@@ -1,16 +1,16 @@
 #include "sensor_service.h"
+
+#include "config.h"
 #include "cube.h"
 #include "exporter.h"
 #include "registry.h"
 #include "private.h"
 
-#include <yt/yt/core/concurrency/async_rw_lock.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/virtual.h>
 #include <yt/yt/core/ytree/ypath_client.h>
-#include <yt/yt/core/ytree/ypath_detail.h>
 
 namespace NYT::NProfiling {
 
@@ -19,7 +19,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const static auto& Logger = SolomonLogger;
+static constexpr auto& Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -29,7 +29,7 @@ class TSensorServiceImpl
 {
 public:
     TSensorServiceImpl(
-        TString name,
+        std::string name,
         TSolomonRegistry* registry,
         TAsyncReaderWriterLock* const exporterLock)
         : Name_(std::move(name))
@@ -38,15 +38,15 @@ public:
     { }
 
 private:
-    using TTagMap = THashMap<TString, TString>;
+    using TTagMap = THashMap<std::string, std::string>;
 
-    const TString Name_;
+    const std::string Name_;
     TSolomonRegistry* const Registry_;
     TAsyncReaderWriterLock* const ExporterLock_;
 
     struct TGetSensorOptions
     {
-        std::optional<TString> Name;
+        std::optional<std::string> Name;
         TTagMap TagMap;
         bool ReadAllProjections = false;
         bool ExportSummaryAsMax = true;
@@ -60,7 +60,7 @@ private:
         TGetSensorOptions options;
         // Set default value depending on whether we are in the sensor service root.
         bool defaultReadAllProjections;
-        if (Name_) {
+        if (!Name_.empty()) {
             THROW_ERROR_EXCEPTION_IF(requestOptions->Contains("name"),
                 "Specifying \"name\" option is allowed only in requests to sensor service root");
 
@@ -68,7 +68,7 @@ private:
             options.Name = Name_;
         } else {
             defaultReadAllProjections = false;
-            options.Name = requestOptions->Find<TString>("name");
+            options.Name = requestOptions->Find<std::string>("name");
         }
 
         options.ReadAllProjections = requestOptions->Get<bool>("read_all_projections", /*defaultValue*/ defaultReadAllProjections);
@@ -134,9 +134,12 @@ public:
         : Config_(std::move(config))
         , Registry_(std::move(registry))
         , Exporter_(std::move(exporter))
-        , RootSensorServiceImpl_(New<TSensorServiceImpl>(/*name*/ TString(), Registry_.Get(), &Exporter_->Lock_))
+        , RootSensorServiceImpl_(New<TSensorServiceImpl>(/*name*/ std::string(), Registry_.Get(), &Exporter_->Lock_))
         , Root_(GetEphemeralNodeFactory(/*shouldHideAttributes*/ true)->CreateMap())
         , SensorTreeUpdateDuration_(Registry_->GetSelfProfiler().Timer("/sensor_service_tree_update_duration"))
+    { }
+
+    void Initialize()
     {
         UpdateSensorTreeExecutor_ = New<TPeriodicExecutor>(
             Exporter_->ControlQueue_->GetInvoker(),
@@ -152,7 +155,7 @@ private:
     const TSensorServiceImplPtr RootSensorServiceImpl_;
     const IMapNodePtr Root_;
 
-    THashMap<TString, TSensorServiceImplPtr> NameToSensorServiceImpl_;
+    THashMap<std::string, TSensorServiceImplPtr> NameToSensorServiceImpl_;
 
     TEventTimer SensorTreeUpdateDuration_;
     TPeriodicExecutorPtr UpdateSensorTreeExecutor_;
@@ -177,8 +180,8 @@ private:
             EmplaceOrCrash(NameToSensorServiceImpl_, name, sensorServiceImpl);
 
             auto node = CreateVirtualNode(std::move(sensorServiceImpl));
-            auto path = "/" + name;
             try {
+                auto path = TYPath("/" + name);
                 ForceYPath(Root_, path);
                 SetNodeByYPath(Root_, path, node);
             } catch (const std::exception& ex) {
@@ -196,7 +199,7 @@ private:
         SensorTreeUpdateDuration_.Record(elapsed);
 
         YT_LOG_DEBUG(
-            "Finished updating sensor service tree"
+            "Finished updating sensor service tree "
             "(TotalSensorCount: %v, AddedSensorCount: %v, MalformedSensorCount: %v, Elapsed: %v)",
             sensors.size(),
             addedSensorCount,
@@ -232,7 +235,7 @@ private:
         auto guard = WaitFor(TAsyncLockReaderGuard::Acquire(&Exporter_->Lock_))
             .ValueOrThrow();
 
-        auto attributeKeys = NYT::FromProto<THashSet<TString>>(request->attributes().keys());
+        auto attributeKeys = NYT::FromProto<THashSet<std::string>>(request->attributes().keys());
         context->SetRequestInfo("AttributeKeys: %v", attributeKeys);
 
         response->set_value(BuildYsonStringFluently()
@@ -272,10 +275,12 @@ IYPathServicePtr CreateSensorService(
     TSolomonRegistryPtr registry,
     TSolomonExporterPtr exporter)
 {
-    return New<TSensorService>(
+    auto service = New<TSensorService>(
         std::move(config),
         std::move(registry),
         std::move(exporter));
+    service->Initialize();
+    return service;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

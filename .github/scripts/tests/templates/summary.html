@@ -1,16 +1,44 @@
 <html>
 <head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism-themes/1.9.0/prism-vs.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
     <style>
+        body {
+            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            width: 100%;
+        }
+        h1 { 
+            font-size: 20px; 
+        }
         th {
             text-transform: uppercase;
         }
 
         th, td {
             padding: 5px;
+            word-break: break-word; /* Allow breaking long words */
+            font-size: 14px;
+            min-width: 80px;
+        }
+        td.test_name{
+            min-width: 72.5vw;
+            max-width: 72.5vw;
+        }
+        td.test_name.with_history{
+            min-width: 62vw;
+            max-width: 62vw;
         }
 
         table {
             border-collapse: collapse;
+            width: 100%;
+            left: 5;
         }
 
         span.test_status {
@@ -28,64 +56,571 @@
         span.test_mute {
             color: blue;
         }
-        button.copy {
-            float: right;
+        .svg_passed {
+            fill: green;
         }
+    
+        .svg_failure {
+            fill: red;
+        }
+    
+        .svg_skipped {
+            fill: gray;
+        }
+    
+        .svg_mute {
+            fill: blue;
+        }
+
+        .svg-icon {
+            float: left;
+            width: 14px;
+            height: 14px;
+            padding-left: 1px;
+            padding-right: 1px;
+            margin-right: 0px;
+            border-radius: 50%;
+            position: relative; /* Essential for tooltips */
+            cursor: pointer;
+        }
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: left;
+            padding: 4px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .button svg {
+            fill: #4b535c;
+            fill-rule: evenodd;
+        }
+
+        .button svg:hover {
+            fill: #0366d6;
+            fill-rule: evenodd;
+        }
+
+        .button-group {
+            display: inline-flex;
+            float: right;
+            align-items: center;
+            position: relative; /* Added for positioning the dropdown */
+            white-space: nowrap;
+        }
+
+        .button-group > button {
+            margin-left: 5px;
+            padding: 4px 8px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .button-group > button svg {
+            fill: #4b535c;
+            fill-rule: evenodd;
+        }
+
+        .button-group > button svg:hover {
+            fill: #0366d6;
+            fill-rule: evenodd;
+        }
+
+        .button-group  .icon-container .show_history_svg {
+            fill: #ffffff;
+            stroke: #000;
+            stroke-width: 2.5;
+            fill-rule: evenodd;
+         }
+
+        .button-group  .icon-container .show_history_svg:hover {
+            stroke: #0366d6;
+         }
+
+        .button-group .button-text {
+            color: #4b535c;
+        }
+        .button-group .button-text:hover {
+            color: #0366d6;
+        }
+
+        .button-group .dropdown {
+            display: none; /* Hide the dropdown by default */
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 8px;
+            z-index: 10; /* Ensure the dropdown is above other content */
+            width: 160;
+        }
+
+        .button-group .dropdown.show {
+            display: block; /* Show the dropdown when active */
+        }
+
+        .button-group .dropdown > button {
+            display: table; /* Make each button in the dropdown take up full width */
+            margin-bottom: 3px; /* Add spacing between dropdown buttons */
+        }
+        .button-group button .icon-container {
+            display: inline-block; /* Align SVG with text */
+            vertical-align: middle; /* Center SVG vertically */
+            margin-right: 3px; /* Add spacing between SVG and text */
+        }
+
+        .button-group button .button-text {
+            margin-left: 5px; /* Add spacing between icon and text */
+            cursor: pointer; /* Make text clickable */
+            
+        }
+        .button-group button::after { /* Target the "Copy" button specifically */
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #7d7d92; /* Same as your tooltip background */
+            color: white;
+            padding: 2px 5px;
+            border-radius: 3px;
+            visibility: hidden; /* Hide by default */
+            opacity: 0;
+            transition: visibility 0.2s, opacity 0.2s;
+        }
+
+        .button-group button:hover::after {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .tooltip {
+            visibility: hidden;
+            max-width: 340px;
+            min-width: 260px;
+            word-break: break-word;
+            background-color: #7d7d92;
+            color: #fff;
+            text-align: left;
+            border-radius: 5px;
+            padding: 5px;
+            position: absolute;
+            z-index: 3;
+            bottom: 100%; /* Positioned above the svg icon */
+            left: 50%; /* Center the tooltip */
+            margin-left: -95px; /* Use negative margin to actually center the tooltip */
+            opacity: 0;
+            transition: opacity 0.3s;
+            overflow: hidden;
+            white-space: nowrap; /* Don't forget this one */
+            text-overflow: ellipsis;
+        }
+
+        .tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%; /* Arrow will be positioned at the bottom of the tooltip */
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #7d7d92 transparent transparent transparent; /* Arrow color */
+        }
+
+        .tooltip.visible {
+            visibility: visible;
+            opacity: 1;
+        }
+  
         table > tbody > tr > td:nth-child(2),
         table > tbody > tr > td:nth-child(3),
         table > tbody > tr > td:nth-child(4) {
-            text-align: center;
+            text-align: left;
         }
-    </style>
-    <script>
-        function copyTestNameToClipboard(text) {
-            const full_name = text.trim();
-            const pieces = /(.+)\/([^$]+)$/.exec(full_name);
+    
+        .collapsible-content {
+            display: table-row-group;
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+            height: 0;
+            overflow: hidden;
+        }
+    
+        .collapsible-content.active {
+            position: relative;
+            top: 0;
+            left: 5;
+            height: auto;
+        }
 
-            if (!pieces) {
-                console.error("Unable to split path/test for %o", full_name);
-                return;
+        .collapsible-header {
+            cursor: pointer;
+            background-color: #f2f2f2;
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-bottom: 5px;
+        }
+
+        .toggle-visibility-buttons {
+            margin-bottom: 10px;
+            overflow:hidden;
+            float: right;
+        }
+
+        .error-button {
+            border: none;
+            cursor: pointer;
+            background: url("data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjM0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSIzNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOC41OSAxNi4zNGw0LjU4LTQuNTktNC41OC00LjU5TDEwIDUuNzVsNiA2LTYgNnoiLz48L3N2Zz4=") no-repeat 50% 50% / 1em 1em;
+            width: 1em;
+            height: 1em;  
+            content: "";
+            transition: transform .5s;
+        }
+
+        pre>code[class*=language-] {
+            font-size: x-small;
+        }
+
+        .console-frame {
+            font-size: x-small;
+            display: grid;
+            border-radius: 4px;
+            overscroll-behavior: none;
+            background: #ddd;
+            padding: 5px;
+            color: #f1f2f3;
+            overflow-y: auto;
+            font-family: monospace;
+            word-break: keep-all;
+            font-size: x-small;
+        }
+
+        .console-frame::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .console-frame::-webkit-scrollbar-track {
+            background: #c5c6c8;
+        }
+
+        .console-frame::-webkit-scrollbar-thumb {
+            background: #838485;
+            border-radius: 4px;
+        }
+        pre[class*=language-] {
+            padding: 1em;
+            margin: 0;
+            overflow: auto;
+        }
+
+</style>
+<script>
+    function findParentBySelector(elm, selector) {
+        var all = document.querySelectorAll(selector);
+        var cur = elm.parentNode;
+        while(cur && !collectionHas(all, cur)) { //keep going up until you find a match
+            cur = cur.parentNode; //go up
+        }
+        return cur; //will return null if not found
+    }
+
+    function collectionHas(a, b) { //helper function (see below)
+        for(var i = 0, len = a.length; i < len; i ++) {
+            if(a[i] == b) return true;
+        }
+        return false;
+    }
+
+    function copyTestNameToClipboard(text) {
+        const full_name = text.trim();
+        let pieces 
+        if (full_name.includes('.py.'))
+        {
+            pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(full_name);
+        } else
+        {
+            pieces = /(.+)\/([^$]+)$/.exec(full_name);
+        }
+
+        if (!pieces) {
+            console.error("Unable to split path/test name from %o", full_name);
+            return;
+        }
+        let [path, testName] = [pieces[1], pieces[2]];
+
+        const namePieces = testName.split('.');
+
+        if (namePieces.length === 2) {
+            testName = namePieces[0] + '::' + namePieces[1];
+        } else {
+            testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
+        }
+
+        const cmdArg = `./ya make -ttt {{ build_preset }} -F '${testName}' ${path}`;
+
+        console.log(cmdArg);
+
+        navigator.clipboard.writeText(cmdArg).then(
+            () => {
+                console.log("Copied!");
+                showCopiedTooltip();
+            },
+            () => {
+                console.error("Unable to copy %o to clipboard", cmdArg);
             }
-            let [path, testName] = [pieces[1], pieces[2]];
+        );
+    }
+    function copyTestNameForMuteToClipboard(text) {
+        const full_name = text.trim();
+        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
 
-            const namePieces = testName.split('.');
+        if (!pieces) {
+            console.error("Unable to split path/test name from %o", full_name);
+            return;
+        }
+        let [path, testName] = [pieces[1], pieces[2]];
 
-            if (namePieces.length === 2) {
-                testName = namePieces[0] + '::' + namePieces[1];
-            } else {
-                testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
+
+        const cmdArg = `${path} ${testName}`;
+
+        console.log(cmdArg);
+
+        navigator.clipboard.writeText(cmdArg).then(
+            () => {
+                console.log("Copied!");
+                showCopiedTooltip();
+            },
+            () => {
+                console.error("Unable to copy %o to clipboard", cmdArg);
             }
+        );
+    }
 
-            const cmdArg = `${path} -F '${testName}'`;
+    function createIssue(test,owner,success_count, fail_count) {
+        const full_name = test.trim();
+        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
 
-            console.log(cmdArg);
+        if (!pieces) {
+            console.error("Unable to split path/test name from %o", full_name);
+            return;
+        }
+        let [path, testName] = [pieces[1], pieces[2]];
+        
+        if (success_count + fail_count != 0){
+            let url = "https://github.com/ydb-platform/ydb/issues/new?title=Mute "+ encodeURIComponent(path)+"/"+ encodeURIComponent(testName) + "&body=" + encodeURIComponent(path)+"/"+ encodeURIComponent(testName) +"%0A%0A**Add%20line%20to%20[muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt):**%0A%60" + encodeURIComponent(path)+" "+ encodeURIComponent(testName)+"%60%0A%0A%20Owner:%20[TEAM:@ydb-platform/"+owner+"](https://github.com/orgs/ydb-platform/teams/"+owner+")%0A%0A**Read%20more%20in%20[mute_rules.md](https://github.com/ydb-platform/ydb/blob/main/.github/config/mute_rules.md)**%20%20%0A%0A**Summary%20history:**%0A%20Success%20rate%20**"+(success_count/(success_count+fail_count)*100)+"%25**%0APass:"+success_count+"%20Fail:"+fail_count+"%20%0A%0A**Test%20run%20history:**%20[link](https://datalens.yandex/34xnbsom67hcq?full_name=" +path+ "/"+ testName+ ")%0A%0AMore%20info%20in%20[dashboard](https://datalens.yandex/4un3zdm0zcnyr)&labels=mute"
+            window.open(url, '_blank');
+        }
+        else {
+            let url = "https://github.com/ydb-platform/ydb/issues/new?title=Mute "+ encodeURIComponent(path)+"/"+ encodeURIComponent(testName) + "&body=" + encodeURIComponent(path)+"/"+ encodeURIComponent(testName) +"%0A%0A**Add%20line%20to%20[muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt):**%0A%60" + encodeURIComponent(path)+" "+ encodeURIComponent(testName)+"%60%0A%0A%20Owner:%20[TEAM:@ydb-platform/"+owner+"](https://github.com/orgs/ydb-platform/teams/"+owner+")%0A%0A**Read%20more%20in%20[mute_rules.md](https://github.com/ydb-platform/ydb/blob/main/.github/config/mute_rules.md)**%20%20%0A%0A**Summary%20history:**%0APass:"+success_count+"%20Fail:"+fail_count+"%20%0A%0A**Test%20run%20history:**%20[link](https://datalens.yandex/34xnbsom67hcq?full_name=" +path+ "/"+ testName+ ")%0A%0AMore%20info%20in%20[dashboard](https://datalens.yandex/4un3zdm0zcnyr)&labels=mute"
+            window.open(url, '_blank');
+        }
+         
+    }
 
-            navigator.clipboard.writeText(cmdArg).catch(
-                () => {
-                    console.error("Unable to copy %o to clipboard", cmdArg);
+    function openHistory(test) {
+        const full_name = test.trim();
+        let url = "https://datalens.yandex/34xnbsom67hcq?full_name="+full_name
+        window.open(url, '_blank');
+    }
+
+    
+    let lastOpenedTooltip = null;
+
+    function toggleTooltip(event) {
+        event.stopPropagation();
+        const tooltip = event.currentTarget.querySelector('.tooltip');
+
+        if (tooltip.classList.contains('visible')) {
+            tooltip.classList.remove('visible');
+            lastOpenedTooltip = null;
+        } else {
+            hideTooltips();
+            tooltip.classList.add('visible');
+            lastOpenedTooltip = tooltip;
+        }
+    }
+
+    function hideTooltips() {
+        if (lastOpenedTooltip) {
+            lastOpenedTooltip.classList.remove('visible');
+            lastOpenedTooltip = null;
+        }
+    }
+
+
+    function toggleAllTables(action) {
+        const contents = document.querySelectorAll('.collapsible-content');
+        if (action === 'expand') {
+            contents.forEach(content => content.classList.add('active'));
+        } else if (action === 'collapse') {
+            contents.forEach(content => content.classList.remove('active'));
+        }
+    }
+    function ButtonIconsClick(button){
+        button.addEventListener('click', function() {
+                const iconContainer = button.querySelector('.icon-container');
+                const initialIcon = iconContainer.querySelector('svg:first-child');
+                const doneIcon = iconContainer.querySelector('svg:last-child');
+
+                // Swap icon visibility
+                initialIcon.style.display = 'none'; 
+                doneIcon.style.display = 'block';
+
+                // You can add any additional actions here, like:
+                // - Disabling the button
+                // - Changing the button's title
+                // - Triggering other effects
+            });
+         
+    }
+    document.addEventListener("DOMContentLoaded", function() {
+        let openDropdown = null; // Track the currently open dropdown
+
+        const buttonGroups = document.querySelectorAll(".button-group");
+        buttonGroups.forEach(buttonGroup => {
+            const dropdown = buttonGroup.querySelector('.dropdown');
+            const toggleButton = buttonGroup.querySelector('button:first-child'); // The "..." button
+
+            toggleButton.addEventListener('click', function() {
+                // Close any previously open dropdown
+                if (openDropdown && openDropdown !== dropdown) {
+                    openDropdown.classList.remove('show');
                 }
-            );
-        }
-        function copyOnPress(event) {
-            event.preventDefault();
-            copyTestNameToClipboard(event.target.previousElementSibling.textContent)
-        }
+                dropdown.classList.toggle('show');
+                openDropdown = dropdown.classList.contains('show') ? dropdown : null;
+                const iconContainer = dropdown.querySelectorAll('.icon-container');
+                iconContainer.forEach(element=>{
+                    const initialIcon = element.querySelector('svg:first-child');
+                    const doneIcon = element.querySelector('svg:last-child');
 
-        document.addEventListener("DOMContentLoaded", function() {
-            const els = document.getElementsByClassName("copy");
-            for (let i = 0; i < els.length; i++) {
-                els[i].addEventListener('click', copyOnPress);
+                // Swap icon visibility
+                initialIcon.style.display = 'block'; 
+                doneIcon.style.display = 'none';
+                });
+            });
+            
+            // Close the dropdown when clicking outside of it
+            document.addEventListener('click', function(event) {
+                if (!event.target.closest('.button-group')) {
+                    dropdown.classList.remove('show');
+                    openDropdown = null;
+                }
+            });
+            buttonGroup.querySelectorAll('.button-group .dropdown  .button').forEach(button => {
+                ButtonIconsClick(button)
+            });
+        });
+
+        document.addEventListener('keydown', function(event) {
+            if ((event.ctrlKey && event.keyCode == 70) || (event.metaKey && event.keyCode == 70)) { 
+                toggleAllTables('expand');
+            }    
+        });
+
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('.svg-icon') && !event.target.classList.contains('copy')) {
+                hideTooltips();
             }
         });
-    </script>
+        const svgIcons = document.querySelectorAll('.svg-icon');
+        svgIcons.forEach(icon => {
+            icon.addEventListener('click', toggleTooltip);
+        });
+        const copyButtons = document.querySelectorAll(".copy");
+        copyButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                copyTestNameToClipboard(findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText);
+            });
+        });
+        const muteButtons = document.querySelectorAll(".mute");
+        muteButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                copyTestNameForMuteToClipboard(findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText);
+            });
+        });
+        const historyButton = document.querySelectorAll(".open_history");
+        historyButton.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                openHistory(findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText);
+            });
+        });
+        const createIssueButton = document.querySelectorAll(".create_issue");
+        createIssueButton.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const success_count = findParentBySelector(event.target,'tr').querySelectorAll('.svg_passed').length
+                const fail_count = findParentBySelector(event.target,'tr').querySelectorAll('.svg_failure').length + findParentBySelector(event.target,'tr').querySelectorAll('.svg_mute').length
+
+                createIssue(
+                    findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText,
+                    findParentBySelector(event.target,'tr').querySelector('.test_owner').innerText,
+                    success_count,fail_count
+                );
+            });
+        });
+
+        const headers = document.querySelectorAll(".collapsible-header");
+        headers.forEach(header => {
+            header.addEventListener('click', function() {
+                const content = this.nextElementSibling;
+                if (content.classList.contains('active')) {
+                    content.classList.remove('active');
+                } else {
+                    content.classList.add('active');
+                }
+            });
+        });
+
+        document.getElementById('expand-all').addEventListener('click', function(event) {
+             toggleAllTables('expand');
+        });
+        document.getElementById('collapse-all').addEventListener('click',  function(event) {
+            toggleAllTables('collapse');
+        });
+    });
+    function toggleError(button) {
+    const errorContent = button.nextElementSibling;
+    const consoleFrame = errorContent.querySelector('.console-frame');
+    if (errorContent.style.display === 'none') {
+        errorContent.style.display = 'block';
+        consoleFrame.style.display = 'block';
+        button.style.transform = "rotate(90deg)"
+    } else {
+        errorContent.style.display = 'none';
+        consoleFrame.style.display = 'none';
+        button.style.transform = "rotate(0deg)"
+    }
+  }
+</script>
 </head>
 <body>
+    <div class="toggle-visibility-buttons">
+        <button id="expand-all">Expand All</button>
+        <button id="collapse-all">Collapse All</button>
+    </div>
 {% for status in status_order %}
-<h1 id="{{ status.name}}">{{ status.name }} ({{ tests[status] | length }})</h1>
-<table style="width:100%;" border="1">
+<h1 id="{{ status.name}}" class="collapsible-header">{{ status.name }} ({{ tests[status] | length }})</h1>
+<table class="collapsible-content active" border="1">
     <thead>
     <tr>
+        <th>test owner</th>
         <th>test name</th>
+    {% if status.is_error  and history%}
+        <th>history<br>
+            old->new
+        </th>
+    {% endif %}
         <th>elapsed</th>
         <th>status</th>
     {% if status in has_any_log %}
@@ -96,10 +631,129 @@
     <tbody>
     {% for t in tests[status] %}
     <tr>
-        <td>
-            <span>{{ t.full_name }}</span>
-            {% if status.is_error %}<button class="copy" title="Copy test filter to clipboard">Copy test filter</button>{% endif %}
+        <td class="test_owner">
+            <a href="https://github.com/orgs/ydb-platform/teams/{{ t.owners.replace('TEAM:@ydb-platform/','')}}" target="_blank">{{ t.owners.replace('TEAM:@ydb-platform/','')}}</a>
         </td>
+        {% if status.is_error %} 
+        <td class="test_name with_history">
+        {% else %} 
+        <td class="test_name">
+        {% endif %}
+            <span>{{ t.full_name }}</span>
+            {% if status.is_error %}
+            <div class="button-group">
+                <button class="button" title="Show options">
+                    <svg  class="more"  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" stroke="none" aria-hidden="true" viewBox="0 0 448 512">
+                        <path  d="M8 256a56 56 0 1 1 112 0A56 56 0 1 1 8 256zm160 0a56 56 0 1 1 112 0 56 56 0 1 1 -112 0zm216-56a56 56 0 1 1 0 112 56 56 0 1 1 0-112z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+                <div class="dropdown">
+                    <button class="button copy" title="Copy test filter to clipboard" >
+                        <div class="icon-container"> 
+                            <svg  class="copy_svg"  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" stroke="none" aria-hidden="true" viewBox="0 0 16 16">
+                                <path  d="M12 2.5H8A1.5 1.5 0 0 0 6.5 4v1H8a3 3 0 0 1 3 3v1.5h1A1.5 1.5 0 0 0 13.5 8V4A1.5 1.5 0 0 0 12 2.5M11 11h1a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3H8a3 3 0 0 0-3 3v1H4a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3zM4 6.5h4A1.5 1.5 0 0 1 9.5 8v4A1.5 1.5 0 0 1 8 13.5H4A1.5 1.5 0 0 1 2.5 12V8A1.5 1.5 0 0 1 4 6.5" clip-rule="evenodd"></path>
+                            </svg>
+                            <svg class="done-icon" width="16" height="16" viewBox="0 0 26 26" fill="green" display="none">
+                                <path class="cls-2" d="M12,2A10,10,0,1,0,22,12,10,10,0,0,0,12,2Zm0,18a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z"/>
+                                <path class="cls-2" d="M14.7,8.39l-3.78,5L9.29,11.28a1,1,0,0,0-1.58,1.23l2.43,3.11a1,1,0,0,0,.79.38h0a1,1,0,0,0,.79-.39l4.57-6a1,1,0,1,0-1.6-1.22Z"/>
+                            </svg>
+                        </div>
+                        <span class="button-text">Copy run command</span>
+                    </button>
+                    {% if status.name == "FAIL" %} 
+                    <button class="button mute" title="Copy mute string to clipboard" >
+                        <div class="icon-container"> 
+                            <svg  class="mute_svg"  xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left" stroke="none" viewBox="2 0 30 17">
+                                <!-- First icon: copied squares -->
+                                <path transform="translate(20, 0)" d="M12 2.5H8A1.5 1.5 0 0 0 6.5 4v1H8a3 3 0 0 1 3 3v1.5h1A1.5 1.5 0 0 0 13.5 8V4A1.5 1.5 0 0 0 12 2.5M11 11h1a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3H8a3 3 0 0 0-3 3v1H4a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3zM4 6.5h4A1.5 1.5 0 0 1 9.5 8v4A1.5 1.5 0 0 1 8 13.5H4A1.5 1.5 0 0 1 2.5 12V8A1.5 1.5 0 0 1 4 6.5"  />
+                                <!-- Second icon: microphone -->
+                                <path transform="translate(0, 0)" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z"  />
+                            </svg>
+                            <svg class="done-icon" width="16" height="16" viewBox="0 0 26 26" fill="green" display="none">
+                                <path class="cls-2" d="M12,2A10,10,0,1,0,22,12,10,10,0,0,0,12,2Zm0,18a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z"/>
+                                <path class="cls-2" d="M14.7,8.39l-3.78,5L9.29,11.28a1,1,0,0,0-1.58,1.23l2.43,3.11a1,1,0,0,0,.79.38h0a1,1,0,0,0,.79-.39l4.57-6a1,1,0,1,0-1.6-1.22Z"/>
+                            </svg>
+                        </div>
+                        <span class="button-text">Copy mute string</span>
+                    </button>
+                    <button class="button create_issue" title="Create issue">
+                        <div class="icon-container"> 
+                            <svg class="issue_svg" xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left"  stroke="none" viewBox="2 0 30 17">
+                                <!-- First icon: plus -->
+                                <path transform="translate(20, 0)" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M8.75 5.5a.75.75 0 0 0-1.5 0v1.75H5.5a.75.75 0 0 0 0 1.5h1.75v1.75a.75.75 0 0 0 1.5 0V8.75h1.75a.75.75 0 0 0 0-1.5H8.75z"  />
+                                <!-- Second icon: microphone -->
+                                <path transform="translate(0, 0)" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z"  />
+                            </svg>
+                            <svg class="done-icon" width="16" height="16" viewBox="0 0 26 26" fill="green" display="none">
+                                <path class="cls-2" d="M12,2A10,10,0,1,0,22,12,10,10,0,0,0,12,2Zm0,18a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z"/>
+                                <path class="cls-2" d="M14.7,8.39l-3.78,5L9.29,11.28a1,1,0,0,0-1.58,1.23l2.43,3.11a1,1,0,0,0,.79.38h0a1,1,0,0,0,.79-.39l4.57-6a1,1,0,1,0-1.6-1.22Z"/>
+                            </svg>
+                        </div>
+                        <span class="button-text">Create mute issue</span>
+                    </button>
+                     {% endif %}
+                    <button class="button open_history" title="Show history">
+                        <div class="icon-container"> 
+                            <svg class="show_history_svg" width="18" height="18" viewBox="0 0 48 48" fill="none"  xmlns="http://www.w3.org/2000/svg">
+                                <path d="M42 24V9C42 7.34315 40.6569 6 39 6H9C7.34315 6 6 7.34315 6 9V39C6 40.6569 7.34315 42 9 42H24"  stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="32" cy="32" r="6" />
+                                <path d="M37 36L42 40"  stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M14 16H34"  stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M14 24L22 24"   stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <svg class="done-icon" width="16" height="16" viewBox="0 0 26 26" fill="green" display="none">
+                                <path class="cls-2" d="M12,2A10,10,0,1,0,22,12,10,10,0,0,0,12,2Zm0,18a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z"/>
+                                <path class="cls-2" d="M14.7,8.39l-3.78,5L9.29,11.28a1,1,0,0,0-1.58,1.23l2.43,3.11a1,1,0,0,0,.79.38h0a1,1,0,0,0,.79-.39l4.57-6a1,1,0,1,0-1.6-1.22Z"/>
+                            </svg>
+                        </div>
+                        <span class="button-text">Open test history</span>
+                    </button>
+           
+                    </div>
+                </div>
+            {% endif %}
+            {% if t.status_description %}
+            <button class="error-button" onclick="toggleError(this)"></button>
+            <div style="display: none;" class="error-content">
+                <div class="console-frame" style="display: none;">
+                    <pre><code class="language-{{ 'python' if '.py' in t.full_name else 'cpp'}}">{{ t.status_description | default("Status description missed") }}</code></pre>
+                </div>
+            </div>
+            {% endif %}
+        </td>
+        {% if (status.is_error and t.full_name in history) %}
+        <td>
+            {% for h in history[t.full_name] %}
+                <span class="svg-icon">
+                    {% if history[t.full_name][h].status == 'failure' %}
+                    <svg class="svg_failure" viewBox="0 0 16 16" >
+                        <path  fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
+                    </svg>
+                    {% elif history[t.full_name][h].status == 'passed' %}
+                    <svg class="svg_passed" viewBox="0 0 16 16" >
+                        <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
+                    </svg>
+                    {% elif history[t.full_name][h].status == 'mute' %}
+                    <svg class="svg_mute" viewBox="0 0 17 16" >
+                        <path  fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>                    </svg>
+                    </svg>
+                    {% endif %}
+                    <span class="tooltip">
+                        Status: {{history[t.full_name][h].status}}<br>
+                        Date: {{ history[t.full_name][h].datetime }}<br>
+                        {% if history[t.full_name][h].status_description != "" %}
+                        Info: {{ history[t.full_name][h].status_description.split(';')[0][0:100] }}<br>
+                        {% endif %}
+                        SHA: <a href="https://github.com/ydb-platform/ydb//commit/{{ history[t.full_name][h].commit }}" style="color: #00f;" target="_blank">{{history[t.full_name][h].commit[0:8]}}</a>
+                    </span>
+
+                </span>
+            {% endfor %}
+        </td> 
+        {% elif (status.is_error and  history) %}
+        <td></td>
+        {% elif status.is_error %}
+        {% endif %}
         <td><span title="{{ t.elapsed }}s">{{ t.elapsed_display }}</span></td>
         <td>
             <span class="test_status test_{{ t.status_display }}">{{ t.status_display }}</span>
@@ -108,7 +762,7 @@
         <td>
             {% if t.log_urls %}
                 {% for log_name, log_url in t.log_urls.items() %}
-                <a href="{{ log_url }}">{{ log_name.upper() }}</a>{% if not loop.last %} | {% endif %}
+                <a href="{{ log_url }}">{{ log_name }}</a>{% if not loop.last %} | {% endif %}
 
                 {% endfor %}
             {% else %}

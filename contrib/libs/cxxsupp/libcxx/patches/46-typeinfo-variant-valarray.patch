@@ -1,0 +1,45 @@
+diff --git a/include/typeinfo b/include/typeinfo
+index 3a1981a..bc8969a 100644
+--- a/include/typeinfo
++++ b/include/typeinfo
+@@ -320,24 +320,40 @@ public:
+ 
+ class _LIBCPP_EXPORTED_FROM_ABI bad_cast : public exception {
+ public:
++#  ifdef _LIBCPP_ABI_MICROSOFT
++  bad_cast() _NOEXCEPT {}
++  virtual ~bad_cast() _NOEXCEPT {}
++  virtual const char* what() const _NOEXCEPT { return "std::bad_cast"; }
++#  else
+   bad_cast() _NOEXCEPT;
+   _LIBCPP_HIDE_FROM_ABI bad_cast(const bad_cast&) _NOEXCEPT            = default;
+   _LIBCPP_HIDE_FROM_ABI bad_cast& operator=(const bad_cast&) _NOEXCEPT = default;
+   ~bad_cast() _NOEXCEPT override;
+   const char* what() const _NOEXCEPT override;
++#  endif
+ };
+ 
+ class _LIBCPP_EXPORTED_FROM_ABI bad_typeid : public exception {
+ public:
++#  ifdef _LIBCPP_ABI_MICROSOFT
++  bad_typeid() _NOEXCEPT {}
++  virtual ~bad_typeid() _NOEXCEPT {}
++  virtual const char* what() const _NOEXCEPT { return "std::bad_typeid"; }
++#  else
+   bad_typeid() _NOEXCEPT;
+   _LIBCPP_HIDE_FROM_ABI bad_typeid(const bad_typeid&) _NOEXCEPT            = default;
+   _LIBCPP_HIDE_FROM_ABI bad_typeid& operator=(const bad_typeid&) _NOEXCEPT = default;
+   ~bad_typeid() _NOEXCEPT override;
+   const char* what() const _NOEXCEPT override;
++#  endif
+ };
+ 
+ } // namespace std
+ 
++#  ifdef _LIBCPP_ABI_MICROSOFT
++class type_info : public std::type_info {};
++#  endif
++
+ #endif // defined(_LIBCPP_ABI_VCRUNTIME)
+ 
+ #if defined(_LIBCPP_ABI_VCRUNTIME) && _HAS_EXCEPTIONS == 0

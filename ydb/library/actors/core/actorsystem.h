@@ -8,7 +8,6 @@
 #include "log_settings.h"
 #include "scheduler_cookie.h"
 #include "cpu_manager.h"
-#include "executor_thread.h"
 
 #include <library/cpp/threading/future/future.h>
 #include <ydb/library/actors/util/ticket_lock.h>
@@ -161,6 +160,7 @@ namespace NActors {
         TIntrusivePtr<NLog::TSettings> LoggerSettings0;
         TProxyWrapperFactory ProxyWrapperFactory;
         TMutex ProxyCreationLock;
+        mutable std::vector<TActorId> DynamicProxies;
 
         bool StartExecuted;
         bool StopExecuted;
@@ -304,6 +304,9 @@ namespace NActors {
         TVector<IExecutorPool*> GetBasicExecutorPools() const {
             return CpuManager->GetBasicExecutorPools();
         }
+
+        void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
+        void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
 
     };
 }

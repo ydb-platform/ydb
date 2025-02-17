@@ -4,7 +4,7 @@
 
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <vector>
@@ -296,11 +296,6 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
     }
 
     if (!maybeRead) {
-        return node;
-    }
-
-    // temporary for keys grouping push down not useful
-    if (!aggCombine.Keys().Empty()) {
         return node;
     }
 

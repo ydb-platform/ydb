@@ -65,6 +65,9 @@ struct TTransactionCommitOptions
     //! If |false| then coordinator will be chosen on the primary cell of the cluster
     //! that has been specified when starting transaction.
     bool AllowAlienCoordinator = false;
+
+    //! All strongly ordered transactions are ordered by commit timestamp.
+    bool StronglyOrdered = false;
 };
 
 struct TTransactionPingOptions

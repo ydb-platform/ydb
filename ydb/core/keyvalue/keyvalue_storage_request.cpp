@@ -164,7 +164,7 @@ public:
 
     void Handle(TEvBlobStorage::TEvPatchResult::TPtr &ev, const TActorContext &ctx) {
         auto groupId = ev->Get()->GroupId;
-        CheckYellow(ev->Get()->StatusFlags, groupId);
+        CheckYellow(ev->Get()->StatusFlags, groupId.GetRawId());
 
         NKikimrProto::EReplyStatus status = ev->Get()->Status;
         if (status != NKikimrProto::OK) {
@@ -211,8 +211,8 @@ public:
         }
         patch->StatusFlags.Merge(ev->Get()->StatusFlags.Raw);
         ++PatchRequestsReplied;
-        IntermediateResults->Stat.GroupWrittenBytes[std::make_pair(ev->Get()->Id.Channel(), groupId)] += ev->Get()->Id.BlobSize();
-        IntermediateResults->Stat.GroupWrittenIops[std::make_pair(ev->Get()->Id.Channel(), groupId)] += 1;
+        IntermediateResults->Stat.GroupWrittenBytes[std::make_pair(ev->Get()->Id.Channel(), groupId.GetRawId())] += ev->Get()->Id.BlobSize();
+        IntermediateResults->Stat.GroupWrittenIops[std::make_pair(ev->Get()->Id.Channel(), groupId.GetRawId())] += 1;
         UpdateRequest(ctx);
     }
 
@@ -313,14 +313,14 @@ public:
             return;
         }
         if (ev->Get()->ResponseSz != request.ReadQueue.size()) {
-            LOG_ERROR_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
+            ALOG_ERROR(NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
                 << " Got# " << ev->Get()->Print(false));
             TStringStream str;
             str << "KeyValue# " << TabletInfo->TabletID;
             str << " Unexpected EvGet ResponseSz# " << (ui32)ev->Get()->ResponseSz;
             str << " InFlightQueries# " << (ui32)InFlightQueries;
             str << " ReadQueue.size# " << request.ReadQueue.size();
-            str << " Marker# KV27";
+            str << " Marker# KV270";
             resetReadItems(NKikimrProto::ERROR);
             ReplyErrorAndDie(ctx, str.Str());
             return;
@@ -393,7 +393,7 @@ public:
             return false;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
+        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
                 << " UpdateRequest ReadRequestsReplied# " << ReadRequestsReplied
                 << " ReadRequestsSent# " << ReadRequestsSent
                 << " WriteRequestsReplied # " << WriteRequestsReplied
@@ -715,7 +715,7 @@ public:
                         const ui32 groupId = TabletInfo->GroupFor(logoBlobId.Channel(), logoBlobId.Generation());
                         Y_ABORT_UNLESS(groupId != Max<ui32>(), "Put Blob# %s is mapped to an invalid group (-1)!",
                                 logoBlobId.ToString().c_str());
-                        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
+                        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
                                 << " Send TEvPut# " << put->ToString() << " to groupId# " << groupId
                                 << " now# " << TAppData::TimeProvider->Now().MilliSeconds() << " Marker# KV60");
 
@@ -761,7 +761,7 @@ public:
                 
                 const ui32 groupId = TabletInfo->GroupFor(request.PatchedBlobId.Channel(), request.PatchedBlobId.Generation());
                 Y_VERIFY_S(groupId != Max<ui32>(), "Patch Blob# " << request.PatchedBlobId.ToString() << " is mapped to an invalid group (-1)!");
-                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
+                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
                         << " Send TEvPatch# " << patch->ToString() << " to groupId# " << groupId
                         << " now# " << TAppData::TimeProvider->Now().MilliSeconds() << " Marker# KV69");
 

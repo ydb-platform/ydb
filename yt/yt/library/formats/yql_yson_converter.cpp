@@ -169,19 +169,19 @@ void TYqlJsonWriter::OnStringScalarWeightLimited(TStringBuf value, i64 limit)
     auto incomplete = false;
     auto base64 = false;
     if (IsUtf(valueToWrite)) {
-        if (static_cast<i64>(valueToWrite.Size()) > limit) {
+        if (std::ssize(valueToWrite) > limit) {
             valueToWrite = TruncateUtf8(valueToWrite, limit);
             incomplete = true;
         }
     } else {
         base64 = true;
-        auto maxEncodedSize = Base64EncodeBufSize(valueToWrite.Size());
+        auto maxEncodedSize = Base64EncodeBufSize(valueToWrite.size());
         if (static_cast<i64>(maxEncodedSize) > limit) {
             auto truncatedLen = (limit - 1) / 4 * 3;
-            incomplete = (truncatedLen < static_cast<i64>(valueToWrite.Size()));
+            incomplete = (truncatedLen < std::ssize(valueToWrite));
             valueToWrite.Trunc(truncatedLen);
         }
-        Buffer_.Resize(Base64EncodeBufSize(valueToWrite.Size()));
+        Buffer_.Resize(Base64EncodeBufSize(valueToWrite.size()));
         valueToWrite = Base64Encode(valueToWrite, Buffer_.Begin());
     }
     OnStringScalarImpl(valueToWrite, incomplete, base64);
@@ -198,7 +198,7 @@ void TYqlJsonWriter::TransferYsonWeightLimited(
         callback(&writer);
     }
     auto yson = TStringBuf(Buffer_.Begin(), Buffer_.End());
-    if (static_cast<i64>(yson.Size()) > limit) {
+    if (std::ssize(yson) > limit) {
         OnStringScalarImpl("", /* incomplete */ true, /* base64 */ false);
     } else {
         WriteWithWrapping(
@@ -563,7 +563,7 @@ public:
         cursor->Next();
         EnsureYsonItemTypeEqual(cursor->GetCurrent(), EYsonItemType::Int64Value);
         const auto alternativeIndex = cursor->GetCurrent().UncheckedAsInt64();
-        if (Y_UNLIKELY(!(0 <= alternativeIndex && alternativeIndex < static_cast<int>(ElementConverters_.size())))) {
+        if (Y_UNLIKELY(!(0 <= alternativeIndex && alternativeIndex < std::ssize(ElementConverters_)))) {
             THROW_ERROR_EXCEPTION("Alternative index is out of bounds: expected it to be in [%v, %v), got %v",
                 0,
                 ElementConverters_.size(),

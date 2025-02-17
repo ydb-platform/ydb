@@ -3,6 +3,7 @@
 #include <cstddef>
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
@@ -46,6 +47,8 @@ enum class ERequestType: size_t {
     TABLE_STREAMEXECUTESCANQUERY,
     TABLE_STREAMREADTABLE,
     TABLE_READROWS,
+    TABLE_DESCRIBEEXTERNALDATASOURCE,
+    TABLE_DESCRIBEEXTERNALTABLE,
 
     QUERY_EXECUTEQUERY,
     QUERY_EXECUTESCRIPT,
@@ -61,61 +64,65 @@ enum class ERequestType: size_t {
     DISCOVERY_NODEREGISTRATION,
     DISCOVERY_LISTENDPOINTS,
 
+    RATELIMITER_CREATE_RESOURCE,
+    RATELIMITER_ALTER_RESOURCE,
+    RATELIMITER_DROP_RESOURCE,
+    RATELIMITER_LIST_RESOURCES,
+    RATELIMITER_DESCRIBE_RESOURCE,
+    RATELIMITER_ACQUIRE_RESOURCE,
+
+    BSCONFIG_REPLACESTORAGECONFIG,
+    BSCONFIG_FETCHSTORAGECONFIG,
+    BSCONFIG_BOOTSTRAP,
+
+    PING_GRPC,
+    PING_PROXY,
+    PING_KQP,
+    PING_SCHEME_CACHE,
+    PING_TX_PROXY,
+    PING_ACTOR_CHAIN,
+
+    // Requests inside write session
+    TOPIC_STREAMWRITE,
+    TOPIC_STREAMWRITE_INIT,
+    TOPIC_STREAMWRITE_WRITE,
+    TOPIC_STREAMWRITE_UPDATE_TOKEN,
+    // Requests inside read session
+    TOPIC_STREAMREAD,
+    TOPIC_STREAMREAD_INIT,
+    TOPIC_STREAMREAD_READ,
+    TOPIC_STREAMREAD_COMMIT_OFFSET,
+    TOPIC_STREAMREAD_PARTITION_SESSION_STATUS,
+    TOPIC_STREAMREAD_UPDATE_TOKEN,
+    TOPIC_STREAMREAD_DIRECT_READ_ACK,
+    TOPIC_STREAMREAD_START_PARTITION_SESSION,
+    TOPIC_STREAMREAD_STOP_PARTITION_SESSION,
+    // Requests inside direct read session
+    TOPIC_STREAMDIRECTREAD,
+    TOPIC_STREAMDIRECTREAD_INIT,
+    TOPIC_STREAMDIRECTREAD_START_DIRECT_READ_PARTITION_SESSION,
+    TOPIC_STREAMDIRECTREAD_UPDATE_TOKEN,
+    // Single requests
+    TOPIC_COMMITOFFSET,
+    TOPIC_UPDATEOFFSETSINTRANSACTION,
+    TOPIC_CREATETOPIC,
+    TOPIC_DESCRIBETOPIC,
+    TOPIC_DESCRIBEPARTITION,
+    TOPIC_DESCRIBECONSUMER,
+    TOPIC_ALTERTOPIC,
+    TOPIC_DROPTOPIC,
+
     REQUEST_TYPES_CNT, // Add new types above this line
 };
 
 static constexpr size_t kRequestTypesCnt = static_cast<size_t>(ERequestType::REQUEST_TYPES_CNT);
 
-static const THashMap<TStringBuf, ERequestType> NameToRequestType = {
-    {"KeyValue.CreateVolume", ERequestType::KEYVALUE_CREATEVOLUME},
-    {"KeyValue.DropVolume", ERequestType::KEYVALUE_DROPVOLUME},
-    {"KeyValue.AlterVolume", ERequestType::KEYVALUE_ALTERVOLUME},
-    {"KeyValue.DescribeVolume", ERequestType::KEYVALUE_DESCRIBEVOLUME},
-    {"KeyValue.ListLocalPartitions", ERequestType::KEYVALUE_LISTLOCALPARTITIONS},
-    {"KeyValue.AcquireLock", ERequestType::KEYVALUE_ACQUIRELOCK},
-    {"KeyValue.ExecuteTransaction", ERequestType::KEYVALUE_EXECUTETRANSACTION},
-    {"KeyValue.Read", ERequestType::KEYVALUE_READ},
-    {"KeyValue.ReadRange", ERequestType::KEYVALUE_READRANGE},
-    {"KeyValue.ListRange", ERequestType::KEYVALUE_LISTRANGE},
-    {"KeyValue.GetStorageChannelStatus", ERequestType::KEYVALUE_GETSTORAGECHANNELSTATUS},
+// Name to request map
+extern const THashMap<TStringBuf, ERequestType> NameToRequestType;
 
-    {"Table.CreateSession", ERequestType::TABLE_CREATESESSION},
-    {"Table.KeepAlive", ERequestType::TABLE_KEEPALIVE},
-    {"Table.AlterTable", ERequestType::TABLE_ALTERTABLE},
-    {"Table.CreateTable", ERequestType::TABLE_CREATETABLE},
-    {"Table.DropTable", ERequestType::TABLE_DROPTABLE},
-    {"Table.DescribeTable", ERequestType::TABLE_DESCRIBETABLE},
-    {"Table.CopyTable", ERequestType::TABLE_COPYTABLE},
-    {"Table.CopyTables", ERequestType::TABLE_COPYTABLES},
-    {"Table.RenameTables", ERequestType::TABLE_RENAMETABLES},
-    {"Table.ExplainDataQuery", ERequestType::TABLE_EXPLAINDATAQUERY},
-    {"Table.ExecuteSchemeQuery", ERequestType::TABLE_EXECUTESCHEMEQUERY},
-    {"Table.BeginTransaction", ERequestType::TABLE_BEGINTRANSACTION},
-    {"Table.DescribeTableOptions", ERequestType::TABLE_DESCRIBETABLEOPTIONS},
-    {"Table.DeleteSession", ERequestType::TABLE_DELETESESSION},
-    {"Table.CommitTransaction", ERequestType::TABLE_COMMITTRANSACTION},
-    {"Table.RollbackTransaction", ERequestType::TABLE_ROLLBACKTRANSACTION},
-    {"Table.PrepareDataQuery", ERequestType::TABLE_PREPAREDATAQUERY},
-    {"Table.ExecuteDataQuery", ERequestType::TABLE_EXECUTEDATAQUERY},
-    {"Table.BulkUpsert", ERequestType::TABLE_BULKUPSERT},
-    {"Table.StreamExecuteScanQuery", ERequestType::TABLE_STREAMEXECUTESCANQUERY},
-    {"Table.StreamReadTable", ERequestType::TABLE_STREAMREADTABLE},
-    {"Table.ReadRows", ERequestType::TABLE_READROWS},
-
-    {"Query.ExecuteQuery", ERequestType::QUERY_EXECUTEQUERY},
-    {"Query.ExecuteScript", ERequestType::QUERY_EXECUTESCRIPT},
-    {"Query.FetchScriptResults", ERequestType::QUERY_FETCHSCRIPTRESULTS},
-    {"Query.CreateSession", ERequestType::QUERY_CREATESESSION},
-    {"Query.DeleteSession", ERequestType::QUERY_DELETESESSION},
-    {"Query.AttachSession", ERequestType::QUERY_ATTACHSESSION},
-    {"Query.BeginTransaction", ERequestType::QUERY_BEGINTRANSACTION},
-    {"Query.CommitTransaction", ERequestType::QUERY_COMMITTRANSACTION},
-    {"Query.RollbackTransaction", ERequestType::QUERY_ROLLBACKTRANSACTION},
-
-    {"Discovery.WhoAmI", ERequestType::DISCOVERY_WHOAMI},
-    {"Discovery.NodeRegistration", ERequestType::DISCOVERY_NODEREGISTRATION},
-    {"Discovery.ListEndpoints", ERequestType::DISCOVERY_LISTENDPOINTS},
-};
+// Request types that don't inherit default sampling rules for UNSPECIFIED request type.
+// Actually it is the set of long session requests that generate their own sampled requests.
+extern const THashSet<ERequestType> NoDefaultSamplingRequestTypes;
 
 struct TRequestDiscriminator {
     ERequestType RequestType = ERequestType::UNSPECIFIED;

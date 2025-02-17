@@ -13,7 +13,7 @@ using namespace NObjectClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = TransactionClientLogger;
+static constexpr auto& Logger = TransactionClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -23,9 +23,11 @@ TTimestampProviderBase::TTimestampProviderBase(std::optional<TDuration> latestTi
 
 TFuture<TTimestamp> TTimestampProviderBase::GenerateTimestamps(int count, TCellTag clockClusterTag)
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
-    YT_LOG_DEBUG("Generating fresh timestamps (Count: %v)", count);
+    YT_LOG_DEBUG("Generating fresh timestamps (Count: %v, ClockClusterTag: %v)",
+        count,
+        clockClusterTag);
 
     return DoGenerateTimestamps(count, clockClusterTag).Apply(BIND(
         &TTimestampProviderBase::OnGenerateTimestamps,
@@ -47,7 +49,7 @@ std::atomic<TTimestamp>& TTimestampProviderBase::GetLatestTimestampReferenceByTa
 
 TTimestamp TTimestampProviderBase::GetLatestTimestamp(TCellTag clockClusterTag)
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     auto result = GetLatestTimestampReferenceByTag(clockClusterTag).load(std::memory_order::relaxed);
 
@@ -76,9 +78,10 @@ TFuture<TTimestamp> TTimestampProviderBase::OnGenerateTimestamps(
     auto firstTimestamp = timestampOrError.Value();
     auto lastTimestamp = firstTimestamp + count - 1;
 
-    YT_LOG_DEBUG("Fresh timestamps generated (Timestamps: %v-%v)",
+    YT_LOG_DEBUG("Fresh timestamps generated (Timestamps: %v-%v, ClockClusterTag: %v)",
         firstTimestamp,
-        lastTimestamp);
+        lastTimestamp,
+        clockClusterTag);
 
     auto& latestTimestamp = GetLatestTimestampReferenceByTag(clockClusterTag);
     auto latestTimestampValue = latestTimestamp.load(std::memory_order::relaxed);
@@ -96,7 +99,7 @@ TFuture<TTimestamp> TTimestampProviderBase::OnGenerateTimestamps(
 
 void TTimestampProviderBase::UpdateLatestTimestamp()
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     YT_LOG_DEBUG("Updating latest timestamp");
     GenerateTimestamps(1).Subscribe(BIND([] (const TErrorOr<TTimestamp>& timestampOrError) {

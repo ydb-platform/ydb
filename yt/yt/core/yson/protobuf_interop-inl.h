@@ -17,6 +17,41 @@ const TProtobufMessageType* ReflectProtobufMessageType()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class ProtoType, class Type, bool UseParseOptionsInSerialize>
+static const void* DoRegisterIntermediateProtoInteropRepresentation()
+{
+    NYT::NYson::AddProtobufConverterRegisterAction([] {
+        auto* descriptor = ProtoType::default_instance().GetDescriptor();
+        NYT::NYson::TProtobufMessageConverter converter;
+        converter.Serializer = [] (
+            NYT::NYson::IYsonConsumer* consumer,
+            const google::protobuf::Message* message,
+            const NYson::TProtobufParserOptions& parseOptions = {})
+            {
+                const auto* typedMessage = dynamic_cast<const ProtoType*>(message);
+                YT_VERIFY(typedMessage);
+                Type value;
+                FromProto(&value, *typedMessage);
+                if constexpr (UseParseOptionsInSerialize) {
+                    Serialize(value, consumer, parseOptions);
+                } else {
+                    Serialize(value, consumer);
+                }
+            };
+        converter.Deserializer = [] (google::protobuf::Message* message, const NYT::NYTree::INodePtr& node) {
+            auto* typedMessage = dynamic_cast<ProtoType*>(message);
+            YT_VERIFY(typedMessage);
+            Type value;
+            Deserialize(value, node);
+            ToProto(typedMessage, value);
+        };
+        NYT::NYson::RegisterCustomProtobufConverter(descriptor, converter);
+    });
+    return nullptr;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 std::optional<int> FindProtobufEnumValueByLiteralUntyped(
     const TProtobufEnumType* type,
     TStringBuf literal);

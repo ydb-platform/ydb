@@ -6,6 +6,7 @@ namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxNavigate : public TTxBase {
     std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> Request;
+    bool Cancelled = false;
 
     TTxNavigate(TSelf* self, NSchemeCache::TSchemeCacheNavigate* request)
         : TTxBase(self)
@@ -23,7 +24,14 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
         const auto& entry = Request->ResultSet.front();
 
         if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            return true; // TODO: handle error
+            Cancelled = true;
+
+            if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
+                Self->DeleteStatisticsFromTable();
+            } else {
+                Self->FinishTraversal(db);
+            }
+            return true;
         }
 
         Self->Columns.clear();
@@ -44,10 +52,17 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
             Self->KeyColumnTypes[col.second.KeyOrder] = col.second.PType;
         }
 
-        if (Self->InitStartKey) {
+        if (Self->TraversalStartKey.GetCells().empty()) {
             TVector<TCell> minusInf(Self->KeyColumnTypes.size());
-            Self->StartKey = TSerializedCellVec(minusInf);
-            Self->PersistSysParam(db, Schema::SysParam_StartKey, Self->StartKey.GetBuffer());
+            Self->TraversalStartKey = TSerializedCellVec(minusInf);
+            Self->PersistStartKey(db);
+        }
+
+        if (Self->TraversalIsColumnTable) {
+            Self->HiveId = entry.DomainInfo->ExtractHive();
+            if (Self->HiveId == 0) {
+                Self->HiveId = AppData()->DomainsInfo->GetHive();
+            }
         }
 
         return true;
@@ -55,6 +70,10 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
 
     void Complete(const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxNavigate::Complete");
+
+        if (Cancelled) {
+            return;
+        }
 
         Self->Resolve();
     }

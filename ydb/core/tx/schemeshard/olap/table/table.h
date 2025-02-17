@@ -2,6 +2,15 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/sharding/sharding.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+
+namespace NKikimr::NSchemeShard::NOlap::NAlter {
+class ISSEntity;
+class ISSEntityEvolution;
+class TEntityInitializationContext;
+class TEvolutionInitializationContext;
+}
 
 namespace NKikimr::NSchemeShard {
 
@@ -14,7 +23,15 @@ public:
 
     TPathId GetOlapStorePathIdVerified() const {
         AFL_VERIFY(!IsStandalone());
-        return PathIdFromPathId(Description.GetColumnStorePathId());
+        return TPathId::FromProto(Description.GetColumnStorePathId());
+    }
+
+    std::shared_ptr<NSharding::IShardingBase> GetShardingVerified(const TOlapSchema& olapSchema) const {
+        return NSharding::IShardingBase::BuildFromProto(olapSchema, Description.GetSharding()).DetachResult();
+    }
+
+    std::set<ui64> GetShardIdsSet() const {
+        return std::set<ui64>(Description.GetSharding().GetColumnShards().begin(), Description.GetSharding().GetColumnShards().end());
     }
 
     const auto& GetColumnShards() const {
@@ -24,13 +41,22 @@ public:
     void SetColumnShards(const std::vector<ui64>& columnShards) {
         AFL_VERIFY(GetColumnShards().empty())("original", Description.DebugString());
         AFL_VERIFY(columnShards.size());
-        Description.MutableSharding()->SetVersion(1);
 
         Description.MutableSharding()->MutableColumnShards()->Clear();
         Description.MutableSharding()->MutableColumnShards()->Reserve(columnShards.size());
         for (ui64 columnShard : columnShards) {
             Description.MutableSharding()->AddColumnShards(columnShard);
         }
+    }
+
+    THashSet<TString> GetUsedTiers() const {
+        THashSet<TString> tiers;
+        for (const auto& tier : Description.GetTtlSettings().GetEnabled().GetTiers()) {
+            if (tier.HasEvictToExternalStorage()) {
+                tiers.emplace(tier.GetEvictToExternalStorage().GetStorage());
+            }
+        }
+        return tiers;
     }
 
     NKikimrSchemeOp::TColumnTableDescription Description;
@@ -40,9 +66,14 @@ public:
     TAggregatedStats Stats;
 
     TColumnTableInfo() = default;
-    TColumnTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description,
+    TColumnTableInfo(ui64 alterVersion, const NKikimrSchemeOp::TColumnTableDescription& description,
         TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
         TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
+
+    const NKikimrSchemeOp::TColumnStoreSharding& GetStandaloneShardingVerified() const {
+        AFL_VERIFY(!!StandaloneSharding);
+        return *StandaloneSharding;
+    }
 
     const auto& GetOwnedColumnShardsVerified() const {
         AFL_VERIFY(IsStandalone());
@@ -78,9 +109,14 @@ public:
         Stats.UpdateShardStats(shardIdx, newStats);
     }
 
-    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
-        Stats.UpdateTableStats(pathId, newStats);
+    void UpdateTableStats(const TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
+        Stats.TableStats[pathId].Aggregated.PartCount = GetColumnShards().size();
+        Stats.UpdateTableStats(shardIdx, pathId, newStats);
     }
+
+    TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> BuildEntity(const TPathId& pathId, const NOlap::NAlter::TEntityInitializationContext& iContext) const;
+
+    TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntityEvolution>> BuildEvolution(const TPathId& pathId, const NOlap::NAlter::TEvolutionInitializationContext& iContext) const;
 };
 
 }

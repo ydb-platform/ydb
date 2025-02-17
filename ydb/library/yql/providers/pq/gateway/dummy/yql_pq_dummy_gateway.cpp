@@ -1,4 +1,5 @@
 #include "yql_pq_dummy_gateway.h"
+#include "yql_pq_file_topic_client.h"
 
 #include <util/generic/is_in.h>
 #include <util/generic/yexception.h>
@@ -10,7 +11,7 @@ namespace NYql {
 NThreading::TFuture<void> TDummyPqGateway::OpenSession(const TString& sessionId, const TString& username) {
     with_lock (Mutex) {
         Y_ENSURE(sessionId);
-        Y_ENSURE(username);
+        Y_UNUSED(username);
 
         Y_ENSURE(!IsIn(OpenedSessions, sessionId), "Session " << sessionId << " is already opened in pq gateway");
         OpenedSessions.insert(sessionId);
@@ -57,6 +58,14 @@ TDummyPqGateway& TDummyPqGateway::AddDummyTopic(const TDummyTopic& topic) {
         Y_ENSURE(Topics.emplace(key, topic).second, "Already inserted dummy topic {" << topic.Cluster << ", " << topic.Path << "}");
         return *this;
     }
+}
+
+IPqGateway::TPtr CreatePqFileGateway() {
+    return MakeIntrusive<TDummyPqGateway>();
+}
+
+ITopicClient::TPtr TDummyPqGateway::GetTopicClient(const NYdb::TDriver&, const NYdb::NTopic::TTopicClientSettings&) {
+    return MakeIntrusive<TFileTopicClient>(Topics);
 }
 
 void TDummyPqGateway::UpdateClusterConfigs(

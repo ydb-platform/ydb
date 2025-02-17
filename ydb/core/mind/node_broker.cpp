@@ -7,7 +7,10 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/config_helpers.h>
+#include <ydb/core/protos/counters_node_broker.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -58,14 +61,13 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
 
     const auto *appData = AppData(ctx);
 
-    Y_ABORT_UNLESS(appData->FeatureFlags.GetEnableNodeBrokerSingleDomainMode());
-
     MaxStaticId = Min(appData->DynamicNameserviceConfig->MaxStaticNodeId, TActorId::MaxNodeId);
     MinDynamicId = Max(MaxStaticId + 1, (ui64)Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId));
     MaxDynamicId = Max(MinDynamicId, (ui64)Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId));
 
-    EnableDynamicNodeNameGeneration = appData->FeatureFlags.GetEnableDynamicNodeNameGeneration();
+    EnableStableNodeNames = appData->FeatureFlags.GetEnableStableNodeNames();
 
+    Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     ClearState();
 
     ProcessTx(CreateTxInitScheme(), ctx);
@@ -107,6 +109,7 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                 << "  MaxStaticNodeId: " << AppData(ctx)->DynamicNameserviceConfig->MaxStaticNodeId << Endl
                 << "  MaxDynamicNodeId: " << AppData(ctx)->DynamicNameserviceConfig->MaxDynamicNodeId << Endl
                 << "  EpochDuration: " << EpochDuration << Endl
+                << "  StableNodeNamePrefix: " << StableNodeNamePrefix << Endl
                 << "  BannedIds:";
             for (auto &pr : BannedIds)
                 str << " [" << pr.first << ", " << pr.second << "]";
@@ -196,7 +199,7 @@ void TNodeBroker::AddNode(const TNodeInfo &info)
     FreeIds.Reset(info.NodeId);
     if (info.SlotIndex.has_value()) {
         SlotIndexesPools[info.ServicedSubDomain].Acquire(info.SlotIndex.value());
-    }    
+    }
 
     if (info.Expire > Epoch.Start) {
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -286,15 +289,47 @@ void TNodeBroker::AddDelayedListNodesRequest(ui64 epoch,
 
 void TNodeBroker::ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev)
 {
-    ui64 version = ev->Get()->Record.GetCachedVersion();
+    auto *msg = ev->Get();
 
     NKikimrNodeBroker::TNodesInfo info;
     Epoch.Serialize(*info.MutableEpoch());
     info.SetDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
     TAutoPtr<TEvNodeBroker::TEvNodesInfo> resp = new TEvNodeBroker::TEvNodesInfo(info);
-    if (version != Epoch.Version)
-        resp->PreSerializedData = EpochCache;
 
+    bool optimized = false;
+
+    if (msg->Record.HasCachedVersion()) {
+        if (msg->Record.GetCachedVersion() == Epoch.Version) {
+            // Client has an up-to-date list already
+            optimized = true;
+        } else {
+            // We may be able to only send added nodes in the same epoch when
+            // all deltas are cached up to the current epoch inclusive.
+            ui64 neededFirstVersion = msg->Record.GetCachedVersion() + 1;
+            if (!EpochDeltasVersions.empty() &&
+                EpochDeltasVersions.front() <= neededFirstVersion &&
+                EpochDeltasVersions.back() == Epoch.Version &&
+                neededFirstVersion <= Epoch.Version)
+            {
+                ui64 firstIndex = neededFirstVersion - EpochDeltasVersions.front();
+                if (firstIndex > 0) {
+                    // Note: usually there is a small number of nodes added
+                    // between subsequent requests, so this substr should be
+                    // very cheap.
+                    resp->PreSerializedData = EpochDeltasCache.substr(EpochDeltasEndOffsets[firstIndex - 1]);
+                } else {
+                    resp->PreSerializedData = EpochDeltasCache;
+                }
+                optimized = true;
+            }
+        }
+    }
+
+    if (!optimized) {
+        resp->PreSerializedData = EpochCache;
+    }
+
+    TabletCounters->Percentile()[COUNTER_LIST_NODES_BYTES].IncrementFor(resp->GetCachedByteSize());
     LOG_TRACE_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                 "Send TEvNodesInfo for epoch " << Epoch.ToString());
 
@@ -303,12 +338,16 @@ void TNodeBroker::ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev)
 
 void TNodeBroker::ProcessDelayedListNodesRequests()
 {
+    THashSet<TActorId> processed;
     while (!DelayedListNodesRequests.empty()) {
         auto it = DelayedListNodesRequests.begin();
         if (it->first > Epoch.Id)
             break;
 
-        ProcessListNodesRequest(it->second);
+        // Avoid processing more than one request from the same sender
+        if (processed.insert(it->second->Sender).second) {
+            ProcessListNodesRequest(it->second);
+        }
         DelayedListNodesRequests.erase(it);
     }
 }
@@ -345,8 +384,8 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
 void TNodeBroker::FillNodeName(const std::optional<ui32> &slotIndex,
                                NKikimrNodeBroker::TNodeInfo &info) const
 {
-    if (EnableDynamicNodeNameGeneration && slotIndex.has_value()) {
-        const TString name = TStringBuilder() << "slot-" << slotIndex;
+    if (EnableStableNodeNames && slotIndex.has_value()) {
+        const TString name = TStringBuilder() << StableNodeNamePrefix << slotIndex.value();
         info.SetName(name);
     }
 }
@@ -426,6 +465,12 @@ void TNodeBroker::PrepareEpochCache()
         FillNodeInfo(entry.second, *info.AddExpiredNodes());
 
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&EpochCache);
+    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.size());
+
+    EpochDeltasCache.clear();
+    EpochDeltasVersions.clear();
+    EpochDeltasEndOffsets.clear();
+    TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
 }
 
 void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
@@ -440,6 +485,18 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&delta);
 
     EpochCache += delta;
+    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.size());
+
+    if (!EpochDeltasVersions.empty() && EpochDeltasVersions.back() + 1 != Epoch.Version) {
+        EpochDeltasCache.clear();
+        EpochDeltasVersions.clear();
+        EpochDeltasEndOffsets.clear();
+    }
+
+    EpochDeltasCache += delta;
+    EpochDeltasVersions.push_back(Epoch.Version);
+    EpochDeltasEndOffsets.push_back(EpochDeltasCache.size());
+    TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
 }
 
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
@@ -487,6 +544,8 @@ void TNodeBroker::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
         EpochDuration = MIN_LEASE_DURATION;
     }
 
+    StableNodeNamePrefix = config.GetStableNodeNamePrefix();
+
     BannedIds.clear();
     for (auto &banned : config.GetBannedNodeIds())
         BannedIds.emplace_back(banned.GetFrom(), banned.GetTo());
@@ -505,7 +564,8 @@ void TNodeBroker::DbAddNode(const TNodeInfo &node,
                 << " lease=" << node.Lease
                 << " expire=" << node.ExpirationString()
                 << " servicedsubdomain=" << node.ServicedSubDomain
-                << " slotindex= " << node.SlotIndex);
+                << " slotindex=" << node.SlotIndex
+                << " authorizedbycertificate=" << (node.AuthorizedByCertificate ? "true" : "false"));
 
     NIceDb::TNiceDb db(txc.DB);
     using T = Schema::Nodes;
@@ -517,7 +577,8 @@ void TNodeBroker::DbAddNode(const TNodeInfo &node,
         .Update<T::Lease>(node.Lease)
         .Update<T::Expire>(node.Expire.GetValue())
         .Update<T::Location>(node.Location.GetSerializedLocation())
-        .Update<T::ServicedSubDomain>(node.ServicedSubDomain);
+        .Update<T::ServicedSubDomain>(node.ServicedSubDomain)
+        .Update<T::AuthorizedByCertificate>(node.AuthorizedByCertificate);
 
     if (node.SlotIndex.has_value()) {
         db.Table<T>().Key(node.NodeId)
@@ -670,7 +731,8 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
             info.ServicedSubDomain = TSubDomainKey(nodesRowset.GetValueOrDefault<T::ServicedSubDomain>());
             if (nodesRowset.HaveValue<T::SlotIndex>()) {
                 info.SlotIndex = nodesRowset.GetValue<T::SlotIndex>();
-            } 
+            }
+            info.AuthorizedByCertificate = nodesRowset.GetValue<T::AuthorizedByCertificate>();
             AddNode(info);
 
             LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
@@ -784,12 +846,36 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
     db.Table<T>().Key(node.NodeId).Update<T::Location>(node.Location.GetSerializedLocation());
 }
 
+void TNodeBroker::DbReleaseSlotIndex(const TNodeInfo &node,
+                                       TTransactionContext &txc) 
+{
+
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Release slot index (" << node.SlotIndex << ") node " << node.IdString() );
+    NIceDb::TNiceDb db(txc.DB);
+    using T = Schema::Nodes;
+    db.Table<T>().Key(node.NodeId)
+        .UpdateToNull<T::SlotIndex>();
+}
+  
+void TNodeBroker::DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
+                                       TTransactionContext &txc)
+{
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Update node " << node.IdString() << " authorizedbycertificate in database"
+                << " authorizedbycertificate=" << (node.AuthorizedByCertificate ? "true" : "false"));
+
+    NIceDb::TNiceDb db(txc.DB);
+    using T = Schema::Nodes;
+    db.Table<T>().Key(node.NodeId).Update<T::AuthorizedByCertificate>(node.AuthorizedByCertificate);
+}
+
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                          const TActorContext &ctx)
-{   
+{
     const auto& appConfig = ev->Get()->Record.GetConfig();
     if (appConfig.HasFeatureFlags()) {
-        EnableDynamicNodeNameGeneration = appConfig.GetFeatureFlags().GetEnableDynamicNodeNameGeneration();
+        EnableStableNodeNames = appConfig.GetFeatureFlags().GetEnableStableNodeNames();
     }
 
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
@@ -819,6 +905,7 @@ void TNodeBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr
 void TNodeBroker::Handle(TEvNodeBroker::TEvListNodes::TPtr &ev,
                          const TActorContext &)
 {
+    TabletCounters->Cumulative()[COUNTER_LIST_NODES_REQUESTS].Increment(1);
     auto &rec = ev->Get()->Record;
 
     ui64 epoch = rec.GetMinEpoch();
@@ -833,6 +920,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvListNodes::TPtr &ev,
 void TNodeBroker::Handle(TEvNodeBroker::TEvResolveNode::TPtr &ev,
                          const TActorContext &ctx)
 {
+    TabletCounters->Cumulative()[COUNTER_RESOLVE_NODE_REQUESTS].Increment(1);
     ui32 nodeId = ev->Get()->Record.GetNodeId();
     TAutoPtr<TEvNodeBroker::TEvResolvedNode> resp = new TEvNodeBroker::TEvResolvedNode;
 
@@ -856,10 +944,11 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
 {
     LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvRegistrationRequest"
         << ": request# " << ev->Get()->Record.ShortDebugString());
+    TabletCounters->Cumulative()[COUNTER_REGISTRATION_REQUESTS].Increment(1);
 
-    class TRegisterNodeActor : public TActorBootstrapped<TRegisterNodeActor> {
+    class TResolveTenantActor : public TActorBootstrapped<TResolveTenantActor> {
         TEvNodeBroker::TEvRegistrationRequest::TPtr Ev;
-        TNodeBroker *Self;
+        TActorId ReplyTo;
         NActors::TScopeId ScopeId;
         TSubDomainKey ServicedSubDomain;
 
@@ -868,9 +957,9 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             return NKikimrServices::TActivity::NODE_BROKER_ACTOR;
         }
 
-        TRegisterNodeActor(TEvNodeBroker::TEvRegistrationRequest::TPtr& ev, TNodeBroker *self)
+        TResolveTenantActor(TEvNodeBroker::TEvRegistrationRequest::TPtr& ev, TActorId replyTo)
             : Ev(ev)
-            , Self(self)
+            , ReplyTo(replyTo)
         {}
 
         void Bootstrap(const TActorContext& ctx) {
@@ -927,7 +1016,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 << ": scope id# " << ScopeIdToString(ScopeId)
                 << ": serviced subdomain# " << ServicedSubDomain);
 
-            Self->ProcessTx(Self->CreateTxRegisterNode(Ev, ScopeId, ServicedSubDomain), ctx);
+            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain));
             Die(ctx);
         }
 
@@ -936,12 +1025,21 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             CFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
         })
     };
-    ctx.RegisterWithSameMailbox(new TRegisterNodeActor(ev, this));
+    ctx.RegisterWithSameMailbox(new TResolveTenantActor(ev, SelfId()));
+}
+
+void TNodeBroker::Handle(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev,
+                         const TActorContext &ctx) {
+    LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvGracefulShutdownRequest"
+        << ": request# " << ev->Get()->Record.ShortDebugString());   
+    TabletCounters->Cumulative()[COUNTER_GRACEFUL_SHUTDOWN_REQUESTS].Increment(1);
+    ProcessTx(CreateTxGracefulShutdown(ev), ctx);                     
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
+    TabletCounters->Cumulative()[COUNTER_EXTEND_LEASE_REQUESTS].Increment(1);
     ui32 nodeId = ev->Get()->Record.GetNodeId();
     ProcessTx(nodeId, CreateTxExtendLease(ev), ctx);
 }
@@ -984,6 +1082,29 @@ void TNodeBroker::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
     }
 
     ProcessTx(CreateTxUpdateEpoch(), ctx);
+}
+
+void TNodeBroker::Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    ProcessTx(CreateTxRegisterNode(ev), ctx);
+}
+
+TNodeBroker::TNodeBroker(const TActorId &tablet, TTabletStorageInfo *info)
+        : TActor(&TThis::StateInit)
+        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
+        , EpochDuration(TDuration::Hours(1))
+        , ConfigSubscriptionId(0)
+        , StableNodeNamePrefix("slot-")
+        , TxProcessor(new TTxProcessor(*this, "root", NKikimrServices::NODE_BROKER))
+{
+    TabletCountersPtr.Reset(new TProtobufTabletCounters<
+        ESimpleCounters_descriptor,
+        ECumulativeCounters_descriptor,
+        EPercentileCounters_descriptor,
+        ETxTypes_descriptor
+    >());
+    TabletCounters = TabletCountersPtr.Get();
 }
 
 IActor *CreateNodeBroker(const TActorId &tablet,

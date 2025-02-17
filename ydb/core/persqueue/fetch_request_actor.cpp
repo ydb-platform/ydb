@@ -75,7 +75,7 @@ private:
 
     bool CanProcessFetchRequest; //any partitions answered that it has data or WaitMs timeout occured
     ui32 FetchRequestReadsDone;
-    ui64 FetchRequestCurrentReadTablet; 
+    ui64 FetchRequestCurrentReadTablet;
     ui64 CurrentCookie;
     ui32 FetchRequestBytesLeft;
     THolder<TEvPQ::TEvFetchResponse> Response;
@@ -92,6 +92,9 @@ private:
     TString ErrorReason;
     TActorId RequesterId;
     ui64 PendingQuotaAmount;
+
+    std::unordered_map<TString, TString> PrivateTopicPathToCdcPath;
+    std::unordered_map<TString, TString> CdcPathToPrivateTopicPath;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -145,10 +148,10 @@ public:
                 break;
 
             case EWakeupTag::RlNoResource:
-                // Re-requesting the quota. We do this until we get a quota. 
+                // Re-requesting the quota. We do this until we get a quota.
                 RequestDataQuota(PendingQuotaAmount, ctx);
                 break;
-            
+
             default:
                 Y_VERIFY_DEBUG_S(false, "Unsupported tag: " << static_cast<ui64>(tag));
         }
@@ -171,21 +174,29 @@ public:
 
     void SendSchemeCacheRequest(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "SendSchemeCacheRequest");
-        
+
         auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(1);
         schemeCacheRequest->DatabaseName = Settings.Database;
 
         THashSet<TString> topicsRequested;
-        for (const auto& part : Settings.Partitions) {
-            auto ins = topicsRequested.insert(part.Topic).second;
-            if (!ins)
-                continue;
-            auto split = NKikimr::SplitPath(part.Topic);
+
+        if (PrivateTopicPathToCdcPath.empty()) {
+            for (const auto& part : Settings.Partitions) {
+                topicsRequested.insert(part.Topic);
+            }
+        } else {
+            for (const auto& [key, value] : PrivateTopicPathToCdcPath) {
+                topicsRequested.insert(key);
+            }
+        }
+
+        for (const auto& topicName : topicsRequested) {
+            auto split = NKikimr::SplitPath(topicName);
             TSchemeCacheNavigate::TEntry entry;
             entry.Path.insert(entry.Path.end(), split.begin(), split.end());
 
             entry.SyncVersion = true;
-            entry.ShowPrivatePath = false;
+            entry.ShowPrivatePath = true;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
 
             schemeCacheRequest->ResultSet.emplace_back(std::move(entry));
@@ -197,6 +208,7 @@ public:
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Handle SchemeCache response");
         auto& result = ev->Get()->Request;
+        bool anyCdcTopicInRequest = false;
         for (const auto& entry : result->ResultSet) {
             auto path = CanonizePath(NKikimr::JoinPath(entry.Path));
             switch (entry.Status) {
@@ -218,6 +230,16 @@ public:
                                 TStringBuilder() << "Got error: " << ToString(entry.Status) << " trying to find topic: " << path
                             ), ctx
                     );
+            }
+            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                anyCdcTopicInRequest = true;
+                Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
+                auto privateTopicPath = CanonizePath(JoinPath(ChildPath(NKikimr::SplitPath(path), entry.ListNodeEntry->Children.at(0).Name)));
+                PrivateTopicPathToCdcPath[privateTopicPath] = path;
+                CdcPathToPrivateTopicPath[path] = privateTopicPath;
+                TopicInfo[privateTopicPath] = TopicInfo[path];
+                TopicInfo.erase(path);
+                continue;
             }
             if (entry.Kind != TSchemeCacheNavigate::EKind::KindTopic) {
                 return SendReplyAndDie(
@@ -250,12 +272,18 @@ public:
                         ), ctx
                 );;
             }
-    
+
             auto& description = entry.PQGroupInfo->Description;
             auto& topicInfo = TopicInfo[path];
             topicInfo.BalancerTabletId = description.GetBalancerTabletID();
             topicInfo.PQInfo = entry.PQGroupInfo;
         }
+
+        if (anyCdcTopicInRequest) {
+            SendSchemeCacheRequest(ctx);
+            return;
+        }
+
         for (auto& p: TopicInfo) {
             ProcessMetadata(p.first, p.second, ctx);
         }
@@ -345,7 +373,7 @@ public:
             if (HandlePipeError(tabletId, ctx))
                 return;
 
-            auto reason = TStringBuilder() << "Client pipe to " << tabletId << " connection error, Status" 
+            auto reason = TStringBuilder() << "Client pipe to " << tabletId << " connection error, Status"
                                                            << NKikimrProto::EReplyStatus_Name(msg->Status).data()
                                                            << ", Marker# PQ6";
             return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::INTERNAL_ERROR, reason), ctx);
@@ -393,8 +421,15 @@ public:
             return SendReplyAndDie(std::move(Response), ctx);
         }
         Y_ABORT_UNLESS(FetchRequestReadsDone < Settings.Partitions.size());
-        const auto& req = Settings.Partitions[FetchRequestReadsDone];
-        const auto& topic = req.Topic;
+        auto& req = Settings.Partitions[FetchRequestReadsDone];
+
+        auto& topic = req.Topic;
+
+        auto cdcToPrivateIt = CdcPathToPrivateTopicPath.find(req.Topic);
+        if (cdcToPrivateIt != CdcPathToPrivateTopicPath.end()) {
+            topic = cdcToPrivateIt->second;
+        }
+
         const auto& offset = req.Offset;
         const auto& part = req.Partition;
         const auto& maxBytes = req.MaxBytes;
@@ -423,7 +458,7 @@ public:
         preq->Record.SetRequestId(reqId);
         auto partReq = preq->Record.MutablePartitionRequest();
         partReq->SetCookie(CurrentCookie);
-        
+
         partReq->SetTopic(topic);
         partReq->SetPartition(part);
         auto read = partReq->MutableCmdRead();
@@ -462,7 +497,13 @@ public:
         const auto& topic = req.Topic;
         const auto& part = req.Partition;
 
-        res->SetTopic(topic);
+        auto privateTopicToCdcIt = PrivateTopicPathToCdcPath.find(topic);
+        if (privateTopicToCdcIt == PrivateTopicPathToCdcPath.end()) {
+            res->SetTopic(topic);
+        } else {
+            res->SetTopic(PrivateTopicPathToCdcPath[topic]);
+        }
+
         res->SetPartition(part);
         auto read = res->MutableReadResult();
         if (record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult())
@@ -480,7 +521,8 @@ public:
         SetMeteringMode(it->second.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
 
         if (IsQuotaRequired()) {
-            PendingQuotaAmount = 1 + CalcRuConsumption(GetPayloadSize(record));
+            PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record)) + (Settings.RuPerRequest ? 1 : 0);
+            Settings.RuPerRequest = false;
             RequestDataQuota(PendingQuotaAmount, ctx);
         } else {
             ProceedFetchRequest(ctx);
@@ -495,16 +537,16 @@ public:
             const auto& results = response.GetCmdReadResult().GetResult();
             for (auto& r : results) {
                 auto proto(NKikimr::GetDeserializedData(r.GetData()));
-                readBytesSize += proto.GetData().Size();
+                readBytesSize += proto.GetData().size();
             }
         }
         return readBytesSize;
     }
 
     bool CheckAccess(const TSecurityObject& access) {
-        if (!Settings.User.Defined())
+        if (Settings.User == nullptr)
             return true;
-        return access.CheckAccess(NACLib::EAccessRights::SelectRow, Settings.User.GetRef());
+        return access.CheckAccess(NACLib::EAccessRights::SelectRow, *Settings.User);
     }
 
      void SendReplyAndDie(THolder<TEvPQ::TEvFetchResponse> event, const TActorContext& ctx) {

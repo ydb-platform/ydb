@@ -288,7 +288,8 @@ public:
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests) override {
+            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) override {
         if (auto res = RestoreWholeFromDataParts(logCtx, state, info)) {
             return *res;
         } else if (auto res = RestoreWholeWithErasure(logCtx, state, info)) {
@@ -302,7 +303,7 @@ public:
 
         if (auto res = SetAbsentForUnrecoverableAltruistic(altruisticState, state)) {
             return *res;
-        } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state)) {
+        } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state, info)) {
             return *res;
         } else if (auto res = ProcessPessimistic(info, pessimisticState, false, state)) {
             return *res;
@@ -311,15 +312,15 @@ public:
         // Try excluding the slow disk
         bool isDone = false;
         // TODO: Mark disk that does not answer when accelerating requests
-        i32 slowDiskSubgroupIdx = MarkSlowSubgroupDisk(state, info, blackboard, false);
-        if (slowDiskSubgroupIdx >= 0) {
+        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, blackboard, false, accelerationParams);
+        if (slowDiskSubgroupMask >= 0) {
             TBlobStorageGroupInfo::EBlobState fastPessimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
             TBlobStorageGroupInfo::EBlobState fastOptimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
             TBlobStorageGroupInfo::EBlobState fastAltruisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
             EvaluateCurrentLayout(logCtx, state, info, &fastPessimisticState, &fastOptimisticState,
                     &fastAltruisticState, true);
             if (!IsUnrecoverableAltruistic(fastAltruisticState)
-                    && !ProcessOptimistic(fastAltruisticState, fastOptimisticState, true, state)) {
+                    && !ProcessOptimistic(fastAltruisticState, fastOptimisticState, true, state, info)) {
                 IssueGetRequests(logCtx, state, info, true, groupDiskRequests);
                 isDone = true;
             }

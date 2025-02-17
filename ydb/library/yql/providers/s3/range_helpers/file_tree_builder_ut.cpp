@@ -1,7 +1,7 @@
 #include "file_tree_builder.h"
 #include "path_list_reader.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
         b.Save(&range);
 
         TPathList paths;
-        ReadPathsList({}, MakeParams(range), {}, paths);
+        ReadPathsList(MakeParams(range), {}, paths);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "name");
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
         b.Save(&range);
 
         TPathList paths;
-        ReadPathsList({}, MakeParams(range), {}, paths);
+        ReadPathsList(MakeParams(range), {}, paths);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "a///b");
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
         b.Save(&range);
 
         TPathList paths;
-        ReadPathsList({}, MakeParams(range), {}, paths);
+        ReadPathsList(MakeParams(range), {}, paths);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "root/name/");
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
         b.Save(&range);
 
         TPathList paths;
-        ReadPathsList({}, MakeParams(range), {}, paths);
+        ReadPathsList(MakeParams(range), {}, paths);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
 
@@ -178,6 +178,36 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
         UNIT_ASSERT_VALUES_EQUAL(paths[1].Size, 3);
         UNIT_ASSERT_VALUES_EQUAL(paths[1].IsDirectory, false);
         UNIT_ASSERT_VALUES_EQUAL(paths[1].PathIndex, 1);
+    }
+
+    Y_UNIT_TEST(DeserializesRootSlash) {
+        TFileTreeBuilder b;
+        b.AddPath("/root/name/", 3, true);
+        b.AddPath("", 42, true);
+        b.AddPath("//", 42, true);
+
+        NS3::TRange range;
+        b.Save(&range);
+
+        TPathList paths;
+        ReadPathsList(MakeParams(range), {}, paths);
+
+        UNIT_ASSERT_VALUES_EQUAL(paths.size(), 3);
+
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "//");
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].Size, 42);
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].IsDirectory, true);
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].PathIndex, 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(paths[1].Path, "/root/name/");
+        UNIT_ASSERT_VALUES_EQUAL(paths[1].Size, 3);
+        UNIT_ASSERT_VALUES_EQUAL(paths[1].IsDirectory, true);
+        UNIT_ASSERT_VALUES_EQUAL(paths[1].PathIndex, 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(paths[2].Path, "");
+        UNIT_ASSERT_VALUES_EQUAL(paths[2].Size, 42);
+        UNIT_ASSERT_VALUES_EQUAL(paths[2].IsDirectory, true);
+        UNIT_ASSERT_VALUES_EQUAL(paths[2].PathIndex, 2);
     }
 }
 

@@ -1,10 +1,18 @@
 # Вставка и модификация данных с помощью UPSERT
 
-Добавьте данные в таблицу с помощью конструкции [UPSERT INTO](../../yql/reference/syntax/upsert_into.md).
+{% note warning %}
+
+{% include [not_allow_for_olap](../../_includes/not_allow_for_olap_text.md) %}
+
+{% include [not_allow_for_olap](../../_includes/ways_add_data_to_olap.md) %}
+
+{% endnote %}
+
+Добавьте данные в строковою таблицу с помощью конструкции [UPSERT INTO](../../yql/reference/syntax/upsert_into.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 UPSERT INTO episodes
 (
     series_id,
@@ -27,6 +35,4 @@ COMMIT;
 
 -- Посмотреть результат:
 SELECT * FROM episodes WHERE series_id = 2 AND season_id = 5;
-
-COMMIT;
 ```

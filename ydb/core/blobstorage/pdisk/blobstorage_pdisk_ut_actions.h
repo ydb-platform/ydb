@@ -7,6 +7,7 @@
 #include "blobstorage_pdisk_chunk_id_formatter.h"
 
 #include <util/random/mersenne64.h>
+#include <ydb/core/base/blobstorage_common.h>
 
 namespace NKikimr {
 
@@ -1655,7 +1656,7 @@ private:
         switch (TestStep) {
         case 0:
             VERBOSE_COUT(" Sending TEvInit");
-            VDiskID.GroupID = MyNum;
+            VDiskID.GroupID = TGroupId::FromValue(MyNum);
             ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
             break;
         case 10:
@@ -1797,7 +1798,7 @@ private:
         switch (TestStep) {
         case 0:
             VERBOSE_COUT(" Sending TEvInit");
-            VDiskID.GroupID = MyNum;
+            VDiskID.GroupID = TGroupId::FromValue(MyNum);
             ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
             break;
         case 10:

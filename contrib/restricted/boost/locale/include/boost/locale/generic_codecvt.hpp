@@ -150,7 +150,7 @@ namespace boost { namespace locale {
     template<typename CharType, typename CodecvtImpl, int CharSize = sizeof(CharType)>
     class generic_codecvt;
 
-    /// \brief UTF-16 to/from UTF-8 codecvt facet to use with char16_t or wchar_t on Windows
+    /// \brief UTF-16 to/from narrow char codecvt facet to use with char16_t or wchar_t on Windows
     ///
     /// Note in order to fit the requirements of usability by std::wfstream it uses mbstate_t
     /// to handle intermediate states in handling of variable length UTF-16 sequences
@@ -344,7 +344,7 @@ namespace boost { namespace locale {
         }
     };
 
-    /// \brief UTF-32 to/from UTF-8 codecvt facet to use with char32_t or wchar_t on POSIX platforms
+    /// \brief UTF-32 to/from narrow char codecvt facet to use with char32_t or wchar_t on POSIX platforms
     ///
     /// Its member functions implement standard virtual functions of basic codecvt.
     /// mbstate_t is not used for UTF-32 handling due to fixed length encoding
@@ -456,11 +456,11 @@ namespace boost { namespace locale {
         }
     };
 
-    template<typename CharType, typename CodecvtImpl>
-    class generic_codecvt<CharType, CodecvtImpl, 1> : public std::codecvt<CharType, char, std::mbstate_t>,
-                                                      public generic_codecvt_base {
+    template<typename CodecvtImpl>
+    class generic_codecvt<char, CodecvtImpl, 1> : public std::codecvt<char, char, std::mbstate_t>,
+                                                  public generic_codecvt_base {
     public:
-        typedef CharType uchar;
+        typedef char uchar;
 
         const CodecvtImpl& implementation() const { return *static_cast<const CodecvtImpl*>(this); }
 

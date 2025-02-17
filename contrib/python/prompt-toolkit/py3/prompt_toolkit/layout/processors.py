@@ -5,6 +5,7 @@ from a buffer before the BufferControl will render it to the screen.
 They can insert fragments before or after, or highlight fragments by replacing the
 fragment types.
 """
+
 from __future__ import annotations
 
 import re
@@ -85,6 +86,9 @@ class TransformationInput:
         previous processors into account.)
     :param fragments: List of fragments that we can transform. (Received from the
         previous processor.)
+    :param get_line: Optional ; a callable that returns the fragments of another
+        line in the  current buffer; This can be used to create processors capable
+        of affecting transforms across multiple lines.
     """
 
     def __init__(
@@ -96,6 +100,7 @@ class TransformationInput:
         fragments: StyleAndTextTuples,
         width: int,
         height: int,
+        get_line: Callable[[int], StyleAndTextTuples] | None = None,
     ) -> None:
         self.buffer_control = buffer_control
         self.document = document
@@ -104,6 +109,7 @@ class TransformationInput:
         self.fragments = fragments
         self.width = width
         self.height = height
+        self.get_line = get_line
 
     def unpack(
         self,
@@ -343,9 +349,9 @@ class HighlightMatchingBracketProcessor(Processor):
         self.chars = chars
         self.max_cursor_distance = max_cursor_distance
 
-        self._positions_cache: SimpleCache[
-            Hashable, list[tuple[int, int]]
-        ] = SimpleCache(maxsize=8)
+        self._positions_cache: SimpleCache[Hashable, list[tuple[int, int]]] = (
+            SimpleCache(maxsize=8)
+        )
 
     def _get_positions_to_highlight(self, document: Document) -> list[tuple[int, int]]:
         """
@@ -841,9 +847,9 @@ class ReverseSearchProcessor(Processor):
     def apply_transformation(self, ti: TransformationInput) -> Transformation:
         from .controls import SearchBufferControl
 
-        assert isinstance(
-            ti.buffer_control, SearchBufferControl
-        ), "`ReverseSearchProcessor` should be applied to a `SearchBufferControl` only."
+        assert isinstance(ti.buffer_control, SearchBufferControl), (
+            "`ReverseSearchProcessor` should be applied to a `SearchBufferControl` only."
+        )
 
         source_to_display: SourceToDisplay | None
         display_to_source: DisplayToSource | None
@@ -924,11 +930,7 @@ class ConditionalProcessor(Processor):
             return Transformation(transformation_input.fragments)
 
     def __repr__(self) -> str:
-        return "{}(processor={!r}, filter={!r})".format(
-            self.__class__.__name__,
-            self.processor,
-            self.filter,
-        )
+        return f"{self.__class__.__name__}(processor={self.processor!r}, filter={self.filter!r})"
 
 
 class DynamicProcessor(Processor):
@@ -990,6 +992,7 @@ class _MergedProcessor(Processor):
                     fragments,
                     ti.width,
                     ti.height,
+                    ti.get_line,
                 )
             )
             fragments = transformation.fragments

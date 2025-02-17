@@ -2,10 +2,11 @@
 #include "rpc_common/rpc_common.h"
 #include "rpc_scheme_base.h"
 
-#include <ydb/core/ydb_convert/table_description.h>
-#include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/core/ydb_convert/table_settings.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/scheme/scheme_type_id.h>
+#include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/table_settings.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <ydb/core/grpc_services/base/base.h>
@@ -120,7 +121,6 @@ bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikim
         }
     }
 
-    to.SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
     status = {};
     return true;
 }
@@ -128,11 +128,6 @@ bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikim
 bool ConvertSchemaFromInternalToPublic(const NKikimrSchemeOp::TColumnTableSchema& from, Ydb::LogStore::Schema& to,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {
-    if (from.GetEngine() != NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES) {
-        status = Ydb::StatusIds::INTERNAL_ERROR;
-        error = TStringBuilder() << "Unexpected table engine: " << NKikimrSchemeOp::EColumnTableEngine_Name(from.GetEngine());
-        return false;
-    }
     to.mutable_primary_key()->CopyFrom(from.GetKeyColumnNames());
     for (const auto& column : from.GetColumns()) {
         auto* col = to.add_columns();
@@ -440,8 +435,6 @@ private:
             if (!FillTtlSettings(*create->MutableTtlSettings()->MutableEnabled(), req->ttl_settings(), status, error)) {
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
-        } else if (req->has_tiering_settings()) {
-            create->MutableTtlSettings()->SetUseTiering(req->tiering_settings().tiering_id());
         }
 
         create->SetColumnShardCount(req->shards_count());
@@ -514,29 +507,8 @@ private:
                 }
 
                 if (tableDescription.HasTtlSettings() && tableDescription.GetTtlSettings().HasEnabled()) {
-                    const auto& inTTL = tableDescription.GetTtlSettings().GetEnabled();
-
-                    switch (inTTL.GetColumnUnit()) {
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
-                        auto& outTTL = *describeLogTableResult.mutable_ttl_settings()->mutable_date_type_column();
-                        outTTL.set_column_name(inTTL.GetColumnName());
-                        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-                        break;
-                    }
-
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
-                        auto& outTTL = *describeLogTableResult.mutable_ttl_settings()->mutable_value_since_unix_epoch();
-                        outTTL.set_column_name(inTTL.GetColumnName());
-                        outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(inTTL.GetColumnUnit()));
-                        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-                        break;
-                    }
-
-                    default:
-                        break;
+                    if (!FillTtlSettings(*describeLogTableResult.mutable_ttl_settings(), tableDescription.GetTtlSettings().GetEnabled(), status, error)) {
+                        return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                     }
                 }
 
@@ -624,12 +596,6 @@ private:
             }
         } else if (req->has_drop_ttl_settings()) {
             alter->MutableAlterTtlSettings()->MutableDisabled();
-        }
-
-        if (req->has_set_tiering_settings()) {
-            alter->MutableAlterTtlSettings()->SetUseTiering(req->set_tiering_settings().tiering_id());
-        } else if (req->has_drop_tiering_settings()) {
-            alter->MutableAlterTtlSettings()->SetUseTiering("");
         }
 
         ctx.Send(MakeTxProxyID(), proposeRequest.release());

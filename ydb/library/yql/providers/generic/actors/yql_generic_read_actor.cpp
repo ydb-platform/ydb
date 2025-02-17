@@ -8,16 +8,16 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
-#include <ydb/library/yql/public/udf/arrow/util.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 namespace NYql::NDq {
 
@@ -27,11 +27,11 @@ namespace NYql::NDq {
 
         template <typename T>
         T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
-            //We want to avoid making a copy of data stored in a future.
-            //But there is no direct way to extract data from a const future
-            //So, we make a copy of the future, that is cheap. Then, extract the value from this copy.
-            //It destructs the value in the original future, but this trick is legal and documented here:
-            //https://docs.yandex-team.ru/arcadia-cpp/cookbook/concurrency
+            // We want to avoid making a copy of data stored in a future.
+            // But there is no direct way to extract data from a const future
+            // So, we make a copy of the future, that is cheap. Then, extract the value from this copy.
+            // It destructs the value in the original future, but this trick is legal and documented here:
+            // https://docs.yandex-team.ru/arcadia-cpp/cookbook/concurrency
             return NThreading::TFuture<T>(f).ExtractValueSync();
         }
 
@@ -59,7 +59,14 @@ namespace NYql::NDq {
 
         void Bootstrap() {
             Become(&TGenericReadActor::StateFunc);
-            InitSplitsListing();
+            auto issue = InitSplitsListing();
+            if (issue) {
+                return NotifyComputeActorWithIssue(
+                    TActivationContext::ActorSystem(),
+                    ComputeActorId_,
+                    InputIndex_,
+                    std::move(*issue));
+            };
         }
 
         static constexpr char ActorName[] = "GENERIC_READ_ACTOR";
@@ -79,13 +86,18 @@ namespace NYql::NDq {
 
         // ListSplits
 
-        void InitSplitsListing() {
+        TMaybe<TIssue> InitSplitsListing() {
             YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits listing";
 
             // Prepare request
             NConnector::NApi::TListSplitsRequest request;
             NConnector::NApi::TSelect select = Source_.select(); // copy TSelect from source
-            TokenProvider_->MaybeFillToken(*select.mutable_data_source_instance());
+
+            auto error = TokenProvider_->MaybeFillToken(*select.mutable_data_source_instance());
+            if (error) {
+                return TIssue(error);
+            }
+
             *request.mutable_selects()->Add() = std::move(select);
 
             // Initialize stream
@@ -100,6 +112,8 @@ namespace NYql::NDq {
                         TEvListSplitsIterator>(
                         actorSystem, selfId, computeActorId, inputIndex, future);
                 });
+
+            return Nothing();
         }
 
         void Handle(TEvListSplitsIterator::TPtr& ev) {
@@ -145,7 +159,16 @@ namespace NYql::NDq {
             // Server sent EOF, now we are ready to start splits reading
             if (NConnector::GrpcStatusEndOfStream(status)) {
                 YQL_CLOG(DEBUG, ProviderGeneric) << "Handle :: EvListSplitsFinished :: last message was reached, start data reading";
-                return InitSplitsReading();
+                auto issue = InitSplitsReading();
+                if (issue) {
+                    return NotifyComputeActorWithIssue(
+                        TActivationContext::ActorSystem(),
+                        ComputeActorId_,
+                        InputIndex_,
+                        std::move(*issue));
+                }
+
+                return;
             }
 
             // Server temporary failure
@@ -163,27 +186,32 @@ namespace NYql::NDq {
         }
 
         // ReadSplits
-        void InitSplitsReading() {
+        TMaybe<TIssue> InitSplitsReading() {
             YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits reading";
 
             if (Splits_.empty()) {
                 YQL_CLOG(WARN, ProviderGeneric) << "Accumulated empty list of splits";
                 ReadSplitsFinished_ = true;
-                return NotifyComputeActorWithData();
+                NotifyComputeActorWithData();
+                return Nothing();
             }
 
             // Prepare request
             NConnector::NApi::TReadSplitsRequest request;
             request.set_format(NConnector::NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
+            request.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL);
             request.mutable_splits()->Reserve(Splits_.size());
 
-            std::for_each(
-                Splits_.cbegin(), Splits_.cend(),
-                [&](const NConnector::NApi::TSplit& split) {
-                    NConnector::NApi::TSplit splitCopy = split;
-                    TokenProvider_->MaybeFillToken(*splitCopy.mutable_select()->mutable_data_source_instance());
-                    *request.mutable_splits()->Add() = std::move(split);
-                });
+            for (const auto& split : Splits_) {
+                NConnector::NApi::TSplit splitCopy = split;
+
+                auto error = TokenProvider_->MaybeFillToken(*splitCopy.mutable_select()->mutable_data_source_instance());
+                if (error) {
+                    return TIssue(std::move(error));
+                }
+
+                *request.mutable_splits()->Add() = std::move(splitCopy);
+            }
 
             // Start streaming
             Client_->ReadSplits(request).Subscribe(
@@ -197,6 +225,8 @@ namespace NYql::NDq {
                         TEvReadSplitsIterator>(
                         actorSystem, selfId, computeActorId, inputIndex, future);
                 });
+
+            return Nothing();
         }
 
         void Handle(TEvReadSplitsIterator::TPtr& ev) {
@@ -308,14 +338,27 @@ namespace NYql::NDq {
 
         static void NotifyComputeActorWithError(
             TActorSystem* actorSystem,
-            const NActors::TActorId computeActorId,
-            const ui64 inputIndex,
+            NActors::TActorId computeActorId,
+            ui64 inputIndex,
             const NConnector::NApi::TError& error) {
             actorSystem->Send(computeActorId,
                               new TEvAsyncInputError(
                                   inputIndex,
                                   NConnector::ErrorToIssues(error),
                                   NConnector::ErrorToDqStatus(error)));
+            return;
+        }
+
+        static void NotifyComputeActorWithIssue(
+            TActorSystem* actorSystem,
+            NActors::TActorId computeActorId,
+            ui64 inputIndex,
+            TIssue issue) {
+            actorSystem->Send(computeActorId,
+                              new TEvAsyncInputError(
+                                  inputIndex,
+                                  TIssues{std::move(issue)},
+                                  NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR));
             return;
         }
 
@@ -404,10 +447,10 @@ namespace NYql::NDq {
             TActorBootstrapped<TGenericReadActor>::PassAway();
         }
 
-        void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {
+        void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {
         }
 
-        void LoadState(const NDqProto::TSourceState&) final {
+        void LoadState(const TSourceState&) final {
         }
 
         void CommitState(const NDqProto::TCheckpoint&) final {
@@ -452,11 +495,11 @@ namespace NYql::NDq {
     {
         const auto dsi = source.select().data_source_instance();
         YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"
-                                        << " kind=" << NYql::NConnector::NApi::EDataSourceKind_Name(dsi.kind())
+                                        << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
                                         << ", endpoint=" << dsi.endpoint().ShortDebugString()
                                         << ", database=" << dsi.database()
                                         << ", use_tls=" << ToString(dsi.use_tls())
-                                        << ", protocol=" << NYql::NConnector::NApi::EProtocol_Name(dsi.protocol());
+                                        << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol());
 
         // FIXME: strange piece of logic - authToken is created but not used:
         // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp?rev=r11550199#L140
@@ -485,7 +528,8 @@ namespace NYql::NDq {
 
         auto tokenProvider = CreateGenericTokenProvider(
             source.GetToken(),
-            source.GetServiceAccountId(), source.GetServiceAccountIdSignature(),
+            source.GetServiceAccountId(), 
+            source.GetServiceAccountIdSignature(),
             credentialsFactory);
 
         const auto actor = new TGenericReadActor(

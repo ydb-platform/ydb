@@ -1,0 +1,127 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  22b5b5d070e97abf2f294fd8daa049ef
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 66.67
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [270:272]
+
+KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE_1_0.txt [1:23]
+
+KEEP     Zlib                 6d13094d211db3a58bdf333865e7b7c3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        include/miniselect/pdqselect.h [6:22]
+
+KEEP     BSL-1.0              7d3828955914ad1d2ca8cc379f314483
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/miniselect/floyd_rivest_select.h at line 3, include/miniselect/heap_select.h at line 3, include/miniselect/median_of_3_random.h at line 3, include/miniselect/median_of_medians.h at line 3, include/miniselect/median_of_ninthers.h at line 3, include/miniselect/median_of_ninthers.h at line 8, include/miniselect/pdqselect.h at line 26, include/miniselect/private/median_common.h at line 3, include/miniselect/private/median_common.h at line 8
+    License text:
+         * Distributed under the Boost Software License, Version 1.0.
+         *    (See accompanying file LICENSE_1_0.txt or copy at
+         *          https://boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 96.30
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/miniselect/floyd_rivest_select.h [2:4]
+        include/miniselect/heap_select.h [2:4]
+        include/miniselect/median_of_3_random.h [2:4]
+        include/miniselect/median_of_medians.h [2:4]
+        include/miniselect/median_of_ninthers.h [2:4]
+        include/miniselect/median_of_ninthers.h [7:9]
+        include/miniselect/pdqselect.h [25:27]
+        include/miniselect/private/median_common.h [2:4]
+        include/miniselect/private/median_common.h [7:9]
+
+KEEP     BSL-1.0              875c30f97ef14814ddf77b6469bdd156
+BELONGS ya.make
+    License text:
+        [![License](https://img.shields.io/badge/License-Boost%201.0-lightblue.svg)](https://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [2:2]
+
+KEEP     BSL-1.0              8b185f9934ff0624f3fc2241acab1ded
+BELONGS ya.make
+    License text:
+        The code is made available under the [Boost License 1.0](https://boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [265:265]
+        README.md [273:273]
+
+KEEP     BSL-1.0              e0ebbe8d1888f759d08bfccd2ebbd8bc
+BELONGS ya.make
+    License text:
+        [![License](https://img.shields.io/badge/License-Boost%201.0-lightblue.svg)](https://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [2:2]

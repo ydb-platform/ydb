@@ -1,6 +1,6 @@
 #pragma once
 
-#include "string.h"
+#include "format_arg.h"
 
 #include <library/cpp/yt/misc/enum.h>
 
@@ -15,10 +15,10 @@ TString DecodeEnumValue(TStringBuf value);
 TString EncodeEnumValue(TStringBuf value);
 
 template <class T>
-std::optional<T> TryParseEnum(TStringBuf value);
+std::optional<T> TryParseEnum(TStringBuf str, bool enableUnknown = false);
 
 template <class T>
-T ParseEnum(TStringBuf value);
+T ParseEnum(TStringBuf str);
 
 template <class T>
 void FormatEnum(TStringBuilderBase* builder, T value, bool lowerCase);

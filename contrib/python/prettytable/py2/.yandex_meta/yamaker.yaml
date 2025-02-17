@@ -1,0 +1,2 @@
+keep:
+  - tests/prettytable_test.py

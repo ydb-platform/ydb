@@ -6,18 +6,42 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
-#include <ydb/library/yql/minikql/dom/json.h>
-#include <ydb/library/yql/minikql/dom/yson.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/utils/utf8.h>
+#include <yql/essentials/minikql/dom/json.h>
+#include <yql/essentials/minikql/dom/yson.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/utils/utf8.h>
 
 namespace NKikimr {
+
+namespace {
+
+    bool FillAllowPermissions(NACLib::TDiffACL& out, const Ydb::Scheme::Permissions& in, TString& error) {
+        for (const auto& permission : in.permission_names()) {
+            try {
+                auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(permission);
+                out.AddAccess(
+                    NACLib::EAccessType::Allow,
+                    aclAttrs.AccessMask,
+                    in.subject(),
+                    aclAttrs.InheritanceType
+                );
+            } catch (const std::exception& e) {
+                error = e.what();
+                return false;
+            }
+        }
+        return true;
+    }
+
+} // anonymous namespace
 
 template<typename TOut>
 Y_FORCE_INLINE void ConvertMiniKQLTupleTypeToYdbType(const NKikimrMiniKQL::TTupleType& protoTupleType, TOut& output) {
@@ -170,7 +194,6 @@ void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& 
             break;
         }
         case Ydb::Type::kDecimalType: {
-            // TODO: Decimal parameters
             output.SetKind(NKikimrMiniKQL::ETypeKind::Data);
             auto data = output.MutableData();
             data->SetScheme(NYql::NProto::TypeIds::Decimal);
@@ -305,6 +328,14 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const NKikimrMiniKQL::
             res.set_uint64_value(value.GetUint64());
             break;
         case NUdf::TDataType<NUdf::TInterval>::Id:
+            res.set_int64_value(value.GetInt64());
+            break;
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+            res.set_int32_value(value.GetInt32());
+            break;
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
             res.set_int64_value(value.GetInt64());
             break;
         case NUdf::TDataType<NUdf::TDecimal>::Id:
@@ -446,6 +477,34 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
             }
             res.SetInt64(value.int64_value());
             break;
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Date32");
+            if (value.int32_value() >= NUdf::MAX_DATE32) {
+                throw yexception() << "Invalid Date32 value";
+            }
+            res.SetInt32(value.int32_value());
+            break;
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Datetime64");
+            if (value.int64_value() >= NUdf::MAX_DATETIME64) {
+                throw yexception() << "Invalid Datetime64 value";
+            }
+            res.SetInt64(value.int64_value());
+            break;
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Timestamp64");
+            if (value.int64_value() >= NUdf::MAX_TIMESTAMP64) {
+                throw yexception() << "Invalid Timestamp64 value";
+            }
+            res.SetInt64(value.int64_value());
+            break;
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval64");
+            if (std::abs(value.int64_value()) >= NUdf::MAX_INTERVAL64) {
+                throw yexception() << "Invalid Interval64 value";
+            }
+            res.SetInt64(value.int64_value());
+            break;
         case NUdf::TDataType<NUdf::TUuid>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kLow128, "Uuid");
             res.SetLow128(value.low_128());
@@ -454,10 +513,11 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "JsonDocument");
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(value.text_value());
-            if (!binaryJson.Defined()) {
-                throw yexception() << "Invalid JsonDocument value";
+            if (std::holds_alternative<TString>(binaryJson)){
+                throw yexception() << "Invalid JsonDocument value: " << std::get<TString>(binaryJson);
             }
-            res.SetBytes(binaryJson->Data(), binaryJson->Size());
+            const auto& value = std::get<NBinaryJson::TBinaryJson>(binaryJson);
+            res.SetBytes(value.Data(), value.Size());
             break;
         }
         case NUdf::TDataType<NUdf::TDyNumber>::Id: {
@@ -466,7 +526,7 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
             if (!dyNumber.Defined()) {
                 throw yexception() << "Invalid DyNumber value";
             }
-            res.SetBytes(dyNumber->Data(), dyNumber->Size());
+            res.SetBytes(dyNumber->data(), dyNumber->size());
             break;
         }
         case NUdf::TDataType<char*>::Id: {
@@ -1075,6 +1135,22 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
         ok = (ui64)std::abs(cell.AsValue<i64>()) < NUdf::MAX_TIMESTAMP;
         break;
 
+    case NScheme::NTypeIds::Date32:
+        ok = cell.AsValue<i32>() < NUdf::MAX_DATE32;
+        break;
+
+    case NScheme::NTypeIds::Datetime64:
+        ok = cell.AsValue<i64>() < NUdf::MAX_DATETIME64;
+        break;
+
+    case NScheme::NTypeIds::Timestamp64:
+        ok = cell.AsValue<i64>() < NUdf::MAX_TIMESTAMP64;
+        break;
+
+    case NScheme::NTypeIds::Interval64:
+        ok = std::abs(cell.AsValue<i64>()) < NUdf::MAX_INTERVAL64;
+        break;
+
     case NScheme::NTypeIds::Utf8:
         ok = NYql::IsUtf8(cell.AsBuf());
         break;
@@ -1115,9 +1191,7 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
     return ok;
 }
 
-
-
-bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
+bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Value* vp, bool allowCastFromString,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool)
 {
     if (vp->Hasnull_flag_value()) {
@@ -1130,13 +1204,30 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
     }
 
     const Ydb::Value& val = *vp;
+    auto typeId = type.GetTypeId();
 
 #define EXTRACT_VAL(cellType, protoType, cppType) \
     case NScheme::NTypeIds::cellType : { \
+        bool valuePresent = val.Has##protoType##_value(); \
+        if (valuePresent) { \
             cppType v = val.Get##protoType##_value(); \
             c = TCell((const char*)&v, sizeof(v)); \
-            break; \
-        }
+        } else if (allowCastFromString && val.Hastext_value()) { \
+            const auto slot = NUdf::GetDataSlot(typeId); \
+            const auto out = NMiniKQL::ValueFromString(slot, val.Gettext_value()); \
+            if (!out) { \
+                err = Sprintf("Cannot parse value of type " #cellType " from text '%s'", val.Gettext_value().data()); \
+                return false; \
+            } \
+            const auto v = out.Get<cppType>(); \
+            c = TCell((const char*)&v, sizeof(v)); \
+        } else { \
+            err = Sprintf("Value of type " #cellType " expected"); \
+            return false; \
+        } \
+        Y_ABORT_UNLESS(c.IsInline()); \
+        break; \
+    }
 
     switch (type.GetTypeId()) {
     EXTRACT_VAL(Bool, bool, ui8);
@@ -1166,11 +1257,12 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         }
     case NScheme::NTypeIds::JsonDocument : {
         const auto binaryJson = NBinaryJson::SerializeToBinaryJson(val.Gettext_value());
-        if (!binaryJson.Defined()) {
-            err = "Invalid JSON for JsonDocument provided";
+        if (std::holds_alternative<TString>(binaryJson)) {
+            err = "Invalid JSON for JsonDocument provided: " + std::get<TString>(binaryJson);
             return false;
         }
-        const auto binaryJsonInPool = valueDataPool.AppendString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
+        const auto& value = std::get<NBinaryJson::TBinaryJson>(binaryJson);
+        const auto binaryJsonInPool = valueDataPool.AppendString(TStringBuf(value.Data(), value.Size()));
         c = TCell(binaryJsonInPool.data(), binaryJsonInPool.size());
         break;
     }
@@ -1184,12 +1276,22 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         c = TCell(dyNumberInPool.data(), dyNumberInPool.size());
         break;
     }
-    case NScheme::NTypeIds::Yson :
-    case NScheme::NTypeIds::String : {
+    case NScheme::NTypeIds::Yson : {
             TString v = val.Getbytes_value();
             c = TCell(v.data(), v.size());
             break;
         }
+    case NScheme::NTypeIds::String : {
+        if (val.Hasbytes_value()) {
+            c = TCell(val.Getbytes_value().data(), val.Getbytes_value().size());
+        } else if (allowCastFromString && val.Hastext_value()) {
+            c = TCell(val.Gettext_value().data(), val.Gettext_value().size());
+        } else {
+            err = "Cannot parse value of type String";
+            return false;
+        }
+        break;
+    }
     case NScheme::NTypeIds::Decimal :
     case NScheme::NTypeIds::Uuid : {
         std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
@@ -1204,7 +1306,7 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         TString text = val.Gettext_value();
         if (!text.empty()) {
             isText = true;
-            auto desc = type.GetTypeDesc();
+            auto desc = type.GetPgTypeDesc();
             auto res = NPg::PgNativeBinaryFromNativeText(text, desc);
             if (res.Error) {
                 err = TStringBuilder() << "Invalid text value for "
@@ -1215,7 +1317,7 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         } else {
             binary = val.Getbytes_value();
         }
-        auto* desc = type.GetTypeDesc();
+        auto* desc = type.GetPgTypeDesc();
         if (typmod != -1 && NPg::TypeDescNeedsCoercion(desc)) {
             auto res = NPg::PgNativeBinaryCoerce(TStringBuf(binary), desc, typmod);
             if (res.Error) {
@@ -1308,6 +1410,18 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
     case EPrimitiveType::Interval:
         vb.Interval(cell.AsValue<i64>());
         break;
+    case EPrimitiveType::Date32:
+        vb.Date32(cell.AsValue<i32>());
+        break;
+    case EPrimitiveType::Datetime64:
+        vb.Datetime64(cell.AsValue<i64>());
+        break;
+    case EPrimitiveType::Timestamp64:
+        vb.Timestamp64(cell.AsValue<i64>());
+        break;
+    case EPrimitiveType::Interval64:
+        vb.Interval64(cell.AsValue<i64>());
+        break;
     case EPrimitiveType::TzDate:
         vb.TzDate(getString());
         break;
@@ -1329,11 +1443,15 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
     case EPrimitiveType::Json:
         vb.Json(getString());
         break;
-    case EPrimitiveType::Uuid:
-        vb.Uuid(getString());
+    case EPrimitiveType::Uuid: {
+        ui64 hi;
+        ui64 lo;
+        NUuid::UuidBytesToHalfs(cell.AsBuf().data(), 16, hi, lo);
+        vb.Uuid(TUuidValue(lo, hi));
         break;
+    }
     case EPrimitiveType::JsonDocument:
-        vb.JsonDocument(getString());
+        vb.JsonDocument(NBinaryJson::SerializeToJson(getString()));
         break;
     case EPrimitiveType::DyNumber:
         vb.DyNumber(getString());
@@ -1342,5 +1460,128 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
         Y_ENSURE(false, TStringBuilder() << "Unsupported type: " << primitive);
     }
 }
+
+bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
+             const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in,
+             TString& error) {
+    if (in.Empty()) {
+        return true;
+    }
+
+    NACLib::TDiffACL diffACL;
+    for (const auto& action : in->actions()) {
+        if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
+            return false;
+        }
+    }
+    out.MutableModifyACL()->SetDiffACL(diffACL.SerializeAsString());
+
+    return true;
+}
+
+void FillOwner(NKikimrScheme::TEvModifySchemeTransaction& out,
+    const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in) {
+    if (in.Empty()) {
+        return;
+    }
+
+    for (const auto& action : in->actions()) {
+        if (action.has_change_owner()) {
+            out.SetOwner(action.change_owner());
+        }
+    }
+}
+
+#define CHECK_OR_RETURN_ERROR(cond, descr) \
+    if (!(cond)) { \
+        errStr = descr; \
+        return false; \
+    }
+
+// NOTE: TCell's can reference memory from tupleValue
+bool CellsFromTuple(const Ydb::Type* tupleType,
+                    const Ydb::Value& tupleValue,
+                    const TConstArrayRef<TConversionTypeInfo>& types,
+                    bool allowCastFromString,
+                    bool checkNullability,
+                    TVector<TCell>& key,
+                    TString& errStr,
+                    TMemoryPool& valueDataPool) {
+    if (tupleType) {
+        Ydb::Type::TypeCase typeCase = tupleType->type_case();
+        CHECK_OR_RETURN_ERROR(typeCase == Ydb::Type::kTupleType ||
+                              (typeCase == Ydb::Type::TYPE_NOT_SET && tupleType->tuple_type().elementsSize() == 0), "Must be a tuple");
+        CHECK_OR_RETURN_ERROR(tupleType->tuple_type().elementsSize() <= types.size(),
+            "Tuple size " + ToString(tupleType->tuple_type().elementsSize()) + " is greater that expected size " + ToString(types.size()));
+
+        for (size_t i = 0; i < tupleType->tuple_type().elementsSize(); ++i) {
+            const auto& ti = tupleType->tuple_type().Getelements(i);
+            if (checkNullability && !types[i].IsNotNull) {
+                // do not allow to build cell for nullable column from not nullable type (PG type allways optional)
+                CHECK_OR_RETURN_ERROR(
+                    ti.type_case() == Ydb::Type::kOptionalType || ti.type_case() == Ydb::Type::kPgType,
+                    "Element at index " + ToString(i) + " in not an Optional");
+            }
+            const auto& item = ti.type_case() == Ydb::Type::kOptionalType ? ti.Getoptional_type().Getitem() : ti;
+            const auto& typeId = item.type_id();
+
+            NScheme::TTypeInfoMod typeInfoMod;
+            TString typeErr;
+            if (!NScheme::TypeInfoFromProto(item, typeInfoMod, typeErr)) {
+                CHECK_OR_RETURN_ERROR(false, "Element at index " + ToString(i) + ", type parsing error: " + typeErr);
+            }
+
+            switch (item.type_case()) {
+            case Ydb::Type::kTypeId: {
+                CHECK_OR_RETURN_ERROR(typeInfoMod.TypeInfo == types[i].TypeInfo ||
+                    allowCastFromString && (typeInfoMod.TypeInfo.GetTypeId() == NScheme::NTypeIds::Utf8),
+                    "Element at index " + ToString(i) + " has type " + Type_PrimitiveTypeId_Name(typeId) + " but expected type is " + ToString(types[i].TypeInfo.GetTypeId()));
+                break;
+            }
+            case Ydb::Type::kPgType: {
+                CHECK_OR_RETURN_ERROR(typeInfoMod.TypeInfo == types[i].TypeInfo && typeInfoMod.TypeMod == types[i].TypeMod,
+                    "Element at index " + ToString(i) + " has pg type " + NPg::PgTypeNameFromTypeDesc(typeInfoMod.TypeInfo.GetPgTypeDesc(), typeInfoMod.TypeMod)
+                    + " but expected type is " + NPg::PgTypeNameFromTypeDesc(types[i].TypeInfo.GetPgTypeDesc(), types[i].TypeMod));
+                break;
+            }
+            default:
+                CHECK_OR_RETURN_ERROR(false, "Element at index " + ToString(i) + " in not a TypeId or PgType");
+                break;
+            }
+        }
+
+        CHECK_OR_RETURN_ERROR(tupleType->Gettuple_type().elementsSize() == tupleValue.itemsSize(),
+            Sprintf("Tuple value length %" PRISZT " doesn't match the length in type %" PRISZT, tupleValue.itemsSize(), tupleType->Gettuple_type().elementsSize()));
+    } else {
+        CHECK_OR_RETURN_ERROR(types.size() >= tupleValue.itemsSize(),
+            Sprintf("Tuple length %" PRISZT " is greater than key column count %" PRISZT, tupleValue.itemsSize(), types.size()));
+    }
+
+    for (ui32 i = 0; i < tupleValue.itemsSize(); ++i) {
+        auto& v = tupleValue.Getitems(i);
+
+        // allow to build cell for nullable column from not nullable type for compatibility reason, so there is no checks.
+        // nested value will be unwrapped in CellFromProtoVal()
+
+        i32 typmod = -1;
+        if (types[i].TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg && !types[i].TypeMod.empty()) {
+            const auto result = NPg::BinaryTypeModFromTextTypeMod(types[i].TypeMod, types[i].TypeInfo.GetPgTypeDesc());
+            CHECK_OR_RETURN_ERROR(!result.Error, Sprintf("Invalid TypeMod in tuple at position %" PRIu32 ", error: %s", i, result.Error->data()));
+        }
+        TCell c;
+        TString cellErr;
+        bool parsed = CellFromProtoVal(types[i].TypeInfo, typmod, &v, allowCastFromString, c, cellErr, valueDataPool);
+
+        CHECK_OR_RETURN_ERROR(parsed, cellErr + " in tuple at position " + ToString(i));
+
+        if (!parsed) {
+            return false;
+        }
+        key.push_back(c);
+    }
+
+    return true;
+}
+#undef CHECK_OR_RETURN_ERROR
 
 } // namespace NKikimr

@@ -4,8 +4,6 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
     FORK_SUBTESTS()
 
-    TIMEOUT(600)
-
     SRCS(
         balancing.cpp
     )

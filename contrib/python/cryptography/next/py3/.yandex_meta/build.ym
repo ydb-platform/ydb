@@ -1,0 +1,7 @@
+{% extends '//builtin/pypi.ym' %}
+
+{% block pypi_package %}
+cryptography
+{% endblock %}
+
+{% block current_version %}41.0.6{% endblock %}

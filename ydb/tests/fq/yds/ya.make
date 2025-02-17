@@ -1,6 +1,7 @@
 PY3TEST()
 
 FORK_SUBTESTS()
+
 SPLIT_FACTOR(50)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
@@ -12,7 +13,9 @@ PEERDIR(
     ydb/tests/tools/fq_runner
 )
 
-DEPENDS(ydb/tests/tools/pq_read)
+DEPENDS(
+    ydb/tests/tools/pq_read
+)
 
 PY_SRCS(
     conftest.py
@@ -39,6 +42,7 @@ TEST_SRCS(
     test_recovery_match_recognize.py
     test_recovery_mz.py
     test_restart_query.py
+    test_row_dispatcher.py
     test_select_1.py
     test_select_limit_db_id.py
     test_select_limit.py
@@ -49,15 +53,11 @@ TEST_SRCS(
     test_yq_streaming.py
 )
 
-IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(2400)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
-
-REQUIREMENTS(ram:16)
 
 END()

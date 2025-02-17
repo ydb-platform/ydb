@@ -14,10 +14,10 @@ namespace NKikimr::NConveyor {
 class TWorkerTask {
 private:
     YDB_READONLY_DEF(ITask::TPtr, Task);
-    YDB_READONLY_DEF(NActors::TActorId, OwnerId);
     YDB_READONLY(TMonotonic, CreateInstant, TMonotonic::Now());
     YDB_READONLY_DEF(std::shared_ptr<TTaskSignals>, TaskSignals);
     std::optional<TMonotonic> StartInstant;
+    YDB_READONLY(ui64, ProcessId, 0);
 public:
     void OnBeforeStart() {
         StartInstant = TMonotonic::Now();
@@ -28,10 +28,10 @@ public:
         return *StartInstant;
     }
 
-    TWorkerTask(ITask::TPtr task, const NActors::TActorId& ownerId, std::shared_ptr<TTaskSignals> taskSignals)
+    TWorkerTask(const ITask::TPtr& task, const std::shared_ptr<TTaskSignals>& taskSignals, const ui64 processId)
         : Task(task)
-        , OwnerId(ownerId)
         , TaskSignals(taskSignals)
+        , ProcessId(processId)
     {
         Y_ABORT_UNLESS(task);
     }
@@ -66,23 +66,16 @@ struct TEvInternal {
     };
 
     class TEvTaskProcessedResult:
-        public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult>,
-        public TConclusion<ITask::TPtr> {
+        public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
     private:
         using TBase = TConclusion<ITask::TPtr>;
         YDB_READONLY_DEF(TMonotonic, StartInstant);
-        YDB_READONLY_DEF(NActors::TActorId, OwnerId);
+        YDB_READONLY(ui64, ProcessId, 0);
     public:
-        TEvTaskProcessedResult(const TWorkerTask& originalTask, const TString& errorMessage)
-            : TBase(TConclusionStatus::Fail(errorMessage))
-            , StartInstant(originalTask.GetStartInstant())
-            , OwnerId(originalTask.GetOwnerId()) {
-
-        }
-        TEvTaskProcessedResult(const TWorkerTask& originalTask, ITask::TPtr result)
-            : TBase(result)
-            , StartInstant(originalTask.GetStartInstant())
-            , OwnerId(originalTask.GetOwnerId()) {
+        TEvTaskProcessedResult(const TWorkerTask& originalTask)
+            : StartInstant(originalTask.GetStartInstant())
+            , ProcessId(originalTask.GetProcessId())
+        {
 
         }
     };
@@ -91,13 +84,20 @@ struct TEvInternal {
 class TWorker: public NActors::TActorBootstrapped<TWorker> {
 private:
     using TBase = NActors::TActorBootstrapped<TWorker>;
-public:
+    const double CPUUsage = 1;
+    bool WaitWakeUp = false;
+    const NActors::TActorId DistributorId;
+    std::optional<TWorkerTask> WaitTask;
+    void ExecuteTask(const TWorkerTask& workerTask);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);
+    void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
+public:
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInternal::TEvNewTask, HandleMain);
-            default:
+            hFunc(NActors::TEvents::TEvWakeup, HandleMain);
+        default:
                 ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "unexpected event for task executor: " << ev->GetTypeRewrite();
                 break;
         }
@@ -107,8 +107,10 @@ public:
         Become(&TWorker::StateMain);
     }
 
-    TWorker(const TString& conveyorName)
+    TWorker(const TString& conveyorName, const double cpuUsage, const NActors::TActorId& distributorId)
         : TBase("CONVEYOR::" + conveyorName + "::WORKER")
+        , CPUUsage(cpuUsage)
+        , DistributorId(distributorId)
     {
 
     }

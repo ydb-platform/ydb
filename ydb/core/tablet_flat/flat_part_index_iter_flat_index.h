@@ -149,6 +149,18 @@ public:
         return Iter.GetRecord()->Cell(GroupInfo.ColsKeyIdx[index]);
     }
 
+    void GetKeyCells(TSmallVec<TCell>& keyCells) const override {
+        keyCells.clear();
+
+        Y_ABORT_UNLESS(Index);
+        Y_ABORT_UNLESS(Iter);
+        
+        auto record = Iter.GetRecord();
+        for (auto index : xrange(GroupInfo.KeyTypes.size())) {
+            keyCells.push_back(record->Cell(GroupInfo.ColsKeyIdx[index]));
+        }
+    }
+
     const TRecord * GetRecord() const {
         Y_ABORT_UNLESS(Index);
         Y_ABORT_UNLESS(Iter);
@@ -172,7 +184,7 @@ private:
             return &*Index;
         }
         auto pageId = Part->IndexPages.GetFlat(GroupId);
-        auto page = Env->TryGetPage(Part, pageId);
+        auto page = Env->TryGetPage(Part, pageId, {});
         if (page) {
             Index = TIndex(*page);
             Y_VERIFY_DEBUG_S(EndRowId == Index->GetEndRowId(), "EndRowId mismatch " << EndRowId << " != " << Index->GetEndRowId() << " (group " << GroupId.Historic << "/" << GroupId.Index <<")");

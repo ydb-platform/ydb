@@ -12,6 +12,7 @@
 #include <yt/yt/core/net/connection.h>
 
 #include <yt/yt/core/concurrency/poller.h>
+
 #include <util/string/cast.h>
 
 namespace NYT::NHttp {
@@ -26,13 +27,13 @@ class TClient
 {
 public:
     TClient(
-        const TClientConfigPtr& config,
-        const IDialerPtr& dialer,
-        const IInvokerPtr& invoker)
-        : Config_(config)
-        , Dialer_(dialer)
-        , Invoker_(invoker)
-        , ConnectionPool_(New<TConnectionPool>(dialer, config, invoker))
+        TClientConfigPtr config,
+        IDialerPtr dialer,
+        IInvokerPtr invoker)
+        : Config_(std::move(config))
+        , Dialer_(std::move(dialer))
+        , Invoker_(std::move(invoker))
+        , ConnectionPool_(New<TConnectionPool>(Dialer_, Config_, Invoker_))
     { }
 
     TFuture<IResponsePtr> Get(
@@ -94,11 +95,22 @@ public:
         return StartRequest(EMethod::Put, url, headers);
     }
 
+    TFuture<IResponsePtr> Request(
+        EMethod method,
+        const TString& url,
+        const std::optional<TSharedRef>& body,
+        const THeadersPtr& headers) override
+    {
+        return WrapError(url, BIND([=, this, this_ = MakeStrong(this)] {
+            return DoRequest(method, url, body, headers);
+        }));
+    }
+
 private:
     const TClientConfigPtr Config_;
     const IDialerPtr Dialer_;
     const IInvokerPtr Invoker_;
-    TConnectionPoolPtr ConnectionPool_;
+    const TConnectionPoolPtr ConnectionPool_;
 
     static int GetDefaultPort(const TUrlRef& parsedUrl)
     {
@@ -114,9 +126,8 @@ private:
         auto host = parsedUrl.Host;
         TNetworkAddress address;
 
-        auto tryIP = TNetworkAddress::TryParse(host);
-        if (tryIP.IsOK()) {
-            address = tryIP.Value();
+        if (auto ipOrError = TNetworkAddress::TryParse(host); ipOrError.IsOK()) {
+            address = ipOrError.Value();
         } else {
             auto asyncAddress = TAddressResolver::Get()->Resolve(ToString(host));
             address = WaitFor(asyncAddress)
@@ -126,15 +137,17 @@ private:
         return TNetworkAddress(address, parsedUrl.Port.value_or(GetDefaultPort(parsedUrl)));
     }
 
-    std::pair<THttpOutputPtr, THttpInputPtr> OpenHttp(const TUrlRef& urlRef)
+    std::pair<THttpOutputPtr, THttpInputPtr> Connect(const TUrlRef& urlRef)
     {
         auto context = New<TDialerContext>();
         context->Host = urlRef.Host;
+
         auto address = GetAddress(urlRef);
 
         // TODO(aleexfi): Enable connection pool by default
         if (Config_->MaxIdleConnections == 0) {
-            auto connection = WaitFor(Dialer_->Dial(address, std::move(context))).ValueOrThrow();
+            auto connection = WaitFor(Dialer_->Dial(address, std::move(context)))
+                .ValueOrThrow();
 
             auto input = New<THttpInput>(
                 connection,
@@ -150,9 +163,10 @@ private:
 
             return {std::move(output), std::move(input)};
         } else {
-            auto connection = WaitFor(ConnectionPool_->Connect(address, std::move(context))).ValueOrThrow();
+            auto connection = WaitFor(ConnectionPool_->Connect(address, std::move(context)))
+                .ValueOrThrow();
 
-            auto reuseSharedState = New<NDetail::TReusableConnectionState>(connection, ConnectionPool_);
+            auto reusableState = New<NDetail::TReusableConnectionState>(connection, ConnectionPool_);
 
             auto input = New<NDetail::TConnectionReuseWrapper<THttpInput>>(
                 connection,
@@ -160,13 +174,13 @@ private:
                 Invoker_,
                 EMessageType::Response,
                 Config_);
-            input->SetReusableState(reuseSharedState);
+            input->SetReusableState(reusableState);
 
             auto output = New<NDetail::TConnectionReuseWrapper<THttpOutput>>(
                 connection,
                 EMessageType::Request,
                 Config_);
-            output->SetReusableState(reuseSharedState);
+            output->SetReusableState(reusableState);
 
             return {std::move(output), std::move(input)};
         }
@@ -175,7 +189,7 @@ private:
     template <typename T>
     TFuture<T> WrapError(const TString& url, TCallback<T()> action)
     {
-        return BIND([=, this_ = MakeStrong(this)] {
+        return BIND([=, this_ = MakeStrong(this), action = std::move(action)] {
             try {
                 return action();
             } catch (const std::exception& ex) {
@@ -196,8 +210,7 @@ private:
             THttpOutputPtr request,
             THttpInputPtr response,
             TIntrusivePtr<TClient> client,
-            TString url
-        )
+            TString url)
             : Request_(std::move(request))
             , Response_(std::move(response))
             , Client_(std::move(client))
@@ -213,7 +226,7 @@ private:
                 // Waits for response headers internally.
                 Response_->GetStatusCode();
 
-                return IResponsePtr{Response_};
+                return IResponsePtr(Response_);
             }));
         }
 
@@ -228,10 +241,10 @@ private:
         }
 
     private:
-        THttpOutputPtr Request_;
-        THttpInputPtr Response_;
-        TIntrusivePtr<TClient> Client_;
-        TString Url_;
+        const THttpOutputPtr Request_;
+        const THttpInputPtr Response_;
+        const TIntrusivePtr<TClient> Client_;
+        const TString Url_;
     };
 
     std::pair<THttpOutputPtr, THttpInputPtr> StartAndWriteHeaders(
@@ -244,7 +257,7 @@ private:
 
         auto urlRef = ParseUrl(url);
 
-        std::tie(request, response) = OpenHttp(urlRef);
+        std::tie(request, response) = Connect(urlRef);
 
         request->SetHost(urlRef.Host, urlRef.PortStr);
         if (headers) {
@@ -266,7 +279,7 @@ private:
     {
         return WrapError(url, BIND([=, this, this_ = MakeStrong(this)] {
             auto [request, response] = StartAndWriteHeaders(method, url, headers);
-            return IActiveRequestPtr{New<TActiveRequest>(request, response, this_, url)};
+            return IActiveRequestPtr(New<TActiveRequest>(request, response, this_, url));
         }));
     }
 
@@ -287,45 +300,44 @@ private:
                 .ThrowOnError();
         }
 
+        if (Config_->IgnoreContinueResponses) {
+            while (response->GetStatusCode() == EStatusCode::Continue) {
+                response->Reset();
+            }
+        }
+
         // Waits for response headers internally.
         auto redirectUrl = response->TryGetRedirectUrl();
         if (redirectUrl && redirectCount < Config_->MaxRedirectCount) {
             return DoRequest(method, *redirectUrl, body, headers, redirectCount + 1);
         }
 
-        return IResponsePtr(response);
-    }
-
-    TFuture<IResponsePtr> Request(
-        EMethod method,
-        const TString& url,
-        const std::optional<TSharedRef>& body,
-        const THeadersPtr& headers)
-    {
-        return WrapError(url, BIND([=, this, this_ = MakeStrong(this)] {
-            return DoRequest(method, url, body, headers);
-        }));
+        return response;
     }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 IClientPtr CreateClient(
-    const TClientConfigPtr& config,
-    const IDialerPtr& dialer,
-    const IInvokerPtr& invoker)
+    TClientConfigPtr config,
+    IDialerPtr dialer,
+    IInvokerPtr invoker)
 {
-    return New<TClient>(config, dialer, invoker);
+    return New<TClient>(
+        std::move(config),
+        std::move(dialer),
+        std::move(invoker));
 }
 
 IClientPtr CreateClient(
-    const TClientConfigPtr& config,
-    const IPollerPtr& poller)
+    TClientConfigPtr config,
+    IPollerPtr poller)
 {
+    auto invoker = poller->GetInvoker();
     return CreateClient(
-        config,
-        CreateDialer(New<TDialerConfig>(), poller, HttpLogger),
-        poller->GetInvoker());
+        std::move(config),
+        CreateDialer(New<TDialerConfig>(), std::move(poller), HttpLogger()),
+        std::move(invoker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

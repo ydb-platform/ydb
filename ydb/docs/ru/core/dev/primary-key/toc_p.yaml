@@ -1,0 +1,5 @@
+items:
+- name: Строковые
+  href: row-oriented.md
+- name: Колоночные
+  href: column-oriented.md

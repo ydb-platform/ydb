@@ -1,4 +1,5 @@
 #include "agent_impl.h"
+#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -177,7 +178,7 @@ namespace NKikimr::NBlobDepot {
         switch (Event->GetTypeRewrite()) {
 #define XX(TYPE) \
             case TEvBlobStorage::TYPE: \
-                response = Event->Get<TEvBlobStorage::T##TYPE>()->MakeErrorResponse(status, errorReason, Agent.VirtualGroupId); \
+                response = Event->Get<TEvBlobStorage::T##TYPE>()->MakeErrorResponse(status, errorReason, TGroupId::FromValue(Agent.VirtualGroupId)); \
                 static_cast<TEvBlobStorage::T##TYPE##Result&>(*response).ExecutionRelay = std::move(ExecutionRelay); \
                 break; \
             //
@@ -207,6 +208,20 @@ namespace NKikimr::NBlobDepot {
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
         OnDestroy(true);
         DoDestroy();
+    }
+
+    NKikimrProto::EReplyStatus TBlobDepotAgent::TQuery::CheckBlockForTablet(ui64 tabletId, std::optional<ui32> generation,
+            ui32 *blockedGeneration) {
+        const NKikimrProto::EReplyStatus status = Agent.BlocksManager.CheckBlockForTablet(tabletId, generation, this,
+            blockedGeneration);
+        if (status != NKikimrProto::OK) {
+            if (status != NKikimrProto::UNKNOWN) {
+                EndWithError(status, "block race detected");
+            } else if (!--BlockChecksRemain) {
+                EndWithError(NKikimrProto::ERROR, "failed to obtain blocked generation");
+            }
+        }
+        return status;
     }
 
     void TBlobDepotAgent::TQuery::DoDestroy() {

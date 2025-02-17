@@ -1,0 +1,589 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              07d4ea27a275fc0b7043690f14bf03f1
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2006-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/detail/file_wrapper.hpp [3:5]
+        include/boost/interprocess/detail/managed_open_or_create_impl.hpp [3:5]
+        include/boost/interprocess/smart_ptr/detail/shared_count.hpp [7:9]
+        include/boost/interprocess/smart_ptr/enable_shared_from_this.hpp [6:8]
+        include/boost/interprocess/smart_ptr/intrusive_ptr.hpp [6:8]
+        include/boost/interprocess/smart_ptr/scoped_ptr.hpp [7:9]
+
+SKIP     LicenseRef-scancode-other-permissive 0bee3b00e8750de5f3ce9c579c53bed5
+BELONGS ya.make
+    License text:
+        // in supporting documentation.  William E. Kempf makes no representations
+        // about the suitability of this software for any purpose.
+        // It is provided "as is" without express or implied warranty.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        include/boost/interprocess/sync/interprocess_recursive_mutex.hpp [22:24]
+        include/boost/interprocess/sync/posix/mutex.hpp [22:24]
+        include/boost/interprocess/sync/posix/recursive_mutex.hpp [22:24]
+        include/boost/interprocess/sync/spin/recursive_mutex.hpp [22:24]
+
+KEEP     BSL-1.0              27c441c3cf7de0c94aaeb366f028696b
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2020-2021. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/detail/char_wchar_holder.hpp [3:5]
+
+KEEP     BSL-1.0              2cc71fe4bd12718a9884bf7ff37269f3
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+        // http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/detail/min_max.hpp [5:7]
+        include/boost/interprocess/detail/move.hpp [4:6]
+        include/boost/interprocess/detail/mpl.hpp [5:7]
+        include/boost/interprocess/detail/pointer_type.hpp [6:8]
+        include/boost/interprocess/detail/timed_utils.hpp [5:7]
+        include/boost/interprocess/detail/transform_iterator.hpp [6:8]
+        include/boost/interprocess/detail/type_traits.hpp [5:7]
+        include/boost/interprocess/detail/utilities.hpp [6:8]
+        include/boost/interprocess/smart_ptr/deleter.hpp [5:7]
+        include/boost/interprocess/smart_ptr/detail/sp_counted_base.hpp [5:7]
+        include/boost/interprocess/smart_ptr/shared_ptr.hpp [8:10]
+        include/boost/interprocess/smart_ptr/weak_ptr.hpp [7:9]
+
+KEEP     BSL-1.0              304c8552dc56cab871c2de4763ff6fc9
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        //    (See accompanying file LICENSE_1_0.txt or copy at
+        //    http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/detail/math_functions.hpp [6:8]
+
+KEEP     BSL-1.0              3a69d67d5822ad2987752d722c44ca2a
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2007-2014. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/detail/shared_dir_helpers.hpp [3:5]
+
+KEEP     BSL-1.0              47a0454637d4fa45d78eb2557ccd70c4
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+        // http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/detail/atomic.hpp [7:9]
+        include/boost/interprocess/smart_ptr/detail/sp_counted_base_atomic.hpp [16:18]
+        include/boost/interprocess/smart_ptr/detail/sp_counted_impl.hpp [20:22]
+
+KEEP     BSL-1.0              4d5252e413de14514a327fd589154ef8
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2005-2013. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/detail/os_thread_functions.hpp [3:5]
+
+KEEP     BSL-1.0              4ea1383dd870de8fa4ba78b3f077f660
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2009-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/containers/containers_fwd.hpp [3:5]
+        include/boost/interprocess/detail/file_locking_helpers.hpp [3:5]
+        include/boost/interprocess/detail/intermodule_singleton.hpp [3:5]
+        include/boost/interprocess/detail/intermodule_singleton_common.hpp [3:5]
+        include/boost/interprocess/detail/managed_global_memory.hpp [3:5]
+        include/boost/interprocess/detail/portable_intermodule_singleton.hpp [3:5]
+        include/boost/interprocess/detail/windows_intermodule_singleton.hpp [3:5]
+        include/boost/interprocess/detail/xsi_shared_memory_file_wrapper.hpp [3:5]
+        include/boost/interprocess/xsi_shared_memory.hpp [3:5]
+
+KEEP     BSL-1.0              4ebf5547dee6ab6b8aeb6b822352227b
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2005-2015. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/detail/win32_api.hpp [3:5]
+        include/boost/interprocess/detail/workaround.hpp [3:5]
+        include/boost/interprocess/exceptions.hpp [3:5]
+        include/boost/interprocess/offset_ptr.hpp [3:5]
+
+KEEP     BSL-1.0              4ee4563f1657e4bee051a7033c20db63
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2009. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/xsi_key.hpp [3:5]
+
+KEEP     Mit-Old-Style        55e81d3c6ec19a0377f36e6e6d487cd9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mit-old-style
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit-old-style.LICENSE
+    Files with this license:
+        include/boost/interprocess/sync/interprocess_recursive_mutex.hpp [18:22]
+        include/boost/interprocess/sync/posix/mutex.hpp [18:22]
+        include/boost/interprocess/sync/posix/recursive_mutex.hpp [18:22]
+        include/boost/interprocess/sync/spin/recursive_mutex.hpp [18:22]
+
+KEEP     BSL-1.0              56f4fcb5d91e0daef7ad21bf68734337
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2008-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/allocators/detail/allocator_common.hpp [3:5]
+        include/boost/interprocess/containers/allocation_type.hpp [3:5]
+        include/boost/interprocess/containers/deque.hpp [3:5]
+        include/boost/interprocess/containers/flat_map.hpp [3:5]
+        include/boost/interprocess/containers/flat_set.hpp [3:5]
+        include/boost/interprocess/containers/list.hpp [3:5]
+        include/boost/interprocess/containers/map.hpp [3:5]
+        include/boost/interprocess/containers/pair.hpp [3:5]
+        include/boost/interprocess/containers/set.hpp [3:5]
+        include/boost/interprocess/containers/slist.hpp [3:5]
+        include/boost/interprocess/containers/stable_vector.hpp [3:5]
+        include/boost/interprocess/containers/string.hpp [3:5]
+        include/boost/interprocess/containers/vector.hpp [3:5]
+        include/boost/interprocess/containers/version_type.hpp [3:5]
+        include/boost/interprocess/detail/variadic_templates_tools.hpp [3:5]
+        include/boost/interprocess/managed_xsi_shared_memory.hpp [3:5]
+
+KEEP     BSL-1.0              67d6eeedc82fbc62f6f52eb0c128e9e6
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2012-2013. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/sync/detail/common_algorithms.hpp [3:5]
+
+KEEP     BSL-1.0              6dd5c9f652ff038348bb42aa68a7164c
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2010-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/detail/robust_emulation.hpp [3:5]
+
+KEEP     BSL-1.0              7046eb5e05d97f8094aad004556f5459
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2006-2014. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/smart_ptr/unique_ptr.hpp [3:5]
+
+KEEP     BSL-1.0              745252704aa72167f50d9aad40337785
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost Software License, Version 1.0.
+        //  See accompanying file LICENSE_1_0.txt or copy at
+        //  http://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/detail/os_thread_functions.hpp [18:20]
+
+KEEP     BSL-1.0              75a19a6388a7f4489e2a025313437ca8
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2005-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/allocators/adaptive_pool.hpp [3:5]
+        include/boost/interprocess/allocators/allocator.hpp [3:5]
+        include/boost/interprocess/allocators/cached_adaptive_pool.hpp [3:5]
+        include/boost/interprocess/allocators/cached_node_allocator.hpp [3:5]
+        include/boost/interprocess/allocators/detail/adaptive_node_pool.hpp [3:5]
+        include/boost/interprocess/allocators/detail/node_pool.hpp [3:5]
+        include/boost/interprocess/allocators/node_allocator.hpp [3:5]
+        include/boost/interprocess/allocators/private_adaptive_pool.hpp [3:5]
+        include/boost/interprocess/allocators/private_node_allocator.hpp [3:5]
+        include/boost/interprocess/anonymous_shared_memory.hpp [3:5]
+        include/boost/interprocess/creation_tags.hpp [3:5]
+        include/boost/interprocess/detail/cast_tags.hpp [3:5]
+        include/boost/interprocess/detail/config_begin.hpp [3:5]
+        include/boost/interprocess/detail/config_end.hpp [3:5]
+        include/boost/interprocess/detail/in_place_interface.hpp [3:5]
+        include/boost/interprocess/detail/managed_memory_impl.hpp [3:5]
+        include/boost/interprocess/detail/named_proxy.hpp [3:5]
+        include/boost/interprocess/detail/os_file_functions.hpp [3:5]
+        include/boost/interprocess/detail/segment_manager_helper.hpp [3:5]
+        include/boost/interprocess/errors.hpp [3:5]
+        include/boost/interprocess/file_mapping.hpp [3:5]
+        include/boost/interprocess/indexes/flat_map_index.hpp [3:5]
+        include/boost/interprocess/indexes/iset_index.hpp [3:5]
+        include/boost/interprocess/indexes/iunordered_set_index.hpp [3:5]
+        include/boost/interprocess/indexes/map_index.hpp [3:5]
+        include/boost/interprocess/indexes/null_index.hpp [3:5]
+        include/boost/interprocess/interprocess_fwd.hpp [3:5]
+        include/boost/interprocess/ipc/message_queue.hpp [3:5]
+        include/boost/interprocess/managed_external_buffer.hpp [3:5]
+        include/boost/interprocess/managed_heap_memory.hpp [3:5]
+        include/boost/interprocess/managed_mapped_file.hpp [3:5]
+        include/boost/interprocess/managed_shared_memory.hpp [3:5]
+        include/boost/interprocess/managed_windows_shared_memory.hpp [3:5]
+        include/boost/interprocess/mapped_region.hpp [3:5]
+        include/boost/interprocess/mem_algo/detail/mem_algo_common.hpp [3:5]
+        include/boost/interprocess/mem_algo/detail/simple_seq_fit_impl.hpp [3:5]
+        include/boost/interprocess/mem_algo/rbtree_best_fit.hpp [3:5]
+        include/boost/interprocess/mem_algo/simple_seq_fit.hpp [3:5]
+        include/boost/interprocess/permissions.hpp [3:5]
+        include/boost/interprocess/segment_manager.hpp [3:5]
+        include/boost/interprocess/shared_memory_object.hpp [3:5]
+        include/boost/interprocess/streams/bufferstream.hpp [3:5]
+        include/boost/interprocess/streams/vectorstream.hpp [3:5]
+        include/boost/interprocess/sync/detail/condition_algorithm_8a.hpp [3:5]
+        include/boost/interprocess/sync/file_lock.hpp [3:5]
+        include/boost/interprocess/sync/interprocess_condition.hpp [3:5]
+        include/boost/interprocess/sync/interprocess_mutex.hpp [3:5]
+        include/boost/interprocess/sync/interprocess_recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/interprocess_semaphore.hpp [3:5]
+        include/boost/interprocess/sync/interprocess_sharable_mutex.hpp [7:9]
+        include/boost/interprocess/sync/interprocess_upgradable_mutex.hpp [5:7]
+        include/boost/interprocess/sync/lock_options.hpp [3:5]
+        include/boost/interprocess/sync/mutex_family.hpp [3:5]
+        include/boost/interprocess/sync/named_condition.hpp [3:5]
+        include/boost/interprocess/sync/named_condition_any.hpp [3:5]
+        include/boost/interprocess/sync/named_mutex.hpp [3:5]
+        include/boost/interprocess/sync/named_recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/named_semaphore.hpp [3:5]
+        include/boost/interprocess/sync/named_sharable_mutex.hpp [3:5]
+        include/boost/interprocess/sync/named_upgradable_mutex.hpp [3:5]
+        include/boost/interprocess/sync/null_mutex.hpp [3:5]
+        include/boost/interprocess/sync/posix/condition.hpp [3:5]
+        include/boost/interprocess/sync/posix/mutex.hpp [3:5]
+        include/boost/interprocess/sync/posix/named_mutex.hpp [3:5]
+        include/boost/interprocess/sync/posix/named_semaphore.hpp [3:5]
+        include/boost/interprocess/sync/posix/pthread_helpers.hpp [3:5]
+        include/boost/interprocess/sync/posix/recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/posix/semaphore.hpp [3:5]
+        include/boost/interprocess/sync/posix/semaphore_wrapper.hpp [3:5]
+        include/boost/interprocess/sync/posix/timepoint_to_timespec.hpp [3:5]
+        include/boost/interprocess/sync/scoped_lock.hpp [3:5]
+        include/boost/interprocess/sync/sharable_lock.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_condition.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_condition_any.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_mutex.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_semaphore.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_upgradable_mutex.hpp [3:5]
+        include/boost/interprocess/sync/spin/condition.hpp [3:5]
+        include/boost/interprocess/sync/spin/mutex.hpp [3:5]
+        include/boost/interprocess/sync/spin/recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/spin/semaphore.hpp [3:5]
+        include/boost/interprocess/sync/upgradable_lock.hpp [3:5]
+        include/boost/interprocess/sync/windows/condition.hpp [3:5]
+        include/boost/interprocess/sync/windows/mutex.hpp [3:5]
+        include/boost/interprocess/sync/windows/recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/windows/semaphore.hpp [3:5]
+        include/boost/interprocess/sync/windows/sync_utils.hpp [3:5]
+        include/boost/interprocess/windows_shared_memory.hpp [3:5]
+
+KEEP     BSL-1.0              8abbac2c705b0911702566954b0ebe9b
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost Software License, Version 1.0. (See
+        //  accompanying file LICENSE_1_0.txt or copy at
+        //  http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/sync/cv_status.hpp [6:8]
+
+KEEP     BSL-1.0              9345cd12d4429cfc366f36202f6b68bd
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2007-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/allocators/detail/node_tools.hpp [3:5]
+        include/boost/interprocess/detail/interprocess_tester.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_creation_functor.hpp [3:5]
+
+KEEP     Mit-Old-Style        99b210ed9efe704d061e43a6c4c4beb3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mit-old-style
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit-old-style.LICENSE
+    Files with this license:
+        include/boost/interprocess/streams/bufferstream.hpp [20:26]
+        include/boost/interprocess/streams/vectorstream.hpp [20:26]
+
+KEEP     BSL-1.0              9c9d1b849de44df51c32aee55e3233e2
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2023-2024. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/timed_utils.hpp [3:5]
+
+KEEP     BSL-1.0              b2055be15799034e5690865f2062c03a
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2011-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/sync/windows/named_condition.hpp [3:5]
+        include/boost/interprocess/sync/windows/named_condition_any.hpp [3:5]
+        include/boost/interprocess/sync/windows/named_mutex.hpp [3:5]
+        include/boost/interprocess/sync/windows/named_recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/windows/named_semaphore.hpp [3:5]
+        include/boost/interprocess/sync/windows/named_sync.hpp [3:5]
+        include/boost/interprocess/sync/windows/winapi_mutex_wrapper.hpp [3:5]
+        include/boost/interprocess/sync/windows/winapi_semaphore_wrapper.hpp [3:5]
+        include/boost/interprocess/sync/windows/winapi_wrapper_common.hpp [3:5]
+
+KEEP     BSL-1.0              b6a409674a4ee07847ea12b101a0118a
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2006. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/smart_ptr/detail/bad_weak_ptr.hpp [6:8]
+        include/boost/interprocess/sync/spin/interprocess_barrier.hpp [3:5]
+
+KEEP     BSL-1.0              bfce030a4887d21b304b87b154737065
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2013-2013. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/sync/spin/wait.hpp [4:6]
+
+KEEP     BSL-1.0              d4d0d34f805f5eee001a987f1e04a4a4
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2012-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/detail/config_external_begin.hpp [3:5]
+        include/boost/interprocess/detail/config_external_end.hpp [3:5]
+        include/boost/interprocess/sync/detail/condition_any_algorithm.hpp [3:5]
+        include/boost/interprocess/sync/detail/locks.hpp [3:5]
+        include/boost/interprocess/sync/interprocess_condition_any.hpp [3:5]
+
+KEEP     BSL-1.0              d61752484f220755bd1f5e838c59307b
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2014-2015. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/detail/nothrow.hpp [3:5]
+        include/boost/interprocess/detail/simple_swap.hpp [5:7]
+        include/boost/interprocess/detail/std_fwd.hpp [3:5]
+
+KEEP     BSL-1.0              f0421be5a87b237d5f722433355f7a9e
+BELONGS ya.make
+    License text:
+        //  Use, modification, and distribution is subject to the Boost Software
+        //  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy
+        //  at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 96.88
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/errors.hpp [15:17]
+
+KEEP     BSL-1.0              fe371f5eab8bfd96a6b2bcb62751072f
+BELONGS ya.make
+    License text:
+        // (C) Copyright Howard Hinnant 2007-2010. Distributed under the Boost
+        // Software License, Version 1.0. (see http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/interprocess/sync/interprocess_sharable_mutex.hpp [4:5]

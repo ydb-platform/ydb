@@ -1,7 +1,7 @@
 #include "flat_page_label.h"
 #include "flat_part_iface.h"
-#include "flat_table_part.h"
-#include "util_basics.h"
+#include "flat_page_data.h"
+#include "flat_page_flat_index.h"
 
 #include <ydb/core/util/pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>

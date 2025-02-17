@@ -3,34 +3,60 @@ name: Release documentation
 on:
   push:
     branches:
+      - 'main'
       - 'stable-**'
     paths: 
       - 'ydb/docs/**'
   workflow_dispatch:
 
 jobs:
-  release:
+  build:
+    runs-on: ubuntu-latest
     concurrency:
       group: release-documentation-${{ github.ref }}
       cancel-in-progress: true
-    runs-on: ubuntu-latest
+    permissions: write-all
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+      - name: Build
+        uses: diplodoc-platform/docs-build-action@v3
+        with:
+          revision: "${{ github.sha }}"
+          src-root: ${{ vars.SRC_ROOT }}
+  upload:
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-documentation-${{ github.ref }}
+      cancel-in-progress: true
+    permissions: write-all
+    steps:
+      - name: Upload
+        uses: diplodoc-platform/docs-upload-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          storage-bucket: "common/${{ secrets.DOCS_PROJECT_NAME }}"
+          storage-endpoint: ${{ vars.DOCS_AWS_ENDPOINT }}
+          storage-access-key-id: ${{ secrets.DOCS_AWS_KEY_ID }}
+          storage-secret-access-key: ${{ secrets.DOCS_AWS_SECRET_ACCESS_KEY }}
+          storage-region: ${{ vars.DOCS_AWS_REGION }}
+  release:
+    needs: upload
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-documentation-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
       - name: Extract version
         shell: bash
         run: echo "version=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" | sed -e 's|stable-|v|g' -e 's|-|.|g' >> $GITHUB_OUTPUT
         id: extract_version
       - name: Release
-        uses: diplodoc-platform/docs-release-action@v1
+        uses: diplodoc-platform/docs-release-action@v2
         with:
           revision: "${{ github.sha }}"
           version: "${{ steps.extract_version.outputs.version }}"
-          project-name: ${{ secrets.DOCS_PROJECT_NAME }}
-          src-root: ${{ vars.SRC_ROOT }}
-          storage-bucket: ${{ secrets.DOCS_AWS_BUCKET }}
-          storage-endpoint: ${{ vars.DOCS_AWS_ENDPOINT }}
+          storage-bucket: ${{ secrets.DOCS_PROJECT_NAME }}
           storage-access-key-id: ${{ secrets.DOCS_AWS_KEY_ID }}
           storage-secret-access-key: ${{ secrets.DOCS_AWS_SECRET_ACCESS_KEY }}
-          storage-region: ${{ vars.DOCS_AWS_REGION }}
-          shared-storage-bucket: true

@@ -1,12 +1,5 @@
 PROGRAM(mvp_oidc_proxy)
 
-OWNER(
-    alexnick
-    xenoxeno
-    tarasov-egor
-    g:kikimr
-)
-
 CFLAGS(
     -DPROFILE_MEMORY_ALLOCATIONS
 )
@@ -19,6 +12,7 @@ SRCS(
 
 PEERDIR(
     ydb/mvp/oidc_proxy
+    library/cpp/getopt
 )
 
 YQL_LAST_ABI_VERSION()

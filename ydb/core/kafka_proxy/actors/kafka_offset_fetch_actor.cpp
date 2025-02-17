@@ -28,7 +28,8 @@ struct PartitionOffsets {
 class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<TTopicOffsetActor,
                                                        NKikimr::NGRpcProxy::V1::TLocalRequestBase,
                                                        NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse>,
-                         public NKikimr::NGRpcProxy::V1::TDescribeTopicActorImpl {
+                         public NKikimr::NGRpcProxy::V1::TDescribeTopicActorImpl,
+                         public NKikimr::NGRpcProxy::V1::TCdcStreamCompatible {
     using TBase = NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<TTopicOffsetActor,
         NKikimr::NGRpcProxy::V1::TLocalRequestBase,
         NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse>;
@@ -36,7 +37,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
     public:
     TTopicOffsetActor(std::shared_ptr<TSet<TString>> consumers,
             const NKikimr::NGRpcProxy::V1::TLocalRequestBase& request,
-            const TActorId& requester, 
+            const TActorId& requester,
             std::shared_ptr<TSet<ui32>> partitions,
             const TString& originalTopicName,
             const TString& userSID)
@@ -214,7 +215,7 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
 
 void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
     // If API level <= 7, Groups would be empty. In this case we convert message to level 8 and process it uniformely later
-    KAFKA_LOG_D("TopicOffsetActor: new request for user '" << Context->UserToken->GetUserSID()<< "'");
+    KAFKA_LOG_D("TopicOffsetActor: new request for user " << GetUsernameOrAnonymous(Context));
     if (Message->Groups.empty()) {
         TOffsetFetchRequestData::TOffsetFetchRequestGroup group;
         group.GroupId = Message->GroupId.value();
@@ -238,7 +239,7 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
         NKikimr::NGRpcProxy::V1::TLocalRequestBase locationRequest{
             NormalizePath(Context->DatabasePath, topicToEntities.first),
             Context->DatabasePath,
-            Context->UserToken->GetSerializedToken(),
+            GetUserSerializedToken(Context),
         };
         ctx.Register(new TTopicOffsetActor(
             topicToEntities.second.Consumers,
@@ -246,7 +247,7 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
             SelfId(),
             topicToEntities.second.Partitions,
             topicToEntities.first,
-            Context->UserToken->GetUserSID()
+            GetUsernameOrAnonymous(Context)
         ));
         InflyTopics++;
     }
@@ -275,7 +276,7 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
 
     if (InflyTopics == 0) {
         auto response = GetOffsetFetchResponse();
-        KAFKA_LOG_D("TopicOffsetActor: sending response to user '" << Context->UserToken->GetUserSID()<< "'");
+        KAFKA_LOG_D("TopicOffsetActor: sending response to user " << GetUsernameOrAnonymous(Context));
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
         Die(ctx);
     }

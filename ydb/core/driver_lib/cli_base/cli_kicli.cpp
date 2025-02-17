@@ -1,3 +1,7 @@
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.h>
+#include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include "cli_kicli.h"
 
 namespace NKikimr {
@@ -23,10 +27,6 @@ void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBus
 }
 
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeDescribe>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusWhoAmI>& request) {
     SetToken(config, request);
 }
 
@@ -64,24 +64,42 @@ int OnMessageBus(const TClientCommand::TConfig& config, const NMsgBusProxy::TBus
     return 0;
 }
 
-int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClient::TKikimr&)> handler) {
-    NClient::TKikimr kikimr(CommandConfig.ClientConfig);
-    if (!config.SecurityToken.empty()) {
-        kikimr.SetSecurityToken(config.SecurityToken);
+std::optional<TString> AcquireSecurityToken(TClientCommand::TConfig& config) {
+    if (config.SecurityToken.empty() && !config.StaticCredentials.User.empty()) {
+        NYdb::TDriverConfig driverConfig;
+        driverConfig.SetEndpoint(TCommandConfig::ParseServerAddress(config.Address).Address);
+        NYdb::TDriver connection(driverConfig);
+        NYdb::NConsoleClient::TDummyClient client(connection);
+
+        auto credentialsProviderFactory = NYdb::CreateLoginCredentialsProviderFactory(config.StaticCredentials);
+        auto loginProvider = credentialsProviderFactory->CreateProvider(client.GetCoreFacility());
+        try {
+            // Note: may throw exceptions
+            config.SecurityToken = loginProvider->GetAuthInfo();
+        } catch (...) {
+            connection.Stop();
+            throw;
+        }
+        connection.Stop();
     }
 
-    if (!config.StaticCredentials.User.empty()) {
-        TAutoPtr<NMsgBusProxy::TBusLoginRequest> request = new NMsgBusProxy::TBusLoginRequest();
-        request.Get()->Record.SetUser(config.StaticCredentials.User);
-        request.Get()->Record.SetPassword(config.StaticCredentials.Password);
-        NClient::TResult result = kikimr.ExecuteRequest(request.Release()).GetValueSync();
-        if (result.GetStatus() == NMsgBusProxy::MSTATUS_OK) {
-            kikimr.SetSecurityToken(result.GetResponse<NMsgBusProxy::TBusResponse>().Record.GetUserToken());
-            config.SecurityToken = result.GetResponse<NMsgBusProxy::TBusResponse>().Record.GetUserToken();
-        } else {
-            Cerr << result.GetError().GetMessage() << Endl;
-            return 1;
+    if (!config.SecurityToken.empty()) {
+        return config.SecurityToken;
+    } else {
+        return std::nullopt;
+    }
+}
+
+int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClient::TKikimr&)> handler) {
+    NClient::TKikimr kikimr(CommandConfig.ClientConfig);
+
+    try {
+        if (auto token = AcquireSecurityToken(config)) {
+            kikimr.SetSecurityToken(*token);
         }
+    } catch (const std::exception& e) {
+        Cerr << e.what() << Endl;
+        return 1;
     }
 
     return handler(kikimr);

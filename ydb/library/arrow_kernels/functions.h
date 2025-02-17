@@ -7,3 +7,4 @@
 #include "func_modulo_or_zero.h"
 #include "func_math.h"
 #include "func_round.h"
+#include "func_num_rows.h"

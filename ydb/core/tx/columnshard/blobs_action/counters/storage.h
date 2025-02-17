@@ -1,9 +1,11 @@
 #pragma once
 #include "read.h"
-#include "write.h"
 #include "remove_declare.h"
 #include "remove_gc.h"
+#include "write.h"
+
 #include <ydb/core/tx/columnshard/counters/common/owner.h>
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/hash.h>
 
@@ -26,6 +28,7 @@ enum class EConsumer {
     WRITING_BUFFER,
     WRITING_OPERATOR,
     NORMALIZER,
+    STATISTICS,
 
     COUNT
 };
@@ -37,6 +40,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TWriteCounters>, WriteCounters);
     YDB_READONLY_DEF(std::shared_ptr<TRemoveDeclareCounters>, RemoveDeclareCounters);
     YDB_READONLY_DEF(std::shared_ptr<TRemoveGCCounters>, RemoveGCCounters);
+
 public:
     TConsumerCounters(const TString& consumerId, const TStorageCounters& parent);
 };
@@ -45,11 +49,11 @@ class TStorageCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
     std::vector<std::shared_ptr<TConsumerCounters>> Consumers;
+
 public:
     TStorageCounters(const TString& storageId);
 
     std::shared_ptr<TConsumerCounters> GetConsumerCounter(const EConsumer consumer);
-
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations

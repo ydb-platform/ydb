@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
@@ -144,7 +145,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         }
 
     private:
-        TActorId PipeCache = MakePipePeNodeCacheID(false);
+        TActorId PipeCache = MakePipePerNodeCacheID(false);
         TActorId Owner;
         TActorId Client;
 
@@ -305,7 +306,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         auto request = MakeSQLRequest(sql, dml);
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetYdbStatus(), code);
     }
 
     void SendScanQuery(TTestActorRuntime* runtime, TActorId kqpProxy, TActorId sender, const TString& queryText) {
@@ -326,9 +327,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                     collectedKeys->push_back(row.items(0).uint64_value());
                 }
 
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
-                resp->Record.SetSeqNo(record.GetSeqNo());
                 runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                 return true;
             }
@@ -397,18 +397,17 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             : Table(table)
         {
             if (testActorType == ETestActorType::SorceRead) {
-                InterceptReadActorPipeCache(MakePipePeNodeCacheID(false));
+                InterceptReadActorPipeCache(MakePipePerNodeCacheID(false));
             } else if (testActorType == ETestActorType::StreamLookup) {
-                InterceptStreamLookupActorPipeCache(MakePipePeNodeCacheID(false));
+                InterceptStreamLookupActorPipeCache(MakePipePerNodeCacheID(false));
             }
-            
+
             if (providedServer) {
                 Server = providedServer;
             } else {
                 TKikimrSettings settings;
                 NKikimrConfig::TAppConfig appConfig;
                 appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(testActorType == ETestActorType::SorceRead);
-                appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(testActorType == ETestActorType::StreamLookup);
                 settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
                 settings.SetAppConfig(appConfig);
 
@@ -449,7 +448,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
 
         void AssertSuccess() {
             auto reply = Runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(Sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         }
 
         void SendScanQuery(TString text) {
@@ -681,7 +680,6 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         Tests::TServerSettings serverSettings(pm.GetPort(2134));
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetAppConfig(appConfig);
@@ -890,7 +888,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         );
 
         shim->ReadsReceived.WaitI();
-        
+
         UNIT_ASSERT_EQUAL(shards.size(), 1);
         auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
@@ -937,7 +935,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         );
 
         shim->ReadsReceived.WaitI();
-        
+
         UNIT_ASSERT_EQUAL(shards.size(), 1);
         auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 

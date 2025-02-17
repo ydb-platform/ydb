@@ -20,6 +20,10 @@ namespace NTable {
 
         }
 
+        void Pause() noexcept {
+            OnPause = true;
+        }
+
         void Resume(EScan op) noexcept
         {
             Y_DEBUG_ABORT_UNLESS(op == EScan::Feed || op == EScan::Reset);

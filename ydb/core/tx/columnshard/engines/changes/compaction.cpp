@@ -1,8 +1,10 @@
 #include "compaction.h"
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/storage/granule.h>
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
+
 #include <ydb/core/protos/counters_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 
 namespace NKikimr::NOlap {
 
@@ -12,7 +14,7 @@ void TCompactColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     if (ui32 switched = SwitchedPortions.size()) {
         out << "switch " << switched << " portions:(";
         for (auto& portionInfo : SwitchedPortions) {
-            out << portionInfo;
+            out << portionInfo->DebugString(false);
         }
         out << "); ";
     }
@@ -23,27 +25,12 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
 
     const TPortionMeta::EProduced producedClassResultCompaction = GetResultProducedClass();
     for (auto& portionInfo : AppendedPortions) {
-        portionInfo.GetPortionConstructor().MutableMeta().UpdateRecordsMeta(producedClassResultCompaction);
+        portionInfo.GetPortionConstructor().MutablePortionConstructor().MutableMeta().UpdateRecordsMeta(producedClassResultCompaction);
     }
 }
 
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
-
-    Y_ABORT_UNLESS(SwitchedPortions.size());
-    THashMap<TString, THashSet<TBlobRange>> blobRanges;
-    auto& index = self.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
-    for (const auto& p : SwitchedPortions) {
-        Y_ABORT_UNLESS(!p.Empty());
-        p.FillBlobRangesByStorage(blobRanges, index);
-    }
-
-    for (const auto& p : blobRanges) {
-        auto action = BlobsAction.GetReading(p.first);
-        for (auto&& b: p.second) {
-            action->AddRange(b);
-        }
-    }
 
     self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId()));
     NeedGranuleStatusProvide = true;
@@ -53,7 +40,7 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
 void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     TBase::DoWriteIndexOnComplete(self, context);
     if (self) {
-        self->IncCounter(NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds());
+        self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds());
     }
 }
 
@@ -68,23 +55,23 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
     NeedGranuleStatusProvide = false;
 }
 
-TCompactColumnEngineChanges::TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext)
+TCompactColumnEngineChanges::TCompactColumnEngineChanges(
+    std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext)
     : TBase(saverContext, NBlobOperations::EConsumer::GENERAL_COMPACTION)
     , GranuleMeta(granule) {
     Y_ABORT_UNLESS(GranuleMeta);
 
-    SwitchedPortions.reserve(portions.size());
     for (const auto& portionInfo : portions) {
         Y_ABORT_UNLESS(!portionInfo->HasRemoveSnapshot());
-        SwitchedPortions.emplace_back(*portionInfo);
-        AddPortionToRemove(*portionInfo);
+        SwitchedPortions.emplace_back(portionInfo);
+        AddPortionToRemove(portionInfo);
         Y_ABORT_UNLESS(portionInfo->GetPathId() == GranuleMeta->GetPathId());
     }
-    Y_ABORT_UNLESS(SwitchedPortions.size());
+    //    Y_ABORT_UNLESS(SwitchedPortions.size());
 }
 
 TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {
-    Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
+    Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || !NeedGranuleStatusProvide || !IsActive());
 }
 
-}
+}   // namespace NKikimr::NOlap

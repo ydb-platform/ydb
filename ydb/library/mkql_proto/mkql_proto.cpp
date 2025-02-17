@@ -1,19 +1,19 @@
 #include "mkql_proto.h"
 
-#include <ydb/library/yql/minikql/defs.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/library/yql/minikql/dom/json.h>
-#include <ydb/library/yql/utils/utf8.h>
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
-#include <ydb/library/yql/minikql/dom/yson.h>
+#include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/minikql/dom/json.h>
+#include <yql/essentials/utils/utf8.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/minikql/dom/yson.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NKikimr::NMiniKQL {
@@ -70,7 +70,10 @@ Y_FORCE_INLINE void HandleKindDataExport(const TType* type, const NUdf::TUnboxed
             }
         case NUdf::TDataType<NUdf::TTzDate>::Id:
         case NUdf::TDataType<NUdf::TTzDatetime>::Id:
-        case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+        case NUdf::TDataType<NUdf::TTzDate32>::Id:
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
             const NUdf::TUnboxedValue out(ValueToString(NUdf::GetDataSlot(dataType->GetSchemeType()), value));
             const auto& stringRef = out.AsStringRef();
             res.set_text_value(stringRef.Data(), stringRef.Size());
@@ -295,7 +298,7 @@ void ExportTypeToProtoImpl(TType* type, Ydb::Type& res, const TVector<ui32>* col
         case TType::EKind::Pg: {
             auto* pgType = static_cast<TPgType*>(type);
             auto typeId = pgType->GetTypeId();
-            auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(typeId);
+            auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(typeId);
             MKQL_ENSURE(typeDesc, TStringBuilder() << "Unknown PG type id: " << typeId);
 
             auto* pg = res.mutable_pg_type();
@@ -435,7 +438,10 @@ Y_FORCE_INLINE void HandleKindDataExport(const TType* type, const NUdf::TUnboxed
         }
         case NUdf::TDataType<NUdf::TTzDate>::Id:
         case NUdf::TDataType<NUdf::TTzDatetime>::Id:
-        case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+        case NUdf::TDataType<NUdf::TTzDate32>::Id:
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
             const NUdf::TUnboxedValue out(ValueToString(NUdf::GetDataSlot(dataType->GetSchemeType()), value));
             const auto& stringRef = out.AsStringRef();
             res.SetText(stringRef.Data(), stringRef.Size());
@@ -755,7 +761,10 @@ Y_FORCE_INLINE NUdf::TUnboxedValue HandleKindDataImport(const TType* type, const
             return MakeString(value.GetText());
         case NUdf::TDataType<NUdf::TTzDate>::Id:
         case NUdf::TDataType<NUdf::TTzDatetime>::Id:
-        case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+        case NUdf::TDataType<NUdf::TTzDate32>::Id:
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
             MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kText);
             return NUdf::TUnboxedValuePod(ValueFromString(NUdf::GetDataSlot(dataType->GetSchemeType()), value.GetText()));
         }
@@ -829,6 +838,9 @@ void ExportPrimitiveTypeToProto(ui32 schemeType, Ydb::Type& output) {
         case NYql::NProto::TypeIds::Datetime64:
         case NYql::NProto::TypeIds::Timestamp64:
         case NYql::NProto::TypeIds::Interval64:
+        case NYql::NProto::TypeIds::TzDate32:
+        case NYql::NProto::TypeIds::TzDatetime64:
+        case NYql::NProto::TypeIds::TzTimestamp64:
             output.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(schemeType));
             break;
 
@@ -1193,6 +1205,9 @@ TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TV
                 case NUdf::TDataType<NUdf::TTzDate>::Id:
                 case NUdf::TDataType<NUdf::TTzDatetime>::Id:
                 case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+                case NUdf::TDataType<NUdf::TTzDate32>::Id:
+                case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+                case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
                     dataNode = TDataLiteral::Create(ValueFromString(NUdf::GetDataSlot(dataType->GetSchemeType()), value.GetText()), dataType, env);
                     break;
                 case NUdf::TDataType<NUdf::TDate>::Id:
@@ -1367,7 +1382,7 @@ TType* TProtoImporter::ImportTypeFromProto(const Ydb::Type& input) {
             return env.GetTypeOfEmptyDictLazy();
         case Ydb::Type::kPgType: {
             if (const auto& typeName = input.pg_type().type_name()) {
-                auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
                 MKQL_ENSURE(typeDesc, TStringBuilder() << "Unknown PG type name: " << typeName);
                 return TPgType::Create(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc), env);
             } else {
@@ -1489,6 +1504,18 @@ Y_FORCE_INLINE NUdf::TUnboxedValue KindDataImport(const TType* type, const Ydb::
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzTimestamp");
             return NUdf::TUnboxedValuePod(ValueFromString(NUdf::GetDataSlot(dataType->GetSchemeType()), value.text_value()));
         }
+        case NUdf::TDataType<NUdf::TTzDate32>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzDate32");
+            return NUdf::TUnboxedValuePod(ValueFromString(NUdf::GetDataSlot(dataType->GetSchemeType()), value.text_value()));
+        }
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzDatetime64");
+            return NUdf::TUnboxedValuePod(ValueFromString(NUdf::GetDataSlot(dataType->GetSchemeType()), value.text_value()));
+        }
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzTimestamp64");
+            return NUdf::TUnboxedValuePod(ValueFromString(NUdf::GetDataSlot(dataType->GetSchemeType()), value.text_value()));
+        }
         case NUdf::TDataType<NUdf::TJson>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "Json");
             const auto& stringRef = value.text_value();
@@ -1534,7 +1561,7 @@ Y_FORCE_INLINE NUdf::TUnboxedValue KindDataImport(const TType* type, const Ydb::
             return NUdf::TUnboxedValuePod(value.int64_value());
         }
         case NUdf::TDataType<NUdf::TDate32>::Id: {
-            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Date32");
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Date32");
             if (value.int32_value() < NUdf::MIN_DATE32 || value.int32_value() > NUdf::MAX_DATE32) {
                 throw yexception() << "Invalid Date value";
             }
@@ -1574,10 +1601,11 @@ Y_FORCE_INLINE NUdf::TUnboxedValue KindDataImport(const TType* type, const Ydb::
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "JsonDocument");
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(value.text_value());
-            if (!binaryJson.Defined()) {
+            if (std::holds_alternative<TString>(binaryJson)) {
                 throw yexception() << "Invalid JsonDocument value";
             }
-            return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
+            const auto& value = std::get<NBinaryJson::TBinaryJson>(binaryJson);
+            return MakeString(TStringBuf(value.Data(), value.Size()));
         }
         case NUdf::TDataType<NUdf::TDyNumber>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "DyNumber");
@@ -1786,7 +1814,7 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
                 return NYql::NCommon::PgValueFromNativeBinary(value.GetBytes(), pgType->GetTypeId());
             }
             if (value.HasText()) {
-                return NYql::NCommon::PgValueFromNativeText(value.GetBytes(), pgType->GetTypeId());
+                return NYql::NCommon::PgValueFromNativeText(value.GetText(), pgType->GetTypeId());
             }
             MKQL_ENSURE(false, "malformed pg value");
         }

@@ -18,7 +18,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -85,6 +85,7 @@ private:
             , ResponseHandler_(std::move(responseHandler))
             , Options_(options)
             , RetryChecker_(std::move(retryChecker))
+            , BackoffStrategy_(Config_->RetryBackoff)
         {
             YT_ASSERT(Config_);
             YT_ASSERT(UnderlyingChannel_);
@@ -111,7 +112,7 @@ private:
             // this one may be invoked multiple times.
             void SetNewUnderlying(IClientRequestControlPtr newUnderlying)
             {
-                VERIFY_THREAD_AFFINITY_ANY();
+                YT_ASSERT_THREAD_AFFINITY_ANY();
 
                 if (!newUnderlying) {
                     return;
@@ -140,7 +141,7 @@ private:
 
             void Cancel() override
             {
-                VERIFY_THREAD_AFFINITY_ANY();
+                YT_ASSERT_THREAD_AFFINITY_ANY();
 
                 auto guard = Guard(SpinLock_);
                 Canceled_.store(true);
@@ -154,21 +155,21 @@ private:
 
             bool IsCanceled() const
             {
-                VERIFY_THREAD_AFFINITY_ANY();
+                YT_ASSERT_THREAD_AFFINITY_ANY();
 
                 return Canceled_.load();
             }
 
             TFuture<void> SendStreamingPayload(const TStreamingPayload& /*payload*/) override
             {
-                VERIFY_THREAD_AFFINITY_ANY();
+                YT_ASSERT_THREAD_AFFINITY_ANY();
 
                 return MakeFuture<void>(TError("Retrying channel does not support streaming"));
             }
 
             TFuture<void> SendStreamingFeedback(const TStreamingFeedback& /*feedback*/) override
             {
-                VERIFY_THREAD_AFFINITY_ANY();
+                YT_ASSERT_THREAD_AFFINITY_ANY();
 
                 return MakeFuture<void>(TError("Retrying channel does not support streaming"));
             }
@@ -190,6 +191,7 @@ private:
         const TCallback<bool(const TError&)> RetryChecker_;
         const TRetryingRequestControlThunkPtr RequestControlThunk_ = New<TRetryingRequestControlThunk>();
 
+        TBackoffStrategy BackoffStrategy_;
         //! The current attempt number (1-based).
         int CurrentAttempt_ = 1;
         TInstant Deadline_;
@@ -210,10 +212,19 @@ private:
 
         void HandleError(TError error) override
         {
-            YT_LOG_DEBUG(error, "Request attempt failed (RequestId: %v, Attempt: %v of %v)",
+            YT_LOG_DEBUG(error, "Request attempt failed (RequestId: %v, Attempt: %v)",
                 Request_->GetRequestId(),
-                CurrentAttempt_,
-                Config_->RetryAttempts);
+                MakeFormatterWrapper([&] (auto* builder) {
+                    if (Config_->EnableExponentialRetryBackoffs) {
+                        builder->AppendFormat("%v of %v",
+                            BackoffStrategy_.GetInvocationIndex() + 1,
+                            BackoffStrategy_.GetInvocationCount());
+                    } else {
+                        builder->AppendFormat("%v of %v",
+                            CurrentAttempt_,
+                            Config_->RetryAttempts);
+                    }
+                }));
 
             if (!RetryChecker_.Run(error)) {
                 ResponseHandler_->HandleError(std::move(error));
@@ -232,12 +243,12 @@ private:
             Retry();
         }
 
-        void HandleResponse(TSharedRefArray message, TString address) override
+        void HandleResponse(TSharedRefArray message, const std::string& address) override
         {
             YT_LOG_DEBUG("Request attempt succeeded (RequestId: %v)",
                 Request_->GetRequestId());
 
-            ResponseHandler_->HandleResponse(std::move(message), std::move(address));
+            ResponseHandler_->HandleResponse(std::move(message), address);
         }
 
         void HandleStreamingPayload(const TStreamingPayload& /*payload*/) override
@@ -276,15 +287,25 @@ private:
 
         void Retry()
         {
-            int count = ++CurrentAttempt_;
-            if (count > Config_->RetryAttempts || TInstant::Now() + Config_->RetryBackoffTime > Deadline_) {
+            auto retryAttemptsExhausted = false;
+            auto backoffTime = TDuration::Zero();
+            if (Config_->EnableExponentialRetryBackoffs) {
+                retryAttemptsExhausted = !BackoffStrategy_.Next();
+                backoffTime = BackoffStrategy_.GetBackoff();
+            } else {
+                auto count = ++CurrentAttempt_;
+                retryAttemptsExhausted = count > Config_->RetryAttempts;
+                backoffTime = Config_->RetryBackoffTime;
+            }
+
+            if (retryAttemptsExhausted || TInstant::Now() + backoffTime > Deadline_) {
                 ReportError(TError(NRpc::EErrorCode::Unavailable, "Request retries failed"));
                 return;
             }
 
             TDelayedExecutor::Submit(
                 BIND(&TRetryingRequest::DoRetry, MakeStrong(this)),
-                Config_->RetryBackoffTime,
+                backoffTime,
                 TDispatcher::Get()->GetHeavyInvoker());
         }
 
@@ -305,22 +326,31 @@ private:
 
         void DoSend()
         {
-            YT_LOG_DEBUG("Request attempt started (RequestId: %v, Method: %v.%v, %v%vAttempt: %v of %v, RequestTimeout: %v, RetryTimeout: %v)",
+            YT_LOG_DEBUG("Request attempt started (RequestId: %v, Method: %v.%v, %v%vAttempt: %v, RequestTimeout: %v, RetryTimeout: %v)",
                 Request_->GetRequestId(),
                 Request_->GetService(),
                 Request_->GetMethod(),
                 MakeFormatterWrapper([&] (auto* builder) {
-                    if (Request_->GetUser()) {
+                    if (!Request_->GetUser().empty()) {
                         builder->AppendFormat("User: %v, ", Request_->GetUser());
                     }
                 }),
                 MakeFormatterWrapper([&] (auto* builder) {
-                    if (Request_->GetUserTag() && Request_->GetUserTag() != Request_->GetUser()) {
+                    if (!Request_->GetUserTag().empty() && Request_->GetUserTag() != Request_->GetUser()) {
                         builder->AppendFormat("UserTag: %v, ", Request_->GetUserTag());
                     }
                 }),
-                CurrentAttempt_,
-                Config_->RetryAttempts,
+                MakeFormatterWrapper([&] (auto* builder) {
+                    if (Config_->EnableExponentialRetryBackoffs) {
+                        builder->AppendFormat("%v of %v",
+                            BackoffStrategy_.GetInvocationIndex() + 1,
+                            BackoffStrategy_.GetInvocationCount());
+                    } else {
+                        builder->AppendFormat("%v of %v",
+                            CurrentAttempt_,
+                            Config_->RetryAttempts);
+                    }
+                }),
                 Options_.Timeout,
                 Config_->RetryTimeout);
 

@@ -9,11 +9,16 @@
 namespace NKikimr::NOlap {
 
 NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
+    FullValidation();
     NKikimrTxColumnShard::TIndexPortionMeta portionMeta;
     portionMeta.SetTierName(TierName);
-    if (!StatisticsStorage.IsEmpty()) {
-        *portionMeta.MutableStatisticsStorage() = StatisticsStorage.SerializeToProto();
-    }
+    portionMeta.SetCompactionLevel(CompactionLevel);
+    portionMeta.SetDeletionsCount(DeletionsCount);
+    portionMeta.SetRecordsCount(RecordsCount);
+    portionMeta.SetColumnRawBytes(ColumnRawBytes);
+    portionMeta.SetColumnBlobBytes(ColumnBlobBytes);
+    portionMeta.SetIndexRawBytes(IndexRawBytes);
+    portionMeta.SetIndexBlobBytes(IndexBlobBytes);
     switch (Produced) {
         case TPortionMeta::EProduced::UNSPECIFIED:
             Y_ABORT_UNLESS(false);
@@ -35,10 +40,13 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
             break;
     }
 
-    portionMeta.SetPrimaryKeyBorders(ReplaceKeyEdges.SerializeToStringDataOnlyNoCompression());
+    portionMeta.SetPrimaryKeyBorders(ReplaceKeyEdges.SerializePayloadToString());
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());
     RecordSnapshotMax.SerializeToProto(*portionMeta.MutableRecordSnapshotMax());
+    for (auto&& i : GetBlobIds()) {
+        *portionMeta.AddBlobIds() = i.GetLogoBlobId().AsBinaryString();
+    }
     return portionMeta;
 }
 

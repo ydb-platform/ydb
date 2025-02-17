@@ -6,7 +6,7 @@ import time
 from hamcrest import assert_that, equal_to, less_than_or_equal_to, is_, none
 from concurrent import futures
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.common.types import TabletTypes
 from ydb.tests.oss.ydb_sdk_import import ydb
 # call this as soon as possible to patch grpc event_handler implementation with additional calls
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class AbstractReadTableTest(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.logger = logger.getChild(cls.__name__)
         cls.driver = ydb.Driver(

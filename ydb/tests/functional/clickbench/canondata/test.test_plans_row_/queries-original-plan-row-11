@@ -35,17 +35,26 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort",
+                                                "Node Type": "TopSort-Aggregate",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Limit": "10",
+                                                        "Name": "TopSort",
+                                                        "TopSortBy": "argument.Count0"
+                                                    },
                                                     {
                                                         "Inputs": [
                                                             {
                                                                 "ExternalPlanNodeId": 4
                                                             }
                                                         ],
-                                                        "Limit": "10",
-                                                        "Name": "TopSort",
-                                                        "TopSortBy": "argument.Count0"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Final"
                                                     }
                                                 ],
                                                 "PlanNodeId": 5,
@@ -60,17 +69,27 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate",
+                                                                "Node Type": "Aggregate-Aggregate",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_0: COUNT(item.UserID,state._yql_agg_0)}",
-                                                                        "GroupBy": "",
+                                                                        "Aggregation": "{COUNT(item.UserID)}",
+                                                                        "GroupBy": "[item.MobilePhone,item.MobilePhoneModel]",
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
+                                                                    },
+                                                                    {
                                                                         "Inputs": [
                                                                             {
                                                                                 "ExternalPlanNodeId": 2
                                                                             }
                                                                         ],
-                                                                        "Name": "Aggregate"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Final"
                                                                     }
                                                                 ],
                                                                 "PlanNodeId": 3,
@@ -90,13 +109,14 @@
                                                                                 "Operators": [
                                                                                     {
                                                                                         "Aggregation": "state",
-                                                                                        "GroupBy": "",
+                                                                                        "GroupBy": "[item.MobilePhone,item.MobilePhoneModel,item.UserID]",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
                                                                                             }
                                                                                         ],
-                                                                                        "Name": "Aggregate"
+                                                                                        "Name": "Aggregate",
+                                                                                        "Phase": "Intermediate"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [
@@ -110,18 +130,20 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/local/clickbench/plans/row/hits",
                                                                                         "ReadColumns": [
                                                                                             "MobilePhone",
                                                                                             "MobilePhoneModel",
                                                                                             "UserID"
                                                                                         ],
                                                                                         "ReadRanges": [
-                                                                                            "EventTime (-\u221e, +\u221e)",
                                                                                             "CounterID (-\u221e, +\u221e)",
                                                                                             "EventDate (-\u221e, +\u221e)",
                                                                                             "UserID (-\u221e, +\u221e)",
+                                                                                            "EventTime (-\u221e, +\u221e)",
                                                                                             "WatchID (-\u221e, +\u221e)"
                                                                                         ],
+                                                                                        "Scan": "Parallel",
                                                                                         "Table": "clickbench/plans/row/hits"
                                                                                     }
                                                                                 ],
@@ -147,106 +169,10 @@
                             }
                         ]
                     }
-                ]
-            },
-            "SimplifiedPlan": {
-                "Node Type": "Query",
-                "PlanNodeId": 0,
-                "PlanNodeType": "Query",
-                "Plans": [
-                    {
-                        "Node Type": "ResultSet",
-                        "PlanNodeId": 1,
-                        "PlanNodeType": "ResultSet",
-                        "Plans": [
-                            {
-                                "Node Type": "Limit",
-                                "Operators": [
-                                    {
-                                        "Limit": "10",
-                                        "Name": "Limit"
-                                    }
-                                ],
-                                "PlanNodeId": 2,
-                                "Plans": [
-                                    {
-                                        "Node Type": "TopSort",
-                                        "Operators": [
-                                            {
-                                                "Limit": "10",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "argument.Count0"
-                                            }
-                                        ],
-                                        "PlanNodeId": 4,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "Aggregate",
-                                                "Operators": [
-                                                    {
-                                                        "Aggregation": "{_yql_agg_0: COUNT(item.UserID,state._yql_agg_0)}",
-                                                        "GroupBy": "",
-                                                        "Name": "Aggregate"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 6,
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "Aggregate",
-                                                        "Operators": [
-                                                            {
-                                                                "Aggregation": "state",
-                                                                "GroupBy": "",
-                                                                "Name": "Aggregate"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 8,
-                                                        "Plans": [
-                                                            {
-                                                                "Node Type": "Filter",
-                                                                "Operators": [
-                                                                    {
-                                                                        "Name": "Filter",
-                                                                        "Predicate": "item.MobilePhoneModel != \"\""
-                                                                    }
-                                                                ],
-                                                                "PlanNodeId": 9,
-                                                                "Plans": [
-                                                                    {
-                                                                        "Node Type": "TableFullScan",
-                                                                        "Operators": [
-                                                                            {
-                                                                                "Name": "TableFullScan",
-                                                                                "ReadColumns": [
-                                                                                    "MobilePhone",
-                                                                                    "MobilePhoneModel",
-                                                                                    "UserID"
-                                                                                ],
-                                                                                "ReadRanges": [
-                                                                                    "EventTime (-\u221e, +\u221e)",
-                                                                                    "CounterID (-\u221e, +\u221e)",
-                                                                                    "EventDate (-\u221e, +\u221e)",
-                                                                                    "UserID (-\u221e, +\u221e)",
-                                                                                    "WatchID (-\u221e, +\u221e)"
-                                                                                ],
-                                                                                "Table": "clickbench/plans/row/hits"
-                                                                            }
-                                                                        ],
-                                                                        "PlanNodeId": 10
-                                                                    }
-                                                                ]
-                                                            }
-                                                        ]
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {
@@ -259,10 +185,10 @@
                                 "UserID"
                             ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

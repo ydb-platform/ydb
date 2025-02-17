@@ -31,6 +31,7 @@ namespace NActors {
         i16 SoftProcessingDurationTs = 0;
         EASProfile ActorSystemProfile = EASProfile::Default;
         bool HasSharedThread = false;
+        bool UseRingQueue = false;
     };
 
     struct TSharedExecutorPoolConfig {
@@ -39,7 +40,7 @@ namespace NActors {
         TCpuMask Affinity; // Executor thread affinity
         TDuration TimePerMailbox = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         ui32 EventsPerMailbox = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
-        i16 SoftProcessingDurationTs = Us2Ts(500);
+        i16 SoftProcessingDurationTs = Us2Ts(10'000);
     };
 
     struct TIOExecutorPoolConfig {
@@ -47,6 +48,7 @@ namespace NActors {
         TString PoolName;
         ui32 Threads = 1;
         TCpuMask Affinity; // Executor thread affinity
+        bool UseRingQueue = false;
     };
 
     struct TSelfPingInfo {

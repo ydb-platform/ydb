@@ -96,7 +96,7 @@ public:
             return EExecutionStatus::Continue;
         
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because an duplicate key");
-        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Operation is aborting because an duplicate key");
+        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation is aborting because an duplicate key");
         ResetChanges(userDb, writeOp, txc);
         return EExecutionStatus::Executed;
     }
@@ -124,8 +124,8 @@ public:
                 ui32 columnTag = validatedOperation.GetColumnIds()[valueColIdx];
                 const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
 
-                NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
-                ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeInfo));
+                const NScheme::TTypeId vtypeId = scheme.GetColumnInfo(tableInfo, columnTag)->PType.GetTypeId();
+                ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeId));
             }
         };
 
@@ -139,15 +139,15 @@ public:
                 if (cell.IsNull()) {
                     key.emplace_back();
                 } else {
-                    NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, keyCol)->PType;
-                    key.emplace_back(cell.Data(), cell.Size(), vtypeInfo);
+                    NScheme::TTypeId vtypeId = scheme.GetColumnInfo(tableInfo, keyCol)->PType.GetTypeId();
+                    key.emplace_back(cell.Data(), cell.Size(), vtypeId);
                 }
             }
 
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     fillOps(rowIdx);
-                    userDb.UpdateRow(fullTableId, key, ops);
+                    userDb.UpsertRow(fullTableId, key, ops);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
@@ -164,6 +164,11 @@ public:
                     userDb.InsertRow(fullTableId, key, ops);
                     break;
                 }
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
+                    fillOps(rowIdx);
+                    userDb.UpdateRow(fullTableId, key, ops);
+                    break;
+                }
                 default:
                     // Checked before in TWriteOperation
                     Y_FAIL_S(operationType << " operation is not supported now");
@@ -173,7 +178,8 @@ public:
         switch (operationType) {
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
-            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
                 DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
                 DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
                 break;
@@ -280,6 +286,12 @@ public:
             }
 
             if (guardLocks.LockTxId) {
+                auto abortLock = [&]() {
+                    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because it cannot acquire locks");
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because it cannot acquire locks");
+                    return EExecutionStatus::Executed;
+                };
+
                 switch (DataShard.SysLocksTable().EnsureCurrentLock()) {
                     case EEnsureCurrentLock::Success:
                         // Lock is valid, we may continue with reads and side-effects
@@ -288,23 +300,23 @@ public:
                     case EEnsureCurrentLock::Broken:
                         // Lock is valid, but broken, we could abort early in some
                         // cases, but it doesn't affect correctness.
+                        if (!op->IsReadOnly()) {
+                            return abortLock();
+                        }
                         break;
 
                     case EEnsureCurrentLock::TooMany:
                         // Lock cannot be created, it's not necessarily a problem
                         // for read-only transactions, for non-readonly we need to
                         // abort;
-                        if (op->IsReadOnly()) {
-                            break;
+                        if (!op->IsReadOnly()) {
+                            return abortLock();
                         }
-
-                        [[fallthrough]];
+                        break;
 
                     case EEnsureCurrentLock::Abort:
                         // Lock cannot be created and we must abort
-                        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because it cannot acquire locks");
-                        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because it cannot acquire locks");
-                        return EExecutionStatus::Executed;
+                        return abortLock();
                 }
             }
 
@@ -340,6 +352,8 @@ public:
                 }
                 return EExecutionStatus::Executed;
             }
+
+            const bool isArbiter = op->HasVolatilePrepareFlag() && KqpLocksIsArbiter(tabletId, kqpLocks);
 
             KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, userDb);
 
@@ -378,13 +392,14 @@ public:
             if (commitTxIds) {
                 TVector<ui64> participants(awaitingDecisions.begin(), awaitingDecisions.end());
                 DataShard.GetVolatileTxManager().PersistAddVolatileTx(
-                    txId,
+                    userDb.GetVolatileTxId(),
                     writeVersion,
                     commitTxIds,
                     userDb.GetVolatileDependencies(),
                     participants,
                     userDb.GetChangeGroup(),
                     userDb.GetVolatileCommitOrdered(),
+                    isArbiter,
                     txc
                 );
             }

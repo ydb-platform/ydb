@@ -1,0 +1,13 @@
+From aea799e5a84e03900db9eda81e172f4f757f02da Mon Sep 17 00:00:00 2001
+From: Антон Самохвалов <pg@yandex-team.ru>
+Date: Sun, 21 Sep 2008 09:07:30 +0000
+Subject: [PATCH] use optimized algo
+
+git-svn-id: svn+ssh://arcadia.yandex.ru/arc/trunk/arcadia/contrib/libs/zlib@113692 41d65440-b5be-11dd-afe3-b2e846d9b4f8
+--- a/zconf.h
++++ b/zconf.h
+@@ -183,3 +183,3 @@
+ #endif
+-#ifdef MSDOS
++#if defined(MSDOS) || defined(_i386_) || defined(_x86_64_)
+ #  define UNALIGNED_OK

@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import tarfile
 
 FLAT_DIRS_REPO_TEMPLATE = 'flatDir {{ dirs {dirs} }}\n'
@@ -48,10 +49,10 @@ ext.compileOnlyAndroidArs = [
     {compile_only_aars}
 ]
 
-def minVersion = 23
-def compileVersion = 33
-def targetVersion = 33
-def buildVersion = '33.0.0'
+def minVersion = 26
+def compileVersion = 34
+def targetVersion = 34
+def buildVersion = '34.0.0'
 
 import com.android.build.gradle.LibraryPlugin
 import java.nio.file.Files
@@ -269,7 +270,10 @@ if __name__ == '__main__':
         jsrc_dir = os.path.join(args.output_dir, 'jsrc_{}'.format(str(index)))
         os.makedirs(jsrc_dir)
         with tarfile.open(jsrc, 'r') as tar:
-            tar.extractall(path=jsrc_dir)
+            if sys.version_info >= (3, 12):
+                tar.extractall(path=jsrc_dir, filter='data')
+            else:
+                tar.extractall(path=jsrc_dir)
             args.java_dirs.append(jsrc_dir)
 
     args.build_gradle = os.path.join(args.output_dir, 'build.gradle')

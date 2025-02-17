@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: google-auth
-Version: 2.29.0
+Version: 2.38.0
 Summary: Google Authentication Library
 Home-page: https://github.com/googleapis/google-auth-library-python
 Author: Google Cloud Platform
@@ -24,22 +24,25 @@ Classifier: Operating System :: OS Independent
 Classifier: Topic :: Internet :: WWW/HTTP
 Requires-Python: >=3.7
 License-File: LICENSE
-Requires-Dist: cachetools <6.0,>=2.0.0
-Requires-Dist: pyasn1-modules >=0.2.1
-Requires-Dist: rsa <5,>=3.1.4
+Requires-Dist: cachetools<6.0,>=2.0.0
+Requires-Dist: pyasn1-modules>=0.2.1
+Requires-Dist: rsa<5,>=3.1.4
 Provides-Extra: aiohttp
-Requires-Dist: aiohttp <4.0.0.dev0,>=3.6.2 ; extra == 'aiohttp'
-Requires-Dist: requests <3.0.0.dev0,>=2.20.0 ; extra == 'aiohttp'
+Requires-Dist: aiohttp<4.0.0.dev0,>=3.6.2; extra == "aiohttp"
+Requires-Dist: requests<3.0.0.dev0,>=2.20.0; extra == "aiohttp"
 Provides-Extra: enterprise_cert
-Requires-Dist: cryptography ==36.0.2 ; extra == 'enterprise_cert'
-Requires-Dist: pyopenssl ==22.0.0 ; extra == 'enterprise_cert'
+Requires-Dist: cryptography; extra == "enterprise-cert"
+Requires-Dist: pyopenssl; extra == "enterprise-cert"
+Provides-Extra: pyjwt
+Requires-Dist: pyjwt>=2.0; extra == "pyjwt"
+Requires-Dist: cryptography>=38.0.3; extra == "pyjwt"
 Provides-Extra: pyopenssl
-Requires-Dist: pyopenssl >=20.0.0 ; extra == 'pyopenssl'
-Requires-Dist: cryptography >=38.0.3 ; extra == 'pyopenssl'
+Requires-Dist: pyopenssl>=20.0.0; extra == "pyopenssl"
+Requires-Dist: cryptography>=38.0.3; extra == "pyopenssl"
 Provides-Extra: reauth
-Requires-Dist: pyu2f >=0.1.5 ; extra == 'reauth'
+Requires-Dist: pyu2f>=0.1.5; extra == "reauth"
 Provides-Extra: requests
-Requires-Dist: requests <3.0.0.dev0,>=2.20.0 ; extra == 'requests'
+Requires-Dist: requests<3.0.0.dev0,>=2.20.0; extra == "requests"
 
 Google Auth Python Library
 ==========================

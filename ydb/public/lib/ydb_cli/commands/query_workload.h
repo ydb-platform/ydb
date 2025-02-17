@@ -11,7 +11,7 @@ public:
     TCommandQueryWorkload();
 };
 
-class TCommandQueryWorkloadRun : public TYdbOperationCommand, public TInterruptibleCommand
+class TCommandQueryWorkloadRun : public TYdbSimpleCommand, public TInterruptibleCommand
 {
 public:
     TCommandQueryWorkloadRun();

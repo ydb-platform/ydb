@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
@@ -121,11 +122,51 @@ private:
     friend class TKqpTransactionContext;
 };
 
+class TShardIdToTableInfo {
+public:
+    const TTableInfo& Get(ui64 shardId) const {
+        const auto* result = GetPtr(shardId);
+        AFL_ENSURE(result);
+        return *result;
+    }
+
+    const TTableInfo* GetPtr(ui64 shardId) const {
+        auto it = ShardIdToInfo.find(shardId);
+        return it != std::end(ShardIdToInfo)
+            ? &it->second
+            : nullptr;
+    }
+
+    void Add(ui64 shardId, bool isOlap, const TString& path) {
+        const auto [stringsIter, _] = Strings.insert(path);
+        const TStringBuf pathBuf = *stringsIter;
+        auto infoIter = ShardIdToInfo.find(shardId);
+        if (infoIter != std::end(ShardIdToInfo)) {
+            AFL_ENSURE(infoIter->second.IsOlap == isOlap);
+            infoIter->second.Pathes.insert(pathBuf);
+        } else {
+            ShardIdToInfo.emplace(
+                shardId,
+                TTableInfo{
+                    .IsOlap = isOlap,
+                    .Pathes = {pathBuf},
+                });
+        }
+    }
+
+private:
+    THashMap<ui64, TTableInfo> ShardIdToInfo;
+    std::unordered_set<TString> Strings;// Pointers aren't invalidated.
+};
+using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
+
+bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery);
+
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
     explicit TKqpTransactionContext(bool implicit, const NMiniKQL::IFunctionRegistry* funcRegistry,
-        TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider, bool enableImmediateEffects)
-        : NYql::TKikimrTransactionContextBase(enableImmediateEffects)
+        TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
+        : NYql::TKikimrTransactionContextBase()
         , Implicit(implicit)
         , ParamsState(MakeIntrusive<TParamsState>())
     {
@@ -158,6 +199,8 @@ public:
     void Finish() final {
         YQL_ENSURE(DeferredEffects.Empty());
         YQL_ENSURE(!Locks.HasLocks());
+        YQL_ENSURE(!TxManager);
+        YQL_ENSURE(!BufferActorId);
 
         FinishTime = TInstant::Now();
 
@@ -188,6 +231,12 @@ public:
         ParamsState = MakeIntrusive<TParamsState>();
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
         HasImmediateEffects = false;
+
+        HasOlapTable = false;
+        HasOltpTable = false;
+        HasTableWrite = false;
+        HasTableRead = false;
+        NeedUncommittedChangesFlush = false;
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -212,9 +261,13 @@ public:
                 break;
 
             case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
-                // TODO: (KIKIMR-3374) Use separate isolation mode to avoid optimistic locks.
-                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO;
                 Readonly = true;
+                break;
+
+            case Ydb::Table::TransactionSettings::kSnapshotReadWrite:
+                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW;
+                Readonly = false;
                 break;
 
             case Ydb::Table::TransactionSettings::TX_MODE_NOT_SET:
@@ -223,9 +276,11 @@ public:
         };
     }
 
-    bool ShouldExecuteDeferredEffects() const {
-        if (HasUncommittedChangesRead) {
-            YQL_ENSURE(EnableImmediateEffects);
+    bool ShouldExecuteDeferredEffects(const TKqpPhyTxHolder::TConstPtr& tx) const {
+        if (NeedUncommittedChangesFlush || HasOlapTable) {
+            return !DeferredEffects.Empty();
+        }
+        if (EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && !tx && HasTableRead) {
             return !DeferredEffects.Empty();
         }
 
@@ -254,12 +309,18 @@ public:
     }
 
     bool CanDeferEffects() const {
-        if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-            YQL_ENSURE(EnableImmediateEffects);
+        if (NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution() || HasOlapTable) {
             return false;
         }
 
         return true;
+    }
+
+    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery) {
+        NeedUncommittedChangesFlush = HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery);
+        if (NeedUncommittedChangesFlush) {
+            ModifiedTablesSinceLastFlush.clear();   
+        }
     }
 
 public:
@@ -287,6 +348,19 @@ public:
     TTxAllocatorState::TPtr TxAlloc;
 
     IKqpGateway::TKqpSnapshotHandle SnapshotHandle;
+
+    bool HasOlapTable = false;
+    bool HasOltpTable = false;
+    bool HasTableWrite = false;
+    bool HasTableRead = false;
+
+    bool NeedUncommittedChangesFlush = false;
+    THashSet<NKikimr::TTableId> ModifiedTablesSinceLastFlush;
+
+    TActorId BufferActorId;
+    IKqpTransactionManagerPtr TxManager = nullptr;
+
+    TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
 };
 
 struct TTxId {
@@ -329,7 +403,7 @@ struct THash<NKikimr::NKqp::TTxId> {
 };
 
 namespace NKikimr::NKqp {
-    
+
 class TTransactionsCache {
     size_t MaxActiveSize;
     THashMap<TTxId, TIntrusivePtr<TKqpTransactionContext>, THash<NKikimr::NKqp::TTxId>> Active;
@@ -434,6 +508,8 @@ public:
     }
 };
 
+NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NYql::TKikimrPathId& pathId);
+NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId);
 std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);
 
@@ -441,9 +517,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
-bool HasOlapTableWriteInStage(
-    const NKqpProto::TKqpPhyStage& stage,
-    const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& tables);
+bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage);
 bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);

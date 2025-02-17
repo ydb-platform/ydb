@@ -17,7 +17,7 @@
 #endif
 
 #if defined(_bionic_)
-//TODO
+// TODO
 #else
     #if !defined(HAVE_BACKTRACE) && defined(_cygwin_)
         #define CaptureStackBackTrace RtlCaptureStackBackTrace
@@ -95,8 +95,8 @@ namespace {
 
             return 0;
         }
-    }
-}
+    } // namespace NGCCBacktrace
+} // namespace
 
 size_t BackTrace(void** p, size_t len) {
     return NGCCBacktrace::BackTrace(p, len);
@@ -216,7 +216,7 @@ namespace {
         TSymFromAddrFunc SymFromAddrFunc;
         BOOL InitOk;
     };
-}
+} // namespace
 
 TResolvedSymbol ResolveSymbol(void* sym, char* buf, size_t len) {
     return Singleton<TWinSymbolResolverImpl>()->Resolve(sym, buf, len);

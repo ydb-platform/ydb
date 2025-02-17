@@ -6,19 +6,19 @@ select
   cd_marital_status,
   cd_dep_count,
   count(*) cnt1,
-  avg(cd_dep_count) a1,
+  min(cd_dep_count) a1,
   max(cd_dep_count) x1,
-  sum(cd_dep_count) s1,
+  avg(cd_dep_count) s1,
   cd_dep_employed_count,
   count(*) cnt2,
-  avg(cd_dep_employed_count) a2,
+  min(cd_dep_employed_count) a2,
   max(cd_dep_employed_count) x2,
-  sum(cd_dep_employed_count) s2,
+  avg(cd_dep_employed_count) s2,
   cd_dep_college_count,
   count(*) cnt3,
-  avg(cd_dep_college_count) a3,
+  min(cd_dep_college_count) a3,
   max(cd_dep_college_count) x3,
-  sum(cd_dep_college_count) s3
+  avg(cd_dep_college_count) s3
  from
   {{customer}} c,{{customer_address}} ca,{{customer_demographics}}
  where
@@ -28,19 +28,19 @@ select
           from {{store_sales}},{{date_dim}}
           where c.c_customer_sk = ss_customer_sk and
                 ss_sold_date_sk = d_date_sk and
-                d_year = 2001 and
+                d_year = 2002 and
                 d_qoy < 4) and
    (exists (select *
             from {{web_sales}},{{date_dim}}
             where c.c_customer_sk = ws_bill_customer_sk and
                   ws_sold_date_sk = d_date_sk and
-                  d_year = 2001 and
+                  d_year = 2002 and
                   d_qoy < 4) or
     exists (select *
             from {{catalog_sales}},{{date_dim}}
             where c.c_customer_sk = cs_ship_customer_sk and
                   cs_sold_date_sk = d_date_sk and
-                  d_year = 2001 and
+                  d_year = 2002 and
                   d_qoy < 4))
  group by ca_state,
           cd_gender,

@@ -42,6 +42,13 @@ private:
     TDisjointIntervalTree<ui64> Offsets_;
 };
 
+struct TTopicOperationTransaction {
+    NKikimrPQ::TDataTransaction tx;
+    bool hasWrite = false;
+};
+
+using TTopicOperationTransactions = THashMap<ui64, TTopicOperationTransaction>;
+
 class TTopicPartitionOperations {
 public:
     bool IsValid() const;
@@ -49,14 +56,17 @@ public:
     void AddOperation(const TString& topic, ui32 partition,
                       const TString& consumer,
                       const Ydb::Topic::OffsetsRange& range);
-    void AddOperation(const TString& topic, ui32 partition);
+    void AddOperation(const TString& topic, ui32 partition,
+                      TMaybe<ui32> supportivePartition);
 
-    void BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTransaction> &txs);
+    void BuildTopicTxs(TTopicOperationTransactions &txs);
 
     void Merge(const TTopicPartitionOperations& rhs);
 
     void SetTabletId(ui64 value);
     ui64 GetTabletId() const;
+
+    TMaybe<TString> GetTopicName() const;
 
     bool HasReadOperations() const;
     bool HasWriteOperations() const;
@@ -67,6 +77,7 @@ private:
     THashMap<TString, TConsumerOperations> Operations_;
     bool HasWriteOperations_ = false;
     TMaybe<ui64> TabletId_;
+    TMaybe<ui32> SupportivePartition_;
 };
 
 struct TTopicPartition {
@@ -98,7 +109,8 @@ public:
     void AddOperation(const TString& topic, ui32 partition,
                       const TString& consumer,
                       const Ydb::Topic::OffsetsRange& range);
-    void AddOperation(const TString& topic, ui32 partition);
+    void AddOperation(const TString& topic, ui32 partition,
+                      TMaybe<ui32> supportivePartition);
 
     void FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate,
                                  TMaybe<TString> consumer);
@@ -106,12 +118,14 @@ public:
                                     Ydb::StatusIds_StatusCode& status,
                                     TString& message);
 
-    void BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTransaction> &txs);
+    void BuildTopicTxs(TTopicOperationTransactions &txs);
 
     void Merge(const TTopicOperations& rhs);
 
     TSet<ui64> GetReceivingTabletIds() const;
     TSet<ui64> GetSendingTabletIds() const;
+
+    TMaybe<TString> GetTabletName(ui64 tabletId) const;
 
     size_t GetSize() const;
 

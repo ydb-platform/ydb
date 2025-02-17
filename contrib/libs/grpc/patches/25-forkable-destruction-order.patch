@@ -1,0 +1,36 @@
+--- a/src/core/lib/event_engine/forkable.cc	(index)
++++ b/src/core/lib/event_engine/forkable.cc	(working tree)
+@@ -78,8 +78,13 @@ void ManageForkable(Forkable* forkable) {
+ void StopManagingForkable(Forkable* forkable) {
+   grpc_core::MutexLock lock(g_mu.get());
+   auto iter = std::find(g_forkables->begin(), g_forkables->end(), forkable);
+-  GPR_ASSERT(iter != g_forkables->end());
+-  g_forkables->erase(iter);
++  // We've faced with the issue that destructor for TimerManager object is called
++  // between PrepareFork and PostforkParent.
++  // In result in PostforkParent we try to access not valid object via forkable ptr.
++  // https://github.com/grpc/grpc/issues/33516
++  if (iter != g_forkables->end()) {
++    g_forkables->erase(iter);
++  }
+ }
+ 
+ }  // namespace experimental
+--- a/src/core/lib/event_engine/posix_engine/timer_manager.cc	(index)
++++ b/src/core/lib/event_engine/posix_engine/timer_manager.cc	(working tree)
+@@ -144,7 +144,14 @@ void TimerManager::Shutdown() {
+   }
+ }
+ 
+-TimerManager::~TimerManager() { Shutdown(); }
++TimerManager::~TimerManager() {
++    // We've faced with the issue that destructor for TimerManager object is called
++    // between PrepareFork and PostforkParent. see forkable.cc
++    // Let's remove object from g_forcable list here
++    // https://github.com/grpc/grpc/issues/33516
++    StopManagingForkable(this);
++    Shutdown();
++}
+ 
+ void TimerManager::Host::Kick() { timer_manager_->Kick(); }
+ 

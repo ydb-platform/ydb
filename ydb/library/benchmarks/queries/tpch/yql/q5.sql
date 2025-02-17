@@ -4,7 +4,7 @@
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
 
-$border = Date("1995-01-01");
+$border = Date("1994-01-01");
 
 $j1 = (
 select
@@ -17,7 +17,7 @@ join
 on
     n.n_regionkey = r.r_regionkey
 where
-    r_name = 'AFRICA'
+    r_name = 'ASIA'
 );
 
 $j2 = (
@@ -59,8 +59,8 @@ join
 on
     c.c_custkey = o.o_custkey
 where
-    CAST(o.o_orderdate AS Timestamp) >= $border
-    and CAST(o.o_orderdate AS Timestamp) < ($border + Interval("P365D"))
+    o.o_orderdate >= $border
+    and o.o_orderdate < ($border + Interval("P365D"))
 );
 
 $j5 = (
@@ -79,7 +79,7 @@ on
 
 select
     n_name,
-    sum(l_extendedprice * (1 - l_discount)) as revenue
+    sum(l_extendedprice * ($z1_12 - l_discount)) as revenue
 from
     $j5
 group by

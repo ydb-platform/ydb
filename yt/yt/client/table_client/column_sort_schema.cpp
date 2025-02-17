@@ -62,7 +62,7 @@ void ValidateSortColumns(const std::vector<TColumnSortSchema>& columns)
 {
     ValidateKeyColumnCount(columns.size());
 
-    THashSet<TString> names;
+    THashSet<std::string> names;
     for (const auto& column : columns) {
         if (!names.insert(column.Name).second) {
             THROW_ERROR_EXCEPTION("Duplicate sort column name %Qv",
@@ -77,9 +77,11 @@ void ToProto(
     NProto::TSortColumnsExt* protoSortColumns,
     const TSortColumns& sortColumns)
 {
+    using NYT::ToProto;
+
     for (const auto& sortColumn : sortColumns) {
-        protoSortColumns->add_names(sortColumn.Name);
-        protoSortColumns->add_sort_orders(static_cast<int>(sortColumn.SortOrder));
+        protoSortColumns->add_names(ToProto(sortColumn.Name));
+        protoSortColumns->add_sort_orders(ToProto(sortColumn.SortOrder));
     }
 }
 
@@ -87,26 +89,23 @@ void FromProto(
     TSortColumns* sortColumns,
     const NProto::TSortColumnsExt& protoSortColumns)
 {
+    using NYT::FromProto;
+
     YT_VERIFY(protoSortColumns.names_size() == protoSortColumns.sort_orders_size());
     for (int columnIndex = 0; columnIndex < protoSortColumns.names_size(); ++columnIndex) {
         TColumnSortSchema sortColumn{
             .Name = protoSortColumns.names(columnIndex),
-            .SortOrder = CheckedEnumCast<ESortOrder>(protoSortColumns.sort_orders(columnIndex))
+            .SortOrder = FromProto<ESortOrder>(protoSortColumns.sort_orders(columnIndex)),
         };
         sortColumns->push_back(sortColumn);
     }
 }
 
-void FormatValue(TStringBuilderBase* builder, const TSortColumns& sortColumns, TStringBuf /* format */)
+void FormatValue(TStringBuilderBase* builder, const TSortColumns& sortColumns, TStringBuf /* spec */)
 {
     builder->AppendFormat("{ColumnNames: %v, Comparator: %v}",
         GetColumnNames(sortColumns),
         GetComparator(sortColumns));
-}
-
-TString ToString(const TSortColumns& sortColumns)
-{
-    return ToStringViaBuilder(sortColumns);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

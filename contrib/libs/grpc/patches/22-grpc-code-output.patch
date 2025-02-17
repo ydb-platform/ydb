@@ -1,0 +1,17 @@
+--- a/src/core/lib/transport/metadata_batch.cc	(index)
++++ b/src/core/lib/transport/metadata_batch.cc	(working tree)
+@@ -26,6 +26,14 @@
+ 
+ #include "src/core/lib/transport/timeout_encoding.h"
+ 
++template<>
++void Out<grpc_status_code>(IOutputStream& os, grpc_status_code t) {
++    // We use ::ToString for convertation of status code to string,
++    // but it requries definition of the void Out<T>
++    // see util/stream/output.h for details
++    os << static_cast<int>(t);
++}
++
+ namespace grpc_core {
+ namespace metadata_detail {
+ 

@@ -71,23 +71,17 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     TUserTable::TPtr info = DataShard.CreateUserTable(txc, schemeTx.GetCreateTable());
     DataShard.AddUserTable(tableId, info);
 
-    for (const auto& [indexPathId, indexInfo] : info->Indexes) {
-        if (indexInfo.Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
-            AddSenders.emplace_back(new TEvChangeExchange::TEvAddSender(
-                tableId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId
-            ));
-        }
-    }
+    info->ForEachAsyncIndex([&](const auto& indexPathId, const auto&) {
+        AddSenders.emplace_back(new TEvChangeExchange::TEvAddSender(
+            tableId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId
+        ));
+    });
 
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-    if (DataShard.GetState() == TShardState::WaitScheme) {
-        txc.DB.NoMoreReadsForTx();
-        DataShard.SetPersistState(TShardState::Ready, txc);
-        DataShard.CheckMvccStateChangeCanStart(ctx); // Recheck
-        DataShard.SendRegistrationRequestTimeCast(ctx);
-    }
+    txc.DB.NoMoreReadsForTx();
+    DataShard.OnTableCreated(txc, ctx);
 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }

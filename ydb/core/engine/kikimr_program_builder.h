@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 
 
 namespace NKikimr {

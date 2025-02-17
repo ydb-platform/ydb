@@ -19,8 +19,7 @@ using namespace google::protobuf;
         auto element = ResolveProtobufElementByYPath(type, path).Element; \
         EXPECT_TRUE(std::holds_alternative<std::unique_ptr<TProtobufScalarElement>>(element)); \
         int fieldType = static_cast<int>( \
-            std::get<std::unique_ptr<TProtobufScalarElement>>(element)->Type \
-        ); \
+            std::get<std::unique_ptr<TProtobufScalarElement>>(element)->Type); \
         EXPECT_EQ(fieldType, expectedType); \
     } while (false);
 
@@ -187,7 +186,7 @@ TEST(TProtobufScalarTypeTest, MapNestedTypes)
         FieldDescriptor::TYPE_STRING);
 }
 
-#define EXPECT_ENUM_STORAGE_TYPE(messageType, path, expectedEnumType) \
+#define EXPECT_ENUM_STORAGE_TYPE(messageType, path, expectedEnumStorageType, expectedEnumType) \
     do { \
         auto type = ReflectProtobufMessageType<NProto::messageType>(); \
         auto element = ResolveProtobufElementByYPath(type, path).Element; \
@@ -195,16 +194,17 @@ TEST(TProtobufScalarTypeTest, MapNestedTypes)
         auto elementPtr = std::get<std::unique_ptr<TProtobufScalarElement>>(element).get(); \
         int fieldType = static_cast<int>(elementPtr->Type); \
         EXPECT_EQ(fieldType, FieldDescriptor::TYPE_ENUM); \
-        EXPECT_EQ(elementPtr->EnumStorageType, expectedEnumType); \
+        EXPECT_EQ(elementPtr->EnumStorageType, expectedEnumStorageType); \
+        EXPECT_EQ(elementPtr->EnumType, ReflectProtobufEnumType(NProto::messageType::expectedEnumType##_descriptor())); \
     } while (false);
 
 TEST(TProtobufScalarTypeTest, EnumTypes)
 {
-    EXPECT_ENUM_STORAGE_TYPE(TExampleMessage, "/enum_int", EEnumYsonStorageType::Int);
-    EXPECT_ENUM_STORAGE_TYPE(TExampleMessage, "/enum_int_repeated/0", EEnumYsonStorageType::Int);
+    EXPECT_ENUM_STORAGE_TYPE(TExampleMessage, "/enum_int", EEnumYsonStorageType::Int, EEnum);
+    EXPECT_ENUM_STORAGE_TYPE(TExampleMessage, "/enum_int_repeated/0", EEnumYsonStorageType::Int, EAnotherEnum);
 
-    EXPECT_ENUM_STORAGE_TYPE(TExampleMessage, "/enum_string", EEnumYsonStorageType::String);
-    EXPECT_ENUM_STORAGE_TYPE(TExampleMessage, "/enum_string_repeated/0", EEnumYsonStorageType::String);
+    EXPECT_ENUM_STORAGE_TYPE(TExampleMessage, "/enum_string", EEnumYsonStorageType::String, EAnotherEnum);
+    EXPECT_ENUM_STORAGE_TYPE(TExampleMessage, "/enum_string_repeated/0", EEnumYsonStorageType::String, EEnum);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

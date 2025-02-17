@@ -1,0 +1,229 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 00a57fab80978a96d0d241f099fb752e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004 Topspin Communications.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/sa.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 09d6692a7808fdf9c67420a433ebb60a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017-2018, Mellanox Technologies inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/ib_user_ioctl_verbs.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a8283d9fdfed0fd0d6100be00fd0ea5
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017, Mellanox Technologies inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/mlx5_api.h [2:2]
+        include/infiniband/verbs_api.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ceb9210b3e9ceadf6943ae33e0ad1f9
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005 PathScale, Inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/verbs.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 318d2c947aa242b40dc9d49996169fb1
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005 Voltaire Inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/rdma/rdma_cma.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 392fcde9544778c622fcf243c4a9dc38
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005-2011 Intel Corporation.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/rdma/rdma_cma_abi.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3b30456bbf55d4f7c41a9aca269cc7eb
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005-2014 Intel Corporation.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/rdma/rdma_cma.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 433505f50582b373c9f6d6eb37419e19
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2011-2012 Intel Corporation.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/rdma/rsocket.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 572f25496d11d36ef29b538d152333f4
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004, 2011-2012 Intel Corporation.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/verbs.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 58975fa8d481e8201d85a4ec943c3b49
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017 Mellanox Technologies, Inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/mlx5dv.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 65642d6cfc0b53f92e36d1bc32cc183b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005 Voltaire, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/sa.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 82d19ec13832687ad7718469ae1c68d9
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005, 2006, 2007 Cisco Systems, Inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/verbs.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9ed393a5d893f3969affcc42db7e42a0
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018, Mellanox Technologies inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/mlx5_user_ioctl_verbs.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a4b84bef3014b1238490b3b7aab32092
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004, 2005 Topspin Communications.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/verbs.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ab4b1fd0971a8ab506fa99e76626cf62
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2010 Intel Corporation.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/ib.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b065dad3da9574dee489fff624f5d5ed
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005 Topspin Communications.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/opcode.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b5f2b36b50b29305b3aaa7d872e00c49
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2010-2014 Intel Corporation.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/rdma/rdma_verbs.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL de2e1037c1469c6ae39671a166bccc56
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017 Mellanox Technologies Ltd.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/infiniband/tm_types.h [2:2]

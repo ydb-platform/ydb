@@ -227,12 +227,12 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
 
         const ui64 tabletId = TTestTxConfig::TxTablet0;
 
-        auto boot1 = CreateTestBootstrapper(runtime,
+        auto instance1 = StartTestTablet(runtime,
             CreateTestTabletInfo(tabletId, TTabletTypes::Dummy),
             [enableInitialLease](const TActorId & tablet, TTabletStorageInfo* info) {
                 return new TLeasesTablet(tablet, info, enableInitialLease);
             });
-        runtime.EnableScheduleForActor(boot1);
+        runtime.EnableScheduleForActor(instance1);
 
         {
             TDispatchOptions options;
@@ -262,13 +262,6 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                     break;
-                case TEvTablet::TEvTabletDead::EventType:
-                    // Prevent tablets from restarting
-                    // This is most important for the boot1 actor, since it
-                    // quickly receives bad commit signal and tries to restart
-                    // the original tablet. However we prevent executor from
-                    // killing itself too, so we could make additional queries.
-                    return TTestActorRuntime::EEventAction::DROP;
                 case TEvTablet::TEvDemoted::EventType:
                     // Block guardian from telling tablet about a new generation
                     return TTestActorRuntime::EEventAction::DROP;
@@ -280,13 +273,13 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
         };
         auto prevObserver = runtime.SetObserverFunc(observerFunc);
 
-        auto boot2 = CreateTestBootstrapper(runtime,
+        auto instance2 = StartTestTablet(runtime,
             CreateTestTabletInfo(tabletId, TTabletTypes::Dummy),
             [enableInitialLease](const TActorId & tablet, TTabletStorageInfo* info) {
                 return new TLeasesTablet(tablet, info, enableInitialLease);
             },
             /* node index */ 1);
-        runtime.EnableScheduleForActor(boot2);
+        runtime.EnableScheduleForActor(instance2);
 
         {
             TDispatchOptions options;

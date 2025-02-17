@@ -1,21 +1,18 @@
-import ipaddress
 import logging
 import re
-import uuid
 import pytz
 
-from enum import Enum
 from io import IOBase
 from typing import Any, Tuple, Dict, Sequence, Optional, Union, Generator
-from datetime import date, datetime, tzinfo
+from datetime import tzinfo
 
 from pytz.exceptions import UnknownTimeZoneError
 
-from clickhouse_connect import common
+from clickhouse_connect.driver import tzutil
+from clickhouse_connect.driver.binding import bind_query
 from clickhouse_connect.driver.common import dict_copy, empty_gen, StreamContext
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.types import Matrix, Closable
-from clickhouse_connect.json_impl import any_to_json
 from clickhouse_connect.driver.exceptions import StreamClosedError, ProgrammingError
 from clickhouse_connect.driver.options import check_arrow, pd_extended_dtypes
 from clickhouse_connect.driver.context import BaseQueryContext
@@ -28,7 +25,6 @@ limit_re = re.compile(r'\s+LIMIT($|\s)', re.IGNORECASE)
 select_re = re.compile(r'(^|\s)SELECT\s', re.IGNORECASE)
 insert_re = re.compile(r'(^|\s)INSERT\s*INTO', re.IGNORECASE)
 command_re = re.compile(r'(^\s*)(' + commands + r')\s', re.IGNORECASE)
-external_bind_re = re.compile(r'{.+:.+}')
 
 
 # pylint: disable=too-many-instance-attributes
@@ -37,9 +33,9 @@ class QueryContext(BaseQueryContext):
     Argument/parameter object for queries.  This context is used to set thread/query specific formats
     """
 
-    # pylint: disable=duplicate-code,too-many-arguments,too-many-locals
+    # pylint: disable=duplicate-code,too-many-arguments,too-many-positional-arguments,too-many-locals
     def __init__(self,
-                 query: str = '',
+                 query: Union[str, bytes] = '',
                  parameters: Optional[Dict[str, Any]] = None,
                  settings: Optional[Dict[str, Any]] = None,
                  query_formats: Optional[Dict[str, str]] = None,
@@ -170,13 +166,14 @@ class QueryContext(BaseQueryContext):
         elif self.apply_server_tz:
             active_tz = self.server_tz
         else:
-            active_tz = self.local_tz
+            active_tz = tzutil.local_tz
         if active_tz == pytz.UTC:
             return None
         return active_tz
 
+    # pylint disable=too-many-positional-arguments
     def updated_copy(self,
-                     query: Optional[str] = None,
+                     query: Optional[Union[str, bytes]] = None,
                      parameters: Optional[Dict[str, Any]] = None,
                      settings: Optional[Dict[str, Any]] = None,
                      query_formats: Optional[Dict[str, str]] = None,
@@ -217,7 +214,11 @@ class QueryContext(BaseQueryContext):
 
     def _update_query(self):
         self.final_query, self.bind_params = bind_query(self.query, self.parameters, self.server_tz)
-        self.uncommented_query = remove_sql_comments(self.final_query)
+        if isinstance(self.final_query, bytes):
+            # If we've embedded binary data in the query, all bets are off, and we check the original query for comments
+            self.uncommented_query = remove_sql_comments(self.query)
+        else:
+            self.uncommented_query = remove_sql_comments(self.final_query)
 
 
 class QueryResult(Closable):
@@ -338,129 +339,6 @@ class QueryResult(Closable):
             self._block_gen = None
 
 
-BS = '\\'
-must_escape = (BS, '\'', '`', '\t', '\n')
-
-
-def quote_identifier(identifier: str):
-    first_char = identifier[0]
-    if first_char in ('`', '"') and identifier[-1] == first_char:
-        # Identifier is already quoted, assume that it's valid
-        return identifier
-    return f'`{escape_str(identifier)}`'
-
-
-def finalize_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]],
-                   server_tz: Optional[tzinfo] = None) -> str:
-    while query.endswith(';'):
-        query = query[:-1]
-    if not parameters:
-        return query
-    if hasattr(parameters, 'items'):
-        return query % {k: format_query_value(v, server_tz) for k, v in parameters.items()}
-    return query % tuple(format_query_value(v) for v in parameters)
-
-
-def bind_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]],
-               server_tz: Optional[tzinfo] = None) -> Tuple[str, Dict[str, str]]:
-    while query.endswith(';'):
-        query = query[:-1]
-    if not parameters:
-        return query, {}
-    if external_bind_re.search(query) is None:
-        return finalize_query(query, parameters, server_tz), {}
-    return query, {f'param_{k}': format_bind_value(v, server_tz) for k, v in parameters.items()}
-
-
-def format_str(value: str):
-    return f"'{escape_str(value)}'"
-
-
-def escape_str(value: str):
-    return ''.join(f'{BS}{c}' if c in must_escape else c for c in value)
-
-
-# pylint: disable=too-many-return-statements
-def format_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
-    """
-    Format Python values in a ClickHouse query
-    :param value: Python object
-    :param server_tz: Server timezone for adjusting datetime values
-    :return: Literal string for python value
-    """
-    if value is None:
-        return 'NULL'
-    if isinstance(value, str):
-        return format_str(value)
-    if isinstance(value, datetime):
-        if value.tzinfo is not None or server_tz != pytz.UTC:
-            value = value.astimezone(server_tz)
-        return f"'{value.strftime('%Y-%m-%d %H:%M:%S')}'"
-    if isinstance(value, date):
-        return f"'{value.isoformat()}'"
-    if isinstance(value, list):
-        return f"[{', '.join(format_query_value(x, server_tz) for x in value)}]"
-    if isinstance(value, tuple):
-        return f"({', '.join(format_query_value(x, server_tz) for x in value)})"
-    if isinstance(value, dict):
-        if common.get_setting('dict_parameter_format') == 'json':
-            return format_str(any_to_json(value).decode())
-        pairs = [format_query_value(k, server_tz) + ':' + format_query_value(v, server_tz)
-                 for k, v in value.items()]
-        return f"{{{', '.join(pairs)}}}"
-    if isinstance(value, Enum):
-        return format_query_value(value.value, server_tz)
-    if isinstance(value, (uuid.UUID, ipaddress.IPv4Address, ipaddress.IPv6Address)):
-        return f"'{value}'"
-    return value
-
-
-# pylint: disable=too-many-branches
-def format_bind_value(value: Any, server_tz: tzinfo = pytz.UTC, top_level: bool = True):
-    """
-    Format Python values in a ClickHouse query
-    :param value: Python object
-    :param server_tz: Server timezone for adjusting datetime values
-    :param top_level: Flag for top level for nested structures
-    :return: Literal string for python value
-    """
-
-    def recurse(x):
-        return format_bind_value(x, server_tz, False)
-
-    if value is None:
-        return '\\N'
-    if isinstance(value, str):
-        if top_level:
-            # At the top levels, strings must not be surrounded by quotes
-            return escape_str(value)
-        return format_str(value)
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=server_tz)
-        val = value.strftime('%Y-%m-%d %H:%M:%S')
-        if top_level:
-            return val
-        return f"'{val}'"
-    if isinstance(value, date):
-        if top_level:
-            return value.isoformat()
-        return f"'{value.isoformat()}'"
-    if isinstance(value, list):
-        return f"[{', '.join(recurse(x) for x in value)}]"
-    if isinstance(value, tuple):
-        return f"({', '.join(recurse(x) for x in value)})"
-    if isinstance(value, dict):
-        if common.get_setting('dict_parameter_format') == 'json':
-            return any_to_json(value).decode()
-        pairs = [recurse(k) + ':' + recurse(v)
-                 for k, v in value.items()]
-        return f"{{{', '.join(pairs)}}}"
-    if isinstance(value, Enum):
-        return recurse(value.value)
-    return str(value)
-
-
 comment_re = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|(--\s)[^\n]*$)", re.MULTILINE | re.DOTALL)
 
 
@@ -496,9 +374,12 @@ def to_arrow_batches(buffer: IOBase) -> StreamContext:
     return StreamContext(buffer, reader)
 
 
-def arrow_buffer(table) -> Tuple[Sequence[str], bytes]:
+def arrow_buffer(table, compression: Optional[str] = None) -> Tuple[Sequence[str], bytes]:
     pyarrow = check_arrow()
+    options = None
+    if compression in ('zstd', 'lz4'):
+        options = pyarrow.ipc.IpcWriteOptions(compression=pyarrow.Codec(compression=compression))
     sink = pyarrow.BufferOutputStream()
-    with pyarrow.RecordBatchFileWriter(sink, table.schema) as writer:
+    with pyarrow.RecordBatchFileWriter(sink, table.schema, options=options) as writer:
         writer.write(table)
     return table.schema.names, sink.getvalue()

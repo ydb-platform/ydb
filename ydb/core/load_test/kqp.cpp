@@ -5,11 +5,11 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
-#include <ydb/library/workload/workload_factory.h>
-#include <ydb/library/workload/stock_workload.h>
-#include <ydb/library/workload/kv_workload.h>
+#include <ydb/library/workload/abstract/workload_factory.h>
+#include <ydb/library/workload/stock/stock.h>
+#include <ydb/library/workload/kv/kv.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/histogram/hdr/histogram.h>
@@ -187,7 +187,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " data request status: Success");
@@ -265,6 +265,7 @@ public:
             params->Limit = cmd.GetStock().GetLimit();
             params->DbPath = WorkingDir;
             params->MinPartitions = UniformPartitionsCount;
+            params->DbPath = cmd.GetWorkingDir();
             WorkloadQueryGen = std::make_shared<NYdbWorkload::TStockWorkloadGenerator>(params.get());
             WorkloadQueryGenParams = params;
         } else if (cmd.Workload_case() == NKikimr::TEvLoadTestRequest_TKqpLoad::WorkloadCase::kKv) {
@@ -277,6 +278,7 @@ public:
             params->ColumnsCnt = cmd.GetKv().GetColumnsCnt();
             params->RowsCnt = cmd.GetKv().GetRowsCnt();
             params->MinPartitions = UniformPartitionsCount;
+            params->DbPath = cmd.GetWorkingDir();
             WorkloadQueryGen = std::make_shared<NYdbWorkload::TKvWorkloadGenerator>(params.get());
             WorkloadQueryGenParams = params;
         } else {
@@ -407,12 +409,13 @@ private:
     }
 
     void HandleDropTablesResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " drop tables status: SUCCESS");
         } else {
             LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " drop tables status: FAIL, reason: " + ev->Get()->ToString());
+            Error = TStringBuilder() << "Failed to drop tables " << ev->Get()->ToString();
         }
 
         DeathReport(ctx);
@@ -496,6 +499,7 @@ private:
             CreateTables(ctx);
         } else {
             LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Session creation failed: " + ev->Get()->ToString());
+            Error = TStringBuilder() << "Failed to create session " << ev->Get()->ToString();
         }
     }
 
@@ -515,7 +519,7 @@ private:
     }
 
     void HandleCreateTableResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Become(&TKqpLoadActor::StateMain);
@@ -524,6 +528,7 @@ private:
             InsertInitData(ctx);
         } else {
             LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " tables creation failed: " + ev->Get()->ToString());
+            Error = TStringBuilder() << "Failed to create tables " << ev->Get()->ToString();
             CreateTables(ctx);
         }
     }
@@ -542,12 +547,13 @@ private:
     }
 
     void HandleDataQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " init query status: SUCCESS");
         } else {
             LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " init query status: FAIL, reason: " + ev->Get()->ToString());
+            Error = TStringBuilder() << "Failed to initialize " << ev->Get()->ToString();
         }
 
         if (InitData.empty()) {
@@ -568,6 +574,11 @@ private:
     TString RenderHTML() {
         TStringStream str;
         HTML(str) {
+            if (Error) {
+                DIV() {
+                    str << "ERROR: " << Error;
+                }
+            }
             TABLE_CLASS("table table-condensed") {
                 TABLEHEAD() {
                     TABLER() {
@@ -679,6 +690,7 @@ private:
     std::shared_ptr<NYdbWorkload::IWorkloadQueryGenerator> WorkloadQueryGen;
 
     // Monitoring
+    TString Error;
     std::unique_ptr<MonitoringData> Total;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> LoadCounters;
     NMonitoring::TDynamicCounters::TCounterPtr Transactions;

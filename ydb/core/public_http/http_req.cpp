@@ -1,7 +1,7 @@
 #include "http_req.h"
 
 #include <ydb/library/actors/http/http_proxy.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb/core/http_proxy/http_req.h>
 
 #include <util/generic/guid.h>
@@ -107,7 +107,7 @@ namespace NKikimr::NPublicHttp {
     }
 
     TString HttpCodeFamily(TStringBuf code) {
-        if (code.Size() != 3) {
+        if (code.size() != 3) {
             return "unknown";
         }
 
@@ -170,6 +170,10 @@ namespace NKikimr::NPublicHttp {
         return IdempotencyKey;
     }
 
+    TString THttpRequestContext::GetPeer() const {
+        return !ForwardedFor.empty() ? TString(ForwardedFor) : TString(Request->Host);
+    }
+
     void THttpRequestContext::ResponseBadRequest(Ydb::StatusIds::StatusCode status, const TString& errorText) const {
         DoResponseBadRequest(status, errorText);
     }
@@ -222,8 +226,8 @@ namespace NKikimr::NPublicHttp {
                 ", method: " << Request->Method <<
                 ", url: " << Request->URL <<
                 ", content type: " << ContentType <<
-                ", request body size: " << Request->Body.Size() <<
-                ", response body size: " << body.Size() <<
+                ", request body size: " << Request->Body.size() <<
+                ", response body size: " << body.size() <<
                 ", elapsed: " << elapsed <<
                 ", from: " << Request->Address <<
                 ", forwarded for: " << ForwardedFor <<

@@ -341,6 +341,10 @@ namespace boost { namespace locale {
     typedef basic_message<char> message;
     /// Convenience typedef for wchar_t
     typedef basic_message<wchar_t> wmessage;
+#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+    /// Convenience typedef for char8_t
+    typedef basic_message<char8_t> u8message;
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
     /// Convenience typedef for char16_t
     typedef basic_message<char16_t> u16message;

@@ -71,6 +71,9 @@ constexpr bool IsFuture = false;
 template <class T>
 constexpr bool IsFuture<TFuture<T>> = true;
 
+template <class U, class F>
+void InterceptExceptions(const TPromise<U>& promise, const F& func);
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -169,6 +172,9 @@ struct TFutureTimeoutOptions
     //! If set to a non-trivial error, timeout or cancelation errors
     //! are enveloped into this error.
     TError Error;
+
+    //! An invoker the timeout event is handled in (DelayedExecutor is null).
+    IInvokerPtr Invoker;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -283,23 +289,18 @@ public:
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case the deadline is reached).
-    //! The timeout event is handled in #invoker (DelayedExecutor is null).
     TFuture<T> WithDeadline(
         TInstant deadline,
-        TFutureTimeoutOptions options = {},
-        IInvokerPtr invoker = nullptr) const;
+        TFutureTimeoutOptions options = {}) const;
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case of timeout).
-    //! The timeout event is handled in #invoker (DelayedExecutor is null).
     TFuture<T> WithTimeout(
         TDuration timeout,
-        TFutureTimeoutOptions options = {},
-        IInvokerPtr invoker = nullptr) const;
+        TFutureTimeoutOptions options = {}) const;
     TFuture<T> WithTimeout(
         std::optional<TDuration> timeout,
-        TFutureTimeoutOptions options = {},
-        IInvokerPtr invoker = nullptr) const;
+        TFutureTimeoutOptions options = {}) const;
 
     //! Chains the asynchronous computation with another one.
     template <class R>
@@ -472,6 +473,9 @@ public:
     //! Checks if the promise is canceled.
     bool IsCanceled() const;
 
+    //! Returns cancelation error if one is present.
+    TError GetCancelationError() const;
+
     //! Attaches a cancellation handler.
     /*!
      *  \param handler A callback to call when TFuture<T>::Cancel is triggered
@@ -500,6 +504,10 @@ protected:
     friend void swap(TPromise<U>& lhs, TPromise<U>& rhs);
     template <class U>
     friend struct ::hash;
+    template <class U, class F>
+    friend void ::NYT::NDetail::InterceptExceptions(const TPromise<U>& promise, const F& func);
+
+    void TrySetCanceled(const TError& error);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -720,6 +728,14 @@ TFuture<std::vector<TErrorOr<T>>> RunWithBoundedConcurrency(
 //! Same as above but supports cancelation.
 template <class T>
 TFuture<std::vector<TErrorOr<T>>> CancelableRunWithBoundedConcurrency(
+    std::vector<TCallback<TFuture<T>()>> callbacks,
+    int concurrencyLimit,
+    bool failOnError = false);
+
+//! Same as above but cancels all futures if at least one task fails.
+// (same as CancelableRunWithBoundedConcurrency with failOnError=true)
+template <class T>
+TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
     std::vector<TCallback<TFuture<T>()>> callbacks,
     int concurrencyLimit);
 

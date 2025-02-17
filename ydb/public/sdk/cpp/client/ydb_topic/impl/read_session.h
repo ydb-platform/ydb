@@ -1,11 +1,12 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session_impl.ipp>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/counters_logger.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
+#include "counters_logger.h"
+#include "read_session_impl.ipp"
+#include "topic_impl.h"
 
-namespace NYdb::NTopic {
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
+
+namespace NYdb::inline V2::NTopic {
 
 class TReadSession : public IReadSession {
 public:
@@ -62,19 +63,6 @@ private:
     void AbortImpl(EStatus statusCode, const TString& message, TDeferredActions<false>& deferred);
 
 private:
-    using TOffsetRanges = THashMap<TString, THashMap<ui64, TDisjointIntervalTree<ui64>>>;
-
-    void CollectOffsets(NTable::TTransaction& tx,
-                        const TReadSessionEvent::TDataReceivedEvent& event);
-    void CollectOffsets(NTable::TTransaction& tx,
-                        const TString& topicPath, ui32 partitionId, ui64 offset);
-    void UpdateOffsets(const NTable::TTransaction& tx);
-
-    //
-    // (session, tx) -> topic -> partition -> (begin, end)
-    //
-    THashMap<std::pair<TString, TString>, TOffsetRanges> OffsetRanges;
-
     TReadSessionSettings Settings;
     const TString SessionId;
     const TInstant StartSessionTime = TInstant::Now();

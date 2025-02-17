@@ -11,7 +11,6 @@
 #include "flat_page_gstat.h"
 #include "flat_page_txidstat.h"
 #include "flat_page_txstatus.h"
-#include "util_basics.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -156,9 +155,10 @@ namespace NTable {
 
         virtual ui64 DataSize() const = 0;
         virtual ui64 BackingSize() const = 0;
-        virtual ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
-        virtual NPage::EPage GetPageType(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
-        virtual ui8 GetGroupChannel(NPage::TGroupId groupId = { }) const = 0;
+        virtual ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
+        virtual ui64 GetPageSize(ELargeObj lob, ui64 ref) const = 0;
+        virtual NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
+        virtual ui8 GetGroupChannel(NPage::TGroupId groupId) const = 0;
         virtual ui8 GetPageChannel(ELargeObj lob, ui64 ref) const = 0;
 
     protected:

@@ -1,8 +1,8 @@
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/read_session.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, ui64 index);
 
@@ -76,6 +76,10 @@ public:
         }
     }
 
+    void OnEndPartitionStream(TReadSessionEvent::TEndPartitionSessionEvent& event) {
+        event.Confirm();
+    }
+
     void OnPartitionStreamClosed(TReadSessionEvent::TPartitionSessionClosedEvent& event) {
         with_lock (Lock) {
             const ui64 partitionStreamId = event.GetPartitionSession()->GetPartitionSessionId();
@@ -110,6 +114,9 @@ TReadSessionSettings::TEventHandlers& TReadSessionSettings::TEventHandlers::Simp
         StopPartitionSessionHandler([handlers](TReadSessionEvent::TStopPartitionSessionEvent& event) {
             handlers->OnDestroyPartitionStream(event);
         });
+        EndPartitionSessionHandler([handlers](TReadSessionEvent::TEndPartitionSessionEvent& event) {
+            handlers->OnEndPartitionStream(event);
+        });
         CommitOffsetAcknowledgementHandler([handlers](TReadSessionEvent::TCommitOffsetAcknowledgementEvent& event) {
             handlers->OnCommitAcknowledgement(event);
         });
@@ -131,6 +138,9 @@ TReadSessionSettings::TEventHandlers& TReadSessionSettings::TEventHandlers::Simp
             event.Confirm();
         });
         StopPartitionSessionHandler([](TReadSessionEvent::TStopPartitionSessionEvent& event) {
+            event.Confirm();
+        });
+        EndPartitionSessionHandler([](TReadSessionEvent::TEndPartitionSessionEvent& event) {
             event.Confirm();
         });
         CommitOffsetAcknowledgementHandler([](TReadSessionEvent::TCommitOffsetAcknowledgementEvent&){});

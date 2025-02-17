@@ -24,7 +24,7 @@ public:
             bool isErrorDisk = false;
             for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                 if (disk.DiskParts[partIdx].Situation == TBlobState::ESituation::Error) {
-                    R_LOG_DEBUG_SX(logCtx, "BPG50", "Id# " << state.Id.ToString()
+                    DSP_LOG_DEBUG_SX(logCtx, "BPG50", "Id# " << state.Id.ToString()
                         << " restore disk# " << diskIdx
                         << " part# " << partIdx
                         << " error");
@@ -36,7 +36,7 @@ public:
             if (!isErrorDisk) {
                 for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                     const TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                    R_LOG_DEBUG_SX(logCtx, "BPG51", "Id# " << state.Id.ToString()
+                    DSP_LOG_DEBUG_SX(logCtx, "BPG51", "Id# " << state.Id.ToString()
                         << " restore disk# " << diskIdx
                         << " part# " << partIdx
                         << " situation# " << TBlobState::SituationToString(partSituation));
@@ -60,14 +60,20 @@ public:
         const ui32 optimisticReplicas = optimisticLayout.CountEffectiveReplicas(info.Type);
         *optimisticState = info.BlobState(optimisticReplicas, errorDisks);
 
-        R_LOG_DEBUG_SX(logCtx, "BPG55", "restore Id# " << state.Id.ToString()
+        DSP_LOG_DEBUG_SX(logCtx, "BPG55", "restore Id# " << state.Id.ToString()
             << " optimisticReplicas# " << optimisticReplicas
             << " optimisticState# " << TBlobStorageGroupInfo::BlobStateToString(*optimisticState));
     }
 
-    std::optional<EStrategyOutcome> SetErrorForUnrecoverableOptimistic(TBlobStorageGroupInfo::EBlobState optimisticState) {
+    std::optional<EStrategyOutcome> SetErrorForUnrecoverableOptimistic(TBlobStorageGroupInfo::EBlobState optimisticState,
+            TBlobState& state, const TBlobStorageGroupInfo& info) {
         switch (optimisticState) {
             case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
+                return EStrategyOutcome::Error(TStringBuilder() << "TRestoreStrategy saw optimisticState# "
+                        << TBlobStorageGroupInfo::BlobStateToString(optimisticState)
+                        << " GroupId# " << info.GroupID
+                        << " BlobId# " << state.Id
+                        << " Reported ErrorReasons# " << state.ReportProblems(info));
             case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:
             case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY:
             case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED:
@@ -80,7 +86,8 @@ public:
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests) override {
+            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) override {
         // Check if the work is already done.
         if (state.WholeSituation == TBlobState::ESituation::Absent) {
             return EStrategyOutcome::DONE; // nothing to restore
@@ -121,29 +128,17 @@ public:
         // Look at the current layout and set the status if possible
         TBlobStorageGroupInfo::EBlobState optimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
         EvaluateRestoreLayout(logCtx, state, info, &optimisticState);
-        if (auto res = SetErrorForUnrecoverableOptimistic(optimisticState)) {
+        if (auto res = SetErrorForUnrecoverableOptimistic(optimisticState, state, info)) {
             return *res;
         }
 
-        // Find the slowest disk
-        i32 worstSubgroupIdx = -1;
-        ui64 worstPredictedNs = 0;
-        ui64 nextToWorstPredictedNs = 0;
-        state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                HandleClassToQueueId(blackboard.PutHandleClass),
-                &worstPredictedNs, &nextToWorstPredictedNs, &worstSubgroupIdx);
-
-        // Check if the slowest disk exceptionally slow, or just not very fast
-        i32 slowDiskSubgroupIdx = -1;
-        if (nextToWorstPredictedNs > 0 && worstPredictedNs > nextToWorstPredictedNs * 2) {
-            slowDiskSubgroupIdx = worstSubgroupIdx;
-        }
+        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, blackboard, true, accelerationParams);
 
         bool isDone = false;
-        if (slowDiskSubgroupIdx >= 0) {
+        if (slowDiskSubgroupMask != 0) {
             // If there is an exceptionally slow disk, try not touching it, mark isDone
             TBlobStorageGroupType::TPartLayout layout;
-            PreparePartLayout(state, info, &layout, slowDiskSubgroupIdx);
+            PreparePartLayout(state, info, &layout, slowDiskSubgroupMask);
 
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
@@ -157,7 +152,7 @@ public:
         if (!isDone) {
             // Fill in the part layout
             TBlobStorageGroupType::TPartLayout layout;
-            PreparePartLayout(state, info, &layout, InvalidVDiskIdx);
+            PreparePartLayout(state, info, &layout, 0);
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
             Y_ABORT_UNLESS(isCorrectable);

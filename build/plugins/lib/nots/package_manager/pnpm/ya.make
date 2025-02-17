@@ -1,4 +1,4 @@
-SUBSCRIBER(g:frontend-build-platform)
+SUBSCRIBER(g:frontend_build_platform)
 
 PY3_LIBRARY()
 
@@ -16,7 +16,6 @@ PY_SRCS(
 PEERDIR(
     build/plugins/lib/nots/package_manager/base
     contrib/python/PyYAML
-    contrib/python/six
 )
 
 END()

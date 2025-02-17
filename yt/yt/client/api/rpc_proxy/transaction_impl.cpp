@@ -4,11 +4,14 @@
 #include "config.h"
 #include "private.h"
 
-#include <yt/yt/client/transaction_client/helpers.h>
+#include <yt/yt/client/api/transaction.h>
+
+#include <yt/yt/client/table_client/name_table.h>
+#include <yt/yt/client/table_client/wire_protocol.h>
 
 #include <yt/yt/client/tablet_client/table_mount_cache.h>
 
-#include <yt/yt/client/api/transaction.h>
+#include <yt/yt/client/transaction_client/helpers.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -22,6 +25,8 @@ using namespace NCypressClient;
 using namespace NApi;
 using namespace NYTree;
 using namespace NYPath;
+using namespace NYson;
+using namespace NQueueClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -53,7 +58,7 @@ TTransaction::TTransaction(
     , PingPeriod_(pingPeriod)
     , StickyProxyAddress_(stickyParameters ? std::move(stickyParameters->ProxyAddress) : TString())
     , SequenceNumberSourceId_(sequenceNumberSourceId)
-    , Logger(RpcProxyClientLogger.WithTag("TransactionId: %v, %v",
+    , Logger(RpcProxyClientLogger().WithTag("TransactionId: %v, %v",
         Id_,
         Connection_->GetLoggingTag()))
     , Proxy_(Channel_)
@@ -76,7 +81,10 @@ TTransaction::TTransaction(
         PingPeriod_,
         /*sticky*/ stickyParameters.has_value(),
         StickyProxyAddress_);
+}
 
+void TTransaction::Initialize()
+{
     // TODO(babenko): don't run periodic pings if client explicitly disables them in options
     RunPeriodicPings();
 }
@@ -439,7 +447,7 @@ void TTransaction::ModifyRows(
 
     req->Attachments() = SerializeRowset(
         nameTable,
-        MakeRange(rows),
+        TRange(rows),
         req->mutable_rowset_descriptor());
 
     TFuture<void> future;
@@ -478,7 +486,7 @@ void TTransaction::ModifyRows(
 
     if (future) {
         future
-            .Subscribe(BIND([=, this, this_ = MakeStrong(this)](const TError& error) {
+            .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TError& error) {
                 if (!error.IsOK()) {
                     YT_LOG_DEBUG(error, "Error sending row modifications");
                     YT_UNUSED_FUTURE(Abort());
@@ -492,18 +500,19 @@ void TTransaction::ModifyRows(
     }
 }
 
-TFuture<void> TTransaction::AdvanceConsumer(
+TFuture<void> TTransaction::AdvanceQueueConsumer(
     const NYPath::TRichYPath& consumerPath,
     const NYPath::TRichYPath& queuePath,
     int partitionIndex,
     std::optional<i64> oldOffset,
     i64 newOffset,
-    const TAdvanceConsumerOptions& options)
+    const TAdvanceQueueConsumerOptions& options)
 {
     ValidateTabletTransactionId(GetId());
 
     THROW_ERROR_EXCEPTION_IF(newOffset < 0, "Queue consumer offset %v cannot be negative", newOffset);
 
+    // COMPAT(nadya73): Use AdvaceConsumer (not AdvanceQueueConsumer) for compatibility with old clusters.
     auto req = Proxy_.AdvanceConsumer();
     SetTimeoutOptions(*req, options);
 
@@ -523,6 +532,83 @@ TFuture<void> TTransaction::AdvanceConsumer(
     req->set_new_offset(newOffset);
 
     return req->Invoke().As<void>();
+}
+
+TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
+    const NYPath::TRichYPath& producerPath,
+    const NYPath::TRichYPath& queuePath,
+    const TQueueProducerSessionId& sessionId,
+    TQueueProducerEpoch epoch,
+    NTableClient::TNameTablePtr nameTable,
+    const std::vector<TSharedRef>& serializedRows,
+    const TPushQueueProducerOptions& options)
+{
+    ValidateTabletTransactionId(GetId());
+
+    THROW_ERROR_EXCEPTION_IF(epoch.Underlying() < 0,
+        "Epoch number %v cannot be negative", epoch);
+    THROW_ERROR_EXCEPTION_IF(options.SequenceNumber && options.SequenceNumber->Underlying() < 0,
+        "Sequence number %v cannot be negative", *options.SequenceNumber);
+
+    auto req = Proxy_.PushQueueProducer();
+    SetTimeoutOptions(*req, options);
+    if (options.SequenceNumber) {
+        req->set_sequence_number(options.SequenceNumber->Underlying());
+    }
+    req->set_require_sync_replica(options.RequireSyncReplica);
+
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.producer_path", ToString(producerPath));
+        req->TracingTags().emplace_back("yt.queue_path", ToString(queuePath));
+        req->TracingTags().emplace_back("yt.session_id", ToString(sessionId));
+        req->TracingTags().emplace_back("yt.epoch", ToString(epoch));
+    }
+
+    ToProto(req->mutable_transaction_id(), GetId());
+
+    ToProto(req->mutable_producer_path(), producerPath);
+    ToProto(req->mutable_queue_path(), queuePath);
+
+    ToProto(req->mutable_session_id(), sessionId);
+    req->set_epoch(epoch.Underlying());
+
+    if (options.UserMeta) {
+        ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
+    }
+
+    auto* descriptor = req->mutable_rowset_descriptor();
+    descriptor->Clear();
+    descriptor->set_wire_format_version(NApi::NRpcProxy::CurrentWireFormatVersion);
+    descriptor->set_rowset_kind(NProto::RK_UNVERSIONED);
+    for (int id = 0; id < nameTable->GetSize(); ++id) {
+        auto* entry = descriptor->add_name_table_entries();
+        entry->set_name(TString(nameTable->GetName(id)));
+    }
+
+    req->Attachments() = serializedRows;
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPushQueueProducerPtr& rsp) {
+        return TPushQueueProducerResult{
+            .LastSequenceNumber = TQueueProducerSequenceNumber(rsp->last_sequence_number()),
+            .SkippedRowCount = rsp->skipped_row_count(),
+        };
+    }));
+}
+
+TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
+    const NYPath::TRichYPath& producerPath,
+    const NYPath::TRichYPath& queuePath,
+    const TQueueProducerSessionId& sessionId,
+    TQueueProducerEpoch epoch,
+    NTableClient::TNameTablePtr nameTable,
+    TSharedRange<NTableClient::TUnversionedRow> rows,
+    const TPushQueueProducerOptions& options)
+{
+    auto writer = CreateWireProtocolWriter();
+    writer->WriteUnversionedRowset(rows);
+    auto serializedRows = writer->Finish();
+
+    return PushQueueProducer(producerPath, queuePath, sessionId, epoch, nameTable, serializedRows, options);
 }
 
 TFuture<ITransactionPtr> TTransaction::StartTransaction(
@@ -574,7 +660,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TTransaction::MultiLookupRows
 }
 
 TFuture<TSelectRowsResult> TTransaction::SelectRows(
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options)
 {
     ValidateActive();
@@ -584,7 +670,7 @@ TFuture<TSelectRowsResult> TTransaction::SelectRows(
 }
 
 TFuture<NYson::TYsonString> TTransaction::ExplainQuery(
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options)
 {
     ValidateActive();
@@ -839,13 +925,33 @@ IJournalWriterPtr TTransaction::CreateJournalWriter(
         PatchTransactionId(options));
 }
 
+TFuture<TDistributedWriteSessionWithCookies> TTransaction::StartDistributedWriteSession(
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options)
+{
+    ValidateActive();
+    return Client_->StartDistributedWriteSession(
+        path,
+        PatchTransactionId(options));
+}
+
+TFuture<void> TTransaction::FinishDistributedWriteSession(
+    const TDistributedWriteSessionWithResults& sessionWithResults,
+    const TDistributedWriteSessionFinishOptions& options)
+{
+    ValidateActive();
+    return Client_->FinishDistributedWriteSession(
+        sessionWithResults,
+        options);
+}
+
 TFuture<void> TTransaction::DoAbort(
     TGuard<NThreading::TSpinLock>* guard,
     const TTransactionAbortOptions& /*options*/)
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
-    if (State_ == ETransactionState::Aborting || State_ == ETransactionState::Aborted) {
+    if (AbortPromise_) {
         return AbortPromise_.ToFuture();
     }
 
@@ -855,44 +961,59 @@ TFuture<void> TTransaction::DoAbort(
 
     auto alienTransactions = AlienTransactions_;
 
+    AbortPromise_ = NewPromise<void>();
+    auto abortFuture = AbortPromise_.ToFuture();
+
     guard->Release();
 
     auto req = Proxy_.AbortTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
 
-    AbortPromise_.TrySetFrom(req->Invoke().Apply(
+    req->Invoke().Subscribe(
         BIND([=, this, this_ = MakeStrong(this)] (const TApiServiceProxy::TErrorOrRspAbortTransactionPtr& rspOrError) {
             {
                 auto guard = Guard(SpinLock_);
 
-                if (State_ != ETransactionState::Aborting) {
+                if (!AbortPromise_) {
                     YT_LOG_DEBUG(rspOrError, "Transaction is no longer aborting, abort response ignored");
                     return;
                 }
 
+                TError abortError;
                 if (rspOrError.IsOK()) {
                     YT_LOG_DEBUG("Transaction aborted");
                 } else if (rspOrError.FindMatching(NTransactionClient::EErrorCode::NoSuchTransaction)) {
-                    YT_LOG_DEBUG("Transaction has expired or was already aborted, ignored");
+                    YT_LOG_DEBUG("Transaction has expired or was already aborted");
                 } else {
-                    YT_LOG_DEBUG(rspOrError, "Error aborting transaction, considered detached");
-                    State_ = ETransactionState::Detached;
-                    THROW_ERROR_EXCEPTION("Error aborting transaction %v",
+                    YT_LOG_DEBUG(rspOrError, "Error aborting transaction");
+                    abortError = TError("Error aborting transaction %v",
                         GetId())
                         << rspOrError;
                 }
 
-                State_ = ETransactionState::Aborted;
-            }
+                if (abortError.IsOK()) {
+                    State_ = ETransactionState::Aborted;
+                } else {
+                    State_ = ETransactionState::AbortFailed;
+                }
 
-            Aborted_.Fire(TError("Transaction aborted by user request"));
-        })));
+                auto abortPromise = std::exchange(AbortPromise_, TPromise<void>());
+
+                guard.Release();
+
+                if (abortError.IsOK()) {
+                    Aborted_.Fire(TError("Transaction aborted by user request"));
+                }
+
+                abortPromise.Set(std::move(abortError));
+            }
+        }));
 
     for (const auto& transaction : alienTransactions) {
         YT_UNUSED_FUTURE(transaction->Abort());
     }
 
-    return AbortPromise_.ToFuture();
+    return abortFuture;
 }
 
 TFuture<void> TTransaction::SendPing()
@@ -931,7 +1052,6 @@ TFuture<void> TTransaction::SendPing()
                     GetId());
 
                 if (fireAborted) {
-                    AbortPromise_.TrySet();
                     Aborted_.Fire(error);
                 }
 
@@ -994,7 +1114,7 @@ void TTransaction::ValidateActive()
 
 void TTransaction::DoValidateActive()
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     if (State_ != ETransactionState::Active) {
         THROW_ERROR_EXCEPTION(
             NTransactionClient::EErrorCode::InvalidTransactionState,
@@ -1012,7 +1132,7 @@ TApiServiceProxy::TReqBatchModifyRowsPtr TTransaction::CreateBatchModifyRowsRequ
 
 TFuture<void> TTransaction::InvokeBatchModifyRowsRequest()
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     YT_VERIFY(BatchModifyRowsRequest_);
 
     TApiServiceProxy::TReqBatchModifyRowsPtr batchRequest;
@@ -1029,7 +1149,7 @@ TFuture<void> TTransaction::InvokeBatchModifyRowsRequest()
 
 std::vector<TFuture<void>> TTransaction::FlushModifyRowsRequests()
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
     auto futures = std::move(BatchModifyRowsFutures_);
     if (BatchModifyRowsRequest_) {

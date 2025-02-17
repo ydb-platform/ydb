@@ -4,6 +4,7 @@
 #include "flat_part_iface.h"
 #include "flat_part_index_iter_flat_index.h"
 #include "flat_part_charge_iface.h"
+#include "flat_page_data.h"
 
 #include <util/generic/bitmap.h>
 
@@ -218,9 +219,9 @@ namespace NTable {
                     auto currentFirstRowId = current->GetRowId();
                     auto currentLastRowId = currentExt ? (currentExt->GetRowId() - 1) : Max<TRowId>();
 
-                    auto page = Env->TryGetPage(Part, current->GetPageId());
+                    auto page = Env->TryGetPage(Part, current->GetPageId(), {});
                     if (bytesLimit) {
-                        bytes += Part->GetPageSize(current->GetPageId());
+                        bytes += Part->GetPageSize(current->GetPageId(), {});
                     }
                     ready &= bool(page);
 
@@ -316,9 +317,9 @@ namespace NTable {
                     auto currentFirstRowId = currentExt ? (currentExt->GetRowId() - 1) : Max<TRowId>();
                     auto currentLastRowId = current->GetRowId();
 
-                    auto page = Env->TryGetPage(Part, current->GetPageId());
+                    auto page = Env->TryGetPage(Part, current->GetPageId(), {});
                     if (bytesLimit) {
-                        bytes += Part->GetPageSize(current->GetPageId());
+                        bytes += Part->GetPageSize(current->GetPageId(), {});
                     }
                     ready &= bool(page);
 

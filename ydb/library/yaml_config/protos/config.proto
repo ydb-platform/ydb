@@ -72,6 +72,7 @@ message TExtendedHostConfigDrive {
     optional uint64 Kind = 5 [(NMarkers.CopyTo) = "THostConfigDrive"];
 
     optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6 [(NMarkers.CopyTo) = "THostConfigDrive"];
+    optional uint64 ExpectedSlotCount = 7;
 }
 
 message THosts {
@@ -134,6 +135,10 @@ message TExtendedDefineHostConfig {
 
     optional NKikimrBlobStorage.TPDiskConfig DefaultHostPDiskConfig = 4 [(NMarkers.CopyTo) = "TDefineHostConfig"];
 
+    repeated string Rot = 5 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+    repeated string Ssd = 6 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+    repeated string Nvme = 7 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+
     optional uint64 ItemConfigGeneration = 100 [(NMarkers.CopyTo) = "TDefineHostConfig"];
 }
 
@@ -150,4 +155,12 @@ message TEphemeralInputFields {
     optional string Erasure = 6;
     optional string DefaultDiskType = 7 [default = "SSD"];
     optional TTls Tls = 8;
+    optional FailDomainKind FailDomainType = 9 [default = Rack];
+    optional TDomainsConfig.TSecurityConfig SecurityConfig = 10;
+
+    enum FailDomainKind {
+        Rack = 0;
+        Body = 1;
+        Disk = 2;
+    }
 }

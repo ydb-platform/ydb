@@ -2,8 +2,9 @@
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/utils/chunked_buffer.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
@@ -81,10 +82,10 @@ struct TEvDq {
 
 struct TChannelDataOOB {
     NDqProto::TChannelData Proto;
-    TRope Payload;
+    TChunkedBuffer Payload;
 
     size_t PayloadSize() const {
-        return Proto.GetData().GetRaw().size() + Payload.size();
+        return Proto.GetData().GetRaw().size() + Payload.Size();
     }
 
     ui32 RowCount() const {

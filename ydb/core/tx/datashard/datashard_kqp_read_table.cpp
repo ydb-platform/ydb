@@ -1,12 +1,13 @@
 #include "datashard_kqp_compute.h"
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -17,17 +18,8 @@ using namespace NUdf;
 namespace {
 
 void ValidateKeyType(const TType* keyType, NScheme::TTypeInfo expectedType) {
-    auto type = keyType;
-
-    if (type->IsOptional()) {
-        type = AS_TYPE(TOptionalType, type)->GetItemType();
-    }
-
-    // TODO: support pg types
-    MKQL_ENSURE_S(type->GetKind() != TType::EKind::Pg, "pg types are not supported");
-    auto dataType = AS_TYPE(TDataType, type)->GetSchemeType();
-
-    MKQL_ENSURE_S(dataType == expectedType.GetTypeId());
+    const NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(keyType);
+    MKQL_ENSURE_S(typeInfo == expectedType);
 }
 
 void ValidateKeyTuple(const TTupleType* tupleType, const NDataShard::TUserTable& tableInfo,
@@ -118,9 +110,7 @@ TSerializedTableRange BuildRange(const TTupleType* fromType, const NUdf::TUnboxe
                 }
             }
 
-            // TODO: support pg types
-            MKQL_ENSURE_S(type->GetKind() != TType::EKind::Pg, "pg types are not supported");
-            auto typeInfo = NScheme::TTypeInfo(AS_TYPE(TDataType, type)->GetSchemeType());
+            const NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(type);
             cells.emplace_back(MakeCell(typeInfo, value, typeEnv, /* copy */ true));
         }
 
@@ -269,10 +259,10 @@ private:
     EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const final {
         if (!this->Iterator) {
             TVector<TCell> fromCells;
-            BuildKeyTupleCells(ParseResult.FromTuple->GetType(), FromNode->GetValue(ctx), fromCells, *ctx.TypeEnv);
+            BuildKeyTupleCells(ParseResult.FromTuple->GetType(), FromNode->GetValue(ctx), fromCells, ctx.TypeEnv);
 
             TVector<TCell> toCells;
-            BuildKeyTupleCells(ParseResult.ToTuple->GetType(), ToNode->GetValue(ctx), toCells, *ctx.TypeEnv);
+            BuildKeyTupleCells(ParseResult.ToTuple->GetType(), ToNode->GetValue(ctx), toCells, ctx.TypeEnv);
 
             auto range = TTableRange(fromCells, ParseResult.FromInclusive, toCells, ParseResult.ToInclusive);
 
@@ -328,7 +318,7 @@ private:
         if (!RangeId) {
             const auto localTid = this->ComputeCtx.GetLocalTableId(ParseResult.TableId);
             const auto* tableInfo = this->ComputeCtx.Database->GetScheme().GetTableInfo(localTid);
-            Ranges = CreateTableRanges<IsReverse>(ParseResult, RangesNode, *ctx.TypeEnv, ctx, tableInfo->KeyColumns.size());
+            Ranges = CreateTableRanges<IsReverse>(ParseResult, RangesNode, ctx.TypeEnv, ctx, tableInfo->KeyColumns.size());
             RangeId = 0;
 
             if (ItemsLimit) {

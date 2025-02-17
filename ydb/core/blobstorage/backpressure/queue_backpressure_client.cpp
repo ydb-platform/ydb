@@ -77,12 +77,13 @@ public:
             NKikimrBlobStorage::EVDiskQueueId queueId,const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, const TString& queueName,
             ui32 interconnectChannel, bool /*local*/, TDuration watchdogTimeout,
-            TIntrusivePtr<NBackpressure::TFlowRecord> &flowRecord, NMonitoring::TCountableBase::EVisibility visibility)
+            TIntrusivePtr<NBackpressure::TFlowRecord> &flowRecord, NMonitoring::TCountableBase::EVisibility visibility,
+            bool useActorSystemTime)
         : BSProxyCtx(bspctx)
         , QueueName(queueName)
         , Counters(counters->GetSubgroup("queue", queueName))
         , Queue(Counters, LogPrefix, bspctx, clientId, interconnectChannel,
-                (info ? info->Type : TErasureType::ErasureNone), visibility)
+                (info ? info->Type : TErasureType::ErasureNone), visibility, useActorSystemTime)
         , VDiskIdShort(vdiskId)
         , QueueId(queueId)
         , QueueWatchdogTimeout(watchdogTimeout)
@@ -98,7 +99,7 @@ public:
         ApplyGroupInfo(*std::exchange(Info, nullptr));
         QLOG_INFO_S("BSQ01", "starting parent# " << parent);
         InitCounters();
-        RegisteredInUniversalScheduler = RegisterActorInUniversalScheduler(SelfId(), FlowRecord, ctx.ExecutorThread.ActorSystem);
+        RegisteredInUniversalScheduler = RegisterActorInUniversalScheduler(SelfId(), FlowRecord, ctx.ActorSystem());
         Y_ABORT_UNLESS(!BlobStorageProxy);
         BlobStorageProxy = parent;
         RequestReadiness(nullptr, ctx);
@@ -458,12 +459,10 @@ private:
                 break;
 
             case EState::READY:
-                QLOG_NOTICE_S("BSQ96", "connection lost status# " << NKikimrProto::EReplyStatus_Name(status)
+                QLOG_INFO_S("BSQ96", "connection lost status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " errorReason# " << errorReason << " timeout# " << timeout);
                 ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false, false, nullptr));
-                Queue.DrainQueue(status, TStringBuilder() << "BS_QUEUE: " << errorReason, ctx);
-                DrainStatus(status, ctx);
-                DrainAssimilate(status, errorReason, ctx);
+                Drain(ctx, status, errorReason);
                 break;
         }
         State = EState::INITIAL;
@@ -473,6 +472,12 @@ private:
         } else {
             RequestReadiness(nullptr, ctx);
         }
+    }
+
+    void Drain(const TActorContext& ctx, NKikimrProto::EReplyStatus status, const TString& errorReason) {
+        Queue.DrainQueue(status, TStringBuilder() << "BS_QUEUE: " << errorReason, ctx);
+        DrainStatus(status, ctx);
+        DrainAssimilate(status, errorReason, ctx);
     }
 
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr ev, const TActorContext& ctx) {
@@ -671,7 +676,7 @@ private:
         QLOG_DEBUG_S("BSQ34", "Status# " << status
             << " VDiskId# " << VDiskId
             << " Cookie# " << cookie);
-        auto response = std::make_unique<TEvBlobStorage::TEvVStatusResult>(status, VDiskId, false, false, 0);
+        auto response = std::make_unique<TEvBlobStorage::TEvVStatusResult>(status, VDiskId, false, false, false, 0);
         ctx.Send(sender, response.release(), 0, cookie);
     }
 
@@ -777,6 +782,8 @@ private:
             ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
             UpdateRequestTrackingStatsScheduled = true;
         }
+
+        LWPROBE(BackPressureRequestTrackingStats, RecentGroup->GetGroupID(), EPDiskType_Name(RecentGroup->GetDeviceType()), VDiskId.ToStringWOGeneration(), WorstDuration.MicroSeconds() / 1000.0);
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -785,14 +792,15 @@ private:
     void Die(const TActorContext& ctx) override {
         QLOG_DEBUG_S("BSQ99", "terminating queue actor");
         if (RegisteredInUniversalScheduler) {
-            RegisterActorInUniversalScheduler(SelfId(), nullptr, ctx.ExecutorThread.ActorSystem);
+            RegisterActorInUniversalScheduler(SelfId(), nullptr, ctx.ActorSystem());
         }
         Unsubscribe(RemoteVDisk.NodeId(), ctx);
+        Drain(ctx, NKikimrProto::ERROR, "BS_QUEUE terminated");
         return TActor::Die(ctx);
     }
 
     void Unsubscribe(const ui32 nodeId, const TActorContext& ctx) {
-        ctx.Send(ctx.ExecutorThread.ActorSystem->InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
+        ctx.Send(ctx.ActorSystem()->InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
         SessionId = {};
     }
 
@@ -975,9 +983,10 @@ IActor* CreateVDiskBackpressureClient(const TIntrusivePtr<TBlobStorageGroupInfo>
         NKikimrBlobStorage::EVDiskQueueId queueId,const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, const TString& queueName,
         ui32 interconnectChannel, bool local, TDuration watchdogTimeout,
-        TIntrusivePtr<NBackpressure::TFlowRecord> &flowRecord, NMonitoring::TCountableBase::EVisibility visibility) {
+        TIntrusivePtr<NBackpressure::TFlowRecord> &flowRecord, NMonitoring::TCountableBase::EVisibility visibility,
+        bool useActorSystemTime) {
     return new NBsQueue::TVDiskBackpressureClientActor(info, vdiskId, queueId, counters, bspctx, clientId, queueName,
-        interconnectChannel, local, watchdogTimeout, flowRecord, visibility);
+        interconnectChannel, local, watchdogTimeout, flowRecord, visibility, useActorSystemTime);
 }
 
 } // NKikimr

@@ -2,12 +2,13 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/library/yql/dq/common/dq_value.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
 
 #include <library/cpp/protobuf/util/pb_io.h>
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -28,7 +29,7 @@ NKqpProto::TKqpPhyTx BuildTxPlan(const TString& sql, TIntrusivePtr<IKqpGateway> 
     IModuleResolver::TPtr moduleResolver;
     UNIT_ASSERT(GetYqlDefaultModuleResolver(moduleCtx, moduleResolver));
 
-    auto qp = CreateKqpHost(gateway, cluster, "/Root", config, moduleResolver, NYql::IHTTPGateway::Make(), nullptr, nullptr, Nothing(), nullptr, nullptr, false, false, nullptr, actorSystem);
+    auto qp = CreateKqpHost(gateway, cluster, "/Root", config, moduleResolver, NYql::IHTTPGateway::Make(), nullptr, nullptr, NKikimrConfig::TQueryServiceConfig(), Nothing(), nullptr, nullptr, false, false, nullptr, actorSystem, nullptr);
     auto result = qp->SyncPrepareDataQuery(sql, IKqpHost::TPrepareSettings());
     result.Issues().PrintTo(Cerr);
     UNIT_ASSERT(result.Success());
@@ -41,7 +42,7 @@ NKqpProto::TKqpPhyTx BuildTxPlan(const TString& sql, TIntrusivePtr<IKqpGateway> 
 [[maybe_unused]]
 TIntrusivePtr<IKqpGateway> MakeIcGateway(const TKikimrRunner& kikimr) {
     auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetAnyNodeActorSystem();
-    return CreateKikimrIcGateway(TString(DefaultKikimrClusterName), "/Root", TKqpGatewaySettings(),
+    return CreateKikimrIcGateway(TString(DefaultKikimrClusterName), "/Root", "/Root", TKqpGatewaySettings(),
         actorSystem, kikimr.GetTestServer().GetRuntime()->GetNodeId(0),
         TAlignedPagePoolCounters(), kikimr.GetTestServer().GetSettings().AppConfig->GetQueryServiceConfig());
 }

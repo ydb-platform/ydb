@@ -9,9 +9,14 @@ namespace NDq {
 void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats) {
     if (stats.CollectBasic()) {
         proto.SetBytes(stats.Bytes);
+        proto.SetDecompressedBytes(stats.DecompressedBytes);
         proto.SetRows(stats.Rows);
         proto.SetChunks(stats.Chunks);
         proto.SetSplits(stats.Splits);
+        proto.SetFilteredBytes(stats.FilteredBytes);
+        proto.SetFilteredRows(stats.FilteredRows);
+        proto.SetQueuedBytes(stats.QueuedBytes);
+        proto.SetQueuedRows(stats.QueuedRows);
         if (stats.CollectFull()) {
             proto.SetFirstMessageMs(stats.FirstMessageTs.MilliSeconds());
             proto.SetPauseMessageMs(stats.PauseMessageTs.MilliSeconds());
@@ -61,6 +66,14 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     protoTask->SetWaitInputTimeUs(taskStats.WaitInputTime.MicroSeconds());
     protoTask->SetWaitOutputTimeUs(taskStats.WaitOutputTime.MicroSeconds());
 
+    protoTask->SetSpillingComputeWriteBytes(taskStats.SpillingComputeWriteBytes);
+    protoTask->SetSpillingChannelWriteBytes(taskStats.SpillingChannelWriteBytes);
+
+    protoTask->SetSpillingComputeReadTimeUs(taskStats.SpillingComputeReadTime.MicroSeconds());
+    protoTask->SetSpillingComputeWriteTimeUs(taskStats.SpillingComputeWriteTime.MicroSeconds());
+    protoTask->SetSpillingChannelReadTimeUs(taskStats.SpillingChannelReadTime.MicroSeconds());
+    protoTask->SetSpillingChannelWriteTimeUs(taskStats.SpillingChannelWriteTime.MicroSeconds());
+
     if (StatsLevelCollectProfile(level)) {
         if (taskStats.ComputeCpuTimeByRun) {
             auto snapshot = taskStats.ComputeCpuTimeByRun->Snapshot();
@@ -76,6 +89,29 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
             s->SetName(TString(stat.Key.GetName()));
             s->SetValue(stat.Value);
             s->SetDeriv(stat.Key.IsDeriv());
+        }
+    }
+
+    for (const auto& opStat : taskStats.OperatorStat) {
+        auto& op = *protoTask->MutableOperators()->Add();
+        op.SetOperatorId(opStat.OperatorId);
+        op.SetBytes(std::max<i64>(0, opStat.Bytes));
+        op.SetRows(std::max<i64>(0, opStat.Rows));
+        switch (opStat.OperatorType) {
+            case TOperatorType::Join: {
+                    op.MutableJoin();
+                }
+                break;
+            case TOperatorType::Filter: {
+                    op.MutableFilter();
+                }
+                break;
+            case TOperatorType::Aggregation: {
+                    op.MutableAggregation();
+                }
+                break;
+            default:
+                break;
         }
     }
 
@@ -248,8 +284,9 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     protoTask->SetResultRows(resultStats.Rows);
     protoTask->SetResultBytes(resultStats.Bytes);
 
-    protoTask->SetFinishTimeMs(finishTime.MilliSeconds());
+    protoTask->SetCreateTimeMs(taskStats.CreateTs.MilliSeconds());
     protoTask->SetStartTimeMs(startTime.MilliSeconds());
+    protoTask->SetFinishTimeMs(finishTime.MilliSeconds());
 }
 
 } // namespace NDq

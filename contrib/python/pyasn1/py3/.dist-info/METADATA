@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pyasn1
-Version: 0.6.0
+Version: 0.6.1
 Summary: Pure-Python implementation of ASN.1 types and DER/BER/CER codecs (X.208)
 Home-page: https://github.com/pyasn1/pyasn1
 Author: Ilya Etingof
@@ -29,6 +29,7 @@ Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Communications

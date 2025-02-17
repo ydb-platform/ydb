@@ -1,5 +1,3 @@
-OWNER(g:yql)
-
 LIBRARY()
 
 PEERDIR(

@@ -22,7 +22,7 @@ void SpinWaitSlowPathLoggingHook(
     Y_UNUSED(cpuDelay);
     Y_UNUSED(location);
     Y_UNUSED(activityKind);
-    // XXX(babenko): currently broken
+    // XXX(babenko): YT-23731: currently broken
     // if (cpuDelay >= SpinWaitSlowPathLoggingThreshold) {
     //     const auto& Logger = ThreadingLogger;
     //     YT_LOG_DEBUG("Spin wait took too long (SourceLocation: %, ActivityKind: %v, Delay: %v)",

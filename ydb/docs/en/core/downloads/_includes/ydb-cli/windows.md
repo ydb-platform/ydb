@@ -1,5 +1,16 @@
 | Version | Release date | Download | Changelog |
 :--- | :--- | :--- | :---
+| v.2.19.0 | 05/02/2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.19.0/windows/amd64/ydb.exe) | [See the changelog](../../../changelog-cli.md#2-19-0) |
+| v.2.18.0 | 24/12/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.18.0/windows/amd64/ydb.exe) | [See the changelog](../../../changelog-cli.md#2-18-0) |
+| v.2.17.0 | 04/12/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.17.0/windows/amd64/ydb.exe) | [See the changelog](../../../changelog-cli.md#2-17-0) |
+| v.2.16.0 | 26/11/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.16.0/windows/amd64/ydb.exe) | [See the changelog](../../../changelog-cli.md#2-16-0) |
+| v.2.15.0 | 17/10/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.15.0/windows/amd64/ydb.exe) |
+| v.2.14.0 | 03/10/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.14.0/windows/amd64/ydb.exe) |
+| v.2.13.0 | 23/09/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.13.0/windows/amd64/ydb.exe) |
+| v.2.12.0 | 19/09/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.12.0/windows/amd64/ydb.exe) |
+| v.2.11.0 | 15/07/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.11.0/windows/amd64/ydb.exe) |
+| v.2.10.0 | 24/06/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.10.0/windows/amd64/ydb.exe) | [See the changelog](../../../changelog-cli.md#2-10-0) |
+| v.2.9.0 | 25/04/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.9.0/windows/amd64/ydb.exe) | [See the changelog](../../../changelog-cli.md#2-9-0) |
 | v.2.8.0 | 12/01/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.8.0/windows/amd64/ydb.exe) | [See the changelog](../../../changelog-cli.md#2-8-0) |
 | v.2.7.0 | 23/10/2023 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.7.0/windows/amd64/ydb.exe) | [See the changelog](../../../changelog-cli.md#2-7-0) |
 | v.2.6.0 | 07/09/2023 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.6.0/windows/amd64/ydb.exe) | [See the changelog](../../../changelog-cli.md#2-6-0) |

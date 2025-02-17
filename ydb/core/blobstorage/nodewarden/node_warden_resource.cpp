@@ -1,6 +1,9 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/blobstorage/crypto/default.h>
+#include <ydb/core/blobstorage/incrhuge/incrhuge_keeper.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/wcache.h>
 #include <util/string/split.h>
@@ -72,7 +75,7 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
 }
 
 void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
-    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, nullptr));
+    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled));
     if (ev->Get()->Subscribe) {
         StorageConfigSubscribers.insert(ev->Sender);
     }
@@ -80,6 +83,8 @@ void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
 
 void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     ev->Get()->Config->Swap(&StorageConfig);
+    SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
+
     if (StorageConfig.HasBlobStorageConfig()) {
         if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
             const NKikimrBlobStorage::TNodeWardenServiceSet *proposed = nullptr;
@@ -95,15 +100,18 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             ApplyStorageConfig(bsConfig.GetServiceSet(), proposed);
         }
     }
+
     if (StorageConfig.HasStateStorageConfig() && StorageConfig.HasStateStorageBoardConfig() && StorageConfig.HasSchemeBoardConfig()) {
         ApplyStateStorageConfig(ev->Get()->ProposedConfig.get());
     } else {
         Y_ABORT_UNLESS(!StorageConfig.HasStateStorageConfig() && !StorageConfig.HasStateStorageBoardConfig() &&
             !StorageConfig.HasSchemeBoardConfig());
     }
+
     for (const TActorId& subscriber : StorageConfigSubscribers) {
-        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr));
+        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled));
     }
+
     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, 0, ev->Sender, SelfId(),
         nullptr, ev->Cookie));
 }
@@ -163,21 +171,19 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     };
 
     TActorSystem *as = TActivationContext::ActorSystem();
-    if (!StateStorageProxyConfigured || changed(*StateStorageInfo, *stateStorageInfo) || changed(*BoardInfo, *boardInfo) ||
-            changed(*SchemeBoardInfo, *schemeBoardInfo)) { // reconfigure proxy
-        STLOG(PRI_INFO, BS_NODE, NW50, "updating state storage proxy configuration");
-        Send(MakeStateStorageProxyID(), new  TEvStateStorage::TEvUpdateGroupConfig(stateStorageInfo, boardInfo,
-            schemeBoardInfo));
-        StateStorageProxyConfigured = true;
-    } else { // no changes
-        return;
+    const bool changedStateStorage = !StateStorageProxyConfigured || changed(*StateStorageInfo, *stateStorageInfo);
+    const bool changedBoard = !StateStorageProxyConfigured || changed(*BoardInfo, *boardInfo);
+    const bool changedSchemeBoard = !StateStorageProxyConfigured || changed(*SchemeBoardInfo, *schemeBoardInfo);
+    if (!changedStateStorage && !changedBoard && !changedSchemeBoard) {
+        return; // no changes
     }
 
-    // generate actor ids of local replicas
+    // start new replicas if needed
     THashSet<TActorId> localActorIds;
-    auto scanLocalActorIds = [&](const TIntrusivePtr<TStateStorageInfo>& info) {
-        if (info) {
-            for (const auto& ring : info->Rings) {
+    auto startReplicas = [&](TIntrusivePtr<TStateStorageInfo>&& info, auto&& factory, const char *comp, auto *which) {
+        // collect currently running local replicas
+        if (const auto& current = *which) {
+            for (const auto& ring : current->Rings) {
                 for (const auto& replicaId : ring.Replicas) {
                     if (replicaId.NodeId() == LocalNodeId) {
                         const auto [it, inserted] = localActorIds.insert(replicaId);
@@ -186,67 +192,19 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
                 }
             }
         }
-    };
-    scanLocalActorIds(StateStorageInfo);
-    scanLocalActorIds(BoardInfo);
-    scanLocalActorIds(SchemeBoardInfo);
 
-    // start new replicas if needed
-    auto startReplicas = [&](TIntrusivePtr<TStateStorageInfo>&& info, auto&& factory, const char *comp, auto *which) {
         for (const auto& ring : info->Rings) {
             for (ui32 index = 0; index < ring.Replicas.size(); ++index) {
                 if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
-                    if (ReplicaStartPending.contains(replicaId)) {
-                        // this operation is already pending, we just have to wait
-                    } else if (localActorIds.erase(replicaId)) {
-                        if (const TActorId actorId = as->RegisterLocalService(replicaId, TActorId())) {
-                            STLOG(PRI_INFO, BS_NODE, NW05, "terminating existing state storage replica",
-                                (Component, comp), (ReplicaId, replicaId), (ActorId, actorId));
-                            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(),
-                                nullptr, 0)); // expect to terminate immediately upon reception of this message
-
-                            auto startReplica = [this, factory, which, comp, expectedReplicaId = replicaId] {
-                                const auto& info = *which;
-                                ReplicaStartPending.erase(expectedReplicaId);
-                                bool started = false;
-                                for (const auto& ring : info->Rings) {
-                                    for (ui32 index = 0; index < ring.Replicas.size(); ++index) {
-                                        const auto& replicaId = ring.Replicas[index];
-                                        if (replicaId == expectedReplicaId) {
-                                            STLOG(PRI_INFO, BS_NODE, NW44, "delayed starting new state storage replica",
-                                                (Component, comp), (ReplicaId, replicaId), (Index, index), (Config, *info));
-                                            Y_ABORT_UNLESS(!started);
-                                            started = true;
-                                            TActorSystem *as = TActivationContext::ActorSystem();
-                                            const TActorId prevActorId = as->RegisterLocalService(replicaId,
-                                                as->Register(factory(info, index), TMailboxType::ReadAsFilled,
-                                                AppData()->SystemPoolId));
-                                            Y_VERIFY_S(!prevActorId, "unacceptable race in StateStorage replica registration"
-                                                " Component# " << comp
-                                                << " Index# " << index
-                                                << " Config# " << info->ToString()
-                                                << " ReplicaId# " << replicaId);
-                                        }
-                                    }
-                                }
-                                if (!started) {
-                                    STLOG(PRI_INFO, BS_NODE, NW48, "did not start new state storage replica",
-                                        (Component, comp), (ReplicaId, expectedReplicaId), (Config, *info));
-                                }
-                            };
-
-                            const TActorId forwardOnNondelivery = SelfId();
-                            const ui64 cookie = NextGoneCookie++;
-                            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Gone, 0, actorId, SelfId(),
-                                nullptr, cookie, &forwardOnNondelivery)); // this message is expected to be forwarded
-                            GoneCallbacks.emplace(cookie, startReplica);
-                            ReplicaStartPending.emplace(replicaId);
-                        }
-                    } else {
+                    if (!localActorIds.erase(replicaId)) {
                         STLOG(PRI_INFO, BS_NODE, NW08, "starting new state storage replica",
                             (Component, comp), (ReplicaId, replicaId), (Index, index), (Config, *info));
                         as->RegisterLocalService(replicaId, as->Register(factory(info, index), TMailboxType::ReadAsFilled,
                             AppData()->SystemPoolId));
+                    } else if (which == &StateStorageInfo) {
+                        Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(info, nullptr, nullptr));
+                    } else {
+                        // TODO(alexvru): update other kinds of replicas
                     }
                 }
             }
@@ -254,22 +212,35 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
 
         *which = std::move(info);
     };
-    startReplicas(std::move(stateStorageInfo), CreateStateStorageReplica, "StateStorage", &StateStorageInfo);
-    startReplicas(std::move(boardInfo), CreateStateStorageBoardReplica, "StateStorageBoard", &BoardInfo);
-    startReplicas(std::move(schemeBoardInfo), CreateSchemeBoardReplica, "SchemeBoard", &SchemeBoardInfo);
+    if (changedStateStorage) {
+        startReplicas(std::move(stateStorageInfo), CreateStateStorageReplica, "StateStorage", &StateStorageInfo);
+    }
+    if (changedBoard) {
+        startReplicas(std::move(boardInfo), CreateStateStorageBoardReplica, "StateStorageBoard", &BoardInfo);
+    }
+    if (changedSchemeBoard) {
+        startReplicas(std::move(schemeBoardInfo), CreateSchemeBoardReplica, "SchemeBoard", &SchemeBoardInfo);
+    }
 
     // terminate unused replicas
     for (const auto& replicaId : localActorIds) {
         STLOG(PRI_INFO, BS_NODE, NW43, "terminating useless state storage replica", (ReplicaId, replicaId));
-        const TActorId actorId = as->RegisterLocalService(actorId, TActorId());
+        const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
     }
-}
 
-void TNodeWarden::HandleGone(STATEFN_SIG) {
-    auto nh = GoneCallbacks.extract(ev->Cookie);
-    Y_ABORT_UNLESS(nh);
-    nh.mapped()();
+    // reconfigure proxy
+    STLOG(PRI_INFO, BS_NODE, NW50, "updating state storage proxy configuration");
+    if (StateStorageProxyConfigured) {
+        Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvUpdateGroupConfig(StateStorageInfo, BoardInfo,
+            SchemeBoardInfo));
+    } else {
+        const TActorId newInstance = as->Register(CreateStateStorageProxy(StateStorageInfo, BoardInfo, SchemeBoardInfo),
+            TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+        const TActorId stubInstance = as->RegisterLocalService(MakeStateStorageProxyID(), newInstance);
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, stubInstance, newInstance, nullptr, 0));
+        StateStorageProxyConfigured = true;
+    }
 }
 
 void TNodeWarden::ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
@@ -304,7 +275,7 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
     TActorId actorId = Register(CreateIncrHugeKeeper(settings), TMailboxType::HTSwap, AppData()->SystemPoolId);
 
     // bind it to service
-    TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(keeperId, actorId);
+    TActivationContext::ActorSystem()->RegisterLocalService(keeperId, actorId);
 
     // forward to just created service
     TActivationContext::Send(ev->Forward(keeperId));

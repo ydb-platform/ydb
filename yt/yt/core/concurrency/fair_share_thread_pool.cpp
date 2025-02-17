@@ -21,7 +21,7 @@ namespace NYT::NConcurrency {
 
 using namespace NProfiling;
 
-static const auto& Logger = ConcurrencyLogger;
+static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -71,7 +71,10 @@ public:
         return false;
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver /*waitTimeObserver*/) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
+    { }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
     { }
 
     ~TBucket();
@@ -80,7 +83,6 @@ public:
     TWeakPtr<TFairShareQueue> Parent;
     TRingQueue<TEnqueuedAction> Queue;
     THeapItem* HeapIterator = nullptr;
-    i64 WaitTime = 0;
 
     TCpuDuration ExcessTime = 0;
     int CurrentExecutions = 0;
@@ -187,6 +189,10 @@ public:
     void Invoke(TClosure callback, TBucket* bucket)
     {
         auto guard = Guard(SpinLock_);
+        // See Shutdown.
+        if (Stopping_) {
+            return;
+        }
 
         QueueSize_.fetch_add(1, std::memory_order::relaxed);
 
@@ -228,12 +234,20 @@ public:
 
     void Shutdown()
     {
-        Drain();
-    }
-
-    void Drain()
-    {
         auto guard = Guard(SpinLock_);
+        // We want to make sure that calls to
+        // Shutdown and Invoke are "atomic" with respect
+        // to each other. We need this so that
+        // there are no tasks left in the queue after
+        // the first call to Shutdown has finished.
+        // Here we achieve that by accessing
+        // both buckets and Stopping flag under
+        // SpinLock in either method.
+        // See two_level_fair_share_thread_pool.cpp
+        // for lock-free version with a more detailed
+        // explanation why Stopping flag logic provides
+        // the desired guarantee.
+        Stopping_ = true;
         for (const auto& item : Heap_) {
             item.Bucket->Drain();
         }
@@ -249,10 +263,10 @@ public:
 
         auto tscp = NProfiling::TTscp::Get();
 
-        TBucketPtr bucket;
+        i64 waitTime = 0;
         {
             auto guard = Guard(SpinLock_);
-            bucket = GetStarvingBucket(action, tscp);
+            auto bucket = GetStarvingBucket(action, tscp);
 
             if (!bucket) {
                 return false;
@@ -264,12 +278,12 @@ public:
             threadState.AccountedAt = tscp.Instant;
 
             action->StartedAt = tscp.Instant;
-            bucket->WaitTime = action->StartedAt - action->EnqueuedAt;
+            waitTime = action->StartedAt - action->EnqueuedAt;
         }
 
         YT_ASSERT(action && !action->Finished);
 
-        WaitTimeCounter_.Record(CpuDurationToDuration(bucket->WaitTime));
+        WaitTimeCounter_.Record(CpuDurationToDuration(waitTime));
         return true;
     }
 
@@ -339,7 +353,7 @@ private:
     const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-
+    bool Stopping_ = false;
     std::vector<THeapItem> Heap_;
 
     std::atomic<int> ThreadCount_ = 0;
@@ -393,7 +407,7 @@ private:
         AccountCurrentlyExecutingBuckets(tscp);
 
         #ifdef YT_ENABLE_TRACE_LOGGING
-        if (Logger.IsLevelEnabled(NLogging::ELogLevel::Trace)) {
+        if (Logger().IsLevelEnabled(NLogging::ELogLevel::Trace)) {
             auto guard = Guard(TagMappingSpinLock_);
             YT_LOG_TRACE("Buckets: [%v]",
                 MakeFormattableView(
@@ -512,7 +526,7 @@ public:
             CallbackEventCount_,
             GetThreadTags(ThreadNamePrefix_)))
     {
-        Configure(threadCount);
+        SetThreadCount(threadCount);
         EnsureStarted();
     }
 
@@ -521,9 +535,9 @@ public:
         Shutdown();
     }
 
-    void Configure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        TThreadPoolBase::Configure(threadCount);
+        TThreadPoolBase::SetThreadCount(threadCount);
     }
 
     IInvokerPtr GetInvoker(const TFairShareThreadPoolTag& tag) override
@@ -548,18 +562,10 @@ private:
         TThreadPoolBase::DoShutdown();
     }
 
-    TClosure MakeFinalizerCallback() override
-    {
-        return BIND_NO_PROPAGATE([queue = Queue_, callback = TThreadPoolBase::MakeFinalizerCallback()] {
-            callback();
-            queue->Drain();
-        });
-    }
-
-    void DoConfigure(int threadCount) override
+    void DoSetThreadCount(int threadCount) override
     {
         Queue_->Configure(threadCount);
-        TThreadPoolBase::DoConfigure(threadCount);
+        TThreadPoolBase::DoSetThreadCount(threadCount);
     }
 
     TSchedulerThreadPtr SpawnThread(int index) override

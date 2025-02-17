@@ -6,8 +6,12 @@ IF (WITH_VALGRIND)
     SPLIT_FACTOR(40)
 ENDIF()
 
-TIMEOUT(600)
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 PEERDIR(
     library/cpp/getopt
@@ -17,7 +21,8 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
+    ydb/public/sdk/cpp/src/client/table
 )
 
 SRCS(

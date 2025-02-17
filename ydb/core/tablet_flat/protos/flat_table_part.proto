@@ -46,6 +46,7 @@ message TLayout {
     optional uint32 TxIdStats = 10; // EPage::TxIdStats for uncommitted deltas
     repeated TBTreeIndexMeta BTreeGroupIndexes = 11;
     repeated TBTreeIndexMeta BTreeHistoricIndexes = 12;
+    optional uint32 BTreeIndexesFormatVersion = 13;
 }
 
 message TStat {

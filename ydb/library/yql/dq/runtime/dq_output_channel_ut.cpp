@@ -2,9 +2,9 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/dq/runtime/ut/ut_helper.h>
 
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/minikql/computation/mkql_value_builder.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/minikql/computation/mkql_value_builder.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

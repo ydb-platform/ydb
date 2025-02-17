@@ -1,6 +1,9 @@
 #pragma once
 
 #include <yt/yt/core/misc/public.h>
+#include <yt/yt/core/misc/configurable_singleton_decl.h>
+
+#include <library/cpp/yt/misc/enum.h>
 
 namespace NYT::NConcurrency {
 
@@ -23,6 +26,8 @@ DECLARE_REFCOUNTED_STRUCT(IFairShareActionQueue)
 
 DECLARE_REFCOUNTED_STRUCT(IQuantizedExecutor)
 
+DECLARE_REFCOUNTED_CLASS(TAsyncLooper);
+
 namespace NDetail {
 
 DECLARE_REFCOUNTED_STRUCT(TDelayedExecutorEntry)
@@ -31,11 +36,12 @@ DECLARE_REFCOUNTED_STRUCT(TDelayedExecutorEntry)
 
 using TDelayedExecutorCookie = NDetail::TDelayedExecutorEntryPtr;
 
-DECLARE_REFCOUNTED_CLASS(TThroughputThrottlerConfig)
-DECLARE_REFCOUNTED_CLASS(TRelativeThroughputThrottlerConfig)
-DECLARE_REFCOUNTED_CLASS(TPrefetchingThrottlerConfig)
+DECLARE_REFCOUNTED_STRUCT(TThroughputThrottlerConfig)
+DECLARE_REFCOUNTED_STRUCT(TRelativeThroughputThrottlerConfig)
+DECLARE_REFCOUNTED_STRUCT(TPrefetchingThrottlerConfig)
 DECLARE_REFCOUNTED_STRUCT(IThroughputThrottler)
 DECLARE_REFCOUNTED_STRUCT(IReconfigurableThroughputThrottler)
+DECLARE_REFCOUNTED_STRUCT(ITestableReconfigurableThroughputThrottler)
 
 DECLARE_REFCOUNTED_STRUCT(IAsyncInputStream)
 DECLARE_REFCOUNTED_STRUCT(IAsyncOutputStream)
@@ -48,6 +54,7 @@ DECLARE_REFCOUNTED_STRUCT(IAsyncZeroCopyOutputStream)
 DECLARE_REFCOUNTED_STRUCT(IFairShareThreadPool)
 
 DECLARE_REFCOUNTED_CLASS(TAsyncStreamPipe)
+DECLARE_REFCOUNTED_CLASS(TBoundedAsyncStreamPipe)
 
 DEFINE_ENUM(EWaitForStrategy,
     (WaitFor)
@@ -84,6 +91,9 @@ DECLARE_REFCOUNTED_STRUCT(IThreadPoolPoller)
 
 DECLARE_REFCOUNTED_CLASS(TThread)
 
+constexpr int DefaultMaxIdleFibers = 5'000;
+constexpr int DefaultFiberStackPoolSize = 1'000;
+
 using TFiberId = size_t;
 constexpr size_t InvalidFiberId = 0;
 
@@ -104,6 +114,9 @@ DECLARE_REFCOUNTED_STRUCT(ITwoLevelFairShareThreadPool)
 
 class TFiber;
 
+DECLARE_REFCOUNTED_STRUCT(TFiberManagerConfig)
+DECLARE_REFCOUNTED_STRUCT(TFiberManagerDynamicConfig)
+
 DECLARE_REFCOUNTED_STRUCT(TFairThrottlerConfig)
 DECLARE_REFCOUNTED_STRUCT(TFairThrottlerBucketConfig)
 
@@ -116,6 +129,8 @@ DECLARE_REFCOUNTED_CLASS(TBucketThrottler)
 DECLARE_REFCOUNTED_STRUCT(ICallbackProvider)
 
 class TPropagatingStorage;
+
+YT_DECLARE_RECONFIGURABLE_SINGLETON(TFiberManagerConfig, TFiberManagerDynamicConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

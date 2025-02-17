@@ -1,4 +1,5 @@
 #include "dispatcher.h"
+
 #include "dispatcher_impl.h"
 
 #include <yt/yt/core/bus/private.h>
@@ -10,7 +11,7 @@ namespace NYT::NBus {
 TTcpDispatcher::TTcpDispatcher()
     : Impl_(New<TImpl>())
 {
-    BusProfiler.WithSparse().AddProducer("", Impl_);
+    BusProfiler().WithSparse().AddProducer("", Impl_);
 }
 
 TTcpDispatcher* TTcpDispatcher::Get()
@@ -43,7 +44,7 @@ bool TTcpDispatcher::IsNetworkingDisabled()
     return Impl_->IsNetworkingDisabled();
 }
 
-const TString& TTcpDispatcher::GetNetworkNameForAddress(const NNet::TNetworkAddress& address)
+const std::string& TTcpDispatcher::GetNetworkNameForAddress(const NNet::TNetworkAddress& address)
 {
     return Impl_->GetNetworkNameForAddress(address);
 }
@@ -51,6 +52,11 @@ const TString& TTcpDispatcher::GetNetworkNameForAddress(const NNet::TNetworkAddr
 TTosLevel TTcpDispatcher::GetTosLevelForBand(EMultiplexingBand band)
 {
     return Impl_->GetTosLevelForBand(band);
+}
+
+int TTcpDispatcher::GetMultiplexingParallelism(EMultiplexingBand band, int multiplexingParallelism)
+{
+    return Impl_->GetMultiplexingParallelism(band, multiplexingParallelism);
 }
 
 NYTree::IYPathServicePtr TTcpDispatcher::GetOrchidService()

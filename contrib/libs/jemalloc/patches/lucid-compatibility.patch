@@ -1,0 +1,11 @@
+--- a/include/jemalloc/internal/jemalloc_internal_defs-linux.h	(index)
++++ b/include/jemalloc/internal/jemalloc_internal_defs-linux.h	(working tree)
+@@ -81,1 +81,1 @@
+-#define JEMALLOC_HAVE_SECURE_GETENV 
++/* #undef JEMALLOC_HAVE_SECURE_GETENV */
+@@ -89,1 +89,1 @@
+-#define JEMALLOC_HAVE_PTHREAD_SETNAME_NP 
++/* #undef JEMALLOC_HAVE_PTHREAD_SETNAME_NP */
+@@ -95,1 +95,1 @@
+-#define JEMALLOC_HAVE_PTHREAD_GETNAME_NP 
++/* #undef JEMALLOC_HAVE_PTHREAD_GETNAME_NP */

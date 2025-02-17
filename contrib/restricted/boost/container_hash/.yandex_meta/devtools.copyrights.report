@@ -1,0 +1,191 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 01774e8f00f9fa9fc7175f9399854c44
+BELONGS ya.make
+    License text:
+        // Copyright 2021-2023 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container_hash/detail/hash_integral.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0cf50a14f48d5f6b52260bcafcb4688e
+BELONGS ya.make
+    License text:
+        // Copyright 2005-2014 Daniel James.
+        // Copyright 2021, 2022 Peter Dimov.
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container_hash/hash.hpp [1:4]
+        include/boost/container_hash/hash_fwd.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 28754ad9c0aa02276f0e2f7033f5dfc4
+BELONGS ya.make
+    License text:
+        // Copyright 2005-2014 Daniel James.
+        // Copyright 2021, 2022 Peter Dimov.
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container_hash/hash.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2fbd26d4aba2eca0cf87ce8c48e9b349
+BELONGS ya.make
+    License text:
+        // Copyright 2017, 2018 Peter Dimov.
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container_hash/is_contiguous_range.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3daf1cb1dc9e23adce33a58786a1f0f4
+BELONGS ya.make
+    License text:
+        // Copyright 2005-2009 Daniel James.
+        // Distributed under the Boost Software License, Version 1.0. (See accompanying
+        // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container_hash/detail/hash_tuple_like.hpp [1:4]
+        include/boost/container_hash/detail/limits.hpp [1:3]
+        include/boost/container_hash/extensions.hpp [1:3]
+        include/boost/container_hash/hash_fwd.hpp [1:4]
+        include/boost/functional/hash.hpp [2:4]
+        include/boost/functional/hash/hash.hpp [2:4]
+        include/boost/functional/hash/hash_fwd.hpp [2:4]
+        include/boost/functional/hash_fwd.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8e00e7d6fce9c86304b3ed14045f8800
+BELONGS ya.make
+    License text:
+        // Copyright 2017 Daniel James.
+        // Distributed under the Boost Software License, Version 1.0. (See accompanying
+        // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/functional/hash/extensions.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9bb9e82bc657b80e17ef1f9712100d50
+BELONGS ya.make
+    License text:
+        // Copyright 2022, 2023 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container_hash/detail/mulx.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b4fd6345abc0fea642cbcb10c732e66f
+BELONGS ya.make
+    License text:
+        // Copyright 2017, 2022 Peter Dimov.
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container_hash/is_tuple_like.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL df56a08a51f11ebc1571263ab013bc25
+BELONGS ya.make
+    License text:
+        // Copyright 2022 Peter Dimov.
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container_hash/detail/hash_mix.hpp [1:3]
+        include/boost/container_hash/detail/hash_range.hpp [1:3]
+        include/boost/container_hash/is_described_class.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e323857368fb1433c9c3079428ca51d3
+BELONGS ya.make
+    License text:
+        // Copyright 2017 Peter Dimov.
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container_hash/is_range.hpp [1:3]
+        include/boost/container_hash/is_unordered_range.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL faedff635aa9f9a8a18d7c7c02b75e2d
+BELONGS ya.make
+    License text:
+        // Copyright 2005-2009 Daniel James.
+        // Copyright 2021 Peter Dimov.
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container_hash/detail/hash_tuple_like.hpp [1:4]

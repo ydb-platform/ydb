@@ -30,7 +30,7 @@ class DiscoveryEndpointsResolver(_DiscoveryEndpointsResolver):
         connection = conn_impl.Connection(endpoint, self._driver_config)
         try:
             await connection.connection_ready()
-        except Exception:
+        except BaseException:
             self._add_debug_details(
                 'Failed to establish connection to YDB discovery endpoint: "%s". Check endpoint correctness.' % endpoint
             )
@@ -53,7 +53,7 @@ class DiscoveryEndpointsResolver(_DiscoveryEndpointsResolver):
             )
 
             return resolved
-        except Exception as e:
+        except BaseException as e:
 
             self._add_debug_details(
                 'Failed to resolve endpoints for database %s. Endpoint: "%s". Error details:\n %s',

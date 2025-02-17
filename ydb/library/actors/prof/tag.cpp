@@ -23,8 +23,16 @@ namespace NProfiling {
     private:
         TMutex Mutex;
         atomizer<ci_hash, ci_equal_to> Tags;
-
     public:
+        const ui32 DefaultTag = 0;
+        const ui32 OverlimitCountersTag = 0;
+
+        TStringAtoms()
+            : DefaultTag(MakeTag("_DEFAULT"))
+            , OverlimitCountersTag(MakeTag("_OVERLIMIT_COUNTERS"))
+        {
+        }
+
         static TStringAtoms& Instance() {
             return *Singleton<TStringAtoms>();
         }
@@ -62,6 +70,14 @@ namespace NProfiling {
             }
         }
     };
+
+    ui32 GetDefaultTag() {
+        return TStringAtoms::Instance().DefaultTag;
+    }
+
+    ui32 GetOverlimitCountersTag() {
+        return TStringAtoms::Instance().OverlimitCountersTag;
+    }
 
     ui32 MakeTag(const char* s) {
         return TStringAtoms::Instance().MakeTag(s);
@@ -125,12 +141,12 @@ TMemoryProfileGuard::TMemoryProfileGuard(const TString& id, const bool enabled)
     : Id(enabled ? id : "")
 {
     if (enabled) {
-        NProfiling::TMemoryTagScope::Reset(TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Start"));
+        PredTag = NProfiling::TMemoryTagScope::Reset(TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Start"));
     }
 }
 
 TMemoryProfileGuard::~TMemoryProfileGuard() {
     if (Id) {
-        NProfiling::TMemoryTagScope::Reset(TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Finish"));
+        NProfiling::TMemoryTagScope::Reset(PredTag);
     }
 }

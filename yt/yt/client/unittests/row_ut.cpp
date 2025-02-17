@@ -4,6 +4,7 @@
 #include <yt/yt/client/table_client/versioned_row.h>
 
 #include <yt/yt/core/test_framework/framework.h>
+
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <limits>
@@ -15,7 +16,7 @@ namespace {
 
 void CheckSerialize(TUnversionedRow original)
 {
-    auto serialized = NYT::ToProto<TString>(original);
+    auto serialized = NYT::ToProto<TProtobufString>(original);
     auto deserialized =  NYT::FromProto<TUnversionedOwningRow>(serialized);
 
     ASSERT_EQ(original, deserialized);

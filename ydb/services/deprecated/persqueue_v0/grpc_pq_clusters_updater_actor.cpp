@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/pq_database.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr {
 namespace NGRpcProxy {
@@ -42,18 +43,19 @@ void TClustersUpdater::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpd
 
 
 void TClustersUpdater::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx) {
-    auto& record = ev->Get()->Record.GetRef();
+    auto& record = ev->Get()->Record;
 
     if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-        auto& t = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
         bool local = false;
         TVector<TString> clusters;
-        for (size_t i = 0; i < t.ListSize(); ++i) {
-            TString dc = t.GetList(i).GetStruct(0).GetOptional().GetText();
-            local = t.GetList(i).GetStruct(1).GetOptional().GetBool();
+        NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
+
+        while(parser.TryNextRow()) {
+            TString dc = *parser.ColumnParser(0).GetOptionalUtf8();
+            local = *parser.ColumnParser(1).GetOptionalBool();
             clusters.push_back(dc);
             if (local) {
-                bool enabled = t.GetList(i).GetStruct(2).GetOptional().GetBool();
+                bool enabled = *parser.ColumnParser(2).GetOptionalBool();
                 Y_ABORT_UNLESS(LocalCluster.empty() || LocalCluster == dc);
                 bool changed = LocalCluster != dc || Enabled != enabled;
                 if (changed) {

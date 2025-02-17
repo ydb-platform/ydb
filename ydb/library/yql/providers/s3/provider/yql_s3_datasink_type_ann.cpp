@@ -1,15 +1,16 @@
 #include "yql_s3_provider_impl.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -26,6 +27,7 @@ TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
 
     return {};
 }
+
 }
 
 namespace {
@@ -71,6 +73,10 @@ private:
 
         const TTypeAnnotationNode* sourceType = source->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         if (!EnsureStructType(source->Pos(), *sourceType, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!NS3Util::ValidateS3ReadWriteSchema(sourceType->Cast<TStructExprType>(), ctx)) {
             return TStatus::Error;
         }
 
@@ -271,13 +277,22 @@ private:
                     return true;
                 }
 
+                if (name == "data.date.format") {
+                    const auto& value = setting.Tail();
+                    if (!EnsureAtom(value, ctx)) {
+                        return false;
+                    }
+
+                    return true;
+                }
+
                 if (name == "csvdelimiter") {
                     const auto& value = setting.Tail();
                     if (!EnsureAtom(value, ctx)) {
                         return false;
                     }
 
-                    if (value.Content().Size() != 1) {
+                    if (value.Content().size() != 1) {
                         ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "csv_delimiter must be single character"));
                         return false;
                     }
@@ -292,7 +307,7 @@ private:
                 return true;
             };
 
-            if (!EnsureValidSettings(*input->Child(TS3Target::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format", "data.timestamp.formatname", "data.timestamp.format", "csvdelimiter", "filepattern"}, validator, ctx)) {
+            if (!EnsureValidSettings(*input->Child(TS3Target::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format", "data.timestamp.formatname", "data.timestamp.format", "data.date.format", "csvdelimiter", "filepattern"}, validator, ctx)) {
                 return TStatus::Error;
             }
 

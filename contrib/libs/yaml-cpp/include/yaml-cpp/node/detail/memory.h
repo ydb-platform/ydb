@@ -22,11 +22,12 @@ namespace YAML {
 namespace detail {
 class YAML_CPP_API memory {
  public:
+  memory() : m_nodes{} {}
   node& create_node();
   void merge(const memory& rhs);
 
  private:
-  typedef std::set<shared_node> Nodes;
+  using Nodes = std::set<shared_node>;
   Nodes m_nodes;
 };
 
@@ -40,7 +41,7 @@ class YAML_CPP_API memory_holder {
  private:
   shared_memory m_pMemory;
 };
-}
-}
+}  // namespace detail
+}  // namespace YAML
 
 #endif  // VALUE_DETAIL_MEMORY_H_62B23520_7C8E_11DE_8A39_0800200C9A66

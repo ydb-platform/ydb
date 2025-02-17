@@ -1,0 +1,83 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b26996bfb42c528af128697232328ba
+BELONGS ya.make
+    License text:
+        Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [2:2]
+        include/aws/mqtt/client.h [5:5]
+        include/aws/mqtt/exports.h [4:4]
+        include/aws/mqtt/mqtt.h [5:5]
+        include/aws/mqtt/private/client_impl.h [5:5]
+        include/aws/mqtt/private/fixed_header.h [5:5]
+        include/aws/mqtt/private/mqtt_client_test_helper.h [4:4]
+        include/aws/mqtt/private/packets.h [5:5]
+        include/aws/mqtt/private/shared_constants.h [2:2]
+        include/aws/mqtt/private/topic_tree.h [5:5]
+        include/aws/mqtt/private/v5/mqtt5_callbacks.h [2:2]
+        include/aws/mqtt/private/v5/mqtt5_client_impl.h [5:5]
+        include/aws/mqtt/private/v5/mqtt5_decoder.h [2:2]
+        include/aws/mqtt/private/v5/mqtt5_encoder.h [2:2]
+        include/aws/mqtt/private/v5/mqtt5_options_storage.h [5:5]
+        include/aws/mqtt/private/v5/mqtt5_topic_alias.h [2:2]
+        include/aws/mqtt/private/v5/mqtt5_utils.h [5:5]
+        include/aws/mqtt/private/v5/rate_limiters.h [2:2]
+        include/aws/mqtt/v5/mqtt5_client.h [5:5]
+        include/aws/mqtt/v5/mqtt5_listener.h [2:2]
+        include/aws/mqtt/v5/mqtt5_packet_storage.h [5:5]
+        include/aws/mqtt/v5/mqtt5_types.h [5:5]
+        source/client.c [2:2]
+        source/client_channel_handler.c [2:2]
+        source/fixed_header.c [2:2]
+        source/mqtt.c [2:2]
+        source/packets.c [2:2]
+        source/shared_constants.c [2:2]
+        source/topic_tree.c [2:2]
+        source/v5/mqtt5_callbacks.c [2:2]
+        source/v5/mqtt5_client.c [2:2]
+        source/v5/mqtt5_decoder.c [2:2]
+        source/v5/mqtt5_encoder.c [2:2]
+        source/v5/mqtt5_listener.c [2:2]
+        source/v5/mqtt5_options_storage.c [2:2]
+        source/v5/mqtt5_topic_alias.c [2:2]
+        source/v5/mqtt5_types.c [2:2]
+        source/v5/mqtt5_utils.c [2:2]
+        source/v5/rate_limiters.c [2:2]

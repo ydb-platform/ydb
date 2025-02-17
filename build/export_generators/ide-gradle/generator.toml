@@ -1,4 +1,5 @@
 use_managed_peers_closure = true
+ignore_platforms = true
 
 [root]
 template="settings.gradle.kts.jinja"
@@ -6,8 +7,11 @@ copy=[
     "gradlew",
     "gradlew.bat",
     "gradle/wrapper/gradle-wrapper.jar",
-    "gradle/wrapper/gradle-wrapper.properties"
+    "gradle/wrapper/gradle-wrapper.properties",
 ]
+
+[targets.EXTRA_ONLY]
+template="build.gradle.kts.jinja"
 
 [targets.jar]
 template="build.gradle.kts.jinja"
@@ -16,6 +20,9 @@ template="build.gradle.kts.jinja"
 template={ path="build.gradle.kts.proto.jinja", dest="build.gradle.kts" }
 
 [attrs.target]
+# DEPRECATED
+annotation_processors="list"
+
 required_jdk="str"
 add_vcs_info_to_mf="bool"
 junit4_test="flag"
@@ -23,7 +30,10 @@ junit5_test="flag"
 app_main_class="str"
 jar_source_set="list"
 enable_preview="flag"
-annotation_processors="list"
+use_annotation_processor="list"
+use_errorprone="flag"
+jdk_version="str"
+jdk_path="str"
 
 publish="flag"
 publish_group="str"
@@ -37,13 +47,16 @@ proto_common_version="str"
 
 proto_grpc="flag"
 proto_grpc_version="str"
+proto_kotlin="flag"
+proto_kotlin_grpc="flag"
+proto_kotlin_grpc_version="str"
 
 kotlin_version="str"
 with_kotlin="flag"
-with_kotlinc_plugin_allopen="flag"
-with_kotlinc_plugin_lombok="flag"
-with_kotlinc_plugin_noarg="flag"
-with_kotlinc_plugin_serialization="flag"
+with_kotlinc_plugin_allopen="set"
+with_kotlinc_plugin_lombok="set"
+with_kotlinc_plugin_noarg="set"
+with_kotlinc_plugin_serialization="set"
 
 runs="list"
 runs-args="list"
@@ -56,6 +69,19 @@ runs-in_noparse="list"
 runs-out="list"
 runs-out_dir="list"
 runs-tool="list"
+
+custom_runs="list"
+custom_runs-depends="list"
+custom_runs-env="list"
+custom_runs-command="list"
+custom_runs-outputs="list"
+custom_runs-cwd="str"
+custom_runs-cmake_packages="list"
+custom_runs-cmake_packages-ITEM="dict"
+custom_runs-cmake_packages-name="str"
+custom_runs-cmake_packages-components="list"
+
+javac-flags="list"
 
 [attrs.root]
 
@@ -73,5 +99,7 @@ test=[
     "/src/test",
     "/src/test/java",
     "/src/test-integration",
+    "/src/integration-test",
     "/src/testFixtures",
+    "/src/intTest",
 ]

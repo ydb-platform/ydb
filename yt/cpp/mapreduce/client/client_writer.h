@@ -17,6 +17,7 @@ class TClientWriter
 public:
     TClientWriter(
         const TRichYPath& path,
+        const IRawClientPtr& rawClient,
         IClientRetryPolicyPtr clientRetryPolicy,
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,

@@ -2,11 +2,12 @@ from decimal import Decimal
 from doctest import DocTestSuite
 from fractions import Fraction
 from functools import reduce
-from itertools import combinations, count, permutations
+from itertools import combinations, count, groupby, permutations
 from operator import mul
-from math import factorial
+from math import comb, factorial
 from sys import version_info
 from unittest import TestCase, skipIf
+from unittest.mock import patch
 
 import more_itertools as mi
 
@@ -134,32 +135,45 @@ class NthTests(TestCase):
 
 
 class AllEqualTests(TestCase):
-    """Tests for ``all_equal()``"""
-
     def test_true(self):
-        """Everything is equal"""
         self.assertTrue(mi.all_equal('aaaaaa'))
         self.assertTrue(mi.all_equal([0, 0, 0, 0]))
 
     def test_false(self):
-        """Not everything is equal"""
         self.assertFalse(mi.all_equal('aaaaab'))
         self.assertFalse(mi.all_equal([0, 0, 0, 1]))
 
     def test_tricky(self):
-        """Not everything is identical, but everything is equal"""
         items = [1, complex(1, 0), 1.0]
         self.assertTrue(mi.all_equal(items))
 
     def test_empty(self):
-        """Return True if the iterable is empty"""
         self.assertTrue(mi.all_equal(''))
         self.assertTrue(mi.all_equal([]))
 
     def test_one(self):
-        """Return True if the iterable is singular"""
         self.assertTrue(mi.all_equal('0'))
         self.assertTrue(mi.all_equal([0]))
+
+    def test_key(self):
+        self.assertTrue(mi.all_equal('4٤໔４৪', key=int))
+        self.assertFalse(mi.all_equal('Abc', key=str.casefold))
+
+    @patch('more_itertools.recipes.groupby', autospec=True)
+    def test_groupby_calls(self, mock_groupby):
+        next_count = 0
+
+        class _groupby(groupby):
+            def __next__(true_self):
+                nonlocal next_count
+                next_count += 1
+                return super().__next__()
+
+        mock_groupby.side_effect = _groupby
+        iterable = iter('aaaaa')
+        self.assertTrue(mi.all_equal(iterable))
+        self.assertEqual(list(iterable), [])
+        self.assertEqual(next_count, 2)
 
 
 class QuantifyTests(TestCase):
@@ -267,6 +281,12 @@ class PairwiseTests(TestCase):
         """ensure an empty iterator if there's not enough values to pair"""
         p = mi.pairwise("a")
         self.assertRaises(StopIteration, lambda: next(p))
+
+    def test_coverage(self):
+        from more_itertools import recipes
+
+        p = recipes._pairwise([1, 2, 3])
+        self.assertEqual([(1, 2), (2, 3)], list(p))
 
 
 class GrouperTests(TestCase):
@@ -392,43 +412,53 @@ class PowersetTests(TestCase):
 
 
 class UniqueEverseenTests(TestCase):
-    """Tests for ``unique_everseen()``"""
-
     def test_everseen(self):
-        """ensure duplicate elements are ignored"""
         u = mi.unique_everseen('AAAABBBBCCDAABBB')
         self.assertEqual(['A', 'B', 'C', 'D'], list(u))
 
     def test_custom_key(self):
-        """ensure the custom key comparison works"""
         u = mi.unique_everseen('aAbACCc', key=str.lower)
         self.assertEqual(list('abC'), list(u))
 
     def test_unhashable(self):
-        """ensure things work for unhashable items"""
         iterable = ['a', [1, 2, 3], [1, 2, 3], 'a']
         u = mi.unique_everseen(iterable)
         self.assertEqual(list(u), ['a', [1, 2, 3]])
 
     def test_unhashable_key(self):
-        """ensure things work for unhashable items with a custom key"""
         iterable = ['a', [1, 2, 3], [1, 2, 3], 'a']
         u = mi.unique_everseen(iterable, key=lambda x: x)
         self.assertEqual(list(u), ['a', [1, 2, 3]])
 
 
 class UniqueJustseenTests(TestCase):
-    """Tests for ``unique_justseen()``"""
-
     def test_justseen(self):
-        """ensure only last item is remembered"""
         u = mi.unique_justseen('AAAABBBCCDABB')
         self.assertEqual(list('ABCDAB'), list(u))
 
     def test_custom_key(self):
-        """ensure the custom key comparison works"""
         u = mi.unique_justseen('AABCcAD', str.lower)
         self.assertEqual(list('ABCAD'), list(u))
+
+
+class UniqueTests(TestCase):
+    def test_basic(self):
+        iterable = [0, 1, 1, 8, 9, 9, 9, 8, 8, 1, 9, 9]
+        actual = list(mi.unique(iterable))
+        expected = [0, 1, 8, 9]
+        self.assertEqual(actual, expected)
+
+    def test_key(self):
+        iterable = ['1', '1', '10', '10', '2', '2', '20', '20']
+        actual = list(mi.unique(iterable, key=int))
+        expected = ['1', '2', '10', '20']
+        self.assertEqual(actual, expected)
+
+    def test_reverse(self):
+        iterable = ['1', '1', '10', '10', '2', '2', '20', '20']
+        actual = list(mi.unique(iterable, key=int, reverse=True))
+        expected = ['20', '10', '2', '1']
+        self.assertEqual(actual, expected)
 
 
 class IterExceptTests(TestCase):
@@ -698,7 +728,7 @@ class NthPermutationTests(TestCase):
         n = factorial(len(iterable)) // factorial(len(iterable) - r)
         for index in [-1 - n, n + 1]:
             with self.assertRaises(IndexError):
-                mi.nth_combination(iterable, r, index)
+                mi.nth_permutation(iterable, r, index)
 
     def test_invalid_r(self):
         iterable = 'abcde'
@@ -706,7 +736,7 @@ class NthPermutationTests(TestCase):
         n = factorial(len(iterable)) // factorial(len(iterable) - r)
         for r in [-1, n + 1]:
             with self.assertRaises(ValueError):
-                mi.nth_combination(iterable, r, 0)
+                mi.nth_permutation(iterable, r, 0)
 
 
 class PrependTests(TestCase):
@@ -825,7 +855,7 @@ class TriplewiseTests(TestCase):
 
 
 class SlidingWindowTests(TestCase):
-    def test_basic(self):
+    def test_islice_version(self):
         for iterable, n, expected in [
             ([], 1, []),
             ([0], 1, [(0,)]),
@@ -839,6 +869,17 @@ class SlidingWindowTests(TestCase):
             with self.subTest(expected=expected):
                 actual = list(mi.sliding_window(iterable, n))
                 self.assertEqual(actual, expected)
+
+    def test_deque_version(self):
+        iterable = map(str, range(100))
+        all_windows = list(mi.sliding_window(iterable, 95))
+        self.assertEqual(all_windows[0], tuple(map(str, range(95))))
+        self.assertEqual(all_windows[-1], tuple(map(str, range(5, 100))))
+
+    def test_zero(self):
+        iterable = map(str, range(100))
+        with self.assertRaises(ValueError):
+            list(mi.sliding_window(iterable, 0))
 
 
 class SubslicesTests(TestCase):
@@ -881,6 +922,12 @@ class PolynomialFromRootsTests(TestCase):
             with self.subTest(roots=roots):
                 actual = mi.polynomial_from_roots(roots)
                 self.assertEqual(actual, expected)
+
+    def test_large(self):
+        n = 1_500
+        actual = mi.polynomial_from_roots([-1] * n)
+        expected = [comb(n, k) for k in range(n + 1)]
+        self.assertEqual(actual, expected)
 
 
 class PolynomialEvalTests(TestCase):
@@ -1106,8 +1153,12 @@ class FactorTests(TestCase):
             (6, [2, 3]),
             (360, [2, 2, 2, 3, 3, 5]),
             (128_884_753_939, [128_884_753_939]),
-            (999953 * 999983, [999953, 999983]),
-            (909_909_090_909, [3, 3, 7, 13, 13, 751, 113797]),
+            (999_953 * 999_983, [999_953, 999_983]),
+            (909_909_090_909, [3, 3, 7, 13, 13, 751, 1_137_97]),
+            (
+                1_647_403_876_764_101_672_307_088,
+                [2, 2, 2, 2, 19, 23, 109471, 13571009, 158594251],
+            ),
         ):
             with self.subTest(n=n):
                 actual = list(mi.factor(n))
@@ -1168,3 +1219,169 @@ class TotientTests(TestCase):
         ):
             with self.subTest(n=n):
                 self.assertEqual(mi.totient(n), expected)
+
+
+class PrimeFunctionTests(TestCase):
+    def test_is_prime_pseudoprimes(self):
+        # Carmichael number that strong pseudoprime to prime bases < 307
+        # https://doi.org/10.1006/jsco.1995.1042
+        p = 29674495668685510550154174642905332730771991799853043350995075531276838753171770199594238596428121188033664754218345562493168782883  # noqa:E501
+        gnarly_carmichael = (313 * (p - 1) + 1) * (353 * (p - 1) + 1)
+
+        for n in (
+            # Least Carmichael number with n prime factors:
+            # https://oeis.org/A006931
+            561,
+            41041,
+            825265,
+            321197185,
+            5394826801,
+            232250619601,
+            9746347772161,
+            1436697831295441,
+            60977817398996785,
+            7156857700403137441,
+            1791562810662585767521,
+            87674969936234821377601,
+            6553130926752006031481761,
+            1590231231043178376951698401,
+            # Carmichael numbers with exactly 4 prime factors:
+            # https://oeis.org/A074379
+            41041,
+            62745,
+            63973,
+            75361,
+            101101,
+            126217,
+            172081,
+            188461,
+            278545,
+            340561,
+            449065,
+            552721,
+            656601,
+            658801,
+            670033,
+            748657,
+            838201,
+            852841,
+            997633,
+            1033669,
+            1082809,
+            1569457,
+            1773289,
+            2100901,
+            2113921,
+            2433601,
+            2455921,
+            # Lucas-Carmichael numbers:
+            # https://oeis.org/A006972
+            399,
+            935,
+            2015,
+            2915,
+            4991,
+            5719,
+            7055,
+            8855,
+            12719,
+            18095,
+            20705,
+            20999,
+            22847,
+            29315,
+            31535,
+            46079,
+            51359,
+            60059,
+            63503,
+            67199,
+            73535,
+            76751,
+            80189,
+            81719,
+            88559,
+            90287,
+            # Strong pseudoprimes to bases 2, 3 and 5:
+            # https://oeis.org/A056915
+            25326001,
+            161304001,
+            960946321,
+            1157839381,
+            3215031751,
+            3697278427,
+            5764643587,
+            6770862367,
+            14386156093,
+            15579919981,
+            18459366157,
+            19887974881,
+            21276028621,
+            27716349961,
+            29118033181,
+            37131467521,
+            41752650241,
+            42550716781,
+            43536545821,
+            # Strong pseudoprimes to bases 2, 3, 5, and 7:
+            # https://oeis.org/A211112
+            39365185894561,
+            52657210792621,
+            11377272352951,
+            15070413782971,
+            3343433905957,
+            16603327018981,
+            3461715915661,
+            52384617784801,
+            3477707481751,
+            18996486073489,
+            55712149574381,
+            gnarly_carmichael,
+        ):
+            with self.subTest(n=n):
+                self.assertFalse(mi.is_prime(n))
+
+    def test_primes(self):
+        for i, n in enumerate(mi.sieve(10**5)):
+            with self.subTest(n=n):
+                self.assertTrue(mi.is_prime(n))
+                self.assertEqual(mi.nth_prime(i), n)
+
+        self.assertFalse(mi.is_prime(-1))
+        with self.assertRaises(ValueError):
+            mi.nth_prime(-1)
+
+    def test_special_primes(self):
+        for n in (
+            # Mersenee primes:
+            # https://oeis.org/A211112
+            3,
+            7,
+            31,
+            127,
+            8191,
+            131071,
+            524287,
+            2147483647,
+            2305843009213693951,
+            618970019642690137449562111,
+            162259276829213363391578010288127,
+            170141183460469231731687303715884105727,
+            # Various big primes:
+            # https://bigprimes.org/
+            7990614013,
+            80358337843874809987,
+            814847562949580526031364519741,
+            1982427225022428178169740526258124929077,
+            91828213828508622559862344537590739566883686537727,
+            406414746815201693481517584049440077164779143248351060891669,
+        ):
+            with self.subTest(n=n):
+                self.assertTrue(mi.is_prime(n))
+
+
+class LoopsTests(TestCase):
+    def test_basic(self):
+        self.assertTrue(
+            all(list(mi.loops(n)) == [None] * n for n in range(-10, 10))
+        )

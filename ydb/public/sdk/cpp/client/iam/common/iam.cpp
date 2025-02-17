@@ -7,7 +7,7 @@
 using namespace NYdbGrpc;
 using namespace yandex::cloud::iam::v1;
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TIAMCredentialsProvider : public ICredentialsProvider {
 public:

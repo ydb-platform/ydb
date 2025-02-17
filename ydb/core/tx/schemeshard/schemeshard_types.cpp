@@ -20,6 +20,9 @@ TSchemeLimits TSchemeLimits::FromProto(const NKikimrScheme::TSchemeLimits& proto
     if (proto.HasMaxTableColumns()) {
         result.MaxTableColumns = proto.GetMaxTableColumns();
     }
+    if (proto.HasMaxColumnTableColumns()) {
+        result.MaxColumnTableColumns = proto.GetMaxColumnTableColumns();
+    }
     if (proto.HasMaxTableColumnNameLength()) {
         result.MaxTableColumnNameLength = proto.GetMaxTableColumnNameLength();
     }
@@ -69,6 +72,7 @@ NKikimrScheme::TSchemeLimits TSchemeLimits::AsProto() const {
     result.SetMaxAclBytesSize(MaxAclBytesSize);
 
     result.SetMaxTableColumns(MaxTableColumns);
+    result.SetMaxColumnTableColumns(MaxColumnTableColumns);
     result.SetMaxTableColumnNameLength(MaxTableColumnNameLength);
     result.SetMaxTableKeyColumns(MaxTableKeyColumns);
     result.SetMaxTableIndices(MaxTableIndices);

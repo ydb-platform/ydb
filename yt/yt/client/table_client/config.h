@@ -1,12 +1,15 @@
 #pragma once
 
 #include "public.h"
+#include "versioned_io_options.h"
 
 #include <yt/yt/client/chunk_client/config.h>
 
 #include <yt/yt/client/tablet_client/public.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
+
+#include <yt/yt/core/misc/config.h>
 
 #include <yt/yt/library/quantile_digest/public.h>
 
@@ -31,7 +34,7 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TRetentionConfig)
 
-TString ToString(const TRetentionConfigPtr& obj);
+void FormatValue(TStringBuilderBase* builder, const TRetentionConfigPtr& obj, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -152,6 +155,8 @@ public:
 
     double SampleRate;
 
+    bool EnableLargeColumnarStatistics;
+
     TChunkIndexesWriterConfigPtr ChunkIndexes;
 
     TSlimVersionedWriterConfigPtr Slim;
@@ -244,10 +249,6 @@ public:
     //! Recommended to be ~100 times less than weight of samples for that column.
     i64 ColumnDictionarySize;
 
-    //! Level of compression algorithm.
-    //! Applied to digested compression dictionary upon its construction.
-    int CompressionLevel;
-
     //! Subset of all dictionary building policies.
     //! Will build and apply dictionaries only from this subset.
     //! Upon each chunk compression will independently decide which dictionary fits best.
@@ -306,7 +307,7 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TBatchHunkReaderConfig)
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TTableReaderConfig
     : public virtual NChunkClient::TMultiChunkReaderConfig
@@ -423,10 +424,14 @@ public:
     bool EnableColumnarValueStatistics;
     bool EnableRowCountInColumnarStatistics;
     bool EnableSegmentMetaInBlocks;
+    bool EnableColumnMetaInChunkMeta;
+    bool ConsiderMinRowRangeDataWeight;
 
     NYTree::INodePtr CastAnyToCompositeNode;
 
     ETableSchemaModification SchemaModification;
+
+    TVersionedWriteOptions VersionedWriteOptions;
 
     EOptimizeFor OptimizeFor;
     std::optional<NChunkClient::EChunkFormat> ChunkFormat;
@@ -434,6 +439,9 @@ public:
 
     //! Maximum number of heavy columns in approximate statistics.
     int MaxHeavyColumns;
+
+    std::optional<i64> BlockSize;
+    std::optional<i64> BufferSize;
 
     void EnableValidationOptions(bool validateAnyIsValidYson = false);
 
@@ -460,7 +468,7 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TVersionedRowDigestConfig)
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 struct TRowBatchReadOptions
 {
@@ -476,6 +484,23 @@ struct TRowBatchReadOptions
     //! If false then the reader must return a non-columnar batch.
     bool Columnar = false;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSchemalessBufferedDynamicTableWriterConfig
+    : public TTableWriterConfig
+{
+public:
+    i64 MaxBatchSize;
+    TDuration FlushPeriod;
+    TExponentialBackoffOptions RetryBackoff;
+
+    REGISTER_YSON_STRUCT(TSchemalessBufferedDynamicTableWriterConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TSchemalessBufferedDynamicTableWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

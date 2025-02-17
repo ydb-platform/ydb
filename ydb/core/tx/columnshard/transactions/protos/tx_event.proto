@@ -1,0 +1,19 @@
+package NKikimrColumnShardTxProto;
+
+message TEvent {
+    optional uint64 PathId = 1;
+    optional string ClassName = 2;
+
+    message TReadEvent {
+        optional string Filter = 1;
+        optional string Schema = 2;
+    }
+
+    message TWriteEvent {
+    }
+
+    oneof Implementation {
+        TReadEvent Read = 20;
+        TWriteEvent Write = 21;
+    }
+}

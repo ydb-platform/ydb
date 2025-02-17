@@ -2,6 +2,7 @@
 #include "defrag_quantum.h"
 #include "defrag_search.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/common/circlebufstream.h>
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
@@ -16,18 +17,21 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     TDefragCtx::TDefragCtx(
             const TIntrusivePtr<TVDiskContext> &vctx,
+            const TIntrusivePtr<TVDiskConfig> &vconfig,
             const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
             const TPDiskCtxPtr &pdiskCtx,
             const TActorId &skeletonId,
             const TActorId &hugeKeeperId,
             bool runDefrageBySchedule)
         : VCtx(vctx)
+        , VCfg(vconfig)
         , HugeBlobCtx(hugeBlobCtx)
         , PDiskCtx(pdiskCtx)
         , SkeletonId(skeletonId)
         , HugeKeeperId(hugeKeeperId)
         , DefragMonGroup(VCtx->VDiskCounters, "subsystem", "defrag")
         , RunDefragBySchedule(runDefrageBySchedule)
+        , MaxChunksToDefrag(vconfig->MaxChunksToDefragInflight)
     {}
 
     TDefragCtx::~TDefragCtx() = default;
@@ -40,28 +44,34 @@ namespace NKikimr {
         {}
     };
 
+    double DefragThreshold(const TOutOfSpaceState& oos, double defaultPercent, double hugeDefragFreeSpaceBorder) {
+        double multiplier = Min(oos.GetFreeSpaceShare() / hugeDefragFreeSpaceBorder, 1.0);
+        return defaultPercent * multiplier;
+    }
+
+    const ui32 MIN_CAN_BE_FREED_CHUNKS = 9;
+
+    bool HugeHeapDefragmentationRequired(ui32 hugeCanBeFreedChunks, ui32 hugeTotalChunks, double defragThreshold) {
+        if (hugeCanBeFreedChunks <= MIN_CAN_BE_FREED_CHUNKS) {
+            return false;
+        }
+        double percentOfGarbage = static_cast<double>(hugeCanBeFreedChunks) / hugeTotalChunks;
+        return percentOfGarbage >= defragThreshold;
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // HugeHeapDefragmentationRequired
     // We calculate allowd percent of garbage as a percent of chunks
     // that can be freed to number of chunks used by VDisk
     ////////////////////////////////////////////////////////////////////////////
-    bool HugeHeapDefragmentationRequired(
-            const TOutOfSpaceState& oos,
-            ui32 hugeCanBeFreedChunks,
-            ui32 hugeTotalChunks) {
+    bool HugeHeapDefragmentationRequired(const TOutOfSpaceState& oos, ui32 hugeCanBeFreedChunks, ui32 hugeTotalChunks,
+            double defaultPercent, double hugeDefragFreeSpaceBorder) {
+        double defragThreshold = DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
+        return HugeHeapDefragmentationRequired(hugeCanBeFreedChunks, hugeTotalChunks, defragThreshold);
+    }
 
-        if (hugeCanBeFreedChunks < 10)
-            return false;
-
-        double percentOfGarbage = static_cast<double>(hugeCanBeFreedChunks) / hugeTotalChunks;
-
-        if (oos.GetLocalColor() > TSpaceColor::CYAN) {
-            return percentOfGarbage >= 0.02;
-        } else if (oos.GetLocalColor() > TSpaceColor::GREEN) {
-            return percentOfGarbage >= 0.15;
-        } else {
-            return percentOfGarbage >= 0.30;
-        }
+    ui32 MaxInflightDefragChunks(ui32 maxChunksToDefrag, ui32 hugeCanBeFreedChunks) {
+        return Min(maxChunksToDefrag, hugeCanBeFreedChunks - MIN_CAN_BE_FREED_CHUNKS);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -113,13 +123,16 @@ namespace NKikimr {
                     const auto& oos = DCtx->VCtx->GetOutOfSpaceState();
                     Y_ABORT_UNLESS(usefulChunks <= totalChunks);
                     const ui32 canBeFreedChunks = totalChunks - usefulChunks;
-                    if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks)) {
-                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(DCtx->MaxChunksToDefrag);
+                    double defaultPercent = DCtx->VCfg->DefaultHugeGarbagePerMille / 1000.0;
+                    double hugeDefragFreeSpaceBorder = DCtx->VCfg->HugeDefragFreeSpaceBorderPerMille / 1000.0;
+                    DCtx->DefragMonGroup.DefragThreshold() = DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
+                    if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
+                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflightDefragChunks(DCtx->MaxChunksToDefrag, canBeFreedChunks));
                         Y_ABORT_UNLESS(chunksToDefrag);
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
                             (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
-                            (ChunksToDefrag, chunksToDefrag.ToString()));
+                            (ChunksToDefrag, chunksToDefrag));
                         res = std::make_unique<TEvDefragStartQuantum>(std::move(chunksToDefrag));
                     } else {
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD04, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
@@ -205,7 +218,7 @@ namespace NKikimr {
 
         // Task for database defrag
         struct TTask {
-            std::variant<TEvBlobStorage::TEvVDefrag::TPtr, TEvDefragStartQuantum::TPtr> Request;
+            std::variant<TEvBlobStorage::TEvVDefrag::TPtr, TEvDefragStartQuantum::TPtr, TEvHullShredDefrag::TPtr> Request;
             TStat Stat;
             bool FirstQuantum = true; // true, if we run a first quantum with this task
 
@@ -240,21 +253,19 @@ namespace NKikimr {
                 Sublog.Log() << "=== Starting Defrag ===\n";
             }
 
+            using T = std::optional<TChunksToDefrag>;
+            auto getChunksToDefrag = TOverloaded{
+                [](TEvBlobStorage::TEvVDefrag::TPtr& /*ev*/) -> T { return std::nullopt; },
+                [](TEvDefragStartQuantum::TPtr& ev) -> T { return std::move(ev->Get()->ChunksToDefrag); },
+                [](TEvHullShredDefrag::TPtr& ev) -> T { return TChunksToDefrag::Shred(ev->Get()->ChunksToShred); }
+            };
+
             Sublog.Log() << "Defrag quantum started\n";
             ++TotalDefragRuns;
             InProgress = true;
-            ActiveActors.Insert(ctx.Register(CreateDefragQuantumActor(DCtx,
-                GInfo->GetVDiskId(DCtx->VCtx->ShortSelfVDisk),
-                std::visit([](auto& r) { return GetChunksToDefrag(r); }, task.Request))), __FILE__, __LINE__,
-                ctx, NKikimrServices::BLOBSTORAGE);
-        }
-
-        static std::optional<TChunksToDefrag> GetChunksToDefrag(TEvBlobStorage::TEvVDefrag::TPtr& /*ev*/) {
-            return std::nullopt;
-        }
-
-        static std::optional<TChunksToDefrag> GetChunksToDefrag(TEvDefragStartQuantum::TPtr& ev) {
-            return std::move(ev->Get()->ChunksToDefrag);
+            ActiveActors.Insert(ctx.Register(CreateDefragQuantumActor(DCtx, GInfo->GetVDiskId(DCtx->VCtx->ShortSelfVDisk),
+                std::visit(getChunksToDefrag, task.Request))), __FILE__, __LINE__, ctx,
+                NKikimrServices::BLOBSTORAGE);
         }
 
         void Bootstrap(const TActorContext &ctx) {
@@ -273,18 +284,46 @@ namespace NKikimr {
             Sublog.Log() << "Defrag quantum has been finished\n";
 
             auto *msg = ev->Get();
-            Y_ABORT_UNLESS(msg->Stat.Eof || msg->Stat.FreedChunks.size() == DCtx->MaxChunksToDefrag);
+            auto& mstat = msg->Stat;
 
             auto &task = WaitQueue.front();
 
             // update stat
-            task.Stat.FoundChunksToDefrag += msg->Stat.FoundChunksToDefrag;
-            task.Stat.RewrittenRecs += msg->Stat.RewrittenRecs;
-            task.Stat.RewrittenBytes += msg->Stat.RewrittenBytes;
-            task.Stat.Eof = msg->Stat.Eof;
-            task.Stat.FreedChunks.insert(task.Stat.FreedChunks.end(), msg->Stat.FreedChunks.begin(), msg->Stat.FreedChunks.end());
+            task.Stat.FoundChunksToDefrag += mstat.FoundChunksToDefrag;
+            task.Stat.RewrittenRecs += mstat.RewrittenRecs;
+            task.Stat.RewrittenBytes += mstat.RewrittenBytes;
+            task.Stat.Eof = mstat.Eof;
+            task.Stat.FreedChunks.insert(task.Stat.FreedChunks.end(), mstat.FreedChunks.begin(), mstat.FreedChunks.end());
 
-            if (std::visit([&](auto& r) { return ProcessQuantumResult(r, task); }, task.Request)) {
+            auto processQuantumResult = TOverloaded{
+                [&](TEvBlobStorage::TEvVDefrag::TPtr& ev) {
+                    const auto& record = ev->Get()->Record;
+                    auto reply = std::make_unique<TEvBlobStorage::TEvVDefragResult>(NKikimrProto::OK, record.GetVDiskID());
+                    reply->Record.SetFoundChunksToDefrag(task.Stat.FoundChunksToDefrag);
+                    reply->Record.SetRewrittenRecs(task.Stat.RewrittenRecs);
+                    reply->Record.SetRewrittenBytes(task.Stat.RewrittenBytes);
+                    reply->Record.SetEof(task.Stat.Eof);
+                    for (const auto& x : task.Stat.FreedChunks) {
+                        reply->Record.MutableFreedChunks()->Add(x.ChunkId);
+                    }
+                    Send(ev->Sender, reply.release());
+                    return task.Stat.Eof || !record.GetFull();
+                },
+                [&](TEvDefragStartQuantum::TPtr& ev) {
+                    Send(ev->Sender, new TEvBlobStorage::TEvVDefragResult);
+                    return true; // this is always final quantum
+                },
+                [&](TEvHullShredDefrag::TPtr& ev) {
+                    if (mstat.Eof) {
+                        Send(ev->Sender, new TEvHullShredDefragResult, 0, ev->Cookie);
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+            };
+
+            if (std::visit(processQuantumResult, task.Request)) {
                 WaitQueue.pop_front();
                 Sublog.Log() << "=== Defrag Finished ===\n";
             }
@@ -292,23 +331,14 @@ namespace NKikimr {
             RunDefragIfAny(ctx);
         }
 
-        bool ProcessQuantumResult(TEvBlobStorage::TEvVDefrag::TPtr& ev, TTask& task) {
-            const auto& record = ev->Get()->Record;
-            auto reply = std::make_unique<TEvBlobStorage::TEvVDefragResult>(NKikimrProto::OK, record.GetVDiskID());
-            reply->Record.SetFoundChunksToDefrag(task.Stat.FoundChunksToDefrag);
-            reply->Record.SetRewrittenRecs(task.Stat.RewrittenRecs);
-            reply->Record.SetRewrittenBytes(task.Stat.RewrittenBytes);
-            reply->Record.SetEof(task.Stat.Eof);
-            for (const auto& x : task.Stat.FreedChunks) {
-                reply->Record.MutableFreedChunks()->Add(x.ChunkId);
+        void Handle(TEvNotifyChunksDeleted::TPtr ev, const TActorContext& /*ctx*/) {
+            for (TTask& task : WaitQueue) {
+                if (auto *ptr = std::get_if<TEvHullShredDefrag::TPtr>(&task.Request)) {
+                    for (const TChunkIdx chunkId : ev->Get()->Chunks) {
+                        (*ptr)->Get()->ChunksToShred.erase(chunkId);
+                    }
+                }
             }
-            Send(ev->Sender, reply.release());
-            return task.Stat.Eof || !record.GetFull();
-        }
-
-        bool ProcessQuantumResult(TEvDefragStartQuantum::TPtr& ev, TTask& /*task*/) {
-            Send(ev->Sender, new TEvBlobStorage::TEvVDefragResult);
-            return true; // this is always final quantum
         }
 
         void Die(const TActorContext& ctx) override {
@@ -330,6 +360,11 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvVDefrag::TPtr &ev, const TActorContext &ctx) {
             Sublog.Log() << "Defrag request\n";
+            WaitQueue.emplace_back(ev);
+            RunDefragIfAny(ctx);
+        }
+
+        void Handle(TEvHullShredDefrag::TPtr& ev, const TActorContext& ctx) {
             WaitQueue.emplace_back(ev);
             RunDefragIfAny(ctx);
         }
@@ -417,10 +452,12 @@ namespace NKikimr {
             CFunc(TEvents::TSystem::Poison, Die)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvBlobStorage::TEvVDefrag, Handle)
+            HFunc(TEvHullShredDefrag, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvSublogLine, Handle)
             HFunc(TEvDefragStartQuantum, Handle)
             HFunc(TEvDefragQuantumResult, Handle)
+            HFunc(TEvNotifyChunksDeleted, Handle)
         );
 
     public:
@@ -439,9 +476,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // CreateDefragActor
     ////////////////////////////////////////////////////////////////////////////
-    IActor* CreateDefragActor(
-            const std::shared_ptr<TDefragCtx> &dCtx,
-            const TIntrusivePtr<TBlobStorageGroupInfo> &info) {
+    IActor* CreateDefragActor(const std::shared_ptr<TDefragCtx> &dCtx, const TIntrusivePtr<TBlobStorageGroupInfo> &info) {
         return new TDefragActor(dCtx, info);
     }
 

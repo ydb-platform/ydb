@@ -55,15 +55,14 @@ namespace NActors {
 
         void Handle(TEvInterconnect::TEvListNodes::TPtr& ev,
                     const TActorContext& ctx) {
-            THolder<TEvInterconnect::TEvNodesInfo>
-                reply(new TEvInterconnect::TEvNodesInfo());
-            reply->Nodes.reserve(NodeTable.size());
+            auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+            nodes->reserve(NodeTable.size());
             for (const auto& pr : NodeTable) {
-                reply->Nodes.emplace_back(pr.first,
-                                          pr.second.Address, pr.second.Host, pr.second.ResolveHost,
-                                          pr.second.Port, pr.second.Location);
+                nodes->emplace_back(pr.first,
+                                    pr.second.Address, pr.second.Host, pr.second.ResolveHost,
+                                    pr.second.Port, pr.second.Location);
             }
-            ctx.Send(ev->Sender, reply.Release());
+            ctx.Send(ev->Sender, new TEvInterconnect::TEvNodesInfo(nodes));
         }
 
         void Handle(TEvInterconnect::TEvGetNode::TPtr& ev,

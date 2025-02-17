@@ -37,23 +37,6 @@ namespace NKikimr {
             }
         };
 
-        //////////////// Transformed Item //////////////////////////////////////
-        struct TTransformedItem {
-            TKey Key;
-            const TMemRec *MemRec;
-            const TDataMerger *DataMerger;
-
-            // intermediate data
-            TMemRec NewMemRec;                      // new mem rec is build here if required
-            TDataMerger NewDataMerger;              // new DataMerger, if we need to rebuild it
-
-            TTransformedItem();
-            const TTransformedItem *SetRaw(const TKey &key, const TMemRec *memRec, const TDataMerger *dataMerger);
-            const TTransformedItem *SetNewDisk(const TKey &key, const TIngress &ingress, TDataMerger &dataMerger);
-            const TTransformedItem *SetRmData(const TKey &key, const TMemRec *memRec, const TDataMerger *dataMerger);
-        };
-
-
         THandoffMap(const THullCtxPtr &hullCtx,
                 bool runHandoff,
                 const TActorId &skeletonId)
@@ -61,10 +44,6 @@ namespace NKikimr {
             , Top(HullCtx->VCtx->Top)
             , RunHandoff(runHandoff)
             , SkeletonId(skeletonId)
-            , DelMap()
-            , Counter(0)
-            , TrRes()
-            , Stat()
         {
         }
 
@@ -80,15 +59,10 @@ namespace NKikimr {
 
         // Transforms record according to the built handoff map. It returns item we need to write, pointer is
         // valid until next call. Nullptr indicates that item is to be removed completely.
-        const TTransformedItem *Transform(const TKey& key, const TMemRec* memRec,
-                                          const TDataMerger* dataMerger, bool /*keepData*/, bool keepItem) {
+        void Transform(const TKey& /*key*/, TMemRec& /*memRec*/, TDataMerger& dataMerger) {
             // do nothing by default, all work is done in template specialization for logo blobs
             Counter++;
-            if (!keepItem) {
-                return nullptr;
-            }
-            Y_DEBUG_ABORT_UNLESS(dataMerger->Empty());
-            return TrRes.SetRaw(key, memRec, dataMerger);
+            Y_DEBUG_ABORT_UNLESS(dataMerger.Empty());
         }
 
     private:
@@ -97,166 +71,50 @@ namespace NKikimr {
         const bool RunHandoff;
         const TActorId SkeletonId;
 
-        TDeque<ui8> DelMap;
-        unsigned Counter;
-        TTransformedItem TrRes;
+        std::vector<ui8> DelMap;
+        size_t Counter = 0;
         TStat Stat;
     };
 
-
-    ////////////////////////////////////////////////////////////////////////////
-    // TTransformedItem implementation
-    ////////////////////////////////////////////////////////////////////////////
-    template <class TKey, class TMemRec>
-    THandoffMap<TKey, TMemRec>::TTransformedItem::TTransformedItem()
-        : Key()
-        , MemRec(nullptr)
-        , DataMerger(nullptr)
-        , NewMemRec()
-        , NewDataMerger()
-    {}
-
-    template <class TKey, class TMemRec>
-    const typename THandoffMap<TKey, TMemRec>::TTransformedItem *
-        THandoffMap<TKey, TMemRec>::TTransformedItem::SetRaw(const TKey &key, const TMemRec *memRec,
-                                                             const TDataMerger *dataMerger) {
-        Key = key;
-        MemRec = memRec;
-        DataMerger = dataMerger;
-        NewMemRec.SetNoBlob();
-        NewDataMerger.Clear();
-        return this;
-    }
-
-    template <class TKey, class TMemRec>
-    const typename THandoffMap<TKey, TMemRec>::TTransformedItem *
-        THandoffMap<TKey, TMemRec>::TTransformedItem::SetNewDisk(const TKey &key, const TIngress &ingress,
-                                                                 TDataMerger &dataMerger) {
-        NewMemRec = TMemRecLogoBlob(ingress);
-        NewDataMerger.Swap(dataMerger);
-        NewMemRec.SetType(NewDataMerger.GetType());
-
-        Key = key;
-        MemRec = &NewMemRec;
-        DataMerger = &NewDataMerger;
-        return this;
-    }
-
-    template <class TKey, class TMemRec>
-    const typename THandoffMap<TKey, TMemRec>::TTransformedItem *
-        THandoffMap<TKey, TMemRec>::TTransformedItem::SetRmData(const TKey &key, const TMemRec *memRec,
-                                                                const TDataMerger *dataMerger) {
-            NewMemRec = TMemRecLogoBlob(memRec->GetIngress());
-            NewDataMerger.SetEmptyFromAnotherMerger(dataMerger);
-            NewMemRec.SetType(NewDataMerger.GetType());
-
-            Key = key;
-            MemRec = &NewMemRec;
-            DataMerger = &NewDataMerger;
-            return this;
-    }
-
-
-    ////////////////////////////////////////////////////////////////////////////
-    // Template specialization for LogoBlobs
-    ////////////////////////////////////////////////////////////////////////////
-    template <>
-    inline const THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::TTransformedItem *
-        THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::Transform(
-            const TKeyLogoBlob& key,
-            const TMemRecLogoBlob* memRec,
-            const TDataMerger* dataMerger,
-            bool keepData,
-            bool keepItem)
-    {
+    template<>
+    inline void THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::Transform(const TKeyLogoBlob& key, TMemRecLogoBlob& memRec,
+            TDataMerger& dataMerger) {
         Y_DEFER { Counter++; };
 
-        if (!keepItem) {
-            return nullptr;
-        }
-
-        if (!keepData) {
-            return TrRes.SetRmData(key, memRec, dataMerger);
-        }
-
-        const TTransformedItem *defaultResult = TrRes.SetRaw(key, memRec, dataMerger); // unchanged by default
         if (!RunHandoff) {
-            return defaultResult;
+            return;
         }
 
         Y_VERIFY(Counter < DelMap.size());
-        TIngress ingress = memRec->GetIngress(); // ingress we are going to change
-        NMatrix::TVectorType localParts = ingress.LocalParts(Top->GType);
+        TIngress ingress = memRec.GetIngress(); // ingress we are going to change
         ui8 vecSize = Top->GType.TotalPartCount();
 
-        const NMatrix::TVectorType delPlan(DelMap.at(Counter), vecSize);
-        const NMatrix::TVectorType delVec = delPlan & localParts;
+        const NMatrix::TVectorType delPlan(DelMap[Counter], vecSize);
+        const NMatrix::TVectorType delVec = delPlan & ingress.LocalParts(Top->GType);
 
         if (delVec.Empty()) {
-            return defaultResult;
+            return;
         }
 
         // mark deleted handoff parts in ingress
-        for (ui8 i = localParts.FirstPosition(); i != localParts.GetSize(); i = localParts.NextPosition(i)) {
-            if (delVec.Get(i)) {
-                const ui8 partId = i + 1;
-                TLogoBlobID id(key.LogoBlobID(), partId);
-                ingress.DeleteHandoff(Top.get(), HullCtx->VCtx->ShortSelfVDisk, id, true);
-                localParts.Clear(i);
-            }
+        for (ui8 i : delVec) {
+            // this clears local bit too
+            ingress.DeleteHandoff(Top.get(), HullCtx->VCtx->ShortSelfVDisk, TLogoBlobID(key.LogoBlobID(), i + 1), true);
         }
 
-        if (localParts.Empty()) {
-            // we have deleted all parts, we can remove the record completely
-            return nullptr;
-        }
+        // update merger with the filtered parts (only remaining local parts are kept)
+        dataMerger.FilterLocalParts(ingress.LocalParts(Top->GType));
 
-        TDataMerger newMerger;
-        switch (memRec->GetType()) {
-            case TBlobType::DiskBlob: {
-                const TDiskBlob& blob = dataMerger->GetDiskBlobMerger().GetDiskBlob();
+        // reinstate memRec
+        memRec = TMemRecLogoBlob(ingress);
+        memRec.SetDiskBlob(TDiskPart(0, 0, dataMerger.GetInplacedBlobSize(key.LogoBlobID())));
+        memRec.SetType(dataMerger.GetType());
 
-                // create new blob from kept parts
-                for (auto it = blob.begin(); it != blob.end(); ++it) {
-                    if (localParts.Get(it.GetPartId() - 1)) {
-                        newMerger.AddPart(blob, it);
-                    }
-                }
-                break;
-            }
-            case TBlobType::HugeBlob:
-            case TBlobType::ManyHugeBlobs: {
-                const auto& oldMerger = dataMerger->GetHugeBlobMerger();
-
-                auto parts = oldMerger.GetParts();
-                Y_DEBUG_ABORT_UNLESS(oldMerger.SavedData().size() == parts.CountBits());
-                Y_DEBUG_ABORT_UNLESS(oldMerger.SavedData().size() == oldMerger.GetCircaLsns().size());
-
-                for (ui8 i = parts.FirstPosition(), j = 0; i != parts.GetSize(); i = parts.NextPosition(i), ++j) {
-                    if (localParts.Get(i)) {
-                        auto curOneHotPart = NMatrix::TVectorType::MakeOneHot(i, parts.GetSize());
-                        newMerger.AddHugeBlob(&oldMerger.SavedData()[j], &oldMerger.SavedData()[j] + 1, curOneHotPart, oldMerger.GetCircaLsns()[j]);
-                    } else {
-                        newMerger.AddDeletedHugeBlob(oldMerger.SavedData()[j]);
-                    }
-                }
-                break;
-            }
-            default: {
-                Y_DEBUG_ABORT_UNLESS(false);
-                return defaultResult;
-            }
-        }
-
-        // SetNewDisk can handle empty dataMerger correctly.
-        // If dataMerger is empty, we still keep the record, it contains knowledge about
-        // this logoblob, only garbage collection removes records completely
-        return TrRes.SetNewDisk(key, ingress, newMerger);
+        Y_ABORT_UNLESS(memRec.GetLocalParts(Top->GType) == dataMerger.GetParts());
     }
 
-
-    template <>
-    template <class TIterator>
+    template<>
+    template<class TIterator>
     inline void THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::BuildMap(
             const TLevelIndexSnapshot& levelSnap,
             const TIterator& i)

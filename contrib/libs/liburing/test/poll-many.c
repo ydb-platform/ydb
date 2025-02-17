@@ -23,6 +23,8 @@
 
 #define RING_SIZE	512
 
+static int nfiles = NFILES;
+
 struct p {
 	int fd[2];
 	int triggered;
@@ -92,7 +94,7 @@ static int trigger_polls(void)
 		int off;
 
 		do {
-			off = rand() % NFILES;
+			off = rand() % nfiles;
 			if (!p[off].triggered)
 				break;
 		} while (1);
@@ -110,7 +112,7 @@ static int trigger_polls(void)
 
 static int arm_polls(struct io_uring *ring)
 {
-	int ret, to_arm = NFILES, i, off;
+	int ret, to_arm = nfiles, i, off;
 
 	off = 0;
 	while (to_arm) {
@@ -162,7 +164,7 @@ int main(int argc, char *argv[])
 	int i, ret;
 
 	if (argc > 1)
-		return 0;
+		return T_EXIT_SKIP;
 
 	if (getrlimit(RLIMIT_NOFILE, &rlim) < 0) {
 		perror("getrlimit");
@@ -170,8 +172,12 @@ int main(int argc, char *argv[])
 	}
 
 	if (rlim.rlim_cur < (2 * NFILES + 5)) {
-		rlim.rlim_cur = (2 * NFILES + 5);
-		rlim.rlim_max = rlim.rlim_cur;
+		rlim.rlim_cur = rlim.rlim_max;
+		nfiles = (rlim.rlim_cur / 2) - 5;
+		if (nfiles > NFILES)
+			nfiles = NFILES;
+		if (nfiles <= 0)
+			goto err_nofail;
 		if (setrlimit(RLIMIT_NOFILE, &rlim) < 0) {
 			if (errno == EPERM)
 				goto err_nofail;
@@ -180,7 +186,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	for (i = 0; i < NFILES; i++) {
+	for (i = 0; i < nfiles; i++) {
 		if (pipe(p[i].fd) < 0) {
 			perror("pipe");
 			return T_EXIT_FAIL;
@@ -227,5 +233,5 @@ int main(int argc, char *argv[])
 err_nofail:
 	fprintf(stderr, "poll-many: not enough files available (and not root), "
 			"skipped\n");
-	return 0;
+	return T_EXIT_SKIP;
 }

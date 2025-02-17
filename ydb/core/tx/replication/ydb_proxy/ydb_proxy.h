@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
@@ -51,6 +51,7 @@ struct TEvYdbProxy {
         EvTopicReaderGone,
         EV_REQUEST_RESPONSE(ReadTopic),
         EV_REQUEST_RESPONSE(CommitOffset),
+        EvTopicEndPartition,
 
         EvEnd,
     };
@@ -130,6 +131,12 @@ struct TEvYdbProxy {
         using TSelf = TTopicReaderSettings;
         using TBase = NYdb::NTopic::TReadSessionSettings;
 
+        TTopicReaderSettings()
+            : TBase()
+        {
+            AutoPartitioningSupport(true);
+        }
+
         const TBase& GetBase() const {
             return *this;
         }
@@ -158,6 +165,7 @@ struct TEvYdbProxy {
             explicit TMessage(const TDataEvent::TMessageBase& msg, ECodec codec)
                 : Offset(msg.GetOffset())
                 , Data(msg.GetData())
+                , CreateTime(msg.GetCreateTime())
                 , Codec(codec)
             {
             }
@@ -176,16 +184,19 @@ struct TEvYdbProxy {
             ui64 GetOffset() const { return Offset; }
             const TString& GetData() const { return Data; }
             TString& GetData() { return Data; }
+            TInstant GetCreateTime() const { return CreateTime; }
             ECodec GetCodec() const { return Codec; }
             void Out(IOutputStream& out) const;
 
         private:
             ui64 Offset;
             TString Data;
+            TInstant CreateTime;
             ECodec Codec;
         };
 
         explicit TReadTopicResult(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+            PartitionId = event.GetPartitionSession()->GetPartitionId();
             Messages.reserve(event.GetMessagesCount());
             if (event.HasCompressedMessages()) {
                 for (const auto& msg : event.GetCompressedMessages()) {
@@ -200,7 +211,26 @@ struct TEvYdbProxy {
 
         void Out(IOutputStream& out) const;
 
+        ui64 PartitionId;
         TVector<TMessage> Messages;
+    };
+
+    struct TEndTopicPartitionResult {
+        explicit TEndTopicPartitionResult(const NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event)
+            : PartitionId(event.GetPartitionSession()->GetPartitionId())
+            , AdjacentPartitionsIds(event.GetAdjacentPartitionIds().begin(), event.GetAdjacentPartitionIds().end())
+            , ChildPartitionsIds(event.GetChildPartitionIds().begin(), event.GetChildPartitionIds().end()) {
+        }
+
+        void Out(IOutputStream& out) const;
+
+        ui64 PartitionId;
+        TVector<ui64> AdjacentPartitionsIds;
+        TVector<ui64> ChildPartitionsIds;
+    };
+
+    struct TEvTopicEndPartition: public TGenericResponse<TEvTopicEndPartition, EvTopicEndPartition, TEndTopicPartitionResult> {
+        using TBase::TBase;
     };
 
     #define DEFINE_GENERIC_REQUEST(name, ...) \
@@ -250,9 +280,9 @@ struct TEvYdbProxy {
 
 #pragma pop_macro("RemoveDirectory")
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, const TString& token);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database,
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& token);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl,
     const NKikimrReplication::TStaticCredentials& credentials);
 
 }

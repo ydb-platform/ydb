@@ -1,0 +1,21 @@
+--- contrib/python/itsdangerous/py2/tests/test_itsdangerous/test_jws.py	(index)
++++ contrib/python/itsdangerous/py2/tests/test_itsdangerous/test_jws.py	(working tree)
+@@ -5,2 +5,2 @@ import pytest
+-from test_itsdangerous.test_serializer import TestSerializer
+-from test_itsdangerous.test_timed import TestTimedSerializer
++from .test_serializer import TestSerializer
++from .test_timed import TestTimedSerializer
+--- contrib/python/itsdangerous/py2/tests/test_itsdangerous/test_timed.py	(index)
++++ contrib/python/itsdangerous/py2/tests/test_itsdangerous/test_timed.py	(working tree)
+@@ -7,2 +7,2 @@ from freezegun import freeze_time
+-from test_itsdangerous.test_serializer import TestSerializer
+-from test_itsdangerous.test_signer import TestSigner
++from .test_serializer import TestSerializer
++from .test_signer import TestSigner
+--- contrib/python/itsdangerous/py2/tests/test_itsdangerous/test_url_safe.py	(index)
++++ contrib/python/itsdangerous/py2/tests/test_itsdangerous/test_url_safe.py	(working tree)
+@@ -4,2 +4,2 @@ import pytest
+-from test_itsdangerous.test_serializer import TestSerializer
+-from test_itsdangerous.test_timed import TestTimedSerializer
++from .test_serializer import TestSerializer
++from .test_timed import TestTimedSerializer

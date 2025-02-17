@@ -1,19 +1,19 @@
 #include "yql_dq_state.h"
 #include "yql_dq_provider.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 
 #include <util/generic/scope.h>
 
@@ -24,7 +24,7 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
-const THashSet<TStringBuf> VALID_SOURCES = {DqProviderName, ConfigProviderName, YtProviderName, ClickHouseProviderName, YdbProviderName, S3ProviderName, PgProviderName};
+const THashSet<TStringBuf> VALID_SOURCES = {DqProviderName, ConfigProviderName, YtProviderName, ClickHouseProviderName, YdbProviderName, S3ProviderName, PgProviderName, SolomonProviderName};
 const THashSet<TStringBuf> VALID_SINKS = {ResultProviderName, YtProviderName, S3ProviderName};
 
 }
@@ -97,7 +97,13 @@ public:
 
         State_->TypeCtx->DqFallbackPolicy = State_->Settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default);
 
-        IGraphTransformer::TStatus status = NDq::DqWrapRead(input, output, ctx, *State_->TypeCtx, *State_->Settings);
+        IDqIntegration::TWrapReadSettings wrSettings {
+            .WatermarksMode = State_->Settings->WatermarksMode.Get(),
+            .WatermarksGranularityMs = State_->Settings->WatermarksGranularityMs.Get(),
+            .WatermarksLateArrivalDelayMs = State_->Settings->WatermarksLateArrivalDelayMs.Get(),
+            .WatermarksEnableIdlePartitions = State_->Settings->WatermarksEnableIdlePartitions.Get()
+        };
+        IGraphTransformer::TStatus status = NDq::DqWrapIO(input, output, ctx, *State_->TypeCtx, wrSettings);
         if (input != output) {
             YQL_CLOG(INFO, ProviderDq) << "DqsRecapture";
             // TODO: Add before/after recapture transformers

@@ -1,0 +1,15 @@
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:44:1: Fatal: Execution of node: Result
+    	SELECT $udf(@@{"abc":1}@@);
+	^
+        <tmp_path>/program.sql:<main>:40:17: Fatal: Failed to execute:
+CUSTOM_EXCEPTHOOK
+True
+Traceback (most recent call last):
+  File "embedded:f", line 31, in f
+Exception
+
+
+        	$udf = Python3::f(Callable<(String)->String>, $script);
+	                ^

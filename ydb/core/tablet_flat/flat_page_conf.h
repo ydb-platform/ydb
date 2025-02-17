@@ -83,7 +83,7 @@ namespace NPage {
 
         bool Final = true;
         bool CutIndexKeys = true;
-        bool WriteBTreeIndex = false;
+        bool WriteBTreeIndex = true;
         bool WriteFlatIndex = true;
         ui32 MaxLargeBlob = 8 * 1024 * 1024 - 8; /* Maximum large blob size */
         ui32 LargeEdge = Max<ui32>();   /* External blob edge size      */

@@ -1,10 +1,10 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "export_common.h"
 #include "export_s3_buffer_raw.h"
+#include "type_serialization.h"
 
 #include <ydb/core/tablet_flat/flat_row_state.h>
-#include <ydb/library/binary_json/read.h>
+#include <yql/essentials/types/binary_json/read.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
@@ -15,12 +15,13 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TS3BufferRaw::TS3BufferRaw(const TTagToColumn& columns, ui64 rowsLimit, ui64 bytesLimit)
+TS3BufferRaw::TS3BufferRaw(const TTagToColumn& columns, ui64 rowsLimit, ui64 bytesLimit, bool enableChecksums)
     : Columns(columns)
     , RowsLimit(rowsLimit)
     , BytesLimit(bytesLimit)
     , Rows(0)
     , BytesRead(0)
+    , Checksum(enableChecksums ? NBackup::CreateChecksum() : nullptr)
 {
 }
 
@@ -105,8 +106,16 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
         case NScheme::NTypeIds::Interval:
             serialized = cell.ToStream<i64>(out, ErrorString);
             break;
+        case NScheme::NTypeIds::Date32:
+            serialized = cell.ToStream<i32>(out, ErrorString);
+            break;
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+        case NScheme::NTypeIds::Interval64:
+            serialized = cell.ToStream<i64>(out, ErrorString);
+            break;
         case NScheme::NTypeIds::Decimal:
-            serialized = DecimalToStream(cell.AsValue<std::pair<ui64, i64>>(), out, ErrorString);
+            serialized = DecimalToStream(cell.AsValue<std::pair<ui64, i64>>(), out, ErrorString, column.Type);
             break;
         case NScheme::NTypeIds::DyNumber:
             serialized = DyNumberToStream(cell.AsBuf(), out, ErrorString);
@@ -123,7 +132,7 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
             out << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(cell.AsBuf())) << '"';
             break;
         case NScheme::NTypeIds::Pg:
-            serialized = PgToStream(cell.AsBuf(), column.Type.GetTypeDesc(), out, ErrorString);
+            serialized = PgToStream(cell.AsBuf(), column.Type, out, ErrorString);
             break;
         case NScheme::NTypeIds::Uuid:
             serialized = UuidToStream(cell.AsValue<std::pair<ui64, ui64>>(), out, ErrorString);
@@ -146,7 +155,17 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
 bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row) {
     TBufferOutput out(Buffer);
     ErrorString.clear();
-    return Collect(row, out);
+
+    size_t beforeSize = Buffer.Size();
+    if (!Collect(row, out)) {
+        return false;
+    }
+
+    if (Checksum) {
+        TStringBuf data(Buffer.Data(), Buffer.Size());
+        Checksum->AddData(data.Tail(beforeSize));
+    }
+    return true;
 }
 
 IEventBase* TS3BufferRaw::PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats) {
@@ -159,7 +178,12 @@ IEventBase* TS3BufferRaw::PrepareEvent(bool last, NExportScan::IBuffer::TStats& 
     }
 
     stats.BytesSent = buffer->Size();
-    return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last);
+
+    if (Checksum && last) {
+        return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last, Checksum->Serialize());
+    } else {
+        return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last);
+    }
 }
 
 void TS3BufferRaw::Clear() {
@@ -181,9 +205,9 @@ TMaybe<TBuffer> TS3BufferRaw::Flush(bool) {
 }
 
 NExportScan::IBuffer* CreateS3ExportBufferRaw(
-        const IExport::TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit)
+        const IExport::TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit, bool enableChecksums)
 {
-    return new TS3BufferRaw(columns, rowsLimit, bytesLimit);
+    return new TS3BufferRaw(columns, rowsLimit, bytesLimit, enableChecksums);
 }
 
 } // NDataShard

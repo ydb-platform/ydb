@@ -1,0 +1,13 @@
+--- a/lib/spawn-pipe.c	(index)
++++ b/lib/spawn-pipe.c	(working tree)
+@@ -53,7 +53,10 @@
+ # include <spawn.h>
+
+ #endif
+ 
++#if defined(__FreeBSD__) || defined(__MACH__)
++    extern char** environ;
++#endif
+ 
+ #ifdef EINTR
+ 

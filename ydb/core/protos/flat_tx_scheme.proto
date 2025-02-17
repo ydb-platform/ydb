@@ -53,7 +53,7 @@ message TEvModifySchemeTransaction {
     optional uint64 TxId = 2;
     optional uint64 TabletId = 3;
     optional string Owner = 5;
-    optional bool FailOnExist = 6; // depricated, TModifyScheme.FailOnExist is recomended
+    optional bool FailOnExist = 6; // deprecated, TModifyScheme.FailOnExist is recomended
     optional string UserToken = 7 [(Ydb.sensitive) = true]; // serialized NACLib::TUserToken
     optional string PeerName = 8;
 }
@@ -144,13 +144,36 @@ message TEvUpdateConfigResult {
 
 message TEvLogin {
     optional string User = 1;
-    optional string Password = 2;
+    optional string Password = 2 [(Ydb.sensitive) = true];
     optional string ExternalAuth = 3;
+    optional uint64 ExpiresAfterMs = 4;
+    optional string PeerName = 5;  // IP address actually, same as TEvModifySchemeTransaction.PeerName
 }
 
 message TEvLoginResult {
     optional string Error = 1;
-    optional string Token = 2;
+    optional string Token = 2;  // signed jwt token
+    optional string SanitizedToken = 3;  // sanitized token without signature
+    optional bool IsAdmin = 4;
+}
+
+message TEvListUsers {
+
+}
+
+message TEvListUsersResult {
+    message TUser {
+        optional string Name = 1;
+        optional bool IsEnabled = 2;
+        optional bool IsLockedOut = 3;
+        optional uint64 CreatedAt = 4;
+        optional uint64 LastSuccessfulAttemptAt = 5;
+        optional uint64 LastFailedAttemptAt = 6;
+        optional uint32 FailedAttemptCount = 7;
+        optional string PasswordHash = 8; // JSON with type, salt and password hash 
+    }
+
+    repeated TUser Users = 1;
 }
 
 // Sending actor registers itself to be notified when tx completes
@@ -188,6 +211,8 @@ message TSchemeLimits {
 
     optional uint64 MaxExports = 16;
     optional uint64 MaxImports = 17;
+
+    optional uint64 MaxColumnTableColumns = 18;
 }
 
 message TEvInitTenantSchemeShard {
@@ -362,6 +387,7 @@ message TEvSyncTenantSchemeShard {
     optional uint64 TenantSysViewProcessor = 9;
     optional uint64 TenantStatisticsAggregator = 11;
     optional fixed64 TenantGraphShard = 12;
+    optional uint64 TenantBackupController = 13;
 
     optional string TenantRootACL = 10;
 }
@@ -384,6 +410,7 @@ message TEvUpdateTenantSchemeShard {
     optional uint64 TenantSysViewProcessor = 11;
     optional uint64 TenantStatisticsAggregator = 16;
     optional fixed64 TenantGraphShard = 18;
+    optional uint64 TenantBackupController = 19;
 
     optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 12;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 14;

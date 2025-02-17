@@ -1,5 +1,6 @@
 #include "datashard_kqp_compute.h"
 
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/kqp/runtime/kqp_runtime_impl.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
@@ -31,18 +32,10 @@ void ValidateLookupKeys(const TType* inputType, const THashMap<TString, NScheme:
     for (ui32 i = 0; i < rowType->GetMembersCount(); ++i) {
         auto name = rowType->GetMemberName(i);
 
-        auto columnType = keyColumns.FindPtr(name);
-        MKQL_ENSURE_S(columnType);
-        if (NKqp::StructHoldsPgType(*rowType, i)) {
-            auto pgTypeInfo = NKqp::UnwrapPgTypeFromStruct(*rowType, i);
-            MKQL_ENSURE_S(
-                NPg::PgTypeIdFromTypeDesc(pgTypeInfo.GetTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnType->GetTypeDesc()),
-                "Key column type mismatch, column: " << name
-            );
-        } else {
-            auto dataTypeId = NKqp::UnwrapDataTypeFromStruct(*rowType, i);
-            MKQL_ENSURE_S(dataTypeId == columnType->GetTypeId(), "Key column type mismatch, column: " << name);
-        }
+        const NScheme::TTypeInfo* columnTypeInfo = keyColumns.FindPtr(name);
+        MKQL_ENSURE_S(columnTypeInfo);
+        auto typeInfo = NKqp::UnwrapTypeInfoFromStruct(*rowType, i);
+        MKQL_ENSURE_S(typeInfo == *columnTypeInfo, "Key column type mismatch, column: " << name);
     }
 }
 
@@ -72,17 +65,7 @@ TParseLookupTableResult ParseLookupTable(TCallable& callable) {
     result.KeyTypes.resize(keyTypes->GetMembersCount());
     for (ui32 i = 0; i < result.KeyTypes.size(); ++i) {
         NKikimr::NMiniKQL::TType* type = keyTypes->GetMemberType(i);
-        if (type->GetKind() == TType::EKind::Pg) {
-            auto itemType = AS_TYPE(TPgType, type);
-            result.KeyTypes[i] = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(itemType->GetTypeId()));
-        } else {
-            if (type->IsOptional()) {
-                type = AS_TYPE(TOptionalType, keyTypes->GetMemberType(i))->GetItemType();
-            }
-            Y_ENSURE(type->GetKind() == TType::EKind::Data);
-            auto itemType = AS_TYPE(TDataType, type);
-            result.KeyTypes[i] = NScheme::TTypeInfo(itemType->GetSchemeType());
-        }
+        result.KeyTypes[i] = NScheme::TypeInfoFromMiniKQLType(type);
     }
 
     ParseReadColumns(callable.GetType()->GetReturnType(), tagsNode, result.Columns, result.SystemColumns);
@@ -121,7 +104,7 @@ public:
             switch (keysValues.Fetch(key)) {
                 case NUdf::EFetchStatus::Ok: {
                     TVector<TCell> keyCells(ParseResult.KeyIndices.size());
-                    FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, keyCells, *ctx.TypeEnv);
+                    FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, keyCells, ctx.TypeEnv);
 
                     NUdf::TUnboxedValue result;
                     TKqpTableStats stats;
@@ -203,10 +186,10 @@ public:
                         MKQL_ENSURE_S(tableInfo);
 
                         TVector<TCell> fromCells(tableInfo->KeyColumns.size());
-                        FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, fromCells, *ctx.TypeEnv);
+                        FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, fromCells, ctx.TypeEnv);
 
                         TVector<TCell> toCells(ParseResult.KeyIndices.size());
-                        FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, toCells, *ctx.TypeEnv);
+                        FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, toCells, ctx.TypeEnv);
 
                         auto range = TTableRange(fromCells, true, toCells, true);
 

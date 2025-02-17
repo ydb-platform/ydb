@@ -23,6 +23,7 @@
 #include <stdlib.h> /* for abort() */
 #include <string.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
 AWS_EXTERN_C_BEGIN
 
 /**
@@ -42,5 +43,6 @@ AWS_COMMON_API
 void aws_common_fatal_assert_library_initialized(void);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_COMMON_H */

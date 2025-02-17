@@ -41,11 +41,11 @@ public:
         const TMultiLookupOptions& options) override;
 
     TFuture<TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options) override;
 
     TFuture<NYson::TYsonString> ExplainQuery(
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options) override;
 
     TFuture<TPullRowsResult> PullRows(
@@ -214,7 +214,7 @@ public:
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<NTableClient::TLegacyKey> keys,
-        const std::vector<TString>& locks,
+        const std::vector<std::string>& locks,
         NTableClient::ELockType lockType) override;
 
     void ModifyRows(
@@ -225,23 +225,45 @@ public:
 
     // Queues
     void AdvanceConsumer(
-        const NYPath::TYPath& path,
-        int partitionIndex,
-        std::optional<i64> oldOffset,
-        i64 newOffset) override;
-    void AdvanceConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset) override;
-    TFuture<void> AdvanceConsumer(
+    TFuture<void> AdvanceQueueConsumer(
         const NYT::NYPath::TRichYPath& consumer,
         const NYT::NYPath::TRichYPath& queue,
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset,
-        const NYT::NApi::TAdvanceConsumerOptions& options) override;
+        const NYT::NApi::TAdvanceQueueConsumerOptions& options) override;
+
+    TFuture<TPushQueueProducerResult> PushQueueProducer(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        NQueueClient::TQueueProducerEpoch epoch,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NTableClient::TUnversionedRow> rows,
+        const TPushQueueProducerOptions& options) override;
+
+    TFuture<TPushQueueProducerResult> PushQueueProducer(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        NQueueClient::TQueueProducerEpoch epoch,
+        NTableClient::TNameTablePtr nameTable,
+        const std::vector<TSharedRef>& serializedRows,
+        const TPushQueueProducerOptions& options) override;
+
+    // Distributed table client
+    TFuture<TDistributedWriteSessionWithCookies> StartDistributedWriteSession(
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options = {}) override;
+
+    TFuture<void> FinishDistributedWriteSession(
+        const TDistributedWriteSessionWithResults& sessionWithResults,
+        const TDistributedWriteSessionFinishOptions& options = {}) override;
 
 protected:
     const ITransactionPtr Underlying_;

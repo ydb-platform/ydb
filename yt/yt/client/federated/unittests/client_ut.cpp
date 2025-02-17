@@ -13,13 +13,13 @@
 
 #include <util/datetime/base.h>
 
-
 namespace NYT::NClient::NFederated {
 namespace {
 
 using namespace NYT::NApi;
 
 using ::testing::_;
+using ::testing::AnyNumber;
 using ::testing::Return;
 using ::testing::StrictMock;
 
@@ -33,7 +33,7 @@ struct TTestDataStorage
 {
     TTestDataStorage()
     {
-        LookupResult1 = [&]() {
+        LookupResult1 = [&] {
             auto rowBuffer = NYT::New<NTableClient::TRowBuffer>();
             std::vector<NTableClient::TUnversionedRow> rows;
             for (ui64 key : {10, 11}) {
@@ -47,7 +47,7 @@ struct TTestDataStorage
             };
         } ();
 
-        LookupResult2 = [&]() {
+        LookupResult2 = [&] {
             auto rowBuffer = NYT::New<NTableClient::TRowBuffer>();
             std::vector<NTableClient::TUnversionedRow> rows;
             for (ui64 key : {12, 13}) {
@@ -64,7 +64,7 @@ struct TTestDataStorage
         NameTable = NYT::New<NTableClient::TNameTable>();
 
         i32 keyField = NameTable->GetIdOrRegisterName(KeyColumn);
-        auto keys = [&]() {
+        auto keys = [&] {
             auto rowBuffer = NYT::New<NTableClient::TRowBuffer>();
             std::vector<NTableClient::TUnversionedRow> keysVector;
             for (ui64 key : {10, 11}) {
@@ -77,8 +77,8 @@ struct TTestDataStorage
     }
 
     const NYPath::TYPath Path = "/test/table";
-    const TString KeyColumn = "key";
-    const TString ValueColumn = "value";
+    const std::string KeyColumn = "key";
+    const std::string ValueColumn = "value";
 
     const NTableClient::TColumnSchema KeyColumnSchema = NTableClient::TColumnSchema(KeyColumn, NTableClient::EValueType::Uint64);
     const NTableClient::TColumnSchema ValueColumnSchema = NTableClient::TColumnSchema(ValueColumn, NTableClient::EValueType::Uint64);
@@ -107,9 +107,9 @@ TEST(TFederatedClientTest, Basic)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
         .WillOnce(Return(VoidFuture))
@@ -119,13 +119,13 @@ TEST(TFederatedClientTest, Basic)
         .WillRepeatedly(Return(VoidFuture));
 
     // Creation of federated client.
-    std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
+    std::vector<IClientPtr> clients{mockClientVla, mockClientSas};
     auto config = New<TFederationConfig>();
-    config->ClusterHealthCheckPeriod = TDuration::Seconds(5);
+    config->ClusterHealthCheckPeriod = TDuration::Seconds(3);
     config->ClusterRetryAttempts = 1;
     auto federatedClient = CreateClient(clients, config);
 
-    // 1. `vla` client should be used as closest cluster.
+    // 1. `vla` client should be used as first cluster.
     // 2. error from `vla` cluster should be received.
     // 3. `sas` client should be used as other cluster.
 
@@ -171,7 +171,10 @@ TEST(TFederatedClientTest, CheckHealth)
     TTestDataStorage data;
 
     auto mockClientSas = New<TStrictMockClient>();
+
     auto mockClientVla = New<TStrictMockClient>();
+    EXPECT_CALL(*mockClientVla, GetClusterName(_))
+        .Times(AnyNumber());
 
     // To identify best (closest) cluster.
     NYson::TYsonString listResult1(TStringBuf(R"(["a-rpc-proxy-a.sas.yp-c.yandex.net:9013"])"));
@@ -183,9 +186,9 @@ TEST(TFederatedClientTest, CheckHealth)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
     auto config = New<TFederationConfig>();
@@ -212,6 +215,9 @@ TEST(TFederatedClientTest, CheckHealth)
 
     EXPECT_CALL(*mockClientSas, LookupRows(data.Path, _, _, _))
         .WillOnce(Return(MakeFuture(data.LookupResult2)));
+
+    // Wait initialization and choose `local` cluster.
+    Sleep(TDuration::Seconds(2));
 
     // From `vla`.
     {
@@ -266,9 +272,9 @@ TEST(TFederatedClientTest, Transactions)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
         .WillOnce(Return(VoidFuture))
@@ -297,6 +303,12 @@ TEST(TFederatedClientTest, Transactions)
     Sleep(TDuration::Seconds(2));
 
     auto transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).Get().Value();
+
+    // Check mock transaction doesn't work with sticky proxy address.
+    {
+        auto* derived = transaction->As<IFederatedClientTransactionMixin>();
+        ASSERT_EQ(std::nullopt, derived->TryGetStickyProxyAddress());
+    }
 
     // From `vla`.
     {
@@ -351,9 +363,9 @@ TEST(TFederatedClientTest, RetryWithoutTransaction)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
         .WillOnce(Return(VoidFuture))
@@ -437,9 +449,9 @@ TEST(TFederatedClientTest, AttachTransaction)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("b-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("b-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
         .WillRepeatedly(Return(MakeFuture(TError("Failure"))));
@@ -456,14 +468,15 @@ TEST(TFederatedClientTest, AttachTransaction)
     auto mockConnectionVla = New<TStrictMockConnection>();
     EXPECT_CALL(*mockConnectionVla, GetClusterTag())
         .WillRepeatedly(Return(NObjectClient::TCellTag(456)));
-    EXPECT_CALL(*mockClientVla, GetConnection())
-        .WillOnce(Return(mockConnectionVla));
 
     // Creation of federated client.
     std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
     auto config = New<TFederationConfig>();
     config->ClusterHealthCheckPeriod = TDuration::Seconds(5);
     auto federatedClient = CreateClient(clients, config);
+
+    // Wait initialization.
+    Sleep(TDuration::Seconds(2));
 
     auto mockTransactionSas = New<TStrictMockTransaction>();
     auto transactionId = TGuid(0, 123 << 16, 0, 0);

@@ -1,0 +1,58 @@
+{%- macro RenderPackages(target) -%}
+{%-     set packages = [] -%}
+{%-     if target.packages|length -%}
+{%-         set packages = packages + target.packages -%}
+{%-     endif -%}
+{%-     if target.mpackages|length -%}
+{%-         if packages|length -%}
+{#-             Skip duplicating packages -#}
+{%-             set mpackages = target.mpackages|rejectattr('name', 'in', packages|map(attribute='name')) -%}
+{%-             if mpackages|length -%}
+{%-                 set packages = packages + mpackages -%}
+{%-             endif -%}
+{%-         else -%}
+{%-             set packages = packages + target.mpackages -%}
+{%-         endif -%}
+{%-     endif -%}
+{%-     set runs_packages = target.custom_runs|selectattr('cmake_packages')|map(attribute='cmake_packages')|sum -%}
+{%-     if runs_packages|length -%}
+{%-         if packages|length -%}
+{#-             Skip duplicating packages -#}
+{%-             set runs_packages = runs_packages|rejectattr('name', 'in', packages|map(attribute='name')) -%}
+{%-             if runs_packages|length -%}
+{%-                 set packages = packages + runs_packages -%}
+{%-             endif -%}
+{%-         else -%}
+{%-             set packages = packages + runs_packages -%}
+{%-         endif -%}
+{%-     endif -%}
+{%-     if packages|length -%}
+{%-         set simple_packages = packages|rejectattr('components') -%}
+{%-         set complex_packages = packages|selectattr('components') -%}
+{%-         if simple_packages|length -%}
+{%-             for package_name in simple_packages|map(attribute='name')|unique %}
+find_package({{ package_name }} REQUIRED)
+{%              endfor -%}
+{%-         endif -%}
+{%-         if complex_packages|length -%}
+{%-             for package in complex_packages %}
+find_package({{ package.name }} REQUIRED
+{%-                 if package.components|length %} COMPONENTS
+{%-                     for component in package.components %}
+  {{ component }}
+{%                      endfor -%}
+{%-                 endif -%}
+)
+{%              endfor -%}
+{%-         endif -%}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- if target is defined -%}
+{{ RenderPackages(target) }}
+{%- endif -%}
+{%- if extra_targets|length -%}
+{%-     for extra_target in extra_targets -%}
+{{ RenderPackages(extra_target) }}
+{%-     endfor -%}
+{%- endif -%}

@@ -9,7 +9,7 @@ cdef class FrozenList:
         __class_getitem__ = classmethod(types.GenericAlias)
     else:
         @classmethod
-        def __class_getitem__(cls):
+        def __class_getitem__(cls, cls_item):
             return cls
 
     cdef readonly bint frozen

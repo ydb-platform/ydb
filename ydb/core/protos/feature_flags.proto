@@ -1,6 +1,12 @@
+import "google/protobuf/descriptor.proto";
 
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
+
+extend google.protobuf.FieldOptions {
+    // Flags marked with (RequireRestart) = true are not updated at runtime when config changes
+    optional bool RequireRestart = 56681;
+}
 
 message TFeatureFlags {
     enum Tribool {
@@ -8,6 +14,10 @@ message TFeatureFlags {
         VALUE_TRUE = 1;
         VALUE_FALSE = 2;
     }
+
+    // leave removed fields below
+    reserved "SomeRemovedFeatureFlagExample";
+    reserved "AnotherRemovedFeatureFlagExample";
 
     optional bool EnableSeparateSolomonShardForPDisk = 1 [default = true];
     optional bool UseForsetiSchedulerByDefaultForPDisk = 2 [default = true];
@@ -18,22 +28,22 @@ message TFeatureFlags {
     optional bool EnableChunkGraceForPDisk = 7 [default = true];
     optional bool AllowConsistentOperationsForSchemeShard = 8 [default = true];
     optional bool EnableSchemeBoard = 9 [default = true]; // deprecated: always true
-    optional bool AllowYdbRequestsWithoutDatabase = 10 [default = true];
+    optional bool AllowYdbRequestsWithoutDatabase = 10 [default = true, (RequireRestart) = true];
     optional bool EnableExternalSubdomains = 11 [default = true];
     optional bool AllowRecursiveMkDir = 12 [default = true]; // deprecated: always true
     optional bool AllowHugeKeyValueDeletes = 13 [default = true]; // delete when all clients limit deletes per request
     optional bool SendSchemaVersionToDatashard = 14 [default = true]; // deprecated: always true
     optional bool EnableSchemeBoardCache = 15 [default = true]; // deprecated: always true
-    optional bool EnableSystemViews = 16 [default = true];
+    optional bool EnableSystemViews = 16 [default = true, (RequireRestart) = true];
     optional bool EnableExternalHive = 17 [default = true];
     optional bool UseSchemeBoardCacheForSchemeRequests = 18 [default = true]; // deprecated: always true
     optional bool CompileMinikqlWithVersion = 19 [default = true]; // deprecated: always true
     optional bool ReadTableWithSnapshot = 20 [default = true]; // deprecated: always true
-    optional bool ImportantTabletsUseSystemPool = 21 [default = true];
+    optional bool ImportantTabletsUseSystemPool = 21 [default = true, (RequireRestart) = true];
     optional bool EnableOfflineSlaves = 22 [default = true]; // deprecated: always true
     optional bool CheckDatabaseAccessPermission = 23 [default = false];
     optional bool AllowOnlineIndexBuild = 24 [default = true]; // deprecated: always true
-    optional bool EnablePersistentQueryStats = 25 [default = true];
+    optional bool EnablePersistentQueryStats = 25 [default = true, (RequireRestart) = true];
     optional bool DisableDataShardBarrier = 26 [default = false];
     optional bool EnablePutBatchingForBlobStorage = 27 [default = true];
     optional bool EnableKqpWideFlow = 28 [default = true]; // deprecated: always true
@@ -46,8 +56,8 @@ message TFeatureFlags {
     optional bool AllowServerlessStorageBillingForSchemeShard = 35 [default = false];
     optional bool EnableGracefulShutdown = 36 [default = true];
     optional bool EnableDrainOnShutdown = 37 [default = true];
-    optional bool EnableConfigurationCache = 38 [default = false];
-    optional bool EnableDbCounters = 39 [default = false];
+    optional bool EnableConfigurationCache = 38 [default = false, (RequireRestart) = true];
+    optional bool EnableDbCounters = 39 [default = false, (RequireRestart) = true];
     optional bool EnableClockGettimeForUserCpuAccounting = 40 [default = false];
     optional bool EnableAsyncIndexes = 41 [default = true]; // deprecated: always true
     optional bool AllowStreamExecuteYqlScript = 42 [default = true];
@@ -65,7 +75,7 @@ message TFeatureFlags {
     optional bool EnableNotNullColumns = 54 [default = true];
     optional bool EnableTtlOnAsyncIndexedTables = 55 [default = true]; // deprecated: always true
     optional bool EnableBulkUpsertToAsyncIndexedTables = 56 [default = true];
-    optional bool EnableNodeBrokerSingleDomainMode = 57 [default = true];
+    optional bool EnableNodeBrokerSingleDomainMode = 57 [default = true]; // deprecated: always true
     reserved 58; // optional bool EnableKqpSessionActor = 58 [default = true];
     // Dangerous settings we don't want in the public api unless required
     optional bool EnablePublicApiExternalBlobs = 59 [default = false];
@@ -73,7 +83,7 @@ message TFeatureFlags {
     optional bool EnableImplicitScanQueryInScripts = 61 [default = true];
     reserved 62; // EnablePredicateExtractForScanQueries
     optional bool AllowVDiskDefrag = 63 [default = true];
-    optional bool EnableAsyncHttpMon = 64 [default = true];
+    optional bool EnableAsyncHttpMon = 64 [default = true]; // deprecated: always true
     optional bool EnableChangefeeds = 65 [default = true];
     reserved 66; // EnableKqpScanQueryStreamLookup
     optional bool EnableKqpScanQueryMultipleOlapShardsReads = 67 [default = false];
@@ -94,45 +104,93 @@ message TFeatureFlags {
     optional bool EnableDataShardGenericReadSets = 81 [default = false];
     // enable alter database operation to create subdomain's system tablets
     // directly in subdomain's hive
-    optional bool EnableAlterDatabaseCreateHiveFirst = 82 [default = false];
+    optional bool EnableAlterDatabaseCreateHiveFirst = 82 [default = true];
     reserved 83; // EnableKqpDataQuerySourceRead
     optional bool EnableSmallDiskOptimization = 84 [default = true];
     optional bool EnableDataShardVolatileTransactions = 85 [default = true];
-    optional bool EnableTopicServiceTx = 86 [default = false];
+    optional bool EnableTopicServiceTx = 86 [default = true];
     optional bool EnableLLVMCache = 87 [default = false];
     optional bool EnableExternalDataSources = 88 [default = false];
-    optional bool EnableTopicDiskSubDomainQuota = 89 [default = true];
-    optional bool EnableSeparationComputeActorsFromRead = 90 [default = false];
-    optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = false];
+    optional bool EnableTopicDiskSubDomainQuota = 89 [default = true, (RequireRestart) = true];
+    optional bool EnableSeparationComputeActorsFromRead = 90 [default = true];
+    optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = true];
     optional bool EnableScriptExecutionOperations = 92 [default = true];
     optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
-    optional bool EnableTopicSplitMerge = 95 [default = false];
+    optional bool EnableTopicSplitMerge = 95 [default = true];
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
-    optional bool EnableSubscriptionsInDiscovery = 98 [default = false];
+    optional bool EnableSubscriptionsInDiscovery = 98 [default = false, (RequireRestart) = true];
     optional bool EnableGetNodeLabels = 99 [default = false];
     optional bool EnableTopicMessageMeta = 100 [default = true];
-    optional bool EnableIcNodeCache = 101 [default = true];
-    optional bool EnableTempTables = 102 [default = false];
-    optional bool SuppressCompatibilityCheck = 103 [default = false];
-    optional bool EnableUniqConstraint = 104 [default = false];
+    optional bool EnableIcNodeCache = 101 [default = true, (RequireRestart) = true];
+    optional bool EnableTempTables = 102 [default = true];
+    optional bool SuppressCompatibilityCheck = 103 [default = false, (RequireRestart) = true];
+    optional bool EnableUniqConstraint = 104 [default = true];
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
-    optional bool EnableStatistics = 106 [default = false];
-    optional bool EnableUuidAsPrimaryKey = 107 [default = false];
+    optional bool EnableStatistics = 106 [default = true];
+    optional bool EnableUuidAsPrimaryKey = 107 [default = true];
     optional bool EnableTablePgTypes = 108 [default = false];
-    optional bool EnableLocalDBBtreeIndex = 109 [default = false];
+    optional bool EnableLocalDBBtreeIndex = 109 [default = true];
     optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
-    optional bool UseVDisksBalancing = 111 [default = false];
+    reserved 111; // UseVDisksBalancing
     optional bool EnableViews = 112 [default = false];
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
     optional bool EnableAccessServiceBulkAuthorization = 114 [default = false];
     optional bool EnableAddColumsWithDefaults = 115 [ default = false];
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
-    optional bool EnableCMSRequestPriorities = 117 [default = false];
+    optional bool EnableCMSRequestPriorities = 117 [default = true];
     optional bool EnableKeyvalueLogBatching = 118 [default = false];
     optional bool EnableLocalDBFlatIndex = 119 [default = true];
-    optional bool ExtendedVDiskCounters = 120 [default = true];
-    optional bool ExtendedPDiskSensors = 121 [default = true];
-    optional bool EnableDynamicNodeNameGeneration = 122 [default = false];
+    optional bool ExtendedVDiskCounters = 120 [default = true, (RequireRestart) = true];
+    optional bool ExtendedPDiskSensors = 121 [default = true, (RequireRestart) = true];
+    optional bool EnableStableNodeNames = 122 [default = false];
+    optional bool EnableBackupService = 123 [default = false];
+    optional bool EnableVolatileTransactionArbiters = 124 [default = true];
+    optional bool EnableGraphShard = 125 [default = false];
+    optional bool EnableExternalSourceSchemaInference = 126 [default = false];
+    optional bool EnableDbMetadataCache = 127 [default = false];
+    optional bool EnableTableDatetime64 = 128 [default = true];
+    optional bool EnableResourcePools = 129 [default = true];
+    optional bool EnableColumnStatistics = 130 [default = false];
+    optional bool EnableSingleCompositeActionGroup = 131 [default = false];
+    optional bool EnableResourcePoolsOnServerless = 132 [default = false];
+    optional bool EnableVectorIndex = 133 [default = false];
+    optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
+    optional bool EnableResourcePoolsCounters = 135 [default = false];
+    optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
+    optional bool EnableGranularTimecast = 137 [default = true];
+    optional bool EnableAlterShardingInColumnShard = 138 [default = false];
+    optional bool EnablePgSyntax = 139 [default = true];
+    optional bool EnableTieringInColumnShard = 140 [default = false];
+    optional bool EnableMetadataObjectsOnServerless = 141 [default = true];
+    optional bool EnableOlapCompression = 142 [default = false];
+    optional bool EnableExternalDataSourcesOnServerless = 143 [default = true];
+    optional bool EnableSparsedColumns = 144 [default = false];
+    optional bool EnableParameterizedDecimal = 145 [default = true];
+    optional bool EnableImmediateWritingOnBulkUpsert = 146 [default = true];
+    optional bool EnableInsertWriteIdSpecialColumnCompatibility = 147 [default = false];
+    optional bool EnableTopicAutopartitioningForCDC = 148 [default = false];
+    optional bool EnableWritePortionsOnInsert = 149 [default = false];
+    optional bool EnableFollowerStats = 150 [default = true];
+    optional bool EnableTopicAutopartitioningForReplication = 151 [default = false];
+    optional bool EnableDriveSerialsDiscovery = 152 [default = false];
+    optional bool EnableSeparateDiskSpaceQuotas = 153 [default = false];
+    optional bool EnableAntlr4Parser = 154 [default = false];
+    optional bool EnableReleaseNodeNameOnGracefulShutdown = 155 [default = false];
+    optional bool ForceDistconfDisable = 156 [default = false];
+    optional bool EnableScaleRecommender = 157 [default = false];
+    optional bool EnableVDiskThrottling = 158 [default = false];
+    optional bool EnableDataShardInMemoryStateMigration = 159 [default = true];
+    optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = false];
+    optional bool DisableLocalDBEraseCache = 161 [default = false];
+    optional bool EnableExportChecksums = 162 [default = false];
+    optional bool EnableTopicTransfer = 163 [default = false];
+    optional bool EnableViewExport = 164 [default = false];
+    optional bool EnableColumnStore = 165 [default = false];
+    optional bool EnableStrictAclCheck = 166 [default = false];
+    optional bool DatabaseYamlConfigAllowed = 167 [default = false];
+    // deny non-administrators the privilege of administering local users and groups
+    optional bool EnableStrictUserManagement = 168 [default = false];
+    optional bool EnableDatabaseAdmin = 169 [default = false];
 }

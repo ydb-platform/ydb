@@ -120,7 +120,7 @@ STATUS_WAITING = "waiting"  # FreeBSD
 STATUS_SUSPENDED = "suspended"  # NetBSD
 STATUS_PARKED = "parked"  # Linux
 
-# Process.connections() and psutil.net_connections()
+# Process.net_connections() and psutil.net_connections()
 CONN_ESTABLISHED = "ESTABLISHED"
 CONN_SYN_SENT = "SYN_SENT"
 CONN_SYN_RECV = "SYN_RECV"
@@ -189,8 +189,7 @@ sdiskio = namedtuple('sdiskio', ['read_count', 'write_count',
                                  'read_bytes', 'write_bytes',
                                  'read_time', 'write_time'])
 # psutil.disk_partitions()
-sdiskpart = namedtuple('sdiskpart', ['device', 'mountpoint', 'fstype', 'opts',
-                                     'maxfile', 'maxpath'])
+sdiskpart = namedtuple('sdiskpart', ['device', 'mountpoint', 'fstype', 'opts'])
 # psutil.net_io_counters()
 snetio = namedtuple('snetio', ['bytes_sent', 'bytes_recv',
                                'packets_sent', 'packets_recv',
@@ -243,17 +242,17 @@ pio = namedtuple(
 pionice = namedtuple('pionice', ['ioclass', 'value'])
 # psutil.Process.ctx_switches()
 pctxsw = namedtuple('pctxsw', ['voluntary', 'involuntary'])
-# psutil.Process.connections()
+# psutil.Process.net_connections()
 pconn = namedtuple(
     'pconn', ['fd', 'family', 'type', 'laddr', 'raddr', 'status']
 )
 
-# psutil.connections() and psutil.Process.connections()
+# psutil.net_connections() and psutil.Process.net_connections()
 addr = namedtuple('addr', ['ip', 'port'])
 
 
 # ===================================================================
-# --- Process.connections() 'kind' parameter mapping
+# --- Process.net_connections() 'kind' parameter mapping
 # ===================================================================
 
 
@@ -331,6 +330,9 @@ class NoSuchProcess(Error):
         self.name = name
         self.msg = msg or "process no longer exists"
 
+    def __reduce__(self):
+        return (self.__class__, (self.pid, self.name, self.msg))
+
 
 class ZombieProcess(NoSuchProcess):
     """Exception raised when querying a zombie process. This is
@@ -347,6 +349,9 @@ class ZombieProcess(NoSuchProcess):
         self.ppid = ppid
         self.msg = msg or "PID still exists but it's a zombie"
 
+    def __reduce__(self):
+        return (self.__class__, (self.pid, self.name, self.ppid, self.msg))
+
 
 class AccessDenied(Error):
     """Exception raised when permission to perform an action is denied."""
@@ -358,6 +363,9 @@ class AccessDenied(Error):
         self.pid = pid
         self.name = name
         self.msg = msg or ""
+
+    def __reduce__(self):
+        return (self.__class__, (self.pid, self.name, self.msg))
 
 
 class TimeoutExpired(Error):
@@ -373,6 +381,9 @@ class TimeoutExpired(Error):
         self.pid = pid
         self.name = name
         self.msg = "timeout after %s seconds" % seconds
+
+    def __reduce__(self):
+        return (self.__class__, (self.seconds, self.pid, self.name))
 
 
 # ===================================================================
@@ -536,7 +547,7 @@ def isfile_strict(path):
     try:
         st = os.stat(path)
     except OSError as err:
-        if err.errno in (errno.EPERM, errno.EACCES):
+        if err.errno in {errno.EPERM, errno.EACCES}:
             raise
         return False
     else:
@@ -551,7 +562,7 @@ def path_exists_strict(path):
     try:
         os.stat(path)
     except OSError as err:
-        if err.errno in (errno.EPERM, errno.EACCES):
+        if err.errno in {errno.EPERM, errno.EACCES}:
             raise
         return False
     else:
@@ -628,12 +639,12 @@ def socktype_to_enum(num):
 
 def conn_to_ntuple(fd, fam, type_, laddr, raddr, status, status_map, pid=None):
     """Convert a raw connection tuple to a proper ntuple."""
-    if fam in (socket.AF_INET, AF_INET6):
+    if fam in {socket.AF_INET, AF_INET6}:
         if laddr:
             laddr = addr(*laddr)
         if raddr:
             raddr = addr(*raddr)
-    if type_ == socket.SOCK_STREAM and fam in (AF_INET, AF_INET6):
+    if type_ == socket.SOCK_STREAM and fam in {AF_INET, AF_INET6}:
         status = status_map.get(status, CONN_NONE)
     else:
         status = CONN_NONE  # ignore whatever C returned to us
@@ -969,7 +980,7 @@ def debug(msg):
     if PSUTIL_DEBUG:
         import inspect
 
-        fname, lineno, _, lines, index = inspect.getframeinfo(
+        fname, lineno, _, _lines, _index = inspect.getframeinfo(
             inspect.currentframe().f_back
         )
         if isinstance(msg, Exception):

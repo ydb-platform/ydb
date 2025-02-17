@@ -49,119 +49,124 @@ struct TReadIteratorState {
         Init,
         Executing,
         Exhausted,
+        Scan,
     };
 
-    struct TQuota {
-        TQuota() = default;
-
-        TQuota(ui64 rows, ui64 bytes)
+    struct TQuotaValues {
+        TQuotaValues(ui64 rows = Max<ui64>(), ui64 bytes = Max<ui64>())
             : Rows(rows)
             , Bytes(bytes)
         {}
 
-        ui64 Rows = Max<ui64>();
-        ui64 Bytes = Max<ui64>();
+        ui64 Rows;
+        ui64 Bytes;
+    };
+
+    struct TQuota : public TQuotaValues {
+        ui64 SeqNo = 0;
+        ui64 LastAckSeqNo = 0;
+
+        // Unacknowledged quota values (rolling sum)
+        // first item corresponds to SeqNo = LastAckSeqNo + 1,
+        // the full deque corresponds to range [LastAckSeqNo + 1; SeqNo]
+        std::deque<TQuotaValues> Queue;
+
+        /**
+         * Consume the specified number of rows and bytes, allocating a new SeqNo.
+         *
+         * Returns true when there is any quota left.
+         */
+        bool Consume(ui64 rows, ui64 bytes) {
+            ++SeqNo;
+
+            ui64 lastRowsTotal = !Queue.empty() ? Queue.back().Rows : 0;
+            ui64 lastBytesTotal = !Queue.empty() ? Queue.back().Bytes : 0;
+            Queue.emplace_back(lastRowsTotal + rows, lastBytesTotal + bytes);
+
+            Rows = Rows > rows ? Rows - rows : 0;
+            Bytes = Bytes > bytes ? Bytes - bytes : 0;
+
+            return Rows > 0 && Bytes > 0;
+        }
+
+        /**
+         * Acknowledges a previously consumed SeqNo and specifies a new total
+         * quota immediately after that SeqNo. This is usually the remaining
+         * buffer space in the reader.
+         *
+         * Returns true when there is any quota left.
+         */
+        bool Ack(ui64 seqNo, ui64 rows, ui64 bytes) {
+            if (LastAckSeqNo < seqNo && seqNo <= SeqNo) {
+                size_t ackedIndex = seqNo - LastAckSeqNo - 1;
+                Y_ABORT_UNLESS(ackedIndex < Queue.size());
+
+                auto it = Queue.begin() + ackedIndex;
+
+                // How many rows and bytes are still consumed (unacknowledged)
+                ui64 consumedRows = Queue.back().Rows - it->Rows;
+                ui64 consumedBytes = Queue.back().Bytes - it->Bytes;
+                Queue.erase(Queue.begin(), ++it);
+
+                Rows = rows > consumedRows ? rows - consumedRows : 0;
+                Bytes = bytes > consumedBytes ? bytes - consumedBytes : 0;
+
+                LastAckSeqNo = seqNo;
+            } else if (seqNo == SeqNo) {
+                Rows = rows;
+                Bytes = bytes;
+            }
+
+            return Rows > 0 && Bytes > 0;
+        }
     };
 
 public:
     TReadIteratorState(
-            const TReadIteratorId& readId, const TPathId& pathId,
+            const TReadIteratorId& readId, ui64 localReadId, const TPathId& pathId,
             const TActorId& sessionId, const TRowVersion& readVersion, bool isHeadRead,
-            TMonotonic ts, NLWTrace::TOrbit&& orbit = {})
-        : ReadId(readId.ReadId)
+            TMonotonic ts)
+        : ReadId(readId)
+        , LocalReadId(localReadId)
         , PathId(pathId)
         , ReadVersion(readVersion)
         , IsHeadRead(isHeadRead)
         , SessionId(sessionId)
         , StartTs(ts)
-        , Orbit(std::move(orbit))
     {}
+
+    TReadIteratorState(const TReadIteratorState&) = delete;
+    TReadIteratorState& operator=(const TReadIteratorState&) = delete;
 
     bool IsExhausted() const { return State == EState::Exhausted; }
 
     // must be called only once per SeqNo
     void ConsumeSeqNo(ui64 rows, ui64 bytes) {
-        ++SeqNo;
-
-        ui64 lastRowsTotal = 0;
-        ui64 lastBytesTotal = 0;
-        if (!UnackedReads.empty()) {
-            const auto& back = UnackedReads.back();
-            lastRowsTotal = back.Rows;
-            lastBytesTotal = back.Bytes;
-        }
-        UnackedReads.emplace_back(rows + lastRowsTotal, bytes + lastBytesTotal);
-
-        if (Quota.Rows <= rows) {
-            Quota.Rows = 0;
-        } else {
-            Quota.Rows -= rows;
-        }
-
-        if (Quota.Bytes <= bytes) {
-            Quota.Bytes = 0;
-        } else {
-            Quota.Bytes -= bytes;
-        }
-
-        if (Quota.Rows == 0 || Quota.Bytes == 0) {
+        if (!Quota.Consume(rows, bytes)) {
             State = EState::Exhausted;
         }
+        SeqNo = Quota.SeqNo;
     }
 
     void UpQuota(ui64 ackSeqNo, ui64 rows, ui64 bytes) {
-        if (ackSeqNo <= LastAckSeqNo || ackSeqNo > SeqNo)
-            return;
-
-        size_t ackedIndex = ackSeqNo - LastAckSeqNo - 1;
-        Y_ABORT_UNLESS(ackedIndex < UnackedReads.size());
-
-        ui64 consumedRows = 0;
-        ui64 consumedBytes = 0;
-        if (ackedIndex < SeqNo) {
-            AckedReads.Rows = UnackedReads[ackedIndex].Rows;
-            AckedReads.Bytes = UnackedReads[ackedIndex].Bytes;
-            UnackedReads.erase(UnackedReads.begin(), UnackedReads.begin() + ackedIndex + 1);
-
-            // user provided quota for seqNo, if we have sent messages
-            // with higher seqNo then we should account their bytes to
-            // this quota
-            consumedRows = UnackedReads.back().Rows - AckedReads.Rows;
-            consumedBytes = UnackedReads.back().Bytes - AckedReads.Bytes;
-        } else {
-            AckedReads.Rows = 0;
-            AckedReads.Bytes = 0;
-            UnackedReads.clear();
-        }
-
-        LastAckSeqNo = ackSeqNo;
-
-        if (consumedRows >= rows) {
-            Quota.Rows = 0;
-        } else {
-            Quota.Rows = rows - consumedRows;
-        }
-
-        if (consumedBytes >= bytes) {
-            Quota.Bytes = 0;
-        } else {
-            Quota.Bytes = bytes - consumedBytes;
-        }
-
-        if (Quota.Rows == 0 || Quota.Bytes == 0) {
-            State = EState::Exhausted;
-        } else {
+        if (Quota.Ack(ackSeqNo, rows, bytes)) {
             State = EState::Executing;
+        } else {
+            State = EState::Exhausted;
         }
+        LastAckSeqNo = Quota.LastAckSeqNo;
     }
+
+    void ForwardScanEvent(std::unique_ptr<IEventHandle>&& ev, ui64 tabletId);
 
 public:
     EState State = EState::Init;
 
     // Data from original request //
 
-    ui64 ReadId;
-    TPathId PathId;
+    const TReadIteratorId ReadId;
+    const ui64 LocalReadId;
+    const TPathId PathId;
     std::vector<NTable::TTag> Columns;
     TRowVersion ReadVersion;
     bool IsHeadRead;
@@ -195,16 +200,10 @@ public:
     ui64 TotalRows = 0;
     ui64 TotalRowsLimit = Max<ui64>();
 
-    // items are running total,
-    // first item corresponds to SeqNo = LastAckSeqNo + 1,
-    // i.e. [LastAckSeqNo + 1; SeqNo]
-    std::deque<TQuota> UnackedReads;
-
-    TQuota AckedReads;
-
     TActorId SessionId;
     TMonotonic StartTs;
     bool IsFinished = false;
+    bool ReadContinuePending = false;
 
     // note that we send SeqNo's starting from 1
     ui64 SeqNo = 0;
@@ -213,11 +212,15 @@ public:
     TString LastProcessedKey;
     bool LastProcessedKeyErased = false;
 
-    // Orbit used for tracking progress
-    NLWTrace::TOrbit Orbit;
+    // used when read is implemented with a scan
+    ui64 ScanId = 0;
+    ui64 ScanLocalTid = 0;
+    TActorId ScanActorId;
+    // temporary storage for forwarded events until scan has started
+    std::vector<std::unique_ptr<IEventHandle>> ScanPendingEvents;
 };
 
-using TReadIteratorStatePtr = std::unique_ptr<TReadIteratorState>;
-using TReadIteratorsMap = std::unordered_map<TReadIteratorId, TReadIteratorStatePtr, TReadIteratorId::THash>;
+using TReadIteratorsMap = THashMap<TReadIteratorId, TReadIteratorState, TReadIteratorId::THash>;
+using TReadIteratorsLocalMap = THashMap<ui64, TReadIteratorState*>;
 
 } // NKikimr::NDataShard

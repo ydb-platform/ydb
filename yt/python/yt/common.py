@@ -21,7 +21,7 @@ try:
     from collections.abc import Mapping
 except ImportError:
     from collections import Mapping
-from datetime import datetime, timedelta
+import datetime
 from itertools import chain
 from functools import wraps
 
@@ -103,7 +103,7 @@ class YtError(Exception):
         if "host" not in self.attributes:
             self.attributes["host"] = self._get_fqdn()
         if "datetime" not in self.attributes:
-            self.attributes["datetime"] = datetime_to_string(datetime.utcnow())
+            self.attributes["datetime"] = datetime_to_string(utcnow())
 
     def simplify(self):
         """Transforms error (with inner errors) to standard python dict."""
@@ -260,6 +260,10 @@ class YtError(Exception):
         """Rpc unavailable."""
         return self.contains_code(105)
 
+    def is_rpc_response_memory_pressure(self):
+        """Rpc response memory pressure."""
+        return self.contains_code(122)
+
     def is_master_communication_error(self):
         """Master communication error."""
         return self.contains_code(712)
@@ -336,31 +340,35 @@ class YtError(Exception):
         return self.find_matching_error(predicate=pred_new) or self.find_matching_error(predicate=pred_old)
 
     def is_row_is_blocked(self):
-        """Row is blocked"""
+        """Row is blocked."""
         return self.contains_code(1712)
 
     def is_blocked_row_wait_timeout(self):
-        """Timed out waiting on blocked row"""
+        """Timed out waiting on blocked row."""
         return self.contains_code(1713)
 
     def is_chunk_not_preloaded(self):
-        """Chunk data is not preloaded yet"""
+        """Chunk data is not preloaded yet."""
         return self.contains_code(1735)
 
     def is_no_in_sync_replicas(self):
-        """No in-sync replicas found"""
+        """No in-sync replicas found."""
         return self.contains_code(1736)
 
     def is_already_present_in_group(self):
-        """Member is already present in group"""
+        """Member is already present in group."""
         return self.contains_code(908)
 
+    def is_prerequisite_check_failed(self):
+        """Prerequisite check failed."""
+        return self.contains_code(1000)
+
     def is_prohibited_cross_cell_copy(self):
-        """Cross-cell "copy"/"move" command is explicitly disabled"""
+        """Cross-cell "copy"/"move" command is explicitly disabled."""
         return self.contains_code(1002)
 
     def is_sequoia_retriable_error(self):
-        """Probably lock conflict in Sequoia tables"""
+        """Probably lock conflict in Sequoia tables."""
         return self.contains_code(6002)
 
 
@@ -520,7 +528,7 @@ def _pretty_format_full_errors(error, attribute_length_limit):
     origin_cpp_keys = ["pid", "tid", "fid"]
     if all(key in attributes for key in origin_keys):
         date = attributes["datetime"]
-        if isinstance(date, datetime):
+        if isinstance(date, datetime.datetime):
             date = date.strftime("%y-%m-%dT%H:%M:%S.%fZ")
         value = "{0} on {1}".format(attributes["host"], date)
         if all(key in attributes for key in origin_cpp_keys):
@@ -641,7 +649,7 @@ def flatten(obj, list_types=(list, tuple, set, frozenset, types.GeneratorType)):
 
 
 def update_from_env(variables):
-    """Update variables dict from environment."""
+    """Update variables dict from environment (cuts name prefix "YT_")."""
     for key, value in iteritems(os.environ):
         prefix = "YT_"
         if not key.startswith(prefix):
@@ -713,7 +721,7 @@ def touch(path):
 
 
 def date_string_to_datetime(date):
-    return datetime.strptime(date, YT_DATETIME_FORMAT_STRING)
+    return datetime.datetime.strptime(date, YT_DATETIME_FORMAT_STRING)
 
 
 def date_string_to_timestamp(date):
@@ -727,8 +735,15 @@ def date_string_to_timestamp_mcs(time_str):
 
 def datetime_to_string(date, is_local=False):
     if is_local:
-        date = datetime.utcfromtimestamp(time.mktime(date.timetuple()))
+        date = datetime.datetime.utcfromtimestamp(time.mktime(date.timetuple()))
     return date.strftime(YT_DATETIME_FORMAT_STRING)
+
+
+def utcnow():
+    if sys.version_info >= (3, 12, ):
+        return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    else:
+        return datetime.datetime.utcnow()
 
 
 def make_non_blocking(fd):
@@ -827,30 +842,34 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
     if sleep_backoff is None:
         sleep_backoff = 0.3
 
+    last_exception = None
     if ignore_exceptions:
         def check_predicate():
             try:
-                return predicate()
+                return predicate(), None
             # Do not catch BaseException because pytest exceptions are inherited from it
             # pytest.fail raises exception inherited from BaseException.
-            except Exception:
-                return False
+            except Exception as ex:
+                return False, ex
     else:
-        check_predicate = predicate
+        def check_predicate():
+            return predicate(), None
 
     if timeout is None:
         if iter is None:
             iter = 100
         index = 0
         while index < iter:
-            if check_predicate():
+            result, last_exception = check_predicate()
+            if result:
                 return
             index += 1
             time.sleep(sleep_backoff)
     else:
-        start_time = datetime.now()
-        while datetime.now() - start_time < timedelta(seconds=timeout):
-            if check_predicate():
+        start_time = datetime.datetime.now()
+        while datetime.datetime.now() - start_time < datetime.timedelta(seconds=timeout):
+            result, last_exception = check_predicate()
+            if result:
                 return
             time.sleep(sleep_backoff)
 
@@ -858,5 +877,9 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
         error_message = error_message()
     if error_message is None:
         error_message = "Wait failed"
-    error_message += " (timeout = {0})".format(timeout if timeout is not None else iter * sleep_backoff)
+
+    error_message += f" (timeout = {timeout if timeout is not None else iter * sleep_backoff}"
+    if last_exception is not None:
+        error_message += f", exception = {last_exception}"
+    error_message += ")"
     raise WaitFailed(error_message)

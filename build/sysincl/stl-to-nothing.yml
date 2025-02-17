@@ -73,6 +73,7 @@
   - exception
   - expected
   - filesystem
+  - format
   - forward_list
   - fstream
   - functional
@@ -126,8 +127,7 @@
   - variant
   - vector
   - version
-  - unwind.h:
-    - contrib/libs/libunwind/include/unwind.h
+  - unwind.h
 
 
 # Though these are headers provided by libcxx, we do not want to allow them to be included.
@@ -146,3 +146,7 @@
   - experimental/string_view:           DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL_STRING_VIEW
   - experimental/system_error:          DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL_SYSTEM_ERROR
   - experimental/tuple:                 DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL_TUPLE
+
+# These headers belong to libc++, yet certain contribs depend libc++ internal structure.
+- includes:
+  - __utility/swap.h

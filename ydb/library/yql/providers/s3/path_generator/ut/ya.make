@@ -8,9 +8,9 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/minikql
-    ydb/library/yql/public/udf/service/stub
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/minikql
+    yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

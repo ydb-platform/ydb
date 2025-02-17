@@ -6,7 +6,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 namespace NYdb::NConsoleClient {
 #define GETTER(TYPE, NAME) \
@@ -71,6 +71,7 @@ namespace NYdb::NConsoleClient {
         int HandlePartitionSessionStatusEvent(NTopic::TReadSessionEvent::TPartitionSessionStatusEvent*);
         int HandleStopPartitionSessionEvent(NTopic::TReadSessionEvent::TStopPartitionSessionEvent*);
         int HandlePartitionSessionClosedEvent(NTopic::TReadSessionEvent::TPartitionSessionClosedEvent*);
+        int HandleEndPartitionSessionEvent(NTopic::TReadSessionEvent::TEndPartitionSessionEvent*);
         int HandleDataReceivedEvent(NTopic::TReadSessionEvent::TDataReceivedEvent*, IOutputStream&);
         int HandleCommitOffsetAcknowledgementEvent(NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent*);
         int HandleEvent(NTopic::TReadSessionEvent::TEvent&, IOutputStream&);

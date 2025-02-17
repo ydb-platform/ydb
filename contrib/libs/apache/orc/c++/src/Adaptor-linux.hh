@@ -70,6 +70,7 @@ typedef SSIZE_T ssize_t;
 #define PRAGMA(TXT) _Pragma(#TXT)
 
 #if defined(_MSC_VER)
+  // Handles both cl.exe and clang-cl.exe compilers
   #define DIAGNOSTIC_IGNORE(XXX) __pragma(warning(disable : XXX))
 #elif defined(__clang__)
   #define DIAGNOSTIC_IGNORE(XXX) PRAGMA(clang diagnostic ignored XXX)
@@ -109,6 +110,7 @@ typedef SSIZE_T ssize_t;
 namespace orc {
   std::string to_string(double val);
   std::string to_string(int64_t val);
+  bool fileExists(const char* path);
 }
 
 #ifdef HAS_BUILTIN_OVERFLOW_CHECK

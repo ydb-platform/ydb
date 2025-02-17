@@ -7,18 +7,25 @@ items:
   href: manage-releases.md
 - name: Ядро
   items:
+  - name: Общая схема
+    href: general-schema.md
+  - name: Распределённое хранилище
+    href: distributed-storage.md
   - name: LocalDB
     items:
     - name: Персистентные незакомиченные изменения
       href: localdb-uncommitted-txs.md
+  - name: Hive
+    href: hive.md
   - name: DataShard
     items:
     - name: Локи и видимость изменений в транзакциях
       href: datashard-locks-and-change-visibility.md
+    - name: Распределённые транзакции
+      href: datashard-distributed-txs.md
   - name: Тестирование с помощью нагружающих акторов
+    href: load-actors-overview.md
     items:
-    - name: Обзор
-      href: load-actors-overview.md
     - name: KqpLoad
       href: load-actors-kqp.md
     - name: KeyValueLoad

@@ -1,52 +1,21 @@
 #include "controller.h"
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/indexation.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
-bool TController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    if (batch) {
-        FilteredRecordsCount.Add(batch->num_rows());
-    }
-    return true;
-}
-
 bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& shard) {
-    if (change.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
-        TTLFinishedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TInsertColumnEngineChanges::StaticTypeName()) {
-        InsertFinishedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
-        CompactionFinishedCounter.Inc();
-    }
     TGuard<TMutex> g(Mutex);
-    if (SharingIds.empty()) {
-        TCheckContext context;
-        CheckInvariants(shard, context);
-    }
-    return true;
-}
-
-bool TController::DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", change.TypeString())("tablet_id", tabletId);
-    if (change.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
-        TTLStartedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TInsertColumnEngineChanges::StaticTypeName()) {
-        InsertStartedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
-        CompactionStartedCounter.Inc();
-    }
-    return true;
+    return TBase::DoOnWriteIndexComplete(change, shard);
 }
 
 void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& action) {
@@ -54,21 +23,20 @@ void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard&
     for (auto d = action.GetBlobsToRemove().GetDirect().GetIterator(); d.IsValid(); ++d) {
         AFL_VERIFY(RemovedBlobIds[action.GetStorageId()][d.GetBlobId()].emplace(d.GetTabletId()).second);
     }
-//    if (SharingIds.empty()) {
-//        CheckInvariants();
-//    }
 }
 
-void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const {
+void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& /*context*/) const {
     if (!shard.HasIndex()) {
         return;
     }
+    /*
     const auto& index = shard.GetIndexAs<NOlap::TColumnEngineForLogs>();
     std::vector<std::shared_ptr<NOlap::TGranuleMeta>> granules = index.GetTables({}, {});
     THashMap<TString, THashSet<NOlap::TUnifiedBlobId>> ids;
     for (auto&& i : granules) {
+        auto accessor = i->GetDataAccessorPtrVerifiedAs<NOlap::TMemDataAccessor>();
         for (auto&& p : i->GetPortions()) {
-            p.second->FillBlobIdsByStorage(ids, index.GetVersionedIndex());
+            accessor->BuildAccessor(p.second).FillBlobIdsByStorage(ids, index.GetVersionedIndex());
         }
     }
     for (auto&& i : ids) {
@@ -88,13 +56,16 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
         auto manager = shard.GetStoragesManager()->GetOperatorVerified(i.first);
         const NOlap::TTabletsByBlob blobs = manager->GetBlobsToDelete();
         for (auto b = blobs.GetIterator(); b.IsValid(); ++b) {
-            i.second.RemoveSharing(b.GetTabletId(), b.GetBlobId());
+            Cerr << shard.TabletID() << " SHARING_REMOVE_LOCAL:" << b.GetBlobId().ToStringNew() << " FROM " << b.GetTabletId() << Endl;
+            Y_UNUSED(i.second.RemoveSharing(b.GetTabletId(), b.GetBlobId()));
         }
         for (auto b = blobs.GetIterator(); b.IsValid(); ++b) {
-            i.second.RemoveBorrowed(b.GetTabletId(), b.GetBlobId());
+            Cerr << shard.TabletID() << " BORROWED_REMOVE_LOCAL:" << b.GetBlobId().ToStringNew() << " FROM " << b.GetTabletId() << Endl;
+            Y_UNUSED(i.second.RemoveBorrowed(b.GetTabletId(), b.GetBlobId()));
         }
     }
     context.AddCategories(shard.TabletID(), std::move(shardBlobsCategories));
+    */
 }
 
 TController::TCheckContext TController::CheckInvariants() const {
@@ -142,16 +113,19 @@ bool TController::IsTrivialLinks() const {
     TGuard<TMutex> g(Mutex);
     for (auto&& i : ShardActuals) {
         if (!i.second->GetStoragesManager()->GetSharedBlobsManager()->IsTrivialLinks()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "non_trivial");
             return false;
         }
         if (i.second->GetStoragesManager()->HasBlobsToDelete()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "has_delete");
             return false;
         }
     }
     return true;
 }
 
-::NKikimr::NColumnShard::TBlobPutResult::TPtr TController::OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const {
+::NKikimr::NColumnShard::TBlobPutResult::TPtr TController::OverrideBlobPutResultOnCompaction(
+    const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const {
     if (IndexWriteControllerEnabled) {
         return original;
     }
@@ -171,4 +145,10 @@ bool TController::IsTrivialLinks() const {
     return result;
 }
 
+void TController::OnAfterLocalTxCommitted(const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) {
+    if (RestartOnLocalDbTxCommitted == txInfo) {
+        ctx.Send(shard.SelfId(), new TEvents::TEvPoisonPill{});
+    }
 }
+
+}   // namespace NKikimr::NYDBTest::NColumnShard

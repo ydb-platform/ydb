@@ -13,16 +13,20 @@ obviously belong anywhere else. If you spot a better home for
 anything that lives here, please move it."""
 
 import array
+import gc
 import sys
+import time
 import warnings
 from random import Random
 from typing import (
+    Any,
     Callable,
     Dict,
     Generic,
     Iterable,
     Iterator,
     List,
+    Literal,
     Optional,
     Sequence,
     Tuple,
@@ -30,6 +34,8 @@ from typing import (
     Union,
     overload,
 )
+
+from sortedcontainers import SortedList
 
 from hypothesis.errors import HypothesisWarning
 
@@ -105,10 +111,10 @@ class IntList(Sequence[int]):
     def count(self, value: int) -> int:
         return self.__underlying.count(value)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"IntList({list(self.__underlying)!r})"
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.__underlying)
 
     @overload
@@ -199,27 +205,36 @@ class LazySequenceCopy:
     in O(1) time. The full list API is not supported yet but there's no reason
     in principle it couldn't be."""
 
-    __mask: Optional[Dict[int, int]]
-
     def __init__(self, values: Sequence[int]):
         self.__values = values
         self.__len = len(values)
-        self.__mask = None
+        self.__mask: Optional[Dict[int, int]] = None
+        self.__popped_indices: Optional[SortedList] = None
 
     def __len__(self) -> int:
-        return self.__len
+        if self.__popped_indices is None:
+            return self.__len
+        return self.__len - len(self.__popped_indices)
 
-    def pop(self) -> int:
+    def pop(self, i: int = -1) -> int:
         if len(self) == 0:
             raise IndexError("Cannot pop from empty list")
-        result = self[-1]
-        self.__len -= 1
+        i = self.__underlying_index(i)
+
+        v = None
         if self.__mask is not None:
-            self.__mask.pop(self.__len, None)
-        return result
+            v = self.__mask.pop(i, None)
+        if v is None:
+            v = self.__values[i]
+
+        if self.__popped_indices is None:
+            self.__popped_indices = SortedList()
+        self.__popped_indices.add(i)
+        return v
 
     def __getitem__(self, i: int) -> int:
-        i = self.__check_index(i)
+        i = self.__underlying_index(i)
+
         default = self.__values[i]
         if self.__mask is None:
             return default
@@ -227,18 +242,34 @@ class LazySequenceCopy:
             return self.__mask.get(i, default)
 
     def __setitem__(self, i: int, v: int) -> None:
-        i = self.__check_index(i)
+        i = self.__underlying_index(i)
         if self.__mask is None:
             self.__mask = {}
         self.__mask[i] = v
 
-    def __check_index(self, i: int) -> int:
+    def __underlying_index(self, i: int) -> int:
         n = len(self)
         if i < -n or i >= n:
             raise IndexError(f"Index {i} out of range [0, {n})")
         if i < 0:
             i += n
         assert 0 <= i < n
+
+        if self.__popped_indices is not None:
+            # given an index i in the popped representation of the list, compute
+            # its corresponding index in the underlying list. given
+            #   l = [1, 4, 2, 10, 188]
+            #   l.pop(3)
+            #   l.pop(1)
+            #   assert l == [1, 2, 188]
+            #
+            # we want l[i] == self.__values[f(i)], where f is this function.
+            assert len(self.__popped_indices) <= len(self.__values)
+
+            for idx in self.__popped_indices:
+                if idx > i:
+                    break
+                i += 1
         return i
 
 
@@ -276,7 +307,7 @@ class ensure_free_stackframes:
     a reasonable value of N).
     """
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         cur_depth = stack_depth_of_caller()
         self.old_maxdepth = sys.getrecursionlimit()
         # The default CPython recursionlimit is 1000, but pytest seems to bump
@@ -345,14 +376,6 @@ def find_integer(f: Callable[[int], bool]) -> int:
     return lo
 
 
-def pop_random(random: Random, seq: LazySequenceCopy) -> int:
-    """Remove and return a random element of seq. This runs in O(1) but leaves
-    the sequence in an arbitrary order."""
-    i = random.randrange(0, len(seq))
-    swap(seq, i, len(seq) - 1)
-    return seq.pop()
-
-
 class NotFound(Exception):
     pass
 
@@ -394,3 +417,58 @@ class SelfOrganisingList(Generic[T]):
                 self.__values.append(value)
                 return value
         raise NotFound("No values satisfying condition")
+
+
+_gc_initialized = False
+_gc_start: float = 0
+_gc_cumulative_time: float = 0
+
+# Since gc_callback potentially runs in test context, and perf_counter
+# might be monkeypatched, we store a reference to the real one.
+_perf_counter = time.perf_counter
+
+
+def gc_cumulative_time() -> float:
+    global _gc_initialized
+    if not _gc_initialized:
+        if hasattr(gc, "callbacks"):
+            # CPython
+            def gc_callback(
+                phase: Literal["start", "stop"], info: Dict[str, int]
+            ) -> None:
+                global _gc_start, _gc_cumulative_time
+                try:
+                    now = _perf_counter()
+                    if phase == "start":
+                        _gc_start = now
+                    elif phase == "stop" and _gc_start > 0:
+                        _gc_cumulative_time += now - _gc_start  # pragma: no cover # ??
+                except RecursionError:  # pragma: no cover
+                    # Avoid flakiness via UnraisableException, which is caught and
+                    # warned by pytest. The actual callback (this function) is
+                    # validated to never trigger a RecursionError itself when
+                    # when called by gc.collect.
+                    # Anyway, we should hit the same error on "start"
+                    # and "stop", but to ensure we don't get out of sync we just
+                    # signal that there is no matching start.
+                    _gc_start = 0
+                    return
+
+            gc.callbacks.insert(0, gc_callback)
+        elif hasattr(gc, "hooks"):  # pragma: no cover  # pypy only
+            # PyPy
+            def hook(stats: Any) -> None:
+                global _gc_cumulative_time
+                try:
+                    _gc_cumulative_time += stats.duration
+                except RecursionError:
+                    pass
+
+            if gc.hooks.on_gc_minor is None:
+                gc.hooks.on_gc_minor = hook
+            if gc.hooks.on_gc_collect_step is None:
+                gc.hooks.on_gc_collect_step = hook
+
+        _gc_initialized = True
+
+    return _gc_cumulative_time

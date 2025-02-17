@@ -11,7 +11,7 @@ namespace NKikimr::NArrow::NMerger {
 class TMergePartialStream {
 private:
 #ifndef NDEBUG
-    std::optional<TSortableBatchPosition> CurrentKeyColumns;
+    std::optional<TCursor> CurrentKeyColumns;
 #endif
     bool PossibleSameVersionFlag = true;
 
@@ -34,9 +34,12 @@ private:
         return result;
     }
 
-    std::optional<TSortableBatchPosition> DrainCurrentPosition();
+    void DrainCurrentPosition(TRecordBatchBuilder* builder, std::shared_ptr<TSortableScanData>* resultScanData, ui64* resultPosition);
 
-    void CheckSequenceInDebug(const TSortableBatchPosition& nextKeyColumnsPosition);
+    void CheckSequenceInDebug(const TRWSortableBatchPosition& nextKeyColumnsPosition);
+    bool DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish,
+        std::optional<TCursor>* lastResultPosition = nullptr);
+
 public:
     TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse, const std::vector<std::string>& versionColumnNames)
         : SortSchema(sortSchema)
@@ -49,6 +52,7 @@ public:
         Y_ABORT_UNLESS(!DataSchema || DataSchema->num_fields());
     }
 
+    void PutControlPoint(const TSortableBatchPosition& point, const bool deepCopy);
     void SkipToLowerBound(const TSortableBatchPosition& pos, const bool include);
 
     void SetPossibleSameVersion(const bool value) {
@@ -67,8 +71,6 @@ public:
         return TStringBuilder() << "sort_heap=" << SortHeap.DebugJson();
     }
 
-    void PutControlPoint(std::shared_ptr<TSortableBatchPosition> point);
-
     void RemoveControlPoint();
 
     bool ControlPointEnriched() const {
@@ -80,12 +82,10 @@ public:
         if (!batch || !batch->num_rows()) {
             return;
         }
-        if (filter && filter->IsTotalDenyFilter()) {
-            return;
-        }
 //        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
+        const bool isDenyFilter = filter && filter->IsTotalDenyFilter();
         auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;
-        SortHeap.Push(TBatchIterator(batch, filterImpl, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
+        SortHeap.Push(TBatchIterator(batch, filterImpl, SortSchema->field_names(), (!isDenyFilter && DataSchema) ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
     }
 
     bool IsEmpty() const {
@@ -93,10 +93,9 @@ public:
     }
 
     void DrainAll(TRecordBatchBuilder& builder);
-    std::shared_ptr<arrow::Table> SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition = nullptr);
-    bool DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition = nullptr);
-    bool DrainToControlPoint(TRecordBatchBuilder& builder, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition = nullptr);
-    std::vector<std::shared_ptr<arrow::RecordBatch>> DrainAllParts(const std::map<TSortableBatchPosition, bool>& positions,
+    std::shared_ptr<arrow::Table> SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TCursor>* lastResultPosition = nullptr);
+    bool DrainToControlPoint(TRecordBatchBuilder& builder, const bool includeFinish, std::optional<TCursor>* lastResultPosition = nullptr);
+    std::vector<std::shared_ptr<arrow::RecordBatch>> DrainAllParts(const TIntervalPositions& positions,
         const std::vector<std::shared_ptr<arrow::Field>>& resultFields);
 };
 

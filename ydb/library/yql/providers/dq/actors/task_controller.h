@@ -4,7 +4,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 
-#include <ydb/library/yql/providers/common/metrics/service_counters.h>
+#include <yql/essentials/providers/common/metrics/service_counters.h>
 
 namespace NYql {
 

@@ -16,12 +16,12 @@ int TTopicWriteScenario::DoRun(const TClientCommand::TConfig& config)
     ui32 partitionSeed = RandomNumber<ui32>(partitionCount);
 
     std::vector<TString> generatedMessages =
-        TTopicWorkloadWriterWorker::GenerateMessages(MessageSize);
+        TTopicWorkloadWriterWorker::GenerateMessages(MessageSizeBytes);
 
     std::vector<std::future<void>> threads;
 
     StartConsumerThreads(threads, config.Database);
-    StartProducerThreads(threads, partitionCount, partitionSeed, generatedMessages);
+    StartProducerThreads(threads, partitionCount, partitionSeed, generatedMessages, config.Database);
 
     StatsCollector->PrintWindowStatsLoop();
 

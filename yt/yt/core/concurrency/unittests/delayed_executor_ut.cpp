@@ -20,7 +20,7 @@ TEST(TDelayedExecutorTest, SubmitLarge)
     auto state = std::make_shared<TProbeState>();
 
     auto cookie = TDelayedExecutor::Submit(
-        BIND([fired, state, probe = TProbe(state.get())] () { ++*fired; }),
+        BIND([fired, state, probe = TProbe(state.get())] { ++*fired; }),
         TDuration::MilliSeconds(1000));
 
     Sleep(TDuration::MilliSeconds(500));
@@ -40,7 +40,7 @@ TEST(TDelayedExecutorTest, SubmitSmall)
     auto state = std::make_shared<TProbeState>();
 
     auto cookie = TDelayedExecutor::Submit(
-        BIND([fired, state, probe = TProbe(state.get())] () { ++*fired; }),
+        BIND([fired, state, probe = TProbe(state.get())] { ++*fired; }),
         TDuration::MilliSeconds(100));
 
     Sleep(TDuration::MilliSeconds(50));
@@ -60,7 +60,7 @@ TEST(TDelayedExecutorTest, SubmitZeroDelay)
     auto state = std::make_shared<TProbeState>();
 
     auto cookie1 = TDelayedExecutor::Submit(
-        BIND([fired, state, probe = TProbe(state.get())] () { ++*fired; }),
+        BIND([fired, state, probe = TProbe(state.get())] { ++*fired; }),
         TDuration::MilliSeconds(0));
 
     Sleep(TDuration::MilliSeconds(10));
@@ -68,7 +68,7 @@ TEST(TDelayedExecutorTest, SubmitZeroDelay)
     EXPECT_EQ(1, *fired);
 
     auto cookie2 = TDelayedExecutor::Submit(
-        BIND([fired, state, probe = TProbe(state.get())]() { ++*fired; }),
+        BIND([fired, state, probe = TProbe(state.get())] { ++*fired; }),
         TDuration::MilliSeconds(10));
 
     Sleep(TDuration::MilliSeconds(50));
@@ -88,7 +88,7 @@ TEST(TDelayedExecutorTest, StressTest)
         auto delay = rand() % 50;
 
         auto cookie = TDelayedExecutor::Submit(
-            BIND([start, delay, fired] () {
+            BIND([start, delay, fired] {
                 i64 diff = (TInstant::Now() - start).MilliSeconds();
                 EXPECT_LE(delay, diff + 10);
                 EXPECT_LE(diff, delay + 100);
@@ -110,7 +110,7 @@ TEST(TDelayedExecutorTest, SubmitAndCancel)
     auto state = std::make_shared<TProbeState>();
 
     auto cookie = TDelayedExecutor::Submit(
-        BIND([fired, state, probe = TProbe(state.get())] () { ++*fired; }),
+        BIND([fired, state, probe = TProbe(state.get())] { ++*fired; }),
         TDuration::MilliSeconds(10));
 
     TDelayedExecutor::CancelAndClear(cookie);

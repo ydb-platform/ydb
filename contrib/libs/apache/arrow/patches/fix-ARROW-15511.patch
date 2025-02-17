@@ -1,0 +1,35 @@
+From 3f9daeb25fd471e85d584a2743f83a1abfe5fb3d Mon Sep 17 00:00:00 2001
+From: emkornfield <emkornfield@gmail.com>
+Date: Wed, 2 Feb 2022 12:26:12 +0100
+Subject: [PATCH] ARROW-15511: [Python][C++] Remove reference management in
+ numpy indexer
+
+It appears all usages don't escape the scope of methods so a strong reference should already be in place.
+This is necessary because Ndarray1DIndexer can be used without the GIL held.
+
+Closes #12314 from emkornfield/ARROW-15511
+
+Authored-by: emkornfield <emkornfield@gmail.com>
+Signed-off-by: Antoine Pitrou <antoine@python.org>
+---
+ cpp/src/arrow/python/numpy_internal.h | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/cpp/src/arrow/python/numpy_internal.h b/cpp/src/arrow/python/numpy_internal.h
+index 973f577cb1320..50d1a0fcb75d4 100644
+--- a/cpp/src/arrow/python/numpy_internal.h
++++ b/cpp/src/arrow/python/numpy_internal.h
+@@ -43,12 +43,11 @@ class Ndarray1DIndexer {
+   explicit Ndarray1DIndexer(PyArrayObject* arr) : Ndarray1DIndexer() {
+     arr_ = arr;
+     DCHECK_EQ(1, PyArray_NDIM(arr)) << "Only works with 1-dimensional arrays";
+-    Py_INCREF(arr);
+     data_ = reinterpret_cast<uint8_t*>(PyArray_DATA(arr));
+     stride_ = PyArray_STRIDES(arr)[0];
+   }
+ 
+-  ~Ndarray1DIndexer() { Py_XDECREF(arr_); }
++  ~Ndarray1DIndexer() = default;
+ 
+   int64_t size() const { return PyArray_SIZE(arr_); }
+ 

@@ -17,7 +17,7 @@ using namespace NTableClient;
 ////////////////////////////////////////////////////////////////////////////////
 
 IColumnConverterPtr CreateColumnConvert(
-    const NTableClient::TColumnSchema& columnSchema,
+    const TColumnSchema& columnSchema,
     int columnId,
     int columnOffset)
 {
@@ -30,7 +30,7 @@ IColumnConverterPtr CreateColumnConvert(
 
         case EValueType::Double:
             switch (columnSchema.CastToV1Type()) {
-                case NTableClient::ESimpleLogicalValueType::Float:
+                case ESimpleLogicalValueType::Float:
                     return CreateFloatingPoint32ColumnConverter(columnId, columnSchema, columnOffset);
                 default:
                     return CreateFloatingPoint64ColumnConverter(columnId, columnSchema, columnOffset);
@@ -64,27 +64,22 @@ IColumnConverterPtr CreateColumnConvert(
 
 TConvertedColumnRange TColumnConverters::ConvertRowsToColumns(
     TRange<TUnversionedRow> rows,
-    const THashMap<int, TColumnSchema>& columnSchema)
+    const THashMap<int, TColumnSchema>& columnSchemas)
 {
     TConvertedColumnRange convertedColumnsRange;
     if (rows.size() == 0) {
         return convertedColumnsRange;
     }
 
-    if(IsFirstBatch_) {
-        // Initialize mapping column ids to indexes, since, for example, in the case of column specification (//path/to/table{column1,column3}), not all column ids will exist
-
-        auto firstRow = rows[0];
-
-        for (const auto* item = firstRow.Begin(); item != firstRow.End(); ++item) {
-            IdsToIndexes_[item->Id] = std::ssize(ColumnIds_);
-            ColumnIds_.push_back(item->Id);
-            auto iterSchema = columnSchema.find(item->Id);
-            if (iterSchema == columnSchema.end()) {
-                THROW_ERROR_EXCEPTION("Column with Id %v has no schema", item->Id);
-            }
+    if (IsFirstBatch_) {
+        // Initialize mapping column ids to indexes.
+        ColumnIds_.reserve(columnSchemas.size());
+        for (const auto& columnSchema : columnSchemas) {
+            IdsToIndexes_[columnSchema.first] = std::ssize(ColumnIds_);
+            ColumnIds_.push_back(columnSchema.first);
         }
     }
+
     IsFirstBatch_ = false;
 
     std::vector<TUnversionedRowValues> rowsValues;
@@ -101,10 +96,10 @@ TConvertedColumnRange TColumnConverters::ConvertRowsToColumns(
         }
         rowsValues.push_back(std::move(rowValues));
     }
-
+    convertedColumnsRange.reserve(std::ssize(ColumnIds_));
     for (int offset = 0; offset < std::ssize(ColumnIds_); offset++) {
-        auto iterSchema = columnSchema.find(ColumnIds_[offset]);
-        YT_VERIFY(iterSchema != columnSchema.end());
+        auto iterSchema = columnSchemas.find(ColumnIds_[offset]);
+        YT_VERIFY(iterSchema != columnSchemas.end());
         auto converter = CreateColumnConvert(iterSchema->second, ColumnIds_[offset], offset);
         auto columns = converter->Convert(rowsValues);
         convertedColumnsRange.push_back(std::move(columns));

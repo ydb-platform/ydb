@@ -1,0 +1,16 @@
+service: arcadia-unassigned
+title: clang-format default config
+
+arcanum:
+  review:
+    auto_assign: true
+    groups:
+      - name: cppcommittee
+        roles: cppcommittee:consultant
+    rules:
+      - subpaths: "config.clang-format"
+        reviewers:
+          - name: cppcommittee
+            assign: 1
+            ship: 0
+            min_approvers_count: 1

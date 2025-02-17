@@ -103,7 +103,9 @@ class TopicReaderSync:
         self._check_closed()
 
         return self._caller.safe_call_with_result(
-            self._async_reader.receive_batch(),
+            self._async_reader.receive_batch(
+                max_messages=max_messages,
+            ),
             timeout,
         )
 

@@ -11,7 +11,7 @@ import ydb.public.api.protos.ydb_value_pb2 as ydb
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
 import ydb.tests.fq.s3.s3_helpers as s3_helpers
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, YQ_STATS_FULL
+from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, yq_v2, YQ_STATS_FULL
 
 
 class TestS3Formats:
@@ -39,6 +39,26 @@ class TestS3Formats:
         assert result_set.rows[2].items[1].int32_value == 15
         assert result_set.rows[2].items[2].int32_value == 33
 
+    def validate_result_inference(self, result_set):
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 3
+        assert result_set.columns[0].name == "Fruit"
+        assert result_set.columns[0].type.type_id == ydb.Type.UTF8
+        assert result_set.columns[1].name == "Price"
+        assert result_set.columns[1].type.optional_type.item.type_id == ydb.Type.INT64
+        assert result_set.columns[2].name == "Weight"
+        assert result_set.columns[2].type.optional_type.item.type_id == ydb.Type.INT64
+        assert len(result_set.rows) == 3
+        assert result_set.rows[0].items[0].text_value == "Banana"
+        assert result_set.rows[0].items[1].int64_value == 3
+        assert result_set.rows[0].items[2].int64_value == 100
+        assert result_set.rows[1].items[0].text_value == "Apple"
+        assert result_set.rows[1].items[1].int64_value == 2
+        assert result_set.rows[1].items[2].int64_value == 22
+        assert result_set.rows[2].items[0].text_value == "Pear"
+        assert result_set.rows[2].items[1].int64_value == 15
+        assert result_set.rows[2].items[2].int64_value == 33
+
     def validate_pg_result(self, result_set):
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
@@ -61,13 +81,16 @@ class TestS3Formats:
 
     @yq_all
     @pytest.mark.parametrize("kikimr_settings", [{"stats_mode": YQ_STATS_FULL}], indirect=True)
-    @pytest.mark.parametrize("filename, type_format", [
-        ("test.csv", "csv_with_names"),
-        ("test.tsv", "tsv_with_names"),
-        ("test.json", "json_each_row"),
-        ("test.json", "json_list"),
-        ("test.parquet", "parquet"),
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("test.csv", "csv_with_names"),
+            ("test.tsv", "tsv_with_names"),
+            ("test_each_row.json", "json_each_row"),
+            ("test_list.json", "json_list"),
+            ("test.parquet", "parquet"),
+        ],
+    )
     def test_format(self, kikimr, s3, client, filename, type_format, yq_version, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         storage_connection_name = unique_prefix + "fruitbucket"
@@ -100,6 +123,35 @@ class TestS3Formats:
             assert stat["ResultSet"]["IngressBytes"]["sum"] > 0
             if type_format != "json_list":
                 assert stat["ResultSet"]["IngressRows"]["sum"] == 3
+
+    @yq_v2
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("test.csv", "csv_with_names"),
+            ("test.tsv", "tsv_with_names"),
+            ("test_each_row.json", "json_each_row"),
+            ("test_list.json", "json_list"),
+            ("test.parquet", "parquet"),
+        ],
+    )
+    def test_format_inference(self, kikimr, s3, client, filename, type_format, unique_prefix):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`{filename}`
+            WITH (format=`{type_format}`, with_infer='true');
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        self.validate_result_inference(result_set)
 
     @yq_all
     def test_btc(self, kikimr, s3, client, unique_prefix):
@@ -142,20 +194,14 @@ class TestS3Formats:
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_format(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("fbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = '''Fruit,Price,Weight
@@ -183,26 +229,23 @@ Pear,15,33'''
         describe_result = client.describe_query(query_id).result
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
-        assert "Unknown format: invalid_type_format. Use one of: csv_with_names, tsv_with_names, json_list, json, raw, json_as_string, json_each_row, parquet" in describe_string
+        assert (
+            "Unknown format: invalid_type_format. Use one of: csv_with_names, tsv_with_names, json_list, json, raw, json_as_string, json_each_row, parquet"
+            in describe_string
+        )
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_input_compression(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("ibucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         s3_client.put_object(Body="blahblahblah", Bucket='ibucket', Key='fruits', ContentType='text/plain')
@@ -230,20 +273,14 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_output_compression(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("obucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         s3_client.put_object(Body="blahblahblah", Bucket='obucket', Key='fruits', ContentType='text/plain')
@@ -272,20 +309,14 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_custom_csv_delimiter_format(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("fbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = '''Fruit;Price;Weight
@@ -340,7 +371,9 @@ Pear,15,33'''
         describe_result = client.describe_query(query_id).result
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
-        assert "Column `AMOGUS` is marked as not null, but was not found in the csv file" in describe_string, describe_string
+        assert (
+            "Column `AMOGUS` is marked as not null, but was not found in the csv file" in describe_string
+        ), describe_string
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -396,8 +429,12 @@ Pear,15,33'''
             describe_result = client.describe_query(query_id).result
             logging.debug("Describe result: {}".format(describe_result))
             describe_string = "{}".format(describe_result)
-            assert "failed to parse data in column `{}\\' from row 0, probably data type differs from specified in schema".format(
-                corrupted_col_name) in describe_string, describe_string
+            assert (
+                "failed to parse data in column `{}\\' from row 0, probably data type differs from specified in schema".format(
+                    corrupted_col_name
+                )
+                in describe_string
+            ), describe_string
 
         query1_id = client.create_query("simple", sql1, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         query2_id = client.create_query("simple", sql2, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
@@ -492,3 +529,22 @@ Pear,15,33'''
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].bytes_value == b"Pear"
         assert result_set.rows[0].items[1].int32_value == 15
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_raw_empty_schema_query(self, kikimr, s3, client, unique_prefix):
+        self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+        sql = f'''
+            SELECT * FROM `{storage_connection_name}`.`*`
+            WITH (format=raw, SCHEMA ());
+            '''
+
+        query_id = client.create_query(
+            "test_raw_empty_schema", sql, type=fq.QueryContent.QueryType.ANALYTICS
+        ).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        describe_string = "{}".format(describe_result)
+        assert r"Only one column in schema supported in raw format" in describe_string

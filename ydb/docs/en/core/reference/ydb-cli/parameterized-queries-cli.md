@@ -10,7 +10,7 @@ To run parameterized YQL queries you can use the following {{ ydb-short-name }} 
 * [ydb scripting yql](scripting-yql.md).
 * [ydb table query execute](table-query-execute.md).
 
-These commands support the same query parametrization options. Parameter values can be set on the command line, uploaded from [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %} files, and read from `stdin` in binary or [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %} format. On `stdin` you can stream multiple parameter values triggering multiple YQL query executions with batching options.
+These commands support the same query parametrization options. Parameter values can be set on the command line, uploaded from [JSON](https://en.wikipedia.org/wiki/JSON) files, and read from `stdin` in binary or [JSON](https://en.wikipedia.org/wiki/JSON) format. On `stdin` you can stream multiple parameter values triggering multiple YQL query executions with batching options.
 
 {% note warning %}
 
@@ -24,11 +24,11 @@ To provide parameters for a YQL query execution, you can use command line, JSON 
 
 | Name | Description |
 ---|---
-| `-p, --param` | An expression in the format `$name=value`, where `$name` is the name of the YQL query parameter and `value` is its value (a correct [JSON value](https://www.json.org/json-ru.html)). The option can be specified repeatedly.<br><br>All the specified parameters must be declared in the YQL query by the [DECLARE operator](../../yql/reference/syntax/declare.md); otherwise, you will get an error "Query does not contain parameter". If you specify the same parameter several times, you will get an error "Parameter value found in more than one source".<br><br>Depending on your operating system, you might need to escape the `$` character or enclose your expression in single quotes (`'`). |
-| `--param-file` | Name of a file in [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %} format in [UTF-8]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/UTF-8){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/UTF-8){% endif %} encoding that contains parameter values matched against the YQL query parameters by key names. The option can be specified repeatedly.<br><br>If values of the same parameter are found in multiple files or set by the `--param` command line option, you'll get an error "Parameter value found in more than one source".<br><br>Names of keys in the JSON file are expected without the leading `$` sign. Keys that are present in the file but aren't declared in the YQL query will be ignored without an error message. |
-| `--input-format` | Format of parameter values, applied to all sources of parameters (command line, file, or `stdin`).<br>Available options:<ul><li>`json-unicode` (default):[JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}.</li><li>`json-base64`: [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %} with values of binary string parameters (`DECLARE $par AS String`) are [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}-encoded. This feature enables you to process binary data, being decoded from Base64 by the {{ ydb-short-name }} CLI.</li></ul> |
-| `--stdin-format` | Format of parameter values for `stdin`.<br>The {{ ydb-short-name }} CLI automatically detects that a file or an output of another shell command has been redirected to the standard input device `stdin`. In this case, the CLI interprets the incoming data based on the following available options:<ul><li>`json-unicode`: [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}.</li><li>`json-base64`: [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %} with values of binary string parameters (`DECLARE $par AS String`) are [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}-encoded.</li><li>`raw`: Binary data.</li></ul>If format of parameter values for `stdin` isn't specified, the `--input-format` is used. |
-| `--stdin-par` | Name of a parameter whose value is provided on `stdin`, without a `$` sign. This name is required when you use the `raw` format in `--stdin-format`.<br><br>When used with JSON formats, `stdin` is interpreted not as a JSON document but as a JSON value passed to the parameter with the specified name. |
+| `-p, --param` | An expression in the format `$name=value`, where `$name` is the name of the YQL query parameter and `value` is its value (a correct [JSON value](https://www.json.org/json-ru.html)). The option can be specified repeatedly.<br/><br/>All the specified parameters must be declared in the YQL query by the [DECLARE operator](../../yql/reference/syntax/declare.md); otherwise, you will get an error "Query does not contain parameter". If you specify the same parameter several times, you will get an error "Parameter value found in more than one source".<br/><br/>Depending on your operating system, you might need to escape the `$` character or enclose your expression in single quotes (`'`). |
+| `--param-file` | Name of a file in [JSON](https://en.wikipedia.org/wiki/JSON) format in [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoding that contains parameter values matched against the YQL query parameters by key names. The option can be specified repeatedly.<br/><br/>If values of the same parameter are found in multiple files or set by the `--param` command line option, you'll get an error "Parameter value found in more than one source".<br/><br/>Names of keys in the JSON file are expected without the leading `$` sign. Keys that are present in the file but aren't declared in the YQL query will be ignored without an error message. |
+| `--input-format` | Format of parameter values, applied to all sources of parameters (command line, file, or `stdin`).<br/>Available options:<ul><li>`json-unicode` (default):[JSON](https://en.wikipedia.org/wiki/JSON).</li><li>`json-base64`: [JSON](https://en.wikipedia.org/wiki/JSON) with values of binary string parameters (`DECLARE $par AS String`) are [Base64](https://en.wikipedia.org/wiki/Base64)-encoded. This feature enables you to process binary data, being decoded from Base64 by the {{ ydb-short-name }} CLI.</li></ul> |
+| `--stdin-format` | Format of parameter values for `stdin`.<br/>The {{ ydb-short-name }} CLI automatically detects that a file or an output of another shell command has been redirected to the standard input device `stdin`. In this case, the CLI interprets the incoming data based on the following available options:<ul><li>`json-unicode`: [JSON](https://en.wikipedia.org/wiki/JSON).</li><li>`json-base64`: [JSON](https://en.wikipedia.org/wiki/JSON) with values of binary string parameters (`DECLARE $par AS String`) are [Base64](https://en.wikipedia.org/wiki/Base64)-encoded.</li><li>`raw`: Binary data.</li></ul>If format of parameter values for `stdin` isn't specified, the `--input-format` is used. |
+| `--stdin-par` | Name of a parameter whose value is provided on `stdin`, without a `$` sign. This name is required when you use the `raw` format in `--stdin-format`.<br/><br/>When used with JSON formats, `stdin` is interpreted not as a JSON document but as a JSON value passed to the parameter with the specified name. |
 
 The query will be executed on the server once, provided that values are specified for all the parameters [in the `DECLARE` clause](../../yql/reference/syntax/declare.md). If a value is absent for at least one parameter, the command fails with the "Missing value for parameter" message.
 
@@ -92,8 +92,8 @@ Command output:
 
 ```bash
 {{ ydb-cli }} -p quickstart table query execute \
-  -q 'declare $a as String;
-      select $a' \
+  -q 'DECLARE $a AS String;
+      SELECT $a' \
   --input-format json-base64 \
   --param '$a="SGVsbG8sIHdvcmxkCg=="'
 ```
@@ -112,8 +112,8 @@ Command output:
 
 ```bash
 curl -Ls http://ydb.tech/docs | {{ ydb-cli }} -p quickstart table query execute \
-  -q 'declare $a as String;
-      select LEN($a)' \
+  -q 'DECLARE $a AS String;
+      SELECT LEN($a)' \
   --stdin-format raw \
   --stdin-par a
 ```
@@ -140,7 +140,7 @@ A rule for separating parameter sets from one another (framing) complements the 
 
 | Name | Description |
 ---|---
-| `--stdin-format` | Defines the `stdin` framing. <br>Available options:<ul><li>`no-framing` (default): No framing, `stdin` expects a single set of parameters, and the YQL query is executed only once when the `stdin` stream is closed.</li><li>`newline-delimited`: A newline character marks the end of one set of parameter values on `stdin`, separating it from the next one. The YQL query is executed each time a newline character is read from `stdin`.</li></ul> |
+| `--stdin-format` | Defines the `stdin` framing. <br/>Available options:<ul><li>`no-framing` (default): No framing, `stdin` expects a single set of parameters, and the YQL query is executed only once when the `stdin` stream is closed.</li><li>`newline-delimited`: A newline character marks the end of one set of parameter values on `stdin`, separating it from the next one. The YQL query is executed each time a newline character is read from `stdin`.</li></ul> |
 
 {% note warning %}
 
@@ -178,9 +178,9 @@ Let's execute the query by passing the content of this file to `stdin`, formatti
 ```bash
 cat par1.txt | \
 {{ ydb-cli }} -p quickstart table query execute \
-  -q 'declare $a as Int64;
-      declare $b as Int64;
-      select $a+$b' \
+  -q 'DECLARE $a AS Int64;
+      DECLARE $b AS Int64;
+      SELECT $a + $b' \
   --stdin-format newline-delimited \
   --format json-unicode
 ```
@@ -206,9 +206,9 @@ For example, you need to run your query thrice, with the following sets of value
 ```bash
 echo -e '10\n15\n35' | \
 {{ ydb-cli }} -p quickstart table query execute \
-  -q 'declare $a as Int64;
-      declare $b as Int64;
-      select $a+$b as sum1' \
+  -q 'DECLARE $a AS Int64;
+      DECLARE $b AS Int64;
+      SELECT $a + $b AS sum1' \
   --param '$b=100' \
   --stdin-format newline-delimited \
   --stdin-par a \
@@ -255,28 +255,29 @@ To use the batching capbilities, define the `List<...>` or `List<Struct<...>>` p
 
 | Name | Description |
 ---|---
-| `--batch` | The batch mode applied to parameter sets on `stdin`.<br>Available options:<ul><li>`iterative` (default): Batching is [disabled](#streaming-iterate).</li><li>`full`: Full batch mode. The YQL query runs only once when `stdin` is closed, with all the received sets of parameters wrapped into `List<>`, the parameter name is set by the `--stdin-par` option.</li><li>`adaptive`: Adaptive batch mode. The YQL query runs every time when limits are exceeded either on the number of parameter sets per query (`--batch-limit`) or on the batch processing delay (`--batch-max-delay`). All the sets of parameters received by that moment are wrapped into a `List<>`, the parameter name is set by the `--stdin-par` option. |
+| `--batch` | The batch mode applied to parameter sets on `stdin`.<br/>Available options:<ul><li>`iterative` (default): Batching is [disabled](#streaming-iterate).</li><li>`full`: Full batch mode. The YQL query runs only once when `stdin` is closed, with all the received sets of parameters wrapped into `List<>`, the parameter name is set by the `--stdin-par` option.</li><li>`adaptive`: Adaptive batch mode. The YQL query runs every time when limits are exceeded either on the number of parameter sets per query (`--batch-limit`) or on the batch processing delay (`--batch-max-delay`). All the sets of parameters received by that moment are wrapped into a `List<>`, the parameter name is set by the `--stdin-par` option. |
 
 In the adaptive batch mode, you can use the following additional parameters:
 
 | Name | Description |
 ---|---
-| `--batch-limit` | The maximum number of sets of parameters per batch in the adaptive batch mode. The next batch will be sent to the YQL query if the number of parameter sets in it reaches the specified limit. When it's `0`, there's no limit.<br><br>Default value: `1000`.<br><br>Parameter values are sent to each YQL execution without streaming, so the total size per GRPC request that includes the parameter values has the upper limit of about 5 MB. |
-| `--batch-max-delay` | The maximum delay to submit a received parameter set for processing in the adaptive batch mode. It's set as a number with a time unit - `s`, `ms`, `m`.<br><br>Default value: `1s` (1 second).<br><br>The {{ ydb-short-name }} CLI starts a timer when it receives a first set of parameters for the batch on `stdin`, and sends the whole accumulated batch for execution once the timer expires. With this parameter, you can batch efficiently when new parameter sets arrival rate on `stdin` is unpredictable. |
+| `--batch-limit` | The maximum number of sets of parameters per batch in the adaptive batch mode. The next batch will be sent to the YQL query if the number of parameter sets in it reaches the specified limit. When it's `0`, there's no limit.<br/><br/>Default value: `1000`.<br/><br/>Parameter values are sent to each YQL execution without streaming, so the total size per GRPC request that includes the parameter values has the upper limit of about 5 MB. |
+| `--batch-max-delay` | The maximum delay to submit a received parameter set for processing in the adaptive batch mode. It's set as a number with a time unit - `s`, `ms`, `m`.<br/><br/>Default value: `1s` (1 second).<br/><br/>The {{ ydb-short-name }} CLI starts a timer when it receives a first set of parameters for the batch on `stdin`, and sends the whole accumulated batch for execution once the timer expires. With this parameter, you can batch efficiently when new parameter sets arrival rate on `stdin` is unpredictable. |
 
 ### Examples: Full batch processing {#example-batch-full}
 
 ```bash
 echo -e '{"a":10,"b":20}\n{"a":15,"b":25}\n{"a":35,"b":48}' | \
 {{ ydb-cli }} -p quickstart table query execute \
-  -q 'declare $x as List<Struct<a:Int64,b:Int64>>;
-      select ListLength($x), $x' \
+  -q 'DECLARE $x AS List<Struct<a:Int64,b:Int64>>;
+      SELECT ListLength($x), $x' \
   --stdin-format newline-delimited \
   --stdin-par x \
   --batch full
 ```
 
 Command output:
+
 ```text
 ┌─────────┬───────────────────────────────────────────────────┐
 | column0 | column1                                           |
@@ -294,8 +295,8 @@ This example demonstrates the adaptive batching triggered by a processing delay.
 ```bash
 for i in $(seq 1 1000);do echo "Line$i";sleep 0.2;done | \
 {{ ydb-cli }} -p quickstart table query execute \
-  -q 'declare $x as List<Utf8>;
-      select ListLength($x), $x' \
+  -q 'DECLARE $x AS List<Utf8>;
+      SELECT ListLength($x), $x' \
   --stdin-format newline-delimited \
   --stdin-format raw \
   --stdin-par x \
@@ -304,7 +305,7 @@ for i in $(seq 1 1000);do echo "Line$i";sleep 0.2;done | \
 
 Command output (actual values may differ):
 
-```
+```text
 ┌─────────┬────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 | column0 | column1                                                                                                                |
 ├─────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
@@ -336,9 +337,9 @@ In this example, we also demonstrate the option to join parameters from differen
 ```bash
 for i in $(seq 1 200);do echo "Line$i";done | \
 {{ ydb-cli }} -p quickstart table query execute \
-  -q 'declare $x as List<Utf8>;
-      declare $p2 as Int64;
-      select ListLength($x) as count, $p2 as p2, $x as items' \
+  -q 'DECLARE $x AS List<Utf8>;
+      DECLARE $p2 AS Int64;
+      SELECT ListLength($x) AS count, $p2 AS p2, $x AS items' \
   --stdin-format newline-delimited \
   --stdin-format raw \
   --stdin-par x \
@@ -358,9 +359,9 @@ Command output:
 {"count":20,"p2":10,"items":["Line181","Line182","Line183","Line184","Line185","Line186","Line187","Line188","Line189","Line190","Line191","Line192","Line193","Line194","Line195","Line196","Line197","Line198","Line199","Line200"]}
 ```
 
-#### Deleting multiple records from a YDB table based on primary keys {#example-adaptive-delete-pk}
+#### Deleting multiple records from a {{ ydb-short-name }} table based on primary keys {#example-adaptive-delete-pk}
 
-This example shows how you can delete an unlimited number of records from YDB tables without risking exceeding the limit on the number of records per transaction.
+This example shows how you can delete an unlimited number of records from {{ ydb-short-name }} tables without risking exceeding the limit on the number of records per transaction.
 
 Let's create a test table:
 
@@ -379,11 +380,11 @@ Delete all records with ID > 10:
 
 ```bash
 {{ ydb-cli }} -p quickstart table query execute -t scan \
-  -q 'select t.id from test_delete_1 as t where t.id > 10' \
+  -q 'SELECT t.id FROM test_delete_1 AS t WHERE t.id > 10' \
   --format json-unicode | \
 {{ ydb-cli }} -p quickstart table query execute \
-  -q 'declare $lines as List<Struct<id:UInt64>>;
-      delete from test_delete_1 where id in (select tl.id from AS_TABLE($lines) as tl)' \
+  -q 'DECLARE $lines AS List<Struct<id:UInt64>>;
+      DELETE FROM test_delete_1 WHERE id IN (SELECT tl.id FROM AS_TABLE($lines) AS tl)' \
   --stdin-format newline-delimited \
   --stdin-par lines \
   --batch adaptive \

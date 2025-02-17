@@ -6,17 +6,12 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/protos/index_builder.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
-template <>
-inline void Out<NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus>
-    (IOutputStream& o, NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus status)
-{
-    o << NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus_Name(status);
-}
 
 namespace NKikimr {
 
@@ -30,7 +25,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
     static void DoBuildIndex(Tests::TServer::TPtr server, TActorId sender,
                              const TString& tableFrom, const TString& tableTo,
                              const TRowVersion& snapshot,
-                             const NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus& expected) {
+                             const NKikimrIndexBuilder::EBuildStatus& expected) {
         auto &runtime = *server->GetRuntime();
         TVector<ui64> datashards = GetTableShards(server, sender, tableFrom);
         TTableId tableId = ResolveTableId(server, sender, tableFrom);
@@ -57,14 +52,14 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
                 TAutoPtr<IEventHandle> handle;
                 auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvBuildIndexProgressResponse>(handle);
 
-                if (expected == NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE
-                    && reply->Record.GetStatus() == NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED) {
+                if (expected == NKikimrIndexBuilder::EBuildStatus::DONE
+                    && reply->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::ACCEPTED) {
                     Cerr << "skip ACCEPTED" << Endl;
                     continue;
                 }
 
-                if (expected != NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS
-                    && reply->Record.GetStatus() == NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS) {
+                if (expected != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS
+                    && reply->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
                     Cerr << "skip INPROGRESS" << Endl;
                     continue;
                 }
@@ -121,7 +116,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1" });
 
-        DoBuildIndex(server, sender, "/Root/table-1", "/Root/table-2", snapshot, NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE);
+        DoBuildIndex(server, sender, "/Root/table-1", "/Root/table-2", snapshot, NKikimrIndexBuilder::EBuildStatus::DONE);
 
         // Writes to shadow data should not be visible yet
         auto data = ReadShardedTable(server, "/Root/table-2");
@@ -167,17 +162,13 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         CreateShardedTableForIndex(server, sender, "/Root", "table-2", 1, false);
 
-        auto observer = runtime.AddObserver<TEvDataShard::TEvCompactBorrowed>([&](TEvDataShard::TEvCompactBorrowed::TPtr& event) {
-            IActor *actor = runtime.FindActor(event->Sender);
-            if (actor && actor->GetActivityType() == 186) {
-                Cerr << "Ignore SchemeShard TEvCompactBorrowed from " << event->Sender << "(" << actor->GetActivityType() << ")" << " to " << event->Recipient << Endl;
-                event.Reset();
-            }
+        TBlockEvents<TEvDataShard::TEvCompactBorrowed> block(runtime, [&](const TEvDataShard::TEvCompactBorrowed::TPtr& event) {
+            return runtime.FindActorName(event->Sender) == "FLAT_SCHEMESHARD_ACTOR";
         });
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1" });
 
-        DoBuildIndex(server, sender, "/Root/table-1", "/Root/table-2", snapshot, NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE);
+        DoBuildIndex(server, sender, "/Root/table-1", "/Root/table-2", snapshot, NKikimrIndexBuilder::EBuildStatus::DONE);
 
         // Writes to shadow data should not be visible yet
         auto data = ReadShardedTable(server, "/Root/table-2");
@@ -203,12 +194,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), shardIndex == 0 ? 2 : 3);
 
-            const auto& ownersProto = stats.GetUserTablePartOwners();
-            THashSet<ui64> owners(ownersProto.begin(), ownersProto.end());
+            THashSet<ui64> owners(stats.GetUserTablePartOwners().begin(), stats.GetUserTablePartOwners().end());
             // Note: datashard always adds current shard to part owners, even if there are no parts
-            UNIT_ASSERT_VALUES_EQUAL(owners.size(), 2u);
-            UNIT_ASSERT(owners.contains(shards1.at(0)));
-            UNIT_ASSERT(owners.contains(shards2.at(shardIndex)));
+            UNIT_ASSERT_VALUES_EQUAL(owners, (THashSet<ui64>{shards1.at(0), shards2.at(shardIndex)}));
             
             auto tableId = ResolveTableId(server, sender, "/Root/table-2");
             auto result = CompactBorrowed(runtime, shards2.at(shardIndex), tableId);
@@ -217,23 +205,12 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetPathId().GetOwnerId(), tableId.PathId.OwnerId);
             UNIT_ASSERT_VALUES_EQUAL(result.GetPathId().GetLocalId(), tableId.PathId.LocalPathId);
 
-            for (int i = 0; i < 5; ++i) {
+            for (int i = 0; i < 5 && (owners.size() > 1 || owners.contains(shards1.at(0))); ++i) {
                 auto stats = WaitTableStats(runtime, shards2.at(shardIndex));
-                // Cerr << "Received shard stats:" << Endl << stats.DebugString() << Endl;
-                const auto& ownersProto = stats.GetUserTablePartOwners();
-                THashSet<ui64> owners(ownersProto.begin(), ownersProto.end());
-                if (i < 4) {
-                    if (owners.size() > 1) {
-                        continue;
-                    }
-                    if (owners.contains(shards1.at(0))) {
-                        continue;
-                    }
-                }
-                UNIT_ASSERT_VALUES_EQUAL(owners.size(), 1u);
-                UNIT_ASSERT(owners.contains(shards2.at(shardIndex)));
-                Cerr << "OK " << shards2.at(shardIndex) << Endl;
+                owners = THashSet<ui64>(stats.GetUserTablePartOwners().begin(), stats.GetUserTablePartOwners().end());
             }
+
+            UNIT_ASSERT_VALUES_EQUAL(owners, (THashSet<ui64>{shards2.at(shardIndex)}));
         }
 
         // Alter table: disable shadow data and change compaction policy

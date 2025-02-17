@@ -22,8 +22,9 @@ PEERDIR(
     ydb/library/security
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/proto
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()
@@ -32,7 +33,6 @@ END()
 
 RECURSE(
     events
-    proto
 )
 
 RECURSE_FOR_TESTS(

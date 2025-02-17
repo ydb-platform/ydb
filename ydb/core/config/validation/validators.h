@@ -4,6 +4,12 @@
 
 #include <vector>
 
+namespace NKikimrProto {
+
+class TAuthConfig;
+
+} // NKikimrProto
+
 namespace NKikimr::NConfig {
 
 enum class EValidationResult {
@@ -30,6 +36,18 @@ struct TVDiskKey {
 EValidationResult ValidateStaticGroup(
     const NKikimrConfig::TAppConfig& current,
     const NKikimrConfig::TAppConfig& proposed,
+    std::vector<TString>& msg);
+
+EValidationResult ValidateAuthConfig(
+    const NKikimrProto::TAuthConfig& authConfig,
+    std::vector<TString>& msg);
+
+EValidationResult ValidateColumnShardConfig(
+    const NKikimrConfig::TColumnShardConfig& columnShardConfig, 
+    std::vector<TString>& msg);
+
+EValidationResult ValidateConfig(
+    const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);
 
 } // namespace NKikimr::NConfig

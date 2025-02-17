@@ -2,8 +2,6 @@
 
 Generates a write-only load on the VDisk. Simulates a Distributed Storage Proxy. The test outputs the VDisk write performance in operations per second.
 
-{% include notitle [addition](../_includes/addition.md) %}
-
 ## Actor parameters {#options}
 
 {% include [load-actors-params](../_includes/load-actors-params.md) %}
@@ -26,5 +24,3 @@ Generates a write-only load on the VDisk. Simulates a Distributed Storage Proxy.
 ### Parameters of probabilistic distribution {#params}
 
 {% include [load-actors-params](../_includes/load-actors-interval.md) %}
-
-<!-- ## Примеры {#examples} -->

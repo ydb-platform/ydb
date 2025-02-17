@@ -161,7 +161,7 @@
 #define HAVE_ALARM 1
 
 /* Define to 1 if you have the `arc4random' function. */
-/* #undef HAVE_ARC4RANDOM */
+#define HAVE_ARC4RANDOM 1
 
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #define HAVE_ARPA_INET_H 1
@@ -176,10 +176,10 @@
 #define HAVE_BOOL_T 1
 
 /* if BROTLI is in use */
-/* #undef HAVE_BROTLI */
+#define HAVE_BROTLI 1
 
 /* Define to 1 if you have the <brotli/decode.h> header file. */
-/* #undef HAVE_BROTLI_DECODE_H */
+#define HAVE_BROTLI_DECODE_H 1
 
 /* Define to 1 if you have the __builtin_available function. */
 /* #undef HAVE_BUILTIN_AVAILABLE */
@@ -395,7 +395,7 @@
 /* #undef HAVE_LDAP_URL_PARSE */
 
 /* Define to 1 if you have the `brotlidec' library (-lbrotlidec). */
-/* #undef HAVE_LIBBROTLIDEC */
+#define HAVE_LIBBROTLIDEC 1
 
 /* Define to 1 if you have the <libgen.h> header file. */
 #define HAVE_LIBGEN_H 1
@@ -425,7 +425,7 @@
 #define HAVE_LIBZ 1
 
 /* Define to 1 if you have the `zstd' library (-lzstd). */
-/* #undef HAVE_LIBZSTD */
+#define HAVE_LIBZSTD 1
 
 /* Define to 1 if you have the <linux/tcp.h> header file. */
 #define HAVE_LINUX_TCP_H 1
@@ -470,13 +470,13 @@
 #define HAVE_NGHTTP2_NGHTTP2_H 1
 
 /* Define to 1 if you have the <nghttp3/nghttp3.h> header file. */
-/* #undef HAVE_NGHTTP3_NGHTTP3_H */
+#define HAVE_NGHTTP3_NGHTTP3_H 1
 
 /* Define to 1 if you have the <ngtcp2/ngtcp2_crypto.h> header file. */
-/* #undef HAVE_NGTCP2_NGTCP2_CRYPTO_H */
+#define HAVE_NGTCP2_NGTCP2_CRYPTO_H 1
 
 /* Define to 1 if you have the <ngtcp2/ngtcp2.h> header file. */
-/* #undef HAVE_NGTCP2_NGTCP2_H */
+#define HAVE_NGTCP2_NGTCP2_H 1
 
 /* if you have an old MIT Kerberos version, lacking GSS_C_NT_HOSTBASED_SERVICE
    */
@@ -754,10 +754,10 @@
 /* #undef HAVE_X509_H */
 
 /* if libzstd is in use */
-/* #undef HAVE_ZSTD */
+#define HAVE_ZSTD 1
 
 /* Define to 1 if you have the <zstd.h> header file. */
-/* #undef HAVE_ZSTD_H */
+#define HAVE_ZSTD_H 1
 
 /* Define to 1 if you have the `_fseeki64' function. */
 /* #undef HAVE__FSEEKI64 */
@@ -886,16 +886,16 @@
 #define USE_NGHTTP2 1
 
 /* if nghttp3 is in use */
-/* #undef USE_NGHTTP3 */
+#define USE_NGHTTP3 1
 
 /* if ngtcp2 is in use */
-/* #undef USE_NGTCP2 */
+#define USE_NGTCP2 1
 
 /* if ngtcp2_crypto_gnutls is in use */
 /* #undef USE_NGTCP2_CRYPTO_GNUTLS */
 
 /* if ngtcp2_crypto_quictls is in use */
-/* #undef USE_NGTCP2_CRYPTO_QUICTLS */
+#define USE_NGTCP2_CRYPTO_QUICTLS 1
 
 /* if ngtcp2_crypto_wolfssl is in use */
 /* #undef USE_NGTCP2_CRYPTO_WOLFSSL */

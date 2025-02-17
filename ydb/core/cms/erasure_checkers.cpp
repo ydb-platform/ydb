@@ -1,5 +1,8 @@
 #include "erasure_checkers.h"
 
+#include <ydb/core/protos/counters_cms.pb.h>
+#include <ydb/core/tablet/tablet_counters.h>
+
 namespace NKikimr::NCms {
 
 bool TErasureCounterBase::IsDown(const TVDiskInfo &vdisk, TClusterInfoPtr info, TDuration &retryTime, TErrorInfo &error) {
@@ -43,6 +46,10 @@ bool TErasureCounterBase::GroupAlreadyHasLockedDisks() const {
     return HasAlreadyLockedDisks;
 }
 
+bool TErasureCounterBase::GroupHasMoreThanOneDiskPerNode() const {
+    return HasMoreThanOneDiskPerNode;
+}
+
 static TString DumpVDisksInfo(const THashMap<TVDiskID, TString>& vdisks, TClusterInfoPtr info) {
     if (vdisks.empty()) {
         return "<empty>";
@@ -77,10 +84,13 @@ bool TErasureCounterBase::CheckForMaxAvailability(TClusterInfoPtr info, TErrorIn
         }
 
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+        error.Reason = TReason(
+            TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
             << ": too many unavailable vdisks"
             << ". Locked: " << DumpVDisksInfo(Locked, info)
-            << ". Down: " << DumpVDisksInfo(Down, info);
+            << ". Down: " << DumpVDisksInfo(Down, info),
+            TReason::EType::TooManyUnavailableVDisks
+        );
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -118,10 +128,17 @@ bool TErasureCounterBase::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr in
 }
 
 void TErasureCounterBase::CountGroupState(TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo &error) {
-    for (const auto &vdId : info->BSGroup(GroupId).VDisks) {
-        if (vdId != VDisk.VDiskId)
-            CountVDisk(info->VDisk(vdId), info, retryTime, duration, error);
+    const auto& group = info->BSGroup(GroupId);
+
+    TSet<ui32> groupNodes;
+    for (const auto &vdId : group.VDisks) {
+        const auto &vd = info->VDisk(vdId);
+        if (vd.VDiskId != VDisk.VDiskId)
+            CountVDisk(vd, info, retryTime, duration, error);
+        groupNodes.insert(vd.NodeId);
     }
+
+    HasMoreThanOneDiskPerNode = group.VDisks.size() > groupNodes.size();
 
     if (Locked && error.Code == TStatus::DISALLOW) {
         HasAlreadyLockedDisks = true;
@@ -133,10 +150,11 @@ void TErasureCounterBase::CountGroupState(TClusterInfoPtr info, TDuration retryT
 bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo &error,
         TInstant &defaultDeadline, bool allowPartial) const
 {
-    if (HasAlreadyLockedDisks && allowPartial) {
+    if (HasAlreadyLockedDisks && !HasMoreThanOneDiskPerNode && allowPartial) {
+        CmsCounters->Cumulative()[COUNTER_PARTIAL_PERMISSIONS_OPTIMIZED].Increment(1);
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = "You cannot get two or more disks from the same group at the same time"
-                        " without specifying the PartialPermissionAllowed parameter";
+                        " in partial permissions allowed mode";
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -150,10 +168,13 @@ bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErr
         }
 
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+        error.Reason = TReason(
+            TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
             << ": too many unavailable vdisks"
             << ". Locked: " << DumpVDisksInfo(Locked, info)
-            << ". Down: " << DumpVDisksInfo(Down, info);
+            << ". Down: " << DumpVDisksInfo(Down, info),
+            TReason::EType::TooManyUnavailableVDisks
+        );
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -164,10 +185,11 @@ bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErr
 bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo &error,
         TInstant &defaultDeadline, bool allowPartial) const
 {
-    if (HasAlreadyLockedDisks && allowPartial) {
+    if (HasAlreadyLockedDisks && !HasMoreThanOneDiskPerNode && allowPartial) {
+        CmsCounters->Cumulative()[COUNTER_PARTIAL_PERMISSIONS_OPTIMIZED].Increment(1);
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = "You cannot get two or more disks from the same group at the same time"
-                        " without specifying the PartialPermissionAllowed parameter";
+                        " in partial permissions allowed mode";
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -191,20 +213,26 @@ bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInf
 
     if (DataCenterDisabledNodes.size() > 2) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+        error.Reason = TReason(
+            TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
             << ": too many unavailable vdisks"
             << ". Number of data centers with unavailable vdisks: " << DataCenterDisabledNodes.size()
             << ". Locked: " << DumpVDisksInfo(Locked, info)
-            << ". Down: " << DumpVDisksInfo(Down, info);
+            << ". Down: " << DumpVDisksInfo(Down, info),
+            TReason::EType::TooManyUnavailableVDisks
+        );
         error.Deadline = defaultDeadline;
         return false;
     }
 
     error.Code = TStatus::DISALLOW_TEMP;
-    error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+    error.Reason = TReason(
+        TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
         << ": too many unavailable vdisks"
         << ". Locked: " << DumpVDisksInfo(Locked, info)
-        << ". Down: " << DumpVDisksInfo(Down, info);
+        << ". Down: " << DumpVDisksInfo(Down, info),
+        TReason::EType::TooManyUnavailableVDisks
+    );
     error.Deadline = defaultDeadline;
 
     return false;
@@ -225,7 +253,9 @@ void TMirror3dcCounter::CountGroupState(TClusterInfoPtr info, TDuration retryTim
     ++DataCenterDisabledNodes[VDisk.VDiskId.FailRealm];
 }
 
-TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpecies es, const TVDiskInfo &vdisk, ui32 groupId) {
+TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpecies es,
+     const TVDiskInfo &vdisk, ui32 groupId, TTabletCountersBase* cmsCounters) 
+{
     switch (es) {
         case TErasureType::ErasureNone:
         case TErasureType::ErasureMirror3:
@@ -245,9 +275,9 @@ TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpe
         case TErasureType::Erasure2Plus2Block:
         case TErasureType::Erasure2Plus2Stripe:
         case TErasureType::ErasureMirror3of4:
-            return TSimpleSharedPtr<IErasureCounter>(new TDefaultErasureCounter(vdisk, groupId));
+            return TSimpleSharedPtr<IErasureCounter>(new TDefaultErasureCounter(vdisk, groupId, cmsCounters));
         case TErasureType::ErasureMirror3dc:
-            return TSimpleSharedPtr<IErasureCounter>(new TMirror3dcCounter(vdisk, groupId));
+            return TSimpleSharedPtr<IErasureCounter>(new TMirror3dcCounter(vdisk, groupId, cmsCounters));
         default:
             Y_ABORT("Unknown erasure type: %d", es);
     }

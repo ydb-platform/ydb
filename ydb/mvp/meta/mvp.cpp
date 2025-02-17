@@ -13,18 +13,13 @@
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/http/http_cache.h>
-#include <ydb/library/actors/http/http_static.h>
 #include "mvp.h"
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydbc.h>
-#include "meta.h"
-#include <ydb/mvp/core/http_check.h>
-#include <ydb/mvp/core/http_sensors.h>
-#include <ydb/mvp/core/mvp_swagger.h>
-#include <ydb/mvp/core/mvp_tokens.h>
-#include <ydb/mvp/core/cache_policy.h>
 
 using namespace NMVP;
+
+NMVP::TMVP* NMVP::InstanceMVP;
 
 namespace {
 
@@ -61,23 +56,16 @@ void TMVP::OnTerminate(int) {
     AtomicSet(Quit, true);
 }
 
-NActors::IActor* CreateMemProfiler();
-
-TString TMVP::MetaApiEndpoint;
-TString TMVP::MetaDatabase;
-
 int TMVP::Init() {
     ActorSystem.Start();
 
     ActorSystem.Register(NActors::CreateProcStatCollector(TDuration::Seconds(5), AppData.MetricRegistry = std::make_shared<NMonitoring::TMetricRegistry>()));
 
-    BaseHttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
-    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId));
-
-    HttpProxyId = ActorSystem.Register(NHttp::CreateHttpCache(BaseHttpProxyId, GetCachePolicy));
+    HttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
+    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, HttpProxyId));
 
     if (Http) {
-        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpPort, FQDNHostName());
+        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpPort, TStringBuilder() << FQDNHostName() << ':' << HttpPort);
         ev->CompressContentTypes = {
             "text/plain",
             "text/html",
@@ -88,7 +76,7 @@ int TMVP::Init() {
         ActorSystem.Send(HttpProxyId, ev);
     }
     if (Https) {
-        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpsPort, FQDNHostName());
+        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpsPort, TStringBuilder() << FQDNHostName() << ':' << HttpsPort);
         ev->Secure = true;
         ev->SslCertificatePem = TYdbLocation::SslCertificate;
         ev->CompressContentTypes = {
@@ -101,43 +89,7 @@ int TMVP::Init() {
         ActorSystem.Send(HttpProxyId, ev);
     }
 
-    InitMeta(ActorSystem, BaseHttpProxyId, MetaApiEndpoint, MetaDatabase);
-
-    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/ping",
-                         ActorSystem.Register(new THandlerActorHttpCheck())
-                         )
-                     );
-
-    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/mem_profiler",
-                         ActorSystem.Register(CreateMemProfiler())
-                         )
-                     );
-
-    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/mvp/sensors.json",
-                         ActorSystem.Register(new THandlerActorHttpSensors())
-                         )
-                     );
-
-    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/api/mvp.json",
-                         ActorSystem.Register(new THandlerActorMvpSwagger())
-                         )
-                     );
-
-    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/api/",
-                         ActorSystem.Register(NHttp::CreateHttpStaticContentHandler(
-                                                  "/api/", // url
-                                                  "./content/api/", // file path
-                                                  "/mvp/content/api/", // resource path
-                                                  "index.html" // index namt
-                                                  )
-                                              )
-                         )
-                     );
+    InitMeta();
 
     return 0;
 }
@@ -174,12 +126,6 @@ int TMVP::Shutdown() {
     return 0;
 }
 
-
-ui16 TMVP::HttpPort;
-ui16 TMVP::HttpsPort;
-bool TMVP::Http;
-bool TMVP::Https;
-
 TString TMVP::GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr& req) {
     static TString httpEndpoint = "http://[::1]:" + ToString(HttpPort);
     static TString httpsEndpoint = "https://[::1]:" + ToString(HttpsPort);
@@ -187,6 +133,7 @@ TString TMVP::GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr& req) 
 }
 
 NMvp::TTokensConfig TMVP::TokensConfig;
+TString TMVP::MetaDatabaseTokenName;
 
 TMVP::TMVP(int argc, char** argv)
     : ActorSystemStoppingLock()
@@ -194,7 +141,9 @@ TMVP::TMVP(int argc, char** argv)
     , LoggerSettings(BuildLoggerSettings())
     , ActorSystemSetup(BuildActorSystemSetup(argc, argv))
     , ActorSystem(ActorSystemSetup, &AppData, LoggerSettings)
-{}
+{
+    InstanceMVP = this;
+}
 
 TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
     const NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
@@ -225,6 +174,8 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
 
     MetaApiEndpoint = meta["meta_api_endpoint"].as<std::string>("");
     MetaDatabase = meta["meta_database"].as<std::string>("");
+    MetaCache = meta["meta_cache"].as<bool>(false);
+    MetaDatabaseTokenName = meta["meta_database_token_name"].as<std::string>("");
 }
 
 void TMVP::TryGetGenericOptionsFromConfig(
@@ -255,9 +206,6 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
     if (generic["auth"]) {
         auto auth = generic["auth"];
-        if (TYdbLocation::UserToken.empty()) {
-            TYdbLocation::UserToken = auth["token"].as<std::string>("");
-        }
         ydbTokenFile = auth["token_file"].as<std::string>("");
     }
 

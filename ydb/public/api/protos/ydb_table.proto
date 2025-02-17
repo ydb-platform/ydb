@@ -14,6 +14,7 @@ import "ydb/public/api/protos/ydb_formats.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 package Ydb.Table;
@@ -46,13 +47,68 @@ message DeleteSessionResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message GlobalIndexSettings {
+    oneof partitions {
+        // Enable uniform partitioning of the table that implements the index using the specified partition count.
+        // Note that the index columns must be of type Uint32 or Uint64.
+        uint64 uniform_partitions = 1;
+        // Explicitly specify the key values of the index columns that define the partition boundaries
+        // for the table implementing the index.
+        ExplicitPartitions partition_at_keys = 2;
+    }
+    // Partitioning settings for the table that implements the index.
+    PartitioningSettings partitioning_settings = 3;
+}
+
+message VectorIndexSettings {
+    enum Metric {
+        METRIC_UNSPECIFIED = 0;
+        SIMILARITY_INNER_PRODUCT = 1;
+        SIMILARITY_COSINE = 2;
+        DISTANCE_COSINE = 3;
+        DISTANCE_MANHATTAN = 4;
+        DISTANCE_EUCLIDEAN = 5;
+    }
+
+    enum VectorType {
+        VECTOR_TYPE_UNSPECIFIED = 0;
+        VECTOR_TYPE_FLOAT = 1;
+        VECTOR_TYPE_UINT8 = 2;
+        VECTOR_TYPE_INT8 = 3;
+        VECTOR_TYPE_BIT = 4;
+    }
+
+    Metric metric = 1;
+
+    VectorType vector_type = 2;
+
+    uint32 vector_dimension = 3;
+}
+
+message KMeansTreeSettings {
+    VectorIndexSettings settings = 1;
+    // average count of clusters on each level of tree, 0 -- means auto
+    uint32 clusters = 2;
+    // average count of levels in the tree, 0 -- means auto
+    uint32 levels = 3;
+}
+
 message GlobalIndex {
+    GlobalIndexSettings settings = 1;
 }
 
 message GlobalAsyncIndex {
+    GlobalIndexSettings settings = 1;
 }
 
 message GlobalUniqueIndex {
+    GlobalIndexSettings settings = 1;
+}
+
+message GlobalVectorKMeansTreeIndex {
+    GlobalIndexSettings level_table_settings = 1;
+    GlobalIndexSettings posting_table_settings = 2;
+    KMeansTreeSettings vector_settings = 3;
 }
 
 // Represent secondary index
@@ -66,6 +122,7 @@ message TableIndex {
        GlobalIndex global_index = 3;
        GlobalAsyncIndex global_async_index = 4;
        GlobalUniqueIndex global_unique_index = 6;
+       GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 7;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -89,6 +146,7 @@ message TableIndexDescription {
        GlobalIndex global_index = 3;
        GlobalAsyncIndex global_async_index = 5;
        GlobalUniqueIndex global_unique_index = 8;
+       GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 9;
     }
     Status status = 4;
     // list of columns content to be copied in to index table
@@ -191,6 +249,11 @@ message ChangefeedDescription {
         STATE_INITIAL_SCAN = 3;
     }
 
+    message InitialScanProgress {
+        uint32 parts_total = 1;
+        uint32 parts_completed = 2;
+    }
+
     // Name of the feed
     string name = 1;
     // Mode specifies the information that will be written to the feed
@@ -207,6 +270,8 @@ message ChangefeedDescription {
     string aws_region = 7;
     // Interval of emitting of resolved timestamps. If unspecified, resolved timestamps are not emitted.
     google.protobuf.Duration resolved_timestamps_interval = 8;
+    // Progress of initial scan. If unspecified, initial scan was not launched.
+    InitialScanProgress initial_scan_progress = 9;
 }
 
 message StoragePool {
@@ -264,6 +329,8 @@ message PartitionStats {
     uint64 rows_estimate = 1;
     // Approximate size of shard (bytes)
     uint64 store_size = 2;
+    // id of node that serve shard key range
+    uint32 leader_node_id = 3;
 }
 
 message TableStats {
@@ -346,6 +413,7 @@ message SequenceDescription {
     optional sint64 increment = 6; // increment at each call, defaults to 1
     optional bool cycle = 7; // true when cycle on overflow is allowed
     optional SetVal set_val = 8; // set_val(next_value, next_used) is executed atomically when creating
+    optional Type data_type = 9; // data type of the sequence
 }
 
 message ColumnMeta {
@@ -361,11 +429,17 @@ message ColumnMeta {
     oneof default_value {
         TypedValue from_literal = 5;
         SequenceDescription from_sequence = 6;
+        google.protobuf.NullValue empty_default = 7;
     }
 }
 
+message EvictionToExternalStorageSettings {
+    // Path to external data source
+    string storage = 1;
+}
+
 message DateTypeColumnModeSettings {
-    // The row will be considered as expired at the moment of time, when the value
+    // The row will be considered as expired or assigned a tier at the moment of time, when the value
     // stored in <column_name> is less than or equal to the current time (in epoch
     // time format), and <expire_after_seconds> has passed since that moment;
     // i.e. the expiration threshold is the value of <column_name> plus <expire_after_seconds>.
@@ -402,10 +476,27 @@ message ValueSinceUnixEpochModeSettings {
     uint32 expire_after_seconds = 3;
 }
 
+message TtlTier {
+    oneof expression {
+        DateTypeColumnModeSettings date_type_column = 1;
+        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2;
+    }
+
+    oneof action {
+        google.protobuf.Empty delete = 3;
+        EvictionToExternalStorageSettings evict_to_external_storage = 4;
+    }
+}
+
+message TieredModeSettings {
+    repeated TtlTier tiers = 1;
+}
+
 message TtlSettings {
     oneof mode {
         DateTypeColumnModeSettings date_type_column = 1;
         ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2;
+        TieredModeSettings tiered_ttl = 4;
     }
 
     // There is no guarantee that expired row will be deleted immediately upon
@@ -449,10 +540,10 @@ message ColumnFamily {
         COMPRESSION_UNSPECIFIED = 0;
         COMPRESSION_NONE = 1;
         COMPRESSION_LZ4 = 2;
+        COMPRESSION_ZSTD = 3;
     }
 
-    // Name of the column family, the name "default" must be used for the
-    // primary column family that contains at least primary key columns
+    // Name of the column family
     string name = 1;
 
     // This specifies data storage settings for column family
@@ -464,6 +555,11 @@ message ColumnFamily {
     // When enabled table data will be kept in memory
     // WARNING: DO NOT USE
     Ydb.FeatureFlag.Status keep_in_memory = 4;
+
+    // Set the compression level for selected compression type. If no value is specified, default value will be chosen.
+    // For ZSTD compression level must be in range [-131072:22]
+    // For other compression types compression level must be empty
+    optional int32 compression_level = 5;
 }
 
 message PartitioningSettings {
@@ -551,8 +647,7 @@ message CreateTableRequest {
     Ydb.FeatureFlag.Status key_bloom_filter = 16;
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 17;
-    // Tiering rules name. It specifies how data migrates from one tier (logical storage) to another.
-    string tiering = 18;
+    reserved 18;
     // Is temporary table
     bool temporary = 19;
     // Is table column or row oriented
@@ -631,11 +726,7 @@ message AlterTableRequest {
     repeated string drop_changefeeds = 20;
     // Rename existed index
     repeated RenameIndexItem rename_indexes = 21;
-    // Setup or remove tiering
-    oneof tiering_action {
-        string set_tiering = 22;
-        google.protobuf.Empty drop_tiering = 23;
-    }
+    reserved 22, 23;
 }
 
 message AlterTableResponse {
@@ -714,6 +805,10 @@ message DescribeTableRequest {
     bool include_table_stats = 6;
     // Includes partition statistics (required include_table_statistics)
     bool include_partition_stats = 7;
+    // Includes set_val settings for sequences
+    bool include_set_val = 8;
+    // Includes shard -> node id maping (required include_partition_stats)
+    bool include_shard_nodes_info = 9;
 }
 
 message DescribeTableResponse {
@@ -784,12 +879,16 @@ message StaleModeSettings {
 message SnapshotModeSettings {
 }
 
+message SnapshotRWModeSettings {
+}
+
 message TransactionSettings {
     oneof tx_mode {
         SerializableModeSettings serializable_read_write = 1;
         OnlineModeSettings online_read_only = 2;
         StaleModeSettings stale_read_only = 3;
         SnapshotModeSettings snapshot_read_only = 4;
+        SnapshotRWModeSettings snapshot_read_write = 5;
     }
 }
 
@@ -1090,6 +1189,7 @@ message ReadTableRequest {
     // greater than any of the limits
     uint64 batch_limit_bytes = 8;
     uint64 batch_limit_rows = 9;
+    Ydb.FeatureFlag.Status return_not_null_data_as_optional = 10;
 }
 
 // ReadTable doesn't use Operation, returns result directly
@@ -1174,7 +1274,7 @@ message ExecuteScanQueryRequest {
     QueryStatsCollection.Mode collect_stats = 8;
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
-    bool collect_full_diagnostics = 9;
+    bool collect_full_diagnostics = 9 [deprecated=true];
 }
 
 message ExecuteScanQueryPartialResponse {
@@ -1192,5 +1292,45 @@ message ExecuteScanQueryPartialResult {
     Ydb.TableStats.QueryStats query_stats = 6;
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
-    string query_full_diagnostics = 7;
+    string query_full_diagnostics = 7 [deprecated = true];
+}
+
+// Returns information about an external data source with a given path.
+message DescribeExternalDataSourceRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
+}
+
+message DescribeExternalDataSourceResponse {
+    // Holds DescribeExternalDataSourceResult in case of a successful call.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeExternalDataSourceResult {
+    // Description of a generic scheme object.
+    Ydb.Scheme.Entry self = 1;
+    optional string source_type = 2;
+    optional string location = 3;
+    map<string, string> properties = 4;
+}
+
+// Returns information about an external table with a given path.
+message DescribeExternalTableRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
+}
+
+message DescribeExternalTableResponse {
+    // Holds DescribeExternalTableResult in case of a successful call.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeExternalTableResult {
+    // Description of a generic scheme object.
+    Ydb.Scheme.Entry self = 1;
+    optional string source_type = 2;
+    optional string data_source_path = 3;
+    optional string location = 4;
+    repeated ColumnMeta columns = 5;
+    map<string, string> content = 6;
 }

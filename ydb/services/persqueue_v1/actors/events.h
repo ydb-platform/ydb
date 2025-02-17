@@ -7,6 +7,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/tx/scheme_board/events.h>
 
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -24,6 +25,16 @@ using namespace Ydb;
 //     ui64 AssignId;
 //     ui64 Cookie;
 // };
+
+struct TLocalResponseBase {
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
+};
+
+
+struct TAlterTopicResponse : public TLocalResponseBase {
+    NKikimrSchemeOp::TModifyScheme ModifyScheme;
+};
 
 struct TEvPQProxy {
     enum EEv {
@@ -77,6 +88,7 @@ struct TEvPQProxy {
         EvDirectReadSendClientData,
         EvReadingStarted,
         EvReadingFinished,
+        EvAlterTopicResponse,
         EvEnd
     };
 
@@ -490,16 +502,11 @@ struct TEvPQProxy {
         ui64 TabletId;
     };
 
-    struct TLocalResponseBase {
-        Ydb::StatusIds::StatusCode Status;
-        NYql::TIssues Issues;
-    };
-
     struct TPartitionLocationInfo {
         ui64 PartitionId;
         ui64 Generation;
         ui64 NodeId;
-        TString Hostname;
+        //TString Hostname;
     };
 
     struct TEvPartitionLocationResponse : public NActors::TEventLocal<TEvPartitionLocationResponse, EvPartitionLocationResponse>
@@ -559,6 +566,16 @@ struct TEvPQProxy {
         ui64 StartingReadId;
     };
 
+    struct TEvDirectReadDataSessionConnectedResponse : public TEventLocal<TEvDirectReadDataSessionConnectedResponse, EvDirectReadDataSessionConnected> {
+        TEvDirectReadDataSessionConnectedResponse(ui64 assignId, ui32 tabletGeneration)
+            : AssignId(assignId)
+            , Generation(tabletGeneration)
+        {}
+
+        const ui64 AssignId;
+        ui32 Generation;
+    };
+
     struct TEvDirectReadDataSessionDead : public TEventLocal<TEvDirectReadDataSessionDead, EvDirectReadDataSessionDead> {
         TEvDirectReadDataSessionDead(const TString& session)
             : Session(session)
@@ -610,15 +627,25 @@ struct TEvPQProxy {
     };
 
     struct TEvReadingFinished : public TEventLocal<TEvReadingFinished, EvReadingFinished> {
-        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first)
+        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds)
             : Topic(topic)
             , PartitionId(partitionId)
             , FirstMessage(first)
+            , AdjacentPartitionIds(std::move(adjacentPartitionIds))
+            , ChildPartitionIds(std::move(childPartitionIds))
         {}
 
         TString Topic;
         ui32 PartitionId;
         bool FirstMessage;
+
+        std::vector<ui32> AdjacentPartitionIds;
+        std::vector<ui32> ChildPartitionIds;
+    };
+
+    struct TEvAlterTopicResponse : public TEventLocal<TEvAlterTopicResponse, EvAlterTopicResponse>
+                                 , public TLocalResponseBase {
+        TAlterTopicResponse Response;
     };
 };
 
@@ -647,4 +674,23 @@ struct TGetPartitionsLocationRequest : public TLocalRequestBase {
     TVector<ui32> PartitionIds;
 
 };
+
+struct TAlterTopicRequest : public TLocalRequestBase {
+    TAlterTopicRequest(Ydb::Topic::AlterTopicRequest&& request, const TString& workDir, const TString& name,
+                       const TString& database, const TString& token, bool missingOk)
+        : TLocalRequestBase(request.path(), database, token)
+        , Request(std::move(request))
+        , WorkingDir(workDir)
+        , Name(name)
+        , MissingOk(missingOk)
+    {}
+
+    Ydb::Topic::AlterTopicRequest Request;
+    TString WorkingDir;
+    TString Name;
+    bool MissingOk;
+};
+
+
+
 }

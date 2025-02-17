@@ -35,17 +35,26 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort",
+                                                "Node Type": "TopSort-Aggregate",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Limit": "10",
+                                                        "Name": "TopSort",
+                                                        "TopSortBy": "argument.Count0"
+                                                    },
                                                     {
                                                         "Inputs": [
                                                             {
                                                                 "ExternalPlanNodeId": 2
                                                             }
                                                         ],
-                                                        "Limit": "10",
-                                                        "Name": "TopSort",
-                                                        "TopSortBy": "argument.Count0"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Final"
                                                     }
                                                 ],
                                                 "PlanNodeId": 3,
@@ -59,17 +68,18 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-Filter-TableFullScan",
+                                                                "Node Type": "Aggregate-Filter-TableRangeScan",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
+                                                                        "Aggregation": "{SUM(1)}",
                                                                         "GroupBy": "item.Title",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
                                                                             }
                                                                         ],
-                                                                        "Name": "Aggregate"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
                                                                     },
                                                                     {
                                                                         "Inputs": [
@@ -78,25 +88,25 @@
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",
-                                                                        "Predicate": "item.CounterID == 62 And item.EventDate >= \"15887\" And item.EventDate <= \"15917\" And item.DontCountHits == 0 And item.IsRefresh == 0 And item.Title != \"\""
+                                                                        "Predicate": "item.DontCountHits == 0 AND item.IsRefresh == 0 AND item.Title != \"\""
                                                                     },
                                                                     {
                                                                         "Inputs": [],
-                                                                        "Name": "TableFullScan",
+                                                                        "Name": "TableRangeScan",
+                                                                        "Path": "/local/clickbench/plans/row/hits",
                                                                         "ReadColumns": [
-                                                                            "CounterID",
                                                                             "DontCountHits",
-                                                                            "EventDate",
                                                                             "IsRefresh",
                                                                             "Title"
                                                                         ],
-                                                                        "ReadRanges": [
-                                                                            "EventTime (-\u221e, +\u221e)",
-                                                                            "CounterID (-\u221e, +\u221e)",
-                                                                            "EventDate (-\u221e, +\u221e)",
+                                                                        "ReadRange": [
+                                                                            "CounterID (62)",
+                                                                            "EventDate [15887, 15917]",
                                                                             "UserID (-\u221e, +\u221e)",
+                                                                            "EventTime (-\u221e, +\u221e)",
                                                                             "WatchID (-\u221e, +\u221e)"
                                                                         ],
+                                                                        "Scan": "Parallel",
                                                                         "Table": "clickbench/plans/row/hits"
                                                                     }
                                                                 ],
@@ -118,95 +128,10 @@
                             }
                         ]
                     }
-                ]
-            },
-            "SimplifiedPlan": {
-                "Node Type": "Query",
-                "PlanNodeId": 0,
-                "PlanNodeType": "Query",
-                "Plans": [
-                    {
-                        "Node Type": "ResultSet",
-                        "PlanNodeId": 1,
-                        "PlanNodeType": "ResultSet",
-                        "Plans": [
-                            {
-                                "Node Type": "Limit",
-                                "Operators": [
-                                    {
-                                        "Limit": "10",
-                                        "Name": "Limit"
-                                    }
-                                ],
-                                "PlanNodeId": 2,
-                                "Plans": [
-                                    {
-                                        "Node Type": "TopSort",
-                                        "Operators": [
-                                            {
-                                                "Limit": "10",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "argument.Count0"
-                                            }
-                                        ],
-                                        "PlanNodeId": 4,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "Aggregate",
-                                                "Operators": [
-                                                    {
-                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
-                                                        "GroupBy": "item.Title",
-                                                        "Name": "Aggregate"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 6,
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "Filter",
-                                                        "Operators": [
-                                                            {
-                                                                "Name": "Filter",
-                                                                "Predicate": "item.CounterID == 62 And item.EventDate >= \"15887\" And item.EventDate <= \"15917\" And item.DontCountHits == 0 And item.IsRefresh == 0 And item.Title != \"\""
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 7,
-                                                        "Plans": [
-                                                            {
-                                                                "Node Type": "TableFullScan",
-                                                                "Operators": [
-                                                                    {
-                                                                        "Name": "TableFullScan",
-                                                                        "ReadColumns": [
-                                                                            "CounterID",
-                                                                            "DontCountHits",
-                                                                            "EventDate",
-                                                                            "IsRefresh",
-                                                                            "Title"
-                                                                        ],
-                                                                        "ReadRanges": [
-                                                                            "EventTime (-\u221e, +\u221e)",
-                                                                            "CounterID (-\u221e, +\u221e)",
-                                                                            "EventDate (-\u221e, +\u221e)",
-                                                                            "UserID (-\u221e, +\u221e)",
-                                                                            "WatchID (-\u221e, +\u221e)"
-                                                                        ],
-                                                                        "Table": "clickbench/plans/row/hits"
-                                                                    }
-                                                                ],
-                                                                "PlanNodeId": 8
-                                                            }
-                                                        ]
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {
@@ -214,20 +139,20 @@
                     "reads": [
                         {
                             "columns": [
-                                "CounterID",
                                 "DontCountHits",
-                                "EventDate",
                                 "IsRefresh",
                                 "Title"
                             ],
+                            "lookup_by": [
+                                "CounterID (62)"
+                            ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
-                                "CounterID (-\u221e, +\u221e)",
-                                "EventDate (-\u221e, +\u221e)",
+                                "EventDate [15887, 15917]",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
-                            "type": "FullScan"
+                            "type": "Scan"
                         }
                     ]
                 }

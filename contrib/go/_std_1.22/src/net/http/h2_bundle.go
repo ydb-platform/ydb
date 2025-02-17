@@ -1894,6 +1894,9 @@ func http2terminalReadFrameError(err error) bool {
 // returned error is ErrFrameTooLarge. Other errors may be of type
 // ConnectionError, StreamError, or anything else from the underlying
 // reader.
+//
+// If ReadFrame returns an error and a non-nil Frame, the Frame's StreamID
+// indicates the stream responsible for the error.
 func (fr *http2Framer) ReadFrame() (http2Frame, error) {
 	fr.errDetail = nil
 	if fr.lastFrame != nil {
@@ -2926,7 +2929,7 @@ func (fr *http2Framer) maxHeaderStringLen() int {
 // readMetaFrame returns 0 or more CONTINUATION frames from fr and
 // merge them into the provided hf and returns a MetaHeadersFrame
 // with the decoded hpack values.
-func (fr *http2Framer) readMetaFrame(hf *http2HeadersFrame) (*http2MetaHeadersFrame, error) {
+func (fr *http2Framer) readMetaFrame(hf *http2HeadersFrame) (http2Frame, error) {
 	if fr.AllowIllegalReads {
 		return nil, errors.New("illegal use of AllowIllegalReads with ReadMetaHeaders")
 	}
@@ -2969,6 +2972,7 @@ func (fr *http2Framer) readMetaFrame(hf *http2HeadersFrame) (*http2MetaHeadersFr
 		if size > remainSize {
 			hdec.SetEmitEnabled(false)
 			mh.Truncated = true
+			remainSize = 0
 			return
 		}
 		remainSize -= size
@@ -2981,8 +2985,38 @@ func (fr *http2Framer) readMetaFrame(hf *http2HeadersFrame) (*http2MetaHeadersFr
 	var hc http2headersOrContinuation = hf
 	for {
 		frag := hc.HeaderBlockFragment()
+
+		// Avoid parsing large amounts of headers that we will then discard.
+		// If the sender exceeds the max header list size by too much,
+		// skip parsing the fragment and close the connection.
+		//
+		// "Too much" is either any CONTINUATION frame after we've already
+		// exceeded the max header list size (in which case remainSize is 0),
+		// or a frame whose encoded size is more than twice the remaining
+		// header list bytes we're willing to accept.
+		if int64(len(frag)) > int64(2*remainSize) {
+			if http2VerboseLogs {
+				log.Printf("http2: header list too large")
+			}
+			// It would be nice to send a RST_STREAM before sending the GOAWAY,
+			// but the structure of the server's frame writer makes this difficult.
+			return mh, http2ConnectionError(http2ErrCodeProtocol)
+		}
+
+		// Also close the connection after any CONTINUATION frame following an
+		// invalid header, since we stop tracking the size of the headers after
+		// an invalid one.
+		if invalid != nil {
+			if http2VerboseLogs {
+				log.Printf("http2: invalid header: %v", invalid)
+			}
+			// It would be nice to send a RST_STREAM before sending the GOAWAY,
+			// but the structure of the server's frame writer makes this difficult.
+			return mh, http2ConnectionError(http2ErrCodeProtocol)
+		}
+
 		if _, err := hdec.Write(frag); err != nil {
-			return nil, http2ConnectionError(http2ErrCodeCompression)
+			return mh, http2ConnectionError(http2ErrCodeCompression)
 		}
 
 		if hc.HeadersEnded() {
@@ -2999,7 +3033,7 @@ func (fr *http2Framer) readMetaFrame(hf *http2HeadersFrame) (*http2MetaHeadersFr
 	mh.http2HeadersFrame.invalidate()
 
 	if err := hdec.Close(); err != nil {
-		return nil, http2ConnectionError(http2ErrCodeCompression)
+		return mh, http2ConnectionError(http2ErrCodeCompression)
 	}
 	if invalid != nil {
 		fr.errDetail = invalid
@@ -5266,6 +5300,11 @@ func (sc *http2serverConn) processFrameFromReader(res http2readFrameResult) bool
 		sc.goAway(http2ErrCodeFlowControl)
 		return true
 	case http2ConnectionError:
+		if res.f != nil {
+			if id := res.f.Header().StreamID; id > sc.maxClientStreamID {
+				sc.maxClientStreamID = id
+			}
+		}
 		sc.logf("http2: server connection error from %v: %v", sc.conn.RemoteAddr(), ev)
 		sc.goAway(http2ErrCode(ev))
 		return true // goAway will handle shutdown
@@ -9712,7 +9751,7 @@ func (rl *http2clientConnReadLoop) processData(f *http2DataFrame) error {
 		})
 		return nil
 	}
-	if !cs.firstByte {
+	if !cs.pastHeaders {
 		cc.logf("protocol error: received DATA before a HEADERS frame")
 		rl.endStreamError(cs, http2StreamError{
 			StreamID: f.StreamID,

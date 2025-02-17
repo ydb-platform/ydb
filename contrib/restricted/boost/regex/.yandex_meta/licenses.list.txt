@@ -1,0 +1,76 @@
+====================BSL-1.0====================
+ * Distributed under the Boost Software License, Version 1.0.
+ * (See accompanying file LICENSE_1_0.txt or copy at
+ * http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+ * Use, modification and distribution are subject to the
+ * Boost Software License, Version 1.0. (See accompanying file
+ * LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+ * Use, modification and distribution are subject to the 
+ * Boost Software License, Version 1.0. (See accompanying file 
+ * LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 1998-2000
+ * Dr John Maddock
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 1998-2002
+ * John Maddock
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 1998-2004 John Maddock
+ * Copyright 2011 Garmin Ltd. or its subsidiaries
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 1998-2005
+ * John Maddock
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 1998-2009
+ * John Maddock
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 1998-2009 John Maddock
+ * Copyright 2008 Eric Niebler. 
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2002
+ * John Maddock
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2003
+ * John Maddock
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2003-2005
+ * John Maddock
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2004
+ * John Maddock
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2011
+ * John Maddock
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2020
+ * John Maddock

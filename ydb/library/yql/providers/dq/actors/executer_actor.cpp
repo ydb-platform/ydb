@@ -10,13 +10,13 @@
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 
@@ -44,7 +44,8 @@ public:
         const TDqConfiguration::TPtr& settings,
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         TInstant requestStartTime,
-        bool createTaskSuspended)
+        bool createTaskSuspended,
+        ui64 executionTimeout)
         : TRichActor<TDqExecuter>(&TDqExecuter::Handler)
         , GwmActorId(gwmActorId)
         , PrinterId(printerId)
@@ -54,6 +55,7 @@ public:
         , Counters(counters) // root, component=dq
         , LongWorkersAllocationCounter(Counters->GetSubgroup("component", "ServiceProxyActor")->GetCounter("LongWorkersAllocation"))
         , ExecutionTimeoutCounter(Counters->GetSubgroup("component", "ServiceProxyActor")->GetCounter("ExecutionTimeout", /*derivative=*/ true))
+        , Timeout(TDuration::MilliSeconds(executionTimeout))
         , WorkersAllocationFailTimeout(TDuration::MilliSeconds(Settings->_LongWorkersAllocationFailTimeout.Get().GetOrElse(TDqSettings::TDefault::LongWorkersAllocationFailTimeout)))
         , WorkersAllocationWarnTimeout(TDuration::MilliSeconds(Settings->_LongWorkersAllocationWarnTimeout.Get().GetOrElse(TDqSettings::TDefault::LongWorkersAllocationWarnTimeout)))
         , RequestStartTime(requestStartTime)
@@ -82,6 +84,7 @@ private:
         HFunc(TEvDqFailure, OnFailure);
         HFunc(TEvGraphFinished, OnGraphFinished);
         HFunc(TEvQueryResponse, OnQueryResponse);
+        HFunc(NYql::NDqs::TEvQueryStatus, OnQueryStatus);
         // execution timeout
         cFunc(TEvents::TEvBootstrap::EventType, [this]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
@@ -90,16 +93,16 @@ private:
             issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
             Issues.AddIssues({issue});
             *ExecutionTimeoutCounter += 1;
-            Finish(NYql::NDqProto::StatusIds::LIMIT_EXCEEDED);
+            Finish(NYql::NDqProto::StatusIds::LIMIT_EXCEEDED, true);
         })
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup)
     })
 
     Yql::DqsProto::TWorkerFilter GetPragmaFilter() {
         Yql::DqsProto::TWorkerFilter pragmaFilter;
-        if (Settings->WorkerFilter.Get()) {
+        if (const auto& filter = Settings->WorkerFilter.Get(); filter.Defined()) {
             try {
-                TStringInput inputStream1(Settings->WorkerFilter.Get().GetOrElse(""));
+                TStringInput inputStream1(*filter);
                 ParseFromTextFormat(inputStream1, pragmaFilter);
             } catch (...) {
                 YQL_CLOG(INFO, ProviderDq) << "Cannot parse filter pragma " << CurrentExceptionMessage();
@@ -188,6 +191,7 @@ private:
 
 
         const TString computeActorType = Settings->ComputeActorType.Get().GetOrElse("sync");
+        const TString scheduler = Settings->Scheduler.Get().GetOrElse({});
 
         auto resourceAllocator = RegisterChild(CreateResourceAllocator(
             GwmActorId, SelfId(), ControlId, workerCount,
@@ -201,6 +205,7 @@ private:
         allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
         allocateRequest->Record.SetComputeActorType(computeActorType);
         allocateRequest->Record.SetStatsMode(StatsMode);
+        allocateRequest->Record.SetScheduler(scheduler);
         if (enableComputeActor) {
             ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId());
         }
@@ -239,10 +244,6 @@ private:
             allocateRequest.Release(),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
 
-        Timeout = tasks.size() == 1
-            ? TDuration::MilliSeconds(Settings->_LiteralTimeout.Get().GetOrElse(TDqSettings::TDefault::LiteralTimeout))
-            : TDuration::MilliSeconds(Settings->_TableTimeout.Get().GetOrElse(TDqSettings::TDefault::TableTimeout));
-
         YQL_CLOG(DEBUG, ProviderDq) << "Dq timeouts are set to: "
             << ToString(Timeout) << " (global), "
             << ToString(WorkersAllocationFailTimeout) << " (workers allocation fail), "
@@ -257,7 +258,28 @@ private:
         }
     }
 
-    void Finish(NYql::NDqProto::StatusIds::StatusCode statusCode)
+    void OnQueryStatus(NYql::NDqs::TEvQueryStatus::TPtr& ev, const TActorContext& ctx) {
+        Y_UNUSED(ctx);
+        auto response = MakeHolder<NYql::NDqs::TEvQueryStatusResponse>();
+        auto* r = response->Record.MutableResponse();
+        for (auto& metric : LatestStats.GetMetric()) {
+            auto& responseMetric = *r->AddMetric();
+            responseMetric.SetName(metric.GetName());
+            responseMetric.SetSum(metric.GetSum());
+            responseMetric.SetMin(metric.GetMin());
+            responseMetric.SetMax(metric.GetMax());
+            responseMetric.SetAvg(metric.GetAvg());
+            responseMetric.SetCount(metric.GetCount());
+        }
+        if (ExecutionStart) {
+            r->SetStatus("Executing");
+        } else {
+            r->SetStatus("Uploading artifacts");
+        }
+        Send(ev->Sender, response.Release());
+    }
+
+    void Finish(NYql::NDqProto::StatusIds::StatusCode statusCode, bool timeout = false)
     {
         YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ << " with status=" << static_cast<int>(statusCode) << " issues=" << Issues.ToString();
         if (Finished) {
@@ -270,6 +292,7 @@ private:
             }
             IssuesToMessage(Issues, result.MutableIssues());
             result.SetStatusCode(statusCode);
+            result.SetTimeout(timeout);
             Send(ControlId, MakeHolder<TEvQueryResponse>(std::move(result)));
             Finished = true;
         }
@@ -322,7 +345,7 @@ private:
 
     void OnDqStats(TEvDqStats::TPtr& ev) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
-        YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
+        LatestStats = ev->Get()->Record;
         Send(PrinterId, ev->Release().Release());
     }
 
@@ -514,6 +537,7 @@ private:
     bool CreateTaskSuspended;
     bool Finished = false;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
+    NYql::NDqProto::TDqStats LatestStats;
 };
 
 NActors::IActor* MakeDqExecuter(
@@ -523,9 +547,10 @@ NActors::IActor* MakeDqExecuter(
     const TDqConfiguration::TPtr& settings,
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
     TInstant requestStartTime,
-    bool createTaskSuspended
+    bool createTaskSuspended,
+    ui64 executionTimeout
 ) {
-    return new TLogWrapReceive(new TDqExecuter(gwmActorId, printerId, traceId, username, settings, counters, requestStartTime, createTaskSuspended), traceId);
+    return new TLogWrapReceive(new TDqExecuter(gwmActorId, printerId, traceId, username, settings, counters, requestStartTime, createTaskSuspended, executionTimeout), traceId);
 }
 
 } // namespace NDq

@@ -8,7 +8,7 @@
 
 namespace NKikimr::NTestShard {
 
-    class TLoadActor : public TActorBootstrapped<TLoadActor> {
+    class TLoadActor : public TActor<TLoadActor> {
         const ui64 TabletId;
         const ui32 Generation;
         const TActorId Tablet;
@@ -22,6 +22,7 @@ namespace NKikimr::NTestShard {
             ::NTestShard::TStateServer::EEntityState ConfirmedState = ::NTestShard::TStateServer::ABSENT;
             ::NTestShard::TStateServer::EEntityState PendingState = ::NTestShard::TStateServer::ABSENT;
             std::unique_ptr<TEvKeyValue::TEvRequest> Request;
+            NWilson::TTraceId TraceId;
             size_t ConfirmedKeyIndex = Max<size_t>();
 
             TKeyInfo(ui32 len)
@@ -57,14 +58,16 @@ namespace NKikimr::NTestShard {
         TLoadActor(ui64 tabletId, ui32 generation, const TActorId tablet,
             const NKikimrClient::TTestShardControlRequest::TCmdInitialize& settings);
         ~TLoadActor();
+        void Registered(TActorSystem *sys, const TActorId& owner) override;
         void ClearKeys();
-        void Bootstrap(const TActorId& parentId);
+        void Bootstrap();
         void PassAway() override;
         void HandleWakeup();
         void Action();
         void Handle(TEvStateServerStatus::TPtr ev);
 
         STRICT_STFUNC(StateFunc,
+            cFunc(TEvents::TSystem::Bootstrap, Bootstrap);
             hFunc(TEvKeyValue::TEvResponse, Handle);
             hFunc(NMon::TEvRemoteHttpInfo, Handle);
             hFunc(TEvStateServerStatus, Handle);
@@ -174,7 +177,8 @@ namespace NKikimr::NTestShard {
         std::deque<TKey*> TransitionInFlight;
 
         void RegisterTransition(TKey& key, ::NTestShard::TStateServer::EEntityState from,
-            ::NTestShard::TStateServer::EEntityState to, std::unique_ptr<TEvKeyValue::TEvRequest> ev = nullptr);
+            ::NTestShard::TStateServer::EEntityState to, std::unique_ptr<TEvKeyValue::TEvRequest> ev = nullptr,
+            NWilson::TTraceId traceId = {});
         void Handle(TEvStateServerWriteResult::TPtr ev);
 
         void MakeConfirmed(TKey& key);

@@ -1,0 +1,239 @@
+--- contrib/python/ydb/py3/ydb/_apis.py	(index)
++++ contrib/python/ydb/py3/ydb/_apis.py	(working tree)
+@@ -1,9 +1,8 @@
+ # -*- coding: utf-8 -*-
+ import typing
+
+-# Workaround for good IDE and universal for runtime
+-if typing.TYPE_CHECKING:
+-    from ._grpc.v4 import (
++try:
++    from ydb.public.api.grpc import (
+         ydb_cms_v1_pb2_grpc,
+         ydb_discovery_v1_pb2_grpc,
+         ydb_scheme_v1_pb2_grpc,
+@@ -13,7 +12,7 @@ if typing.TYPE_CHECKING:
+         ydb_query_v1_pb2_grpc,
+     )
+
+-    from ._grpc.v4.protos import (
++    from ydb.public.api.protos import (
+         ydb_status_codes_pb2,
+         ydb_discovery_pb2,
+         ydb_scheme_pb2,
+@@ -24,8 +23,8 @@ if typing.TYPE_CHECKING:
+         ydb_query_pb2,
+     )
+
+-else:
+-    from ._grpc.common import (
++except ImportError:
++    from contrib.ydb.public.api.grpc import (
+         ydb_cms_v1_pb2_grpc,
+         ydb_discovery_v1_pb2_grpc,
+         ydb_scheme_v1_pb2_grpc,
+@@ -35,7 +34,7 @@ else:
+         ydb_query_v1_pb2_grpc,
+     )
+
+-    from ._grpc.common.protos import (
++    from contrib.ydb.public.api.protos import (
+         ydb_status_codes_pb2,
+         ydb_discovery_pb2,
+         ydb_scheme_pb2,
+
+--- contrib/python/ydb/py3/ydb/_grpc/grpcwrapper/common_utils.py	(index)
++++ contrib/python/ydb/py3/ydb/_grpc/grpcwrapper/common_utils.py	(working tree)
+@@ -26,8 +26,7 @@ from google.protobuf.timestamp_pb2 import Timestamp as ProtoTimeStamp
+
+ from ...aio.driver import Driver as DriverIO
+
+-# Workaround for good IDE and universal for runtime
+-if typing.TYPE_CHECKING:
++try:
+     from ..v4.protos import ydb_topic_pb2, ydb_issue_message_pb2
+ else:
+     from ..common.protos import ydb_topic_pb2, ydb_issue_message_pb2
+--- contrib/python/ydb/py3/ydb/_grpc/grpcwrapper/ydb_topic.py	(index)
++++ contrib/python/ydb/py3/ydb/_grpc/grpcwrapper/ydb_topic.py	(working tree)
+@@ -12,8 +12,7 @@ from . import ydb_topic_public_types
+ from ... import scheme
+ from ... import issues
+
+-# Workaround for good IDE and universal for runtime
+-if typing.TYPE_CHECKING:
++try:
+     from ..v4.protos import ydb_scheme_pb2, ydb_topic_pb2
+ else:
+     from ..common.protos import ydb_scheme_pb2, ydb_topic_pb2
+--- contrib/python/ydb/py3/ydb/_grpc/grpcwrapper/ydb_topic_public_types.py	(index)
++++ contrib/python/ydb/py3/ydb/_grpc/grpcwrapper/ydb_topic_public_types.py	(working tree)
+@@ -4,8 +4,7 @@ from dataclasses import dataclass, field
+ from enum import IntEnum
+ from typing import Optional, List, Union, Dict
+
+-# Workaround for good IDE and universal for runtime
+-if typing.TYPE_CHECKING:
++try:
+     from ..v4.protos import ydb_topic_pb2
+ else:
+     from ..common.protos import ydb_topic_pb2
+--- contrib/python/ydb/py3/ydb/aio/connection.py	(index)
++++ contrib/python/ydb/py3/ydb/aio/connection.py	(working tree)
+@@ -25,11 +25,10 @@ from ydb.driver import DriverConfig
+ from ydb.settings import BaseRequestSettings
+ from ydb import issues
+
+-# Workaround for good IDE and universal for runtime
+-if typing.TYPE_CHECKING:
+-    from ydb._grpc.v4 import ydb_topic_v1_pb2_grpc
+-else:
+-    from ydb._grpc.common import ydb_topic_v1_pb2_grpc
++try:
++    from ydb.public.api.grpc import ydb_topic_v1_pb2_grpc
++except ImportError:
++    from contrib.ydb.public.api.grpc import ydb_topic_v1_pb2_grpc
+
+
+ _stubs_list = (
+--- contrib/python/ydb/py3/ydb/credentials.py	(index)
++++ contrib/python/ydb/py3/ydb/credentials.py	(working tree)
+@@ -9,13 +9,12 @@ from concurrent import futures
+ import logging
+ import time
+
+-# Workaround for good IDE and universal for runtime
+-if typing.TYPE_CHECKING:
+-    from ._grpc.v4.protos import ydb_auth_pb2
+-    from ._grpc.v4 import ydb_auth_v1_pb2_grpc
+-else:
+-    from ._grpc.common.protos import ydb_auth_pb2
+-    from ._grpc.common import ydb_auth_v1_pb2_grpc
++try:
++    from ydb.public.api.protos import ydb_auth_pb2
++    from ydb.public.api.grpc import ydb_auth_v1_pb2_grpc
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_auth_pb2
++    from contrib.ydb.public.api.grpc import ydb_auth_v1_pb2_grpc
+
+
+ YDB_AUTH_TICKET_HEADER = "x-ydb-auth-ticket"
+--- contrib/python/ydb/py3/ydb/export.py	(index)
++++ contrib/python/ydb/py3/ydb/export.py	(working tree)
+@@ -5,13 +5,12 @@ from . import _apis
+
+ from . import settings_impl as s_impl
+
+-# Workaround for good IDE and universal for runtime
+-if typing.TYPE_CHECKING:
+-    from ._grpc.v4.protos import ydb_export_pb2
+-    from ._grpc.v4 import ydb_export_v1_pb2_grpc
+-else:
+-    from ._grpc.common.protos import ydb_export_pb2
+-    from ._grpc.common import ydb_export_v1_pb2_grpc
++try:
++    from ydb.public.api.protos import ydb_export_pb2
++    from ydb.public.api.grpc import ydb_export_v1_pb2_grpc
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_export_pb2
++    from contrib.ydb.public.api.grpc import ydb_export_v1_pb2_grpc
+
+ from . import operation
+
+--- contrib/python/ydb/py3/ydb/import_client.py	(index)
++++ contrib/python/ydb/py3/ydb/import_client.py	(working tree)
+@@ -5,13 +5,12 @@ from . import _apis
+
+ from . import settings_impl as s_impl
+
+-# Workaround for good IDE and universal for runtime
+-if typing.TYPE_CHECKING:
+-    from ._grpc.v4.protos import ydb_import_pb2
+-    from ._grpc.v4 import ydb_import_v1_pb2_grpc
+-else:
+-    from ._grpc.common.protos import ydb_import_pb2
+-    from ._grpc.common import ydb_import_v1_pb2_grpc
++try:
++    from ydb.public.api.protos import ydb_import_pb2
++    from ydb.public.api.grpc import ydb_import_v1_pb2_grpc
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_import_pb2
++    from contrib.ydb.public.api.grpc import ydb_import_v1_pb2_grpc
+
+
+ from . import operation
+--- contrib/python/ydb/py3/ydb/issues.py	(index)
++++ contrib/python/ydb/py3/ydb/issues.py	(working tree)
+@@ -8,11 +8,10 @@ import typing
+
+ from . import _apis
+
+-# Workaround for good IDE and universal for runtime
+-if typing.TYPE_CHECKING:
+-    from _grpc.v4.protos import ydb_issue_message_pb2, ydb_operation_pb2
+-else:
+-    from ._grpc.common.protos import ydb_issue_message_pb2, ydb_operation_pb2
++try:
++    from ydb.public.api.protos import ydb_issue_message_pb2, ydb_operation_pb2
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_issue_message_pb2, ydb_operation_pb2
+
+
+ _TRANSPORT_STATUSES_FIRST = 401000
+--- contrib/python/ydb/py3/ydb/resolver.py	(index)
++++ contrib/python/ydb/py3/ydb/resolver.py	(working tree)
+@@ -10,11 +10,10 @@ import typing
+ from . import connection as conn_impl, driver, issues, settings as settings_impl, _apis
+
+
+-# Workaround for good IDE and universal for runtime
+-if typing.TYPE_CHECKING:
+-    from ._grpc.v4.protos import ydb_discovery_pb2
+-else:
+-    from ._grpc.common.protos import ydb_discovery_pb2
++try:
++    from ydb.public.api.protos import ydb_discovery_pb2
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_discovery_pb2
+
+
+ logger = logging.getLogger(__name__)
+--- contrib/python/ydb/py3/ydb/scripting.py	(index)
++++ contrib/python/ydb/py3/ydb/scripting.py	(working tree)
+@@ -1,12 +1,11 @@
+ import typing
+
+-# Workaround for good IDE and universal for runtime
+-if typing.TYPE_CHECKING:
+-    from ._grpc.v4.protos import ydb_scripting_pb2
+-    from ._grpc.v4 import ydb_scripting_v1_pb2_grpc
+-else:
+-    from ._grpc.common.protos import ydb_scripting_pb2
+-    from ._grpc.common import ydb_scripting_v1_pb2_grpc
++try:
++    from ydb.public.api.protos import ydb_scripting_pb2
++    from ydb.public.api.grpc import ydb_scripting_v1_pb2_grpc
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_scripting_pb2
++    from contrib.ydb.public.api.grpc import ydb_scripting_v1_pb2_grpc
+
+
+ from . import issues, convert, settings
+--- contrib/python/ydb/py3/ydb/types.py	(index)
++++ contrib/python/ydb/py3/ydb/types.py	(working tree)
+@@ -14,11 +14,10 @@ from google.protobuf import struct_pb2
+ from . import table
+
+
+-# Workaround for good IDE and universal for runtime
+-if typing.TYPE_CHECKING:
+-    from ._grpc.v4.protos import ydb_value_pb2
+-else:
+-    from ._grpc.common.protos import ydb_value_pb2
++try:
++    from ydb.public.api.protos import ydb_value_pb2
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_value_pb2
+
+
+ _SECONDS_IN_DAY = 60 * 60 * 24

@@ -1,5 +1,5 @@
 #include <ydb/services/ydb/ydb_common_ut.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <ydb/public/lib/fq/fq.h>
 #include <ydb/public/lib/fq/helpers.h>
@@ -10,7 +10,7 @@
 #include <ydb/core/fq/libs/control_plane_storage/message_builders.h>
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <library/cpp/retry/retry.h>

@@ -1,4 +1,4 @@
-This is Python version 3.12.2
+This is Python version 3.12.9
 =============================
 
 .. image:: https://github.com/python/cpython/workflows/Tests/badge.svg
@@ -64,7 +64,7 @@ the executable is called ``python.exe``; elsewhere it's just ``python``.
 Building a complete Python installation requires the use of various
 additional third-party libraries, depending on your build platform and
 configure options.  Not all standard library modules are buildable or
-useable on all platforms.  Refer to the
+usable on all platforms.  Refer to the
 `Install dependencies <https://devguide.python.org/getting-started/setup-building.html#build-dependencies>`_
 section of the `Developer Guide`_ for current detailed information on
 dependencies for various Linux distributions and macOS.
@@ -156,15 +156,6 @@ formatting requirements.
 
 For information about building Python's documentation, refer to `Doc/README.rst
 <https://github.com/python/cpython/blob/main/Doc/README.rst>`_.
-
-
-Converting From Python 2.x to 3.x
----------------------------------
-
-Significant backward incompatible changes were made for the release of Python
-3.0, which may cause programs written for Python 2 to fail when run with Python
-3.  For more information about porting your code from Python 2 to Python 3, see
-the `Porting HOWTO <https://docs.python.org/3/howto/pyporting.html>`_.
 
 
 Testing

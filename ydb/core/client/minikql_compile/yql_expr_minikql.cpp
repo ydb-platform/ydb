@@ -4,7 +4,6 @@
 #include "db_key_resolver.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
@@ -12,23 +11,23 @@
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_printer.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
-#include <ydb/library/yql/minikql/mkql_utils.h>
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_utils.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
-#include <ydb/library/yql/core/type_ann/type_ann_impl.h>
-#include <ydb/library/yql/core/type_ann/type_ann_list.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/type_ann/type_ann_impl.h>
+#include <yql/essentials/core/type_ann/type_ann_list.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 
 #include <library/cpp/threading/future/async.h>
 
@@ -395,20 +394,24 @@ private:
                 YQL_ENSURE(column);
                 typeConstraint = column->TypeConstraint;
 
-                // TODO: support pg types
-                auto columnTypeId = column->Type.GetTypeId();
-                YQL_ENSURE(columnTypeId != NScheme::NTypeIds::Pg, "pg types are not supported");
-
-                // Decimal type is transformed into parametrized Decimal(22, 9).
-                if (columnTypeId == NYql::NProto::TypeIds::Decimal) {
+                switch (column->Type.GetTypeId()) {
+                case NScheme::NTypeIds::Pg: {
+                    // no need to support pg types in the deprecated minikql engine
+                    YQL_ENSURE(false, "pg types are not supported");
+                    break;
+                }
+                case NScheme::NTypeIds::Decimal: {
                     columnDataType = ctx.MakeType<TDataExprParamsType>(
-                        NUdf::GetDataSlot(columnTypeId),
-                        ToString(NScheme::DECIMAL_PRECISION),
-                        ToString(NScheme::DECIMAL_SCALE));
-                } else {
+                        EDataSlot::Decimal,
+                        ToString(column->Type.GetDecimalType().GetPrecision()),
+                        ToString(column->Type.GetDecimalType().GetScale()));
+                    break;
+                }
+                default:{
                     columnDataType = GetMkqlDataTypeAnnotation(
-                        TDataType::Create(columnTypeId, *MkqlCtx->TypeEnv),
-                        ctx);
+                        TDataType::Create(column->Type.GetTypeId(), *MkqlCtx->TypeEnv), ctx);
+                    break;
+                }
                 }
             }
 
@@ -1604,7 +1607,7 @@ private:
     }
 
     void SendResponseAndDie(const TMiniKQLCompileResult& result, THashMap<TString, ui64> &&resolveCookies, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(
+        ctx.Send(
             new IEventHandle(
                 ResponseTo,
                 ctx.SelfID,

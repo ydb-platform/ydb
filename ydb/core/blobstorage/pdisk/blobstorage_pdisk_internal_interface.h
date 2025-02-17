@@ -58,13 +58,13 @@ struct TEvHttpInfoResult : public TEventLocal<TEvHttpInfoResult, TEvBlobStorage:
     }
 };
 
-struct TEvPDiskFormattingFinished : public TEventLocal<TEvPDiskFormattingFinished, TEvBlobStorage::EvPDiskFormattingFinished> {
+struct TEvPDiskFormattingFinished : TEventLocal<TEvPDiskFormattingFinished, TEvBlobStorage::EvPDiskFormattingFinished> {
     bool IsSucceed;
     TString ErrorStr;
 
-    TEvPDiskFormattingFinished(bool isSucceed, const TString &errorStr)
+    TEvPDiskFormattingFinished(bool isSucceed, TString errorStr)
         : IsSucceed(isSucceed)
-        , ErrorStr(errorStr)
+        , ErrorStr(std::move(errorStr))
     {}
 
     TString ToString() const {
@@ -81,6 +81,13 @@ struct TEvPDiskFormattingFinished : public TEventLocal<TEvPDiskFormattingFinishe
     }
 };
 
+struct TEvPDiskMetadataLoaded : public TEventLocal<TEvPDiskMetadataLoaded, TEvBlobStorage::EvPDiskMetadataLoaded> {
+    std::optional<TRcBuf> Metadata;
+
+    TEvPDiskMetadataLoaded(std::optional<TRcBuf> metadata)
+        : Metadata(std::move(metadata))
+    {}
+};
 
 ////////////////////////////////////////////////////////////////////////////
 // This event is used for continuing log reading if it is not possible
@@ -91,10 +98,10 @@ struct TEvReadLogContinue : public TEventLocal<TEvReadLogContinue, TEvBlobStorag
     void *Data;
     ui32 Size;
     ui64 Offset;
-    TCompletionAction *CompletionAction;
+    std::weak_ptr<TCompletionAction> CompletionAction;
     TReqId ReqId;
 
-    TEvReadLogContinue(void *data, ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId)
+    TEvReadLogContinue(void *data, ui32 size, ui64 offset, std::weak_ptr<TCompletionAction> completionAction, TReqId reqId)
         : Data(data)
         , Size(size)
         , Offset(offset)
@@ -202,7 +209,7 @@ struct TEvFormatReencryptionFinish : public TEventLocal<TEvFormatReencryptionFin
 
     TEvFormatReencryptionFinish(bool success, TString errorReason)
         : Success(success)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
     {}
 
     TString ToString() const {

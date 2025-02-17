@@ -3,36 +3,20 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include "abstract.h"
-#include "s3_storage_config.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/wrappers/events/common.h>
-
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/client/ClientConfiguration.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/StorageClass.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/auth/AWSCredentials.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/client/AWSClient.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/AbortMultipartUploadRequest.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/CreateMultipartUploadRequest.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/CompleteMultipartUploadRequest.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/GetObjectRequest.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/HeadObjectRequest.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/PutObjectRequest.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectRequest.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/UploadPartRequest.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/UploadPartCopyRequest.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/client/ClientConfiguration.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/S3Client.h>
+
 #include <ydb/library/actors/core/log.h>
-#include <util/generic/scope.h>
-#include <util/string/builder.h>
-#include <util/string/printf.h>
 
 #include <condition_variable>
 #include <mutex>
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
-class TS3ExternalStorage: public IExternalStorageOperator, TS3User {
+class TS3ExternalStorage: public IExternalStorageOperator {
 private:
     THolder<Aws::S3::S3Client> Client;
     const Aws::Client::ClientConfiguration Config;
@@ -61,27 +45,28 @@ private:
             const Aws::S3::S3Client*,
             const typename TEvRequest::TRequest& request,
             const typename TEvResponse::TOutcome& outcome,
-            const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context) {
-                const auto* ctx = static_cast<const TCtx*>(context.get());
+            const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context)
+        {
+            const auto* ctx = static_cast<const TCtx*>(context.get());
 
-                Y_DEFER {
-                    std::unique_lock guard(RunningQueriesMutex);
-                    --RunningQueriesCount;
-                    if (RunningQueriesCount == 0) {
-                        RunningQueriesNotifier.notify_all();
-                    }
-                };
-
-                if (Verbose) {
-                    LOG_NOTICE_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
-                        << ": uuid# " << ctx->GetUUID()
-                        << ", response# " << outcome);
-                } else {
-                    LOG_INFO_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
-                        << ": uuid# " << ctx->GetUUID()
-                        << ", response# " << outcome);
+            Y_DEFER {
+                std::unique_lock guard(RunningQueriesMutex);
+                --RunningQueriesCount;
+                if (RunningQueriesCount == 0) {
+                    RunningQueriesNotifier.notify_all();
                 }
-                ctx->Reply(request, outcome);
+            };
+
+            if (Verbose) {
+                LOG_NOTICE_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
+                    << ": uuid# " << ctx->GetUUID()
+                    << ", response# " << outcome);
+            } else {
+                LOG_INFO_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
+                    << ": uuid# " << ctx->GetUUID()
+                    << ", response# " << outcome);
+            }
+            ctx->Reply(request, outcome);
         };
 
         if (Verbose) {
@@ -100,11 +85,12 @@ private:
     }
 
 public:
-    TS3ExternalStorage(const Aws::Client::ClientConfiguration& config,
-        const Aws::Auth::AWSCredentials& credentials,
-        const TString& bucket, const Aws::S3::Model::StorageClass storageClass,
-        bool verbose = true,
-        bool useVirtualAdressing = true)
+    TS3ExternalStorage(
+            const Aws::Client::ClientConfiguration& config,
+            const Aws::Auth::AWSCredentials& credentials,
+            const TString& bucket, const Aws::S3::Model::StorageClass storageClass,
+            bool verbose = true,
+            bool useVirtualAdressing = true)
         : Client(new Aws::S3::S3Client(
             credentials,
             config,
@@ -133,6 +119,7 @@ public:
     virtual void Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const override;
     virtual void Execute(TEvUploadPartCopyRequest::TPtr& ev) const override;
 };
+
 } // NKikimr::NWrappers::NExternalStorage
 
 #endif // KIKIMR_DISABLE_S3_OPS

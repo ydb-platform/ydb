@@ -19,6 +19,7 @@ namespace NYT::NConcurrency {
 using namespace NProfiling;
 using namespace NYPath;
 using namespace NYTree;
+using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -30,7 +31,8 @@ public:
         const TString& threadName,
         const std::vector<TString>& queueNames,
         const THashMap<TString, std::vector<TString>>& bucketToQueues,
-        NProfiling::IRegistryImplPtr registry)
+        TThreadOptions threadOptions,
+        NProfiling::IRegistryPtr registry)
         : ShutdownCookie_(RegisterShutdownCallback(
             Format("FairShareActionQueue(%v)", threadName),
             BIND_NO_PROPAGATE(&TFairShareActionQueue::Shutdown, MakeWeak(this), /*graceful*/ false),
@@ -94,8 +96,17 @@ public:
             YT_VERIFY(QueueIndexToBucketQueueIndex_[queueIndex] != -1);
         }
 
-        Queue_ = New<TFairShareInvokerQueue>(CallbackEventCount_, std::move(bucketDescriptions), std::move(registry));
-        Thread_ = New<TFairShareQueueSchedulerThread>(Queue_, CallbackEventCount_, threadName, threadName);
+        Queue_ = New<TFairShareInvokerQueue>(
+            CallbackEventCount_,
+            std::move(bucketDescriptions),
+            std::move(registry));
+
+        Thread_ = New<TFairShareQueueSchedulerThread>(
+            Queue_,
+            CallbackEventCount_,
+            threadName,
+            threadName,
+            threadOptions);
     }
 
     ~TFairShareActionQueue()
@@ -105,16 +116,14 @@ public:
 
     void Shutdown(bool graceful)
     {
-        if (Stopped_.exchange(true)) {
+        // Synchronization done via Queue_->Shutdown().
+        if (Stopped_.exchange(true, std::memory_order::relaxed)) {
             return;
         }
 
-        Queue_->Shutdown();
-
-        ShutdownInvoker_->Invoke(BIND([graceful, thread = Thread_, queue = Queue_] {
-            thread->Stop(graceful);
-            queue->DrainConsumer();
-        }));
+        Queue_->Shutdown(graceful);
+        Thread_->Stop(graceful);
+        Queue_->OnConsumerFinished();
     }
 
     const IInvokerPtr& GetInvoker(int index) override
@@ -143,7 +152,7 @@ public:
     }
 
 private:
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
+    const TIntrusivePtr<TEventCount> CallbackEventCount_ = New<TEventCount>();
 
     const TShutdownCookie ShutdownCookie_;
     const IInvokerPtr ShutdownInvoker_ = GetShutdownInvoker();
@@ -156,18 +165,13 @@ private:
 
     std::vector<TString> BucketNames_;
 
-    std::atomic<bool> Started_ = false;
     std::atomic<bool> Stopped_ = false;
 
 
     void EnsuredStarted()
     {
-        if (Started_.load(std::memory_order::relaxed)) {
-            return;
-        }
-        if (Started_.exchange(true)) {
-            return;
-        }
+        // Thread::Start already has
+        // its own short-circ.
         Thread_->Start();
     }
 };
@@ -178,9 +182,15 @@ IFairShareActionQueuePtr CreateFairShareActionQueue(
     const TString& threadName,
     const std::vector<TString>& queueNames,
     const THashMap<TString, std::vector<TString>>& bucketToQueues,
-    NProfiling::IRegistryImplPtr registry)
+    TThreadOptions threadOptions,
+    NProfiling::IRegistryPtr registry)
 {
-    return New<TFairShareActionQueue>(threadName, queueNames, bucketToQueues, std::move(registry));
+    return New<TFairShareActionQueue>(
+        threadName,
+        queueNames,
+        bucketToQueues,
+        threadOptions,
+        std::move(registry));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

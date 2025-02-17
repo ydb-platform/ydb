@@ -1,9 +1,31 @@
 items:
-- name: Сбор логов в кластере Kubernetes с помощью FluentBit и YDB
-  href: fluent-bit.md
-- name: goose
-  href: goose.md
-- name: Импорт из источников JDBC
-  href: import-jdbc.md
-- name: Liquibase
-  href: liquibase.md
+- name: Графические пользовательские интерфейсы
+  href: gui/index.md
+  include:
+    mode: link
+    path: gui/toc-ide.yaml
+- name: Визуализация данных (Business Intelligence, BI)
+  href: visualization/index.md
+  include:
+    mode: link
+    path: visualization/toc-visualization.yaml
+- name: Оркестрация
+  href: orchestration/index.md
+  include:
+    mode: link
+    path: orchestration/toc-orchestration.yaml
+- name: Поставка данных
+  href: ingestion/index.md
+  include:
+    mode: link
+    path: ingestion/toc-ingestion.yaml
+- name: Миграции данных
+  href: migration/index.md
+  include:
+    mode: link
+    path: migration/toc-migration.yaml
+- name: Объектно-реляционное отображение
+  href: orm/index.md
+  include:
+    mode: link
+    path: orm/toc-orm.yaml

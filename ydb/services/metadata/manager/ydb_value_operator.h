@@ -41,6 +41,7 @@ public:
     static Ydb::Value Utf8(const TString& value);
     static Ydb::Value Utf8(const TStringBuf& value);
     static Ydb::Value UInt64(const ui64 value);
+    static Ydb::Value Int64(const i64 value);
     static Ydb::Value UInt32(const ui32 value);
     static Ydb::Value Bool(const bool value);
 };

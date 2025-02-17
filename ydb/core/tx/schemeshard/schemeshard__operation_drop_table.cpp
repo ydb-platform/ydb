@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 
@@ -38,10 +39,10 @@ void DropPath(NIceDb::TNiceDb& db,
     const auto isBackupTable = context.SS->IsBackupTable(path->PathId);
 
     auto domainInfo = context.SS->ResolveDomainInfo(path->PathId);
-    domainInfo->DecPathsInside(1, isBackupTable);
+    domainInfo->DecPathsInside(context.SS, 1, isBackupTable);
 
     auto parentDir = path.Parent();
-    parentDir->DecAliveChildren(1, isBackupTable);
+    DecAliveChildrenDirect(operationId, parentDir.Base(), context, isBackupTable);
     ++parentDir->DirAlterVersion;
     context.SS->PersistPathDirAlterVersion(db, parentDir.Base());
 
@@ -61,7 +62,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropTable TDropParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -124,7 +125,7 @@ public:
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             context.SS->FillSeqNo(tx, seqNo);
             tx.MutableDropTable()->SetId_Deprecated(pathId.LocalPathId);
-            PathIdFromPathId(pathId, tx.MutableDropTable()->MutablePathId());
+            pathId.ToProto(tx.MutableDropTable()->MutablePathId());
             tx.MutableDropTable()->SetName(path->Name);
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
         }
@@ -151,7 +152,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -260,7 +261,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompletePublication"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
@@ -279,7 +280,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
 
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
@@ -340,7 +341,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -364,7 +365,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         context.OnComplete.Barrier(OperationId, "RenamePathBarrier");
 
@@ -530,9 +531,14 @@ public:
                 if (parent.Base()->IsTableIndex()) {
                     checks
                         .IsTableIndex()
-                        .IsInsideTableIndexPath()
-                        .IsUnderDeleting()
-                        .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of drop base table
+                        .IsInsideTableIndexPath();
+                    // Not build index impl tables can be dropped only as part of drop index
+                    // build index impl tables dropped multiple times during index construction
+                    if (!NTableIndex::IsBuildImplTable(name)) {
+                        checks
+                            .IsUnderDeleting()
+                            .IsUnderTheSameOperation(OperationId.GetTxId());
+                    }
                 } else {
                     checks
                         .IsLikeDirectory()
@@ -595,15 +601,6 @@ public:
 
         for (auto splitTx: table->GetSplitOpsInFlight()) {
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
-        }
-
-        if (table->IsTemporary) {
-            const auto& ownerActorId = table->OwnerActorId;
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Processing drop temp table with Name: " << name
-                    << ", WorkingDir: " << parentPathStr
-                    << ", OwnerActorId: " << ownerActorId);
-            context.OnComplete.UpdateTempTablesToDropState(ownerActorId, path.Base()->PathId);
         }
 
         context.OnComplete.ActivateTx(OperationId);

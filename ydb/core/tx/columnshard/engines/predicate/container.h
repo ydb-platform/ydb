@@ -1,9 +1,14 @@
 #pragma once
 #include "predicate.h"
+
 #include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/core/formats/arrow/replace_key.h>
+
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/result.h>
+#include <ydb/library/formats/arrow/replace_key.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+
 #include <optional>
 
 namespace NKikimr::NOlap {
@@ -15,10 +20,12 @@ private:
     std::shared_ptr<NOlap::TPredicate> Object;
     NArrow::ECompareType CompareType;
     mutable std::optional<std::vector<TString>> ColumnNames;
+    std::shared_ptr<NArrow::TReplaceKey> ReplaceKey;
 
-    TPredicateContainer(std::shared_ptr<NOlap::TPredicate> object)
+    TPredicateContainer(std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<NArrow::TReplaceKey>& replaceKey)
         : Object(object)
-        , CompareType(Object->GetCompareType()) {
+        , CompareType(Object->GetCompareType())
+        , ReplaceKey(replaceKey) {
     }
 
     TPredicateContainer(const NArrow::ECompareType compareType)
@@ -27,15 +34,54 @@ private:
 
     static std::partial_ordering ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r);
 
+    static std::shared_ptr<NArrow::TReplaceKey> ExtractKey(const NOlap::TPredicate& predicate, const std::shared_ptr<arrow::Schema>& key) {
+        AFL_VERIFY(predicate.Batch);
+        const auto& batchFields = predicate.Batch->schema()->fields();
+        const auto& keyFields = key->fields();
+        size_t minSize = std::min(batchFields.size(), keyFields.size());
+        for (size_t i = 0; i < minSize; ++i) {
+            Y_DEBUG_ABORT_UNLESS(batchFields[i]->type()->Equals(*keyFields[i]->type()));
+        }
+        if (batchFields.size() <= keyFields.size()) {
+            return std::make_shared<NArrow::TReplaceKey>(NArrow::TReplaceKey::FromBatch(predicate.Batch, predicate.Batch->schema(), 0));
+        } else {
+            return std::make_shared<NArrow::TReplaceKey>(NArrow::TReplaceKey::FromBatch(predicate.Batch, key, 0));
+        }
+    }
+
 public:
+    bool IsSchemaEqualTo(const std::shared_ptr<arrow::Schema>& schema) const {
+        if (!Object) {
+            return false;
+        }
+        return Object->IsEqualSchema(schema);
+    }
+
+    bool IsEqualPointTo(const TPredicateContainer& item) const {
+        if (!Object != !item.Object) {
+            return false;
+        }
+        if (!Object) {
+            return IsForwardInterval() == item.IsForwardInterval();
+        }
+        return Object->IsEqualTo(*item.Object);
+    }
+
+    NArrow::ECompareType GetCompareType() const {
+        return CompareType;
+    }
+
+    const std::shared_ptr<NArrow::TReplaceKey>& GetReplaceKey() const {
+        return ReplaceKey;
+    }
 
     bool IsEmpty() const {
         return !Object;
     }
 
     template <class TArrayColumn>
-    std::optional<typename TArrayColumn::value_type> Get(const ui32 colIndex, const ui32 rowIndex,
-        const std::optional<typename TArrayColumn::value_type> defaultValue = {}) const {
+    std::optional<typename TArrayColumn::value_type> Get(
+        const ui32 colIndex, const ui32 rowIndex, const std::optional<typename TArrayColumn::value_type> defaultValue = {}) const {
         if (!Object) {
             return defaultValue;
         } else {
@@ -53,19 +99,21 @@ public:
 
     bool IsInclude() const;
 
-    bool CrossRanges(const TPredicateContainer& ext);
+    bool CrossRanges(const TPredicateContainer& ext) const;
 
     static TPredicateContainer BuildNullPredicateFrom() {
         return TPredicateContainer(NArrow::ECompareType::GREATER_OR_EQUAL);
     }
 
-    static std::optional<TPredicateContainer> BuildPredicateFrom(std::shared_ptr<NOlap::TPredicate> object, const TIndexInfo* indexInfo);
+    static TConclusion<TPredicateContainer> BuildPredicateFrom(
+        std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<arrow::Schema>& pkSchema);
 
     static TPredicateContainer BuildNullPredicateTo() {
         return TPredicateContainer(NArrow::ECompareType::LESS_OR_EQUAL);
     }
 
-    static std::optional<TPredicateContainer> BuildPredicateTo(std::shared_ptr<NOlap::TPredicate> object, const TIndexInfo* indexInfo);
+    static TConclusion<TPredicateContainer> BuildPredicateTo(
+        std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<arrow::Schema>& pkSchema);
 
     NKikimr::NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const {
         if (!Object) {
@@ -73,23 +121,6 @@ public:
         }
         return NArrow::TColumnFilter::MakePredicateFilter(data, Object->Batch, CompareType);
     }
-
-    std::optional<NArrow::TReplaceKey> ExtractKey(const std::shared_ptr<arrow::Schema>& key) const {
-        if (Object) {
-            const auto& batchFields = Object->Batch->schema()->fields();
-            const auto& keyFields = key->fields();
-            size_t minSize = std::min(batchFields.size(), keyFields.size());
-            for (size_t i = 0; i < minSize; ++i) {
-                Y_DEBUG_ABORT_UNLESS(batchFields[i]->type()->Equals(*keyFields[i]->type()));
-            }
-            if (batchFields.size() <= keyFields.size()) {
-                return NArrow::TReplaceKey::FromBatch(Object->Batch, Object->Batch->schema(), 0);
-            } else {
-                return NArrow::TReplaceKey::FromBatch(Object->Batch, key, 0);
-            }
-        }
-        return {};
-    }
 };
 
-}
+}   // namespace NKikimr::NOlap

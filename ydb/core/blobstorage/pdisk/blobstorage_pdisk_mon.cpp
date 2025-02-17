@@ -1,6 +1,7 @@
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_requestimpl.h"
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
+#include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
 
@@ -19,7 +20,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     using EVisibility = NMonitoring::TCountableBase::EVisibility;
 
     bool extendedPDiskSensors = NActors::TlsActivationContext
-        && NActors::TlsActivationContext->ExecutorThread.ActorSystem
+        && NActors::TActivationContext::ActorSystem()
         && AppData()->FeatureFlags.GetExtendedPDiskSensors();
 
     EVisibility visibilityForExtended = extendedPDiskSensors
@@ -120,6 +121,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(DeviceGroup, DeviceIoErrors, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceWaitTimeMs, true);
 
+    UpdateDurationTracker.SetPDiskId(PDiskId);
     UpdateDurationTracker.SetCounter(DeviceGroup->GetCounter("PDiskThreadBusyTimeNs", true));
 
     // queue subgroup
@@ -142,6 +144,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     HISTOGRAM_INIT(DeviceReadDuration, deviceReadDuration);
     HISTOGRAM_INIT(DeviceWriteDuration, deviceWriteDuration);
     HISTOGRAM_INIT(DeviceTrimDuration, deviceTrimDuration);
+    HISTOGRAM_INIT(DeviceFlushDuration, deviceFlushDuration);
 
     TRACKER_INIT_IF_EXTENDED(LogQueueTime, logQueueTime, Time in millisec);
     TRACKER_INIT_IF_EXTENDED(GetQueueSyncLog, getQueueSyncLog, Time in millisec);
@@ -222,11 +225,17 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardSlay, YardSlay);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardControl, YardControl);
 
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ShredPDisk, ShredPDisk);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, PreShredCompactVDisk, PreShredCompactVDisk);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ShredVDiskResult, ShredVDiskResult);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, MarkDirty, MarkDirty);
+
     IO_REQ_INIT(PDiskGroup, WriteSyncLog, WriteSyncLog);
     IO_REQ_INIT(PDiskGroup, WriteFresh, WriteFresh);
     IO_REQ_INIT(PDiskGroup, WriteHuge, WriteHuge);
     IO_REQ_INIT(PDiskGroup, WriteComp, WriteComp);
     IO_REQ_INIT(PDiskGroup, Trim, WriteTrim);
+    IO_REQ_INIT(PDiskGroup, ChunkShred, WriteShred);
 
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ReadSyncLog, ReadSyncLog);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ReadComp, ReadComp);

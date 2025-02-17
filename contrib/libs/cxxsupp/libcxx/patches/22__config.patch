@@ -1,0 +1,95 @@
+diff --git a/include/__config b/include/__config
+index d32ad24..1bb99ee 100644
+--- a/include/__config
++++ b/include/__config
+@@ -39,13 +39,25 @@
+ #  define _LIBCPP_GCC_VER (__GNUC__ * 100 + __GNUC_MINOR__)
+ #endif
+ 
++// Move outside #ifdef __cplusplus because this needs to work in both C and C++ headers.
++#if defined(__apple_build_version__)
++#  define _LIBCPP_COMPILER_CLANG_BASED
++#  define _LIBCPP_APPLE_CLANG_VER (__apple_build_version__ / 10000)
++#elif defined(__clang__)
++#  define _LIBCPP_COMPILER_CLANG
++#  define _LIBCPP_COMPILER_CLANG_BASED
++#  define _LIBCPP_CLANG_VER (__clang_major__ * 100 + __clang_minor__)
++#elif defined(__GNUC__)
++#  define _LIBCPP_COMPILER_GCC
++#endif
++
+ #ifdef __cplusplus
+ 
+ // Warn if a compiler version is used that is not supported anymore
+ // LLVM RELEASE Update the minimum compiler versions
+ #  if defined(_LIBCPP_CLANG_VER)
+ #    if _LIBCPP_CLANG_VER < 1600
+-#      warning "Libc++ only supports Clang 16 and later"
++// we temporary allow old clang-s #      warning "Libc++ only supports Clang 16 and later"
+ #    endif
+ #  elif defined(_LIBCPP_APPLE_CLANG_VER)
+ #    if _LIBCPP_APPLE_CLANG_VER < 1500
+@@ -94,7 +106,7 @@
+ #    define _LIBCPP_OBJECT_FORMAT_ELF 1
+ #  elif defined(__MACH__)
+ #    define _LIBCPP_OBJECT_FORMAT_MACHO 1
+-#  elif defined(_WIN32)
++#  elif defined(_WIN32) || defined(__CYGWIN__)
+ #    define _LIBCPP_OBJECT_FORMAT_COFF 1
+ #  elif defined(__wasm__)
+ #    define _LIBCPP_OBJECT_FORMAT_WASM 1
+@@ -819,7 +831,7 @@ typedef __char32_t char32_t;
+ // TODO: We provide a escape hatch with _LIBCPP_NO_ABI_TAG for folks who want to avoid increasing
+ //       the length of symbols with an ABI tag. In practice, we should remove the escape hatch and
+ //       use compression mangling instead, see https://github.com/itanium-cxx-abi/cxx-abi/issues/70.
+-#  ifndef _LIBCPP_NO_ABI_TAG
++#  if !defined(_LIBCPP_NO_ABI_TAG) && !defined(__CUDACC__)
+ #    define _LIBCPP_HIDE_FROM_ABI                                                                                      \
+       _LIBCPP_HIDDEN _LIBCPP_EXCLUDE_FROM_EXPLICIT_INSTANTIATION                                                       \
+           __attribute__((__abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_ODR_SIGNATURE))))
+@@ -1101,7 +1113,8 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+         defined(__APPLE__) ||                                                                                          \
+         defined(__MVS__) ||                                                                                            \
+         defined(_AIX) ||                                                                                               \
+-        defined(__EMSCRIPTEN__)
++        defined(__EMSCRIPTEN__) ||                                                                                     \
++        defined(__CYGWIN__)
+ // clang-format on
+ #      define _LIBCPP_HAS_THREAD_API_PTHREAD
+ #    elif defined(__Fuchsia__)
+@@ -1267,6 +1280,10 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+ #    define _LIBCPP_ENABLE_CXX20_REMOVED_TYPE_TRAITS
+ #  endif // _LIBCPP_ENABLE_CXX20_REMOVED_FEATURES
+ 
++// Yandex-specific: We build our own libc++, so it has everything available
++#  define _LIBCPP_DISABLE_AVAILABILITY
++// End of Yandex-specific
++
+ // clang-format off
+ #  define _LIBCPP_PUSH_MACROS _Pragma("push_macro(\"min\")") _Pragma("push_macro(\"max\")") _Pragma("push_macro(\"refresh\")") _Pragma("push_macro(\"move\")") _Pragma("push_macro(\"erase\")")
+ #  define _LIBCPP_POP_MACROS _Pragma("pop_macro(\"min\")") _Pragma("pop_macro(\"max\")") _Pragma("pop_macro(\"refresh\")") _Pragma("pop_macro(\"move\")") _Pragma("pop_macro(\"erase\")")
+@@ -1452,6 +1469,11 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+ #    define _LIBCPP_NO_DESTROY
+ #  endif
+ 
++#  if !__has_builtin(__builtin_is_constant_evaluated) || (defined(_LIBCPP_COMPILER_GCC) && _GNUC_VER < 900) ||         \
++      __CUDACC_VER_MAJOR__ == 10
++#    define _LIBCPP_HAS_NO_BUILTIN_IS_CONSTANT_EVALUATED
++#  endif
++
+ #  if __has_attribute(__diagnose_if__) && !defined(_LIBCPP_DISABLE_ADDITIONAL_DIAGNOSTICS)
+ #    define _LIBCPP_DIAGNOSE_WARNING(...) __attribute__((__diagnose_if__(__VA_ARGS__, "warning")))
+ #  else
+@@ -1473,6 +1495,12 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+ #    define _LIBCPP_LIFETIMEBOUND
+ #  endif
+ 
++#  if defined(_LIBCPP_COMPILER_CLANG_BASED)
++#    define _LIBCPP_REINITIALIZES_OBJECT [[clang::reinitializes]]
++#  else
++#    define _LIBCPP_REINITIALIZES_OBJECT
++#  endif
++
+ #  if __has_attribute(__nodebug__)
+ #    define _LIBCPP_NODEBUG __attribute__((__nodebug__))
+ #  else

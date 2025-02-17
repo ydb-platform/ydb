@@ -19,6 +19,7 @@ enum EDqStatsMode {
 message TDqAsyncBufferStats {
     // Data
     uint64 Bytes  = 1; // physical bytes
+    uint64 DecompressedBytes = 11; // decompressed bytes
     uint64 Rows   = 2; // logical rows (if applicable)
     uint64 Chunks = 3; // chunk is group of sent/received bytes in single batch
     uint64 Splits = 4; // logical partitioning (if applicable)
@@ -29,12 +30,53 @@ message TDqAsyncBufferStats {
     uint64 LastMessageMs   = 8;  // last message processed
     uint64 WaitTimeUs      = 9;  // SUM(Resume_i - Pause_i) in us
     uint64 WaitPeriods     = 10; // COUNT(Resume_i - Pause_i)
+
+    uint64 FilteredBytes = 12;
+    uint64 FilteredRows = 13;
+    uint64 QueuedBytes = 14;
+    uint64 QueuedRows = 15;
+}
+
+message TDqStatsAggr {
+    uint64 Min = 1;
+    uint64 Max = 2;
+    uint64 Sum = 3;
+    uint64 Cnt = 4;
+    repeated TDqHistoryItem History = 5;
+}
+
+message TDqExternalAggrStats {
+    TDqStatsAggr ExternalRows = 1;
+    TDqStatsAggr ExternalBytes = 2;
+    TDqStatsAggr StorageRows = 3;
+    TDqStatsAggr StorageBytes = 4;
+    TDqStatsAggr CpuTimeUs = 5;
+    TDqStatsAggr WaitInputTimeUs = 6;
+    TDqStatsAggr WaitOutputTimeUs = 7;
+    TDqStatsAggr FirstMessageMs = 8;
+    TDqStatsAggr LastMessageMs = 9;
+    uint32 PartitionCount = 10;
+}
+
+message TDqExternalStats {
+    uint64 ExternalRows = 1;
+    uint64 ExternalBytes = 2;
+    uint64 StorageRows = 3;
+    uint64 StorageBytes = 4;
+    uint64 CpuTimeUs = 5;
+    uint64 WaitInputTimeUs = 6;
+    uint64 WaitOutputTimeUs = 7;
+    uint64 FirstMessageMs = 8;
+    uint64 LastMessageMs = 9;
+    string PartitionId = 10;
 }
 
 message TDqAsyncInputBufferStats {
     uint64 InputIndex = 1;
     string IngressName = 9;
 
+    TDqExternalAggrStats External = 13;
+    repeated TDqExternalStats ExternalPartitions = 14;
     TDqAsyncBufferStats Ingress = 10;
     TDqAsyncBufferStats Push = 11;
     TDqAsyncBufferStats Pop = 12;
@@ -160,6 +202,26 @@ message TDqDataProviderStats {
     uint64 Splits = 5;
 }
 
+message TDqFilterStats {
+}
+
+message TDqAggregationStats {
+}
+
+message TDqJoinStats {
+}
+
+message TDqOperatorStats {
+    string OperatorId = 1;
+    uint64 Bytes = 2;
+    uint64 Rows = 3;
+    oneof Type {
+        TDqJoinStats Join = 4;
+        TDqFilterStats Filter = 5;
+        TDqAggregationStats Aggregation = 6;
+    }
+}
+
 message TDqTaskStats {
     reserved 154;
 
@@ -182,9 +244,14 @@ message TDqTaskStats {
     uint64 ResultBytes = 21;
 
     uint64 IngressBytes = 16;
+    uint64 IngressDecompressedBytes = 22;
     uint64 IngressRows = 17;
     uint64 EgressBytes = 18;
     uint64 EgressRows = 19;
+    uint64 IngressFilteredBytes = 23;
+    uint64 IngressFilteredRows = 24;
+    uint64 IngressQueuedBytes = 25;
+    uint64 IngressQueuedRows = 26;
 
     // full stats
     repeated TDqAsyncInputBufferStats Sources = 150;
@@ -192,6 +259,14 @@ message TDqTaskStats {
     repeated TDqAsyncOutputBufferStats Sinks = 152;
     repeated TDqOutputChannelStats OutputChannels = 153;
     repeated TDqAsyncInputBufferStats InputTransforms = 155;
+
+    uint64 SpillingComputeWriteBytes = 160;
+    uint64 SpillingChannelWriteBytes = 161;
+
+    uint64 SpillingComputeReadTimeUs = 162;
+    uint64 SpillingComputeWriteTimeUs = 163;
+    uint64 SpillingChannelReadTimeUs = 164;
+    uint64 SpillingChannelWriteTimeUs = 165;
 
     // profile stats
     repeated TDqTableStats Tables = 10;
@@ -208,11 +283,8 @@ message TDqTaskStats {
 
     google.protobuf.Any Extra = 200;
 
-    // BASIC: StartTs from TR since we don't have better times
-    // FULL+: min(FirstMessageMs) from all Inputs
+    uint64 CreateTimeMs = 166;
     uint64 StartTimeMs = 158;
-
-    // always FinishTs from TR
     uint64 FinishTimeMs = 5;
 
     reserved 4;   // was FirstRowTimeMs
@@ -222,6 +294,8 @@ message TDqTaskStats {
     reserved 107;
     reserved 108;
     reserved 109;
+
+    repeated TDqOperatorStats Operators = 159;
 }
 
 message TDqComputeActorStats {
@@ -239,11 +313,9 @@ message TDqComputeActorStats {
     google.protobuf.Any Extra = 200;
 }
 
-message TDqStatsAggr {
-    uint64 Min = 1;
-    uint64 Max = 2;
-    uint64 Sum = 3;
-    uint64 Cnt = 4;
+message TDqHistoryItem {
+    uint64 TimeMs = 1;
+    uint64 Value = 2;
 }
 
 message TExtraStats {
@@ -258,6 +330,7 @@ message TDqStatsMinMax {
 message TDqAsyncStatsAggr {
     // Data
     TDqStatsAggr Bytes  = 1;
+    TDqStatsAggr DecompressedBytes = 12;
     TDqStatsAggr Rows   = 2;
     TDqStatsAggr Chunks = 3;
     TDqStatsAggr Splits = 4;
@@ -269,9 +342,15 @@ message TDqAsyncStatsAggr {
     TDqStatsAggr WaitTimeUs      = 9;
     TDqStatsAggr WaitPeriods     = 10;
     TDqStatsAggr ActiveTimeUs    = 11;
+
+    TDqStatsAggr FilteredBytes = 13;
+    TDqStatsAggr FilteredRows = 14;
+    TDqStatsAggr QueuedBytes = 15;
+    TDqStatsAggr QueuedRows = 16;
 }
 
 message TDqAsyncBufferStatsAggr {
+    TDqExternalAggrStats External = 5;
     TDqAsyncStatsAggr Ingress = 1; // for Ingress only
     TDqAsyncStatsAggr Push    = 2;
     TDqAsyncStatsAggr Pop     = 3;
@@ -293,11 +372,32 @@ message TDqTableAggrStats {
     google.protobuf.Any Extra = 100;
 }
 
+message TDqFilterStatsAggr {
+}
+
+message TDqAggregationStatsAggr {
+}
+
+message TDqJoinStatsAggr {
+}
+
+message TDqOperatorStatsAggr {
+    string OperatorId = 1;
+    TDqStatsAggr Bytes = 2;
+    TDqStatsAggr Rows = 3;
+    oneof Type {
+        TDqJoinStatsAggr Join = 4;
+        TDqFilterStatsAggr Filter = 5;
+        TDqAggregationStatsAggr Aggregation = 6;
+    }
+}
+
 // aggregated stats for all tasks of the stage
 message TDqStageStats {
     uint32 StageId = 1;
     string StageGuid = 2;
     string Program = 3;
+    uint64 BaseTimeMs = 38;
 
     uint32 TotalTasksCount = 5;
     uint32 FailedTasksCount = 6;
@@ -312,9 +412,19 @@ message TDqStageStats {
     TDqStatsAggr ResultBytes = 27;
 
     TDqStatsAggr IngressBytes = 28;
+    TDqStatsAggr IngressDecompressedBytes = 37;
+    TDqStatsAggr IngressFilteredBytes = 46;
+    TDqStatsAggr IngressFilteredRows = 47;
+    TDqStatsAggr IngressQueuedBytes = 48;
+    TDqStatsAggr IngressQueuedRows = 49;
     TDqStatsAggr IngressRows = 29;
     TDqStatsAggr EgressBytes = 30;
     TDqStatsAggr EgressRows = 31;
+
+    TDqStatsAggr SpillingComputeBytes = 39;
+    TDqStatsAggr SpillingChannelBytes = 40;
+    TDqStatsAggr SpillingComputeTimeUs = 41;
+    TDqStatsAggr SpillingChannelTimeUs = 42;
 
     reserved 13; // FirstRowTimeMs
     reserved 14; // FinishTimeMs
@@ -342,6 +452,13 @@ message TDqStageStats {
     map<string, TDqAsyncBufferStatsAggr> Egress = 20;  // egress to external consumer, per provider
     map<uint32, TDqAsyncBufferStatsAggr> Input = 22;   // input from other stage, per stage
     map<uint32, TDqAsyncBufferStatsAggr> Output = 23;  // output to other stage, per stage
+
+    // all operators share single default id "0", so put them into diferent maps
+    // will be joined into common map after unique id are implemented
+    map<string, TDqOperatorStatsAggr> OperatorJoin = 43;
+    map<string, TDqOperatorStatsAggr> OperatorFilter = 44;
+    map<string, TDqOperatorStatsAggr> OperatorAggregation = 45;
+
     TDqStatsAggr MaxMemoryUsage = 24;
 
     google.protobuf.Any Extra = 100;
@@ -353,7 +470,7 @@ message TDqExecutionStats {
     uint64 CpuTimeUs = 1;  // total cpu time, executer + compute actors + ...
     uint64 DurationUs = 2; // execution wall time
 
-    // these feilds are never used, needs to be reviewed
+    // these fields are never used, needs to be reviewed
     reserved 3; // uint64 ResultRows = 3;
     reserved 4; // uint64 ResultBytes = 4;
 

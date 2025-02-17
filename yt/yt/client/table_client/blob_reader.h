@@ -11,8 +11,8 @@ namespace NYT::NTableClient {
 struct TBlobTableSchema
 {
     // Names of special blob columns.
-    static const TString PartIndexColumn;
-    static const TString DataColumn;
+    static const std::string PartIndexColumn;
+    static const std::string DataColumn;
 
     // Do not specify anything except name and value
     // type in all column schemas.
@@ -25,8 +25,8 @@ struct TBlobTableSchema
 
 NConcurrency::IAsyncZeroCopyInputStreamPtr CreateBlobTableReader(
     NApi::ITableReaderPtr reader,
-    const std::optional<TString>& partIndexColumnName,
-    const std::optional<TString>& dataColumnName,
+    const std::optional<std::string>& partIndexColumnName,
+    const std::optional<std::string>& dataColumnName,
     i64 startPartIndex,
     const std::optional<i64>& offset = std::nullopt,
     const std::optional<i64>& partSize = std::nullopt);

@@ -80,22 +80,34 @@ namespace NKikimr {
 
         STFUNC(StateFunc) {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvMediatorTimecast::TEvRegisterTablet, Handle);
+                hFunc(TEvMediatorTimecast::TEvRegisterTablet, Handle);
+                hFunc(TEvMediatorTimecast::TEvSubscribeReadStep, Handle);
             }
         }
 
-        void Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr& ev) {
             const ui64 tabletId = ev->Get()->TabletId;
             auto& entry = Entries[tabletId];
             if (!entry) {
-                entry = new TMediatorTimecastEntry();
+                entry = new TMediatorTimecastSharedEntry();
             }
 
-            ctx.Send(ev->Sender, new TEvMediatorTimecast::TEvRegisterTabletResult(tabletId, entry));
+            Send(ev->Sender, new TEvMediatorTimecast::TEvRegisterTabletResult(tabletId, new TMediatorTimecastEntry(entry, entry)));
+        }
+
+        void Handle(TEvMediatorTimecast::TEvSubscribeReadStep::TPtr& ev) {
+            const ui64 coordinatorId = ev->Get()->CoordinatorId;
+            auto& entry = ReadSteps[coordinatorId];
+            if (!entry) {
+                entry = new TMediatorTimecastReadStep();
+            }
+
+            Send(ev->Sender, new TEvMediatorTimecast::TEvSubscribeReadStepResult(coordinatorId, 0, entry->Get(), entry));
         }
 
     private:
-        THashMap<ui64, TIntrusivePtr<TMediatorTimecastEntry>> Entries;
+        THashMap<ui64, TIntrusivePtr<TMediatorTimecastSharedEntry>> Entries;
+        THashMap<ui64, TIntrusivePtr<TMediatorTimecastReadStep>> ReadSteps;
     };
 
     void SetupMediatorTimecastProxy(TTestActorRuntime& runtime, ui32 nodeIndex, bool useFake = false)
@@ -628,13 +640,14 @@ namespace NKikimr {
     }
 
     void SetupTabletServices(TTestActorRuntime &runtime, TAppPrepare *app, bool mockDisk, NFake::TStorage storage,
-                            NFake::TCaches caches, bool forceFollowers) {
+                            const NSharedCache::TSharedCacheConfig* sharedCacheConfig, bool forceFollowers,
+                            TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies) {
         TAutoPtr<TAppPrepare> dummy;
         if (app == nullptr) {
             dummy = app = new TAppPrepare;
         }
         TUltimateNodes nodes(runtime, app);
-        SetupBasicServices(runtime, *app, mockDisk, &nodes, storage, caches, forceFollowers);
+        SetupBasicServices(runtime, *app, mockDisk, &nodes, storage, sharedCacheConfig, forceFollowers, dsProxies);
     }
 
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count) {
@@ -1489,7 +1502,7 @@ namespace NKikimr {
             TBlobStorageGroupType::EErasureSpecies erasure) {
             TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0,
                 TMailboxType::Simple, 0)));
-            return ctx.ExecutorThread.RegisterActor(CreateBootstrapper(
+            return ctx.Register(CreateBootstrapper(
                 CreateTestTabletInfo(State->NextTabletId, tabletType, erasure), bi.Get()));
         }
 

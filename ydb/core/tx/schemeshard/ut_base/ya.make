@@ -6,8 +6,6 @@ IF (WITH_VALGRIND)
     SPLIT_FACTOR(40)
 ENDIF()
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -18,7 +16,7 @@ PEERDIR(
     ydb/core/testlib/pg
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 YQL_LAST_ABI_VERSION()
@@ -26,8 +24,9 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     ut_base.cpp
     ut_info_types.cpp
-    ut_allocate_pq.cpp
+    ut_table_decimal_types.cpp
     ut_table_pg_types.cpp
+    ut_commit_redo_limit.cpp
 )
 
 END()

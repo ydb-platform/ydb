@@ -1,0 +1,62 @@
+services:
+  clickhouse:
+    container_name: tests-fq-generic-analytics-clickhouse
+    environment:
+      CLICKHOUSE_DB: db
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: password
+      CLICKHOUSE_USER: user
+    image: clickhouse/clickhouse-server:23-alpine@sha256:b078c1cd294632afa2aeba3530e7ba2e568513da23304354f455a25fab575c06
+    tmpfs:
+      - /run
+      - /tmp
+      - /var
+    volumes:
+      - ./clickhouse:/docker-entrypoint-initdb.d
+  fq-connector-go:
+    command: |
+      sh -c "
+        echo \"$$(dig tests-fq-generic-analytics-ydb +short) tests-fq-generic-analytics-ydb\" >> /etc/hosts; cat /etc/hosts;
+        /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"
+    container_name: tests-fq-generic-analytics-fq-connector-go
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.6.2@sha256:a79b73f31d6ad37ca32d9212fe588e13bef30b56b3d29bbf49e450270c5e11f7
+    ports:
+      - "2130"
+    volumes:
+      - ../../../../library/yql/providers/generic/connector/tests/fq-connector-go/:/opt/ydb/cfg/
+  greenplum:
+    container_name: tests-fq-generic-analytics-greenplum
+    image: ghcr.io/ydb-platform/fq-connector-go_greenplum:6.25.3-6432@sha256:9e862b05719b289b447562fbce6c003916a764a549f924a4175eecd7e7891a0b
+    tmpfs:
+      - /run
+      - /tmp
+      - /var
+    volumes:
+      - ./greenplum/init_db.sh:/init_db.sh
+  postgresql:
+    command: -p 6432
+    container_name: tests-fq-generic-analytics-postgresql
+    environment:
+      POSTGRES_DB: db
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: user
+    image: postgres:15-bullseye@sha256:3411b9f2e5239cd7867f34fcf22fe964230f7d447a71d63c283e3593d3f84085
+    tmpfs:
+      - /run
+      - /tmp
+      - /var
+    volumes:
+      - ./postgresql:/docker-entrypoint-initdb.d
+  ydb:
+    container_name: tests-fq-generic-analytics-ydb
+    environment:
+      DB_USE_IN_MEMORY_PDISKS: "true"
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: user
+      YDB_DEFAULT_LOG_LEVEL: DEBUG
+    hostname: tests-fq-generic-analytics-ydb
+    image: ghcr.io/ydb-platform/local-ydb:latest@sha256:9045e00afec1923dc3277564c7b2f829087c2115f45f18e1d38b80bb89f98be6
+    volumes:
+      - ./ydb/init_ydb:/init_ydb
+      - ./ydb/01_basic.sh:/01_basic.sh
+version: "3.4"

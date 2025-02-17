@@ -1,16 +1,18 @@
 #pragma once
 
+#include "rpc_operation_conv_base.h"
+
 #include <ydb/core/protos/import.pb.h>
-#include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <util/string/cast.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
-struct TImportConv {
+struct TImportConv: public TOperationConv<NKikimrImport::TImport> {
     static Ydb::TOperationId MakeOperationId(const ui64 id, NKikimrImport::TImport::SettingsCase kind) {
         Ydb::TOperationId operationId;
         operationId.SetKind(Ydb::TOperationId::IMPORT);
@@ -28,24 +30,21 @@ struct TImportConv {
         return operationId;
     }
 
-    static Ydb::Operations::Operation ToOperation(const NKikimrImport::TImport& import) {
-        Ydb::Operations::Operation operation;
+    static Operation ToOperation(const NKikimrImport::TImport& in) {
+        auto operation = TOperationConv::ToOperation(in);
 
-        operation.set_id(NOperationId::ProtoToString(MakeOperationId(import.GetId(), import.GetSettingsCase())));
-        operation.set_status(import.GetStatus());
         if (operation.status() == Ydb::StatusIds::SUCCESS) {
-            operation.set_ready(import.GetProgress() == Ydb::Import::ImportProgress::PROGRESS_DONE);
-        } else {
-            operation.set_ready(true);
+            operation.set_ready(in.GetProgress() == Ydb::Import::ImportProgress::PROGRESS_DONE);
+        } else if (operation.status() != Ydb::StatusIds::CANCELLED) {
+            return operation;
         }
-        if (import.IssuesSize()) {
-            operation.mutable_issues()->CopyFrom(import.GetIssues());
-        }
+
+        operation.set_id(NOperationId::ProtoToString(MakeOperationId(in.GetId(), in.GetSettingsCase())));
 
         using namespace Ydb::Import;
-        switch (import.GetSettingsCase()) {
+        switch (in.GetSettingsCase()) {
         case NKikimrImport::TImport::kImportFromS3Settings:
-            Fill<ImportFromS3Metadata, ImportFromS3Result>(operation, import, import.GetImportFromS3Settings());
+            Fill<ImportFromS3Metadata, ImportFromS3Result>(operation, in, in.GetImportFromS3Settings());
             break;
         default:
             Y_DEBUG_ABORT("Unknown import kind");
@@ -53,22 +52,6 @@ struct TImportConv {
         }
 
         return operation;
-    }
-
-private:
-    template <typename TMetadata, typename TResult, typename TSettings>
-    static void Fill(
-            Ydb::Operations::Operation& operation,
-            const NKikimrImport::TImport& import,
-            const TSettings& settings) {
-        TMetadata metadata;
-        metadata.mutable_settings()->CopyFrom(settings);
-        metadata.set_progress(import.GetProgress());
-        metadata.mutable_items_progress()->CopyFrom(import.GetItemsProgress());
-        operation.mutable_metadata()->PackFrom(metadata);
-
-        TResult result;
-        operation.mutable_result()->PackFrom(result);
     }
 
 }; // TImportConv

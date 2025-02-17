@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.1.12)
+VERSION(4.0.8)
 
 LICENSE(Apache-2.0)
 
@@ -51,10 +51,17 @@ PY_SRCS(
     TOP_LEVEL
     moto/__init__.py
     moto/acm/__init__.py
+    moto/acm/exceptions.py
     moto/acm/models.py
     moto/acm/responses.py
     moto/acm/urls.py
     moto/acm/utils.py
+    moto/amp/__init__.py
+    moto/amp/exceptions.py
+    moto/amp/models.py
+    moto/amp/responses.py
+    moto/amp/urls.py
+    moto/amp/utils.py
     moto/apigateway/__init__.py
     moto/apigateway/exceptions.py
     moto/apigateway/integration_parsers/__init__.py
@@ -116,6 +123,11 @@ PY_SRCS(
     moto/budgets/models.py
     moto/budgets/responses.py
     moto/budgets/urls.py
+    moto/ce/__init__.py
+    moto/ce/exceptions.py
+    moto/ce/models.py
+    moto/ce/responses.py
+    moto/ce/urls.py
     moto/cloudformation/__init__.py
     moto/cloudformation/custom_model.py
     moto/cloudformation/exceptions.py
@@ -140,6 +152,11 @@ PY_SRCS(
     moto/cloudwatch/responses.py
     moto/cloudwatch/urls.py
     moto/cloudwatch/utils.py
+    moto/codebuild/__init__.py
+    moto/codebuild/exceptions.py
+    moto/codebuild/models.py
+    moto/codebuild/responses.py
+    moto/codebuild/urls.py
     moto/codecommit/__init__.py
     moto/codecommit/exceptions.py
     moto/codecommit/models.py
@@ -162,6 +179,11 @@ PY_SRCS(
     moto/cognitoidp/responses.py
     moto/cognitoidp/urls.py
     moto/cognitoidp/utils.py
+    moto/comprehend/__init__.py
+    moto/comprehend/exceptions.py
+    moto/comprehend/models.py
+    moto/comprehend/responses.py
+    moto/comprehend/urls.py
     moto/config/__init__.py
     moto/config/exceptions.py
     moto/config/models.py
@@ -222,6 +244,7 @@ PY_SRCS(
     moto/dynamodb/parsing/ast_nodes.py
     moto/dynamodb/parsing/executors.py
     moto/dynamodb/parsing/expressions.py
+    moto/dynamodb/parsing/key_condition_expression.py
     moto/dynamodb/parsing/reserved_keywords.py
     moto/dynamodb/parsing/tokens.py
     moto/dynamodb/parsing/validators.py
@@ -252,6 +275,7 @@ PY_SRCS(
     moto/ec2/models/elastic_block_store.py
     moto/ec2/models/elastic_ip_addresses.py
     moto/ec2/models/elastic_network_interfaces.py
+    moto/ec2/models/fleets.py
     moto/ec2/models/flow_logs.py
     moto/ec2/models/iam_instance_profile.py
     moto/ec2/models/instance_types.py
@@ -289,6 +313,7 @@ PY_SRCS(
     moto/ec2/responses/elastic_block_store.py
     moto/ec2/responses/elastic_ip_addresses.py
     moto/ec2/responses/elastic_network_interfaces.py
+    moto/ec2/responses/fleets.py
     moto/ec2/responses/flow_logs.py
     moto/ec2/responses/general.py
     moto/ec2/responses/iam_instance_profiles.py
@@ -387,6 +412,12 @@ PY_SRCS(
     moto/emrcontainers/responses.py
     moto/emrcontainers/urls.py
     moto/emrcontainers/utils.py
+    moto/emrserverless/__init__.py
+    moto/emrserverless/exceptions.py
+    moto/emrserverless/models.py
+    moto/emrserverless/responses.py
+    moto/emrserverless/urls.py
+    moto/emrserverless/utils.py
     moto/es/__init__.py
     moto/es/exceptions.py
     moto/es/models.py
@@ -416,11 +447,14 @@ PY_SRCS(
     moto/glacier/utils.py
     moto/glue/__init__.py
     moto/glue/exceptions.py
+    moto/glue/glue_schema_registry_constants.py
+    moto/glue/glue_schema_registry_utils.py
     moto/glue/models.py
     moto/glue/responses.py
     moto/glue/urls.py
     moto/glue/utils.py
     moto/greengrass/__init__.py
+    moto/greengrass/exceptions.py
     moto/greengrass/models.py
     moto/greengrass/responses.py
     moto/greengrass/urls.py
@@ -514,10 +548,19 @@ PY_SRCS(
     moto/mediastoredata/models.py
     moto/mediastoredata/responses.py
     moto/mediastoredata/urls.py
+    moto/meteringmarketplace/__init__.py
+    moto/meteringmarketplace/exceptions.py
+    moto/meteringmarketplace/models.py
+    moto/meteringmarketplace/responses.py
+    moto/meteringmarketplace/urls.py
     moto/moto_api/__init__.py
     moto/moto_api/_internal/__init__.py
     moto/moto_api/_internal/managed_state_model.py
     moto/moto_api/_internal/models.py
+    moto/moto_api/_internal/moto_random.py
+    moto/moto_api/_internal/recorder/__init__.py
+    moto/moto_api/_internal/recorder/models.py
+    moto/moto_api/_internal/recorder/responses.py
     moto/moto_api/_internal/responses.py
     moto/moto_api/_internal/state_manager.py
     moto/moto_api/_internal/urls.py
@@ -554,6 +597,11 @@ PY_SRCS(
     moto/packages/boto/ec2/tag.py
     moto/packages/cfnresponse/__init__.py
     moto/packages/cfnresponse/cfnresponse.py
+    moto/personalize/__init__.py
+    moto/personalize/exceptions.py
+    moto/personalize/models.py
+    moto/personalize/responses.py
+    moto/personalize/urls.py
     moto/pinpoint/__init__.py
     moto/pinpoint/exceptions.py
     moto/pinpoint/models.py
@@ -661,6 +709,14 @@ PY_SRCS(
     moto/servicediscovery/models.py
     moto/servicediscovery/responses.py
     moto/servicediscovery/urls.py
+    moto/servicequotas/__init__.py
+    moto/servicequotas/exceptions.py
+    moto/servicequotas/models.py
+    moto/servicequotas/resources/__init__.py
+    moto/servicequotas/resources/default_quotas/__init__.py
+    moto/servicequotas/resources/default_quotas/vpc.py
+    moto/servicequotas/responses.py
+    moto/servicequotas/urls.py
     moto/ses/__init__.py
     moto/ses/exceptions.py
     moto/ses/feedback.py
@@ -669,6 +725,11 @@ PY_SRCS(
     moto/ses/urls.py
     moto/ses/utils.py
     moto/settings.py
+    moto/signer/__init__.py
+    moto/signer/exceptions.py
+    moto/signer/models.py
+    moto/signer/responses.py
+    moto/signer/urls.py
     moto/sns/__init__.py
     moto/sns/exceptions.py
     moto/sns/models.py
@@ -692,6 +753,7 @@ PY_SRCS(
     moto/ssoadmin/models.py
     moto/ssoadmin/responses.py
     moto/ssoadmin/urls.py
+    moto/ssoadmin/utils.py
     moto/stepfunctions/__init__.py
     moto/stepfunctions/exceptions.py
     moto/stepfunctions/models.py
@@ -742,6 +804,7 @@ PY_SRCS(
     moto/transcribe/responses.py
     moto/transcribe/urls.py
     moto/utilities/__init__.py
+    moto/utilities/aws_headers.py
     moto/utilities/distutils_version.py
     moto/utilities/docker_utilities.py
     moto/utilities/paginator.py
@@ -837,7 +900,50 @@ RESOURCE_FILES(
     moto/ec2/resources/instance_type_offerings/region/us-west-1.json
     moto/ec2/resources/instance_type_offerings/region/us-west-2.json
     moto/ec2/resources/instance_types.json
+    moto/ec2/resources/latest_amis/af-south-1.json
+    moto/ec2/resources/latest_amis/ap-east-1.json
+    moto/ec2/resources/latest_amis/ap-northeast-1.json
+    moto/ec2/resources/latest_amis/ap-northeast-2.json
+    moto/ec2/resources/latest_amis/ap-northeast-3.json
+    moto/ec2/resources/latest_amis/ap-south-1.json
+    moto/ec2/resources/latest_amis/ap-southeast-1.json
+    moto/ec2/resources/latest_amis/ap-southeast-2.json
+    moto/ec2/resources/latest_amis/ca-central-1.json
+    moto/ec2/resources/latest_amis/eu-central-1.json
+    moto/ec2/resources/latest_amis/eu-north-1.json
+    moto/ec2/resources/latest_amis/eu-south-1.json
+    moto/ec2/resources/latest_amis/eu-west-1.json
+    moto/ec2/resources/latest_amis/eu-west-2.json
+    moto/ec2/resources/latest_amis/eu-west-3.json
+    moto/ec2/resources/latest_amis/me-south-1.json
+    moto/ec2/resources/latest_amis/sa-east-1.json
+    moto/ec2/resources/latest_amis/us-east-1.json
+    moto/ec2/resources/latest_amis/us-east-2.json
+    moto/ec2/resources/latest_amis/us-west-1.json
+    moto/ec2/resources/latest_amis/us-west-2.json
     moto/moto_server/templates/dashboard.html
+    moto/ssm/resources/ami-amazon-linux-latest/af-south-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/ap-east-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/ap-northeast-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/ap-northeast-2.json
+    moto/ssm/resources/ami-amazon-linux-latest/ap-northeast-3.json
+    moto/ssm/resources/ami-amazon-linux-latest/ap-south-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/ap-southeast-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/ap-southeast-2.json
+    moto/ssm/resources/ami-amazon-linux-latest/ap-southeast-3.json
+    moto/ssm/resources/ami-amazon-linux-latest/ca-central-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/eu-central-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/eu-north-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/eu-south-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/eu-west-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/eu-west-2.json
+    moto/ssm/resources/ami-amazon-linux-latest/eu-west-3.json
+    moto/ssm/resources/ami-amazon-linux-latest/me-south-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/sa-east-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/us-east-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/us-east-2.json
+    moto/ssm/resources/ami-amazon-linux-latest/us-west-1.json
+    moto/ssm/resources/ami-amazon-linux-latest/us-west-2.json
     moto/ssm/resources/regions.json
     moto/ssm/resources/services.json
     moto/support/resources/describe_trusted_advisor_checks.json

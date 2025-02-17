@@ -1,5 +1,6 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 #include "probes.h"
@@ -82,7 +83,7 @@ EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
         op->SetWaitCompletionFlag(true);
     } else if (DataShard.IsFollower()) {
         // It doesn't matter whether we wait or not
-    } else if (DataShard.IsMvccEnabled() && op->IsImmediate()) {
+    } else if (op->IsImmediate()) {
         auto res = PromoteImmediatePostExecuteEdges(op.Get(), txc);
 
         if (res.HadWrites) {
@@ -173,11 +174,14 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
                     << res->GetStatus() << " errors: " << errors);
     }
 
+    if (op->IsImmediate() && !op->IsReadOnly() && op->IsKqpDataTransaction()) {
+        NDataIntegrity::LogIntegrityTrailsFinish<NKikimrTxDataShard::TEvProposeTransactionResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), res->GetStatus());
+    }
+
     if (res->IsPrepared()) {
         DataShard.IncCounter(COUNTER_PREPARE_SUCCESS_COMPLETE_LATENCY, duration);
     } else {
         DataShard.CheckSplitCanStart(ctx);
-        DataShard.CheckMvccStateChangeCanStart(ctx);
     }
 
     if (op->HasNeedDiagnosticsFlag())
@@ -195,14 +199,14 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
             res->Orbit = std::move(op->Orbit);
         }
         if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
-            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.Release(), op->GetCookie());
+            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.Release(), op->GetCookie(), {}, op->GetTraceId());
         } else if (op->IsImmediate() && op->IsReadOnly() && !op->IsAborted()) {
             // TODO: we should actually measure a read timestamp and use it here
-            DataShard.SendImmediateReadResult(op->GetTarget(), res.Release(), op->GetCookie());
+            DataShard.SendImmediateReadResult(op->GetTarget(), res.Release(), op->GetCookie(), {}, op->GetTraceId());
         } else if (op->HasVolatilePrepareFlag() && !op->IsDirty()) {
-            DataShard.SendWithConfirmedReadOnlyLease(op->GetFinishProposeTs(), op->GetTarget(), res.Release(), op->GetCookie());
+            DataShard.SendWithConfirmedReadOnlyLease(op->GetFinishProposeTs(), op->GetTarget(), res.Release(), op->GetCookie(), {}, op->GetTraceId());
         } else {
-            ctx.Send(op->GetTarget(), res.Release(), 0, op->GetCookie());
+            ctx.Send(op->GetTarget(), res.Release(), 0, op->GetCookie(), op->GetTraceId());
         }
     }
 }

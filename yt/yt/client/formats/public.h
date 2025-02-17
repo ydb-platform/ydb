@@ -58,6 +58,7 @@ DEFINE_ENUM(EFormatType,
     (WebJson)
     (Skiff)
     (Arrow)
+    (Yaml)
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -76,6 +77,7 @@ DECLARE_REFCOUNTED_CLASS(TProtobufTableConfig)
 DECLARE_REFCOUNTED_CLASS(TProtobufFormatConfig)
 DECLARE_REFCOUNTED_CLASS(TWebJsonFormatConfig)
 DECLARE_REFCOUNTED_CLASS(TSkiffFormatConfig)
+DECLARE_REFCOUNTED_CLASS(TYamlFormatConfig)
 
 DECLARE_REFCOUNTED_STRUCT(IYamrConsumer)
 
@@ -91,7 +93,7 @@ class TFormat;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline const NLogging::TLogger FormatsLogger("Formats");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, FormatsLogger, "Formats");
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -35,11 +35,13 @@ public:
         const NYql::TDqSettings::TPtr& settings,
         const TDqProgressWriter& progressWriter,
         const THashMap<TString, TString>& modulesMapping,
-        bool discard) override
+        bool discard,
+        ui64 executionTimeout) override
     {
         Y_UNUSED(progressWriter);
         Y_UNUSED(modulesMapping); // TODO: support.
         Y_UNUSED(discard);
+        Y_UNUSED(executionTimeout);
 
         NProto::TGraphParams params;
         THashMap<i64, TString> stagePrograms;

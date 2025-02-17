@@ -1,12 +1,11 @@
-Для выполнения примера с использованием любой доступной базы данных YDB вам потребуется знать [эндпоинт](../../../../concepts/connect.md#endpoint) и [путь базы данных](../../../../concepts/connect.md#database).
+Для выполнения примера с использованием любой доступной базы данных {{ ydb-short-name }} вам потребуется знать [эндпоинт](../../../../concepts/connect.md#endpoint) и [путь базы данных](../../../../concepts/connect.md#database).
 
-Если в базе данных включена аутентификация, то вам также понадобится выбрать [режим аутентификации](../../../../concepts/auth.md) и получить секреты - токен или логин/пароль.
+Если в базе данных включена аутентификация, то вам также понадобится выбрать [режим аутентификации](../../../../security/authentication.md) и получить секреты - токен или логин/пароль.
 
 Выполните команду по следующему образцу:
 
 ```bash
-( cd ydb-java-examples/basic_example/target && \
-<auth_mode_var>="<auth_mode_value>" java -jar ydb-basic-example.jar <endpoint>?database=<database>)
+<auth_mode_var>="<auth_mode_value>" java -jar ydb-java-examples/query-example/target/ydb-query-example.jar grpcs://<endpoint>:<port>/<database>
 ```
 
 , где
@@ -19,6 +18,5 @@
 Например:
 
 ```bash
-( cd ydb-java-examples/basic_example/target && \
-YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." java -jar ydb-basic-example.jar grpcs://ydb.example.com:2135?database=/somepath/somelocation)
+YDB_ACCESS_TOKEN_CREDENTIALS="..." java -jar ydb-java-examples/query-example/target/ydb-query-example.jar grpcs://ydb.example.com:2135/somepath/somelocation
 ```

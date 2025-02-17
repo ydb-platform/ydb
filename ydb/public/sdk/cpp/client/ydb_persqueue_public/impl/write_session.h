@@ -1,15 +1,14 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/aliases.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session_impl.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/persqueue_impl.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
 #include <util/generic/buffer.h>
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 namespace NTests {
     class TSimpleWriteSessionTestAdapter;
@@ -90,9 +89,6 @@ protected:
 
 private:
     TMaybe<TContinuationToken> WaitForToken(const TDuration& timeout);
-    void HandleAck(TWriteSessionEvent::TAcksEvent&);
-    void HandleReady(TWriteSessionEvent::TReadyToAcceptEvent&);
-    void HandleClosed(const TSessionClosedEvent&);
 
     std::atomic_bool Closed = false;
 };

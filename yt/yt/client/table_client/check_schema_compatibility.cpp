@@ -2,6 +2,7 @@
 #include "logical_type.h"
 #include "schema.h"
 #include "comparator.h"
+#include "versioned_io_options.h"
 
 #include <yt/yt/client/complex_types/check_type_compatibility.h>
 
@@ -14,7 +15,7 @@ namespace NYT::NTableClient {
 std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
     const TTableSchema& inputSchema,
     const TTableSchema& outputSchema,
-    bool ignoreSortOrder)
+    TTableSchemaCompatibilityOptions options)
 {
     // If output schema is strict, check that input columns are subset of output columns.
     if (outputSchema.GetStrict()) {
@@ -27,6 +28,14 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
 
         for (const auto& inputColumn : inputSchema.Columns()) {
             if (!outputSchema.FindColumn(inputColumn.Name())) {
+                if (options.AllowTimestampColumns) {
+                    if (auto originalColumnName = GetTimestampColumnOriginalNameOrNull(inputColumn.Name())) {
+                        if (outputSchema.FindColumn(*originalColumnName)) {
+                            continue;
+                        }
+                    }
+                }
+
                 return {
                     ESchemaCompatibility::Incompatible,
                     TError("Column %v is found in input schema but is missing in output schema",
@@ -52,7 +61,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
         }
 
         if (inputColumn) {
-            if (inputColumn->StableName() != outputColumn.StableName()) {
+            if (!options.IgnoreStableNamesDifference && inputColumn->StableName() != outputColumn.StableName()) {
                 return {
                     ESchemaCompatibility::Incompatible,
                     TError("Column %Qv has stable name %Qv in input and %Qv in output schema",
@@ -85,6 +94,15 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
                         inputColumn->GetDiagnosticNameString()),
                 };
             }
+
+            if (outputColumn.Materialized().value_or(true) != inputColumn->Materialized().value_or(true)) {
+                return {
+                    ESchemaCompatibility::Incompatible,
+                    TError("Column %v materialization mismatch",
+                        inputColumn->GetDiagnosticNameString()),
+                };
+            }
+
             if (outputColumn.Aggregate() && inputColumn->Aggregate() != outputColumn.Aggregate()) {
                 return {
                     ESchemaCompatibility::Incompatible,
@@ -92,7 +110,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
                         inputColumn->GetDiagnosticNameString()),
                 };
             }
-        } else if (outputColumn.Expression()) {
+        } else if (options.ForbidExtraComputedColumns && outputColumn.Expression()) {
             return {
                 ESchemaCompatibility::Incompatible,
                 TError("Unexpected computed column %v in output schema",
@@ -158,7 +176,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
         }
     }
 
-    if (ignoreSortOrder) {
+    if (options.IgnoreSortOrder) {
         return result;
     }
 
@@ -192,7 +210,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
     for (int index = 0; index < outputKeySchema->GetColumnCount(); ++index) {
         const auto& inputColumn = inputKeySchema->Columns()[index];
         const auto& outputColumn = outputKeySchema->Columns()[index];
-        if (inputColumn.StableName() != outputColumn.StableName()) {
+        if (!options.IgnoreStableNamesDifference && inputColumn.StableName() != outputColumn.StableName()) {
             return {
                 ESchemaCompatibility::Incompatible,
                 TError("Key columns do not match: input column %v, output column %v",
@@ -217,9 +235,12 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
 std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibility(
     const TTableSchema& inputSchema,
     const TTableSchema& outputSchema,
-    bool ignoreSortOrder)
+    TTableSchemaCompatibilityOptions options)
 {
-    auto result = CheckTableSchemaCompatibilityImpl(inputSchema, outputSchema, ignoreSortOrder);
+    auto result = CheckTableSchemaCompatibilityImpl(
+        inputSchema,
+        outputSchema,
+        options);
     if (result.first != ESchemaCompatibility::FullyCompatible) {
         result.second = TError(NTableClient::EErrorCode::IncompatibleSchemas, "Table schemas are incompatible")
             << result.second

@@ -2,6 +2,7 @@
 non-XML syntax that supports inline expressions and an optional
 sandboxed environment.
 """
+
 from .bccache import BytecodeCache as BytecodeCache
 from .bccache import FileSystemBytecodeCache as FileSystemBytecodeCache
 from .bccache import MemcachedBytecodeCache as MemcachedBytecodeCache
@@ -35,4 +36,4 @@ from .utils import pass_environment as pass_environment
 from .utils import pass_eval_context as pass_eval_context
 from .utils import select_autoescape as select_autoescape
 
-__version__ = "3.1.3"
+__version__ = "3.1.4"

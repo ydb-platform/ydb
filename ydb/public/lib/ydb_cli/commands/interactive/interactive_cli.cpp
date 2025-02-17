@@ -9,7 +9,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_table.h>
-#include <ydb/public/lib/ydb_cli/commands/ydb_yql.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_sql.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -179,10 +179,20 @@ void TInteractiveCLI::Run() {
                 continue;
             }
 
+            TString query = TString(line);
+            TString queryLowerCase = to_lower(query);
+            if (queryLowerCase == "quit" || queryLowerCase == "exit") {
+                std::cout << "Bye" << std::endl;
+                return;
+            }
+
             TString queryStatsMode(NTable::QueryStatsModeToString(interactiveCLIState.CollectStatsMode));
-            TCommandYql yqlCommand(TString(line), queryStatsMode);
-            yqlCommand.Run(Config);
-        } catch (TYdbErrorException &error) {
+            TCommandSql sqlCommand;
+            sqlCommand.SetScript(std::move(query));
+            sqlCommand.SetCollectStatsMode(std::move(queryStatsMode));
+            sqlCommand.SetSyntax("yql");
+            sqlCommand.Run(Config);
+        } catch (NStatusHelpers::TYdbErrorException &error) {
             Cerr << error;
         } catch (yexception & error) {
             Cerr << error;
@@ -191,7 +201,7 @@ void TInteractiveCLI::Run() {
         }
     }
 
-    std::cout << "Bye" << '\n';
+    std::cout << std::endl << "Bye" << std::endl;
 }
 
 }

@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/bus/tcp/public.h>
+
 #include <yt/yt/core/ytree/public.h>
 
 namespace NYT::NBus {
@@ -22,11 +24,14 @@ struct IBusClient
 {
     //! Returns a textual representation of the bus' endpoint.
     //! Typically used for logging.
-    virtual const TString& GetEndpointDescription() const = 0;
+    virtual const std::string& GetEndpointDescription() const = 0;
 
-    //! Returns the bus' endpoint attributes.
+    //! Returns the bus endpoint attributes.
     //! Typically used for constructing errors.
     virtual const NYTree::IAttributeDictionary& GetEndpointAttributes() const = 0;
+
+    //! Apply new dynamic config.
+    virtual void OnDynamicConfigChanged(const NBus::TBusClientDynamicConfigPtr& config) = 0;
 
     //! Creates a new bus.
     /*!

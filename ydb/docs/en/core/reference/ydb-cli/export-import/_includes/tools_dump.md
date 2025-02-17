@@ -19,12 +19,15 @@ The `tools dump` command dumps the database data and objects schema to the clien
 `--scheme-only`: Dump only the details about the database schema objects, without dumping their data
 
 `--consistency-level VAL`: The consistency level. Possible options:
+
 - `database`: A fully consistent dump, with one snapshot taken before starting dumping. Applied by default.
 - `table`: Consistency within each dumped table, taking individual independent snapshots for each table dumped. Might run faster and have a smaller effect on the current workload processing in the database.
 
 `--avoid-copy`: Do not create a snapshot before dumping. The consistency snapshot taken by default might be inapplicable in some cases (for example, for tables with external blobs).
 
 `--save-partial-result`: Don't delete the result of partial dumping. Without this option, the dumps that terminated with an error are deleted.
+
+`--preserve-pool-kinds`: If this option is enabled, the `tools dump` command saves storage device types specified for column groups of the tables to the dump (see the `DATA` parameter in [Column groups](https://ydb.tech/docs/en/yql/reference/syntax/create_table/family) for the reference). To import such a dump, the same [storage pools](https://ydb.tech/docs/en/concepts/glossary#storage-pool) must be present in the database. If at least one storage pool is missing, the import procedure will end with an error. By default this option is disabled, and the import procedure will use the default storage pool that was specified at the moment of database creation (see [Creating a database](https://ydb.tech/docs/en/devops/manual/initial-deployment#create-db) for the reference).
 
 `--ordered`: Rows in the exported tables will be sorted by the primary key.
 
@@ -36,19 +39,19 @@ The `tools dump` command dumps the database data and objects schema to the clien
 
 With automatic creation of the `backup_...` directory In the current directory:
 
-```
+```bash
 {{ ydb-cli }} --profile quickstart tools dump
 ```
 
 To a specific directory:
 
-```
+```bash
 {{ ydb-cli }} --profile quickstart tools dump -o ~/backup_quickstart
 ```
 
 ### Dumping the table structure within a specified database directory (including subdirectories)
 
-```
+```bash
 {{ ydb-cli }} --profile quickstart tools dump -p dir1 --scheme-only
 ```
 

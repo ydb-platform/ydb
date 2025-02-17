@@ -63,11 +63,7 @@ protected:
 public:
     void Refresh(const TAddExternalContext& externalContext);
 
-    TSchemeActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex)
-        : PathId(pathId)
-        , VersionedIndex(versionedIndex) {
-        Y_UNUSED(PathId);
-    }
+    TSchemeActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex);
 };
 
 }

@@ -26,16 +26,16 @@ struct TCheckPermissionOptions
     , public TTransactionalOptions
     , public TPrerequisiteOptions
 {
-    std::optional<std::vector<TString>> Columns;
+    std::optional<std::vector<std::string>> Columns;
     std::optional<bool> Vital;
 };
 
 struct TCheckPermissionResult
 {
     TError ToError(
-        const TString& user,
+        const std::string& user,
         NYTree::EPermission permission,
-        const std::optional<TString>& columns = {}) const;
+        const std::optional<std::string>& columns = {}) const;
 
     NSecurityClient::ESecurityAction Action;
     NObjectClient::TObjectId ObjectId;
@@ -60,7 +60,7 @@ struct TCheckPermissionByAclOptions
 
 struct TCheckPermissionByAclResult
 {
-    TError ToError(const TString& user, NYTree::EPermission permission) const;
+    TError ToError(const std::string& user, NYTree::EPermission permission) const;
 
     NSecurityClient::ESecurityAction Action;
     NSecurityClient::TSubjectId SubjectId;
@@ -76,7 +76,9 @@ struct TSetUserPasswordOptions
 
 struct TIssueTokenOptions
     : public TTimeoutOptions
-{ };
+{
+    TString Description;
+};
 
 struct TIssueTemporaryTokenOptions
     : public TIssueTokenOptions
@@ -87,6 +89,9 @@ struct TIssueTemporaryTokenOptions
 struct TIssueTokenResult
 {
     TString Token;
+    //! Cypress node corresponding to issued token.
+    //! Deleting this node will revoke the token.
+    NCypressClient::TNodeId NodeId;
 };
 
 struct TRefreshTemporaryTokenOptions
@@ -99,12 +104,15 @@ struct TRevokeTokenOptions
 
 struct TListUserTokensOptions
     : public TTimeoutOptions
-{ };
+{
+    bool WithMetadata;
+};
 
 struct TListUserTokensResult
 {
     // Tokens are SHA256-encoded.
     std::vector<TString> Tokens;
+    THashMap<TString, NYson::TYsonString> Metadata;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -124,13 +132,13 @@ struct ISecurityClient
         const TRemoveMemberOptions& options = {}) = 0;
 
     virtual TFuture<TCheckPermissionResponse> CheckPermission(
-        const TString& user,
+        const std::string& user,
         const NYPath::TYPath& path,
         NYTree::EPermission permission,
         const TCheckPermissionOptions& options = {}) = 0;
 
     virtual TFuture<TCheckPermissionByAclResult> CheckPermissionByAcl(
-        const std::optional<TString>& user,
+        const std::optional<std::string>& user,
         NYTree::EPermission permission,
         NYTree::INodePtr acl,
         const TCheckPermissionByAclOptions& options = {}) = 0;
@@ -138,24 +146,24 @@ struct ISecurityClient
     // Methods below correspond to simple authentication scheme
     // and are intended to be used on clusters without third-party tokens (e.g. Yandex blackbox).
     virtual TFuture<void> SetUserPassword(
-        const TString& user,
+        const std::string& user,
         const TString& currentPasswordSha256,
         const TString& newPasswordSha256,
         const TSetUserPasswordOptions& options) = 0;
 
     virtual TFuture<TIssueTokenResult> IssueToken(
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TIssueTokenOptions& options) = 0;
 
     virtual TFuture<void> RevokeToken(
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TString& tokenSha256,
         const TRevokeTokenOptions& options) = 0;
 
     virtual TFuture<TListUserTokensResult> ListUserTokens(
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TListUserTokensOptions& options) = 0;
 };

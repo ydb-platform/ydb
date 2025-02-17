@@ -37,8 +37,28 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<TPathId> Views;
 
+    TDeque<TPathId> Sequences;
+    TDeque<TPathId> AlterSequences;
+
+    //PQ part
+    TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
+    TDeque<std::pair<TPathId, TTopicInfo::TPtr>> PersQueueGroup;
+    TDeque<std::pair<TPathId, TTopicInfo::TPtr>> AddPersQueueGroupAlter;
+
 public:
     ~TStorageChanges() = default;
+
+    void PersistPersQueue(const TPathId& pathId, const TShardIdx& shardIdx, const TTopicTabletInfo::TTopicPartitionInfo& pqInfo) {
+        PersQueue.emplace_back(pathId, shardIdx, pqInfo);
+    }
+
+    void PersistPersQueueGroup(const TPathId& pathId, const TTopicInfo::TPtr pqGroup) {
+        PersQueueGroup.emplace_back(pathId, pqGroup);
+    }
+
+    void PersistAddPersQueueGroupAlter(TPathId pathId, const TTopicInfo::TPtr alterData) {
+        AddPersQueueGroupAlter.emplace_back(pathId, alterData);
+    }
 
     void PersistPath(const TPathId& pathId) {
         Paths.push_back(pathId);
@@ -98,6 +118,14 @@ public:
 
     void PersistView(const TPathId& pathId) {
         Views.emplace_back(pathId);
+    }
+
+    void PersistAlterSequence(const TPathId& pathId) {
+        AlterSequences.push_back(pathId);
+    }
+
+    void PersistSequence(const TPathId& pathId) {
+        Sequences.push_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

@@ -7,8 +7,10 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/persqueue/pq_database.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/services/metadata/service.h>
+
+#include <ydb-cpp-sdk/client/result/result.h>
 
 
 namespace NKikimr::NPQ::NPartitionChooser {
@@ -137,6 +139,7 @@ public:
         ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
         ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(false);
         ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
         // keep compiled query in cache.
         ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
 
@@ -160,27 +163,26 @@ public:
     }
 
     bool HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& /*ctx*/) {
-        auto& record = ev->Get()->Record.GetRef();
+        auto& record = ev->Get()->Record;
 
         if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
             return false;
         }
 
-        auto& t = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
-
+        NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
         TxId = record.GetResponse().GetTxMeta().id();
         Y_ABORT_UNLESS(!TxId.empty());
 
-        if (t.ListSize() != 0) {
-            auto& list = t.GetList(0);
-            auto& tt = list.GetStruct(0);
-            if (tt.HasOptional() && tt.GetOptional().HasUint32()) { //already got partition
-                auto accessTime = list.GetStruct(2).GetOptional().GetUint64();
+        while(parser.TryNextRow()) {
+            auto tt = parser.ColumnParser(0).GetOptionalUint32();
+
+            if (tt.has_value()) { //already got partition
+                auto accessTime = parser.ColumnParser(2).GetOptionalUint64().value_or(0);
                 if (accessTime > AccessTime) { // AccessTime
-                    PartitionId_ = tt.GetOptional().GetUint32();
-                    CreateTime = list.GetStruct(1).GetOptional().GetUint64();
+                    PartitionId_ = *tt;
+                    CreateTime = parser.ColumnParser(1).GetOptionalUint64().value_or(0);
                     AccessTime = accessTime;
-                    SeqNo_ = list.GetStruct(3).GetOptional().GetUint64();
+                    SeqNo_ = parser.ColumnParser(3).GetOptionalUint64().value_or(0);
                 }
             }
         }
@@ -206,6 +208,8 @@ public:
         ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
         // fill tx settings: set commit tx flag&  begin new serializable tx.
         ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+        ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+
         if (KqpSessionId) {
             ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
         }
@@ -254,7 +258,7 @@ private:
     const TString TopicHashName;
 
     NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
-   
+
     NPQ::ESourceIdTableGeneration TableGeneration;
     TString SelectQuery;
     TString UpdateQuery;

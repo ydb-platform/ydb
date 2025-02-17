@@ -23,38 +23,42 @@
 #include "orc/Type.hh"
 #include "orc/Vector.hh"
 
+#include <google/protobuf/message.h>
+
 #include <string>
 
 namespace orc {
 
+  using TProtobufString = decltype(std::declval<::google::protobuf::MessageLite>().GetTypeName());
+
   class FileVersion {
    private:
-    uint32_t majorVersion;
-    uint32_t minorVersion;
+    uint32_t majorVersion_;
+    uint32_t minorVersion_;
 
    public:
     static const FileVersion& v_0_11();
     static const FileVersion& v_0_12();
     static const FileVersion& UNSTABLE_PRE_2_0();
 
-    FileVersion(uint32_t major, uint32_t minor) : majorVersion(major), minorVersion(minor) {}
+    FileVersion(uint32_t major, uint32_t minor) : majorVersion_(major), minorVersion_(minor) {}
 
     /**
      * Get major version
      */
     uint32_t getMajor() const {
-      return this->majorVersion;
+      return this->majorVersion_;
     }
 
     /**
      * Get minor version
      */
     uint32_t getMinor() const {
-      return this->minorVersion;
+      return this->minorVersion_;
     }
 
     bool operator==(const FileVersion& right) const {
-      return this->majorVersion == right.getMajor() && this->minorVersion == right.getMinor();
+      return this->majorVersion_ == right.getMajor() && this->minorVersion_ == right.getMinor();
     }
 
     bool operator!=(const FileVersion& right) const {

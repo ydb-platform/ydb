@@ -8,7 +8,7 @@ namespace NYT::NRpc {
 namespace {
 
 template <class TImpl>
-using TRpcShutdownTest = TTestBase<TImpl>;
+using TRpcShutdownTest = TRpcTestBase<TImpl>;
 
 TYPED_TEST_SUITE(TRpcShutdownTest, TAllTransports);
 

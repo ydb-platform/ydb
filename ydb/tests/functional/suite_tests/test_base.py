@@ -2,21 +2,20 @@
 import itertools
 import json
 import abc
-import collections
 import os
 import random
 import string
 import logging
-import time
 import six
 import enum
+from functools import cmp_to_key
 from concurrent import futures
 
-from hamcrest import assert_that, is_, equal_to, raises, none
-import ydb.tests.library.common.yatest_common as yatest_common
+from hamcrest import assert_that, equal_to, raises
+import yatest
 from yatest.common import source_path, test_source_path
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.oss.canonical import set_canondata_root
@@ -41,21 +40,99 @@ def mute_sdk_loggers():
 mute_sdk_loggers()
 
 
-@enum.unique
-class StatementTypes(enum.Enum):
-    Skipped = 'statement skipped'
-    Ok = 'statement ok'
-    Error = 'statement error'
-    Query = 'statement query'
-    StreamQuery = 'statement stream query'
-    ImportTableData = 'statement import table data'
+class StatementDefinition:
+    @enum.unique
+    class Type(enum.Enum):
+        Ok = 'ok'
+        Error = 'error'
+        Query = 'query'
+        StreamQuery = 'stream query'
+        ImportTableData = 'import table data'
 
+    class SqlStatementType(enum.Enum):
+        Create = "create"
+        DropTable = "drop"
+        Insert = "insert"
+        Uosert = "upsert"
+        Replace = "replace"
+        Delete = "delete"
+        Select = "select"
 
-def get_statement_type(line):
-    for s_type in list(StatementTypes):
-        if s_type.value in line.lower():
-            return s_type
-    raise RuntimeError("Can't find statement type for line %s" % line)
+    @enum.unique
+    class TableType(enum.Enum):
+        Row = 'row'
+        Column = 'column'
+
+    def __init__(self, suite: str, at_line: int, type: Type, text: [str], sql_statement_type: SqlStatementType, table_types: {TableType}):
+        self.suite_name = suite
+        self.at_line = at_line
+        self.s_type = type
+        self.text = text
+        self.sql_statement_type = sql_statement_type
+        self.table_types = table_types
+
+    def __str__(self):
+        return f'''StatementDefinition:
+    suite: {self.suite_name}
+    line: {self.at_line}
+    type: {self.s_type}
+    sql_stmt_tyoe: {self.sql_statement_type}
+    table_types: {', '.join([str(t) for t in self.table_types])}
+    text:
+''' + '\n'.join([f'        {row}' for row in self.text.split('\n')])
+
+    @staticmethod
+    def _parse_statement_type(statement_line: str, suite: str, at_line: int) -> (Type, {TableType}):
+        parts = statement_line.split(' ')
+        parts.pop(0)  # skip 'statement' word
+        table_types = {}
+        if parts[0] == 'error':
+            type = StatementDefinition.Type.Error
+        else:
+            if parts[0] == 'skipped':
+                parts.pop(0)
+            elif parts[0] == 'skipped_cs':
+                table_types = {StatementDefinition.TableType.Row}
+                parts.pop(0)
+            else:
+                table_types = {StatementDefinition.TableType.Row, StatementDefinition.TableType.Column}
+            type = None
+            if table_types:  # ignore rest of the line for skipped tests
+                for t in list(StatementDefinition.Type):
+                    if t.value == ' '.join(parts):
+                        type = t
+                if type is None:
+                    raise RuntimeError(f'Unknown statement type in {suite}, at line: {at_line}')
+        return (type, table_types)
+
+    @staticmethod
+    def _parse_sql_statement_type(lines: [str]) -> SqlStatementType:
+        for line in lines:
+            line = line.lower()
+            if line.startswith("pragma"):
+                continue
+            for t in list(StatementDefinition.SqlStatementType):
+                if line.startswith(t.value):
+                    return t
+        return None
+
+    @staticmethod
+    def parse(suite: str, at_line: int, lines: list[str]):
+        if not lines or not lines[0]:
+            raise RuntimeError(f'Invalid statement in {suite}, at line: {at_line}')
+        type, table_types = StatementDefinition._parse_statement_type(lines[0], suite, at_line)
+        lines.pop(0)
+        at_line += 1
+        statement_lines = []
+        for line in lines:
+            if line.startswith('side effect: '):  # side effects are not supported yet
+                pass
+            else:
+                statement_lines.append(line)
+        sql_statement_type = StatementDefinition._parse_sql_statement_type(statement_lines)
+        if sql_statement_type is None:
+            raise RuntimeError(f'Unknown sql statement type in {suite}, at line: {at_line}')
+        return StatementDefinition(suite, at_line, type, "\n".join(statement_lines), sql_statement_type, table_types)
 
 
 def get_token(length=10):
@@ -65,12 +142,6 @@ def get_token(length=10):
 def get_source_path(*args):
     arcadia_root = source_path('')
     return os.path.join(arcadia_root, test_source_path(os.path.join(*args)))
-
-
-def is_empty_line(line):
-    if line.split():
-        return False
-    return True
 
 
 def get_lines(suite_path):
@@ -97,86 +168,44 @@ def get_test_suites(directory):
     return suites
 
 
-def get_single_statement(lines):
+def split_by_statement(lines):
     statement_lines = []
+    statement_start_line_idx = 0
     for line_idx, line in lines:
-        if is_empty_line(line):
-            statement = "\n".join(statement_lines)
-            return statement
-        statement_lines.append(line)
-    return "\n".join(statement_lines)
-
-
-class ParsedStatement(collections.namedtuple('ParsedStatement', ["at_line", "s_type", "suite_name", "text"])):
-    def get_fields(self):
-        return self._fields
-
-    def __str__(self):
-        result = ["", "Parsed Statement"]
-        for field in self.get_fields():
-            value = str(getattr(self, field))
-            if field != 'text':
-                result.append(' ' * 4 + '%s: %s,' % (field, value))
-            else:
-                result.append(' ' * 4 + '%s:' % field)
-                result.extend([' ' * 8 + row for row in value.split('\n')])
-        return "\n".join(result)
+        if line:
+            if line.startswith("statement "):
+                statement_start_line_idx = line_idx
+                statement_lines = [line]
+            elif statement_lines:
+                statement_lines.append(line)
+        else:
+            if statement_lines:
+                yield (statement_start_line_idx, statement_lines)
+                statement_lines = []
+    if statement_lines:
+        yield (statement_start_line_idx + 1, statement_lines)
 
 
 def get_statements(suite_path, suite_name):
-    lines = get_lines(suite_path)
-    for line_idx, line in lines:
-        if is_empty_line(line) or not is_statement_definition(line):
-            # empty line or junk lines
-            continue
-        text = get_single_statement(lines)
-        yield ParsedStatement(
-            line_idx,
-            get_statement_type(line),
+    for statement_start_line_idx, statement_lines in split_by_statement(get_lines(suite_path)):
+        yield StatementDefinition.parse(
             suite_name,
-            text)
+            statement_start_line_idx,
+            statement_lines,
+        )
 
 
-def is_side_effect(statement_line):
-    return statement_line.startswith('side effect: ')
+def patch_create_table_for_column_table(stmt):
+    if stmt[-1] == ";":
+        stmt = stmt[:-1]
+    return stmt + " WITH (STORE = COLUMN)"
 
 
-def parse_side_effect(se_line):
-    pieces = se_line.split(':')
-    if len(pieces) < 3:
-        raise RuntimeError("Invalid side effect description: %s" % se_line)
-    se_type = pieces[1].strip()
-    se_description = ':'.join(pieces[2:])
-    se_description = se_description.strip()
-
-    return se_type, se_description
-
-
-def get_statement_and_side_effects(statement_text):
-    statement_lines = statement_text.split('\n')
-    side_effects = {}
-    filtered = []
-    for statement_line in statement_lines:
-        if not is_side_effect(statement_line):
-            filtered.append(statement_line)
-            continue
-
-        se_type, se_description = parse_side_effect(statement_line)
-
-        side_effects[se_type] = se_description
-
-    return '\n'.join(filtered), side_effects
-
-
-def is_statement_definition(line):
-    return line.startswith("statement")
-
-
-def format_yql_statement(lines_or_statement, table_path_prefix):
+def patch_yql_statement(lines_or_statement, table_path_prefix):
     if not isinstance(lines_or_statement, list):
         lines_or_statement = [lines_or_statement]
     statement = "\n".join(
-        ['pragma TablePathPrefix = "%s";' % table_path_prefix, "pragma SimpleColumns;"] + lines_or_statement)
+        ['pragma TablePathPrefix = "%s";' % table_path_prefix, "pragma SimpleColumns;", "pragma AnsiCurrentRow;"] + lines_or_statement)
     return statement
 
 
@@ -199,10 +228,10 @@ def wrap_rows(rows):
 
 
 def write_canonical_response(response, file):
-    output_path = os.path.join(yatest_common.output_path(), file)
+    output_path = os.path.join(yatest.common.output_path(), file)
     with open(output_path, 'w') as w:
         w.write(json.dumps(response, indent=4, sort_keys=True))
-    return yatest_common.canonical_file(
+    return yatest.common.canonical_file(
         local=True,
         universal_lines=True,
         path=output_path
@@ -243,22 +272,26 @@ def format_as_table(data):
 class BaseSuiteRunner(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(
-                load_udfs=True,
+                udfs_path=yatest.common.build_path("yql/udfs"),
                 use_in_memory_pdisks=True,
                 disable_iterator_reads=True,
                 disable_iterator_lookups=True,
+                extra_feature_flags=["enable_resource_pools"],
+                column_shard_config={
+                    'allow_nullable_columns_in_pk': True,
+                },
                 # additional_log_configs={'KQP_YQL': 7}
             )
         )
         cls.cluster.start()
         cls.table_path_prefix = None
-        cls.table_path_prefix_ne = None
         cls.driver = ydb.Driver(ydb.DriverConfig(
             database="/Root",
             endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)))
-        cls.pool = ydb.SessionPool(cls.driver)
+        cls.legacy_pool = ydb.SessionPool(cls.driver)  # for explain
+        cls.pool = ydb.QuerySessionPool(cls.driver)
         cls.driver.wait()
         cls.query_id = itertools.count(start=1)
         cls.files = {}
@@ -267,6 +300,7 @@ class BaseSuiteRunner(object):
 
     @classmethod
     def teardown_class(cls):
+        cls.legacy_pool.stop()
         cls.pool.stop()
         cls.driver.stop()
         cls.cluster.stop()
@@ -276,10 +310,14 @@ class BaseSuiteRunner(object):
         self.plan = (kind == 'plan')
         self.query_id = itertools.count(start=1)
         self.table_path_prefix = "/Root/%s" % '_'.join(list(path_pieces) + [kind])
-        self.table_path_prefix_ne = self.table_path_prefix + "_ne"
-        for parsed_statement in get_statements(get_source_path(*path_pieces), os.path.join(*path_pieces)):
-            self.assert_statement(parsed_statement)
+        for statement in get_statements(get_source_path(*path_pieces), os.path.join(*path_pieces)):
+            self.assert_statement(statement)
         return self.files
+
+    def get_table_prefix(self, table_type: StatementDefinition.TableType) -> str:
+        if table_type == StatementDefinition.TableType.Column:
+            return f"{self.table_path_prefix}_{str(table_type.value)}"
+        return self.table_path_prefix
 
     def assert_statement_import_table_data(self, statement):
         # insert into {tableName} () VALUES {dataPath}
@@ -296,6 +334,7 @@ class BaseSuiteRunner(object):
             future_results.append(
                 tp.submit(
                     self.execute_query,
+                    statement,
                     cmd,
                 )
             )
@@ -303,67 +342,70 @@ class BaseSuiteRunner(object):
         for future in future_results:
             safe_execute(lambda: future.result(), statement)
 
-    def assert_statement(self, parsed_statement):
-        start_time = time.time()
+    def assert_statement(self, statement):
         from_type = {
-            StatementTypes.Ok: self.assert_statement_ok,
-            StatementTypes.Query: self.assert_statement_query,
-            StatementTypes.StreamQuery: self.assert_statement_stream_query,
-            StatementTypes.Error: (lambda x: x),
-            StatementTypes.ImportTableData: self.assert_statement_import_table_data,
-            StatementTypes.Skipped: lambda x: x
+            StatementDefinition.Type.Ok: self.assert_statement_ok,
+            StatementDefinition.Type.Query: self.assert_statement_query,
+            StatementDefinition.Type.StreamQuery: self.assert_statement_stream_query,
+            StatementDefinition.Type.Error: (lambda x: x),
+            StatementDefinition.Type.ImportTableData: self.assert_statement_import_table_data,
         }
-        assert_method = from_type.get(parsed_statement.s_type)
-        assert_method(parsed_statement)
-        end_time = time.time()
-        logger.info("Executed statement at line %d, suite from %s, in %0.3f seconds" % (
-            parsed_statement.at_line, parsed_statement.suite_name, end_time - start_time))
+        if not statement.table_types:
+            logger.info(f"Skipped statement {statement.suite_name}:{statement.at_line}")
+            return
+        assert_method = from_type.get(statement.s_type)
+        assert_method(statement)
 
     def assert_statement_ok(self, statement):
-        actual = safe_execute(lambda: self.execute_ydb_ok(statement.text), statement)
+        actual = safe_execute(lambda: self.execute_query(statement))
         assert_that(
-            actual,
-            is_(none()),
+            len(actual),
+            1,
             str(statement),
         )
 
     def assert_statement_error(self, statement):
-        # not supported yet
-        statement_text, side_effects = get_statement_and_side_effects(statement.text)
         assert_that(
-            lambda: self.execute_query(statement_text),
+            lambda: self.execute_query(statement),
             raises(
                 ydb.Error
             )
         )
 
-    def get_query_and_output(self, statement_text):
-        return statement_text, None
+    def get_expected_output(self, _):
+        return None
 
     @staticmethod
     def pretty_json(j):
         return json.dumps(j, indent=4, sort_keys=True)
 
-    def assert_statement_query(self, statement):
-        def get_actual_and_expected():
-            query, expected = self.get_query_and_output(statement.text)
-            actual = self.execute_query(query)
-            return actual, expected
+    def remove_optimizer_estimates(self, query_plan):
+        if 'Plans' in query_plan:
+            for p in query_plan['Plans']:
+                self.remove_optimizer_estimates(p)
+        if 'Operators' in query_plan:
+            for op in query_plan['Operators']:
+                for key in ['A-Cpu', 'A-Rows', 'E-Cost', 'E-Rows', 'E-Size']:
+                    if key in op:
+                        del op[key]
 
+    def assert_statement_query(self, statement):
         query_id = next(self.query_id)
         query_name = "query_%d" % query_id
         if self.plan:
             query_plan = json.loads(self.explain(statement.text))
             if 'SimplifiedPlan' in query_plan:
                 del query_plan['SimplifiedPlan']
+            if 'Plan' in query_plan:
+                self.remove_optimizer_estimates(query_plan['Plan'])
             self.files[query_name + '.plan'] = write_canonical_response(
                 query_plan,
                 query_name + '.plan',
             )
 
             return
-
-        actual_output, expected_output = safe_execute(get_actual_and_expected, statement, query_name)
+        expected_output = self.get_expected_output(statement.text)
+        actual_output = safe_execute(lambda: self.execute_query(statement), statement, query_name)
 
         if len(actual_output) > 0:
             self.files[query_name] = write_canonical_response(
@@ -379,78 +421,98 @@ class BaseSuiteRunner(object):
                 )
 
     def execute_scan_query(self, yql_text):
-        success = False
-        retries = 10
-        while retries > 0 and not success:
-            retries -= 1
-
+        def callee():
             it = self.driver.table_client.scan_query(yql_text)
             result = []
-            while True:
-                try:
-                    response = next(it)
-                    for row in response.result_set.rows:
-                        result.append(row)
-
-                except StopIteration:
-                    return result
-
-                except Exception:
-                    if retries == 0:
-                        raise
+            for response in it:
+                for row in response.result_set.rows:
+                    result.append(row)
+            return result
+        return ydb.retry_operation_sync(callee)
 
     def assert_statement_stream_query(self, statement):
         if self.plan:
             return
 
-        yql_text = format_yql_statement(statement.text, self.table_path_prefix)
+        yql_text = patch_yql_statement(statement.text, self.get_table_prefix(StatementDefinition.TableType.Row))
         yql_text = "--!syntax_v1\n" + yql_text + "\n\n"
         result = self.execute_scan_query(yql_text)
         file_name = statement.suite_name.split('/')[1] + '.out'
-        output_path = os.path.join(yatest_common.output_path(), file_name)
+        output_path = os.path.join(yatest.common.output_path(), file_name)
         with open(output_path, 'a+') as w:
             w.write(yql_text)
             w.write(format_as_table(result))
             w.write("\n\n")
 
-        self.files[file_name] = yatest_common.canonical_file(
+        self.files[file_name] = yatest.common.canonical_file(
             path=output_path,
             local=True,
             universal_lines=True,
         )
 
-    def is_probably_scheme(self, yql_text):
-        lwr = yql_text.lower()
-        return 'create table' in lwr or 'drop table' in lwr
-
-    def execute_ydb_ok(self, statement_text):
-        if self.is_probably_scheme(statement_text):
-            self.execute_scheme(statement_text)
-        else:
-            self.execute_query(statement_text)
-
     def explain(self, query):
-        yql_text = format_yql_statement(query, self.table_path_prefix)
-        return self.pool.retry_operation_sync(lambda s: s.explain(yql_text)).query_plan
+        yql_text = patch_yql_statement(query, self.get_table_prefix(StatementDefinition.TableType.Row))
+        # seems explain not working with query service ?
+        """
+        result_sets = self.pool.execute_with_retries(yql_text, exec_mode=ydb.query.base.QueryExecMode.EXPLAIN)
+        first_set = result_sets[0]
+        print("***", first_set)
+        print("***", first_set.rows)
+        return first_set.rows[0]
+        """
 
-    def execute_scheme(self, statement_text):
-        yql_text = format_yql_statement(statement_text, self.table_path_prefix)
-        self.pool.retry_operation_sync(lambda s: s.execute_scheme(yql_text))
-        yql_text = format_yql_statement(statement_text, self.table_path_prefix_ne)
-        self.pool.retry_operation_sync(lambda s: s.execute_scheme(yql_text))
-        return None
+        return self.legacy_pool.retry_operation_sync(lambda s: s.explain(yql_text)).query_plan
 
-    def execute_query(self, statement_text):
-        yql_text = format_yql_statement(statement_text, self.table_path_prefix)
-        result = self.pool.retry_operation_sync(lambda s: s.transaction().execute(yql_text, commit_tx=True))
+    def execute_query(self, statement: StatementDefinition, amended_text: str = None):
+        text_row = amended_text if amended_text is not None else statement.text
+        if statement.sql_statement_type == StatementDefinition.SqlStatementType.Create:
+            text_column = patch_create_table_for_column_table(text_row)
+        else:
+            text_column = text_row
+        text_row = patch_yql_statement(text_row, self.get_table_prefix(StatementDefinition.TableType.Row))
+        text_column = patch_yql_statement(text_column, self.get_table_prefix(StatementDefinition.TableType.Column))
+        result_row = self.pool.execute_with_retries(text_row)
+        if StatementDefinition.TableType.Column in statement.table_types:
+            result_column = self.pool.execute_with_retries(text_column)
 
-        if len(result) == 1:
-            scan_query_result = self.execute_scan_query(yql_text)
-            for i in range(len(result)):
+        if statement.sql_statement_type == StatementDefinition.SqlStatementType.Select:
+            scan_query_result = self.execute_scan_query(text_row)
+            self.execute_assert(
+                result_row[0].rows,
+                scan_query_result,
+                "Scan query and query service produce different results",
+            )
+            if StatementDefinition.TableType.Column in statement.table_types:
+                def flatten_result(result_sets):
+                    return [row for result_set in result_sets for row in result_set.rows]
+
+                def compare(lhs, rhs):
+                    lhs_keys = sorted(lhs.keys())
+                    rhs_keys = sorted(rhs.keys())
+                    if lhs_keys != rhs_keys:
+                        return -1 if lhs_keys < rhs_keys else 1
+
+                    def cmp_val_none(lhs, rhs):
+                        if lhs is None or rhs is None:
+                            if lhs == rhs:
+                                return 0
+                            return -1 if lhs is None else 1
+                        if lhs == rhs:
+                            return 0
+                        return -1 if lhs < rhs else 1
+
+                    for k in lhs_keys:
+                        c = cmp_val_none(lhs[k], rhs[k])
+                        if c != 0:
+                            return c
+                    return 0
+
+                sorted_result_row = sorted(flatten_result(result_row), key=cmp_to_key(compare))
+                sorted_result_column = sorted(flatten_result(result_column), key=cmp_to_key(compare))
+
                 self.execute_assert(
-                    result[i].rows,
-                    scan_query_result,
-                    "Results are not same",
+                    sorted_result_row,
+                    sorted_result_column,
+                    f"Row table and column table produce different results: \n{sorted_result_row} \n{sorted_result_column}",
                 )
-
-        return result
+        return result_row

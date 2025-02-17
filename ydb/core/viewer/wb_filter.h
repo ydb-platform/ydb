@@ -1,15 +1,14 @@
 #pragma once
+#include <util/string/split.h>
 #include <util/string/vector.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <util/string/split.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NNodeWhiteboard;
 using namespace ::google::protobuf;
 
-template <typename ResponseType>
+template<typename ResponseType>
 struct TWhiteboardInfo;
 
 struct TEnumValue {
@@ -551,5 +550,4 @@ void FilterWhiteboardResponses(ResponseType& response, const TString& filters) {
     TWhiteboardFilter<ResponseType>::FilterResponse(response, filterFilters);
 }
 
-}
 }

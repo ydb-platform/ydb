@@ -1,12 +1,12 @@
 #include "kqp_compute.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders_codegen.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/public/udf/udf_terminator.h>
-#include <ydb/library/yql/public/udf/udf_type_builder.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/public/udf/udf_terminator.h>
+#include <yql/essentials/public/udf/udf_type_builder.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -149,6 +149,15 @@ public:
                 }
                 case EJoinKind::LeftOnly: {
                     if (rightRow.HasValue()) {
+                        ok = false;
+                        break;
+                    }
+
+                    result = FillResultItems(std::move(leftRow), std::move(rightRow), EOutputMode::OnlyLeftRow);
+                    break;
+                }
+                case EJoinKind::LeftSemi: {
+                    if (!rightRow.HasValue()) {
                         ok = false;
                         break;
                     }

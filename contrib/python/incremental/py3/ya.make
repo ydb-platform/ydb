@@ -2,19 +2,25 @@
 
 PY3_LIBRARY()
 
-VERSION(22.10.0)
+VERSION(24.7.2)
 
 LICENSE(MIT)
+
+PEERDIR(
+    contrib/python/setuptools
+)
 
 NO_LINT()
 
 NO_CHECK_IMPORTS(
+    incremental._hatch
     incremental.update
 )
 
 PY_SRCS(
     TOP_LEVEL
     incremental/__init__.py
+    incremental/_hatch.py
     incremental/_version.py
     incremental/update.py
 )

@@ -58,6 +58,10 @@ public:
         self.set_type(Ydb::Scheme::Entry::DIRECTORY);
 
         for (const auto& binding : Bindings_) {
+            if (binding.type() == FederatedQuery::BindingSetting::DATA_STREAMS) {
+                continue;
+            }
+
             auto& destEntry = *result.add_children();
             destEntry.set_name(binding.name());
             destEntry.set_owner(binding.meta().created_by());

@@ -42,8 +42,8 @@ void TUserJobStatsProxy::Init(IOutputStream * usingStream) {
 
     if (usingStream == nullptr) {
         TFileHandle fixedDesrc(JobStatisticsHandle);
-        FetchedOut = MakeHolder<TFixedBufferFileOutput>(TFile(fixedDesrc.Duplicate()));
-        UsingStream = FetchedOut.Get();
+        FetchedOut = std::make_unique<TFixedBufferFileOutput>(TFile(fixedDesrc.Duplicate()));
+        UsingStream = FetchedOut.get();
         fixedDesrc.Release();
     } else {
         UsingStream = usingStream;
@@ -55,8 +55,8 @@ void TUserJobStatsProxy::InitChecked(IOutputStream* def) {
 
     if (usingStream == nullptr && !GetEnv("YT_JOB_ID").empty()) {
         TFileHandle fixedDesrc(JobStatisticsHandle);
-        FetchedOut = MakeHolder<TFixedBufferFileOutput>(TFile(fixedDesrc.Duplicate()));
-        UsingStream = FetchedOut.Get();
+        FetchedOut = std::make_unique<TFixedBufferFileOutput>(TFile(fixedDesrc.Duplicate()));
+        UsingStream = FetchedOut.get();
         fixedDesrc.Release();
     } else {
         UsingStream = def;
@@ -89,7 +89,7 @@ void TUserJobStatsProxy::CommitStats() {
 
 
 TTimeStatHolder TUserJobStatsProxy::TimerStart(TString name, bool commitOnFinish) {
-    return THolder(new TTimeStat(this, name, commitOnFinish));
+    return std::unique_ptr<TTimeStat>(new TTimeStat(this, name, commitOnFinish));
 }
 
 void TUserJobStatsProxy::WriteStat(TString name, i64 val) {

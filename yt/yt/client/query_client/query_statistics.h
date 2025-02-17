@@ -23,6 +23,7 @@ struct TQueryStatistics
     bool IncompleteInput = false;
     bool IncompleteOutput = false;
     size_t MemoryUsage = 0;
+    i64 TotalGroupedRowCount = 0;
 
     std::vector<TQueryStatistics> InnerStatistics;
 
@@ -32,7 +33,7 @@ struct TQueryStatistics
 void ToProto(NProto::TQueryStatistics* serialized, const TQueryStatistics& original);
 void FromProto(TQueryStatistics* original, const NProto::TQueryStatistics& serialized);
 
-TString ToString(const TQueryStatistics& stat);
+void FormatValue(TStringBuilderBase* builder, const TQueryStatistics& stat, TStringBuf spec);
 
 void Serialize(const TQueryStatistics& statistics, NYson::IYsonConsumer* consumer);
 

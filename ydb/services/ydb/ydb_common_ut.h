@@ -4,8 +4,11 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include <ydb/services/ydb/ydb_dummy.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
+
+#include <util/system/tempfile.h>
 
 #include "ydb_keys_ut.h"
 
@@ -30,7 +33,7 @@ struct TKikimrTestSettings {
     static TString GetServerCrt() { return NYdbSslTestData::ServerCrt; }
     static TString GetServerKey() { return NYdbSslTestData::ServerKey; }
 
-    static NKikimr::TDynamicNodeAuthorizationParams GetCertAuthParams() {return {}; }
+    static NKikimr::TCertificateAuthorizationParams GetCertAuthParams() {return {}; }
 };
 
 struct TKikimrTestWithAuth : TKikimrTestSettings {
@@ -39,6 +42,32 @@ struct TKikimrTestWithAuth : TKikimrTestSettings {
 
 struct TKikimrTestWithAuthAndSsl : TKikimrTestWithAuth {
     static constexpr bool SSL = true;
+};
+
+struct TKikimrTestWithServerCert : TKikimrTestWithAuthAndSsl {
+    static constexpr bool SSL = true;
+
+    static const TCertAndKey& GetCACertAndKey() {
+        static const TCertAndKey ca = GenerateCA(TProps::AsCA());
+        return ca;
+    }
+
+    static const TCertAndKey& GetServerCert() {
+        static const TCertAndKey server = GenerateSignedCert(GetCACertAndKey(), TProps::AsServer());
+        return server;
+    }
+
+    static TString GetCaCrt() {
+        return GetCACertAndKey().Certificate.c_str();
+    }
+
+    static TString GetServerCrt() {
+        return GetServerCert().Certificate.c_str();
+    }
+
+    static TString GetServerKey() {
+        return GetServerCert().PrivateKey.c_str();
+    }
 };
 
 struct TKikimrTestNoSystemViews : TKikimrTestSettings {
@@ -85,6 +114,7 @@ public:
         ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableDataColumnForIndexTable(true);
         ServerSettings->SetEnableNotNullColumns(true);
+        ServerSettings->SetEnableParameterizedDecimal(true);
         ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
@@ -99,6 +129,9 @@ public:
         if (builder) {
             builder(*ServerSettings);;
         }
+
+        ServerCertificateFile.Write(TestSettings::GetServerCrt().data(), TestSettings::GetServerCrt().size());
+        ServerSettings->ServerCertFilePath = ServerCertificateFile.Name();
 
         Server_.Reset(new TServer(*ServerSettings));
         Tenants_.Reset(new Tests::TTenants(Server_));
@@ -118,7 +151,7 @@ public:
 
         NYdbGrpc::TServerOptions grpcOption;
         if (TestSettings::AUTH) {
-            grpcOption.SetUseAuth(true);
+            grpcOption.SetUseAuth(appConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()); // In real life UseAuth is initialized with EnforceUserTokenRequirement. To avoid incorrect tests we must do the same.
         }
         grpcOption.SetPort(grpc);
         if (TestSettings::SSL) {
@@ -126,7 +159,7 @@ public:
             sslData.Cert = TestSettings::GetServerCrt();
             sslData.Key = TestSettings::GetServerKey();
             sslData.Root =TestSettings::GetCaCrt();
-            sslData.DoRequestClientCertificate = appConfig.GetFeatureFlags().GetEnableDynamicNodeAuthorization() && appConfig.GetClientCertificateAuthorization().HasDynamicNodeAuthorization();
+            sslData.DoRequestClientCertificate = appConfig.GetClientCertificateAuthorization().GetRequestClientCertificate();
 
             grpcOption.SetSslData(sslData);
         }
@@ -168,6 +201,7 @@ public:
 private:
     TPortManager PortManager;
     ui16 GRpcPort_;
+    TTempFileHandle ServerCertificateFile;
 };
 
 struct TTestOlap {
@@ -237,7 +271,6 @@ struct TTestOlap {
                     Columns { Name: "request_id" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     KeyColumnNames: "uid"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )", storeName.c_str());
@@ -323,5 +356,12 @@ using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema<TKikimrTe
 using TKikimrWithGrpcAndRootSchemaWithAuth = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth>;
 using TKikimrWithGrpcAndRootSchemaWithAuthAndSsl = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>;
 using TKikimrWithGrpcAndRootSchemaNoSystemViews = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestNoSystemViews>;
+
+Ydb::StatusIds::StatusCode WaitForStatus(
+    std::shared_ptr<grpc::Channel> channel, const TString& opId,
+    TString* error = nullptr,
+    int retries = 10,
+    TDuration sleepDuration = NYdb::ITERATION_DURATION
+);
 
 }

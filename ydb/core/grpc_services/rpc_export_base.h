@@ -1,16 +1,18 @@
 #pragma once
 
+#include "rpc_operation_conv_base.h"
+
 #include <ydb/core/protos/export.pb.h>
-#include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <util/string/cast.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
-struct TExportConv {
+struct TExportConv: public TOperationConv<NKikimrExport::TExport> {
     static Ydb::TOperationId MakeOperationId(const ui64 id, NKikimrExport::TExport::SettingsCase kind) {
         Ydb::TOperationId operationId;
         operationId.SetKind(Ydb::TOperationId::EXPORT);
@@ -31,27 +33,24 @@ struct TExportConv {
         return operationId;
     }
 
-    static Ydb::Operations::Operation ToOperation(const NKikimrExport::TExport& exprt) {
-        Ydb::Operations::Operation operation;
+    static Operation ToOperation(const NKikimrExport::TExport& in) {
+        auto operation = TOperationConv::ToOperation(in);
 
-        operation.set_id(NOperationId::ProtoToString(MakeOperationId(exprt.GetId(), exprt.GetSettingsCase())));
-        operation.set_status(exprt.GetStatus());
         if (operation.status() == Ydb::StatusIds::SUCCESS) {
-            operation.set_ready(exprt.GetProgress() == Ydb::Export::ExportProgress::PROGRESS_DONE);
-        } else {
-            operation.set_ready(true);
+            operation.set_ready(in.GetProgress() == Ydb::Export::ExportProgress::PROGRESS_DONE);
+        } else if (operation.status() != Ydb::StatusIds::CANCELLED) {
+            return operation;
         }
-        if (exprt.IssuesSize()) {
-            operation.mutable_issues()->CopyFrom(exprt.GetIssues());
-        }
+
+        operation.set_id(NOperationId::ProtoToString(MakeOperationId(in.GetId(), in.GetSettingsCase())));
 
         using namespace Ydb::Export;
-        switch (exprt.GetSettingsCase()) {
+        switch (in.GetSettingsCase()) {
         case NKikimrExport::TExport::kExportToYtSettings:
-            Fill<ExportToYtMetadata, ExportToYtResult>(operation, exprt, exprt.GetExportToYtSettings());
+            Fill<ExportToYtMetadata, ExportToYtResult>(operation, in, in.GetExportToYtSettings());
             break;
         case NKikimrExport::TExport::kExportToS3Settings:
-            Fill<ExportToS3Metadata, ExportToS3Result>(operation, exprt, exprt.GetExportToS3Settings());
+            Fill<ExportToS3Metadata, ExportToS3Result>(operation, in, in.GetExportToS3Settings());
             break;
         default:
             Y_DEBUG_ABORT("Unknown export kind");
@@ -59,22 +58,6 @@ struct TExportConv {
         }
 
         return operation;
-    }
-
-private:
-    template <typename TMetadata, typename TResult, typename TSettings>
-    static void Fill(
-            Ydb::Operations::Operation& operation,
-            const NKikimrExport::TExport& exprt,
-            const TSettings& settings) {
-        TMetadata metadata;
-        metadata.mutable_settings()->CopyFrom(settings);
-        metadata.set_progress(exprt.GetProgress());
-        metadata.mutable_items_progress()->CopyFrom(exprt.GetItemsProgress());
-        operation.mutable_metadata()->PackFrom(metadata);
-
-        TResult result;
-        operation.mutable_result()->PackFrom(result);
     }
 
 }; // TExportConv

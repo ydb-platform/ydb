@@ -1,8 +1,7 @@
 #include "write_session_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/trace_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/trace_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -13,12 +12,39 @@
 #include <util/stream/buffer.h>
 #include <util/generic/guid.h>
 
-
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 // Error code from file ydb/public/api/protos/persqueue_error_codes_v1.proto
 const ui64 WRITE_ERROR_PARTITION_INACTIVE = 500029;
+
+namespace {
+
+using TTxId = std::pair<std::string_view, std::string_view>;
+using TTxIdOpt = std::optional<TTxId>;
+
+TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& request)
+{
+    Y_ABORT_UNLESS(request.messages_size());
+
+    if (!request.has_tx()) {
+        return std::nullopt;
+    }
+
+    const Ydb::Topic::TransactionIdentity& tx = request.tx();
+    return TTxId(tx.session(), tx.id());
+}
+
+TTxIdOpt GetTransactionId(const NTable::TTransaction* tx)
+{
+    if (!tx) {
+        return std::nullopt;
+    }
+
+    return TTxId(tx->GetSession().GetId(), tx->GetId());
+}
+
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl
@@ -72,24 +98,22 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
         EventsQueue = std::make_shared<TWriteSessionEventsQueue>(Settings);
     }
 
-    ++ConnectionAttemptsDone;
     if (!Started) {
         with_lock(Lock) {
             HandleWakeUpImpl();
         }
         InitWriter();
     }
-    Started = true;
-    if (Settings.DirectWriteToPartition_ && (Settings.PartitionId_.Defined() || DirectWriteToPartitionId.Defined())) {
-        with_lock (Lock) {
+    with_lock (Lock) {
+        ++ConnectionAttemptsDone;
+        Started = true;
+        if (Settings.DirectWriteToPartition_ && (Settings.PartitionId_.Defined() || DirectWriteToPartitionId.Defined())) {
             PreferredPartitionLocation = {};
-            return ConnectToPreferredPartitionLocation(delay);
+            ConnectToPreferredPartitionLocation(delay);
+            return;
         }
     }
-    else
-    {
-        return Connect(delay);
-    }
+    Connect(delay);
 }
 
 // Returns true if we need to switch to another DirectWriteToPartitionId.
@@ -138,7 +162,6 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session is aborting and will not restart");
         return result;
     }
-    LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Got error. " << status.ToDebugString());
     SessionEstablished = false;
 
     // Keep DirectWriteToPartitionId value on temporary errors.
@@ -160,10 +183,11 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
     if (nextDelay) {
         result.StartDelay = *nextDelay;
         result.DoRestart = true;
-        LOG_LAZY(DbDriverState->Log, TLOG_WARNING, LogPrefix() << "Write session will restart in " << result.StartDelay);
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Got error. " << status.ToDebugString());
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session will restart in " << result.StartDelay);
         ResetForRetryImpl();
-
     } else {
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Got error. " << status.ToDebugString());
         LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Write session will not restart after a fatal error");
         result.DoStop = true;
         CheckHandleResultImpl(result);
@@ -206,6 +230,8 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
         AbortImpl();
         return;
     }
+
+    ++ConnectionGeneration;
 
     prevDescribePartitionContext = std::exchange(DescribePartitionContext, describePartitionContext);
     Y_ASSERT(DescribePartitionContext);
@@ -266,7 +292,15 @@ void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::To
 
     if (!status.IsSuccess()) {
         with_lock (Lock) {
-            handleResult = OnErrorImpl({status.GetStatus(), MakeIssueWithSubIssues("Failed to get partition location", status.GetIssues())});
+            if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+                Settings.DirectWriteToPartition_ = false;
+                handleResult = OnErrorImpl({
+                    EStatus::UNAVAILABLE,
+                    MakeIssueWithSubIssues("The server does not support direct write, fallback to in-direct write", status.GetIssues())
+                });
+            } else {
+                handleResult = OnErrorImpl({status.GetStatus(), MakeIssueWithSubIssues("Failed to get partition location", status.GetIssues())});
+            }
         }
         ProcessHandleResult(handleResult);
         return;
@@ -369,10 +403,6 @@ void TWriteSessionImpl::InitWriter() { // No Lock, very initial start - no race 
             ThrowFatalError("ProducerId != MessageGroupId scenario is currently not supported");
     }
     CompressionExecutor = Settings.CompressionExecutor_;
-    IExecutor::TPtr executor;
-    executor = CreateSyncExecutor();
-    executor->Start();
-    Executor = std::move(executor);
 
     Settings.CompressionExecutor_->Start();
     Settings.EventHandlers_.HandlersExecutor_->Start();
@@ -476,13 +506,121 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
     return EventsQueue->WaitEvent();
 }
 
+void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
+{
+    if (!tx) {
+        return;
+    }
+
+    const TTransactionId txId = MakeTransactionId(*tx);
+    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+
+    with_lock(txInfo->Lock) {
+        if (txInfo->Subscribed) {
+            return;
+        }
+
+        txInfo->IsActive = true;
+        txInfo->Subscribed = true;
+        txInfo->AllAcksReceived = NThreading::NewPromise<TStatus>();
+    }
+
+    auto callback = [cbContext = this->SelfContext, txId, txInfo]() {
+        with_lock(txInfo->Lock) {
+            Y_ABORT_UNLESS(!txInfo->CommitCalled);
+
+            txInfo->CommitCalled = true;
+
+            if (txInfo->WriteCount == txInfo->AckCount) {
+                txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
+                if (auto self = cbContext->LockShared()) {
+                    self->DeleteTx(txId);
+                }
+                return txInfo->AllAcksReceived.GetFuture();
+            }
+
+            if (txInfo->IsActive) {
+                return txInfo->AllAcksReceived.GetFuture();
+            }
+        }
+
+        return NThreading::MakeFuture(MakeSessionExpiredError());
+    };
+
+    tx->AddPrecommitCallback(std::move(callback));
+}
+
+void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
+{
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    auto p = WrittenInTx.find(seqNo);
+    if (p == WrittenInTx.end()) {
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                 LogPrefix() << "OnAck: seqNo=" << seqNo << ", txId=?");
+        return;
+    }
+
+    const TTransactionId& txId = p->second;
+    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+
+    with_lock(txInfo->Lock) {
+        ++txInfo->AckCount;
+
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                 LogPrefix() << "OnAck: seqNo=" << seqNo << ", txId=" << GetTxId(txId) << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+
+        if (txInfo->CommitCalled && (txInfo->WriteCount == txInfo->AckCount)) {
+            txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
+
+            Txs.erase(txId);
+        }
+    }
+}
+
+auto TWriteSessionImpl::GetOrCreateTxInfo(const TTransactionId& txId) -> TTransactionInfoPtr
+{
+    auto p = Txs.find(txId);
+    if (p == Txs.end()) {
+        TTransactionInfoPtr& txInfo = Txs[txId];
+        txInfo = std::make_shared<TTransactionInfo>();
+        txInfo->Subscribed = false;
+        txInfo->CommitCalled = false;
+        p = Txs.find(txId);
+    }
+    return p->second;
+}
+
+void TWriteSessionImpl::DeleteTx(const TTransactionId& txId)
+{
+    with_lock (Lock) {
+        Txs.erase(txId);
+    }
+}
+
 void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
     TInstant createdAtValue = message.CreateTimestamp_.Defined() ? *message.CreateTimestamp_ : TInstant::Now();
     bool readyToAccept = false;
     size_t bufferSize = message.Data.size();
     with_lock(Lock) {
+        TrySubscribeOnTransactionCommit(message.GetTxPtr());
+
+        ui64 seqNo = GetNextIdImpl(message.SeqNo_);
+
+        if (message.GetTxPtr()) {
+            const auto& txId = MakeTransactionId(*message.GetTxPtr());
+            TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+            with_lock(txInfo->Lock) {
+                ++txInfo->WriteCount;
+
+                LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                         LogPrefix() << "OnWrite: seqNo=" << seqNo << ", txId=" << GetTxId(txId) << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+            }
+            WrittenInTx[seqNo] = txId;
+        }
+
         CurrentBatch.Add(
-                GetNextIdImpl(message.SeqNo_), createdAtValue, message.Data, message.Codec, message.OriginalSize,
+                seqNo, createdAtValue, message.Data, message.Codec, message.OriginalSize,
                 message.MessageMeta_,
                 message.GetTxPtr()
         );
@@ -575,6 +713,10 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             Cancel(prevConnectDelayContext);
         }
         Cancel(prevConnectTimeoutContext);
+
+        if (Processor) {
+            Processor->Cancel();
+        }
 
         reqSettings = TRpcRequestSettings::Make(Settings, PreferredPartitionLocation.Endpoint);
 
@@ -796,6 +938,11 @@ void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t co
             }
         }
     }
+
+    for (auto& event : processResult.Events) {
+        EventsQueue->PushEvent(std::move(event));
+    }
+
     if (doRead)
         ReadFromProcessor();
 
@@ -808,9 +955,6 @@ void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t co
         if (processResult.HandleResult.DoStop) {
             CloseImpl(std::move(errorStatus));
         }
-    }
-    for (auto& event : processResult.Events) {
-        EventsQueue->PushEvent(std::move(event));
     }
     if (needSetValue) {
         InitSeqNoPromise.SetValue(*processResult.InitSeqNo);
@@ -940,22 +1084,30 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             writeStat->PartitionQuotedTime = durationConv(stat.partition_quota_wait_time());
             writeStat->TopicQuotedTime = durationConv(stat.topic_quota_wait_time());
 
-            for (size_t messageIndex = 0, endIndex = batchWriteResponse.acks_size(); messageIndex != endIndex; ++messageIndex) {
+            for (const auto& ack : batchWriteResponse.acks()) {
                 // TODO: Fill writer statistics
-                auto ack = batchWriteResponse.acks(messageIndex);
-                ui64 sequenceNumber = ack.seq_no();
+                ui64 msgId = GetIdImpl(ack.seq_no());
 
-                Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped());
-                auto msgWriteStatus = ack.has_written()
-                                ? TWriteSessionEvent::TWriteAck::EES_WRITTEN
-                                : (ack.skipped().reason() == Ydb::Topic::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason_REASON_ALREADY_WRITTEN
-                                    ? TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN
-                                    : TWriteSessionEvent::TWriteAck::EES_DISCARDED);
+                Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped() || ack.has_written_in_tx());
+
+                TrySignalAllAcksReceived(msgId);
+
+                TWriteSessionEvent::TWriteAck::EEventState msgWriteStatus;
+                if (ack.has_written_in_tx()) {
+                    msgWriteStatus = TWriteSessionEvent::TWriteAck::EES_WRITTEN_IN_TX;
+                } else if (ack.has_written()) {
+                    msgWriteStatus = TWriteSessionEvent::TWriteAck::EES_WRITTEN;
+                } else {
+                    msgWriteStatus =
+                        (ack.skipped().reason() == Ydb::Topic::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason_REASON_ALREADY_WRITTEN)
+                        ? TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN
+                        : TWriteSessionEvent::TWriteAck::EES_DISCARDED;
+                }
 
                 ui64 offset = ack.has_written() ? ack.written().offset() : 0;
 
                 acksEvent.Acks.push_back(TWriteSessionEvent::TWriteAck{
-                    GetIdImpl(sequenceNumber),
+                    msgId,
                     msgWriteStatus,
                     TWriteSessionEvent::TWriteAck::TWrittenMessageDetails {
                         offset,
@@ -964,7 +1116,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                     writeStat,
                 });
 
-                if (CleanupOnAcknowledged(GetIdImpl(sequenceNumber))) {
+                if (CleanupOnAcknowledged(msgId)) {
                     result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
                 }
             }
@@ -1022,6 +1174,9 @@ bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 id) {
 
     (*Counters->BytesInflightTotal) = MemoryUsage;
     SentOriginalMessages.pop();
+
+    WrittenInTx.erase(id);
+
     return result;
 }
 
@@ -1121,7 +1276,17 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
     (*Counters->BytesInflightCompressed) += block.Data.size();
 
     PackedMessagesToSend.emplace(std::move(block));
-    SendImpl();
+
+    if (!SendImplScheduled.exchange(true)) {
+        CompressionExecutor->Post([cbContext = SelfContext]() {
+            if (auto self = cbContext->LockShared()) {
+                self->SendImplScheduled = false;
+                with_lock (self->Lock) {
+                    self->SendImpl();
+                }
+            }
+        });
+    }
     return memoryUsage;
 }
 
@@ -1149,7 +1314,6 @@ void TWriteSessionImpl::ResetForRetryImpl() {
     }
     if (!OriginalMessagesToSend.empty() && OriginalMessagesToSend.front().Id < minId)
         minId = OriginalMessagesToSend.front().Id;
-    MinUnsentId = minId;
     Y_ABORT_UNLESS(PackedMessagesToSend.size() == totalPackedMessages);
     Y_ABORT_UNLESS(OriginalMessagesToSend.size() == totalOriginalMessages);
 }
@@ -1270,20 +1434,36 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: try to update token");
 
-    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished)
+    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished) {
         return;
-    TClientMessage clientMessage;
-    auto* updateRequest = clientMessage.mutable_update_token_request();
+    }
+
     auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
-    if (token == PrevToken)
+    if (token == PrevToken) {
         return;
-    UpdateTokenInProgress = true;
-    updateRequest->set_token(token);
-    PrevToken = token;
+    }
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: updating token");
 
+    UpdateTokenInProgress = true;
+    PrevToken = token;
+
+    TClientMessage clientMessage;
+    clientMessage.mutable_update_token_request()->set_token(token);
     Processor->Write(std::move(clientMessage));
+}
+
+bool TWriteSessionImpl::TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const
+{
+    Y_ABORT_UNLESS(writeRequest);
+
+    if (!writeRequest->messages_size()) {
+        return false;
+    }
+
+    Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
+
+    return GetTransactionId(*writeRequest) != GetTransactionId(OriginalMessagesToSend.front().Tx);
 }
 
 void TWriteSessionImpl::SendImpl() {
@@ -1294,11 +1474,17 @@ void TWriteSessionImpl::SendImpl() {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
         ui32 prevCodec = 0;
+
+        ui64 currentSize = 0;
+
         // Send blocks while we can without messages reordering.
-        while (IsReadyToSendNextImpl() && clientMessage.ByteSizeLong() < GetMaxGrpcMessageSize()) {
+        while (IsReadyToSendNextImpl() && currentSize < GetMaxGrpcMessageSize()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
             if (writeRequest->messages_size() > 0 && prevCodec != block.CodecID) {
+                break;
+            }
+            if (TxIsChanged(writeRequest)) {
                 break;
             }
             prevCodec = block.CodecID;
@@ -1340,6 +1526,8 @@ void TWriteSessionImpl::SendImpl() {
             moveBlock.Move(block);
             SentPackedMessage.emplace(std::move(moveBlock));
             PackedMessagesToSend.pop();
+
+            currentSize += writeRequest->ByteSizeLong();
         }
         UpdateTokenIfNeededImpl();
         LOG_LAZY(DbDriverState->Log,
@@ -1474,10 +1662,24 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ConnectDelayContext);
         if (Processor)
             Processor->Cancel();
-
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
+        CancelTransactions();
     }
+}
+
+void TWriteSessionImpl::CancelTransactions()
+{
+    for (auto& [_, txInfo] : Txs) {
+        with_lock(txInfo->Lock) {
+            txInfo->IsActive = false;
+            if (txInfo->WriteCount != txInfo->AckCount) {
+                txInfo->AllAcksReceived.SetValue(MakeSessionExpiredError());
+            }
+        }
+    }
+
+    Txs.clear();
 }
 
 void TWriteSessionImpl::CloseImpl(EStatus statusCode, NYql::TIssues&& issues) {

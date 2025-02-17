@@ -23,7 +23,7 @@ ui32 TEventHolder::Fill(IEventHandle& ev) {
     } else if (ev.HasEvent()) {
         Event.Reset(ev.ReleaseBase());
         EventSerializedSize = Event->CalculateSerializedSize();
-        Y_DEBUG_ABORT_UNLESS(Event->IsSerializable());
+        Y_ABORT_UNLESS(Event->IsSerializable());
     } else {
         EventSerializedSize = 0;
     }

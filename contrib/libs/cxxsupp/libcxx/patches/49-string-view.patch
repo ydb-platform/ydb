@@ -1,0 +1,31 @@
+diff --git a/include/string_view b/include/string_view
+index e8584a6..4df4f02 100644
+--- a/include/string_view
++++ b/include/string_view
+@@ -306,6 +306,8 @@ public:
+ 
+   _LIBCPP_HIDE_FROM_ABI basic_string_view& operator=(const basic_string_view&) _NOEXCEPT = default;
+ 
++  _LIBCPP_CONSTEXPR _LIBCPP_HIDE_FROM_ABI basic_string_view(nullptr_t, size_t) = delete;
++
+   _LIBCPP_CONSTEXPR _LIBCPP_HIDE_FROM_ABI basic_string_view(const _CharT* __s, size_type __len) _NOEXCEPT
+       : __data_(__s),
+         __size_(__len) {
+@@ -344,7 +346,7 @@ public:
+   _LIBCPP_CONSTEXPR _LIBCPP_HIDE_FROM_ABI basic_string_view(const _CharT* __s)
+       : __data_(__s), __size_(std::__char_traits_length_checked<_Traits>(__s)) {}
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+   basic_string_view(nullptr_t) = delete;
+ #endif
+ 
+@@ -666,7 +668,7 @@ public:
+   }
+ #endif
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+   constexpr _LIBCPP_HIDE_FROM_ABI bool contains(basic_string_view __sv) const noexcept { return find(__sv) != npos; }
+ 
+   constexpr _LIBCPP_HIDE_FROM_ABI bool contains(value_type __c) const noexcept { return find(__c) != npos; }

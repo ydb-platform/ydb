@@ -26,7 +26,7 @@ public:
 
         auto processGroup = [&](TGroupInfo *group) {
             auto *protoGroupInfo = responseRecord.AddBSGroupInfo();
-            protoGroupInfo->SetGroupId(group->ID);
+            protoGroupInfo->SetGroupId(group->ID.GetRawId());
             protoGroupInfo->SetErasureSpecies(group->ErasureSpecies);
             const TResourceRawValues& groupResources = group->GetResourceCurrentValues();
             protoGroupInfo->SetDataSize(groupResources.DataSize);
@@ -42,7 +42,7 @@ public:
         };
 
         if (requestRecord.HasGroupId()) {
-            if (TGroupInfo *group = Self->FindGroup(requestRecord.GetGroupId())) {
+            if (TGroupInfo *group = Self->FindGroup(TGroupId::FromProto(&requestRecord, &NKikimrBlobStorage::TEvRequestBSControllerInfo::GetGroupId))) {
                 processGroup(group);
             }
         } else {

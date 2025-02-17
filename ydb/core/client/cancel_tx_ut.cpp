@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TCancelTx) {
                 annoyingClient.InitRoot();
         annoyingClient.CreateTable("/dc-1", table);
 
-        annoyingClient.FlatQuery(
+        annoyingClient.FlatQuery(cleverServer.GetRuntime(),
                     "("
                     "   (return (AsList"
                     "       (UpdateRow '/dc-1/T '('('key (Uint32 '0)))  '('('value (Uint32 '11111))) )"
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(TCancelTx) {
 
                 TFlatMsgBusClient::TFlatQueryOptions opts;
                 NKikimrClient::TResponse response;
-                annoyingClient.FlatQueryRaw(queryText, opts, response, 2);
+                annoyingClient.FlatQueryRaw(server.GetRuntime(), queryText, opts, response, 2);
 
                 if (false)
                     Cerr << response << Endl;

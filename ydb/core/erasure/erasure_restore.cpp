@@ -1,6 +1,7 @@
 #include "erasure.h"
-#include <library/cpp/pop_count/popcount.h>
 #include <util/string/printf.h>
+
+#include <bit>
 
 namespace NKikimr {
 
@@ -407,7 +408,7 @@ namespace NKikimr {
             }
         }
 
-        Y_ABORT_UNLESS(PopCount(availableMask) >= 4);
+        Y_ABORT_UNLESS(std::popcount(availableMask) >= 4);
         Y_ABORT_UNLESS(size % 32 == 0);
 
         if (whole) {
@@ -416,7 +417,7 @@ namespace NKikimr {
 
         restoreMask &= ~availableMask;
 
-        Y_ABORT_UNLESS(PopCount(restoreMask) <= 2);
+        Y_ABORT_UNLESS(std::popcount(restoreMask) <= 2);
 
         for (ui32 part = 0; part < 6; ++part) {
             if (restoreMask >> part & 1) {

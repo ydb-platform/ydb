@@ -1,28 +1,37 @@
 #include "yql_s3_dq_integration.h"
 #include "yql_s3_mkql_compiler.h"
 
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/library/yql/providers/s3/proto/source.pb.h>
 #include <ydb/library/yql/providers/s3/range_helpers/file_tree_builder.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
+#include <ydb/library/yql/utils/plan/plan_utils.h>
 
 #include <library/cpp/json/writer/json_value.h>
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
 namespace {
+
+TString GetLastName(const TString& fullName) {
+    auto n = fullName.find_last_of('/');
+    return (n == fullName.npos) ? fullName : fullName.substr(n + 1);
+}
 
 TExprNode::TListType GetKeys(const TExprNode& settings) {
     for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
@@ -73,7 +82,7 @@ public:
     {
     }
 
-    ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
+    ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         std::vector<std::vector<TPath>> parts;
         std::optional<ui64> mbLimitHint;
         bool hasDirectories = false;
@@ -99,6 +108,7 @@ public:
         }
 
         constexpr ui64 maxTaskRatio = 20;
+        auto maxPartitions = settings.MaxPartitions;
         if (!maxPartitions || (mbLimitHint && maxPartitions > *mbLimitHint / maxTaskRatio)) {
             maxPartitions = std::max(*mbLimitHint / maxTaskRatio, ui64{1});
             YQL_CLOG(TRACE, ProviderS3) << "limited max partitions to " << maxPartitions;
@@ -179,7 +189,7 @@ public:
     TMaybe<TOptimizerStatistics> ReadStatistics(const TExprNode::TPtr& sourceWrap, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         double size = 0;
-        double cols = 0;
+        int cols = 0;
         double rows = 0;
         if (const auto& maybeParseSettings = TMaybeNode<TS3ParseSettings>(sourceWrap->Child(0))) {
             const auto& parseSettings = maybeParseSettings.Cast();
@@ -195,18 +205,34 @@ public:
                 }
             }
 
+            TVector<TString>* primaryKey = nullptr;
+            if (auto constraints = GetSetting(parseSettings.Settings().Ref(), "constraints"sv)) {
+                auto node = NYT::NodeFromYsonString(constraints->Child(1)->Content());
+                auto* primaryKeyNode = node.AsMap().FindPtr("primary_key");
+                if (primaryKeyNode) {
+                    TVector<TString> parsed;
+                    for (auto col : primaryKeyNode->AsList()) {
+                        parsed.push_back(col.AsString());
+                    }
+                    State_->PrimaryKeys.emplace_back(std::move(parsed));
+                    primaryKey = &State_->PrimaryKeys.back();
+                }
+            }
+
             if (parseSettings.RowType().Maybe<TCoStructType>()) {
                 cols = parseSettings.RowType().Ptr()->ChildrenSize();
             }
 
             rows = size / 1024; // magic estimate
-            return TOptimizerStatistics(rows, cols, size);
+            return primaryKey
+                ? TOptimizerStatistics(BaseTable, rows, cols, size, size, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(*primaryKey)))
+                : TOptimizerStatistics(BaseTable, rows, cols, size, size);
         } else {
             return Nothing();
         }
     }
 
-    TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& ) override {
         if (const auto& maybeS3ReadObject = TMaybeNode<TS3ReadObject>(read)) {
             const auto& s3ReadObject = maybeS3ReadObject.Cast();
             YQL_ENSURE(s3ReadObject.Ref().GetTypeAnn(), "No type annotation for node " << s3ReadObject.Ref().Content());
@@ -261,13 +287,16 @@ public:
             if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && format != "raw" && format != "json_list") {
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3ParseSettings>()
+                        .World(s3ReadObject.World())
                         .Paths(s3ReadObject.Object().Paths())
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
                         .Build()
                         .RowsLimitHint(ctx.NewAtom(read->Pos(), ""))
+                        .Path(s3ReadObject.Path())
                         .Format(s3ReadObject.Object().Format())
                         .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
+                        .FilterPredicate(s3ReadObject.FilterPredicate())
                         .Settings(s3ReadObject.Object().Settings())
                         .Build()
                     .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
@@ -304,11 +333,13 @@ public:
                 auto emptyNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3SourceSettings>()
+                        .World(s3ReadObject.World())
                         .Paths(s3ReadObject.Object().Paths())
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
                             .Build()
                         .RowsLimitHint(ctx.NewAtom(read->Pos(), ""))
+                        .Path(s3ReadObject.Path())
                         .SizeLimit(
                             sizeLimitIndex != -1 ? readSettings->Child(sizeLimitIndex)->TailPtr()
                                                  : emptyNode)
@@ -329,7 +360,7 @@ public:
         return read;
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxPartitions) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxPartitions, TExprContext&) override {
         const TDqSource source(&node);
         if (const auto maySettings = source.Settings().Maybe<TS3SourceSettingsBase>()) {
             const auto settings = maySettings.Cast();
@@ -363,6 +394,13 @@ public:
                     // TODO: pass context
                     TExprContext ctx;
                     srcDesc.SetRowType(NCommon::WriteTypeToYson(ctx.MakeType<TStructExprType>(rowTypeItems), NYT::NYson::EYsonFormat::Text));
+                }
+
+                if (auto predicate = parseSettings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
+                    TStringBuilder err;
+                    if (!SerializeFilterPredicate(predicate, srcDesc.mutable_predicate(), err)) {
+                        ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
+                    }
                 }
 
                 if (const auto maySettings = parseSettings.Settings()) {
@@ -400,6 +438,9 @@ public:
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
 
+            srcDesc.SetAsyncDecoding(State_->Configuration->AsyncDecoding.Get().GetOrElse(false));
+            srcDesc.SetAsyncDecompressing(State_->Configuration->AsyncDecompressing.Get().GetOrElse(false));
+
 #if defined(_linux_) || defined(_darwin_)
 
             auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
@@ -410,7 +451,7 @@ public:
 
             auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.Get().GetOrElse(1000);
             srcDesc.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", ToString(fileQueueBatchObjectCountLimit)});
-            
+
             YQL_CLOG(DEBUG, ProviderS3) << " useRuntimeListing=" << useRuntimeListing;
 
             if (useRuntimeListing) {
@@ -422,27 +463,16 @@ public:
                         packed.Data().Literal().Value(),
                         FromString<bool>(packed.IsText().Literal().Value()),
                         paths);
-                    paths.insert(paths.end(), 
-                        std::make_move_iterator(pathsChunk.begin()), 
+                    paths.insert(paths.end(),
+                        std::make_move_iterator(pathsChunk.begin()),
                         std::make_move_iterator(pathsChunk.end()));
                 }
 
-                NS3::TRange range;
-                range.SetStartPathIndex(0);
-                TFileTreeBuilder builder;
-                std::for_each(paths.cbegin(), paths.cend(), [&builder](const TPath& f) {
-                    builder.AddPath(f.Path, f.Size, f.IsDirectory);
-                });
-                builder.Save(&range);
-                
-                TVector<TString> serialized(1);
-                TStringOutput out(serialized.front());
-                range.Save(&out);
-                
-                paths.clear();
-                ReadPathsList(srcDesc, {}, serialized, paths);
+                for (size_t i = 0; i < paths.size(); ++i) {
+                    paths[i].PathIndex = i;
+                }
 
-                NDq::TS3ReadActorFactoryConfig readActorConfig;
+                const NDq::TS3ReadActorFactoryConfig& readActorConfig = State_->Configuration->S3ReadActorFactoryConfig;
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;
                 if (srcDesc.HasFormat()) {
                     if (auto it = readActorConfig.FormatSizeLimits.find(srcDesc.GetFormat()); it != readActorConfig.FormatSizeLimits.end()) {
@@ -485,22 +515,30 @@ public:
 
                 YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", consumersCount=" << consumersCount;
 
+                ui64 readLimit = std::numeric_limits<ui64>::max();
+                if (const auto sizeLimitIter = srcDesc.MutableSettings()->find("sizeLimit"); sizeLimitIter != srcDesc.MutableSettings()->cend()) {
+                    readLimit = FromString<ui64>(sizeLimitIter->second);
+                }
+
                 auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                     NDq::CreateS3FileQueueActor(
                         0ul,
                         std::move(paths),
                         fileQueuePrefetchSize,
                         fileSizeLimit,
+                        readLimit,
                         useRuntimeListing,
                         consumersCount,
                         fileQueueBatchSizeLimit,
                         fileQueueBatchObjectCountLimit,
                         State_->Gateway,
+                        State_->GatewayRetryPolicy,
                         connect.Url,
-                        GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
+                        TS3Credentials(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
                         pathPattern,
                         pathPatternVariant,
-                        NS3Lister::ES3PatternType::Wildcard
+                        NS3Lister::ES3PatternType::Wildcard,
+                        State_->Configuration->AllowLocalFiles
                     ),
                     NActors::TMailboxType::HTSwap,
                     State_->ExecutorPoolId
@@ -568,41 +606,54 @@ public:
             return false;
         }
 
-        const NJson::TJsonValue* clusterNameProp = properties.FindPtr("ExternalDataSource");
-        const TString clusterName = clusterNameProp && clusterNameProp->IsString() ? clusterNameProp->GetString() : TString();
-
         auto source = node.Cast<TDqSource>();
-        if (auto maybeSettings = source.Settings().Maybe<TS3SourceSettings>()) {
-            const TS3SourceSettings settings = maybeSettings.Cast();
-            if (clusterName) {
-                properties["Name"] = TStringBuilder() << "Raw read " << clusterName;
-            } else {
-                properties["Name"] = "Raw read from external data source";
-            }
-            properties["Format"] = "raw";
-            if (TString limit = settings.RowsLimitHint().StringValue()) {
-                properties["RowsLimitHint"] = limit;
-            }
-            return true;
-        } else if (auto maybeSettings = source.Settings().Maybe<TS3ParseSettings>()) {
-            const TS3ParseSettings settings = maybeSettings.Cast();
-            if (clusterName) {
-                properties["Name"] = TStringBuilder() << "Parse " << clusterName;
-            } else {
-                properties["Name"] = "Parse from external data source";
-            }
-            properties["Format"] = settings.Format().StringValue();
-            if (TString limit = settings.RowsLimitHint().StringValue()) {
+        if (auto maybeSettingsBase = source.Settings().Maybe<TS3SourceSettingsBase>()) {
+            const auto settingsBase = maybeSettingsBase.Cast();
+            auto path = settingsBase.Path().StringValue();
+            properties["Path"] = path;
+            if (auto limit = settingsBase.RowsLimitHint().StringValue()) {
                 properties["RowsLimitHint"] = limit;
             }
 
-            const TStructExprType* fullRowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-            auto rowTypeItems = fullRowType->GetItems();
-            auto& columns = properties["ReadColumns"];
-            for (auto& item : rowTypeItems) {
-                columns.AppendValue(item->GetName());
+            auto s3DataSource = source.DataSource().Cast<TS3DataSource>();
+            auto cluster = GetLastName(s3DataSource.Cluster().StringValue());
+            TString name;
+            if (s3DataSource.Name()) {
+                name = GetLastName(s3DataSource.Name().Cast().StringValue());
             }
-            return true;
+            if (!name) {
+                name = cluster;
+                if (path) {
+                    name = name + '.' + path;
+                }
+            }
+
+            properties["ExternalDataSource"] = cluster;
+            properties["Name"] = name;
+
+
+            if (source.Settings().Maybe<TS3SourceSettings>()) {
+                properties["Format"] = "raw";
+                return true;
+            }
+
+            if (auto maybeSettings = source.Settings().Maybe<TS3ParseSettings>()) {
+                const TS3ParseSettings settings = maybeSettings.Cast();
+                properties["Format"] = settings.Format().StringValue();
+                if (const auto& compression = GetCompression(settings.Settings().Ref()); !compression.empty()) {
+                    properties["Compression"] = TString{compression};
+                }
+                if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
+                    properties["Filter"] = NPlanUtils::PrettyExprStr(predicate);
+                }
+                const TStructExprType* fullRowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                auto rowTypeItems = fullRowType->GetItems();
+                auto& columns = properties["ReadColumns"];
+                for (auto& item : rowTypeItems) {
+                    columns.AppendValue(item->GetName());
+                }
+                return true;
+            }
         }
         return false;
     }

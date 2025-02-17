@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.0.0)
+VERSION(2.1.0)
 
-ORIGINAL_SOURCE(https://github.com/apache/orc/archive/rel/release-2.0.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/apache/orc/archive/rel/release-2.1.0.tar.gz)
 
 PEERDIR(
     contrib/libs/apache/orc-format
@@ -65,6 +65,7 @@ SRCS(
     c++/src/TypeImpl.cc
     c++/src/Vector.cc
     c++/src/Writer.cc
+    c++/src/io/Cache.cc
     c++/src/io/InputStream.cc
     c++/src/io/OutputStream.cc
     c++/src/sargs/ExpressionTree.cc

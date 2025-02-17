@@ -41,7 +41,9 @@ SRCS(
     generic/stack_ut.cpp
     generic/store_policy_ut.cpp
     generic/strbuf_ut.cpp
+    generic/string_transparent_hash_ut.cpp
     generic/string_ut.cpp
+    generic/string_ut.h
     generic/typelist_ut.cpp
     generic/typetraits_ut.cpp
     generic/utility_ut.cpp
@@ -50,22 +52,15 @@ SRCS(
     generic/xrange_ut.cpp
     generic/yexception_ut.c
     generic/yexception_ut.cpp
+    generic/yexception_ut.h
     generic/ylimits_ut.cpp
     generic/ymath_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/util/tests/ya_util_tests.inc)
 
-IF (NOT OS_IOS AND NOT ARCH_PPC64LE)
-    # Abseil fails to build (with linkage error) on ios and with compilation error on PowerPC
-    # (somewhere in unscaledcycleclock.cc).
-    PEERDIR(
-        library/cpp/containers/absl_flat_hash
-    )
-
-    SRCS(
-        generic/string_transparent_hash_ut.cpp
-    )
-ENDIF()
+PEERDIR(
+    library/cpp/containers/absl_flat_hash
+)
 
 END()

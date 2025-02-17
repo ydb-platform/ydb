@@ -3,12 +3,17 @@
 
 namespace NKikimr::NOlap {
 
-class TCleanupTablesColumnEngineChanges: public TColumnEngineChanges {
+class TCleanupTablesColumnEngineChanges: public TColumnEngineChanges,
+                                         public NColumnShard::TMonitoringObjectsCounter<TCleanupTablesColumnEngineChanges> {
 private:
     using TBase = TColumnEngineChanges;
 protected:
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
+
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
+
+    }
 
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
@@ -25,8 +30,11 @@ protected:
     virtual ui64 DoCalcMemoryForUsage() const override {
         return 0;
     }
+    virtual NDataLocks::ELockCategory GetLockCategory() const override {
+        return NDataLocks::ELockCategory::Tables;
+    }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
-        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), TablesToDrop);
+        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), TablesToDrop, GetLockCategory());
     }
 
 public:
@@ -40,7 +48,7 @@ public:
     virtual ui32 GetWritePortionsCount() const override {
         return 0;
     }
-    virtual TWritePortionInfoWithBlobs* GetWritePortionInfo(const ui32 /*index*/) override {
+    virtual TWritePortionInfoWithBlobsResult* GetWritePortionInfo(const ui32 /*index*/) override {
         return nullptr;
     }
     virtual bool NeedWritePortion(const ui32 /*index*/) const override {

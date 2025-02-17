@@ -1,10 +1,8 @@
 from moto.core import BaseBackend, BaseModel
 from moto.ec2 import ec2_backends
-from moto.core import get_account_id
 from moto.core.utils import BackendDict
-import uuid
+from moto.moto_api._internal import mock_random as random
 import datetime
-from random import choice
 
 from .exceptions import ResourceNotFoundException, ValidationException
 
@@ -84,7 +82,7 @@ class OpsworkInstance(BaseModel):
         self.infrastructure_class = "ec2 (fixed)"
         self.platform = "linux (fixed)"
 
-        self.id = "{0}".format(uuid.uuid4())
+        self.id = "{0}".format(random.uuid4())
         self.created_at = datetime.datetime.utcnow()
 
     def start(self):
@@ -274,7 +272,7 @@ class Layer(BaseModel):
         self.install_updates_on_boot = install_updates_on_boot
         self.use_ebs_optimized_instances = use_ebs_optimized_instances
 
-        self.id = "{0}".format(uuid.uuid4())
+        self.id = "{0}".format(random.uuid4())
         self.created_at = datetime.datetime.utcnow()
 
     def __eq__(self, other):
@@ -316,6 +314,7 @@ class Stack(BaseModel):
     def __init__(
         self,
         name,
+        account_id,
         region,
         service_role_arn,
         default_instance_profile_arn,
@@ -369,10 +368,10 @@ class Stack(BaseModel):
         self.default_root_device_type = default_root_device_type
         self.agent_version = agent_version
 
-        self.id = "{0}".format(uuid.uuid4())
+        self.id = "{0}".format(random.uuid4())
         self.layers = []
         self.apps = []
-        self.account_number = get_account_id()
+        self.account_number = account_id
         self.created_at = datetime.datetime.utcnow()
 
     def __eq__(self, other):
@@ -381,7 +380,8 @@ class Stack(BaseModel):
     def generate_hostname(self):
         # this doesn't match amazon's implementation
         return "{theme}-{rand}-(moto)".format(
-            theme=self.hostname_theme, rand=[choice("abcdefghijhk") for _ in range(4)]
+            theme=self.hostname_theme,
+            rand=[random.choice("abcdefghijhk") for _ in range(4)],
         )
 
     @property
@@ -469,7 +469,7 @@ class App(BaseModel):
         if environment is None:
             self.environment = {}
 
-        self.id = "{0}".format(uuid.uuid4())
+        self.id = "{0}".format(random.uuid4())
         self.created_at = datetime.datetime.utcnow()
 
     def __eq__(self, other):
@@ -502,10 +502,10 @@ class OpsWorksBackend(BaseBackend):
         self.layers = {}
         self.apps = {}
         self.instances = {}
-        self.ec2_backend = ec2_backends[region_name]
+        self.ec2_backend = ec2_backends[account_id][region_name]
 
     def create_stack(self, **kwargs):
-        stack = Stack(**kwargs)
+        stack = Stack(account_id=self.account_id, **kwargs)
         self.stacks[stack.id] = stack
         return stack
 

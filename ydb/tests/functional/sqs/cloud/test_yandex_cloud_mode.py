@@ -10,7 +10,7 @@ import time
 import uuid
 
 import pytest
-import ydb.tests.library.common.yatest_common as yatest_common
+import yatest
 
 import ydb
 from hamcrest import assert_that, equal_to, not_none, has_item, has_items, is_not, contains_string
@@ -36,12 +36,12 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         config_generator.yaml_config['sqs_config']['account_settings_defaults'] = {'max_queues_count': 40}
         config_generator.yaml_config['sqs_config']['background_metrics_update_time_ms'] = 1000
 
-        cls.event_output_file = yatest_common.output_path("events-%s.txt" % random.randint(1, 10000000))
+        cls.event_output_file = yatest.common.output_path("events-%s.txt" % random.randint(1, 10000000))
         config_generator.yaml_config['sqs_config']['yc_search_events_config'] = {
             'enable_yc_search': True,
             'output_file_name': cls.event_output_file,
         }
-        temp_token_file = yatest_common.work_path("tokenfile")
+        temp_token_file = yatest.common.work_path("tokenfile")
         with open(temp_token_file, "w") as fl:
             fl.write("root@builtin")
 
@@ -880,8 +880,5 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
             )
         )
 
-        # Check that getting queue url with custom name still works
-        assert_that(
-            lambda: self._sqs_api.get_queue_url(custom_queue_name),
-            not_(raises(RuntimeError))
-        )
+        received_queue_url = self._sqs_api.get_queue_url(custom_queue_name)
+        assert received_queue_url == queue_url

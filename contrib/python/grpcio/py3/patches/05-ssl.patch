@@ -1,0 +1,50 @@
+diff --git a/src/python/grpcio/grpc/_cython/_cygrpc/grpc.pxi b/src/python/grpcio/grpc/_cython/_cygrpc/grpc.pxi
+index fc7a9ba..bfec911 100644
+--- a/src/python/grpcio/grpc/_cython/_cygrpc/grpc.pxi
++++ b/src/python/grpcio/grpc/_cython/_cygrpc/grpc.pxi
+@@ -333,6 +333,7 @@ cdef extern from "grpc/grpc.h":
+     void * reserved
+     grpc_op_data data
+
++  void grpc_dont_init_openssl() nogil
+   void grpc_init() nogil
+   void grpc_shutdown() nogil
+   void grpc_shutdown_blocking() nogil
+diff --git a/src/python/grpcio/grpc/_cython/cygrpc.pyx b/src/python/grpcio/grpc/_cython/cygrpc.pyx
+index ce98fa3..f7f369c 100644
+--- a/src/python/grpcio/grpc/_cython/cygrpc.pyx
++++ b/src/python/grpcio/grpc/_cython/cygrpc.pyx
+@@ -56,8 +56,8 @@ cdef _initialize():
+   # We have Python callbacks called by c-core threads, this ensures the GIL
+   # is initialized.
+   PyEval_InitThreads()
+-  grpc_set_ssl_roots_override_callback(
+-          <grpc_ssl_roots_override_callback>ssl_roots_override_callback)
+-
++  import ssl
++  grpc_dont_init_openssl()
++  # Load Arcadia certs in ComputePemRootCerts and do not override here.
+ 
+ _initialize()
+diff --git a/src/python/grpcio/grpc/_cython/_cygrpc/security.pyx.pxi b/src/python/grpcio/grpc/_cython/_cygrpc/security.pyx.pxi
+index e17ca6d..9cc3fd5 100644
+--- a/src/python/grpcio/grpc/_cython/_cygrpc/security.pyx.pxi
++++ b/src/python/grpcio/grpc/_cython/_cygrpc/security.pyx.pxi
+@@ -14,16 +14,10 @@
+ 
+ from libc.string cimport memcpy
+ 
+-import pkgutil
+-
+-
+ cdef grpc_ssl_roots_override_result ssl_roots_override_callback(
+     char **pem_root_certs) nogil:
+   with gil:
+-    pkg = __name__
+-    if pkg.endswith('.cygrpc'):
+-      pkg = pkg[:-len('.cygrpc')]
+-    temporary_pem_root_certs = pkgutil.get_data(pkg, '_credentials/roots.pem')
++    temporary_pem_root_certs = ''
+     pem_root_certs[0] = <char *>gpr_malloc(len(temporary_pem_root_certs) + 1)
+     memcpy(
+         pem_root_certs[0], <char *>temporary_pem_root_certs,

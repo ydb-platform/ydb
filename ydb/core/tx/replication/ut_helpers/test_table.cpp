@@ -21,12 +21,15 @@ void TTestTableDescription::TReplicationConfig::SerializeTo(NKikimrSchemeOp::TTa
         Y_ABORT("Unexpected mode");
     }
 
-    switch (Consistency) {
-    case CONSISTENCY_STRONG:
-        proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG);
+    switch (ConsistencyLevel) {
+    case CONSISTENCY_LEVEL_UNKNOWN:
+        proto.SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN);
         break;
-    case CONSISTENCY_WEAK:
-        proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
+    case CONSISTENCY_LEVEL_GLOBAL:
+        proto.SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL);
+        break;
+    case CONSISTENCY_LEVEL_ROW:
+        proto.SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
         break;
     default:
         Y_ABORT("Unexpected consistency");
@@ -36,7 +39,7 @@ void TTestTableDescription::TReplicationConfig::SerializeTo(NKikimrSchemeOp::TTa
 TTestTableDescription::TReplicationConfig TTestTableDescription::TReplicationConfig::Default() {
     return TReplicationConfig{
         .Mode = MODE_READ_ONLY,
-        .Consistency = CONSISTENCY_WEAK,
+        .ConsistencyLevel = CONSISTENCY_LEVEL_ROW,
     };
 }
 
@@ -53,6 +56,10 @@ void TTestTableDescription::SerializeTo(NKikimrSchemeOp::TTableDescription& prot
 
     if (ReplicationConfig) {
         ReplicationConfig->SerializeTo(*proto.MutableReplicationConfig());
+    }
+
+    if (UniformPartitions) {
+        proto.SetUniformPartitionsCount(*UniformPartitions);
     }
 }
 

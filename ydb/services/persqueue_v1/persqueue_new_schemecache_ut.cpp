@@ -1,14 +1,15 @@
 #include "actors/read_session_actor.h"
+#include "actors/helpers.h"
 #include <ydb/services/persqueue_v1/ut/pq_data_writer.h>
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
 #include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
 
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
-#include <ydb/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -19,10 +20,10 @@
 #include <util/string/join.h>
 #include <util/generic/overloaded.h>
 
-#include <grpc++/client_context.h>
+#include <grpcpp/client_context.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
 
 namespace {
     const static TString DEFAULT_TOPIC_NAME = "rt3.dc1--topic1";
@@ -67,6 +68,7 @@ namespace NKikimr::NPersQueueTests {
                 NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PQ_METACACHE}
             );
             PrepareForGrpcNoDC(*server.AnnoyingClient);
+            server.AnnoyingClient->GrantConnect("topic1@" BUILTIN_ACL_DOMAIN);
 
             TPQDataWriter writer("source1", server, DEFAULT_TOPIC_PATH);
 
@@ -75,7 +77,9 @@ namespace NKikimr::NPersQueueTests {
 
             NYdb::TDriverConfig driverCfg;
 
-            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
+                     .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
+                     .SetDatabase("/Root");
 
             auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
 
@@ -98,7 +102,11 @@ namespace NKikimr::NPersQueueTests {
             PrepareForGrpcNoDC(*server.AnnoyingClient);
             NYdb::TDriverConfig driverCfg;
 
-            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
+                     .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
+                     .SetDatabase("/Root");
+
+            server.AnnoyingClient->GrantConnect("user1@" BUILTIN_ACL_DOMAIN);
 
             auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
             auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
@@ -124,7 +132,7 @@ namespace NKikimr::NPersQueueTests {
 
             auto testReadFromTopic = [&](const TString& topicPath) {
                 NYdb::NPersQueue::TReadSessionSettings settings;
-                settings.ConsumerName("user1").AppendTopics(topicPath);
+                settings.ConsumerName("user1").AppendTopics(std::string{topicPath});
                 auto reader = CreateReader(*ydbDriver, settings);
 
                 for (int i = 0; i < 4; ++i) {
@@ -151,8 +159,8 @@ namespace NKikimr::NPersQueueTests {
             Cerr << ">>>>> Create PersQueue client" << Endl;
             NYdb::TDriverConfig driverCfg;
             driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
-                .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG))
-                .SetDatabase("/Root");
+                     .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
+                     .SetDatabase("/Root");
 
             auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
             auto persqueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
@@ -246,7 +254,7 @@ namespace NKikimr::NPersQueueTests {
 
                 std::shared_ptr<NYdb::NPersQueue::IReadSession> reader;
                 auto settings = NYdb::NPersQueue::TReadSessionSettings()
-                        .AppendTopics(topic)
+                        .AppendTopics(std::string{topic})
                         .ConsumerName(consumerName)
                         .StartingMessageTimestamp(curTs)
                         .ReadOnlyOriginal(true);
@@ -260,7 +268,7 @@ namespace NKikimr::NPersQueueTests {
                             Cerr << ">>>>> Iteration: " << i << " Got message: " << msg.GetData().substr(0, 16)
                                                         << " :: " << msg.DebugString(false) << Endl << Flush;
 
-                            auto count = ++map[msg.GetData()];
+                            auto count = ++map[TString{msg.GetData()}];
                             UNIT_ASSERT_C(count == 1, "Each message must be received once");
                             if (i == 0) {
                                 // First iteration. Filling ts and firstOffset vectors from received messages
@@ -320,13 +328,20 @@ namespace NKikimr::NPersQueueTests {
             }
         }
 
-        Y_UNIT_TEST(TestReadAtTimestamp) {
+        Y_UNIT_TEST(TestReadAtTimestamp_3) {
+            auto generate = [](ui32 messageId) {
+                return TStringBuilder() << "Hello___" << messageId << "___" << CreateGuidAsString() << TString(1_MB, 'a');
+            };
+
+            TestReadAtTimestampImpl(3, generate);
+        }
+
+        Y_UNIT_TEST(TestReadAtTimestamp_10) {
             auto generate = [](ui32 messageId) {
                 return TStringBuilder() << "Hello___" << messageId << "___" << CreateGuidAsString() << TString(1_MB, 'a');
             };
 
             TestReadAtTimestampImpl(10, generate);
-            TestReadAtTimestampImpl(3, generate);
         }
 
         Y_UNIT_TEST(TestWriteStat1stClass) {
@@ -346,7 +361,7 @@ namespace NKikimr::NPersQueueTests {
                                                                                     {{"folder_id", folderId},
                                                                                      {"cloud_id", cloudId},
                                                                                      {"database_id", databaseId}}));
-
+                server.AnnoyingClient->GrantConnect(consumerName);
                 server.AnnoyingClient->SetNoConfigMode();
                 server.AnnoyingClient->FullInit();
                 server.AnnoyingClient->InitUserRegistry();
@@ -355,11 +370,13 @@ namespace NKikimr::NPersQueueTests {
 
                 NYdb::TDriverConfig driverCfg;
 
-                driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+                driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
+                         .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
+                         .SetDatabase("/Root");
 
                 const auto monPort = TPortManager().GetPort();
                 auto Counters = server.CleverServer->GetGRpcServerRootCounters();
-                NActors::TSyncHttpMon Monitoring({
+                NActors::TMon Monitoring({
                     .Port = monPort,
                     .Address = "localhost",
                     .Threads = 3,
@@ -367,7 +384,7 @@ namespace NKikimr::NPersQueueTests {
                     .Host = "localhost",
                 });
                 Monitoring.RegisterCountersPage("counters", "Counters", Counters);
-                Monitoring.Start();
+                Monitoring.Start(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem());
 
                 auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
                 auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
@@ -398,6 +415,29 @@ namespace NKikimr::NPersQueueTests {
                         UNIT_ASSERT(equal);
                     };
 
+                auto checkUserAgentCounters =
+                    [cloudId, folderId, databaseId]
+                    (auto monPort, const TString& sensor, const TString& protocol, const TString& userAgent, const TString& topic, const TString& consumer) {
+                        auto counters = SendQuery(monPort, "/counters/counters=pqproxy/subsystem=userAgents/json");
+                        const auto sensors = counters["sensors"].GetArray();
+                        for (const auto& s : sensors) {
+                            const auto& labels = s["labels"];
+                            if (labels["sensor"].GetString() != sensor) {
+                                continue;
+                            }
+                            UNIT_ASSERT_VALUES_EQUAL(labels["host"].GetString(), "");
+                            UNIT_ASSERT_VALUES_EQUAL(labels["protocol"].GetString(), protocol);
+                            if (!topic.empty()) {
+                                UNIT_ASSERT_VALUES_EQUAL(labels["topic"].GetString(), topic);
+                            } else if (!consumer.empty()) {
+                                UNIT_ASSERT_VALUES_EQUAL(labels["consumer"].GetString(), consumer);
+                            } else {
+                                UNIT_FAIL("Neither topic nor consumer were provided");
+                            }
+                            UNIT_ASSERT_VALUES_EQUAL(labels["user_agent"].GetString(), NGRpcProxy::V1::DropUserAgentSuffix(NGRpcProxy::V1::CleanupCounterValueString(userAgent)));
+                        }
+                    };
+
                 {
                     NYdb::NScheme::TSchemeClient schemeClient(*ydbDriver);
                     NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.generic.read", "ydb.generic.write"});
@@ -408,20 +448,24 @@ namespace NKikimr::NPersQueueTests {
                     UNIT_ASSERT(result.IsSuccess());
                 }
 
+                static constexpr auto userAgent = "test-client/v0.1 ' ?*'\"`| (some build info (codename); os 1.0)";
                 {
+                    server.AnnoyingClient->GrantConnect("user@builtin");
+
                     auto newDriverCfg = driverCfg;
                     newDriverCfg.SetAuthToken("user@builtin");
 
                     ydbDriver = MakeHolder<NYdb::TDriver>(newDriverCfg);
 
-                    auto writer = CreateSimpleWriter(*ydbDriver, fullTopicName, "123", 1);
+                    auto writer = CreateSimpleWriter(*ydbDriver, fullTopicName, "123", 1, {}, {}, {}, userAgent);
                     for (int i = 0; i < 4; ++i) {
                         bool res = writer->Write(TString(10, 'a'));
                         UNIT_ASSERT(res);
                     }
 
                     NYdb::NPersQueue::TReadSessionSettings settings;
-                    settings.ConsumerName(consumerName).AppendTopics(topicName);
+                    settings.ConsumerName(consumerName).AppendTopics(std::string{topicName});
+                    settings.Header({{NYdb::YDB_APPLICATION_NAME, userAgent}});
                     auto reader = CreateReader(*ydbDriver, settings);
 
                     auto msg = GetNextMessageSkipAssignment(reader);
@@ -488,7 +532,221 @@ namespace NKikimr::NPersQueueTests {
                                   },
                                   topicName, consumerName, "", ""
                                   );
+
+                    checkUserAgentCounters(monPort, "BytesWrittenByUserAgent", "pqv1", userAgent, fullTopicName, "");
+                    checkUserAgentCounters(monPort, "BytesReadByUserAgent", "pqv1", userAgent, "", consumerName);
                 }
+                Monitoring.Stop();
+            };
+
+            testWriteStat1stClass("user1");
+            testWriteStat1stClass("some@random@consumer");
+        }
+
+        Y_UNIT_TEST(TestWriteStat1stClassTopicAPI) {
+            auto testWriteStat1stClass = [](const TString& consumerName) {
+                TTestServer server(false);
+                server.ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+                server.StartServer();
+                server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE});
+
+                const TString topicName{"account2/topic2"};
+                const TString fullTopicName{"/Root/account2/topic2"};
+                const TString folderId{"somefolder"};
+                const TString cloudId{"somecloud"};
+                const TString databaseId{"root"};
+                UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+                                         server.AnnoyingClient->AlterUserAttributes("/", "Root",
+                                                                                    {{"folder_id", folderId},
+                                                                                     {"cloud_id", cloudId},
+                                                                                     {"database_id", databaseId}}));
+
+                server.AnnoyingClient->SetNoConfigMode();
+                server.AnnoyingClient->FullInit();
+                server.AnnoyingClient->InitUserRegistry();
+                server.AnnoyingClient->MkDir("/Root", "account2");
+                server.AnnoyingClient->CreateTopicNoLegacy(fullTopicName, 5);
+
+                const auto monPort = TPortManager().GetPort();
+                auto Counters = server.CleverServer->GetGRpcServerRootCounters();
+                NActors::TMon Monitoring({
+                    .Port = monPort,
+                    .Address = "localhost",
+                    .Threads = 3,
+                    .Title = "root",
+                    .Host = "localhost",
+                });
+                Monitoring.RegisterCountersPage("counters", "Counters", Counters);
+                Monitoring.Start(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem());
+
+                auto driverCfg = NYdb::TDriverConfig()
+                    .SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
+                    .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
+                    .SetDatabase("/Root");
+
+                auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
+                auto client = MakeHolder<NYdb::NTopic::TTopicClient>(*ydbDriver);
+
+                {
+                    auto res = client->AlterTopic(fullTopicName,
+                        NYdb::NTopic::TAlterTopicSettings()
+                        .BeginAddConsumer(consumerName)
+                        .EndAddConsumer()
+                    );
+                    res.Wait();
+                    UNIT_ASSERT(res.GetValue().IsSuccess());
+                }
+
+                auto checkCounters =
+                    [cloudId, folderId, databaseId](auto monPort,
+                                                    const std::set<std::string>& canonicalSensorNames,
+                                                    const TString& stream, const TString& consumer,
+                                                    const TString& host, const TString& shard) {
+                        auto counters = GetCounters1stClass(monPort, "datastreams", "%2FRoot", cloudId,
+                                                            databaseId, folderId, stream, consumer, host,
+                                                            shard);
+                        const auto sensors = counters["sensors"].GetArray();
+                        std::set<std::string> sensorNames;
+                        std::transform(sensors.begin(), sensors.end(),
+                                       std::inserter(sensorNames, sensorNames.begin()),
+                                       [](auto& el) {
+                                           return el["labels"]["name"].GetString();
+                                       });
+                        auto equal = sensorNames == canonicalSensorNames;
+                        UNIT_ASSERT(equal);
+                    };
+
+                auto checkUserAgentCounters =
+                    [cloudId, folderId, databaseId]
+                    (auto monPort, const TString& sensor, const TString& protocol, const TString& userAgent, const TString& topic, const TString& consumer) {
+                        auto counters = SendQuery(monPort, "/counters/counters=pqproxy/subsystem=userAgents/json");
+                        const auto sensors = counters["sensors"].GetArray();
+                        for (const auto& s : sensors) {
+                            const auto& labels = s["labels"];
+                            if (labels["sensor"].GetString() != sensor) {
+                                continue;
+                            }
+                            UNIT_ASSERT_VALUES_EQUAL(labels["host"].GetString(), "");
+                            UNIT_ASSERT_VALUES_EQUAL(labels["protocol"].GetString(), protocol);
+                            if (!topic.empty()) {
+                                UNIT_ASSERT_VALUES_EQUAL(labels["topic"].GetString(), topic);
+                            } else if (!consumer.empty()) {
+                                UNIT_ASSERT_VALUES_EQUAL(labels["consumer"].GetString(), consumer);
+                            } else {
+                                UNIT_FAIL("Neither topic nor consumer were provided");
+                            }
+                            UNIT_ASSERT_VALUES_EQUAL(labels["user_agent"].GetString(), NGRpcProxy::V1::DropUserAgentSuffix(NGRpcProxy::V1::CleanupCounterValueString(userAgent)));
+                        }
+                    };
+
+                {
+                    server.AnnoyingClient->GrantConnect("user@builtin");
+                    NYdb::NScheme::TSchemeClient schemeClient(*ydbDriver);
+                    NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.generic.read", "ydb.generic.write"});
+
+                    auto result = schemeClient.ModifyPermissions("/Root",
+                                                                 NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)).ExtractValueSync();
+                    Cerr << result.GetIssues().ToString() << "\n";
+                    UNIT_ASSERT(result.IsSuccess());
+                }
+
+                static constexpr auto userAgent = "test-client/v0.1 ' ?*'\"`| (some build info (codename); os 1.0)";
+
+                {
+                    auto newDriverCfg = driverCfg;
+                    newDriverCfg.SetAuthToken("user@builtin");
+
+                    ydbDriver = MakeHolder<NYdb::TDriver>(newDriverCfg);
+
+                    auto topicClient = NYdb::NTopic::TTopicClient(*ydbDriver);
+                    auto writer = topicClient.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
+                        .Path(fullTopicName)
+                        .MessageGroupId("123")
+                        .ProducerId("123")
+                        .Codec(NYdb::NPersQueue::ECodec::RAW)
+                        .DirectWriteToPartition(false)
+                        .Header({{NYdb::YDB_APPLICATION_NAME, userAgent}})
+                    );
+
+                    for (int i = 0; i < 4; ++i) {
+                        bool res = writer->Write(TString(10, 'a'));
+                        UNIT_ASSERT(res);
+                    }
+
+                    NYdb::NTopic::TReadSessionSettings settings;
+                    settings.ConsumerName(consumerName).AppendTopics(std::string{topicName});
+
+                    auto reader = CreateReader(*ydbDriver, settings, nullptr, userAgent);
+
+                    auto msg = GetNextMessageSkipAssignment(reader);
+                    UNIT_ASSERT(msg);
+
+                    checkCounters(monPort,
+                                  {
+                                      "api.grpc.topic.stream_read.commits",
+                                      "api.grpc.topic.stream_read.partition_session.errors",
+                                      "api.grpc.topic.stream_read.partition_session.started",
+                                      "api.grpc.topic.stream_read.partition_session.stopped",
+                                      "api.grpc.topic.stream_read.partition_session.count",
+                                      "api.grpc.topic.stream_read.partition_session.starting_count",
+                                      "api.grpc.topic.stream_read.partition_session.stopping_count",
+                                      "api.grpc.topic.stream_write.errors",
+                                      "api.grpc.topic.stream_write.sessions_active_count",
+                                      "api.grpc.topic.stream_write.sessions_created",
+                                  },
+                                  topicName, "", "", ""
+                                  );
+
+                    checkCounters(monPort,
+                                  {
+                                      "api.grpc.topic.stream_read.commits",
+                                      "api.grpc.topic.stream_read.partition_session.errors",
+                                      "api.grpc.topic.stream_read.partition_session.started",
+                                      "api.grpc.topic.stream_read.partition_session.stopped",
+                                      "api.grpc.topic.stream_read.partition_session.count",
+                                      "api.grpc.topic.stream_read.partition_session.starting_count",
+                                      "api.grpc.topic.stream_read.partition_session.stopping_count",
+
+                                  },
+                                  topicName, consumerName, "", ""
+                                  );
+
+                    checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                                  {
+                                      "topic.read.lag_milliseconds",
+                                      "topic.write.bytes",
+                                      "topic.write.messages",
+                                      "topic.write.discarded_bytes",
+                                      "topic.write.discarded_messages",
+                                      "api.grpc.topic.stream_write.bytes",
+                                      "topic.write.partition_throttled_milliseconds",
+                                      "topic.write.message_size_bytes",
+                                      "api.grpc.topic.stream_write.messages",
+                                      "topic.write.lag_milliseconds",
+                                      "topic.write.uncompressed_bytes",
+                                      "api.grpc.topic.stream_read.bytes",
+                                      "api.grpc.topic.stream_read.messages",
+                                      "topic.read.bytes",
+                                      "topic.read.messages",
+                                  },
+                                  topicName, "", "", ""
+                                  );
+
+                    checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                                  {
+                                      "topic.read.lag_milliseconds",
+                                      "api.grpc.topic.stream_read.bytes",
+                                      "api.grpc.topic.stream_read.messages",
+                                      "topic.read.bytes",
+                                      "topic.read.messages",
+                                  },
+                                  topicName, consumerName, "", ""
+                                  );
+
+                    checkUserAgentCounters(monPort, "BytesWrittenByUserAgent", "topic", userAgent, fullTopicName, "");
+                    checkUserAgentCounters(monPort, "BytesReadByUserAgent", "topic", userAgent, "", consumerName);
+                }
+                Monitoring.Stop();
             };
 
             testWriteStat1stClass("user1");
@@ -499,7 +757,7 @@ namespace NKikimr::NPersQueueTests {
 
     Y_UNIT_TEST_SUITE(TPersqueueDataPlaneTestSuite) {
         Y_UNIT_TEST(WriteSession) {
-            TPersQueueV1TestServer server(true, true);
+            TPersQueueV1TestServer server({.CheckACL=true, .TenantModeEnabled=true});
 
             TString topic = "/Root/account1/write_topic";
             TString consumer = "consumer_aba";
@@ -526,7 +784,7 @@ namespace NKikimr::NPersQueueTests {
             }
             {
                 auto reader = server.PersQueueClient->CreateReadSession(TReadSessionSettings().ConsumerName("non_existing")
-                                                                        .AppendTopics(topic).DisableClusterDiscovery(true)
+                                                                        .AppendTopics(std::string{topic}).DisableClusterDiscovery(true)
                                                                         .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy()));
 
 
@@ -534,8 +792,8 @@ namespace NKikimr::NPersQueueTests {
                 future.Wait(TDuration::Seconds(10));
                 UNIT_ASSERT(future.HasValue());
 
-                TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false);
-                UNIT_ASSERT(event.Defined());
+                std::optional<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false);
+                UNIT_ASSERT(event.has_value());
 
                 Cerr << "Got new read session event: " << DebugString(*event) << Endl;
 
@@ -543,7 +801,7 @@ namespace NKikimr::NPersQueueTests {
             }
             {
                 auto reader = server.PersQueueClient->CreateReadSession(TReadSessionSettings().ConsumerName(consumer)
-                                                                        .AppendTopics(topic).DisableClusterDiscovery(true)
+                                                                        .AppendTopics(std::string{topic}).DisableClusterDiscovery(true)
                                                                         .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy()));
 
 
@@ -551,8 +809,8 @@ namespace NKikimr::NPersQueueTests {
                 future.Wait(TDuration::Seconds(10));
                 UNIT_ASSERT(future.HasValue());
 
-                TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false);
-                UNIT_ASSERT(event.Defined());
+                std::optional<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false);
+                UNIT_ASSERT(event.has_value());
 
                 Cerr << "Got new read session event: " << DebugString(*event) << Endl;
 
@@ -563,7 +821,7 @@ namespace NKikimr::NPersQueueTests {
 
     Y_UNIT_TEST_SUITE(TPersqueueControlPlaneTestSuite) {
         Y_UNIT_TEST(SetupReadLockSessionWithDatabase) {
-            TPersQueueV1TestServer server(false, true);
+            TPersQueueV1TestServer server({.TenantModeEnabled=true});
 
             {
                 auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
@@ -599,7 +857,7 @@ namespace NKikimr::NPersQueueTests {
         }
 
         Y_UNIT_TEST(SetupWriteLockSessionWithDatabase) {
-            TPersQueueV1TestServer server(false, true);
+            TPersQueueV1TestServer server({.TenantModeEnabled=true});
 
             auto stub = Ydb::PersQueue::V1::PersQueueService::NewStub(server.InsecureChannel);
             grpc::ClientContext grpcContext;
@@ -624,7 +882,7 @@ namespace NKikimr::NPersQueueTests {
         }
 
         Y_UNIT_TEST(TestAddRemoveReadRule) {
-            TPersQueueV1TestServer server(false, true);
+            TPersQueueV1TestServer server({.TenantModeEnabled=true});
             SET_LOCALS;
 
             pqClient->CreateConsumer("goodUser");

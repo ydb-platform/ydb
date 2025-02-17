@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.8.3)
+VERSION(0.8.4)
 
 LICENSE(PSF-2.0)
 
@@ -41,6 +41,7 @@ RESOURCE_FILES(
     parso/python/grammar310.txt
     parso/python/grammar311.txt
     parso/python/grammar312.txt
+    parso/python/grammar313.txt
     parso/python/grammar36.txt
     parso/python/grammar37.txt
     parso/python/grammar38.txt

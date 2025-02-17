@@ -1,10 +1,14 @@
 #pragma once
-
+#include <queue>
 #include <util/generic/algorithm.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr::NViewer {
 
 inline ui32 LevenshteinDistance(TString word1, TString word2) {
+    word1 = to_lower(word1);
+    word2 = to_lower(word2);
     ui32 size1 = word1.size();
     ui32 size2 = word2.size();
     ui32 dist[size1 + 1][size2 + 1]; // distance matrix
@@ -29,62 +33,35 @@ inline ui32 LevenshteinDistance(TString word1, TString word2) {
     return dist[size1][size2];
 }
 
-template<typename Type>
 class FuzzySearcher {
-    struct WordHit {
-        ui32 Distance;
-        Type Data;
-
-        WordHit(ui32 dist, Type data)
-            : Distance(dist)
-            , Data(data)
-        {}
-
-        bool operator<(const WordHit& other) const {
-            return Distance < other.Distance;
-        }
-
-        bool operator>(const WordHit& other) const {
-            return Distance > other.Distance;
-        }
-    };
-
-public:
-    THashMap<TString, Type> Dictionary;
-
-    FuzzySearcher(const THashMap<TString, Type>& dictionary)
-        : Dictionary(dictionary) {}
-
-    FuzzySearcher(const TVector<TString>& words) {
-        for (const auto& word : words) {
-            Dictionary[word] = word;
+    static size_t CalculateWordHit(const TString& searchWord, const TString& testWord) {
+        size_t findPos = testWord.find(searchWord);
+        if (findPos != TString::npos) {
+            return testWord.size() - searchWord.size() + findPos;
+        } else {
+            return 1000 * LevenshteinDistance(searchWord, testWord);
         }
     }
 
-    TVector<Type> Search(const TString& searchWord, ui32 limit = 10) {
-        auto cmp = [](const WordHit& left, const WordHit& right) {
-            return left.Distance < right.Distance;
-        };
-        std::priority_queue<WordHit, TVector<WordHit>, decltype(cmp)> queue(cmp);
-
-        for (const auto& [word, data]: Dictionary) {
-            auto wordHit = WordHit(LevenshteinDistance(searchWord, word), data);
-            if (queue.size() < limit) {
-                queue.emplace(wordHit);
-            } else if (wordHit.Distance < queue.top().Distance) {
-                queue.pop();
-                queue.emplace(wordHit);
-            }
+public:
+    template<typename Type>
+    static std::vector<const Type*> Search(const std::vector<Type>& dictionary, const TString& searchWord, ui32 limit = 10) {
+        TString search = to_lower(searchWord);
+        std::vector<std::pair<size_t, size_t>> hits; // {distance, index}
+        hits.reserve(dictionary.size());
+        for (size_t index = 0; index < dictionary.size(); ++index) {
+            hits.emplace_back(CalculateWordHit(search, to_lower(TString(dictionary[index]))), index);
         }
-
-        TVector<Type> results;
-        while (!queue.empty()) {
-            results.emplace_back(queue.top().Data);
-            queue.pop();
+        std::sort(hits.begin(), hits.end());
+        if (hits.size() > limit) {
+            hits.resize(limit);
         }
-
-        std::reverse(results.begin(), results.end());
-        return results;
+        std::vector<const Type*> result;
+        result.reserve(hits.size());
+        for (const auto& hit : hits) {
+            result.emplace_back(&dictionary[hit.second]);
+        }
+        return result;
     }
 };
 

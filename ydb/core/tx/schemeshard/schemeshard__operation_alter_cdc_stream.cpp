@@ -1,12 +1,17 @@
+#include "schemeshard__operation_alter_cdc_stream.h"
+
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
+
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
 namespace NKikimr::NSchemeShard {
+
+namespace NCdc {
 
 namespace {
 
@@ -57,7 +62,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->PersistCdcStream(db, pathId);
-        context.SS->CdcStreams[pathId] = stream->AlterData;
+        context.SS->CdcStreams[pathId]->FinishAlter();
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
@@ -139,8 +144,11 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderOperation();
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -232,7 +240,7 @@ protected:
         auto table = context.SS->Tables.at(pathId);
 
         auto& notice = *tx.MutableAlterCdcStreamNotice();
-        PathIdFromPathId(pathId, notice.MutablePathId());
+        pathId.ToProto(notice.MutablePathId());
         notice.SetTableSchemaVersion(table->AlterVersion + 1);
 
         bool found = false;
@@ -248,7 +256,7 @@ protected:
             auto stream = context.SS->CdcStreams.at(childPathId);
 
             Y_VERIFY_S(!found, "Too many cdc streams are planned to alter"
-                << ": found# " << PathIdFromPathId(notice.GetStreamDescription().GetPathId())
+                << ": found# " << TPathId::FromProto(notice.GetStreamDescription().GetPathId())
                 << ", another# " << childPathId);
             found = true;
 
@@ -355,7 +363,7 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
-        const auto tablePath = TPath::Resolve(workingDir, context.SS).Dive(tableName);
+        const auto tablePath = TPath::Resolve(workingDir, context.SS).Child(tableName, TPath::TSplitChildTag{});
         {
             const auto checks = tablePath.Check();
             checks
@@ -366,9 +374,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting()
                 .NotUnderOperation();
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -471,6 +482,85 @@ private:
 
 } // anonymous
 
+std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
+        const TOperationId& opId,
+        const TPath& workingDirPath,
+        const TString& tableName,
+        const TString& streamName)
+{
+    const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
+    {
+        const auto checks = tablePath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotAsyncReplicaTable()
+            .NotUnderOperation();
+
+        if (checks && !tablePath.IsInsideTableIndexPath()) {
+            checks.IsCommonSensePath();
+        }
+
+        if (!checks) {
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    const auto streamPath = tablePath.Child(streamName);
+    {
+        const auto checks = streamPath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsCdcStream()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    return TStreamPaths{tablePath, streamPath};
+}
+
+void DoAlterStream(
+        TVector<ISubOperation::TPtr>& result,
+        const NKikimrSchemeOp::TAlterCdcStream& op,
+        const TOperationId& opId,
+        const TPath& workingDirPath,
+        const TPath& tablePath)
+{
+    {
+        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl);
+        outTx.MutableAlterCdcStream()->CopyFrom(op);
+        if (op.HasGetReady()) {
+            outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
+        }
+
+        result.push_back(CreateAlterCdcStreamImpl(NextPartId(opId, result), outTx));
+    }
+    {
+        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable);
+        outTx.MutableAlterCdcStream()->CopyFrom(op);
+        if (op.HasGetReady()) {
+            outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
+        }
+
+        result.push_back(CreateAlterCdcStreamAtTable(NextPartId(opId, result), outTx, op.HasGetReady()));
+    }
+}
+
+} // namespace NCdc
+
+using namespace NCdc;
+
 ISubOperation::TPtr CreateAlterCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterCdcStream>(id, tx);
 }
@@ -500,41 +590,12 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto tablePath = workingDirPath.Child(tableName);
-    {
-        const auto checks = tablePath.Check();
-        checks
-            .NotEmpty()
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .IsTable()
-            .NotAsyncReplicaTable()
-            .IsCommonSensePath()
-            .NotUnderOperation();
-
-        if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-        }
+    const auto checksResult = DoAlterStreamPathChecks(opId, workingDirPath, tableName, streamName);
+    if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
+        return {std::get<ISubOperation::TPtr>(checksResult)};
     }
 
-    const auto streamPath = tablePath.Child(streamName);
-    {
-        const auto checks = streamPath.Check();
-        checks
-            .NotEmpty()
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .IsCdcStream()
-            .NotUnderOperation();
-
-        if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-        }
-    }
+    const auto [tablePath, streamPath] = std::get<TStreamPaths>(checksResult);
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
@@ -547,27 +608,7 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
 
     TVector<ISubOperation::TPtr> result;
 
-    {
-        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl);
-        outTx.MutableAlterCdcStream()->CopyFrom(op);
-
-        if (op.HasGetReady()) {
-            outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
-        }
-
-        result.push_back(CreateAlterCdcStreamImpl(NextPartId(opId, result), outTx));
-    }
-
-    {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable);
-        outTx.MutableAlterCdcStream()->CopyFrom(op);
-
-        if (op.HasGetReady()) {
-            outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
-        }
-
-        result.push_back(CreateAlterCdcStreamAtTable(NextPartId(opId, result), outTx, op.HasGetReady()));
-    }
+    DoAlterStream(result, op, opId, workingDirPath, tablePath);
 
     if (op.HasGetReady()) {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
@@ -577,6 +618,14 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
         outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
 
         result.push_back(DropLock(NextPartId(opId, result), outTx));
+    }
+
+    if (workingDirPath.IsTableIndex()) {
+        auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
+        outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+
+        result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     }
 
     return result;

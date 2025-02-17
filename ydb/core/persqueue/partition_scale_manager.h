@@ -21,52 +21,45 @@ namespace NKikimr {
 namespace NPQ {
 
 class TPartitionScaleManager {
-
-public:
-    struct TPartitionInfo {
-        ui32 Id;
-        NSchemeShard::TTopicTabletInfo::TKeyRange KeyRange;
-    };
-
-private:   
+private:
     struct TBalancerConfig {
         TBalancerConfig(
-            NKikimrPQ::TUpdateBalancerConfig& config
+            ui64 pathId,
+            int version,
+            const NKikimrPQ::TPQTabletConfig& config
         )
-            : PathId(config.GetPathId())
-            , PathVersion(config.GetVersion())
-            , PartitionGraph(MakePartitionGraph(config))
-            , PartitionCountLimit(config.GetTabletConfig().GetPartitionStrategy().GetMaxPartitionCount())
-            , MinActivePartitions(config.GetTabletConfig().GetPartitionStrategy().GetMinPartitionCount())
-            , CurPartitions(config.PartitionsSize()) {
+            : PathId(pathId)
+            , PathVersion(version)
+            , MaxActivePartitions(config.GetPartitionStrategy().GetMaxPartitionCount())
+            , MinActivePartitions(config.GetPartitionStrategy().GetMinPartitionCount())
+            , CurPartitions(std::count_if(config.GetAllPartitions().begin(), config.GetAllPartitions().end(), [](auto& p) {
+                return p.GetStatus() != NKikimrPQ::ETopicPartitionStatus::Inactive;
+            })) {
         }
 
         ui64 PathId;
         int PathVersion;
-        TPartitionGraph PartitionGraph;
-        ui64 PartitionCountLimit;
+        ui64 MaxActivePartitions;
         ui64 MinActivePartitions;
         ui64 CurPartitions;
     };
 
 public:
-    TPartitionScaleManager(const TString& topicPath, const TString& databasePath, NKikimrPQ::TUpdateBalancerConfig& balancerConfig);
+    TPartitionScaleManager(const TString& topicName, const TString& topicPath, const TString& databasePath, ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config, const TPartitionGraph& partitionGraph);
 
 public:
-    void HandleScaleStatusChange(const TPartitionInfo& partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx);
+    void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx);
     void HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     void TrySendScaleRequest(const TActorContext& ctx);
-    void UpdateBalancerConfig(NKikimrPQ::TUpdateBalancerConfig& config);
+    void UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config);
     void UpdateDatabasePath(const TString& dbPath);
     void Die(const TActorContext& ctx);
-    
-    static TString GetRangeMid(const TString& from, const TString& to);
 
 private:
     using TPartitionSplit = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit;
     using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
 
-    std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> BuildScaleRequest();
+    std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> BuildScaleRequest(const TActorContext& ctx);
 
 public:
     static const ui64 TRY_SCALE_REQUEST_WAKE_UP_TAG = 10;
@@ -74,16 +67,19 @@ public:
 private:
     static const ui32 MIN_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT = 10;
     static const ui32 MAX_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT = 1000;
-    
+
     const TString TopicName;
+    const TString TopicPath;
     TString DatabasePath = "";
     TActorId CurrentScaleRequest;
     TDuration RequestTimeout = TDuration::MilliSeconds(0);
     TInstant LastResponseTime = TInstant::Zero();
 
-    std::unordered_map<ui64, TPartitionInfo> PartitionsToSplit;
+    std::unordered_set<ui32> PartitionsToSplit;
 
     TBalancerConfig BalancerConfig;
+    const TPartitionGraph& PartitionGraph;
+
     bool RequestInflight = false;
 };
 

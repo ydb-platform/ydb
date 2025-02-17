@@ -1,12 +1,11 @@
 #pragma once
 
 #include "public.h"
+#include "attributes.h"
 
 #include <yt/yt/core/ypath/public.h>
 
 #include <yt/yt/core/yson/public.h>
-
-#include <any>
 
 namespace NYT::NYTree {
 
@@ -67,7 +66,7 @@ namespace NYT::NYTree {
 struct TAttributeFilter
 {
     //! Whitelist of top-level keys to be returned.
-    std::vector<TString> Keys;
+    std::vector<IAttributeDictionary::TKey> Keys;
     std::vector<NYPath::TYPath> Paths;
 
     //! If true, filter is universal, i.e. behavior depends on service's own policy;
@@ -78,10 +77,17 @@ struct TAttributeFilter
     TAttributeFilter() = default;
 
     //! Creates a non-universal filter from given keys and paths.
-    //! This constructor is intentionally non-explicit so that common idiom attributeFilter = {"foo", "bar"} works.
-    TAttributeFilter(std::vector<TString> keys, std::vector<NYPath::TYPath> paths = {});
+    /*implicit*/ TAttributeFilter(
+        std::vector<IAttributeDictionary::TKey> keys,
+        std::vector<NYPath::TYPath> paths = {});
 
-    TAttributeFilter& operator =(std::vector<TString> keys);
+    //! Creates a non-universal filter from a given list of keys.
+    template <class T>
+    TAttributeFilter(std::initializer_list<T> keys);
+
+    // TODO(babenko): switch to std::string
+    TAttributeFilter(std::initializer_list<TString> keys);
+    TAttributeFilter(const std::vector<TString>& keys);
 
     //! Returns true for non-universal filter and false otherwise.
     explicit operator bool() const;
@@ -95,11 +101,11 @@ struct TAttributeFilter
     void ValidateKeysOnly(TStringBuf context = "this context") const;
 
     //! Returns true if #key appears in Keys or "/#key" appears in Paths using linear search.
-    bool AdmitsKeySlow(TStringBuf key) const;
+    bool AdmitsKeySlow(IAttributeDictionary::TKeyView key) const;
 
     // std::nullopt stands for "take the whole attribute without path filtration" (i.e. an equivalent of {""}).
     using TPathFilter = std::optional<std::vector<TYPath>>;
-    using TKeyToFilter = THashMap<TString, TPathFilter>;
+    using TKeyToFilter = THashMap<IAttributeDictionary::TKey, TPathFilter>;
 
     //! Normalization procedure removes redundant keys or paths and returns a mapping of form
     //! top-level key -> list of YPaths inside this top-level key (i.e. with /<key> stripped off) or
@@ -156,9 +162,12 @@ void Deserialize(TAttributeFilter& attributeFilter, NYson::TYsonPullParserCursor
 void FormatValue(
     TStringBuilderBase* builder,
     const TAttributeFilter& attributeFilter,
-    TStringBuf /*format*/);
-TString ToString(const TAttributeFilter& attributeFilter);
+    TStringBuf /*spec*/);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYTree
+
+#define ATTRIBUTE_FILER_INL_H_
+#include "attribute_filter-inl.h"
+#undef ATTRIBUTE_FILER_INL_H_

@@ -1,0 +1,153 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 008c19761ea52dc768a48cfd005fd5cc
+BELONGS ya.make
+    License text:
+        //Copyright (c) 2006-2010 Emil Dotchevski and Reverge Studios, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/exception/detail/error_info_impl.hpp [1:1]
+        include/boost/exception/detail/type_info.hpp [1:1]
+        include/boost/exception/diagnostic_information.hpp [1:1]
+        include/boost/exception/info.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 08eb81be155b92ddb12ca76ecacd3011
+BELONGS ya.make
+    License text:
+        // Copyright 2023 Peter Dimov
+        // Copyright 2024 Emil Dotchevski
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/exception/detail/requires_cxx11.hpp [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 18b9bbddbcb28f4b2be6c0306fb4568c
+BELONGS ya.make
+    License text:
+        // Copyright 2023 Peter Dimov
+        // Copyright 2024 Emil Dotchevski
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/exception/detail/requires_cxx11.hpp [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20aa2056ea9bde4ff4ad3360b783b1e7
+BELONGS ya.make
+    License text:
+        //Copyright (c) 2006-2008 Emil Dotchevski and Reverge Studios, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/exception/all.hpp [1:1]
+        include/boost/exception/detail/shared_ptr.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 257694d3abe37b6acc3c62f038cf0304
+BELONGS ya.make
+    License text:
+        Copyright (c) 2006-2021 Emil Dotchevski
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [19:19]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 498105f8cf77963aff3c856eb50c2341
+BELONGS ya.make
+    License text:
+        //Copyright (c) 2006-2009 Emil Dotchevski and Reverge Studios, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/exception/current_exception_cast.hpp [1:1]
+        include/boost/exception/detail/exception_ptr.hpp [1:2]
+        include/boost/exception/detail/is_output_streamable.hpp [1:1]
+        include/boost/exception/detail/object_hex_dump.hpp [1:1]
+        include/boost/exception/enable_current_exception.hpp [1:1]
+        include/boost/exception/enable_error_info.hpp [1:1]
+        include/boost/exception/errinfo_api_function.hpp [1:1]
+        include/boost/exception/errinfo_at_line.hpp [1:1]
+        include/boost/exception/errinfo_errno.hpp [1:1]
+        include/boost/exception/errinfo_file_handle.hpp [1:1]
+        include/boost/exception/errinfo_file_name.hpp [1:1]
+        include/boost/exception/errinfo_file_open_mode.hpp [1:1]
+        include/boost/exception/errinfo_nested_exception.hpp [1:1]
+        include/boost/exception/errinfo_type_info_name.hpp [1:1]
+        include/boost/exception/error_info.hpp [1:1]
+        include/boost/exception/get_error_info.hpp [1:1]
+        include/boost/exception/info_tuple.hpp [1:1]
+        include/boost/exception/to_string.hpp [1:1]
+        include/boost/exception/to_string_stub.hpp [1:1]
+        include/boost/exception_ptr.hpp [1:1]
+        src/clone_current_exception_non_intrusive.cpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6f691f801939b046f8cede226c17c734
+BELONGS ya.make
+    License text:
+        //Copyright (c) 2006-2009 Emil Dotchevski and Reverge Studios, Inc.
+        //Copyright (c) 2019 Dario Menendez, Banco Santander
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/exception/detail/exception_ptr.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7500e3115ad2ad77256a10dcd614f5bf
+BELONGS ya.make
+    License text:
+        //Copyright (c) 2006-2013 Emil Dotchevski and Reverge Studios, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/exception/detail/clone_current_exception.hpp [1:1]

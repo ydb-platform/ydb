@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     pq_ut_common.cpp
     pq_ut_common.h
@@ -9,8 +13,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/testlib
     ydb/core/persqueue
+    ydb/core/testlib
 )
 
 YQL_LAST_ABI_VERSION()

@@ -2,6 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/mind/hive/hive.h>
+
 namespace {
 
 using namespace NKikimr;
@@ -51,7 +53,7 @@ public:
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -89,19 +91,22 @@ public:
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             context.SS->FillSeqNo(tx, seqNo);
             auto move = tx.MutableMoveTable();
-            PathIdFromPathId(srcPath->PathId, move->MutablePathId());
+            srcPath->PathId.ToProto(move->MutablePathId());
             move->SetTableSchemaVersion(srcTable->AlterVersion+1);
 
-            PathIdFromPathId(dstPath->PathId, move->MutableDstPathId());
+            dstPath->PathId.ToProto(move->MutableDstPathId());
             move->SetDstPath(TPath::Init(dstPath->PathId, context.SS).PathString());
 
             for (const auto& child: srcPath->GetChildren()) {
                 auto name = child.first;
 
-                TPath srcIndexPath = srcPath.Child(name);
-                Y_ABORT_UNLESS(srcIndexPath.IsResolved());
+                TPath srcChildPath = srcPath.Child(name);
+                Y_ABORT_UNLESS(srcChildPath.IsResolved());
 
-                if (srcIndexPath.IsDeleted()) {
+                if (srcChildPath.IsDeleted()) {
+                    continue;
+                }
+                if (srcChildPath.IsSequence()) {
                     continue;
                 }
 
@@ -109,8 +114,8 @@ public:
                 Y_ABORT_UNLESS(dstIndexPath.IsResolved());
 
                 auto remap = move->AddReMapIndexes();
-                PathIdFromPathId(srcIndexPath->PathId, remap->MutableSrcPathId());
-                PathIdFromPathId(dstIndexPath->PathId, remap->MutableDstPathId());
+                srcChildPath->PathId.ToProto(remap->MutableSrcPathId());
+                dstIndexPath->PathId.ToProto(remap->MutableDstPathId());
             }
 
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
@@ -138,8 +143,8 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
                     TPath& srcPath)
 {
     const auto isBackupTable = context.SS->IsBackupTable(srcPath->PathId);
-    srcPath.Parent()->DecAliveChildren(1, isBackupTable);
-    srcPath.DomainInfo()->DecPathsInside(1, isBackupTable);
+    DecAliveChildrenDirect(operationId, srcPath.Parent().Base(), context, isBackupTable);
+    srcPath.DomainInfo()->DecPathsInside(context.SS, 1, isBackupTable);
 
     srcPath->SetDropped(txState.PlanStep, operationId.GetTxId());
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
@@ -234,7 +239,7 @@ public:
 
         dstPath->StepCreated = step;
         context.SS->PersistCreateStep(db, dstPath.Base()->PathId, step);
-        dstPath.DomainInfo()->IncPathsInside();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
 
         dstPath.Activate();
         IncParentDirAlterVersionWithRepublish(OperationId, dstPath, context);
@@ -306,7 +311,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompletePublication"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
@@ -325,7 +330,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
 
@@ -386,7 +391,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate:TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -430,7 +435,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         context.OnComplete.Barrier(OperationId, "RenamePathBarrier");
         return false;
@@ -598,7 +603,8 @@ public:
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
-                .IsResolved();
+                .IsResolved()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
                 if (dstParent.IsUnderDeleting()) {
                     checks
@@ -703,7 +709,7 @@ public:
         dstPath.Base()->UserAttrs->AlterData = srcPath.Base()->UserAttrs;
         dstPath.Base()->ACL = srcPath.Base()->ACL;
 
-        dstParent.Base()->IncAliveChildren();
+        IncAliveChildrenSafeWithUndo(OperationId, dstParent, context); // for correct discard of ChildrenExist prop
 
         // create tx state, do not catch shards right now
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxMoveTable, dstPath.Base()->PathId, srcPath.Base()->PathId);

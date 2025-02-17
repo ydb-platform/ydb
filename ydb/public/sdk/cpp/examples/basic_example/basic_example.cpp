@@ -1,112 +1,107 @@
 #include "basic_example.h"
 
-#include <util/folder/pathsplit.h>
-#include <util/string/printf.h>
+#include <ydb-cpp-sdk/client/retry/retry.h>
+
+#include <util/string/cast.h>
+
+#include <format>
 
 using namespace NYdb;
-using namespace NYdb::NTable;
+using namespace NYdb::NQuery;
+using namespace NYdb::NStatusHelpers;
 
-class TYdbErrorException : public yexception {
-public:
-    TYdbErrorException(const TStatus& status)
-        : Status(status) {}
-
-    TStatus Status;
-};
-
-static void ThrowOnError(const TStatus& status) {
-    if (!status.IsSuccess()) {
-        throw TYdbErrorException(status) << status;
+template <class T>
+std::string OptionalToString(const std::optional<T>& opt) {
+    if (opt.has_value()) {
+        return std::to_string(opt.value());
     }
+    return "(NULL)";
 }
 
-static void PrintStatus(const TStatus& status) {
-    Cerr << "Status: " << status.GetStatus() << Endl;
-    status.GetIssues().PrintTo(Cerr);
-}
-
-static TString JoinPath(const TString& basePath, const TString& path) {
-    if (basePath.empty()) {
-        return path;
+template <>
+std::string OptionalToString<std::string>(const std::optional<std::string>& opt) {
+    if (opt.has_value()) {
+        return opt.value();
     }
-
-    TPathSplitUnix prefixPathSplit(basePath);
-    prefixPathSplit.AppendComponent(path);
-
-    return prefixPathSplit.Reconstruct();
+    return "(NULL)";
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-//! Creates sample tables with CrateTable API.
-static void CreateTables(TTableClient client, const TString& path) {
-    ThrowOnError(client.RetryOperationSync([path](TSession session) {
-        auto seriesDesc = TTableBuilder()
-            .AddNullableColumn("series_id", EPrimitiveType::Uint64)
-            .AddNullableColumn("title", EPrimitiveType::Utf8)
-            .AddNullableColumn("series_info", EPrimitiveType::Utf8)
-            .AddNullableColumn("release_date", EPrimitiveType::Uint64)
-            .SetPrimaryKeyColumn("series_id")
-            .Build();
-
-        return session.CreateTable(JoinPath(path, "series"), std::move(seriesDesc)).GetValueSync();
+static void CreateTables(TQueryClient client) {
+    //! Creates sample tables with the ExecuteQuery method
+    ThrowOnError(client.RetryQuerySync([](TSession session) {
+        auto query = R"(
+            CREATE TABLE series (
+                series_id Uint64,
+                title Utf8,
+                series_info Utf8,
+                release_date Uint64,
+                PRIMARY KEY (series_id)
+            );
+        )";
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 
-    ThrowOnError(client.RetryOperationSync([path](TSession session) {
-        auto seasonsDesc = TTableBuilder()
-            .AddNullableColumn("series_id", EPrimitiveType::Uint64)
-            .AddNullableColumn("season_id", EPrimitiveType::Uint64)
-            .AddNullableColumn("title", EPrimitiveType::Utf8)
-            .AddNullableColumn("first_aired", EPrimitiveType::Uint64)
-            .AddNullableColumn("last_aired", EPrimitiveType::Uint64)
-            .SetPrimaryKeyColumns({"series_id", "season_id"})
-            .Build();
-
-        return session.CreateTable(JoinPath(path, "seasons"), std::move(seasonsDesc)).GetValueSync();
+    ThrowOnError(client.RetryQuerySync([](TSession session) {
+        auto query = R"(
+            CREATE TABLE seasons (
+                series_id Uint64,
+                season_id Uint64,
+                title Utf8,
+                first_aired Uint64,
+                last_aired Uint64,
+                PRIMARY KEY (series_id, season_id)
+            );
+        )";
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 
-    ThrowOnError(client.RetryOperationSync([path](TSession session) {
-        auto episodesDesc = TTableBuilder()
-            .AddNullableColumn("series_id", EPrimitiveType::Uint64)
-            .AddNullableColumn("season_id", EPrimitiveType::Uint64)
-            .AddNullableColumn("episode_id", EPrimitiveType::Uint64)
-            .AddNullableColumn("title", EPrimitiveType::Utf8)
-            .AddNullableColumn("air_date", EPrimitiveType::Uint64)
-            .SetPrimaryKeyColumns({"series_id", "season_id", "episode_id"})
-            .Build();
-
-        return session.CreateTable(JoinPath(path, "episodes"),
-            std::move(episodesDesc)).GetValueSync();
+    ThrowOnError(client.RetryQuerySync([](TSession session) {
+        auto query = R"(
+            CREATE TABLE episodes (
+                series_id Uint64,
+                season_id Uint64,
+                episode_id Uint64,
+                title Utf8,
+                air_date Uint64,
+                PRIMARY KEY (series_id, season_id, episode_id)
+            );
+        )";
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
-}
-
-//! Describe existing table.
-static void DescribeTable(TTableClient client, const TString& path, const TString& name) {
-    TMaybe<TTableDescription> desc;
-
-    ThrowOnError(client.RetryOperationSync([path, name, &desc](TSession session) {
-        auto result = session.DescribeTable(JoinPath(path, name)).GetValueSync();
-
-        if (result.IsSuccess()) {
-            desc = result.GetTableDescription();
-        }
-
-        return result;
-    }));
-
-    Cout << "> Describe table: " << name << Endl;
-    for (auto& column : desc->GetColumns()) {
-        Cout << "Column, name: " << column.Name << ", type: " << FormatType(column.Type) << Endl;
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-//! Fills sample tables with data in single parameterized data query.
-static TStatus FillTableDataTransaction(TSession session, const TString& path) {
-    auto query = Sprintf(R"(
-        PRAGMA TablePathPrefix("%s");
+static void DropTables(TQueryClient client) {
+    ThrowOnError(client.RetryQuerySync([](TSession session) {
+        auto query = R"(
+            DROP TABLE series;
+        )";
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+    }));
 
+    ThrowOnError(client.RetryQuerySync([](TSession session) {
+        auto query = R"(
+            DROP TABLE seasons;
+        )";
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+    }));
+    
+    ThrowOnError(client.RetryQuerySync([](TSession session) {
+        auto query = R"(
+            DROP TABLE episodes;
+        )";
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+    }));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+void FillTableData(TQueryClient client) {
+    ThrowOnError(client.RetryQuerySync([](TSession session) {
+        auto query = R"(
         DECLARE $seriesData AS List<Struct<
             series_id: Uint64,
             title: Utf8,
@@ -152,456 +147,344 @@ static TStatus FillTableDataTransaction(TSession session, const TString& path) {
             title,
             CAST(air_date AS Uint16) AS air_date
         FROM AS_TABLE($episodesData);
-    )", path.c_str());
+        )";
 
-    auto params = GetTablesDataParams();
+        auto params = GetTablesDataParams();
 
-    return session.ExecuteDataQuery(
-        query,
-        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-        params).GetValueSync();
+        return session.ExecuteQuery(
+            query,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+            params).GetValueSync();
+    }));
 }
 
-//! Shows basic usage of YDB data queries and transactions.
-static TStatus SelectSimpleTransaction(TSession session, const TString& path,
-    TMaybe<TResultSet>& resultSet)
-{
-    auto query = Sprintf(R"(
-        PRAGMA TablePathPrefix("%s");
+void SelectSimple(TQueryClient client) {
+    std::optional<TResultSet> resultSet;
+    ThrowOnError(client.RetryQuerySync([&resultSet](TSession session) {
+        auto query = R"(
+            SELECT series_id, title, CAST(release_date AS Date) AS release_date
+            FROM series
+            WHERE series_id = 1;
+        )";
 
-        SELECT series_id, title, CAST(CAST(release_date AS Date) AS String) AS release_date
-        FROM series
-        WHERE series_id = 1;
-    )", path.c_str());
+        auto txControl =
+            // Begin a new transaction with SerializableRW mode
+            TTxControl::BeginTx(TTxSettings::SerializableRW())
+            // Commit the transaction at the end of the query
+            .CommitTx();
 
-    auto txControl =
-        // Begin new transaction with SerializableRW mode
-        TTxControl::BeginTx(TTxSettings::SerializableRW())
-        // Commit transaction at the end of the query
-        .CommitTx();
-
-    // Executes data query with specified transaction control settings.
-    auto result = session.ExecuteDataQuery(query, txControl).GetValueSync();
-
-    if (result.IsSuccess()) {
-        // Index of result set corresponds to its order in YQL query
+        auto result = session.ExecuteQuery(query, txControl).GetValueSync();
+        if (!result.IsSuccess()) {
+            return result;
+        }
         resultSet = result.GetResultSet(0);
-    }
-
-    return result;
-}
-
-//! Shows basic usage of mutating operations.
-static TStatus UpsertSimpleTransaction(TSession session, const TString& path) {
-    auto query = Sprintf(R"(
-        --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
-
-        UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
-            (2, 6, 1, "TBD");
-    )", path.c_str());
-
-    return session.ExecuteDataQuery(query,
-        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
-}
-
-//! Shows usage of parameters in data queries.
-static TStatus SelectWithParamsTransaction(TSession session, const TString& path,
-    ui64 seriesId, ui64 seasonId, TMaybe<TResultSet>& resultSet)
-{
-    auto query = Sprintf(R"(
-        --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
-
-        DECLARE $seriesId AS Uint64;
-        DECLARE $seasonId AS Uint64;
-
-        SELECT sa.title AS season_title, sr.title AS series_title
-        FROM seasons AS sa
-        INNER JOIN series AS sr
-        ON sa.series_id = sr.series_id
-        WHERE sa.series_id = $seriesId AND sa.season_id = $seasonId;
-    )", path.c_str());
-
-    // Type of parameter values should be exactly the same as in DECLARE statements.
-    auto params = session.GetParamsBuilder()
-        .AddParam("$seriesId")
-            .Uint64(seriesId)
-            .Build()
-        .AddParam("$seasonId")
-            .Uint64(seasonId)
-            .Build()
-        .Build();
-
-    auto result = session.ExecuteDataQuery(
-        query,
-        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-        params).GetValueSync();
-
-    if (result.IsSuccess()) {
-        resultSet = result.GetResultSet(0);
-    }
-
-    return result;
-}
-
-//! Shows usage of prepared queries.
-static TStatus PreparedSelectTransaction(TSession session, const TString& path,
-    ui64 seriesId, ui64 seasonId, ui64 episodeId, TMaybe<TResultSet>& resultSet)
-{
-    // Once prepared, query data is stored in the session and identified by QueryId.
-    // Local query cache is used to keep track of queries, prepared in current session.
-    auto query = Sprintf(R"(
-        --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
-
-        DECLARE $seriesId AS Uint64;
-        DECLARE $seasonId AS Uint64;
-        DECLARE $episodeId AS Uint64;
-
-        SELECT *
-        FROM episodes
-        WHERE series_id = $seriesId AND season_id = $seasonId AND episode_id = $episodeId;
-    )", path.c_str());
-
-    // Prepare query or get result from query cache
-    auto prepareResult = session.PrepareDataQuery(query).GetValueSync();
-    if (!prepareResult.IsSuccess()) {
-        return prepareResult;
-    }
-
-    if (!prepareResult.IsQueryFromCache()) {
-        Cerr << "+Finished preparing query: PreparedSelectTransaction" << Endl;
-    }
-
-    auto dataQuery = prepareResult.GetQuery();
-
-    auto params = dataQuery.GetParamsBuilder()
-        .AddParam("$seriesId")
-            .Uint64(seriesId)
-            .Build()
-        .AddParam("$seasonId")
-            .Uint64(seasonId)
-            .Build()
-        .AddParam("$episodeId")
-            .Uint64(episodeId)
-            .Build()
-        .Build();
-
-    auto result = dataQuery.Execute(TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-        params).GetValueSync();
-
-    if (result.IsSuccess()) {
-        resultSet = result.GetResultSet(0);
-    }
-
-    return result;
-}
-
-//! Shows usage of transactions consisting of multiple data queries with client logic between them.
-static TStatus MultiStepTransaction(TSession session, const TString& path, ui64 seriesId, ui64 seasonId,
-    TMaybe<TResultSet>& resultSet)
-{
-    auto query1 = Sprintf(R"(
-        --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
-
-        DECLARE $seriesId AS Uint64;
-        DECLARE $seasonId AS Uint64;
-
-        SELECT first_aired AS from_date FROM seasons
-        WHERE series_id = $seriesId AND season_id = $seasonId;
-    )", path.c_str());
-
-    auto params1 = session.GetParamsBuilder()
-        .AddParam("$seriesId")
-            .Uint64(seriesId)
-            .Build()
-        .AddParam("$seasonId")
-            .Uint64(seasonId)
-            .Build()
-        .Build();
-
-    // Execute first query to get the required values to the client.
-    // Transaction control settings don't set CommitTx flag to keep transaction active
-    // after query execution.
-    auto result = session.ExecuteDataQuery(
-        query1,
-        TTxControl::BeginTx(TTxSettings::SerializableRW()),
-        params1).GetValueSync();
-
-    if (!result.IsSuccess()) {
         return result;
+    }));
+
+    TResultSetParser parser(*resultSet);
+    while (parser.TryNextRow()) {
+        std::cout << "> SelectSimple:" << std::endl << "Series"
+            << ", Id: " << OptionalToString(parser.ColumnParser("series_id").GetOptionalUint64())
+            << ", Title: " << OptionalToString(parser.ColumnParser("title").GetOptionalUtf8())
+            << ", Release date: " << parser.ColumnParser("release_date").GetOptionalDate()->FormatLocalTime("%Y-%m-%d")
+            << std::endl;
     }
+}
 
-    // Get active transaction id
-    auto tx = result.GetTransaction();
+void UpsertSimple(TQueryClient client) {
+    ThrowOnError(client.RetryQuerySync([](TSession session) {
+        auto query = R"(
+            UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
+                (2, 6, 1, "TBD");
+        )";
 
-    TResultSetParser parser(result.GetResultSet(0));
-    parser.TryNextRow();
-    auto date = parser.ColumnParser("from_date").GetOptionalUint64();
+        return session.ExecuteQuery(query,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+    }));
+}
 
-    // Perform some client logic on returned values
-    auto userFunc = [] (const TInstant fromDate) {
-        return fromDate + TDuration::Days(15);
-    };
+void SelectWithParams(TQueryClient client) {
+    std::optional<TResultSet> resultSet;
+    ThrowOnError(client.RetryQuerySync([&resultSet](TSession session) {
+        ui64 seriesId = 2;
+        ui64 seasonId = 3;
+        auto query = R"(
+            DECLARE $seriesId AS Uint64;
+            DECLARE $seasonId AS Uint64;
 
-    TInstant fromDate = TInstant::Days(*date);
-    TInstant toDate = userFunc(fromDate);
+            SELECT sa.title AS season_title, sr.title AS series_title
+            FROM seasons AS sa
+            INNER JOIN series AS sr
+            ON sa.series_id = sr.series_id
+            WHERE sa.series_id = $seriesId AND sa.season_id = $seasonId;
+        )";
 
-    // Construct next query based on the results of client logic
-    auto query2 = Sprintf(R"(
-        --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
+        auto params = TParamsBuilder()
+            .AddParam("$seriesId")
+                .Uint64(seriesId)
+                .Build()
+            .AddParam("$seasonId")
+                .Uint64(seasonId)
+                .Build()
+            .Build();
 
-        DECLARE $seriesId AS Uint64;
-        DECLARE $fromDate AS Uint64;
-        DECLARE $toDate AS Uint64;
-
-        SELECT season_id, episode_id, title, air_date FROM episodes
-        WHERE series_id = $seriesId AND air_date >= $fromDate AND air_date <= $toDate;
-    )", path.c_str());
-
-    auto params2 = session.GetParamsBuilder()
-        .AddParam("$seriesId")
-            .Uint64(seriesId)
-            .Build()
-        .AddParam("$fromDate")
-            .Uint64(fromDate.Days())
-            .Build()
-        .AddParam("$toDate")
-            .Uint64(toDate.Days())
-            .Build()
-        .Build();
-
-    // Execute second query.
-    // Transaction control settings continues active transaction (tx) and
-    // commits it at the end of second query execution.
-    result = session.ExecuteDataQuery(
-        query2,
-        TTxControl::Tx(*tx).CommitTx(),
-        params2).GetValueSync();
-
-    if (result.IsSuccess()) {
+        auto result = session.ExecuteQuery(
+            query,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+            params).GetValueSync();
+        
+        if (!result.IsSuccess()) {
+            return result;
+        }
         resultSet = result.GetResultSet(0);
-    }
-
-    return result;
-}
-
-// Show usage of explicit Begin/Commit transaction control calls.
-// In most cases it's better to use transaction control settings in ExecuteDataQuery calls instead
-// to avoid additional hops to YDB cluster and allow more efficient execution of queries.
-static TStatus ExplicitTclTransaction(TSession session, const TString& path, const TInstant& airDate) {
-    auto beginResult = session.BeginTransaction(TTxSettings::SerializableRW()).GetValueSync();
-    if (!beginResult.IsSuccess()) {
-        return beginResult;
-    }
-
-    // Get newly created transaction id
-    auto tx = beginResult.GetTransaction();
-
-    auto query = Sprintf(R"(
-        --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
-
-        DECLARE $airDate AS Date;
-
-        UPDATE episodes SET air_date = CAST($airDate AS Uint16) WHERE title = "TBD";
-    )", path.c_str());
-
-    auto params = session.GetParamsBuilder()
-        .AddParam("$airDate")
-            .Date(airDate)
-            .Build()
-        .Build();
-
-    // Execute data query.
-    // Transaction control settings continues active transaction (tx)
-    auto updateResult = session.ExecuteDataQuery(query,
-        TTxControl::Tx(tx),
-        params).GetValueSync();
-
-    if (!updateResult.IsSuccess()) {
-        return updateResult;
-    }
-
-    // Commit active transaction (tx)
-    return tx.Commit().GetValueSync();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-void SelectSimple(TTableClient client, const TString& path) {
-    TMaybe<TResultSet> resultSet;
-    ThrowOnError(client.RetryOperationSync([path, &resultSet](TSession session) {
-        return SelectSimpleTransaction(session, path, resultSet);
+        return result;
     }));
 
     TResultSetParser parser(*resultSet);
     if (parser.TryNextRow()) {
-        Cout << "> SelectSimple:" << Endl << "Series"
-            << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64()
-            << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
-            << ", Release date: " << parser.ColumnParser("release_date").GetOptionalString()
-            << Endl;
+        std::cout << "> SelectWithParams:" << std::endl << "Season"
+            << ", Title: " << OptionalToString(parser.ColumnParser("season_title").GetOptionalUtf8())
+            << ", Series title: " << OptionalToString(parser.ColumnParser("series_title").GetOptionalUtf8())
+            << std::endl;
     }
 }
 
-void UpsertSimple(TTableClient client, const TString& path) {
-    ThrowOnError(client.RetryOperationSync([path](TSession session) {
-        return UpsertSimpleTransaction(session, path);
-    }));
-}
-
-void SelectWithParams(TTableClient client, const TString& path) {
+void MultiStep(TQueryClient client) {
     TMaybe<TResultSet> resultSet;
-    ThrowOnError(client.RetryOperationSync([path, &resultSet](TSession session) {
-        return SelectWithParamsTransaction(session, path, 2, 3, resultSet);
-    }));
+    ThrowOnError(client.RetryQuerySync([&resultSet](TSession session) {
+        ui64 seriesId = 2;
+        ui64 seasonId = 5;
+        auto query1 = R"(
+            DECLARE $seriesId AS Uint64;
+            DECLARE $seasonId AS Uint64;
+
+            SELECT first_aired AS from_date FROM seasons
+            WHERE series_id = $seriesId AND season_id = $seasonId;
+        )";
+
+        auto params1 = TParamsBuilder()
+            .AddParam("$seriesId")
+                .Uint64(seriesId)
+                .Build()
+            .AddParam("$seasonId")
+                .Uint64(seasonId)
+                .Build()
+            .Build();
+
+        // Execute the first query to retrieve the required values for the client.
+        // Transaction control settings do not set the CommitTx flag, allowing the transaction to remain active
+        // after query execution.
+        auto result = session.ExecuteQuery(
+            query1,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()),
+            params1);
+
+        auto resultValue = result.GetValueSync();
+
+        if (!resultValue.IsSuccess()) {
+            return resultValue;
+        }
+
+        // Get the active transaction id
+        auto txId = resultValue.GetTransaction()->GetId();
+        
+        // Processing the request result
+        TResultSetParser parser(resultValue.GetResultSet(0));
+        parser.TryNextRow();
+        auto date = parser.ColumnParser("from_date").GetOptionalUint64();
+
+        // Perform some client logic on returned values
+        auto userFunc = [] (const TInstant fromDate) {
+            return fromDate + TDuration::Days(15);
+        };
+
+        TInstant fromDate = TInstant::Days(*date);
+        TInstant toDate = userFunc(fromDate);
+
+        // Construct next query based on the results of client logic
+        auto query2 = R"(
+            DECLARE $seriesId AS Uint64;
+            DECLARE $fromDate AS Uint64;
+            DECLARE $toDate AS Uint64;
+
+            SELECT season_id, episode_id, title, air_date FROM episodes
+            WHERE series_id = $seriesId AND air_date >= $fromDate AND air_date <= $toDate;
+        )";
+
+        auto params2 = TParamsBuilder()
+            .AddParam("$seriesId")
+                .Uint64(seriesId)
+                .Build()
+            .AddParam("$fromDate")
+                .Uint64(fromDate.Days())
+                .Build()
+            .AddParam("$toDate")
+                .Uint64(toDate.Days())
+                .Build()
+            .Build();
+
+        // Execute the second query.
+        // The transaction control settings continue the active transaction (tx)
+        // and commit it at the end of the second query execution.
+        auto result2 = session.ExecuteQuery(
+            query2,
+            TTxControl::Tx(txId).CommitTx(),
+            params2).GetValueSync();
+        
+        if (!result2.IsSuccess()) {
+            return result2;
+        }
+        resultSet = result2.GetResultSet(0);
+        return result2;
+    })); // The end of the retried lambda
 
     TResultSetParser parser(*resultSet);
-    if (parser.TryNextRow()) {
-        Cout << "> SelectWithParams:" << Endl << "Season"
-            << ", Title: " << parser.ColumnParser("season_title").GetOptionalUtf8()
-            << ", Series title: " << parser.ColumnParser("series_title").GetOptionalUtf8()
-            << Endl;
-    }
-}
-
-void PreparedSelect(TTableClient client, const TString& path, ui32 seriesId, ui32 seasonId, ui32 episodeId) {
-    TMaybe<TResultSet> resultSet;
-    ThrowOnError(client.RetryOperationSync([path, seriesId, seasonId, episodeId, &resultSet](TSession session) {
-        return PreparedSelectTransaction(session, path, seriesId, seasonId, episodeId, resultSet);
-    }));
-
-    TResultSetParser parser(*resultSet);
-    if (parser.TryNextRow()) {
-        auto airDate = TInstant::Days(*parser.ColumnParser("air_date").GetOptionalUint64());
-
-        Cout << "> PreparedSelect:" << Endl << "Episode " << parser.ColumnParser("episode_id").GetOptionalUint64()
-            << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
-            << ", Air date: " << airDate.FormatLocalTime("%a %b %d, %Y")
-            << Endl;
-    }
-}
-
-void MultiStep(TTableClient client, const TString& path) {
-    TMaybe<TResultSet> resultSet;
-    ThrowOnError(client.RetryOperationSync([path, &resultSet](TSession session) {
-        return MultiStepTransaction(session, path, 2, 5, resultSet);
-    }));
-
-    TResultSetParser parser(*resultSet);
-    Cout << "> MultiStep:" << Endl;
+    std::cout << "> MultiStep:" << std::endl;
     while (parser.TryNextRow()) {
         auto airDate = TInstant::Days(*parser.ColumnParser("air_date").GetOptionalUint64());
 
-        Cout << "Episode " << parser.ColumnParser("episode_id").GetOptionalUint64()
-            << ", Season: " << parser.ColumnParser("season_id").GetOptionalUint64()
-            << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
+        std::cout << "Episode " << OptionalToString(parser.ColumnParser("episode_id").GetOptionalUint64())
+            << ", Season: " << OptionalToString(parser.ColumnParser("season_id").GetOptionalUint64())
+            << ", Title: " << OptionalToString(parser.ColumnParser("title").GetOptionalUtf8())
             << ", Air date: " << airDate.FormatLocalTime("%a %b %d, %Y")
-            << Endl;
+            << std::endl;
     }
 }
 
-void ExplicitTcl(TTableClient client, const TString& path) {
-    ThrowOnError(client.RetryOperationSync([path](TSession session) {
-        return ExplicitTclTransaction(session, path, TInstant::Now());
+void ExplicitTcl(TQueryClient client) {
+    // Demonstrate the use of explicit Begin and Commit transaction control calls.
+    // In most cases, it's preferable to use transaction control settings within ExecuteDataQuery calls instead, 
+    // as this avoids additional hops to the YDB cluster and allows for more efficient query execution.
+    ThrowOnError(client.RetryQuerySync([](TQueryClient client) -> TStatus {
+        auto airDate = TInstant::Now();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        auto beginResult = session.BeginTransaction(TTxSettings::SerializableRW()).GetValueSync();
+        if (!beginResult.IsSuccess()) {
+            return beginResult;
+        }
+
+        // Get newly created transaction id
+        auto tx = beginResult.GetTransaction();
+
+        auto query = R"(
+            DECLARE $airDate AS Date;
+
+            UPDATE episodes SET air_date = CAST($airDate AS Uint16) WHERE title = "TBD";
+        )";
+
+        auto params = TParamsBuilder()
+            .AddParam("$airDate")
+                .Date(airDate)
+                .Build()
+            .Build();
+
+        // Execute query.
+        // Transaction control settings continues active transaction (tx)
+        auto updateResult = session.ExecuteQuery(query,
+            TTxControl::Tx(tx.GetId()),
+            params).GetValueSync();
+
+        if (!updateResult.IsSuccess()) {
+            return updateResult;
+        }
+        // Commit active transaction (tx)
+        return tx.Commit().GetValueSync();
     }));
 }
 
-void ScanQuerySelect(TTableClient client, const TString& path) {
-    auto query = Sprintf(R"(
-        --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
+void StreamQuerySelect(TQueryClient client) {
+    std::cout << "> StreamQuery:" << std::endl;
 
-        DECLARE $series AS List<UInt64>;
+    ThrowOnError(client.RetryQuerySync([](TQueryClient client) -> TStatus {
+        auto query = R"(
+            DECLARE $series AS List<UInt64>;
 
-        SELECT series_id, season_id, title, CAST(CAST(first_aired AS Date) AS String) AS first_aired
-        FROM seasons
-        WHERE series_id IN $series
-    )", path.c_str());
+            SELECT series_id, season_id, title, CAST(first_aired AS Date) AS first_aired
+            FROM seasons
+            WHERE series_id IN $series
+            ORDER BY season_id;
+        )";
 
-    auto parameters = TParamsBuilder()
-        .AddParam("$series")
-        .BeginList()
-            .AddListItem().Uint64(1)
-            .AddListItem().Uint64(10)
-        .EndList().Build()
-        .Build();
+        auto paramsBuilder = TParamsBuilder();
+        auto& listParams = paramsBuilder
+                                    .AddParam("$series")
+                                    .BeginList();
+        
+        for (auto x : {1, 10}) {
+            listParams.AddListItem().Uint64(x);
+        }
+                
+        auto parameters = listParams
+                                .EndList()
+                                .Build()
+                                .Build();
 
-    // Executes scan query
-    auto result = client.StreamExecuteScanQuery(query, parameters).GetValueSync();
+        // Executes stream query
+        auto resultStreamQuery = client.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).GetValueSync();
 
-    if (!result.IsSuccess()) {
-        Cerr << "ScanQuery execution failure: " << result.GetIssues().ToString() << Endl;
-        return;
-    }
-
-    bool eos = false;
-    Cout << "> ScanQuerySelect:" << Endl;
-    while (!eos) {
-        auto streamPart = result.ReadNext().ExtractValueSync();
-
-        if (!streamPart.IsSuccess()) {
-            eos = true;
-            if (!streamPart.EOS()) {
-                Cerr << "ScanQuery execution failure: " << streamPart.GetIssues().ToString() << Endl;
-            }
-            continue;
+        if (!resultStreamQuery.IsSuccess()) {
+            return resultStreamQuery;
         }
 
-        if (streamPart.HasResultSet()) {
-            auto rs = streamPart.ExtractResultSet();
-            auto columns = rs.GetColumnsMeta();
+        // Iterates over results
+        bool eos = false;
 
-            TResultSetParser parser(rs);
-            while (parser.TryNextRow()) {
-                Cout << "Season"
-                     << ", SeriesId: " << parser.ColumnParser("series_id").GetOptionalUint64()
-                     << ", SeasonId: " << parser.ColumnParser("season_id").GetOptionalUint64()
-                     << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
-                     << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalString()
-                     << Endl;
+        while (!eos) {
+            auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
+
+            if (!streamPart.IsSuccess()) {
+                eos = true;
+                if (!streamPart.EOS()) {
+                    return streamPart;
+                }
+                continue;
+            }
+
+            // It is possible to duplicate lines in the output stream due to an external retryer.
+            if (streamPart.HasResultSet()) {
+                auto rs = streamPart.ExtractResultSet();
+                TResultSetParser parser(rs);
+                while (parser.TryNextRow()) {
+                    std::cout << "Season"
+                            << ", SeriesId: " << OptionalToString(parser.ColumnParser("series_id").GetOptionalUint64())
+                            << ", SeasonId: " << OptionalToString(parser.ColumnParser("season_id").GetOptionalUint64())
+                            << ", Title: " << OptionalToString(parser.ColumnParser("title").GetOptionalUtf8())
+                            << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalDate()->FormatLocalTime("%Y-%m-%d")
+                            << std::endl;
+                }
             }
         }
-    }
+        return TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues());
+    }));
+
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool Run(const TDriver& driver, const TString& path) {
-    TTableClient client(driver);
+bool Run(const TDriver& driver) {
+    TQueryClient client(driver);
 
     try {
-        CreateTables(client, path);
+        CreateTables(client);
 
-        DescribeTable(client, path, "series");
+        FillTableData(client);
 
-        ThrowOnError(client.RetryOperationSync([path](TSession session) {
-            return FillTableDataTransaction(session, path);
-        }));
+        SelectSimple(client);
+        UpsertSimple(client);
 
-        SelectSimple(client, path);
-        UpsertSimple(client, path);
+        SelectWithParams(client);
 
-        SelectWithParams(client, path);
+        MultiStep(client);
 
-        PreparedSelect(client, path, 2, 3, 7);
-        PreparedSelect(client, path, 2, 3, 8);
+        ExplicitTcl(client);
 
-        MultiStep(client, path);
+        StreamQuerySelect(client);
 
-        ExplicitTcl(client, path);
-
-        PreparedSelect(client, path, 2, 6, 1);
-
-        ScanQuerySelect(client, path);
+        DropTables(client);
     }
     catch (const TYdbErrorException& e) {
-        Cerr << "Execution failed due to fatal error:" << Endl;
-        PrintStatus(e.Status);
+        std::cerr << "Execution failed due to fatal error: " << e.what() << std::endl;
         return false;
     }
 

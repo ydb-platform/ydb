@@ -3,8 +3,6 @@
 
 import logging
 import os
-import pytest
-import time
 
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
@@ -20,8 +18,7 @@ class TestConsumer(TestYdsBase):
         sql = R'''
             PRAGMA pq.Consumer="InvalidConsumerName";
             SELECT * FROM yds.`{input_topic}` LIMIT 1;
-            ''' \
-            .format(
+            '''.format(
             input_topic=self.input_topic,
         )
 

@@ -1,3 +1,5 @@
+#include "node_warden.h"
+#include "node_warden_events.h"
 #include "node_warden_impl.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
@@ -19,6 +21,8 @@ namespace NKikimr::NStorage {
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
         const ui32 pdiskID = pdisk.GetPDiskID();
         const ui64 pdiskCategory = pdisk.GetPDiskCategory();
+        const NPDisk::EDeviceType deviceType = TPDiskCategory(pdiskCategory).Type();
+
         const ui64 inMemoryForTestsBufferBytes = pdisk.GetInMemoryForTestsBufferBytes();
         Y_VERIFY_S(!inMemoryForTestsBufferBytes, "InMemory PDisk is deprecated, use SectorMap instead");
 
@@ -38,6 +42,11 @@ namespace NKikimr::NStorage {
         if (pdisk.HasExpectedSerial()) {
             pdiskConfig->ExpectedSerial = pdisk.GetExpectedSerial();
         }
+        pdiskConfig->MaxCommonLogChunks = deviceType == NPDisk::DEVICE_TYPE_ROT ? MaxCommonLogChunksHDD : MaxCommonLogChunksSSD;
+
+        if (pdisk.HasReadOnly()) {
+            pdiskConfig->ReadOnly = pdisk.GetReadOnly();
+        }
 
         // Path scheme: "SectorMap:unique_name[:3000]"
         // where '3000' is device size of in GiB.
@@ -47,13 +56,14 @@ namespace NKikimr::NStorage {
 
             if (splitted[0] == "SectorMap") {
                 Y_ABORT_UNLESS(tokenCount >= 2);
-                ui64 size = (ui64)100 << 30; // 100GB is default
+                ui32 defaultSizeGb = 100;
+                ui64 size = (ui64)defaultSizeGb << 30;
                 if (splitted.size() >= 3) {
                     ui64 minSize = (ui64)100 << 30;
                     if (pdiskConfig->FeatureFlags.GetEnableSmallDiskOptimization()) {
-                        minSize = (32ull << 20) * 256; // at least needed 256 chunks
+                        minSize = (32ull << 20) * 256; // we need at least 256 chunks
                     }
-                    size = Max(minSize, FromStringWithDefault<ui64>(splitted[2], size) << 30);
+                    size = Max(minSize, (ui64)FromStringWithDefault<ui32>(splitted[2], defaultSizeGb) << 30);
                 }
 
                 auto diskMode = NPDisk::NSectorMap::DM_NONE;
@@ -90,7 +100,7 @@ namespace NKikimr::NStorage {
                     google::protobuf::TextFormat::PrintToString(MockDevicesConfig, &data);
                     try {
                         TFile f(MockDevicesPath, CreateAlways | WrOnly);
-                        f.Write(data.Data(), data.Size());
+                        f.Write(data.data(), data.size());
                         f.Flush();
                     } catch (TFileError ex) {
                         STLOG(PRI_WARN, BS_NODE, NW89, "Can't write new MockDevicesConfig to file", (Path, MockDevicesPath));
@@ -116,22 +126,42 @@ namespace NKikimr::NStorage {
         pdiskConfig->HashedMainKey.resize(pdiskKey.Keys.size());
         for (ui32 i = 0; i < pdiskKey.Keys.size(); ++i) {
             THashCalculator hasher;
-            hasher.Hash(keyPrintSalt.Detach(), keyPrintSalt.Size());
+            hasher.Hash(keyPrintSalt.Detach(), keyPrintSalt.size());
             hasher.Hash(&pdiskKey.Keys[i], sizeof(pdiskKey.Keys[i]));
             pdiskConfig->HashedMainKey[i] = TStringBuilder() << Hex(hasher.GetHashResult(), HF_ADDX);
         }
 
-        pdiskConfig->Initialize();
-
         return pdiskConfig;
     }
 
-    void TNodeWarden::StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk) {
+    void TNodeWarden::StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary) {
+        const TString& path = pdisk.GetPath();
+        if (const auto it = PDiskByPath.find(path); it != PDiskByPath.end()) {
+            Y_ABORT_UNLESS(!temporary);
+            const auto jt = LocalPDisks.find(it->second.RunningPDiskId);
+            Y_ABORT_UNLESS(jt != LocalPDisks.end());
+            TPDiskRecord& record = jt->second;
+            if (record.Temporary) { // this is temporary PDisk spinning, have to wait for it to finish
+                PDisksWaitingToStart.insert(pdisk.GetPDiskID());
+                it->second.Pending = pdisk;
+            } else { // incorrect configuration: we are trying to start two different PDisks with the same path
+                STLOG(PRI_ERROR, BS_NODE, NW48, "starting two PDisks with the same path", (Path, path),
+                    (ExistingPDiskId, jt->first.PDiskId), (NewPDiskId, pdisk.GetPDiskID()));
+            }
+            return;
+        }
+
         const TPDiskKey key(pdisk.GetNodeID(), pdisk.GetPDiskID());
         auto [it, inserted] = LocalPDisks.try_emplace(key, pdisk);
         TPDiskRecord& record = it->second;
-        if (!inserted) {
+        if (inserted) {
+            const auto [_, inserted] = PDiskByPath.emplace(path, TPDiskByPathInfo{key, std::nullopt});
+            Y_DEBUG_ABORT_UNLESS(inserted);
+            record.Temporary = temporary;
+        } else {
             Y_ABORT_UNLESS(record.Record.GetPDiskGuid() == pdisk.GetPDiskGuid());
+            Y_ABORT_UNLESS(!record.Temporary);
+            Y_ABORT_UNLESS(!temporary);
             return;
         }
 
@@ -162,27 +192,45 @@ namespace NKikimr::NStorage {
 
         STLOG(PRI_DEBUG, BS_NODE, NW04, "StartLocalPDisk", (NodeId, key.NodeId), (PDiskId, key.PDiskId),
             (Path, TString(TStringBuilder() << '"' << pdisk.GetPath() << '"')),
-            (PDiskCategory, TPDiskCategory(record.Record.GetPDiskCategory())));
+            (PDiskCategory, TPDiskCategory(record.Record.GetPDiskCategory())),
+            (Temporary, temporary));
 
         auto pdiskConfig = CreatePDiskConfig(pdisk);
+        if (temporary) {
+            pdiskConfig->MetadataOnly = true;
+        }
 
         const ui32 pdiskID = pdisk.GetPDiskID();
-        const TString& path = pdisk.GetPath();
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
         const ui64 pdiskCategory = pdisk.GetPDiskCategory();
         Cfg->PDiskKey.Initialize();
         Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey, AppData()->SystemPoolId, LocalNodeId);
-        Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(pdiskID, path, pdiskGuid, pdiskCategory));
-        Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Storage"));
+        if (!temporary) {
+            Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(pdiskID, path, pdiskGuid, pdiskCategory));
+            Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Storage"));
+        }
     }
 
     void TNodeWarden::DestroyLocalPDisk(ui32 pdiskId) {
+        std::optional<NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk> pending;
+
         STLOG(PRI_INFO, BS_NODE, NW36, "DestroyLocalPDisk", (PDiskId, pdiskId));
+
         if (auto it = LocalPDisks.find({LocalNodeId, pdiskId}); it != LocalPDisks.end()) {
             const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateDelete(pdiskId));
+            const auto jt = PDiskByPath.find(it->second.Record.GetPath());
+            Y_ABORT_UNLESS(jt != PDiskByPath.end() && jt->second.RunningPDiskId == it->first);
+            pending = std::move(jt->second.Pending);
+            PDiskByPath.erase(jt);
+            auto& cookies = it->second.ShredCookies;
+            for (auto it = cookies.begin(); it != cookies.end(); ) {
+                const auto& [cookie, generation] = *it++;
+                ProcessShredStatus(cookie, generation, "pdisk has been restarted");
+            }
             LocalPDisks.erase(it);
+            PDiskRestartInFlight.erase(pdiskId);
 
             // mark vdisks still living over this PDisk as destroyed ones
             for (auto it = LocalVDisks.lower_bound({LocalNodeId, pdiskId, 0}); it != LocalVDisks.end() &&
@@ -190,9 +238,25 @@ namespace NKikimr::NStorage {
                 it->second.UnderlyingPDiskDestroyed = true;
             }
         }
+
+        if (pending) {
+            PDisksWaitingToStart.erase(pending->GetPDiskID());
+            StartLocalPDisk(*pending, false);
+
+            // start VDisks over this one waiting for their turn
+            const ui32 actualPDiskId = pending->GetPDiskID();
+            const TVSlotId from(LocalNodeId, actualPDiskId, 0);
+            const TVSlotId to(LocalNodeId, actualPDiskId, Max<ui32>());
+            for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
+                auto& [key, value] = *it;
+                Y_ABORT_UNLESS(!value.RuntimeData); // they can't be working
+                StartLocalVDiskActor(value);
+            }
+        }
     }
 
-    void TNodeWarden::SendPDiskReport(ui32 pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::EPDiskPhase phase) {
+    void TNodeWarden::SendPDiskReport(ui32 pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::EPDiskPhase phase,
+            std::variant<std::monostate, ui64, TString> shredState) {
         STLOG(PRI_DEBUG, BS_NODE, NW41, "SendPDiskReport", (PDiskId, pdiskId), (Phase, phase));
 
         auto report = std::make_unique<TEvBlobStorage::TEvControllerNodeReport>(LocalNodeId);
@@ -200,13 +264,33 @@ namespace NKikimr::NStorage {
         pReport->SetPDiskId(pdiskId);
         pReport->SetPhase(phase);
 
+        const TPDiskKey key(LocalNodeId, pdiskId);
+        if (const auto it = LocalPDisks.find(key); it != LocalPDisks.end() && it->second.Record.HasPDiskGuid()) {
+            pReport->SetPDiskGuid(it->second.Record.GetPDiskGuid());
+        }
+
+        std::visit(TOverloaded{
+            [](std::monostate&) {},
+            [pReport](ui64& generation) { pReport->SetShredGenerationFinished(generation); },
+            [pReport](TString& aborted) { pReport->SetShredAborted(aborted); }
+        }, shredState);
+
         SendToController(std::move(report));
     }
 
-    void TNodeWarden::AskBSCToRestartPDisk(ui32 pdiskId, ui64 requestCookie) {
+    void TNodeWarden::AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
 
-        NKikimrBlobStorage::TRestartPDisk* cmd = ev->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();
+        NKikimrBlobStorage::TConfigRequest* request = ev->Record.MutableRequest();
+
+        NKikimrBlobStorage::TRestartPDisk* cmd = request->AddCommand()->MutableRestartPDisk();
+
+        if (ignoreDegradedGroups) {
+            request->SetIgnoreGroupFailModelChecks(true);
+            request->SetIgnoreDegradedGroupsChecks(true);
+            request->SetIgnoreDisintegratedGroupsChecks(true);
+            request->SetIgnoreGroupSanityChecks(true);
+        }
 
         auto targetPDiskId = cmd->MutableTargetPDiskId();
         targetPDiskId->SetNodeId(LocalNodeId);
@@ -224,7 +308,24 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status) {
+        auto it = PDiskRestartInFlight.find(pdiskId);
+        if (it == PDiskRestartInFlight.end()) {
+            // There was no restart in progress.
+            return;
+        }
+
+        bool requiresAnotherRestart = it->second;
+
+        PDiskRestartInFlight.erase(it);
+
         const TPDiskKey pdiskKey(LocalNodeId, pdiskId);
+
+        if (requiresAnotherRestart) {
+            auto it = LocalPDisks.find(pdiskKey);
+            auto pdisk = it->second.Record;
+            DoRestartLocalPDisk(pdisk);
+            return;
+        }
 
         const TVSlotId from(pdiskKey.NodeId, pdiskKey.PDiskId, 0);
         const TVSlotId to(pdiskKey.NodeId, pdiskKey.PDiskId, Max<ui32>());
@@ -244,10 +345,9 @@ namespace NKikimr::NStorage {
                         key.PDiskId, key.VDiskSlotId));
                     it->second = round;
                 } else {
-                    StartLocalVDiskActor(value, TDuration::Zero());
+                    StartLocalVDiskActor(value);
                 }
             }
-            SendDiskMetrics(false);
 
             vdisks << "}";
             STLOG(PRI_NOTICE, BS_NODE, NW74, "RestartLocalPDisk has finished",
@@ -255,8 +355,8 @@ namespace NKikimr::NStorage {
         } else {
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
                 auto& [key, value] = *it;
-                if (!value.RuntimeData && !SlayInFlight.contains(key)) {
-                    StartLocalVDiskActor(value, TDuration::Zero());
+                if (!value.RuntimeData) {
+                    StartLocalVDiskActor(value);
                 }
             }
         }
@@ -267,16 +367,31 @@ namespace NKikimr::NStorage {
     void TNodeWarden::DoRestartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk) {
         ui32 pdiskId = pdisk.GetPDiskID();
 
-        const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
+        STLOG(PRI_NOTICE, BS_NODE, NW75, "DoRestartLocalPDisk", (PDiskId, pdiskId));
+
+        const auto [restartIt, inserted] = PDiskRestartInFlight.try_emplace(pdiskId, false);
+
+        if (!inserted) {
+            STLOG(PRI_NOTICE, BS_NODE, NW76, "Restart already in progress", (PDiskId, pdiskId));
+            // Restart is already in progress, but we will need to make a new restart, as the configuration changed.
+            restartIt->second = true;
+            return;
+        }
 
         auto it = LocalPDisks.find(TPDiskKey(LocalNodeId, pdiskId));
         if (it == LocalPDisks.end()) {
+            PDiskRestartInFlight.erase(pdiskId);
+
+            STLOG(PRI_NOTICE, BS_NODE, NW77, "Restart state carried from previous start, just starting", (PDiskId, pdiskId));
+
             // This can happen if warden didn't handle pdisk's restart before node's restart.
             // In this case, PDisk has EntityStatus::RESTART instead of EntityStatus::INITIAL.
-            StartLocalPDisk(pdisk);
+            StartLocalPDisk(pdisk, false);
             SendPDiskReport(pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::PD_RESTARTED);
             return;
         }
+
+        const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
 
         TIntrusivePtr<TPDiskConfig> pdiskConfig = CreatePDiskConfig(it->second.Record);
 
@@ -306,13 +421,29 @@ namespace NKikimr::NStorage {
                 continue;
             }
 
-            const NKikimrBlobStorage::EEntityStatus entityStatus = pdisk.HasEntityStatus()
+            NKikimrBlobStorage::EEntityStatus entityStatus = pdisk.HasEntityStatus()
                 ? pdisk.GetEntityStatus()
                 : NKikimrBlobStorage::INITIAL;
 
             const TPDiskKey key(pdisk);
 
+            auto localPdiskIt = LocalPDisks.find({pdisk.GetNodeID(), pdisk.GetPDiskID()});
+            if (localPdiskIt != LocalPDisks.end()) {
+                auto& record = localPdiskIt->second;
+
+                if (record.Record.GetReadOnly() != pdisk.GetReadOnly()) {
+                    // Changing read-only flag requires restart.
+                    entityStatus = NKikimrBlobStorage::RESTART;
+                }
+            }
+
             switch (entityStatus) {
+                case NKikimrBlobStorage::RESTART:
+                    if (localPdiskIt != LocalPDisks.end()) {
+                        localPdiskIt->second.Record = pdisk;
+                    }
+                    DoRestartLocalPDisk(pdisk);
+                    [[fallthrough]];
                 case NKikimrBlobStorage::INITIAL:
                 case NKikimrBlobStorage::CREATE: {
                     const auto [it, inserted] = pdiskMap.try_emplace(key, nullptr);
@@ -323,22 +454,8 @@ namespace NKikimr::NStorage {
                     it->second->ClearEntityStatus();
                     break;
                 }
-
                 case NKikimrBlobStorage::DESTROY:
-                    if (const auto it = pdiskMap.find(key); it != pdiskMap.end()) {
-                        pdiskMap.erase(it);
-                    }
-                    break;
-
-                case NKikimrBlobStorage::RESTART:
-                    if (auto it = LocalPDisks.find({pdisk.GetNodeID(), pdisk.GetPDiskID()}); it != LocalPDisks.end()) {
-                        it->second.Record = pdisk;
-                    }
-                    if (auto it = pdiskMap.find(key); it != pdiskMap.end()) {
-                        it->second->CopyFrom(pdisk);
-                        it->second->ClearEntityStatus();
-                    }
-                    DoRestartLocalPDisk(pdisk);
+                    pdiskMap.erase(key);
                     break;
             }
         }
@@ -354,16 +471,30 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::ApplyServiceSetPDisks() {
         THashSet<TPDiskKey> pdiskToDelete;
+        THashSet<TString> pathsToResetPending;
         for (const auto& [key, value] : LocalPDisks) {
-            pdiskToDelete.insert(key);
+            if (!value.Temporary) { // ignore temporary disks, they are destroyed automatically
+                pdiskToDelete.insert(key);
+            }
+        }
+        for (const auto& [path, record] : PDiskByPath) {
+            if (record.Pending) {
+                pathsToResetPending.insert(path);
+            }
         }
 
         auto processDisk = [&](const TServiceSetPDisk& pdisk) {
             const TPDiskKey key(pdisk);
             if (!LocalPDisks.contains(key)) {
-                StartLocalPDisk(pdisk);
+                StartLocalPDisk(pdisk, false);
             }
             pdiskToDelete.erase(key);
+            pathsToResetPending.erase(pdisk.GetPath());
+
+            if (pdisk.HasStop() && pdisk.GetStop()) {
+                const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
+                Send(actorId, new NPDisk::TEvYardControl(NPDisk::TEvYardControl::EAction::PDiskStop, nullptr));
+            }
         };
 
         for (const auto& pdisk : StaticServices.GetPDisks()) {
@@ -379,6 +510,139 @@ namespace NKikimr::NStorage {
 
         for (const TPDiskKey& key : pdiskToDelete) {
             DestroyLocalPDisk(key.PDiskId);
+        }
+        for (const TString& path : pathsToResetPending) {
+            if (const auto it = PDiskByPath.find(path); it != PDiskByPath.end()) {
+                PDisksWaitingToStart.erase(it->second.Pending->GetPDiskID());
+                it->second.Pending.reset();
+            }
+        }
+    }
+
+    class TNodeWarden::TPDiskMetadataInteractionActor : public TActorBootstrapped<TPDiskMetadataInteractionActor> {
+        const TPDiskKey PDiskKey;
+        std::unique_ptr<IEventHandle> OriginalEv;
+        std::unique_ptr<IEventBase> ConvertedEv;
+        TActorId ParentId;
+        const char* const EventType;
+
+    public:
+        TPDiskMetadataInteractionActor(TPDiskKey pdiskKey, TAutoPtr<IEventHandle> originalEv,
+                std::unique_ptr<IEventBase> convertedEv, const char *eventType)
+            : PDiskKey(pdiskKey)
+            , OriginalEv(originalEv.Release())
+            , ConvertedEv(std::move(convertedEv))
+            , EventType(eventType)
+        {}
+
+        void Bootstrap(TActorId parentId) {
+            ParentId = parentId;
+            Y_ABORT_UNLESS(PDiskKey.NodeId == SelfId().NodeId());
+            Send(MakeBlobStoragePDiskID(PDiskKey.NodeId, PDiskKey.PDiskId), ConvertedEv.release(),
+                IEventHandle::FlagTrackDelivery);
+            Become(&TThis::StateFunc, TDuration::Seconds(10), new TEvents::TEvWakeup);
+        }
+
+        void Handle(TEvents::TEvUndelivered::TPtr /*ev*/) {
+            // send this event again, this may be a race with PDisk destruction
+            TActivationContext::Send(OriginalEv.release());
+            PassAway();
+        }
+
+        void Handle(NPDisk::TEvReadMetadataResult::TPtr ev) {
+            auto *msg = ev->Get();
+            NKikimrBlobStorage::TPDiskMetadataRecord record;
+            TRope rope(std::move(msg->Metadata));
+            TRopeStream stream(rope.begin(), rope.size());
+            STLOG(PRI_DEBUG, BS_NODE, NW59, "TEvReadMetadataResult", (PDiskId, PDiskKey.PDiskId),
+                (Outcome, msg->Outcome), (PDiskGuid, msg->PDiskGuid), (Metadata.size, rope.size()));
+            if (msg->Outcome == NPDisk::EPDiskMetadataOutcome::OK && !record.ParseFromZeroCopyStream(&stream)) {
+                STLOG(PRI_CRIT, BS_NODE, NW44, "ParseFromString failed for TPDiskMetadataRecord",
+                    (PDiskId, PDiskKey.PDiskId));
+                msg->Outcome = NPDisk::EPDiskMetadataOutcome::ERROR;
+            }
+            Send(OriginalEv->Sender, new TEvNodeWardenReadMetadataResult(msg->PDiskGuid, msg->Outcome, std::move(record)),
+                0, OriginalEv->Cookie);
+            PassAway();
+        }
+
+        void Handle(NPDisk::TEvWriteMetadataResult::TPtr ev) {
+            auto *msg = ev->Get();
+            STLOG(PRI_DEBUG, BS_NODE, NW60, "TEvWriteMetadataResult", (PDiskId, PDiskKey.PDiskId),
+                (Outcome, msg->Outcome), (PDiskGuid, msg->PDiskGuid));
+            Send(OriginalEv->Sender, new TEvNodeWardenWriteMetadataResult(msg->PDiskGuid, msg->Outcome), 0,
+                OriginalEv->Cookie);
+            PassAway();
+        }
+
+        void PassAway() override {
+            Send(ParentId, new TEvPrivate::TEvDereferencePDisk(PDiskKey));
+            TActorBootstrapped::PassAway();
+        }
+
+        void HandleWakeup() {
+            Y_DEBUG_ABORT("Event# %s took too long to process", EventType);
+            STLOG(PRI_CRIT, BS_NODE, NW61, "TPDiskMetadataInteractionActor::Wakeup", (EventType, EventType));
+        }
+
+        STRICT_STFUNC(StateFunc,
+            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(NPDisk::TEvReadMetadataResult, Handle);
+            hFunc(NPDisk::TEvWriteMetadataResult, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+        )
+    };
+
+    void TNodeWarden::Handle(TEvNodeWardenReadMetadata::TPtr ev) {
+        const TString& path = ev->Get()->Path;
+        STLOG(PRI_DEBUG, BS_NODE, NW56, "TEvNodeWardenReadMetadata", (Path, path));
+        Register(new TPDiskMetadataInteractionActor(GetPDiskForMetadata(path), ev.Release(),
+            std::make_unique<NPDisk::TEvReadMetadata>(), "TEvNodeWardenReadMetadata"));
+    }
+
+    void TNodeWarden::Handle(TEvNodeWardenWriteMetadata::TPtr ev) {
+        auto *msg = ev->Get();
+        TString data;
+        const bool success = msg->Record.SerializeToString(&data);
+        Y_ABORT_UNLESS(success);
+        const TString& path = msg->Path;
+        STLOG(PRI_DEBUG, BS_NODE, NW57, "TEvNodeWardenWriteMetadata", (Path, path), (Metadata.size, data.size()));
+        Register(new TPDiskMetadataInteractionActor(GetPDiskForMetadata(path), ev.Release(),
+            std::make_unique<NPDisk::TEvWriteMetadata>(TRcBuf(std::move(data))), "TEvNodeWardenWriteMetadata"));
+    }
+
+    TPDiskKey TNodeWarden::GetPDiskForMetadata(const TString& path) {
+        TPDiskKey key(LocalNodeId, Max<ui32>());
+        if (const auto it = PDiskByPath.find(path); it != PDiskByPath.end()) {
+            key = it->second.RunningPDiskId;
+        } else {
+            while (LocalPDisks.contains(key)) {
+                --key.PDiskId;
+            }
+
+            NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk pdisk;
+            pdisk.SetPath(path);
+            pdisk.SetNodeID(key.NodeId);
+            pdisk.SetPDiskID(key.PDiskId);
+            StartLocalPDisk(pdisk, true);
+        }
+
+        const auto it = LocalPDisks.find(key);
+        Y_ABORT_UNLESS(it != LocalPDisks.end());
+        TPDiskRecord& pdisk = it->second;
+        ++pdisk.RefCount;
+
+        return key;
+    }
+
+    void TNodeWarden::Handle(TEvPrivate::TEvDereferencePDisk::TPtr ev) {
+        STLOG(PRI_DEBUG, BS_NODE, NW58, "TEvDereferencePDisk", (PDiskId, ev->Get()->PDiskKey.PDiskId));
+        const auto it = LocalPDisks.find(ev->Get()->PDiskKey);
+        Y_ABORT_UNLESS(it != LocalPDisks.end());
+        TPDiskRecord& pdisk = it->second;
+        --pdisk.RefCount;
+        if (!pdisk.RefCount && pdisk.Temporary) {
+            DestroyLocalPDisk(it->first.PDiskId);
         }
     }
 

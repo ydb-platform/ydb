@@ -2,7 +2,6 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -52,6 +51,7 @@ private:
         void Init(NMonitoring::TDynamicCounterPtr group) {
             Group = group;
 
+            CurrentActivationTimeByActivity.resize(GetActivityTypeCount());
             ElapsedMicrosecByActivityBuckets.resize(GetActivityTypeCount());
             ReceivedEventsByActivityBuckets.resize(GetActivityTypeCount());
             ActorsAliveByActivityBuckets.resize(GetActivityTypeCount());
@@ -77,6 +77,7 @@ private:
                     }
                 }
 
+                *CurrentActivationTimeByActivity[i] = 0;
                 *ElapsedMicrosecByActivityBuckets[i] = ::NHPTimer::GetSeconds(ticks)*1000000;
                 *ReceivedEventsByActivityBuckets[i] = events;
                 *ActorsAliveByActivityBuckets[i] = actors;
@@ -87,6 +88,29 @@ private:
                     *UsageByActivityBuckets[i][j] = stats.UsageByActivity[i][j];
                 }
             }
+
+            auto setActivationTime = [&](TActivationTime activation) {
+                if (!ActorsAliveByActivityBuckets[activation.LastActivity]) {
+                    InitCountersForActivity(activation.LastActivity);
+                }
+                *CurrentActivationTimeByActivity[activation.LastActivity] = activation.TimeUs;
+            };
+            if (stats.CurrentActivationTime.TimeUs) {
+                setActivationTime(stats.CurrentActivationTime);
+            }
+            std::vector<TActivationTime> activationTimes = stats.AggregatedCurrentActivationTime;
+            Sort(activationTimes.begin(), activationTimes.end(), [](auto &left, auto &right) {
+                return left.LastActivity < right.LastActivity ||
+                    left.LastActivity == right.LastActivity && left.TimeUs > right.TimeUs;
+            });
+            ui32 prevActivity = Max<ui32>();
+            for (auto &activationTime : activationTimes) {
+                if (activationTime.LastActivity == prevActivity) {
+                    continue;
+                }
+                setActivationTime(activationTime);
+                prevActivity = activationTime.LastActivity;
+            }
         }
 
     private:
@@ -95,6 +119,8 @@ private:
 
             auto bucketName = TString(GetActivityTypeName(activityType));
 
+            CurrentActivationTimeByActivity[activityType] =
+                Group->GetSubgroup("sensor", "CurrentActivationTimeUsByActivity")->GetNamedCounter("activity", bucketName, false);
             ElapsedMicrosecByActivityBuckets[activityType] =
                 Group->GetSubgroup("sensor", "ElapsedMicrosecByActivity")->GetNamedCounter("activity", bucketName, true);
             ReceivedEventsByActivityBuckets[activityType] =
@@ -114,6 +140,7 @@ private:
     private:
         NMonitoring::TDynamicCounterPtr Group;
 
+        TVector<NMonitoring::TDynamicCounters::TCounterPtr> CurrentActivationTimeByActivity;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ElapsedMicrosecByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ReceivedEventsByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ActorsAliveByActivityBuckets;
@@ -147,6 +174,7 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr MaxThreadCount;
         NMonitoring::TDynamicCounters::TCounterPtr CurrentThreadCountPercent;
         NMonitoring::TDynamicCounters::TCounterPtr PotentialMaxThreadCountPercent;
+        NMonitoring::TDynamicCounters::TCounterPtr PossibleMaxThreadCountPercent;
         NMonitoring::TDynamicCounters::TCounterPtr DefaultThreadCountPercent;
         NMonitoring::TDynamicCounters::TCounterPtr MaxThreadCountPercent;
         NMonitoring::TDynamicCounters::TCounterPtr IsNeedy;
@@ -161,10 +189,6 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByHoggishState;
         NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByExchange;
         NMonitoring::TDynamicCounters::TCounterPtr NotEnoughCpuExecutions;
-        NMonitoring::TDynamicCounters::TCounterPtr MaxConsumedCpu;
-        NMonitoring::TDynamicCounters::TCounterPtr MinConsumedCpu;
-        NMonitoring::TDynamicCounters::TCounterPtr MaxBookedCpu;
-        NMonitoring::TDynamicCounters::TCounterPtr MinBookedCpu;
         NMonitoring::TDynamicCounters::TCounterPtr SpinningTimeUs;
         NMonitoring::TDynamicCounters::TCounterPtr SpinThresholdUs;
 
@@ -186,6 +210,8 @@ private:
         THPTimer UsageTimer;
         TString Name;
         double Threads;
+        double LimitThreads;
+        double DefaultThreads;
 
         void Init(NMonitoring::TDynamicCounters* group, const TString& poolName, ui32 threads) {
             LastElapsedSeconds = 0;
@@ -193,6 +219,8 @@ private:
             UsageTimer.Reset();
             Name = poolName;
             Threads = threads;
+            LimitThreads = threads;
+            DefaultThreads = threads;
 
             PoolGroup = group->GetSubgroup("execpool", poolName);
 
@@ -219,6 +247,7 @@ private:
 
             CurrentThreadCountPercent = PoolGroup->GetCounter("CurrentThreadCountPercent", false);
             PotentialMaxThreadCountPercent  = PoolGroup->GetCounter("PotentialMaxThreadCountPercent", false);
+            PossibleMaxThreadCountPercent  = PoolGroup->GetCounter("PossibleMaxThreadCountPercent", false);
             DefaultThreadCountPercent  = PoolGroup->GetCounter("DefaultThreadCountPercent", false);
             MaxThreadCountPercent  = PoolGroup->GetCounter("MaxThreadCountPercent", false);
 
@@ -234,10 +263,6 @@ private:
             DecreasingThreadsByHoggishState = PoolGroup->GetCounter("DecreasingThreadsByHoggishState", true);
             DecreasingThreadsByExchange = PoolGroup->GetCounter("DecreasingThreadsByExchange", true);
             NotEnoughCpuExecutions = PoolGroup->GetCounter("NotEnoughCpuExecutions", true);
-            MaxConsumedCpu = PoolGroup->GetCounter("MaxConsumedCpuByPool", false);
-            MinConsumedCpu = PoolGroup->GetCounter("MinConsumedCpuByPool", false);
-            MaxBookedCpu = PoolGroup->GetCounter("MaxBookedCpuByPool", false);
-            MinBookedCpu = PoolGroup->GetCounter("MinBookedCpuByPool", false);
             SpinningTimeUs = PoolGroup->GetCounter("SpinningTimeUs", true);
             SpinThresholdUs = PoolGroup->GetCounter("SpinThresholdUs", false);
 
@@ -262,6 +287,7 @@ private:
 
         void Set(const TExecutorPoolStats& poolStats, const TExecutorThreadStats& stats) {
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
+            double elapsedSeconds = ::NHPTimer::GetSeconds(stats.ElapsedTicks);
             *SentEvents         = stats.SentEvents;
             *ReceivedEvents     = stats.ReceivedEvents;
             *PreemptedEvents     = stats.PreemptedEvents;
@@ -269,7 +295,7 @@ private:
             *DestroyedActors    = stats.PoolDestroyedActors;
             *EmptyMailboxActivation = stats.EmptyMailboxActivation;
             *CpuMicrosec        = stats.CpuUs;
-            *ElapsedMicrosec    = ::NHPTimer::GetSeconds(stats.ElapsedTicks)*1000000;
+            *ElapsedMicrosec    = elapsedSeconds*1000000;
             *ParkedMicrosec     = ::NHPTimer::GetSeconds(stats.ParkedTicks)*1000000;
             *ActorRegistrations = stats.PoolActorRegistrations;
             *ActorsAlive        = stats.PoolActorRegistrations - stats.PoolDestroyedActors;
@@ -283,9 +309,9 @@ private:
             *DefaultThreadCount = poolStats.DefaultThreadCount;
             *MaxThreadCount = poolStats.MaxThreadCount;
 
-
             *CurrentThreadCountPercent = poolStats.CurrentThreadCount * 100;
             *PotentialMaxThreadCountPercent = poolStats.PotentialMaxThreadCount * 100;
+            *PossibleMaxThreadCountPercent = poolStats.PotentialMaxThreadCount * 100;
             *DefaultThreadCountPercent = poolStats.DefaultThreadCount * 100;
             *MaxThreadCountPercent = poolStats.MaxThreadCount * 100;
 
@@ -334,53 +360,52 @@ private:
             double seconds = UsageTimer.PassedReset();
 
             // TODO[serxa]: It doesn't account for contention. Use 1 - parkedTicksDelta / seconds / numThreads KIKIMR-11916
-            const double currentThreadCount = poolStats.CurrentThreadCount;
-            const double elapsed = NHPTimer::GetSeconds(stats.ElapsedTicks);
-            const double currentUsage = currentThreadCount > 0 ? ((elapsed - LastElapsedSeconds) / seconds / currentThreadCount) : 0;
-            LastElapsedSeconds = elapsed;
+            Threads = poolStats.CurrentThreadCount;
+            LimitThreads = poolStats.PotentialMaxThreadCount;
+            const double currentUsage = LimitThreads > 0 ? ((elapsedSeconds - LastElapsedSeconds) / seconds / LimitThreads) : 0;
 
             // update usage factor according to smoothness
             const double smoothness = 0.5;
             Usage = currentUsage * smoothness + Usage * (1.0 - smoothness);
+            LastElapsedSeconds = elapsedSeconds;
 #else
             Y_UNUSED(stats);
 #endif
-            Threads = poolStats.CurrentThreadCount;
         }
     };
 
     struct TActorSystemCounters {
         TIntrusivePtr<NMonitoring::TDynamicCounters> Group;
 
-        NMonitoring::TDynamicCounters::TCounterPtr MaxConsumedCpu;
-        NMonitoring::TDynamicCounters::TCounterPtr MinConsumedCpu;
-        NMonitoring::TDynamicCounters::TCounterPtr MaxBookedCpu;
-        NMonitoring::TDynamicCounters::TCounterPtr MinBookedCpu;
+        NMonitoring::TDynamicCounters::TCounterPtr MaxUsedCpuPercent;
+        NMonitoring::TDynamicCounters::TCounterPtr MinUsedCpuPercent;
+        NMonitoring::TDynamicCounters::TCounterPtr MaxElapsedCpuPercent;
+        NMonitoring::TDynamicCounters::TCounterPtr MinElapsedCpuPercent;
 
-        NMonitoring::TDynamicCounters::TCounterPtr AvgAwakeningTimeUs;
-        NMonitoring::TDynamicCounters::TCounterPtr AvgWakingUpTimeUs;
+        NMonitoring::TDynamicCounters::TCounterPtr AvgAwakeningTimeNs;
+        NMonitoring::TDynamicCounters::TCounterPtr AvgWakingUpTimeNs;
 
 
         void Init(NMonitoring::TDynamicCounters* group) {
             Group = group;
 
-            MaxConsumedCpu = Group->GetCounter("MaxConsumedCpu", false);
-            MinConsumedCpu = Group->GetCounter("MinConsumedCpu", false);
-            MaxBookedCpu = Group->GetCounter("MaxBookedCpu", false);
-            MinBookedCpu = Group->GetCounter("MinBookedCpu", false);
-            AvgAwakeningTimeUs = Group->GetCounter("AvgAwakeningTimeUs", false);
-            AvgWakingUpTimeUs = Group->GetCounter("AvgWakingUpTimeUs", false);
+            MaxUsedCpuPercent = Group->GetCounter("MaxUsedCpuPercent", false);
+            MinUsedCpuPercent = Group->GetCounter("MinUsedCpuPercent", false);
+            MaxElapsedCpuPercent = Group->GetCounter("MaxElapsedCpuPercent", false);
+            MinElapsedCpuPercent = Group->GetCounter("MinElapsedCpuPercent", false);
+            AvgAwakeningTimeNs = Group->GetCounter("AvgAwakeningTimeNs", false);
+            AvgWakingUpTimeNs = Group->GetCounter("AvgWakingUpTimeNs", false);
         }
 
         void Set(const THarmonizerStats& harmonizerStats) {
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
-            *MaxConsumedCpu = harmonizerStats.MaxConsumedCpu;
-            *MinConsumedCpu = harmonizerStats.MinConsumedCpu;
-            *MaxBookedCpu = harmonizerStats.MaxBookedCpu;
-            *MinBookedCpu = harmonizerStats.MinBookedCpu;
+            *MaxUsedCpuPercent = harmonizerStats.MaxUsedCpu;
+            *MinUsedCpuPercent = harmonizerStats.MinUsedCpu;
+            *MaxElapsedCpuPercent = harmonizerStats.MaxElapsedCpu;
+            *MinElapsedCpuPercent = harmonizerStats.MinElapsedCpu;
 
-            *AvgAwakeningTimeUs = harmonizerStats.AvgAwakeningTimeUs;
-            *AvgWakingUpTimeUs = harmonizerStats.AvgWakingUpTimeUs;
+            *AvgAwakeningTimeNs = harmonizerStats.AvgAwakeningTimeUs * 1000;
+            *AvgWakingUpTimeNs = harmonizerStats.AvgWakingUpTimeUs * 1000;
 #else
             Y_UNUSED(harmonizerStats);
 #endif
@@ -414,7 +439,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            CFunc(TEvents::TSystem::Wakeup, Wakeup);
+            HFunc(TEvents::TEvWakeup, Wakeup);
         }
     }
 
@@ -423,20 +448,25 @@ private:
         Y_UNUSED(ctx);
     }
 
-    void Wakeup(const TActorContext &ctx) {
-        for (size_t poolId = 0; poolId < PoolCounters.size(); ++poolId) {
+    void Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
+        auto *event = ev->Get();
+        if (event->Tag == 0) {
+            StartOfCollecting = ctx.Now();
+        }
+        if (event->Tag < PoolCounters.size()) {
+            ui16 poolId = event->Tag;
             TVector<TExecutorThreadStats> stats;
             TVector<TExecutorThreadStats> sharedStats;
             TExecutorPoolStats poolStats;
-            ctx.ExecutorThread.ActorSystem->GetPoolStats(poolId, poolStats, stats, sharedStats);
+            ctx.ActorSystem()->GetPoolStats(poolId, poolStats, stats, sharedStats);
             SetAggregatedCounters(PoolCounters[poolId], poolStats, stats, sharedStats);
+            ctx.Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup(poolId + 1));
+            return;
         }
-        THarmonizerStats harmonizerStats = ctx.ExecutorThread.ActorSystem->GetHarmonizerStats();
+        THarmonizerStats harmonizerStats = ctx.ActorSystem()->GetHarmonizerStats();
         ActorSystemCounters.Set(harmonizerStats);
-
         OnWakeup(ctx);
-
-        ctx.Schedule(TDuration::Seconds(IntervalSec), new TEvents::TEvWakeup());
+        ctx.Schedule(TDuration::Seconds(IntervalSec) - (ctx.Now() - StartOfCollecting), new TEvents::TEvWakeup(0));
     }
 
     void SetAggregatedCounters(TExecutorPoolCounters& poolCounters, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& stats, TVector<TExecutorThreadStats>& sharedStats) {
@@ -455,6 +485,7 @@ private:
 
 protected:
     const ui32 IntervalSec;
+    TInstant StartOfCollecting;
     NMonitoring::TDynamicCounterPtr Counters;
 
     TVector<TExecutorPoolCounters> PoolCounters;

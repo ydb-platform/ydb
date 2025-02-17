@@ -44,7 +44,7 @@
                         "PlanNodeType": "Materialize",
                         "Plans": [
                             {
-                                "Node Type": "Aggregate-Limit",
+                                "Node Type": "Aggregate-Limit-Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -52,7 +52,17 @@
                                                 "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Aggregate"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     },
                                     {
                                         "Inputs": [
@@ -60,8 +70,8 @@
                                                 "ExternalPlanNodeId": 2
                                             }
                                         ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
                                     }
                                 ],
                                 "PlanNodeId": 3,
@@ -80,21 +90,24 @@
                                                                 "InternalOperatorId": 1
                                                             }
                                                         ],
-                                                        "Name": "Aggregate"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
                                                     },
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/clickbench/plans/column/hits",
                                                         "ReadColumns": [
                                                             "ResolutionWidth"
                                                         ],
                                                         "ReadRanges": [
-                                                            "EventTime (-\u221e, +\u221e)",
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
                                                             "UserID (-\u221e, +\u221e)",
+                                                            "EventTime (-\u221e, +\u221e)",
                                                             "WatchID (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "SsaProgram": {
                                                             "Command": [
                                                                 {
@@ -124,157 +137,10 @@
                         ],
                         "Subplan Name": "CTE precompute_0_0"
                     }
-                ]
-            },
-            "SimplifiedPlan": {
-                "Node Type": "Query",
-                "PlanNodeId": 0,
-                "PlanNodeType": "Query",
-                "Plans": [
-                    {
-                        "Node Type": "ResultSet_1",
-                        "PlanNodeId": 1,
-                        "PlanNodeType": "ResultSet",
-                        "Plans": [
-                            {
-                                "Node Type": "Aggregate",
-                                "Operators": [
-                                    {
-                                        "Name": "Aggregate"
-                                    }
-                                ],
-                                "PlanNodeId": 5,
-                                "Plans": [
-                                    {
-                                        "Node Type": "Limit",
-                                        "Operators": [
-                                            {
-                                                "Limit": "1",
-                                                "Name": "Limit"
-                                            }
-                                        ],
-                                        "PlanNodeId": 6,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "Aggregate",
-                                                "Operators": [
-                                                    {
-                                                        "Name": "Aggregate"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 8,
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "TableFullScan",
-                                                        "Operators": [
-                                                            {
-                                                                "Name": "TableFullScan",
-                                                                "ReadColumns": [
-                                                                    "ResolutionWidth"
-                                                                ],
-                                                                "ReadRanges": [
-                                                                    "EventTime (-\u221e, +\u221e)",
-                                                                    "CounterID (-\u221e, +\u221e)",
-                                                                    "EventDate (-\u221e, +\u221e)",
-                                                                    "UserID (-\u221e, +\u221e)",
-                                                                    "WatchID (-\u221e, +\u221e)"
-                                                                ],
-                                                                "SsaProgram": {
-                                                                    "Command": [
-                                                                        {
-                                                                            "Projection": {
-                                                                                "Columns": [
-                                                                                    {
-                                                                                        "Id": 21
-                                                                                    }
-                                                                                ]
-                                                                            }
-                                                                        }
-                                                                    ],
-                                                                    "Version": 5
-                                                                },
-                                                                "Table": "clickbench/plans/column/hits"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 9
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            },
-                            {
-                                "Node Type": "Aggregate",
-                                "Operators": [
-                                    {
-                                        "Name": "Aggregate"
-                                    }
-                                ],
-                                "PlanNodeId": 11,
-                                "Plans": [
-                                    {
-                                        "Node Type": "Limit",
-                                        "Operators": [
-                                            {
-                                                "Limit": "1",
-                                                "Name": "Limit"
-                                            }
-                                        ],
-                                        "PlanNodeId": 12,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "Aggregate",
-                                                "Operators": [
-                                                    {
-                                                        "Name": "Aggregate"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 14,
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "TableFullScan",
-                                                        "Operators": [
-                                                            {
-                                                                "Name": "TableFullScan",
-                                                                "ReadColumns": [
-                                                                    "ResolutionWidth"
-                                                                ],
-                                                                "ReadRanges": [
-                                                                    "EventTime (-\u221e, +\u221e)",
-                                                                    "CounterID (-\u221e, +\u221e)",
-                                                                    "EventDate (-\u221e, +\u221e)",
-                                                                    "UserID (-\u221e, +\u221e)",
-                                                                    "WatchID (-\u221e, +\u221e)"
-                                                                ],
-                                                                "SsaProgram": {
-                                                                    "Command": [
-                                                                        {
-                                                                            "Projection": {
-                                                                                "Columns": [
-                                                                                    {
-                                                                                        "Id": 21
-                                                                                    }
-                                                                                ]
-                                                                            }
-                                                                        }
-                                                                    ],
-                                                                    "Version": 5
-                                                                },
-                                                                "Table": "clickbench/plans/column/hits"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 15
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {
@@ -285,10 +151,10 @@
                                 "ResolutionWidth"
                             ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

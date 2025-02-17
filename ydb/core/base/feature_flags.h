@@ -1,13 +1,14 @@
 #pragma once
-
 #include "defs.h"
-
-#include <ydb/core/protos/feature_flags.pb.h>
+#include "runtime_feature_flags.h"
 
 namespace NKikimr {
 
-class TFeatureFlags: public NKikimrConfig::TFeatureFlags {
-    using TBase = NKikimrConfig::TFeatureFlags;
+/**
+ * Thin wrapper around TRuntimeFeatureFlags, for compatibility with existing code
+ */
+class TFeatureFlags : public TRuntimeFeatureFlags {
+    using TBase = TRuntimeFeatureFlags;
 
 public:
     using TBase::TBase;

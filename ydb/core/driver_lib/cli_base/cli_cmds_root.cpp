@@ -1,5 +1,6 @@
 #include "cli.h"
 #include "cli_cmds.h"
+#include <ydb/public/lib/ydb_cli/commands/ydb_service_discovery.h> // for NConsoleClient::TCommandWhoAmI
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
@@ -65,6 +66,8 @@ void TClientCommandRootKikimrBase::Parse(TConfig& config) {
     ParseProfile();
     GetProfileVariable("path", config.Path);
     TClientCommandRootBase::Parse(config);
+    ParseCredentials(config);
+    ParseAddress(config);
     NClient::TKikimr::DUMP_REQUESTS = DumpRequests;
 }
 
@@ -150,7 +153,7 @@ public:
         : TClientCommandRootKikimrBase("ydb")
     {
         AddCommand(std::make_unique<TClientCommandSchemaLite>());
-        AddCommand(std::make_unique<TClientCommandWhoAmI>());
+        AddCommand(std::make_unique<TCommandWhoAmI>());
         AddCommand(std::make_unique<TClientCommandDiscoveryLite>());
     }
 

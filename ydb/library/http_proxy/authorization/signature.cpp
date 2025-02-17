@@ -9,6 +9,8 @@
 #include <openssl/sha.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/map.h>
+#include <util/generic/vector.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <library/cpp/cgiparam/cgiparam.h>

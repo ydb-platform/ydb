@@ -76,6 +76,7 @@ public:
     NMetrics::TAverageValue<TResourceRawValues, 20> AveragedResourceTotalValues;
     double NodeTotalUsage = 0;
     NMetrics::TFastRiseAverageValue<double, 20> AveragedNodeTotalUsage;
+    NMetrics::TAverageValue<double, 20> AveragedNodeTotalCpuUsage;
     TResourceRawValues ResourceMaximumValues;
     TInstant StartTime;
     TNodeLocation Location;
@@ -90,6 +91,7 @@ public:
     NKikimrHive::TNodeStatistics Statistics;
     bool DeletionScheduled = false;
     TString Name;
+    ui64 DrainSeqNo = 0;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -132,7 +134,11 @@ public:
     ui32 GetTabletNeighboursCount(const TTabletInfo& tablet) const {
         auto it = TabletsOfObject.find(tablet.GetObjectId());
         if (it != TabletsOfObject.end()) {
-            return it->second.size();
+            auto count = it->second.size();
+            if (tablet.IsAliveOnLocal(Local)) {
+                --count;
+            }
+            return count;
         } else {
             return 0;
         }
@@ -227,7 +233,7 @@ public:
         }
     }
 
-    bool CanBeDeleted() const;
+    bool CanBeDeleted(TInstant now) const;
     void RegisterInDomains();
     void DeregisterInDomains();
     void Ping();
@@ -243,9 +249,9 @@ public:
     }
 
     double GetNodeUsageForTablet(const TTabletInfo& tablet) const;
-    double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::Dominant) const;
+    double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
     double GetNodeUsage(const TResourceNormalizedValues& normValues,
-                        EResourceToBalance resource = EResourceToBalance::Dominant) const;
+                        EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
 
     ui64 GetTabletsRunningByType(TTabletTypes::EType tabletType) const;
 

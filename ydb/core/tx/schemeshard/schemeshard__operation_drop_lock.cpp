@@ -55,14 +55,8 @@ private:
 }; // TPropose
 
 class TDropLock: public TSubOperation {
-    const bool ProposeToCoordinator;
-
     TTxState::ETxState NextState() const {
-        if (ProposeToCoordinator) {
-            return TTxState::Propose;
-        } else {
-            return TTxState::Done;
-        }
+        return TTxState::Propose;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
@@ -90,13 +84,11 @@ class TDropLock: public TSubOperation {
 public:
     explicit TDropLock(TOperationId id, const TTxTransaction& tx)
         : TSubOperation(id, tx)
-        , ProposeToCoordinator(AppData()->FeatureFlags.GetEnableChangefeedInitialScan())
     {
     }
 
     explicit TDropLock(TOperationId id, TTxState::ETxState state)
         : TSubOperation(id, state)
-        , ProposeToCoordinator(AppData()->FeatureFlags.GetEnableChangefeedInitialScan())
     {
     }
 
@@ -119,8 +111,11 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
                 .IsLikeDirectory();
+
+            if (checks && !parentPath.IsTableIndex()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -134,10 +129,12 @@ public:
             checks
                 .IsAtLocalSchemeShard()
                 .IsResolved()
-                .NotUnderDeleting()
-                .IsCommonSensePath();
+                .NotUnderDeleting();
 
             if (checks) {
+                if (!parentPath.IsTableIndex()) {
+                    checks.IsCommonSensePath();
+                }
                 if (dstPath.IsUnderOperation()) { // may be part of a consistent operation
                     checks.IsUnderTheSameOperation(OperationId.GetTxId());
                 } else {
@@ -191,7 +188,7 @@ public:
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropLock, pathId);
-        txState.State = ProposeToCoordinator ? TTxState::Propose : TTxState::Done;
+        txState.State = TTxState::Propose;
 
         dstPath.Base()->LastTxId = OperationId.GetTxId();
         dstPath.Base()->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;

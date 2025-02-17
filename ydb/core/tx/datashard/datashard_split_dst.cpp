@@ -38,7 +38,7 @@ public:
             TPathId tableId(Self->GetPathOwnerId(), createTable.GetId_Deprecated());
             if (createTable.HasPathId()) {
                 Y_ABORT_UNLESS(Self->GetPathOwnerId() == createTable.GetPathId().GetOwnerId() || Self->GetPathOwnerId() == INVALID_TABLET_ID);
-                tableId = PathIdFromPathId(createTable.GetPathId());
+                tableId = TPathId::FromProto(createTable.GetPathId());
             } else if (tableId.OwnerId == INVALID_TABLET_ID) {
                 // Legacy schemeshard before migrations, shouldn't be possible
                 tableId.OwnerId = Ev->Get()->Record.GetSchemeshardTabletId();
@@ -194,24 +194,18 @@ public:
         if (Self->GetSnapshotManager().GetMinWriteVersion() < minWriteVersion)
             Self->GetSnapshotManager().SetMinWriteVersion(db, minWriteVersion);
 
-        const bool mvcc = Self->IsMvccEnabled();
-        if (mvcc) {
-            TRowVersion completeEdge(record.GetMvccCompleteEdgeStep(), record.GetMvccCompleteEdgeTxId());
-            if (Self->GetSnapshotManager().GetCompleteEdge() < completeEdge)
-                Self->GetSnapshotManager().SetCompleteEdge(db, completeEdge);
-            TRowVersion incompleteEdge(record.GetMvccIncompleteEdgeStep(), record.GetMvccIncompleteEdgeTxId());
-            if (Self->GetSnapshotManager().GetIncompleteEdge() < incompleteEdge)
-                Self->GetSnapshotManager().SetIncompleteEdge(db, incompleteEdge);
-            TRowVersion immediateWriteEdge(record.GetMvccImmediateWriteEdgeStep(), record.GetMvccImmediateWriteEdgeTxId());
-            if (Self->GetSnapshotManager().GetImmediateWriteEdge() < immediateWriteEdge)
-                Self->GetSnapshotManager().SetImmediateWriteEdge(immediateWriteEdge, txc);
-            TRowVersion lowWatermark(record.GetMvccLowWatermarkStep(), record.GetMvccLowWatermarkTxId());
-            if (Self->GetSnapshotManager().GetLowWatermark() < lowWatermark)
-                Self->GetSnapshotManager().SetLowWatermark(db, lowWatermark);
-            bool performedUnprotectedReads = record.GetMvccPerformedUnprotectedReads();
-            if (!Self->GetSnapshotManager().GetPerformedUnprotectedReads() && performedUnprotectedReads)
-                Self->GetSnapshotManager().SetPerformedUnprotectedReads(true, txc);
-        }
+        TRowVersion completeEdge(record.GetMvccCompleteEdgeStep(), record.GetMvccCompleteEdgeTxId());
+        if (Self->GetSnapshotManager().GetCompleteEdge() < completeEdge)
+            Self->GetSnapshotManager().SetCompleteEdge(db, completeEdge);
+        TRowVersion incompleteEdge(record.GetMvccIncompleteEdgeStep(), record.GetMvccIncompleteEdgeTxId());
+        if (Self->GetSnapshotManager().GetIncompleteEdge() < incompleteEdge)
+            Self->GetSnapshotManager().SetIncompleteEdge(db, incompleteEdge);
+        TRowVersion immediateWriteEdge(record.GetMvccImmediateWriteEdgeStep(), record.GetMvccImmediateWriteEdgeTxId());
+        if (Self->GetSnapshotManager().GetImmediateWriteEdge() < immediateWriteEdge)
+            Self->GetSnapshotManager().SetImmediateWriteEdge(db, immediateWriteEdge);
+        TRowVersion lowWatermark(record.GetMvccLowWatermarkStep(), record.GetMvccLowWatermarkTxId());
+        if (Self->GetSnapshotManager().GetLowWatermark() < lowWatermark)
+            Self->GetSnapshotManager().SetLowWatermark(db, lowWatermark);
 
         // Would be true for the first snapshot we receive, e.g. during a merge
         const bool isFirstSnapshot = Self->ReceiveSnapshotsFrom.size() == Self->DstSplitDescription->SourceRangesSize();
@@ -255,8 +249,7 @@ public:
         }
 
         if (Self->ReceiveSnapshotsFrom.empty()) {
-            const auto minVersion = mvcc ? Self->GetSnapshotManager().GetLowWatermark()
-                                         : Self->GetSnapshotManager().GetMinWriteVersion();
+            const auto minVersion = Self->GetSnapshotManager().GetLowWatermark();
 
             // Mark versions not accessible via snapshots as deleted
             for (const auto& kv : Self->GetUserTables()) {
@@ -284,13 +277,15 @@ public:
                 kv.second.OptimizeSplitKeys(rdb);
             }
 
-            if (mvcc) {
-                Self->PromoteFollowerReadEdge(txc);
-            }
+            Self->PromoteFollowerReadEdge(txc);
 
             // Note: we persist Ready, but keep current state in memory until Complete
             Self->SetPersistState(TShardState::Ready, txc);
             Self->State = TShardState::SplitDstReceivingSnapshot;
+
+            // We could perform snapshot reads after becoming ready
+            // Make sure older versions restore mediator state in that case
+            Self->PersistUnprotectedReadsEnabled(db);
 
             // Schedule a new transaction that will move shard to the Ready state
             // and finish initialization. This new transaction is guaranteed to
@@ -340,18 +335,13 @@ public:
 
                 // Initialize snapshot expiration queue with current context time
                 Self->GetSnapshotManager().InitExpireQueue(ctx.Now());
-                if (Self->GetSnapshotManager().HasExpiringSnapshots()) {
-                    Self->PlanCleanup(ctx);
-                }
+                Self->PlanCleanup(ctx);
 
                 // Initialize change senders
                 Self->KillChangeSender(ctx);
                 Self->CreateChangeSender(ctx);
                 Self->MaybeActivateChangeSender(ctx);
                 Self->EmitHeartbeats();
-
-                // Switch mvcc state if needed
-                Self->CheckMvccStateChangeCanStart(ctx);
             }
         }
     };

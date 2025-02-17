@@ -72,7 +72,9 @@ def compare_versions(version1, version2):
 
 
 def go_package_name(unit):
-    name = unit.get('GO_PACKAGE_VALUE')
+    name = unit.get('_GO_PACKAGE_VALUE')
+    if not name and unit.enabled('GO_TEST_MODULE'):
+        name = unit.get('GO_PACKAGE_VALUE')
     if not name:
         name = unit.get('GO_TEST_IMPORT_PATH')
         if name:
@@ -160,8 +162,31 @@ def on_go_process_srcs(unit):
 
     is_test_module = unit.enabled('GO_TEST_MODULE')
 
+    unit_path = unit.path()
+
     # Add gofmt style checks
-    if unit.enabled('_GO_FMT_ADD_CHECK'):
+    add_fmt = True
+    if not unit.enabled('_GO_FMT_ADD_CHECK'):
+        allow_skip_fmt = unit.get('_GO_FMT_ALLOW_SKIP')
+        allow_skip_fmt_list = None
+        if allow_skip_fmt:
+            allow_skip_fmt_list = unit.get('_GO_FMT_ALLOW_SKIP').split(' ')
+
+        if allow_skip_fmt_list:
+            unit_rel_path = rootrel_arc_src(unit_path, unit)
+            if unit_rel_path in allow_skip_fmt_list:
+                add_fmt = False
+            else:
+                for item in allow_skip_fmt_list:
+                    if item:
+                        prefix = item if item[-1] == '/' else item + '/'
+                        if unit_rel_path.startswith(prefix):
+                            add_fmt = False
+                            break
+        if add_fmt:
+            ymake.report_configure_error('Disabling gofmt is prohibited, please contact devtools')
+
+    if add_fmt:
         resolved_go_files = []
         go_source_files = [] if is_test_module and unit.get(['GO_TEST_FOR_DIR']) else go_files
         for path in itertools.chain(go_source_files, go_test_files, go_xtest_files):
@@ -178,8 +203,6 @@ def on_go_process_srcs(unit):
                 basedirs[basedir].append(f)
             for basedir in basedirs:
                 unit.onadd_check(['gofmt'] + basedirs[basedir])
-
-    unit_path = unit.path()
 
     # Go coverage instrumentation (NOTE! go_files list is modified here)
     if is_test_module and unit.enabled('GO_TEST_COVER'):

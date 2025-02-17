@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       arm64.c
@@ -15,9 +17,6 @@
 //  Authors:    Lasse Collin
 //              Jia Tan
 //              Igor Pavlov
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -47,11 +46,11 @@ arm64_code(void *simple lzma_attribute((__unused__)),
 			// The full 26-bit immediate is converted.
 			// The range is +/-128 MiB.
 			//
-			// Using the full range is helps quite a lot with
+			// Using the full range helps quite a lot with
 			// big executables. Smaller range would reduce false
 			// positives in non-code sections of the input though
 			// so this is a compromise that slightly favors big
-			// files. With the full range only six bits of the 32
+			// files. With the full range, only six bits of the 32
 			// need to match to trigger a conversion.
 			const uint32_t src = instr;
 			instr = 0x94000000;

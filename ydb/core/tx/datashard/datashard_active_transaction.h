@@ -8,7 +8,7 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr {
 
@@ -54,6 +54,8 @@ struct TSchemaOperation {
         ETypeAlterCdcStream = 14,
         ETypeDropCdcStream = 15,
         ETypeMoveIndex = 16,
+        ETypeCreateIncrementalRestoreSrc = 17,
+        ETypeCreateIncrementalBackupSrc = 18,
 
         ETypeUnknown = Max<ui32>()
     };
@@ -109,6 +111,8 @@ struct TSchemaOperation {
     bool IsCreateCdcStream() const { return Type == ETypeCreateCdcStream; }
     bool IsAlterCdcStream() const { return Type == ETypeAlterCdcStream; }
     bool IsDropCdcStream() const { return Type == ETypeDropCdcStream; }
+    bool IsCreateIncrementalRestoreSrc() const { return Type == ETypeCreateIncrementalRestoreSrc; }
+    bool IsCreateIncrementalBackupSrc() const { return Type == ETypeCreateIncrementalBackupSrc; }
 
     bool IsReadOnly() const { return ReadOnly; }
 };
@@ -276,7 +280,7 @@ public:
     }
 
     void ReleaseTxData();
-    bool IsTxDataReleased() const { return IsReleased; }
+    bool GetIsReleased() const { return IsReleased; }
 
     bool IsTxInfoLoaded() const { return TxInfo().Loaded; }
 

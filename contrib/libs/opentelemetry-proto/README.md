@@ -43,8 +43,9 @@ components as indicated by the Maturity table below.
 | metrics/\*<br>collector/metrics/* | Stable | [Stable](docs/specification.md#json-protobuf-encoding) |
 | trace/\*<br>collector/trace/* | Stable | [Stable](docs/specification.md#json-protobuf-encoding) |
 | logs/\*<br>collector/logs/* | Stable | [Stable](docs/specification.md#json-protobuf-encoding) |
+| profiles/\*<br>collector/profiles/* | Development | [Development](docs/specification.md#json-protobuf-encoding) |
 
-(See [maturity-matrix.yaml](https://github.com/open-telemetry/community/blob/47813530864b9fe5a5146f466a58bd2bb94edc72/maturity-matrix.yaml#L57)
+(See [Versioning and Stability](https://github.com/open-telemetry/opentelemetry-specification/blob/a08d1f92f62acd4aafe4dfaa04ae7bf28600d49e/specification/versioning-and-stability.md)
 for definition of maturity levels).
 
 ## Stability Definition
@@ -52,16 +53,16 @@ for definition of maturity levels).
 Components marked `Stable` provide the following guarantees:
 
 - Field types, numbers and names will not change.
-- Service names and service package names will not change.
+- Service names and `service` package names will not change.
 - Service method names will not change. [from 1.0.0]
 - Service method parameter names will not change. [from 1.0.0]
 - Service method parameter types and return types will not change. [from 1.0.0]
 - Service method kind (unary vs streaming) will not change.
-- Names of messages and enums will not change. [from 1.0.0]
-- Numbers assigned to enum choices will not change.
-- Names of enum choices will not change. [from 1.0.0]
-- The location of messages and enums, i.e. whether they are declared at the top lexical
-  scope or nested inside another message will not change. [from 1.0.0]
+- Names of `message`s and `enum`s will not change. [from 1.0.0]
+- Numbers assigned to `enum` choices will not change.
+- Names of `enum` choices will not change. [from 1.0.0]
+- The location of `message`s and `enum`s, i.e. whether they are declared at the top lexical
+  scope or nested inside another `message` will not change. [from 1.0.0]
 - Package names and directory structure will not change. [from 1.0.0]
 - `optional` and `repeated` declarators of existing fields will not change. [from 1.0.0]
 - No existing symbol will be deleted.  [from 1.0.0]
@@ -71,25 +72,58 @@ with version number 1.0.0.
 
 The following additive changes are allowed:
 
-- Adding new fields to existing messages.
-- Adding new messages or enums.
-- Adding new choices to existing enums.
-- Adding new choices to existing oneof fields.
-- Adding new services.
-- Adding new methods to existing services.
+- Adding new fields to existing `message`s.
+- Adding new `message`s or `enum`s.
+- Adding new choices to existing `enum`s.
+- Adding new choices to existing `oneof` fields.
+- Adding new `service`s.
+- Adding new `method`s to existing `service`s.
 
 All the additive changes above must be accompanied by an explanation about how
 new and old senders and receivers that implement the version of the protocol
 before and after the change interoperate.
 
-No guarantees are provided whatsoever about the stability of the code that
-is generated from the .proto files by any particular code generator.
-
 ## Experiments
 
-In some cases we are trying to experiment with different features. In this case,
-we recommend using an "experimental" sub-directory instead of adding them to any
-protocol version. These protocols should not be used, except for
-development/testing purposes.
+### New Experimental Components  
 
-Another review must be conducted for experimental protocols to join the main project.
+Sometimes we need to experiment with new components, for example to add a
+completely new signal to OpenTelemetry. In this case, to define new experimental
+components we recommend placing new proto files in a "development" sub-directory.
+Such isolated experimental components are excluded from
+above [stability requirements](#stability-definition).
+
+We recommend using
+`Development`, `Alpha`, `Beta`, `Release Candidate`
+[levels](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/0232-maturity-of-otel.md#maturity-levels)
+to communicate different grades of readiness of new components.
+
+Experimental components may be removed completely at the end of the experiment,
+provided that they are not referenced from any `Stable` component.
+
+Experiments which succeed, require a review to be marked `Stable`. Once marked
+`Stable` they become subject to the [stability requirements](#stability-definition).
+
+### Experimental Additions to Stable Components
+
+New experimental fields or messages may be added in `Development` state to `Stable`
+components. The experimental fields and messages within `Stable components` are subject
+to the full [stability requirements](#stability-definition), and in addition, they must be
+clearly labeled as `Development` (or as any other non-`Stable` level) in the .proto file
+source code.
+
+If an experiment concludes and the previously added field or message is not needed
+anymore, the field/message must stay, but it may be declared "deprecated". During all
+phases of experimentation it must be clearly specified that the field or message may be
+deprecated. Typically, deprecated fields are left empty by the senders and the recipients
+that participate in experiments must expect during all experimental phases (including
+_after_ the experiment is concluded) that the experimental field or message has an
+empty value.
+
+Experiments which succeed, require a review before the field or the message is marked
+`Stable`.
+
+## Generated Code
+
+No guarantees are provided whatsoever about the stability of the code that
+is generated from the .proto files by any particular code generator.

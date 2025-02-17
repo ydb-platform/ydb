@@ -3,9 +3,7 @@ RECURSE(
     common
     comp_nodes
     expr_nodes
-    integration
     opt
-    proto
     runtime
     state
     tasks

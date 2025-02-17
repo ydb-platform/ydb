@@ -1,15 +1,23 @@
 #include "composite_compare.h"
 
+#include "private.h"
+
 #include <yt/yt/client/table_client/row_base.h>
+
 #include <yt/yt/core/yson/pull_parser.h>
 #include <yt/yt/core/yson/token_writer.h>
 
 #include <yt/yt/library/numeric/util.h>
 
 #include <library/cpp/yt/farmhash/farm_hash.h>
+
 #include <library/cpp/yt/logging/logger.h>
 
+#include <library/cpp/yt/misc/compare.h>
+
 #include <util/stream/mem.h>
+
+#include <cmath>
 
 namespace NYT::NTableClient {
 
@@ -17,7 +25,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto Logger = NLogging::TLogger{"YsonCompositeCompare"};
+static constexpr auto& Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -30,7 +38,7 @@ namespace {
 //   3. Tuple
 //   4. Variant
 //
-// When we compare composite or any values we assume that they are well-formed yson representations of same type supporting comparison.
+// When we compare composite or any values we assume that they are well-formed YSON representations of same type supporting comparison.
 // And we compare them in following manner:
 //   1. We scan two values simultaneously and look at their yson tokens and find first mismatching token.
 //   2. If one of the token is EndList (this only can happen if we parsing values of list type
@@ -68,46 +76,10 @@ static constexpr ECompareClass GetCompareClass(EYsonItemType type)
     return static_cast<ECompareClass>(0x3u & (compareClassMask >> (static_cast<ui32>(type) * 2)));
 }
 
-template <typename T>
-Y_FORCE_INLINE int ComparePrimitive(T lhs, T rhs)
-{
-    if (lhs == rhs) {
-        return 0;
-    } else if (lhs < rhs) {
-        return -1;
-    } else {
-        return 1;
-    }
-}
-
-template <>
-Y_FORCE_INLINE int ComparePrimitive<double>(double lhs, double rhs)
-{
-    if (lhs < rhs) {
-        return -1;
-    } else if (lhs > rhs) {
-        return 1;
-    } else if (std::isnan(lhs)) {
-        if (std::isnan(rhs)) {
-            return 0;
-        }
-        return 1;
-    } else if (std::isnan(rhs)) {
-        return -1;
-    } else {
-        return 0;
-    }
-}
-
 [[noreturn]] static void ThrowIncomparableYsonToken(EYsonItemType tokenType)
 {
     THROW_ERROR_EXCEPTION("Incomparable YSON token %Qlv",
         tokenType);
-}
-
-Y_FORCE_INLINE static int GetSign(int x)
-{
-    return static_cast<int>(0 < x) - static_cast<int>(0 > x);
 }
 
 Y_FORCE_INLINE static EValueType MapItemTypeToValueType(EYsonItemType itemType)
@@ -144,15 +116,15 @@ Y_FORCE_INLINE static int CompareYsonItems(const TYsonItem& lhs, const TYsonItem
             case EYsonItemType::EntityValue:
                 return 0;
             case EYsonItemType::Int64Value:
-                return ComparePrimitive(lhs.UncheckedAsInt64(), rhs.UncheckedAsInt64());
+                return TernaryCompare(lhs.UncheckedAsInt64(), rhs.UncheckedAsInt64());
             case EYsonItemType::Uint64Value:
-                return ComparePrimitive(lhs.UncheckedAsUint64(), rhs.UncheckedAsUint64());
+                return TernaryCompare(lhs.UncheckedAsUint64(), rhs.UncheckedAsUint64());
             case EYsonItemType::DoubleValue:
-                return ComparePrimitive(lhs.UncheckedAsDouble(), rhs.UncheckedAsDouble());
+                return NaNSafeTernaryCompare(lhs.UncheckedAsDouble(), rhs.UncheckedAsDouble());
             case EYsonItemType::BooleanValue:
-                return ComparePrimitive(lhs.UncheckedAsBoolean(), rhs.UncheckedAsBoolean());
+                return TernaryCompare(lhs.UncheckedAsBoolean(), rhs.UncheckedAsBoolean());
             case EYsonItemType::StringValue:
-                return GetSign(TString::compare(lhs.UncheckedAsString(), rhs.UncheckedAsString()));
+                return TernaryCompare(lhs.UncheckedAsString(), rhs.UncheckedAsString());
 
             case EYsonItemType::BeginMap:
             case EYsonItemType::EndMap:
@@ -174,9 +146,9 @@ Y_FORCE_INLINE static int CompareYsonItems(const TYsonItem& lhs, const TYsonItem
     }
 
     if (lhsClass == ECompareClass::BeginValue && rhsClass == ECompareClass::BeginValue) {
-        return static_cast<int>(MapItemTypeToValueType(lhs.GetType())) - static_cast<int>(MapItemTypeToValueType(rhs.GetType()));
+        return TernaryCompare(MapItemTypeToValueType(lhs.GetType()), MapItemTypeToValueType(rhs.GetType()));
     }
-    return ComparePrimitive(static_cast<ui32>(lhsClass), static_cast<ui32>(rhsClass));
+    return TernaryCompare(lhsClass, rhsClass);
 }
 
 // Returns the minimum binary size needed to represent a potentially truncated version of the this item.
@@ -212,7 +184,7 @@ i64 GetMinResultingSize(const TYsonItem& item, bool isInsideList)
 
 } // namespace
 
-int CompareCompositeValues(TYsonStringBuf lhs, TYsonStringBuf rhs)
+int CompareYsonValues(TYsonStringBuf lhs, TYsonStringBuf rhs)
 {
     YT_ASSERT(lhs.GetType() == EYsonType::Node);
     YT_ASSERT(rhs.GetType() == EYsonType::Node);
@@ -286,7 +258,7 @@ TFingerprint CompositeFarmHash(TYsonStringBuf value)
             break;
         case EYsonItemType::StringValue: {
             auto string = item.UncheckedAsString();
-            result = FarmFingerprint(FarmFingerprint(string.Data(), string.size()));
+            result = FarmFingerprint(FarmFingerprint(string.data(), string.size()));
             break;
         }
         case EYsonItemType::EndOfStream:
@@ -327,7 +299,7 @@ TFingerprint CompositeFarmHash(TYsonStringBuf value)
                 continue;
             case EYsonItemType::StringValue: {
                 auto string = item.UncheckedAsString();
-                result = FarmFingerprint(result, FarmFingerprint(string.Data(), string.size()));
+                result = FarmFingerprint(result, FarmFingerprint(string.data(), string.size()));
                 continue;
             }
             case EYsonItemType::EndOfStream:

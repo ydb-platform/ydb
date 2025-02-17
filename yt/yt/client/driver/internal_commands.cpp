@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/chunk_client/config.h>
 
+#include <yt/yt/client/tablet_client/table_mount_cache.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 
 namespace NYT::NDriver {
@@ -218,6 +220,20 @@ void TUnreferenceLeaseCommand::DoExecute(ICommandContextPtr context)
         .ThrowOnError();
 
     ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TForsakeChaosCoordinator::Register(TRegistrar registrar)
+{
+    registrar.Parameter("chaos_cell_id", &TThis::ChaosCellId_);
+    registrar.Parameter("coordinator_cell_id", &TThis::CoordinatorCellId_);
+}
+
+void TForsakeChaosCoordinator::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetInternalClientOrThrow()->ForsakeChaosCoordinator(ChaosCellId_, CoordinatorCellId_))
+        .ThrowOnError();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

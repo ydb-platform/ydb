@@ -1,12 +1,13 @@
 # Обзор управления кластером {{ ydb-short-name }} вручную
 
-В этом разделе описано развертывание, конфигурирование, обслуживание, мониторинг и диагностика многоузловых [кластеров {{ ydb-short-name }}](../../concepts/cluster/index.md).
+В этом разделе описано развертывание, конфигурирование, обслуживание, мониторинг и диагностика многоузловых [кластеров {{ ydb-short-name }}](../../concepts/topology.md).
 
 Основные материалы:
 
-- [{#T}](../../deploy/index.md)
+- [{#T}](initial-deployment.md)
 - [{#T}](../../maintenance/manual/index.md)
-- [{#T}](../../devops/manual/monitoring.md)
+- [{#T}](monitoring.md)
+- [{#T}](logging.md)
+- [{#T}](backup-and-recovery.md)
 - [{#T}](../../reference/embedded-ui/index.md)
 - [{#T}](system-views.md)
-- [{#T}](logging.md)

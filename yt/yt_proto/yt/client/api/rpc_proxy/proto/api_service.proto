@@ -6,13 +6,16 @@ option java_multiple_files = true;
 
 option go_package = "a.yandex-team.ru/yt/go/proto/client/api/rpc_proxy";
 
-import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/error.proto";
+import "yt_proto/yt/core/misc/proto/guid.proto";
+import "yt_proto/yt/core/misc/proto/hyperloglog.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
 import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
+import "yt_proto/yt/client/scheduler/proto/spec_patch.proto";
+import "yt_proto/yt/client/table_client/proto/versioned_io_options.proto";
 import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -195,6 +198,7 @@ enum EJobSortField
     JSF_DURATION = 6;
     JSF_PROGRESS = 7;
     JSF_ID = 8;
+    JSF_TASK_NAME = 9;
 }
 
 enum EJobSortDirection
@@ -368,7 +372,7 @@ message TReqStartTransaction
 {
     message TReplicateToMasterCellTags
     {
-        repeated int32 cell_tags = 1;
+        repeated uint32 cell_tags = 1;
     }
 
     required ETransactionType type = 1;
@@ -477,7 +481,7 @@ message TRspAbortTransaction
 
 message TReqLookupRows
 {
-    required string path = 1;
+    required bytes path = 1; // YPath
 
     optional uint64 timestamp = 3 [default = 0x3fffffffffffff01];
     optional uint64 retention_timestamp = 10 [default = 0];
@@ -495,6 +499,8 @@ message TReqLookupRows
 
     required TRowsetDescriptor rowset_descriptor = 200;
 
+    optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 12;
+
     reserved 5;
     reserved 6;
 }
@@ -502,6 +508,7 @@ message TReqLookupRows
 message TRspLookupRows
 {
     required TRowsetDescriptor rowset_descriptor = 200;
+    repeated int32 unavailable_key_indexes = 201;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -517,7 +524,7 @@ message TRetentionConfig
 
 message TReqVersionedLookupRows
 {
-    required string path = 1;
+    required bytes path = 1; // YPath
 
     optional uint64 timestamp = 3 [default = 0x3fffffffffffff01];
 
@@ -542,6 +549,7 @@ message TReqVersionedLookupRows
 message TRspVersionedLookupRows
 {
     required TRowsetDescriptor rowset_descriptor = 200;
+    repeated int32 unavailable_key_indexes = 201;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -550,7 +558,7 @@ message TReqMultiLookup
 {
     message TSubrequest
     {
-        required string path = 1;
+        required bytes path = 1; // YPath
 
         repeated string columns = 2;
         optional bool keep_missing_rows = 3 [default = true];
@@ -561,6 +569,8 @@ message TReqMultiLookup
         required TRowsetDescriptor rowset_descriptor = 6;
 
         required int32 attachment_count = 7;
+
+        optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 8;
     }
 
     repeated TSubrequest subrequests = 1;
@@ -577,8 +587,8 @@ message TRspMultiLookup
     message TSubresponse
     {
         required TRowsetDescriptor rowset_descriptor = 1;
-
         required int32 attachment_count = 2;
+        repeated int32 unavailable_key_indexes = 3;
     }
 
     repeated TSubresponse subresponses = 1;
@@ -601,6 +611,7 @@ message TQueryStatistics
     optional bool incomplete_input = 11;
     optional bool incomplete_output = 12;
     optional uint64 memory_usage = 15;
+    optional int64 total_grouped_row_count = 16;
 
     repeated TQueryStatistics inner_statistics = 14;
 }
@@ -622,7 +633,7 @@ message TReqSelectRows
     optional int32 max_subqueries = 10;
     optional bool allow_full_scan = 11;
     optional bool allow_join_without_index = 12;
-    optional string udf_registry_path = 13;
+    optional bytes udf_registry_path = 13; // YPath
     optional uint64 memory_limit_per_node = 14;
     optional string execution_pool = 15;
     optional EReplicaConsistency replica_consistency = 17;
@@ -632,8 +643,13 @@ message TReqSelectRows
     optional bool merge_versioned_rows = 21;
     optional int32 syntax_version = 22 [default = 1];
     optional int32 execution_backend = 23; // EExecutionBackend
+    optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 25;
+    optional bool use_lookup_cache = 26;
+    optional int64 min_row_count_per_subquery = 27;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
+
+    reserved 24;
 }
 
 message TRspSelectRows
@@ -644,19 +660,44 @@ message TRspSelectRows
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TReqAdvanceConsumer
+message TReqAdvanceQueueConsumer
 {
     optional NYT.NProto.TGuid transaction_id = 1;
-    optional string consumer_path = 2;
-    optional string queue_path = 3;
+    optional bytes consumer_path = 2; // RichYPath
+    optional bytes queue_path = 3; // RichYPath
     optional int32 partition_index = 4;
     optional int64 old_offset = 5;
     optional int64 new_offset = 6;
 }
 
-message TRspAdvanceConsumer
+message TRspAdvanceQueueConsumer
 {
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqPushQueueProducer
+{
+    optional NYT.NProto.TGuid transaction_id = 1;
+    optional bytes producer_path = 2; // RichYPath
+    optional bytes queue_path = 3; // RichYPath
+    optional string session_id = 4;
+    optional int64 epoch = 5;
+    optional bytes user_meta = 6; // YSON
+    optional int64 sequence_number = 7;
+
+    optional bool require_sync_replica = 8;
+
+    required TRowsetDescriptor rowset_descriptor = 200;
+}
+
+message TRspPushQueueProducer
+{
+    optional int64 last_sequence_number = 1;
+    optional int64 skipped_row_count = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 message TRowBatchReadOptions
 {
@@ -667,7 +708,7 @@ message TRowBatchReadOptions
 
 message TReqPullQueue
 {
-    optional string queue_path = 1;
+    optional bytes queue_path = 1; // RichYPath
     optional int64 offset = 2;
     optional int32 partition_index = 3;
     optional TRowBatchReadOptions row_batch_read_options = 4;
@@ -682,10 +723,10 @@ message TRspPullQueue
     optional int64 start_offset = 2;
 }
 
-message TReqPullConsumer
+message TReqPullQueueConsumer
 {
-    optional string consumer_path = 1;
-    optional string queue_path = 2;
+    optional bytes consumer_path = 1; // RichYPath
+    optional bytes queue_path = 2; // RichYPath
     optional int64 offset = 3;
     optional int32 partition_index = 4;
     optional TRowBatchReadOptions row_batch_read_options = 5;
@@ -693,7 +734,7 @@ message TReqPullConsumer
     optional EReplicaConsistency replica_consistency = 6;
 }
 
-message TRspPullConsumer
+message TRspPullQueueConsumer
 {
     optional TRowsetDescriptor rowset_descriptor = 1;
     optional int64 start_offset = 2;
@@ -703,8 +744,8 @@ message TRspPullConsumer
 
 message TReqRegisterQueueConsumer
 {
-    optional string queue_path = 1;
-    optional string consumer_path = 2;
+    optional bytes queue_path = 1; // RichYPath
+    optional bytes consumer_path = 2; // RichYPath
     optional bool vital = 3;
 
     // The most reasonable way to make a std::optional<std::vector<int>> field.
@@ -723,8 +764,8 @@ message TRspRegisterQueueConsumer
 
 message TReqUnregisterQueueConsumer
 {
-    optional string queue_path = 1;
-    optional string consumer_path = 2;
+    optional bytes queue_path = 1; // RichYPath
+    optional bytes consumer_path = 2; // RichYPath
 }
 
 message TRspUnregisterQueueConsumer
@@ -735,16 +776,16 @@ message TRspUnregisterQueueConsumer
 
 message TReqListQueueConsumerRegistrations
 {
-    optional string queue_path = 1;
-    optional string consumer_path = 2;
+    optional bytes queue_path = 1; // RichYPath
+    optional bytes consumer_path = 2; // RichYPath
 }
 
 message TRspListQueueConsumerRegistrations
 {
     message TQueueConsumerRegistration
     {
-        optional string queue_path = 1;
-        optional string consumer_path = 2;
+        optional bytes queue_path = 1; // RichYPath
+        optional bytes consumer_path = 2; // RichYPath
         optional bool vital = 3;
 
         // The most reasonable way to make a std::optional<std::vector<int>> field.
@@ -760,6 +801,35 @@ message TRspListQueueConsumerRegistrations
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqCreateQueueProducerSession
+{
+    optional bytes producer_path = 1; // RichYPath
+    optional bytes queue_path = 2; // RichYPath
+    optional string session_id = 3;
+    optional bytes user_meta = 4; // YSON
+}
+
+message TRspCreateQueueProducerSession
+{
+    optional int64 sequence_number = 1;
+    optional int64 epoch = 2;
+    optional bytes user_meta = 3; // YSON
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqRemoveQueueProducerSession
+{
+    optional bytes producer_path = 1; // RichYPath
+    optional bytes queue_path = 2; // RichYPath
+    optional string session_id = 3;
+}
+
+message TRspRemoveQueueProducerSession
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqExplainQuery
 {
     required string query = 1;
@@ -772,10 +842,11 @@ message TReqExplainQuery
     optional int32 max_subqueries = 7;
     optional bool allow_full_scan = 8;
     optional bool allow_join_without_index = 9;
-    optional string udf_registry_path = 10;
+    optional bytes udf_registry_path = 10; // YPath
     optional string execution_pool = 11;
     optional bool new_range_inference = 12;
-    optional int32 syntax_version = 13;
+    optional int32 syntax_version = 13 [default = 1];
+    optional int64 min_row_count_per_subquery = 14;
 }
 
 message TRspExplainQuery
@@ -793,7 +864,7 @@ message TReplicationRowIndex
 
 message TReqPullRows
 {
-    required string path = 1;
+    required bytes path = 1; // YPath
 
     required NYT.NProto.TGuid upstream_replica_id = 2;
     required bool order_rows_by_timestamp = 3;
@@ -817,7 +888,7 @@ message TRspPullRows
 
 message TReqGetInSyncReplicas
 {
-    required string path = 1;
+    required bytes path = 1; // YPath
 
     optional uint64 timestamp = 2 [default = 0];
 
@@ -835,7 +906,7 @@ message TRspGetInSyncReplicas
 
 message TReqGetTabletInfos
 {
-    required string path = 1;
+    required bytes path = 1; // YPath
     repeated int32 tablet_indexes = 2;
     optional bool request_errors = 3 [default = false];
 }
@@ -872,7 +943,7 @@ message TRspGetTabletInfos
 
 message TReqGetTabletErrors
 {
-    required string path = 1;
+    required bytes path = 1; // YPath
     optional int64 limit = 2;
 }
 
@@ -910,7 +981,7 @@ message TReqModifyRows
     optional int64 sequence_number_source_id = 9;
 
     required NYT.NProto.TGuid transaction_id = 1;
-    required string path = 2;
+    required bytes path = 2; // YPath
     repeated ERowModificationType row_modification_types = 3;
     // COMPAT(lukyan): Remove after RPC protocol version update
     repeated uint32 row_legacy_read_locks = 7;
@@ -1064,6 +1135,26 @@ message TRspResumeChaosCells
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqSuspendTabletCells
+{
+    repeated NYT.NProto.TGuid cell_ids = 1;
+}
+
+message TRspSuspendTabletCells
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqResumeTabletCells
+{
+    repeated NYT.NProto.TGuid cell_ids = 1;
+}
+
+message TRspResumeTabletCells
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqAddMaintenance
 {
     required EMaintenanceComponent component = 1;
@@ -1151,7 +1242,7 @@ message TPrerequisiteOptions
 
     message TRevisionPrerequisite
     {
-        required string path = 2; // YPath
+        required bytes path = 2; // YPath
         required uint64 revision = 3;
         reserved 1; // former transaction_id
     }
@@ -1222,7 +1313,7 @@ message TRspGenerateTimestamps
 
 message TReqExistsNode
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -1239,7 +1330,7 @@ message TRspExistsNode
 
 message TReqGetNode
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     // COMPAT(max42): see comment around TLegacyAttributeKeys.
     optional TLegacyAttributeKeys legacy_attributes = 2;
@@ -1267,7 +1358,7 @@ message TRspGetNode
 
 message TReqListNode
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     // COMPAT(max42): see comment around TLegacyAttributeKeys.
     optional TLegacyAttributeKeys legacy_attributes = 2;
@@ -1319,6 +1410,7 @@ message TColumnSchema
 
     optional string lock = 4;
     optional string expression = 5;
+    optional bool materialized = 13;
     optional string aggregate = 6;
     optional int32 sort_order = 7;
     optional string group = 8;
@@ -1353,7 +1445,7 @@ message TReplicaInfo
 {
     required NYT.NProto.TGuid replica_id = 1;
     required string cluster_name = 2;
-    required string replica_path = 3;
+    required bytes replica_path = 3; // YPath
     required int32 mode = 4; // ETableReplicaMode
 }
 
@@ -1361,11 +1453,14 @@ message TIndexInfo
 {
     required NYT.NProto.TGuid index_table_id = 1;
     required int32 index_kind = 2; // NTableClient::ESecondaryIndexKind
+    optional string predicate = 3;
+    optional string unfolded_column = 4;
+    optional int32 index_correspondence = 6; // NTableClient::ESecondaryIndexState
 }
 
 message TReqGetTableMountInfo
 {
-    required string path = 1;
+    required bytes path = 1; // RichYPath
 }
 
 message TRspGetTableMountInfo
@@ -1376,15 +1471,16 @@ message TRspGetTableMountInfo
     required bool dynamic = 4;
     required NYT.NProto.TGuid upstream_replica_id = 5;
     repeated TReplicaInfo replicas = 6;
-    optional string physical_path = 7;
+    optional bytes physical_path = 7; // YPath
     repeated TIndexInfo indices = 8;
+    optional int32 tablet_count = 9;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 message TReqGetTablePivotKeys
 {
-    required string path = 1;
+    required bytes path = 1; // YPath
     optional bool represent_key_as_list = 2;
 }
 
@@ -1397,8 +1493,8 @@ message TRspGetTablePivotKeys
 
 message TTableBackupManifest
 {
-    required string source_path = 1; // YPath
-    required string destination_path = 2; // YPath
+    required bytes source_path = 1; // YPath
+    required bytes destination_path = 2; // YPath
     required int32 ordered_mode = 3;
 }
 
@@ -1448,7 +1544,7 @@ message TRspRestoreTableBackup
 
 message TReqCreateNode
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
     required int32 type = 2; // NObjectClient::EObjectType
 
     optional NYT.NYTree.NProto.TAttributeDictionary attributes = 3;
@@ -1472,7 +1568,7 @@ message TRspCreateNode
 
 message TReqRemoveNode
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional bool recursive = 2 [default = true];
     optional bool force = 3 [default = false];
@@ -1490,7 +1586,7 @@ message TRspRemoveNode
 
 message TReqSetNode
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
     required bytes value = 2; // YSON
     optional bool recursive = 3;
     optional bool force = 4;
@@ -1509,7 +1605,7 @@ message TRspSetNode
 
 message TReqMultisetAttributesNode
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     message TSubrequest
     {
@@ -1533,7 +1629,7 @@ message TRspMultisetAttributesNode
 
 message TReqLockNode
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
     required int32 mode = 2; // NCypressClient::ELockMode
 
     optional bool waitable = 3 [default = false];
@@ -1556,7 +1652,7 @@ message TRspLockNode
 
 message TReqUnlockNode
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -1571,8 +1667,8 @@ message TRspUnlockNode
 
 message TReqCopyNode
 {
-    required string src_path = 1; // YPath
-    required string dst_path = 2; // YPath
+    required bytes src_path = 1; // YPath
+    required bytes dst_path = 2; // YPath
 
     optional bool recursive = 3 [default = false];
     optional bool force = 4 [default = false];
@@ -1587,6 +1683,7 @@ message TReqCopyNode
     optional bool lock_existing = 13 [default = false];
     optional bool pessimistic_quota_check = 9 [default = true];
     optional bool enable_cross_cell_copying = 15 [default = true];
+    optional bool allow_secondary_index_abandonment = 16 [default = false];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -1602,8 +1699,8 @@ message TRspCopyNode
 
 message TReqMoveNode
 {
-    required string src_path = 1; // YPath
-    required string dst_path = 2; // YPath
+    required bytes src_path = 1; // YPath
+    required bytes dst_path = 2; // YPath
 
     optional bool recursive = 3 [default = false];
     optional bool force = 4 [default = false];
@@ -1613,8 +1710,10 @@ message TReqMoveNode
     optional bool preserve_expiration_time = 6 [default = false];
     optional bool preserve_expiration_timeout = 12 [default = false];
     optional bool preserve_owner = 11 [default = false];
+    optional bool preserve_acl = 14 [default = false];
     optional bool pessimistic_quota_check = 7 [default = true];
     optional bool enable_cross_cell_copying = 13 [default = true];
+    optional bool allow_secondary_index_abandonment = 15 [default = false];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -1630,8 +1729,8 @@ message TRspMoveNode
 
 message TReqLinkNode
 {
-    required string src_path = 1; // YPath
-    required string dst_path = 2; // YPath
+    required bytes src_path = 1; // YPath
+    required bytes dst_path = 2; // YPath
 
     optional bool recursive = 3 [default = false];
     optional bool force = 4 [default = false];
@@ -1652,8 +1751,8 @@ message TRspLinkNode
 
 message TReqConcatenateNodes
 {
-    repeated string src_paths = 1; // YPath
-    required string dst_path = 2; // YPath
+    repeated bytes src_paths = 1; // YPath
+    required bytes dst_path = 2; // YPath
 
     message TFetcher
     {
@@ -1675,7 +1774,7 @@ message TRspConcatenateNodes
 
 message TReqExternalizeNode
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
     required int32 cell_tag = 2;
 
     optional TTransactionalOptions transactional_options = 100;
@@ -1689,7 +1788,7 @@ message TRspExternalizeNode
 
 message TReqInternalizeNode
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional TTransactionalOptions transactional_options = 100;
 }
@@ -1744,7 +1843,7 @@ message TRspDetachTransaction
 
 message TReqMountTable
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional NYT.NProto.TGuid cell_id = 2;
     optional bool freeze = 3 [default = false];
@@ -1763,7 +1862,7 @@ message TRspMountTable
 
 message TReqUnmountTable
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional bool force = 2 [default = false];
 
@@ -1779,7 +1878,7 @@ message TRspUnmountTable
 
 message TReqRemountTable
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional TMutatingOptions mutating_options = 103;
     optional TTabletRangeOptions tablet_range_options = 104;
@@ -1793,7 +1892,7 @@ message TRspRemountTable
 
 message TReqFreezeTable
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional TMutatingOptions mutating_options = 103;
     optional TTabletRangeOptions tablet_range_options = 104;
@@ -1807,7 +1906,7 @@ message TRspFreezeTable
 
 message TReqUnfreezeTable
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional TMutatingOptions mutating_options = 103;
     optional TTabletRangeOptions tablet_range_options = 104;
@@ -1821,7 +1920,7 @@ message TRspUnfreezeTable
 
 message TReqReshardTable
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional int32 tablet_count = 3;
 
@@ -1844,7 +1943,7 @@ message TRspReshardTable
 
 message TReqReshardTableAutomatic
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
     required bool keep_actions = 2 [default = false];
 
     optional TMutatingOptions mutating_options = 103;
@@ -1860,7 +1959,7 @@ message TRspReshardTableAutomatic
 
 message TReqTrimTable
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
     required int32 tablet_index = 2;
     required uint64 trimmed_row_count = 3;
 
@@ -1875,7 +1974,7 @@ message TRspTrimTable
 
 message TReqAlterTable
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional bytes schema = 2; // YSON
     optional bool dynamic = 3;
@@ -1904,6 +2003,7 @@ message TReqAlterTableReplica
     optional bool preserve_timestamps = 4;
     optional EAtomicity atomicity = 5;
     optional bool enable_replicated_table_tracker = 6;
+    optional bytes replica_path = 7; // YPath
 
     optional TMutatingOptions mutating_options = 100;
 }
@@ -1921,6 +2021,7 @@ message TReqAlterReplicationCard
     optional bytes replicated_table_options = 2; // YSON
     optional bool enable_replicated_table_tracker = 3;
     optional NYT.NProto.TGuid replication_card_collocation_id = 4;
+    optional bytes collocation_options = 5; // NTabletClient::TReplicationCollocationOptions
 
     optional TMutatingOptions mutating_options = 100;
 }
@@ -1944,7 +2045,7 @@ message TFetcherConfig
 
 message TReqGetColumnarStatistics
 {
-    repeated string paths = 1; // RichYPath
+    repeated bytes paths = 1; // RichYPath
     optional TFetchChunkSpecConfig fetch_chunk_spec_config = 2;
     optional TFetcherConfig fetcher_config = 3;
     optional EColumnarStatisticsFetcherMode fetcher_mode = 4;
@@ -1977,6 +2078,9 @@ message TColumnarStatistics
     optional int64 chunk_row_count = 12;
     // Total number of rows in legacy chunks whose meta misses columnar statistics.
     optional int64 legacy_chunk_row_count = 13;
+
+    // Per-column hyperloglog digest to approximate number of unique values
+    repeated NYT.NProto.THyperLogLogDigest column_hyperloglog_digests = 14;
 }
 
 message TRspGetColumnarStatistics
@@ -2036,7 +2140,7 @@ message TReqPartitionTables
         optional int32 max_slices_per_fetch = 1;
     }
 
-    repeated string paths = 1; // RichYPath
+    repeated bytes paths = 1; // RichYPath
     optional TFetchChunkSpecConfig fetch_chunk_spec_config = 2;
     optional TFetcherConfig fetcher_config = 3;
     optional TChunkSliceFetcherConfig chunk_slice_fetcher_config = 4;
@@ -2051,7 +2155,7 @@ message TReqPartitionTables
 
 message TMultiTablePartition
 {
-    repeated string table_ranges = 1; // RichYPath
+    repeated bytes table_ranges = 1; // RichYPath
 
     message TStatistics
     {
@@ -2091,7 +2195,7 @@ message TRspBalanceTabletCells
 message TReqGetFileFromCache
 {
     required string md5 = 1;
-    required string cache_path = 2; // YPath
+    required bytes cache_path = 2; // YPath
 
     optional TTransactionalOptions transactional_options = 100;
     optional TMasterReadOptions master_read_options = 102;
@@ -2106,9 +2210,9 @@ message TRspGetFileFromCache
 
 message TReqPutFileToCache
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
     required string md5 = 2;
-    required string cache_path = 3; // YPath
+    required bytes cache_path = 3; // YPath
     optional bool preserve_expiration_timeout = 4 [default = false];
 
     optional TTransactionalOptions transactional_options = 100;
@@ -2164,6 +2268,7 @@ message TReqSuspendOperation
         string operation_alias = 3;
     }
     optional bool abort_running_jobs = 2 [default = false];
+    optional string reason = 4;
 }
 
 message TRspSuspendOperation
@@ -2209,6 +2314,21 @@ message TReqUpdateOperationParameters
 }
 
 message TRspUpdateOperationParameters
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqPatchOperationSpec
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    repeated NYT.NScheduler.NProto.TSpecPatch patches = 3;
+}
+
+message TRspPatchOperationSpec
 {
 }
 
@@ -2316,6 +2436,13 @@ message TReqListJobs
 
     optional bool with_monitoring_descriptor = 21;
 
+    optional string operation_incarnation = 25;
+
+    optional uint64 from_time = 22; // TInstant
+    optional uint64 to_time = 23; // TInstant
+
+    optional string continuation_token = 24;
+
     optional TMasterReadOptions master_read_options = 102;
 }
 
@@ -2383,10 +2510,35 @@ message TReqGetJobStderr
         string operation_alias = 3;
     }
     required NYT.NProto.TGuid job_id = 2;
+    optional int64 limit = 4;
+    optional int64 offset = 5;
 }
 
 message TRspGetJobStderr
 {
+    optional int64 end_offset = 1;
+    optional int64 total_size = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetJobTrace
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    optional NYT.NProto.TGuid job_id = 3;
+    optional NYT.NProto.TGuid trace_id = 4;
+    optional int64 from_event_index = 5;
+    optional int64 to_event_index = 6;
+    optional int64 from_time = 7;
+    optional int64 to_time = 8;
+}
+
+message TRspGetJobTrace
+{
+    repeated TJobTraceEvent events = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2409,7 +2561,7 @@ message TRspGetJobFailContext
 message TReqDumpJobContext
 {
     required NYT.NProto.TGuid job_id = 1;
-    required string path = 2;
+    required bytes path = 2; // YPath
 }
 
 message TRspDumpJobContext
@@ -2454,12 +2606,25 @@ message TRspAbortJob
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+message TReqDumpJobProxyLog
+{
+    required NYT.NProto.TGuid job_id = 1;
+    required NYT.NProto.TGuid operation_id = 2;
+    required bytes path = 3; // YPath
+}
+
+message TRspDumpJobProxyLog
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // STREAMING
 ////////////////////////////////////////////////////////////////////////////////
 
 message TReqReadFile
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional int64 offset = 2;
     optional int64 length = 3;
@@ -2484,7 +2649,7 @@ message TRspReadFile
 
 message TReqWriteFile
 {
-    required string path = 1; // RichYPath
+    required bytes path = 1; // RichYPath
 
     optional bool compute_md5 = 2 [default = false];
     optional bytes config = 3; // YSON-serialized TFileWriterConfig
@@ -2501,7 +2666,7 @@ message TRspWriteFile
 
 message TReqReadJournal
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional int64 first_row_index = 2;
     optional int64 row_count = 3;
@@ -2519,7 +2684,7 @@ message TRspReadJournal
 
 message TReqWriteJournal
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 
     optional bytes config = 2; // YSON-serialized TJournalWriterConfig
     optional bool enable_multiplexing = 3 [default = true];
@@ -2538,7 +2703,7 @@ message TRspWriteJournal
 
 message TReqTruncateJournal
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
     required int64 row_count = 2;
 
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -2553,7 +2718,7 @@ message TRspTruncateJournal
 
 message TReqReadTable
 {
-    required string path = 1; // RichYPath
+    required bytes path = 1; // RichYPath
 
     optional bool unordered = 2 [default = false];
     optional bool omit_inaccessible_columns = 3 [default = false];
@@ -2586,7 +2751,7 @@ message TRspReadTable
 
 message TReqWriteTable
 {
-    required string path = 1; // RichYPath
+    required bytes path = 1; // RichYPath
 
     optional bytes config = 2; // YSON-serialized TTableWriterConfig
 
@@ -2653,7 +2818,7 @@ message TRspRemoveMember
 message TReqCheckPermission
 {
     required string user = 1;
-    required string path = 2; // YSON
+    required bytes path = 2; // YPath
     required int32 permission = 3; // bit enum consisting of 7 bits
 
     optional TTransactionalOptions transactional_options = 100;
@@ -2749,7 +2914,7 @@ message TRspCheckClusterLiveness
 
 message TReqGetPipelineSpec
 {
-    required string pipeline_path = 1;
+    required bytes pipeline_path = 1; // YPath
 }
 
 message TRspGetPipelineSpec
@@ -2762,7 +2927,7 @@ message TRspGetPipelineSpec
 
 message TReqSetPipelineSpec
 {
-    required string pipeline_path = 1;
+    required bytes pipeline_path = 1; // YPath
     optional int64 expected_version = 2;
     required bytes spec = 3; // YSON
     // Update spec even if pipeline is not stopped, just paused.
@@ -2778,7 +2943,7 @@ message TRspSetPipelineSpec
 
 message TReqGetPipelineDynamicSpec
 {
-    required string pipeline_path = 1;
+    required bytes pipeline_path = 1; // YPath
 }
 
 message TRspGetPipelineDynamicSpec
@@ -2791,7 +2956,7 @@ message TRspGetPipelineDynamicSpec
 
 message TReqSetPipelineDynamicSpec
 {
-    required string pipeline_path = 1;
+    required bytes pipeline_path = 1; // YPath
     optional int64 expected_version = 2;
     required bytes spec = 3; // YSON
 }
@@ -2805,7 +2970,7 @@ message TRspSetPipelineDynamicSpec
 
 message TReqStartPipeline
 {
-    required string pipeline_path = 1;
+    required bytes pipeline_path = 1; // YPath
 }
 
 message TRspStartPipeline
@@ -2816,7 +2981,7 @@ message TRspStartPipeline
 
 message TReqPausePipeline
 {
-    required string pipeline_path = 1;
+    required bytes pipeline_path = 1; // YPath
 }
 
 message TRspPausePipeline
@@ -2827,7 +2992,7 @@ message TRspPausePipeline
 
 message TReqStopPipeline
 {
-    required string pipeline_path = 1;
+    required bytes pipeline_path = 1; // YPath
 }
 
 message TRspStopPipeline
@@ -2836,15 +3001,29 @@ message TRspStopPipeline
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TReqGetPipelineStatus
+message TReqGetPipelineState
 {
-    required string pipeline_path = 1;
+    required bytes pipeline_path = 1; // YPath
 }
 
-message TRspGetPipelineStatus
+message TRspGetPipelineState
 {
     // TODO(babenko): provide native proto enum
     required int32 state = 1; // EPipelineState
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetFlowView
+{
+    required bytes pipeline_path = 1; // YPath
+    optional bytes view_path = 2; // YPath
+    optional bool cache = 3 [default = true];
+}
+
+message TRspGetFlowView
+{
+    required bytes flow_view_part = 1; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2881,10 +3060,12 @@ message TOperation
     optional bytes runtime_parameters = 16; // YSON
 
     optional bool suspended = 17;
+    optional string suspend_reason = 29;
 
     optional bytes events = 18; // YSON
     optional bytes result = 19; // YSON
 
+    optional bytes scheduling_attributes_per_pool_tree = 28; // YSON
     optional bytes slot_index_per_pool_tree = 20; // YSON
 
     optional bytes task_names = 21; // YSON
@@ -2994,6 +3175,9 @@ message TJob
     optional NYT.NProto.TGuid probing_job_competition_id = 25;
     optional bool has_probing_competitors = 26;
     optional uint64 job_cookie = 27;
+    optional bytes archive_features = 29; // YSON
+    optional string monitoring_descriptor = 30;
+    optional string operation_incarnation = 31;
 }
 
 message TListJobsStatistics
@@ -3032,20 +3216,32 @@ message TListJobsResult
 
     required TListJobsStatistics statistics = 5;
     repeated NYT.NProto.TError errors = 6;
+
+    optional string continuation_token = 7;
+}
+
+message TJobTraceEvent
+{
+    required NYT.NProto.TGuid operation_id = 1;
+    required NYT.NProto.TGuid job_id = 2;
+    required NYT.NProto.TGuid trace_id = 3;
+    required int64 event_index = 4;
+    required string event = 5;
+    required int64 event_time = 6; // TInstant
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 message TGetFileFromCacheResult
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 message TPutFileToCacheResult
 {
-    required string path = 1; // YPath
+    required bytes path = 1; // YPath
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3082,6 +3278,11 @@ message TReqStartQuery
         required EContentType type = 3;
     }
 
+    message TAccessControlObjects
+    {
+        repeated string items = 1;
+    }
+
     required string query_tracker_stage = 1;
     required EQueryEngine engine = 2;
     required string query = 3;
@@ -3089,7 +3290,8 @@ message TReqStartQuery
     optional bool draft = 5;
     optional bytes annotations = 6; // YSON
     repeated TQueryFile files = 7;
-    optional string access_control_object = 8;
+    optional string access_control_object = 8; // COMPAT(mpereskokova)
+    optional TAccessControlObjects access_control_objects = 9;
 }
 
 message TRspStartQuery
@@ -3127,6 +3329,7 @@ message TRspGetQueryResult
     optional TTableSchema schema = 4;
     required NYT.NChunkClient.NProto.TDataStatistics data_statistics = 5;
     required bool is_truncated = 6;
+    optional bytes full_result = 7; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3163,13 +3366,14 @@ message TQuery
     optional uint64 finish_time = 6; // TInstant
     optional bytes settings = 7; // YSON
     optional string user = 8;
-    optional string access_control_object = 9;
+    optional string access_control_object = 9; // COMPAT(mpereskokova)
     optional EQueryState state = 10;
     optional int64 result_count = 11;
     optional bytes progress = 12; // YSON
     optional NYT.NProto.TError error = 13;
     optional bytes annotations = 14; // YSON
     optional NYT.NYTree.NProto.TAttributeDictionary other_attributes = 15;
+    optional bytes access_control_objects = 16; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3215,10 +3419,16 @@ message TRspListQueries
 
 message TReqAlterQuery
 {
+    message TAccessControlObjects
+    {
+        repeated string items = 1;
+    }
+
     required string query_tracker_stage = 1;
     required NYT.NProto.TGuid query_id = 2;
     optional bytes annotations = 3; // YSON
-    optional string access_control_object = 4;
+    optional string access_control_object = 4; // COMPAT(mpereskokova)
+    optional TAccessControlObjects access_control_objects = 5;
 }
 
 message TRspAlterQuery
@@ -3238,4 +3448,98 @@ message TRspGetQueryTrackerInfo
     required string cluster_name = 1;
     required bytes supported_features = 2; // YSON
     repeated string access_control_objects = 3;
+    optional string query_tracker_stage = 4;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Distributed table client
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqStartDistributedWriteSession
+{
+    required bytes path = 1; // RichYPath
+    required int32 cookie_count = 2;
+
+    optional TTransactionalOptions transactional_options = 100;
+}
+
+message TRspStartDistributedWriteSession
+{
+    required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteSessionPtr
+    repeated bytes signed_cookies = 2; // vector of YSON-serialized TSignedDistributedWriteCookiePtr
+}
+
+message TReqFinishDistributedWriteSession
+{
+    required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteSessionPtr
+    repeated bytes signed_write_results = 2; // vector of YSON-serialized TSignedWriteFragmentResultPtr
+
+    required int32 max_children_per_attach_request = 3;
+}
+
+message TRspFinishDistributedWriteSession
+{
+}
+
+message TReqWriteTableFragment
+{
+    optional bytes config = 1; // YSON-serialized TTableWriterConfig
+
+    optional bytes format = 2; // YSON-serialized TFormat
+
+    required bytes signed_cookie = 3; // YSON-serialized TSignedWriteFragmentCookiePtr
+}
+
+message TRspWriteTableFragment
+{
+    required bytes signed_write_result = 1; // YSON-serialized TSignedWriteFragmentResultPtr
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// NB(apollo1321): Under construction.
+// Shuffle Service
+////////////////////////////////////////////////////////////////////////////////
+
+// Following request can be handled only by proxies with shuffle manager enabled.
+
+message TReqStartShuffle
+{
+    required string account = 1;
+    required int32 partition_count = 2;
+    required NYT.NProto.TGuid parent_transaction_id = 3;
+    optional string medium = 4;
+    optional int32 replication_factor = 5;
+}
+
+message TRspStartShuffle
+{
+    required bytes shuffle_handle = 1; // YSON-serialized TShuffleHandle
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Following requests may be handled by any proxies.
+
+message TReqReadShuffleData
+{
+    required bytes shuffle_handle = 1; // YSON-serialized TShuffleHandle
+    optional bytes reader_config = 2; // YSON-serialized TTableReaderConfig
+    required int32 partition_index = 3;
+}
+
+message TRspReadShuffleData
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqWriteShuffleData
+{
+    required bytes shuffle_handle = 1; // YSON-serialized TShuffleHandle
+    optional bytes writer_config = 2; // YSON-serialized TTableWriterConfig
+    required string partition_column = 3;
+}
+
+message TRspWriteShuffleData
+{
 }

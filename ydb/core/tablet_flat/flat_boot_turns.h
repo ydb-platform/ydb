@@ -204,7 +204,7 @@ namespace NBoot {
                     auto &snapshot = compaction->Snapshots[front.Table];
 
                     // N.B.: schema is reflected first during commit
-                    if (front.CompactionChanges.Strategy != NKikimrSchemeOp::CompactionStrategyUnset &&
+                    if (front.CompactionChanges.Strategy != NKikimrCompaction::CompactionStrategyUnset &&
                         front.CompactionChanges.Strategy != snapshot.Strategy)
                     {
                         snapshot.State.PartLevels.clear();

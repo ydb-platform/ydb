@@ -1,9 +1,31 @@
 items:
-- name: Log records collection in a Kubernetes cluster using FluentBit and YDB
-  href: fluent-bit.md
-- name: Schema migrations with goose
-  href: goose.md
-- name: Importing from JDBC data sources
-  href: import-jdbc.md
-- name: Liquibase
-  href: liquibase.md
+- name: Graphical user interfaces
+  href: gui/index.md
+  include:
+    mode: link
+    path: gui/toc-ide.yaml
+- name: Data visualization
+  href: visualization/index.md
+  include:
+    mode: link
+    path: visualization/toc-visualization.yaml
+- name: Orchestration
+  href: orchestration/index.md
+  include:
+    mode: link
+    path: orchestration/toc-orchestration.yaml
+- name: Data ingestion
+  href: ingestion/index.md
+  include:
+    mode: link
+    path: ingestion/toc-ingestion.yaml
+- name: Data migrations
+  href: migration/index.md
+  include:
+    mode: link
+    path: migration/toc-migration.yaml
+- name: Object–relational mapping
+  href: orm/index.md
+  include:
+    mode: link
+    path: orm/toc-orm.yaml

@@ -35,7 +35,7 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort-TableFullScan",
+                                                "Node Type": "TopSort-Filter-TableFullScan",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
@@ -48,20 +48,31 @@
                                                         "TopSortBy": "$4.EventTime"
                                                     },
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 2
+                                                            }
+                                                        ],
+                                                        "Name": "Filter",
+                                                        "Predicate": "SearchPhrase != \"\"",
+                                                        "Pushdown": "True"
+                                                    },
+                                                    {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/clickbench/plans/column/hits",
                                                         "ReadColumns": [
                                                             "EventTime",
                                                             "SearchPhrase"
                                                         ],
-                                                        "ReadLimit": "10",
                                                         "ReadRanges": [
-                                                            "EventTime (-\u221e, +\u221e)",
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
                                                             "UserID (-\u221e, +\u221e)",
+                                                            "EventTime (-\u221e, +\u221e)",
                                                             "WatchID (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "SsaProgram": {
                                                             "Command": [
                                                                 {
@@ -133,122 +144,10 @@
                             }
                         ]
                     }
-                ]
-            },
-            "SimplifiedPlan": {
-                "Node Type": "Query",
-                "PlanNodeId": 0,
-                "PlanNodeType": "Query",
-                "Plans": [
-                    {
-                        "Node Type": "ResultSet",
-                        "PlanNodeId": 1,
-                        "PlanNodeType": "ResultSet",
-                        "Plans": [
-                            {
-                                "Node Type": "Limit",
-                                "Operators": [
-                                    {
-                                        "Limit": "10",
-                                        "Name": "Limit"
-                                    }
-                                ],
-                                "PlanNodeId": 2,
-                                "Plans": [
-                                    {
-                                        "Node Type": "TopSort",
-                                        "Operators": [
-                                            {
-                                                "Limit": "10",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "$4.EventTime"
-                                            }
-                                        ],
-                                        "PlanNodeId": 4,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "TableFullScan",
-                                                "Operators": [
-                                                    {
-                                                        "Name": "TableFullScan",
-                                                        "ReadColumns": [
-                                                            "EventTime",
-                                                            "SearchPhrase"
-                                                        ],
-                                                        "ReadLimit": "10",
-                                                        "ReadRanges": [
-                                                            "EventTime (-\u221e, +\u221e)",
-                                                            "CounterID (-\u221e, +\u221e)",
-                                                            "EventDate (-\u221e, +\u221e)",
-                                                            "UserID (-\u221e, +\u221e)",
-                                                            "WatchID (-\u221e, +\u221e)"
-                                                        ],
-                                                        "SsaProgram": {
-                                                            "Command": [
-                                                                {
-                                                                    "Assign": {
-                                                                        "Column": {
-                                                                            "Id": 106
-                                                                        },
-                                                                        "Constant": {
-                                                                            "Bytes": ""
-                                                                        }
-                                                                    }
-                                                                },
-                                                                {
-                                                                    "Assign": {
-                                                                        "Column": {
-                                                                            "Id": 107
-                                                                        },
-                                                                        "Function": {
-                                                                            "Arguments": [
-                                                                                {
-                                                                                    "Id": 40
-                                                                                },
-                                                                                {
-                                                                                    "Id": 106
-                                                                                }
-                                                                            ],
-                                                                            "FunctionType": 2,
-                                                                            "KernelIdx": 0,
-                                                                            "YqlOperationId": 12
-                                                                        }
-                                                                    }
-                                                                },
-                                                                {
-                                                                    "Filter": {
-                                                                        "Predicate": {
-                                                                            "Id": 107
-                                                                        }
-                                                                    }
-                                                                },
-                                                                {
-                                                                    "Projection": {
-                                                                        "Columns": [
-                                                                            {
-                                                                                "Id": 5
-                                                                            },
-                                                                            {
-                                                                                "Id": 40
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                }
-                                                            ],
-                                                            "Version": 5
-                                                        },
-                                                        "Table": "clickbench/plans/column/hits"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 5
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {
@@ -259,12 +158,11 @@
                                 "EventTime",
                                 "SearchPhrase"
                             ],
-                            "limit": "10",
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

@@ -5,8 +5,8 @@
 #include "rpc_request_base.h"
 
 #include <ydb/core/grpc_services/base/base.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -44,7 +44,7 @@ public:
     }
 
     void Bootstrap() {
-        if (GetProtoRequest()->do_not_cache() || !Request->GetDatabaseName()) {
+        if (GetProtoRequest()->do_not_cache() || !Request->GetDatabaseName() || !GetProtoRequest()->merge_records()) {
             SendHealthCheckRequest();
         } else {
             RegisterWithSameMailbox(CreateBoardLookupActor(MakeDatabaseMetadataCacheBoardPath(Request->GetDatabaseName().GetRef()),

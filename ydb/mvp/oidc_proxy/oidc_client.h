@@ -1,6 +1,14 @@
 #pragma once
+namespace NActors {
 
-#include <ydb/mvp/core/core_ydb.h>
-#include "openid_connect.h"
+class TActorSystem;
+struct TActorId;
+
+}  // NActors
+namespace NMVP::NOIDC {
+
+struct TOpenIdConnectSettings;
 
 void InitOIDC(NActors::TActorSystem& actorSystem, const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings);
+
+} // NMVP::NOIDC

@@ -17,18 +17,19 @@ class TRoamingRequestControl
 {
 public:
     TRoamingRequestControl(
-        TFuture<IChannelPtr> asyncChannel,
         IClientRequestPtr request,
         IClientResponseHandlerPtr responseHandler,
         const TSendOptions& options)
         : Request_(std::move(request))
         , ResponseHandler_(std::move(responseHandler))
         , Options_(options)
-        , StartTime_(TInstant::Now())
+    { }
+
+    void Initialize(TFuture<IChannelPtr> asyncChannel)
     {
         if (Options_.Timeout) {
             asyncChannel = asyncChannel.WithTimeout(*Options_.Timeout, TFutureTimeoutOptions{
-                .Error = TError("Error getting channel")
+                .Error = TError("Error getting channel"),
             });
         }
 
@@ -56,7 +57,7 @@ private:
     IClientRequestPtr Request_;
     IClientResponseHandlerPtr ResponseHandler_;
     const TSendOptions Options_;
-    const TInstant StartTime_;
+    const TInstant StartTime_ = TInstant::Now();
 
     std::atomic<bool> Semaphore_ = false;
 
@@ -124,7 +125,7 @@ public:
         : Provider_(std::move(provider))
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return Provider_->GetEndpointDescription();
     }
@@ -160,11 +161,12 @@ public:
             }
         }
 
-        return New<TRoamingRequestControl>(
-            std::move(asyncChannel),
+        auto control = New<TRoamingRequestControl>(
             std::move(request),
             std::move(responseHandler),
             options);
+        control->Initialize(std::move(asyncChannel));
+        return control;
     }
 
     void Terminate(const TError& error) override
@@ -183,8 +185,14 @@ public:
         return 0;
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
 private:
     const IRoamingChannelProviderPtr Provider_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 };
 
 IChannelPtr CreateRoamingChannel(IRoamingChannelProviderPtr provider)

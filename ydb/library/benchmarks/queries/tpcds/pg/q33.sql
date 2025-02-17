@@ -13,13 +13,13 @@ with ss as (
   i_manufact_id
 from
  {{item}}
-where i_category in ('Home'))
+where i_category in ('Electronics'))
  and     ss_item_sk              = i_item_sk
  and     ss_sold_date_sk         = d_date_sk
  and     d_year                  = 1998
  and     d_moy                   = 5
  and     ss_addr_sk              = ca_address_sk
- and     ca_gmt_offset           = -6::numeric
+ and     ca_gmt_offset           = -5
  group by i_manufact_id),
  cs as (
  select
@@ -34,13 +34,13 @@ where i_category in ('Home'))
   i_manufact_id
 from
  {{item}}
-where i_category in ('Books'))
+where i_category in ('Electronics'))
  and     cs_item_sk              = i_item_sk
  and     cs_sold_date_sk         = d_date_sk
  and     d_year                  = 1998
  and     d_moy                   = 5
  and     cs_bill_addr_sk         = ca_address_sk
- and     ca_gmt_offset           = -6::numeric
+ and     ca_gmt_offset           = -5
  group by i_manufact_id),
  ws as (
  select
@@ -55,13 +55,13 @@ where i_category in ('Books'))
   i_manufact_id
 from
  {{item}}
-where i_category in ('Home'))
+where i_category in ('Electronics'))
  and     ws_item_sk              = i_item_sk
  and     ws_sold_date_sk         = d_date_sk
  and     d_year                  = 1998
  and     d_moy                   = 5
  and     ws_bill_addr_sk         = ca_address_sk
- and     ca_gmt_offset           = -6::numeric
+ and     ca_gmt_offset           = -5
  group by i_manufact_id)
   select  i_manufact_id ,sum(total_sales) total_sales
  from  (select * from ss

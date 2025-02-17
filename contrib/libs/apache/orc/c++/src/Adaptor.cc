@@ -53,6 +53,12 @@ ssize_t pread(int fd, void* buf, size_t size, off_t offset) {
 #endif
 #endif
 
+#ifdef _MSC_VER
+#include <Windows.h>
+#else
+#include <sys/stat.h>
+#endif
+
 namespace orc {
 #ifdef HAS_DOUBLE_TO_STRING
   std::string to_string(double val) {
@@ -73,4 +79,14 @@ namespace orc {
     return std::to_string(static_cast<long long int>(val));
   }
 #endif
+
+  bool fileExists(const char* path) {
+#ifdef _MSC_VER
+    return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES;
+#else
+    struct stat st;
+    return stat(path, &st) == 0;
+#endif
+  }
+
 }  // namespace orc

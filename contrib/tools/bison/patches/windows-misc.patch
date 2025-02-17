@@ -1,0 +1,96 @@
+--- contrib/tools/bison/lib/gethrxtime.c	(index)
++++ contrib/tools/bison/lib/gethrxtime.c	(working tree)
+@@ -24,7 +24,6 @@
+ 
+ #if ! (HAVE_ARITHMETIC_HRTIME_T && HAVE_DECL_GETHRTIME)
+ 
+-#include <sys/time.h>
+ #include "timespec.h"
+ 
+ /* Get the current time, as a count of the number of nanoseconds since
+@@ -63,7 +62,7 @@ gethrxtime (void)
+      clock that might jump backwards, since it's the best we can do.  */
+   {
+     struct timespec ts;
+-    gettime (&ts);
++    timespec_get(&ts, TIME_UTC);
+     return xtime_make (ts.tv_sec, ts.tv_nsec);
+   }
+ #  endif
+--- contrib/tools/bison/lib/timevar.c	(index)
++++ contrib/tools/bison/lib/timevar.c	(working tree)
+@@ -26,9 +26,6 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+-#include <sys/resource.h>
+-#include <sys/time.h>
+-#include <sys/times.h>
+ 
+ #include "gethrxtime.h"
+ #include "gettext.h"
+@@ -101,7 +101,7 @@ set_to_current_time (struct timevar_time_def *now)
+ 
+   if (!timevar_enabled)
+     return;
+-
++  /*
+   struct rusage self;
+   getrusage (RUSAGE_SELF, &self);
+   struct rusage chld;
+@@ -114,7 +114,7 @@ set_to_current_time (struct timevar_time_def *now)
+   now->sys =
+     xtime_make (self.ru_stime.tv_sec + chld.ru_stime.tv_sec,
+                 (self.ru_stime.tv_usec + chld.ru_stime.tv_usec) * 1000);
+-
++  */
+   now->wall = gethrxtime();
+ }
+ 
+--- contrib/tools/bison/lib/strverscmp.c	(index)
++++ contrib/tools/bison/lib/strverscmp.c	(working tree)
+@@ -17,11 +17,7 @@
+    License along with the GNU C Library; if not, see
+    <https://www.gnu.org/licenses/>.  */
+ 
+-#ifndef _LIBC
+-# include <libc-config.h>
+-# define __strverscmp strverscmp
+-#endif
+
+ #include <stdint.h>
+ #include <string.h>
+ #include <ctype.h>
+--- contrib/tools/bison/lib/setlocale_null.c	(index)
++++ contrib/tools/bison/lib/setlocale_null.c	(working tree)
+@@ -379,7 +379,9 @@ setlocale_null (int category)
+         case LC_TIME:           i = LC_TIME_INDEX;           break;
+         case LC_COLLATE:        i = LC_COLLATE_INDEX;        break;
+         case LC_MONETARY:       i = LC_MONETARY_INDEX;       break;
++#  ifdef LC_MESSAGES
+         case LC_MESSAGES:       i = LC_MESSAGES_INDEX;       break;
++#  endif
+ #  ifdef LC_PAPER
+         case LC_PAPER:          i = LC_PAPER_INDEX;          break;
+ #  endif
+--- contrib/tools/bison/lib/strverscmp.c	(index)
++++ contrib/tools/bison/lib/strverscmp.c	(working tree)
+@@ -39,6 +40,10 @@
+    equal to or greater than S2 (for more info, see the texinfo doc).
+ */
+ 
++#ifndef weak_alias
++#define __strverscmp strverscmp
++#endif
++
+ int
+ __strverscmp (const char *s1, const char *s2)
+ {
+@@ -104,5 +109,7 @@ __strverscmp (const char *s1, const char *s2)
+       return state;
+   }
+ }
++#ifdef weak_alias
+ libc_hidden_def (__strverscmp)
+ weak_alias (__strverscmp, strverscmp)
++#endif

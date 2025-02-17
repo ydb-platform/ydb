@@ -7,7 +7,7 @@
 #include <ydb/core/ymq/base/query_id.h>
 #include <ydb/core/ymq/base/queue_path.h>
 
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 

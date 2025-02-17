@@ -8,13 +8,13 @@ ENDIF()
 
 SRCS(
     sensor_ut.cpp
+    sensor_service_ut.cpp
     name_conflicts_ut.cpp
     profiler_ut.cpp
     solomon_ut.cpp
     tag_ut.cpp
     cube_ut.cpp
     exporter_ut.cpp
-    perf_counter_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)

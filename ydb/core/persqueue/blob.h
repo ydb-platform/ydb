@@ -47,11 +47,11 @@ struct TClientBlob {
         , UncompressedSize(0)
     {}
 
-    TClientBlob(const TString& sourceId, const ui64 seqNo, const TString& data, TMaybe<TPartData> &&partData, TInstant writeTimestamp, TInstant createTimestamp,
+    TClientBlob(const TString& sourceId, const ui64 seqNo, const TString&& data, TMaybe<TPartData> &&partData, TInstant writeTimestamp, TInstant createTimestamp,
                 const ui64 uncompressedSize, const TString& partitionKey, const TString& explicitHashKey)
         : SourceId(sourceId)
         , SeqNo(seqNo)
-        , Data(data)
+        , Data(std::move(data))
         , PartData(std::move(partData))
         , WriteTimestamp(writeTimestamp)
         , CreateTimestamp(createTimestamp)
@@ -84,6 +84,14 @@ struct TClientBlob {
         return PartData ? PartData->PartNo : 0;
     }
 
+    ui16 GetTotalParts() const {
+        return PartData ? PartData->TotalParts : 1;
+    }
+
+    ui16 GetTotalSize() const {
+        return PartData ? PartData->TotalSize : UncompressedSize;
+    }
+
     bool IsLastPart() const {
         return !PartData || PartData->PartNo + 1 == PartData->TotalParts;
     }
@@ -93,7 +101,7 @@ struct TClientBlob {
     void SerializeTo(TBuffer& buffer) const;
     static TClientBlob Deserialize(const char *data, ui32 size);
 
-    static void CheckBlob(const TKey& key, const TString& blob); 
+    static void CheckBlob(const TKey& key, const TString& blob);
 };
 
 static constexpr const ui32 MAX_BLOB_SIZE = 8_MB;
@@ -113,38 +121,31 @@ struct TBatch {
     TVector<ui32> InternalPartsPos;
     NKikimrPQ::TBatchHeader Header;
     TBuffer PackedData;
+    TInstant EndWriteTimestamp;
+
     TBatch()
         : Packed(false)
     {
         PackedData.Reserve(8_MB);
     }
 
-    TBatch(const ui64 offset, const ui16 partNo, const TVector<TClientBlob>& blobs)
-        : Packed(false)
+    TBatch(const ui64 offset, const ui16 partNo)
+        : TBatch()
     {
-        PackedData.Reserve(8_MB);
         Header.SetOffset(offset);
         Header.SetPartNo(partNo);
         Header.SetUnpackedSize(0);
         Header.SetCount(0);
         Header.SetInternalPartsCount(0);
-        for (auto& b : blobs) {
-            AddBlob(b);
-        }
     }
 
-    TBatch(const ui64 offset, const ui16 partNo, const std::deque<TClientBlob>& blobs)
-        : Packed(false)
-    {
-        PackedData.Reserve(8_MB);
-        Header.SetOffset(offset);
-        Header.SetPartNo(partNo);
-        Header.SetUnpackedSize(0);
-        Header.SetCount(0);
-        Header.SetInternalPartsCount(0);
+    static TBatch FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs) {
+        Y_ABORT_UNLESS(!blobs.empty());
+        TBatch batch(offset, blobs.front().GetPartNo());
         for (auto& b : blobs) {
-            AddBlob(b);
+            batch.AddBlob(b);
         }
+        return batch;
     }
 
     void AddBlob(const TClientBlob &b) {
@@ -162,36 +163,55 @@ struct TBatch {
         Header.SetUnpackedSize(unpackedSize);
         Header.SetCount(count);
         Header.SetInternalPartsCount(InternalPartsPos.size());
+
+        EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
     }
 
     ui64 GetOffset() const {
         return Header.GetOffset();
     }
+
     ui16 GetPartNo() const {
         return Header.GetPartNo();
     }
+
     ui32 GetUnpackedSize() const {
         return Header.GetUnpackedSize();
     }
+
     ui32 GetCount() const {
         return Header.GetCount();
     }
+
     ui16 GetInternalPartsCount() const {
         return Header.GetInternalPartsCount();
+    }
+
+    bool IsGreaterThan(ui64 offset, ui16 partNo) const {
+        return GetOffset() > offset || GetOffset() == offset && GetPartNo() > partNo;
+    }
+
+    bool Empty() const {
+        return Blobs.empty();
+    }
+
+    TInstant GetEndWriteTimestamp() const {
+        return EndWriteTimestamp;
     }
 
     TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
         : Packed(true)
         , Header(header)
         , PackedData(data, header.GetPayloadSize())
-    {}
+    {
+    }
 
     ui32 GetPackedSize() const { Y_ABORT_UNLESS(Packed); return sizeof(ui16) + PackedData.size() + Header.ByteSize(); }
     void Pack();
     void Unpack();
-    void UnpackTo(TVector<TClientBlob> *result);
-    void UnpackToType0(TVector<TClientBlob> *result);
-    void UnpackToType1(TVector<TClientBlob> *result);
+    void UnpackTo(TVector<TClientBlob> *result) const;
+    void UnpackToType0(TVector<TClientBlob> *result) const;
+    void UnpackToType1(TVector<TClientBlob> *result) const;
 
     void SerializeTo(TString& res) const;
 
@@ -223,14 +243,39 @@ private:
     ui16 InternalPartsCount;
 };
 
+class TPartitionedBlob;
+
 //THead represents bathes, stored in head(at most 8 Mb)
 struct THead {
-    std::deque<TBatch> Batches;
     //all batches except last must be packed
     // BlobsSize <= 512Kb
     // size of Blobs after packing must be <= BlobsSize
     //otherwise head will be compacted not in total, some blobs will still remain in head
     //PackedSize + BlobsSize must be <= 8Mb
+private:
+    std::deque<TBatch> Batches;
+    ui16 InternalPartsCount = 0;
+
+    friend class TPartitionedBlob;
+
+    class TBatchAccessor {
+        TBatch& Batch;
+
+    public:
+        explicit TBatchAccessor(TBatch& batch)
+            : Batch(batch)
+        {}
+
+        void Pack() {
+            Batch.Pack();
+        }
+
+        void Unpack() {
+            Batch.Unpack();
+        }
+    };
+
+public:
     ui64 Offset;
     ui16 PartNo;
     ui32 PackedSize;
@@ -252,6 +297,18 @@ struct THead {
     //return Max<ui32> if not such pos in head
     //returns batch with such position
     ui32 FindPos(const ui64 offset, const ui16 partNo) const;
+
+    void AddBatch(const TBatch& batch);
+    void ClearBatches();
+    const std::deque<TBatch>& GetBatches() const;
+    const TBatch& GetBatch(ui32 idx) const;
+    const TBatch& GetLastBatch() const;
+    TBatchAccessor MutableBatch(ui32 idx);
+    TBatchAccessor MutableLastBatch();
+    TBatch ExtractFirstBatch();
+    void AddBlob(const TClientBlob& blob);
+
+    friend IOutputStream& operator <<(IOutputStream& out, const THead& value);
 };
 
 IOutputStream& operator <<(IOutputStream& out, const THead& value);
@@ -265,9 +322,16 @@ public:
     TPartitionedBlob(const TPartitionedBlob& x);
 
     TPartitionedBlob(const TPartitionId& partition, const ui64 offset, const TString& sourceId, const ui64 seqNo,
-                     const ui16 totalParts, const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize);
+                     const ui16 totalParts, const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize,
+                     ui16 nextPartNo = 0);
 
-    std::optional<std::pair<TKey, TString>> Add(TClientBlob&& blob);
+    struct TFormedBlobInfo {
+        TKey Key;
+        TString Value;
+    };
+
+    std::optional<TFormedBlobInfo> Add(TClientBlob&& blob);
+    std::optional<TFormedBlobInfo> Add(const TKey& key, ui32 size);
 
     bool IsInited() const { return !SourceId.empty(); }
 
@@ -280,11 +344,21 @@ public:
 
     bool IsNextPart(const TString& sourceId, const ui64 seqNo, const ui16 partNo, TString *reason) const;
 
+    struct TRenameFormedBlobInfo {
+        TRenameFormedBlobInfo() = default;
+        TRenameFormedBlobInfo(const TKey& oldKey, const TKey& newKey, ui32 size);
+
+        TKey OldKey;
+        TKey NewKey;
+        ui32 Size;
+    };
+
     const std::deque<TClientBlob>& GetClientBlobs() const { return Blobs; }
-    const std::deque<std::pair<TKey, ui32>> GetFormedBlobs() const { return FormedBlobs; }
+    const std::deque<TRenameFormedBlobInfo>& GetFormedBlobs() const { return FormedBlobs; }
 
 private:
     TString CompactHead(bool glueHead, THead& head, bool glueNewHead, THead& newHead, ui32 estimatedSize);
+    std::optional<TFormedBlobInfo> CreateFormedBlob(ui32 size, bool useRename);
 
 private:
     TPartitionId Partition;
@@ -300,7 +374,7 @@ private:
     ui16 HeadPartNo;
     std::deque<TClientBlob> Blobs;
     ui32 BlobsSize;
-    std::deque<std::pair<TKey, ui32>> FormedBlobs;
+    std::deque<TRenameFormedBlobInfo> FormedBlobs;
     THead &Head;
     THead &NewHead;
     ui32 HeadSize;

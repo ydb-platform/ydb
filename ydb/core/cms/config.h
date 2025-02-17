@@ -1,12 +1,14 @@
 #pragma once
 
 #include "pdisk_state.h"
+#include "pdisk_status.h"
 
 #include <ydb/core/protos/cms.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
+#include <util/generic/maybe.h>
 
 namespace NKikimr::NCms {
 
@@ -24,11 +26,14 @@ struct TCmsSentinelConfig {
     ui32 ChangeStatusRetries;
 
     ui32 DefaultStateLimit;
+    ui32 GoodStateLimit;
     TMap<EPDiskState, ui32> StateLimits;
 
     ui32 DataCenterRatio;
     ui32 RoomRatio;
     ui32 RackRatio;
+
+    TMaybeFail<EPDiskStatus> EvictVDisksStatus;
 
     void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         config.SetEnable(Enable);
@@ -40,11 +45,13 @@ struct TCmsSentinelConfig {
         config.SetRetryChangeStatus(RetryChangeStatus.GetValue());
         config.SetChangeStatusRetries(ChangeStatusRetries);
         config.SetDefaultStateLimit(DefaultStateLimit);
+        config.SetGoodStateLimit(GoodStateLimit);
         config.SetDataCenterRatio(DataCenterRatio);
         config.SetRoomRatio(RoomRatio);
         config.SetRackRatio(RackRatio);
 
         SaveStateLimits(config);
+        SaveEvictVDisksStatus(config);
     }
 
     void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig &config) {
@@ -57,12 +64,15 @@ struct TCmsSentinelConfig {
         RetryChangeStatus = TDuration::MicroSeconds(config.GetRetryChangeStatus());
         ChangeStatusRetries = config.GetChangeStatusRetries();
         DefaultStateLimit = config.GetDefaultStateLimit();
+        GoodStateLimit = config.GetGoodStateLimit();
         DataCenterRatio = config.GetDataCenterRatio();
         RoomRatio = config.GetRoomRatio();
         RackRatio = config.GetRackRatio();
 
         auto newStateLimits = LoadStateLimits(config);
         StateLimits.swap(newStateLimits);
+
+        EvictVDisksStatus = LoadEvictVDisksStatus(config);
     }
 
     void SaveStateLimits(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
@@ -114,10 +124,11 @@ struct TCmsSentinelConfig {
         stateLimits[NKikimrBlobStorage::TPDiskState::OpenFileError] = 60;
         stateLimits[NKikimrBlobStorage::TPDiskState::ChunkQuotaError] = 60;
         stateLimits[NKikimrBlobStorage::TPDiskState::DeviceIoError] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::Stopped] = 60;
 
-        stateLimits[NKikimrBlobStorage::TPDiskState::Reserved14] = 0;
         stateLimits[NKikimrBlobStorage::TPDiskState::Reserved15] = 0;
         stateLimits[NKikimrBlobStorage::TPDiskState::Reserved16] = 0;
+        stateLimits[NKikimrBlobStorage::TPDiskState::Reserved17] = 0;
         // node online, pdisk missing
         stateLimits[NKikimrBlobStorage::TPDiskState::Missing] = 60;
         // node timeout
@@ -128,6 +139,31 @@ struct TCmsSentinelConfig {
         stateLimits[NKikimrBlobStorage::TPDiskState::Unknown] = 0;
 
         return stateLimits;
+    }
+
+    static TMaybeFail<EPDiskStatus> LoadEvictVDisksStatus(const NKikimrCms::TCmsConfig::TSentinelConfig &config) {
+        using EEvictVDisksStatus = NKikimrCms::TCmsConfig::TSentinelConfig;
+        switch (config.GetEvictVDisksStatus()) {
+            case EEvictVDisksStatus::UNKNOWN:
+            case EEvictVDisksStatus::FAULTY:
+                return EPDiskStatus::FAULTY;
+            case EEvictVDisksStatus::DISABLED:
+                return Nothing();
+        }
+        return EPDiskStatus::FAULTY;
+    }
+
+    void SaveEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
+        using EEvictVDisksStatus = NKikimrCms::TCmsConfig::TSentinelConfig;
+
+        if (EvictVDisksStatus.Empty()) {
+            config.SetEvictVDisksStatus(EEvictVDisksStatus::DISABLED);
+            return;
+        }
+
+        if (*EvictVDisksStatus == EPDiskStatus::FAULTY) {
+            config.SetEvictVDisksStatus(EEvictVDisksStatus::FAULTY);
+        }
     }
 };
 

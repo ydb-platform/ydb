@@ -22,7 +22,9 @@ namespace NYql::NDq {
                 genericClient,
                 credentialsFactory,
                 std::move(args.ParentId),
+                args.TaskCounters,
                 args.Alloc,
+                args.KeyTypeHelper,
                 std::move(lookupSource),
                 args.KeyType,
                 args.PayloadType,
@@ -31,10 +33,19 @@ namespace NYql::NDq {
                 args.MaxKeysInRequest);
         };
 
-        for (auto& name : {"ClickHouseGeneric", "PostgreSqlGeneric", "YdbGeneric"}) {
+        for (auto& name : {
+            "ClickHouseGeneric", 
+            "PostgreSqlGeneric", 
+            "YdbGeneric", 
+            "MySqlGeneric", 
+            "GreenplumGeneric", 
+            "MsSQLServerGeneric", 
+            "OracleGeneric",
+            "LoggingGeneric"}
+            ) {
             factory.RegisterSource<Generic::TSource>(name, readActorFactory);
             factory.RegisterLookupSource<Generic::TLookupSource>(name, lookupActorFactory);
         }
     }
 
-}
+} // namespace NYql::NDq

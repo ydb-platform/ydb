@@ -1,0 +1,144 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0c2b8937b4dd7ffe9d6014b495d4300e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/ratio/ratio_io.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 18b9bbddbcb28f4b2be6c0306fb4568c
+BELONGS ya.make
+    License text:
+        // Copyright 2023 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/ratio/detail/gcd_lcm.hpp [4:6]
+        include/boost/ratio/detail/is_evenly_divisible_by.hpp [4:6]
+        include/boost/ratio/detail/is_ratio.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 235e1329bace813cd48f34c2ee344e77
+BELONGS ya.make
+    License text:
+        //  Copyright 2011 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/ratio/include.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8c4a8c000d9107e7eca71c97ea07a686
+BELONGS ya.make
+    License text:
+        //  Copyright 2008 Howard Hinnant
+        //  Copyright 2008 Beman Dawes
+        //  Copyright 2009 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/ratio/ratio.hpp [3:5]
+        include/boost/ratio/ratio_fwd.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a53a4399b67c24bd1f890aba101e2930
+BELONGS ya.make
+    License text:
+        //  Copyright 2008 Howard Hinnant
+        //  Copyright 2008 Beman Dawes
+        //  Copyright 2009 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/ratio/ratio.hpp [3:5]
+        include/boost/ratio/ratio_fwd.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c3f6937fa9ed593f0837a0f91c6d568a
+BELONGS ya.make
+    License text:
+        //  Copyright 2010 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/ratio.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cf16777a1dfdf5f4dcd957c2ccbf8ffc
+BELONGS ya.make
+    License text:
+        //  Copyright 2008 Howard Hinnant
+        //  Copyright 2008 Beman Dawes
+        //  Copyright 2009 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/ratio/ratio.hpp [3:5]
+        include/boost/ratio/ratio_fwd.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e0fed193286f3ac61728fdf5e779701e
+BELONGS ya.make
+    License text:
+        //  Copyright 2012 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/ratio/config.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e63a42a391669dbd82501fe78900f57d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/ratio/ratio_io.hpp [3:6]

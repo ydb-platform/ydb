@@ -1,10 +1,11 @@
 #include "ydb_service_export.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 
+#include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
 
@@ -18,17 +19,26 @@ namespace {
     const char slashC = '/';
     const TStringBuf slash(&slashC, 1);
 
+    using TFilterOp = TRecursiveListSettings::TFilterOp;
+
     bool FilterTables(const NScheme::TSchemeEntry& entry) {
         return entry.Type == NScheme::ESchemeEntryType::Table;
     }
 
-    TVector<std::pair<TString, TString>> ExpandItem(NScheme::TSchemeClient& client, TStringBuf srcPath, TStringBuf dstPath) {
+    bool FilterAllSupportedSchemeObjects(const NScheme::TSchemeEntry& entry) {
+        return IsIn({
+            NScheme::ESchemeEntryType::Table,
+            NScheme::ESchemeEntryType::View,
+        }, entry.Type);
+    }
+
+    TVector<std::pair<TString, TString>> ExpandItem(NScheme::TSchemeClient& client, TStringBuf srcPath, TStringBuf dstPath, const TFilterOp& filter) {
         // cut trailing slash
         srcPath.ChopSuffix(slash);
         dstPath.ChopSuffix(slash);
 
-        const auto ret = RecursiveList(client, TString{srcPath}, TRecursiveListSettings().Filter(&FilterTables));
-        ThrowOnError(ret.Status);
+        const auto ret = RecursiveList(client, TString{srcPath}, TRecursiveListSettings().Filter(filter));
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(ret.Status);
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {
             return {{TString{srcPath}, TString{dstPath}}};
@@ -43,7 +53,7 @@ namespace {
     }
 
     template <typename TSettings>
-    void ExpandItems(NScheme::TSchemeClient& client, TSettings& settings, const TVector<TRegExMatch>& exclusions) {
+    void ExpandItems(NScheme::TSchemeClient& client, TSettings& settings, const TVector<TRegExMatch>& exclusions, const TFilterOp& filter = FilterTables) {
         auto isExclusion = [&exclusions](const char* str) -> bool {
             for (const auto& pattern : exclusions) {
                 if (pattern.Match(str)) {
@@ -56,7 +66,7 @@ namespace {
 
         auto items(std::move(settings.Item_));
         for (const auto& item : items) {
-            for (const auto& [src, dst] : ExpandItem(client, item.Src, item.Dst)) {
+            for (const auto& [src, dst] : ExpandItem(client, item.Src, item.Dst, filter)) {
                 if (isExclusion(src.c_str())) {
                     continue;
                 }
@@ -132,13 +142,13 @@ void TCommandExportToYt::Config(TConfig& config) {
         .NoArgument().StoreTrue(&UseTypeV3);
 
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 
 void TCommandExportToYt::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     ParseYtProxy(config, "proxy");
     ParseYtToken(config, "token");
@@ -147,7 +157,10 @@ void TCommandExportToYt::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMisuseException() << "At least one item should be provided";
     }
+}
 
+void TCommandExportToYt::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);
 
@@ -211,7 +224,12 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
-    config.Opts->AddLongOption("scheme", "S3 endpoint scheme")
+    auto colors = NColorizer::AutoColors(Cout);
+    config.Opts->AddLongOption("scheme", TStringBuilder()
+            << "S3 endpoint scheme - "
+            << colors.BoldColor() << "http" << colors.OldColor()
+            << " or "
+            << colors.BoldColor() << "https" << colors.OldColor())
         .RequiredArgument("SCHEME").StoreResult(&AwsScheme).DefaultValue(AwsScheme);
 
     TStringBuilder storageClassHelp;
@@ -274,20 +292,25 @@ void TCommandExportToS3::Config(TConfig& config) {
             << "Codec used to compress data" << Endl
             << "  Available options:" << Endl
             << "    - zstd" << Endl
-            << "    - zstd-N (N is compression level, e.g. zstd-3)" << Endl)
+            << "    - zstd-N (N is compression level in range [1, 22], e.g. zstd-3)" << Endl)
         .RequiredArgument("STRING").StoreResult(&Compression);
 
-    config.Opts->AddLongOption("use-virtual-addressing", "S3 bucket virtual addressing")
+    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
+            << "Sets bucket URL style. Value "
+            << colors.BoldColor() << "true" << colors.OldColor()
+            << " means use Virtual-Hosted-Style URL, "
+            << colors.BoldColor() << "false" << colors.OldColor()
+            << " - Path-Style URL.")
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
 
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 
 void TCommandExportToS3::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     ParseAwsProfile(config, "aws-profile");
     ParseAwsAccessKey(config, "access-key");
@@ -297,6 +320,10 @@ void TCommandExportToS3::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMisuseException() << "At least one item should be provided";
     }
+}
+
+void TCommandExportToS3::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
 
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);
@@ -334,10 +361,18 @@ int TCommandExportToS3::Run(TConfig& config) {
     const TDriver driver = CreateDriver(config);
 
     TSchemeClient schemeClient(driver);
-    ExpandItems(schemeClient, settings, ExclusionPatterns);
-
     TExportClient client(driver);
-    TExportToS3Response response = client.ExportToS3(std::move(settings)).GetValueSync();
+
+    auto originalItems = settings.Item_;
+    ExpandItems(schemeClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
+    TExportToS3Response response = client.ExportToS3(settings).ExtractValueSync();
+    if (response.Status().GetStatus() == EStatus::BAD_REQUEST) {
+        // Retry the export operation limiting the scope to tables only.
+        // This approach ensures compatibility with servers running an older version of YDB.
+        settings.Item_ = std::move(originalItems);
+        ExpandItems(schemeClient, settings, ExclusionPatterns, FilterTables);
+        response = client.ExportToS3(settings).ExtractValueSync();
+    }
     ThrowOnError(response);
     PrintOperation(response, OutputFormat);
 

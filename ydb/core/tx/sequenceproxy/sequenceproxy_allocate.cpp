@@ -3,7 +3,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <util/string/builder.h>
@@ -24,7 +24,7 @@ namespace NSequenceProxy {
         TAllocateActor(const TActorId& owner, ui64 cookie, ui64 tabletId, const TPathId& pathId, ui64 cache)
             : Owner(owner)
             , Cookie(cookie)
-            , PipeCache(MakePipePeNodeCacheID(true))
+            , PipeCache(MakePipePerNodeCacheID(true))
             , TabletId(tabletId)
             , PathId(pathId)
             , Cache(cache)

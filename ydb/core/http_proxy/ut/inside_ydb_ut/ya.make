@@ -1,5 +1,3 @@
-OWNER(g:kikimr)
-
 UNITTEST()
 
 SIZE(MEDIUM)
@@ -16,13 +14,14 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/library/aclib
     ydb/library/persqueue/tests
-    ydb/public/sdk/cpp/client/ydb_discovery
-    ydb/public/sdk/cpp/client/ydb_types
+    ydb/public/sdk/cpp/src/client/discovery
+    ydb/public/sdk/cpp/src/client/types
     ydb/services/ydb
 )
 
 SRCS(
-    ../http_proxy_ut.cpp
+    ../kinesis_ut.cpp
+    ../ymq_ut.cpp
     inside_ydb_ut.cpp
 )
 

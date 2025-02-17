@@ -11,15 +11,15 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/transform/yql_lazy_init.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/transform/yql_lazy_init.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -32,12 +32,9 @@ public:
     TDqDataProviderSink(const TDqState::TPtr& state)
         : State(state)
         , LogOptTransformer([state] () { return CreateDqsLogOptTransformer(state->TypeCtx, state->Settings); })
-        , PhyOptTransformer([state] () { return CreateDqsPhyOptTransformer(/*TODO*/nullptr, state->Settings); })
+        , PhyOptTransformer([state] () { return CreateDqsPhyOptTransformer(state->TypeCtx, state->Settings); })
         , PhysicalFinalizingTransformer([] () { return CreateDqsFinalizingOptTransformer(); })
-        , TypeAnnotationTransformer([state] () {
-            return CreateDqsDataSinkTypeAnnotationTransformer(
-                state->TypeCtx, state->Settings->IsDqReplicateEnabled(*state->TypeCtx));
-        })
+        , TypeAnnotationTransformer([state] () { return CreateDqsDataSinkTypeAnnotationTransformer(state->TypeCtx); })
         , ConstraintsTransformer([] () { return CreateDqDataSinkConstraintTransformer(); })
         , RecaptureTransformer([state] () { return CreateDqsRecaptureTransformer(state); })
     { }
@@ -216,7 +213,8 @@ public:
         return TPlanFormatterBase::GetOperationDisplayName(node);
     }
 
-    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, bool withLimits) override {
+        Y_UNUSED(withLimits);
         if (auto maybeStage = TMaybeNode<TDqStageBase>(&node)) {
             writer.OnKeyedItem("Streams");
             writer.OnBeginMap();

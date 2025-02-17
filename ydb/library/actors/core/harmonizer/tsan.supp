@@ -1,0 +1,3 @@
+# tsan reports potential deadlock which is false-positive.
+# See: https://github.com/google/sanitizers/issues/814
+deadlock:NActors::TActorCoro::StateFunc

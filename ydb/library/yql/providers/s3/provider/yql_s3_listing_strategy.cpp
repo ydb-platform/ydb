@@ -1,11 +1,11 @@
 #include "yql_s3_listing_strategy.h"
 
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_future_algorithms.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/url_builder.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/url_builder.h>
 
 #ifdef THROW
 #undef THROW
@@ -16,6 +16,7 @@
 #include <util/generic/overloaded.h>
 #include <deque>
 #include <utility>
+#include <mutex>
 
 namespace NYql {
 IOutputStream& operator<<(IOutputStream& stream, const TS3ListingOptions& options) {
@@ -26,15 +27,20 @@ IOutputStream& operator<<(IOutputStream& stream, const TS3ListingOptions& option
 
 namespace {
 
+TString ParseBasePath(const TString& path) {
+    TString basePath = TString{TStringBuf{path}.RBefore('/')};
+    return basePath == path && !basePath.EndsWith('/') ? TString{} : basePath;
+}
+
 using namespace NThreading;
 using namespace NS3Lister;
 
 TListError MakeLimitExceededError(
-    const TString& componentName, ui64 limit, ui64 actual) {
+    const TString& componentName, ui64 limit, ui64 actual, ui64 listObjectSize) {
     auto issue = TIssue(
         TStringBuilder{} << '[' << componentName << "] Limit exceeded. Limit: " << limit
                          << " Actual: " << actual);
-    return TListError{EListError::LIMIT_EXCEEDED, TIssues{std::move(issue)}};
+    return TListError{EListError::LIMIT_EXCEEDED, TIssues{std::move(issue)}, listObjectSize};
 }
 
 TListError MakeGenericError(const TString& description) {
@@ -86,7 +92,7 @@ private:
                     << stateEntries.Size() + chunkEntries.Size()
                     << " object paths which is more than limit " << limit;
                 state = MakeLimitExceededError(
-                    name, limit, stateEntries.Size() + chunkEntries.Size());
+                    name, limit, stateEntries.Size() + chunkEntries.Size(), stateEntries.ListedObjectSize + chunkEntries.ListedObjectSize);
                 return EAggregationAction::Stop;
             }
             YQL_CLOG(TRACE, ProviderS3)
@@ -134,14 +140,15 @@ public:
     TFlatFileS3ListingStrategy(
         const IS3ListerFactory::TPtr& listerFactory,
         const IHTTPGateway::TPtr& httpGateway,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         bool allowLocalFiles)
         : TCollectingS3ListingStrategy(
-              [allowLocalFiles, httpGateway, listerFactory](
+              [allowLocalFiles, httpGateway, retryPolicy, listerFactory](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
                   Y_UNUSED(options);
                   return listerFactory->Make(
-                      httpGateway, listingRequest, Nothing(), allowLocalFiles);
+                      httpGateway, retryPolicy, listingRequest, Nothing(), allowLocalFiles);
               },
               "TFlatFileS3ListingStrategy") { }
 };
@@ -151,14 +158,15 @@ public:
     TDirectoryS3ListingStrategy(
         const IS3ListerFactory::TPtr& listerFactory,
         const IHTTPGateway::TPtr& httpGateway,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         bool allowLocalFiles)
         : TCollectingS3ListingStrategy(
-              [allowLocalFiles, httpGateway, listerFactory](
+              [allowLocalFiles, httpGateway, retryPolicy, listerFactory](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
                   Y_UNUSED(options);
                   return listerFactory->Make(
-                      httpGateway, listingRequest, "/", allowLocalFiles);
+                      httpGateway, retryPolicy, listingRequest, "/", allowLocalFiles);
               },
               "TDirectoryS3ListingStrategy") { }
 };
@@ -206,6 +214,7 @@ public:
         TListResult Result;
         std::vector<TIntrusivePtr<TIssue>> PreviousIssues;
         bool Set = false;
+        ui64 ListedObjectSize = 0;
     };
 
     explicit TCompositeS3ListingStrategy(TStrategyContainer&& strategies)
@@ -228,12 +237,14 @@ public:
                                    << "[TCompositeS3ListingStrategy] Strategy successfully listed paths. Returning result: "
                                    << chunkEntries.Objects.size() << " objects, "
                                    << chunkEntries.Directories.size() << " path prefixes";
-                               std::get<TListEntries>(state.Result) =
-                                   chunkEntries;
+                               state.ListedObjectSize = std::max(state.ListedObjectSize, chunkEntries.ListedObjectSize);
+                               std::get<TListEntries>(state.Result) = chunkEntries;
+                               std::get<TListEntries>(state.Result).ListedObjectSize = state.ListedObjectSize;
                                state.Set = true;
                                return EAggregationAction::Stop;
                            };
                        auto errorHandler = [&state](const TListError& error) mutable {
+                           state.ListedObjectSize = std::max(state.ListedObjectSize, error.ListedObjectSize);
                            auto issue = MakeIntrusive<TIssue>("Strategy failed with issues");
                            for (auto& subIssue: error.Issues) {
                             issue->AddSubIssue(MakeIntrusive<TIssue>(subIssue));
@@ -242,7 +253,7 @@ public:
 
                            if (IsRecoverableError(error)) {
                                YQL_CLOG(INFO, ProviderS3)
-                                   << "[TCompositeS3ListingStrategy] Strategy failed "
+                                   << "[TCompositeS3ListingStrategy] Strategy failed"
                                    << " to list paths. Trying next one... ";
                                return EAggregationAction::Proceed;
                            }
@@ -351,6 +362,7 @@ public:
                             result.Objects.begin(),
                             listingResult.Objects.cbegin(),
                             listingResult.Objects.cend());
+                        result.ListedObjectSize = listingResult.ListedObjectSize;
                         for (auto& directoryPrefix : listingResult.Directories) {
                             if (directoryPrefix.MatchedGlobs.empty()) {
                                 // We need to list until extra columns are extracted
@@ -402,9 +414,10 @@ public:
     TPartitionedDatasetS3ListingStrategy(
         const IS3ListerFactory::TPtr& listerFactory,
         const IHTTPGateway::TPtr& httpGateway,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         bool allowLocalFiles)
         : TCollectingS3ListingStrategy(
-              [listerFactory, httpGateway, allowLocalFiles](
+              [listerFactory, httpGateway, retryPolicy, allowLocalFiles](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
                   auto ptr = std::shared_ptr<IS3Lister>(
@@ -413,7 +426,7 @@ public:
                           listingRequest.Prefix,
                           options,
                           TDirectoryS3ListingStrategy{
-                              listerFactory, httpGateway, allowLocalFiles}});
+                              listerFactory, httpGateway, retryPolicy, allowLocalFiles}});
                   return MakeFuture(std::move(ptr));
               },
               "TPartitionedDatasetS3ListingStrategy") { }
@@ -488,10 +501,11 @@ public:
                 });
         return NextDirectoryListeningChunk;
     }
+
     void PerformEarlyStop(TListEntries& result, const TString& sourcePrefix) {
-        result.Directories.push_back({.Path = sourcePrefix});
+        result.Directories.push_back({.Path = ParseBasePath(sourcePrefix)});
         for (auto& directoryPrefix : DirectoryPrefixQueue) {
-            result.Directories.push_back({.Path = directoryPrefix});
+            result.Directories.push_back({.Path = ParseBasePath(directoryPrefix)});
         }
         DirectoryPrefixQueue.clear();
     }
@@ -503,16 +517,17 @@ public:
             result.Objects.end(),
             std::make_move_iterator(listingResult.Objects.begin()),
             std::make_move_iterator(listingResult.Objects.end()));
+        result.ListedObjectSize += listingResult.ListedObjectSize;
         if (currentListingTotalSize < MinParallelism) {
             for (auto& directoryPrefix : listingResult.Directories) {
                 DirectoryPrefixQueue.push_back(directoryPrefix.Path);
             }
         } else {
             for (auto& directoryPrefix : listingResult.Directories) {
-                result.Directories.push_back({.Path = directoryPrefix.Path});
+                result.Directories.push_back({.Path = ParseBasePath(directoryPrefix.Path)});
             }
             for (auto& directoryPrefix : DirectoryPrefixQueue) {
-                result.Directories.push_back({.Path = directoryPrefix});
+                result.Directories.push_back({.Path = ParseBasePath(directoryPrefix)});
             }
             DirectoryPrefixQueue.clear();
         }
@@ -557,10 +572,11 @@ public:
     TUnPartitionedDatasetS3ListingStrategy(
         const IS3ListerFactory::TPtr& listerFactory,
         const IHTTPGateway::TPtr& httpGateway,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         size_t minParallelism,
         bool allowLocalFiles)
         : TCollectingS3ListingStrategy(
-              [listerFactory, httpGateway, minParallelism, allowLocalFiles](
+              [listerFactory, httpGateway, retryPolicy, minParallelism, allowLocalFiles](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
                   auto ptr = std::shared_ptr<IS3Lister>(
@@ -579,7 +595,7 @@ public:
                                   : listingRequest.Pattern.substr(
                                         0, NS3::GetFirstWildcardPos(listingRequest.Pattern))},
                           TDirectoryS3ListingStrategy{
-                              listerFactory, httpGateway, allowLocalFiles},
+                              listerFactory, httpGateway, retryPolicy, allowLocalFiles},
                           minParallelism,
                           options.MaxResultSet});
                   return MakeFuture(std::move(ptr));
@@ -616,6 +632,7 @@ public:
         std::vector<TObjectListEntry> Objects;
         std::vector<TDirectoryListEntry> Directories;
         std::vector<TFuture<TListResult>> NextDirectoryListeningChunk;
+        ui64 ListedObjectSize = 0;
         // CurrentListing
         TPromise<TListResult> CurrentPromise;
         bool IsListingFinished = false;
@@ -712,7 +729,8 @@ public:
                 auto error = MakeLimitExceededError(
                     "TConcurrentBFSDirectoryResolverIterator",
                     Limit,
-                    currentListingTotalSize);
+                    currentListingTotalSize,
+                    ListedObjectSize);
                 HandleLimitExceeded(sourcePath, std::move(error));
                 return;
             }
@@ -721,6 +739,7 @@ public:
                 Objects.end(),
                 std::make_move_iterator(listingResult.Objects.begin()),
                 std::make_move_iterator(listingResult.Objects.end()));
+            ListedObjectSize += listingResult.ListedObjectSize;
 
             for (auto& directoryEntry : listingResult.Directories) {
                 if (DirectoryToListMatcher(directoryEntry)) {
@@ -754,12 +773,12 @@ public:
                 res = *MaybeError;
             } else {
                 // TODO: add verification
-                auto result = TListEntries{.Objects = Objects};
+                auto result = TListEntries{.Objects = Objects, .ListedObjectSize = ListedObjectSize};
                 for (auto& directoryPrefix : DirectoryPrefixQueue) {
-                    result.Directories.push_back({.Path = directoryPrefix});
+                    result.Directories.push_back({.Path = ParseBasePath(directoryPrefix)});
                 }
                 for (auto& directoryPrefix: InProgressPaths) {
-                    result.Directories.push_back({.Path = directoryPrefix});
+                    result.Directories.push_back({.Path = ParseBasePath(directoryPrefix)});
                 }
                 for (auto& directoryEntry : Directories) {
                     result.Directories.push_back(directoryEntry);
@@ -893,11 +912,12 @@ public:
     TConcurrentUnPartitionedDatasetS3ListingStrategy(
         const IS3ListerFactory::TPtr& listerFactory,
         const IHTTPGateway::TPtr& httpGateway,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         size_t minParallelism,
         size_t maxParallelOps,
         bool allowLocalFiles)
         : TCollectingS3ListingStrategy(
-              [listerFactory, httpGateway, minParallelism, allowLocalFiles, maxParallelOps](
+              [listerFactory, httpGateway, retryPolicy, minParallelism, allowLocalFiles, maxParallelOps](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
                   auto ptr = std::shared_ptr<IS3Lister>(
@@ -929,7 +949,7 @@ public:
                                   : listingRequest.Pattern.substr(
                                         0, NS3::GetFirstWildcardPos(listingRequest.Pattern))},
                           TDirectoryS3ListingStrategy{
-                              listerFactory, httpGateway, allowLocalFiles},
+                              listerFactory, httpGateway, retryPolicy, allowLocalFiles},
                           options.MaxResultSet,
                           maxParallelOps});
                   return MakeFuture(std::move(ptr));
@@ -943,10 +963,11 @@ public:
     TConcurrentPartitionedDatasetS3ListingStrategy(
         const IS3ListerFactory::TPtr& listerFactory,
         const IHTTPGateway::TPtr& httpGateway,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         size_t maxParallelOps,
         bool allowLocalFiles)
         : TCollectingS3ListingStrategy(
-              [listerFactory, httpGateway, allowLocalFiles, maxParallelOps](
+              [listerFactory, httpGateway, retryPolicy, allowLocalFiles, maxParallelOps](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
                   auto ptr = std::shared_ptr<IS3Lister>(
@@ -974,12 +995,12 @@ public:
                                   : listingRequest.Pattern.substr(
                                         0, NS3::GetFirstWildcardPos(listingRequest.Pattern))},
                           TDirectoryS3ListingStrategy{
-                              listerFactory, httpGateway, allowLocalFiles},
+                              listerFactory, httpGateway, retryPolicy, allowLocalFiles},
                           options.MaxResultSet,
                           maxParallelOps});
                   return MakeFuture(std::move(ptr));
               },
-              "TConcurrentUnPartitionedDatasetS3ListingStrategy") { }
+              "TConcurrentPartitionedDatasetS3ListingStrategy") { }
 };
 
 
@@ -1024,6 +1045,7 @@ private:
 
 IS3ListingStrategy::TPtr MakeS3ListingStrategy(
     const IHTTPGateway::TPtr& httpGateway,
+    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const IS3ListerFactory::TPtr& listerFactory,
     ui64 minDesiredDirectoriesOfFilesPerQuery,
     size_t maxParallelOps,
@@ -1032,7 +1054,7 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
         std::make_shared<TCompositeS3ListingStrategy>(
             std::vector<std::shared_ptr<IS3ListingStrategy>>{
                 std::make_shared<TFlatFileS3ListingStrategy>(
-                    listerFactory, httpGateway, allowLocalFiles),
+                    listerFactory, httpGateway, retryPolicy, allowLocalFiles),
                 std::make_shared<TConditionalS3ListingStrategy>(
                     std::initializer_list<TConditionalS3ListingStrategy::TPair>{
                         {[](const TS3ListingOptions& options) {
@@ -1042,6 +1064,7 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
                          std::make_shared<TPartitionedDatasetS3ListingStrategy>(
                              listerFactory,
                              httpGateway,
+                             retryPolicy,
                              allowLocalFiles)},
                         {[](const TS3ListingOptions& options) {
                              return options.IsPartitionedDataset &&
@@ -1050,6 +1073,7 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
                          std::make_shared<TConcurrentPartitionedDatasetS3ListingStrategy>(
                              listerFactory,
                              httpGateway,
+                             retryPolicy,
                              maxParallelOps,
                              allowLocalFiles)},
                         {[](const TS3ListingOptions& options) {
@@ -1059,6 +1083,7 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
                          std::make_shared<TUnPartitionedDatasetS3ListingStrategy>(
                              listerFactory,
                              httpGateway,
+                             retryPolicy,
                              minDesiredDirectoriesOfFilesPerQuery,
                              allowLocalFiles)},
                         {[](const TS3ListingOptions& options) {
@@ -1068,6 +1093,7 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
                          std::make_shared<TConcurrentUnPartitionedDatasetS3ListingStrategy>(
                              listerFactory,
                              httpGateway,
+                             retryPolicy,
                              minDesiredDirectoriesOfFilesPerQuery,
                              maxParallelOps,
                              allowLocalFiles)}})}));

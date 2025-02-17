@@ -41,7 +41,7 @@ struct TReplicaHistoryItem
 
 struct TReplicaInfo
 {
-    TString ClusterName;
+    std::string ClusterName;
     NYPath::TYPath ReplicaPath;
     NTabletClient::ETableReplicaContentType ContentType;
     NTabletClient::ETableReplicaMode Mode;
@@ -68,7 +68,7 @@ struct TReplicationCard
     TReplicationEra Era = InvalidReplicationEra;
     NTableClient::TTableId TableId;
     NYPath::TYPath TablePath;
-    TString TableClusterName;
+    std::string TableClusterName;
     NTransactionClient::TTimestamp CurrentTimestamp = NTransactionClient::NullTimestamp;
     NTabletClient::TReplicatedTableOptionsPtr ReplicatedTableOptions;
     TReplicationCardCollocationId ReplicationCardCollocationId;
@@ -80,7 +80,7 @@ struct TReplicationCard
 
 DEFINE_REFCOUNTED_TYPE(TReplicationCard)
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 struct TReplicationCardFetchOptions
 {
@@ -91,29 +91,32 @@ struct TReplicationCardFetchOptions
 
     operator size_t() const;
     bool operator == (const TReplicationCardFetchOptions& other) const = default;
+
+    bool Contains(const TReplicationCardFetchOptions& other) const;
 };
 
 void FormatValue(TStringBuilderBase* builder, const TReplicationCardFetchOptions& options, TStringBuf /*spec*/);
-TString ToString(const TReplicationCardFetchOptions& options);
 
-///////////////////////////////////////////////////////////////////////////////
+inline constexpr auto MinimalFetchOptions = TReplicationCardFetchOptions{
+    .IncludeCoordinators = true,
+    .IncludeHistory = true,
+};
+
+////////////////////////////////////////////////////////////////////////////////
 
 void FormatValue(
     TStringBuilderBase* builder,
     const TReplicationProgress& replicationProgress,
     TStringBuf /*spec*/,
     std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
-TString ToString(const TReplicationProgress& replicationProgress);
 
 void FormatValue(TStringBuilderBase* builder, const TReplicaHistoryItem& replicaHistoryItem, TStringBuf /*spec*/);
-TString ToString(const TReplicaHistoryItem& replicaHistoryItem);
 
 void FormatValue(
     TStringBuilderBase* builder,
     const TReplicaInfo& replicaInfo,
     TStringBuf /*spec*/,
     std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
-TString ToString(const TReplicaInfo& replicaInfo);
 
 void FormatValue(
     TStringBuilderBase* builder,
@@ -133,7 +136,7 @@ bool IsReplicaDisabled(NTabletClient::ETableReplicaState state);
 bool IsReplicaReallySync(
     NTabletClient::ETableReplicaMode mode,
     NTabletClient::ETableReplicaState state,
-    const TReplicaHistoryItem& lastReplicaHistoryItem);
+    const std::vector<TReplicaHistoryItem>& replicaHistory);
 NTabletClient::ETableReplicaMode GetTargetReplicaMode(NTabletClient::ETableReplicaMode mode);
 NTabletClient::ETableReplicaState GetTargetReplicaState(NTabletClient::ETableReplicaState state);
 
@@ -182,7 +185,7 @@ std::vector<TReplicationProgress> ScatterReplicationProgress(
 bool IsReplicaLocationValid(
     const TReplicaInfo* replica,
     const NYPath::TYPath& tablePath,
-    const TString& clusterName);
+    const std::string& clusterName);
 
 TReplicationProgress BuildMaxProgress(const TReplicationProgress& progress1, const TReplicationProgress& progress2);
 

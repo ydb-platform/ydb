@@ -1,10 +1,10 @@
 #pragma once
 
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
@@ -79,19 +79,21 @@ struct TKqpExecuterTxResult {
     bool IsStream = true;
     NKikimr::NMiniKQL::TType* MkqlItemType;
     const TVector<ui32>* ColumnOrder = nullptr;
+    const TVector<TString>* ColumnHints = nullptr;
     TMaybe<ui32> QueryResultIndex = 0;
     NKikimr::NMiniKQL::TUnboxedValueBatch Rows;
-    Ydb::ResultSet TrailingResult;
     bool HasTrailingResult = false;
 
     explicit TKqpExecuterTxResult(
         bool isStream,
         NKikimr::NMiniKQL::TType* mkqlItemType,
         const TVector<ui32>* сolumnOrder,
+        const TVector<TString>* columnHints,
         const TMaybe<ui32>& queryResultIndex)
         : IsStream(isStream)
         , MkqlItemType(mkqlItemType)
         , ColumnOrder(сolumnOrder)
+        , ColumnHints(columnHints)
         , QueryResultIndex(queryResultIndex)
     {}
 
@@ -100,7 +102,7 @@ struct TKqpExecuterTxResult {
     NKikimrMiniKQL::TResult* GetMkql(google::protobuf::Arena* arena);
     NKikimrMiniKQL::TResult GetMkql();
     Ydb::ResultSet* GetYdb(google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite);
-    Ydb::ResultSet* ExtractTrailingYdb(google::protobuf::Arena* arena);
+    bool HasTrailingResults();
 
     void FillMkql(NKikimrMiniKQL::TResult* mkqlResult);
     void FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsLimitPerWrite);
@@ -166,7 +168,7 @@ struct TTimeAndRandomProvider {
 
 class TTxAllocatorState: public TTimeAndRandomProvider {
 public:
-    NKikimr::NMiniKQL::TScopedAlloc Alloc;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
     NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
     NKikimr::NMiniKQL::THolderFactory HolderFactory;
@@ -253,7 +255,7 @@ public:
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);
     NKikimrMiniKQL::TResult* GetMkqlTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
     Ydb::ResultSet* GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite);
-    Ydb::ResultSet* ExtractTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
+    bool HasTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb);
 
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);
     TTypedUnboxedValue& GetParameterUnboxedValue(const TString& name);

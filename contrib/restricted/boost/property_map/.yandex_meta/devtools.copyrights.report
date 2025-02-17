@@ -1,0 +1,133 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0a1ddf2f633492698f29966f2ba00d47
+BELONGS ya.make
+    License text:
+        // Copyright (C) Vladimir Prus 2003.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_map/vector_property_map.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 246b91667b5b03d6d465ceede376e098
+BELONGS ya.make
+    License text:
+        // (C) Copyright Jeremy Siek, 2001.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_map/property_map_iterator.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 959ff6a9e03879b0569173e9f854b78a
+BELONGS ya.make
+    License text:
+        //  Copyright (C) 2009 Trustees of Indiana University
+        //  Authors: Jeremiah Willcock, Andrew Lumsdaine
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_map/shared_array_property_map.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 98be8460f5eeedee67d327e5aa099ae2
+BELONGS ya.make
+    License text:
+        // Copyright 2004-5 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_map/dynamic_property_map.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a546abb712c04722f781d7f8e7ebc8c7
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2013 Eurodecision
+        // Authors: Guillaume Pinot
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_map/compose_property_map.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b577ef3450332ce971ed9f06a436e353
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Jeremy Siek 1999-2001.
+        //  Copyright (C) 2006 Trustees of Indiana University
+        //  Authors: Douglas Gregor and Jeremy Siek
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_map/property_map.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e00f1e8f667cb6fd0131b3aaf2dc86a1
+BELONGS ya.make
+    License text:
+        // Copyright 2012, Philipp Moeller
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_map/function_property_map.hpp [5:5]
+        include/boost/property_map/transform_value_property_map.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f58f9e759307d0cd1407b7ffdc0de5ee
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Jeremy Siek 1999-2001.
+        //  Copyright (C) 2006 Trustees of Indiana University
+        //  Authors: Douglas Gregor and Jeremy Siek
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/property_map/property_map.hpp [1:3]

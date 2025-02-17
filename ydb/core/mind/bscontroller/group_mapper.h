@@ -130,7 +130,7 @@ namespace NKikimr {
 
             TMisplacedVDisks FindMisplacedVDisks(const TGroupDefinition& group);
 
-            std::optional<TPDiskId> TargetMisplacedVDisk(ui32 groupId, TGroupDefinition& group, TVDiskIdShort vdisk, 
+            std::optional<TPDiskId> TargetMisplacedVDisk(TGroupId groupId, TGroupDefinition& group, TVDiskIdShort vdisk, 
                 TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, TString& error);
         };
 

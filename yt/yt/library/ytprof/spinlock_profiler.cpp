@@ -66,7 +66,7 @@ void TSpinlockProfiler::RecordEvent(const void* /*lock*/, int64_t waitCycles)
     RecordSample(&fpCursor, waitCycles);
 }
 
-YT_THREAD_LOCAL(int) SpinlockEventCount;
+YT_DEFINE_THREAD_LOCAL(int, SpinlockEventCount);
 
 void TSpinlockProfiler::OnEvent(const void* lock, int64_t waitCycles)
 {
@@ -75,12 +75,14 @@ void TSpinlockProfiler::OnEvent(const void* lock, int64_t waitCycles)
         return;
     }
 
-    if (SpinlockEventCount < samplingRate) {
-        SpinlockEventCount++;
+    auto& spinlockEventCount = SpinlockEventCount();
+
+    if (spinlockEventCount < samplingRate) {
+        spinlockEventCount++;
         return;
     }
 
-    SpinlockEventCount = 0;
+    spinlockEventCount = 0;
     while (HandlingEvent_.exchange(true)) {
         SchedYield();
     }
@@ -92,7 +94,7 @@ void TSpinlockProfiler::OnEvent(const void* lock, int64_t waitCycles)
     HandlingEvent_.store(false);
 }
 
-void TSpinlockProfiler::AnnotateProfile(NProto::Profile* profile, const std::function<i64(const TString&)>& stringify)
+void TSpinlockProfiler::AnnotateProfile(NProto::Profile* profile, const TStringify& stringify)
 {
     auto sampleType = profile->add_sample_type();
     sampleType->set_type(stringify("sample"));
@@ -115,7 +117,6 @@ i64 TSpinlockProfiler::EncodeValue(i64 value)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
 
 TBlockingProfiler::TBlockingProfiler(TSpinlockProfilerOptions options)
     : TSignalSafeProfiler(options)
@@ -171,7 +172,7 @@ void TBlockingProfiler::RecordEvent(
     RecordSample(&fpCursor, cpuDelay);
 }
 
-YT_THREAD_LOCAL(int) YTSpinlockEventCount;
+YT_DEFINE_THREAD_LOCAL(int, YTSpinlockEventCount);
 
 void TBlockingProfiler::OnEvent(
     TCpuDuration cpuDelay,
@@ -183,12 +184,14 @@ void TBlockingProfiler::OnEvent(
         return;
     }
 
-    if (YTSpinlockEventCount < samplingRate) {
-        YTSpinlockEventCount++;
+    auto& ytSpinlockEventCount = YTSpinlockEventCount();
+
+    if (ytSpinlockEventCount < samplingRate) {
+        ytSpinlockEventCount++;
         return;
     }
 
-    YTSpinlockEventCount = 0;
+    ytSpinlockEventCount = 0;
     while (HandlingEvent_.exchange(true)) {
         SchedYield();
     }
@@ -200,7 +203,7 @@ void TBlockingProfiler::OnEvent(
     HandlingEvent_.store(false);
 }
 
-void TBlockingProfiler::AnnotateProfile(NProto::Profile* profile, const std::function<i64(const TString&)>& stringify)
+void TBlockingProfiler::AnnotateProfile(NProto::Profile* profile, const TStringify& stringify)
 {
     auto sampleType = profile->add_sample_type();
     sampleType->set_type(stringify("sample"));

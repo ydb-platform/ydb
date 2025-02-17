@@ -11,12 +11,14 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
-#include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
-#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
+#include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
 
 #include <util/system/file.h>
 #include <util/stream/file.h>
+
+#include <ydb/core/protos/auth.pb.h>
 
 namespace NKikimr::NKqp {
     NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
@@ -69,6 +71,11 @@ namespace NKikimr::NKqp {
         HttpGateway = MakeHttpGateway(HttpGatewayConfig, appData->Counters);
 
         S3GatewayConfig = queryServiceConfig.GetS3();
+
+        SolomonGatewayConfig = queryServiceConfig.GetSolomon();
+        SolomonGateway = NYql::CreateSolomonGateway(SolomonGatewayConfig);
+
+        S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
 
         YtGatewayConfig = queryServiceConfig.GetYt();
         YtGateway = MakeYtGateway(appData->FunctionRegistry, queryServiceConfig);
@@ -125,7 +132,10 @@ namespace NKikimr::NKqp {
             GenericGatewaysConfig,
             YtGatewayConfig,
             YtGateway,
-            nullptr};
+            SolomonGatewayConfig,
+            SolomonGateway,
+            nullptr,
+            S3ReadActorFactoryConfig};
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbEndpointGenerator &&

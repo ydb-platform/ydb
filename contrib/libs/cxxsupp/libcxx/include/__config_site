@@ -28,8 +28,6 @@
 #   define _YNDX_LIBCPP_MAKE_STRING_ITERATOR_POINTERS  0
 #endif
 
-#define _YNDX_WIN32_NOFILESYSTEM_RUNTIME
-
 #define _LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS
 #define _LIBCPP_NO_AUTO_LINK
 #define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
@@ -38,7 +36,6 @@
 #define _LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR
 #define _LIBCPP_ENABLE_CXX17_REMOVED_BINDERS
 #define _LIBCPP_ENABLE_CXX17_REMOVED_RANDOM_SHUFFLE
-#define _LIBCPP_ENABLE_CXX17_REMOVED_UNEXPECTED_FUNCTIONS
 #define _LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION
 
 // should be removed in https://st.yandex-team.ru/IGNIETFERRO-1955
@@ -51,6 +48,24 @@
 
 #define _LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES
 
+#define _LIBCPP_ENABLE_CXX20_REMOVED_SHARED_PTR_UNIQUE
+
 #ifdef _musl_
 #   define _LIBCPP_HAS_MUSL_LIBC
+#endif
+
+#if defined(__has_feature) && (__has_feature(address_sanitizer) || \
+                               __has_feature(leak_sanitizer) || \
+                               __has_feature(thread_sanitizer) || \
+                               __has_feature(memory_sanitizer) || \
+                               __has_feature(undefined_behavior_sanitizer))
+#       define _LIBCPP_HARDENING_MODE_DEFAULT _LIBCPP_HARDENING_MODE_FAST
+#elif defined(NDEBUG)
+#       define _LIBCPP_HARDENING_MODE_DEFAULT _LIBCPP_HARDENING_MODE_NONE
+#else
+#   define _LIBCPP_HARDENING_MODE_DEFAULT _LIBCPP_HARDENING_MODE_FAST
+#endif
+
+#if defined(_WIN32) && defined(_MSC_VER)
+#	define _WCHAR_H_CPLUSPLUS_98_CONFORMANCE_ 1
 #endif

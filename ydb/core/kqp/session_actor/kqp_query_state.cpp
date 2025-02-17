@@ -1,5 +1,6 @@
 #include "kqp_query_state.h"
 
+#include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 namespace NKikimr::NKqp {
@@ -13,6 +14,31 @@ using namespace NSchemeCache;
 #define LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 #define LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
+
+
+TKqpQueryState::TQueryTxId::TQueryTxId(const TQueryTxId& other) {
+    YQL_ENSURE(!Id);
+    Id = other.Id;
+}
+
+TKqpQueryState::TQueryTxId& TKqpQueryState::TQueryTxId::operator=(const TQueryTxId& id) {
+    YQL_ENSURE(!Id);
+    Id = id.Id;
+    return *this;
+}
+
+void TKqpQueryState::TQueryTxId::SetValue(const TTxId& id) {
+    YQL_ENSURE(!Id);
+    Id = id.Id;
+}
+
+TTxId TKqpQueryState::TQueryTxId::GetValue() {
+    return Id ? *Id : TTxId();
+}
+
+void TKqpQueryState::TQueryTxId::Reset() {
+    Id = TTxId();
+}
 
 bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& response) {
     Y_ENSURE(response.Request);
@@ -92,7 +118,7 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
 
     auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = Database;
-    if (UserToken && !UserToken->GetSerializedToken().empty()) {
+    if (HasUserToken()) {
         navigate->UserToken = UserToken;
     }
 
@@ -111,28 +137,44 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
     return std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(navigate.Release());
 }
 
-
 bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
-    CompileResult = ev->CompileResult;
-    YQL_ENSURE(CompileResult);
-    MaxReadType = CompileResult->MaxReadType;
+    CompileStats = ev->Stats;
+    if (!SaveAndCheckCompileResult(ev->CompileResult)) {
+        return false;
+    }
     Orbit = std::move(ev->Orbit);
 
-    if (CompileResult->Status != Ydb::StatusIds::SUCCESS)
+    return true;
+}
+
+bool TKqpQueryState::SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr compileResult) {
+    CompilationRunning = false;
+    CompileResult = compileResult;
+    YQL_ENSURE(CompileResult);
+    MaxReadType = CompileResult->MaxReadType;
+
+    if (CompileResult->Status != Ydb::StatusIds::SUCCESS) {
         return false;
+    }
+
+    if (compileResult->ReplayMessageUserView && GetCollectDiagnostics()) {
+        ReplayMessage = *compileResult->ReplayMessageUserView;
+    }
 
     YQL_ENSURE(CompileResult->PreparedQuery);
     const ui32 compiledVersion = CompileResult->PreparedQuery->GetVersion();
     YQL_ENSURE(compiledVersion == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1,
         "Unexpected prepared query version: " << compiledVersion);
 
-    CompileStats = ev->Stats;
     PreparedQuery = CompileResult->PreparedQuery;
-    if (ev->ReplayMessage) {
-        ReplayMessage = *ev->ReplayMessage;
-    }
     if (!CommandTagName) {
         CommandTagName = CompileResult->CommandTagName;
+    }
+    for (const auto& param : PreparedQuery->GetParameters()) {
+        const auto& ast = CompileResult->GetAst();
+        if (!ast || !ast->PgAutoParamValues || !ast->PgAutoParamValues->Contains(param.GetName())) {
+            ResultParams.push_back(param);
+        }
     }
     return true;
 }
@@ -150,7 +192,71 @@ bool TKqpQueryState::SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev) {
     SplittedWorld = std::move(ev->World);
     SplittedCtx = std::move(ev->Ctx);
     NextSplittedExpr = -1;
-    return true;
+    return ev->Status == Ydb::StatusIds::SUCCESS;
+}
+
+bool TKqpQueryState::TryGetFromCache(
+    TKqpQueryCache& cache,
+    const TGUCSettings::TPtr& gUCSettingsPtr,
+    TIntrusivePtr<TKqpCounters>& counters,
+    const TActorId& sender)
+{
+    TMaybe<TKqpQueryId> query;
+    TMaybe<TString> uid;
+
+    TKqpQuerySettings settings(GetType());
+    settings.DocumentApiRestricted = IsDocumentApiRestricted_;
+    settings.IsInternalCall = IsInternalCall();
+    settings.Syntax = GetSyntax();
+
+    TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
+    bool keepInCache = false;
+    switch (GetAction()) {
+        case NKikimrKqp::QUERY_ACTION_EXECUTE:
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
+            keepInCache = GetQueryKeepInCache() && query->IsSql();
+            break;
+
+        case NKikimrKqp::QUERY_ACTION_PREPARE:
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
+            keepInCache = query->IsSql();
+            break;
+
+        case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
+            uid = GetPreparedQuery();
+            keepInCache = GetQueryKeepInCache();
+            break;
+
+        case NKikimrKqp::QUERY_ACTION_EXPLAIN:
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
+            keepInCache = false;
+            break;
+
+        default:
+            YQL_ENSURE(false);
+    }
+
+    CompileStats = {};
+
+    auto compileResult = cache.Find(
+        uid,
+        query,
+        TempTablesState,
+        keepInCache,
+        UserToken->GetUserSID(),
+        counters,
+        DbCounters,
+        sender,
+        TlsActivationContext->AsActorContext());
+
+    if (compileResult) {
+        if (SaveAndCheckCompileResult(compileResult)) {
+            CompileStats.FromCache = true;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
@@ -163,16 +269,16 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     settings.Syntax = GetSyntax();
 
     bool keepInCache = false;
-    bool perStatementResult = !HasTxControl() && GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE;
+    bool perStatementResult = HasImplicitTx();
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             keepInCache = GetQueryKeepInCache() && query->IsSql();
             break;
 
         case NKikimrKqp::QUERY_ACTION_PREPARE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             keepInCache = query->IsSql();
             break;
 
@@ -182,7 +288,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
             break;
 
         case NKikimrKqp::QUERY_ACTION_EXPLAIN:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             keepInCache = false;
             break;
 
@@ -203,7 +309,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
         statementAst = Statements[CurrentStatementId];
     }
 
-    return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid, std::move(query), keepInCache,
+    return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), keepInCache,
         isQueryActionPrepare, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst);
 }
@@ -223,11 +329,11 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXPLAIN:
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             break;
 
         case NKikimrKqp::QUERY_ACTION_PREPARE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             break;
 
         case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
@@ -244,8 +350,9 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
     }
 
-    return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, CompileResult->Uid, CompileResult->Query, isQueryActionPrepare,
-        compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState);
+    return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, ClientAddress, CompileResult->Uid, query, isQueryActionPrepare,
+        compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState,
+        CompileResult->QueryAst);
 }
 
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
@@ -266,7 +373,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
 
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             break;
         default:
             YQL_ENSURE(false);
@@ -285,17 +392,20 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
         statementAst = Statements[CurrentStatementId];
     }
 
-    return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid, std::move(query), false,
+    return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
         false, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, SplittedCtx.Get(), SplittedExprs.at(NextSplittedExpr));
+        false, SplittedCtx.get(), SplittedExprs.at(NextSplittedExpr));
+}
+
+bool TKqpQueryState::ProcessingLastStatementPart() {
+    return SplittedExprs.empty() || (NextSplittedExpr + 1 >= static_cast<int>(SplittedExprs.size()));
 }
 
 bool TKqpQueryState::PrepareNextStatementPart() {
     QueryData = {};
     PreparedQuery = {};
     CompileResult = {};
-    TxCtx = {};
     CurrentTx = 0;
     TableVersions = {};
     MaxReadType = ETableReadType::Other;
@@ -304,16 +414,15 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     TopicOperations = {};
     ReplayMessage = {};
 
-    ++NextSplittedExpr;
-    
-    if (NextSplittedExpr >= static_cast<int>(SplittedExprs.size()) || SplittedExprs.empty()) {
+    if (ProcessingLastStatementPart()) {
         SplittedWorld.Reset();
         SplittedExprs.clear();
-        SplittedCtx.Reset();
+        SplittedCtx.reset();
         NextSplittedExpr = -1;
         return false;
     }
 
+    ++NextSplittedExpr;
     return true;
 }
 
@@ -323,8 +432,14 @@ void TKqpQueryState::AddOffsetsToTransaction() {
     const auto& operations = GetTopicOperations();
 
     TMaybe<TString> consumer;
-    if (operations.HasConsumer())
+    if (operations.HasConsumer()) {
         consumer = operations.GetConsumer();
+    }
+
+    TMaybe<ui32> supportivePartition;
+    if (operations.HasSupportivePartition()) {
+        supportivePartition = operations.GetSupportivePartition();
+    }
 
     TopicOperations = NTopic::TTopicOperations();
 
@@ -334,7 +449,7 @@ void TKqpQueryState::AddOffsetsToTransaction() {
 
         for (auto& partition : topic.partitions()) {
             if (partition.partition_offsets().empty()) {
-                TopicOperations.AddOperation(path, partition.partition_id());
+                TopicOperations.AddOperation(path, partition.partition_id(), supportivePartition);
             } else {
                 for (auto& range : partition.partition_offsets()) {
                     YQL_ENSURE(consumer.Defined());
@@ -366,12 +481,23 @@ std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> TKqpQueryState::BuildSchemeC
         consumer = operations.GetConsumer();
 
     TopicOperations.FillSchemeCacheNavigate(*navigate, std::move(consumer));
-    navigate->UserToken = UserToken;
+    if (HasUserToken()) {
+        navigate->UserToken = UserToken;
+    }
     navigate->Cookie = QueryId;
     return navigate;
 }
 
+bool TKqpQueryState::HasUserToken() const
+{
+    return UserToken && !UserToken->GetSerializedToken().empty();
+}
+
 bool TKqpQueryState::IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message) {
+    if (!HasUserToken()) {
+        return false;
+    }
+
     auto checkAccessDenied = [&] (const NSchemeCache::TSchemeCacheNavigate::TEntry& result) {
         static const auto selectRowRights = NACLib::EAccessRights::SelectRow;
         static const auto accessAttributesRights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
@@ -421,15 +547,13 @@ bool TKqpQueryState::HasErrors(const NSchemeCache::TSchemeCacheNavigate& respons
     return true;
 }
 
-bool TKqpQueryState::HasImpliedTx() const {
+bool TKqpQueryState::HasImplicitTx() const {
     if (HasTxControl()) {
         return false;
     }
 
     const NKikimrKqp::EQueryAction action = RequestEv->GetAction();
-    if (action != NKikimrKqp::QUERY_ACTION_EXECUTE &&
-        action != NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED)
-    {
+    if (action != NKikimrKqp::QUERY_ACTION_EXECUTE) {
         return false;
     }
 
@@ -441,22 +565,7 @@ bool TKqpQueryState::HasImpliedTx() const {
         return false;
     }
 
-    for (const auto& transactionPtr : PreparedQuery->GetTransactions()) {
-        switch (transactionPtr->GetType()) {
-        case NKqpProto::TKqpPhyTx::TYPE_GENERIC: // data transaction
-            return true;
-        case NKqpProto::TKqpPhyTx::TYPE_UNSPECIFIED:
-        case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-        case NKqpProto::TKqpPhyTx::TYPE_DATA: // data transaction, but not in QueryService API
-        case NKqpProto::TKqpPhyTx::TYPE_SCAN:
-        case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
-        case NKqpProto::TKqpPhyTx_EType_TKqpPhyTx_EType_INT_MIN_SENTINEL_DO_NOT_USE_:
-        case NKqpProto::TKqpPhyTx_EType_TKqpPhyTx_EType_INT_MAX_SENTINEL_DO_NOT_USE_:
-            break;
-        }
-    }
-
-    return false;
+    return true;
 }
 
 }

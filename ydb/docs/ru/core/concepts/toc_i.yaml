@@ -1,27 +1,36 @@
 items:
-- { name: Обзор,                                  href: index.md }
-- { name: Термины и определения,                  href: databases.md }
-- { name: Соединение с БД,       href: connect.md }
-- name: Аутентификация
-  href: auth.md
+- name: Глоссарий
+  href: glossary.md
+- name: Соединение с БД
+  href: connect.md
 - name: Модель данных и схема
-  include: { path: datamodel/toc_p.yaml, mode: link }
-- { name: Транзакции,                             href: transactions.md }
-- { name: Вторичные индексы,                      href: secondary_indexes.md }
-- { name: Change Data Capture (CDC),              href: cdc.md, when: feature_changefeed }
-- { name: Time to Live (TTL),                     href: ttl.md }
-- { name: Скан запросы,                           href: scan_query.md }
-- { name: Ограничения базы данных,                href: limits-ydb.md }
-- { name: Многоверсионное управление конкурентным доступом (MVCC), href: mvcc.md }
+  href: datamodel/index.md
+  include:
+    path: datamodel/toc_p.yaml
+    mode: link
+- name: Топология кластера
+  href: topology.md
+- name: Транзакции
+  href: transactions.md
+- name: Вторичные индексы
+  href: secondary_indexes.md
+- name: Change Data Capture (CDC)
+  href: cdc.md
+  when: feature_changefeed
+- name: Time to Live (TTL) и вытеснение данных во внешнее хранилище
+  href: ttl.md
+- name: Скан запросы
+  href: scan_query.md
+- name: Ограничения базы данных
+  href: limits-ydb.md
+- name: Многоверсионное управление конкурентным доступом (MVCC)
+  href: mvcc.md
+- name: Асинхронная репликация
+  href: async-replication.md
+  when: feature_async_replication
+- name: Оптимизатор запросов
+  href: optimizer.md
 - name: Федеративные запросы
-  include: { path: federated_query/toc_p.yaml, mode: link }
-- name: Кластер YDB
-  items:
-  - name: Обзор
-    href: cluster/index.md
-  - name: Топология
-    href: topology.md
-  - name: Общая схема YDB
-    href: cluster/common_scheme_ydb.md
-  - name: Дисковая подсистема кластера
-    href: cluster/distributed_storage.md
+  include:
+    path: federated_query/toc_p.yaml
+    mode: link

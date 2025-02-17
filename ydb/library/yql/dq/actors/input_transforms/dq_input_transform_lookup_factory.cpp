@@ -8,8 +8,9 @@ namespace NYql::NDq {
 void RegisterDqInputTransformLookupActorFactory(NDq::TDqAsyncIoFactory& factory) {
     factory.RegisterInputTransform<NYql::NDqProto::TDqInputTransformLookupSettings>(
         "StreamLookupInputTransform",
-        [](NDqProto::TDqInputTransformLookupSettings&& settings, IDqAsyncIoFactory::TInputTransformArguments&& args) {
+        [factory = &factory](NDqProto::TDqInputTransformLookupSettings&& settings, IDqAsyncIoFactory::TInputTransformArguments&& args) {
             return CreateInputTransformStreamLookup(
+                factory,
                 std::move(settings),
                 std::move(args)
             );

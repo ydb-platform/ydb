@@ -6,10 +6,10 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
-#include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -57,9 +57,8 @@ class TGRpcRequestProxyImpl
 {
     using TBase = TActorBootstrapped<TGRpcRequestProxyImpl>;
 public:
-    explicit TGRpcRequestProxyImpl(const NKikimrConfig::TAppConfig& appConfig, TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> tracingControl)
+    explicit TGRpcRequestProxyImpl(const NKikimrConfig::TAppConfig& appConfig)
         : ChannelBufferSize(appConfig.GetTableServiceConfig().GetResourceManager().GetChannelBufferSize())
-        , TracingControl(std::move(tracingControl))
     { }
 
     void Bootstrap(const TActorContext& ctx);
@@ -78,7 +77,8 @@ private:
     void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
     void ReplayEvents(const TString& databaseName, const TActorContext& ctx);
 
-    void MaybeStartTracing(IRequestProxyCtx& ctx);
+    template<class TEvent>
+    void MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& event);
 
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
 
@@ -117,6 +117,11 @@ private:
             NYql::TIssues()});
     }
 
+    void Handle(TEvRequestAuthAndCheck::TPtr& ev, const TActorContext&) {
+        ev->Get()->FinishSpan();
+        ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
+    }
+
     // returns true and defer event if no updates for given database
     // otherwice returns false and leave event untouched
     template <typename TEvent>
@@ -149,7 +154,7 @@ private:
             return;
         }
 
-        MaybeStartTracing(*requestBaseCtx);
+        MaybeStartTracing(event);
 
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
@@ -186,8 +191,8 @@ private:
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
-                if (!AllowYdbRequestsWithoutDatabase && DynamicNode) {
-                    requestBaseCtx->ReplyUnauthenticated("Requests without specified database is not allowed");
+                if (!AllowYdbRequestsWithoutDatabase && DynamicNode && !std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
+                    requestBaseCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
                     requestBaseCtx->FinishSpan();
                     return;
                 } else {
@@ -321,7 +326,6 @@ private:
     bool DynamicNode = false;
     TString RootDatabase;
     IGRpcProxyCounters::TPtr Counters;
-    TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> TracingControl;
 };
 
 void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
@@ -415,12 +419,27 @@ void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) 
 
 bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     const auto& state = ctx.GetAuthState();
-    return state.State == NYdbGrpc::TAuthState::AS_OK ||
-           state.State == NYdbGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
-           state.NeedAuth == false && !ctx.GetYdbToken();
+    if (state.State == NYdbGrpc::TAuthState::AS_OK) {
+        return true;
+    }
+
+    const bool authorizationParamsAreSet = ctx.GetYdbToken() || !ctx.FindClientCertPropertyValues().empty();
+    if (!state.NeedAuth && !authorizationParamsAreSet) {
+        return true;
+    }
+
+    if (!state.NeedAuth && state.State == NYdbGrpc::TAuthState::AS_FAIL) {
+        if (AppData()->EnforceUserTokenCheckRequirement && authorizationParamsAreSet) {
+            return false;
+        }
+        return true;
+    }
+    return false;
 }
 
-void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
+template<class TEvent>
+void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& event) {
+    IRequestProxyCtx& ctx = *event->Get();
     auto isTracingDecided = ctx.IsTracingDecided();
     if (!isTracingDecided) {
         return;
@@ -429,11 +448,12 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
         return;
     }
 
-    NWilson::TTraceId traceId;
-    if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef(), TComponentTracingLevels::ProductionVerbose);
+    NWilson::TTraceId traceId = NWilson::TTraceId(event->TraceId); // Can be not empty in case of internal subrequests // In this case it is part of the big request
+    if (!traceId) {
+        TMaybe<TString> traceparentHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
+        traceId = NJaegerTracing::HandleTracing(ctx.GetRequestDiscriminator(), traceparentHeader);
     }
-    TracingControl->HandleTracing(traceId, ctx.GetRequestDiscriminator());
+
     if (traceId) {
         NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
         if (auto database = ctx.GetDatabaseName()) {
@@ -463,7 +483,8 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdat
     }
 
     if (describeScheme.GetPathDescription().HasDomainDescription()
-        && describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) {
+        && describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()
+        && describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0) {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updating SecurityState for " << databaseName);
         Send(MakeTicketParserID(), new TEvTicketParser::TEvUpdateLoginSecurityState(
             describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState()
@@ -473,6 +494,8 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdat
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no DomainDescription");
         } else if (!describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no SecurityState");
+        } else if (describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() == 0) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no PublicKeys");
         }
     }
 
@@ -590,6 +613,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvCoordinationSessionRequest, PreHandle);
         HFunc(TEvNodeCheckRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);
+        HFunc(TEvRequestAuthAndCheck, PreHandle);
 
         default:
             Y_ABORT("Unknown request: %u\n", ev->GetTypeRewrite());
@@ -597,8 +621,8 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
     }
 }
 
-IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig, TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> tracingControl) {
-    return new TGRpcRequestProxyImpl(appConfig, std::move(tracingControl));
+IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig) {
+    return new TGRpcRequestProxyImpl(appConfig);
 }
 
 } // namespace NGRpcService

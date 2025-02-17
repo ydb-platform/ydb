@@ -1,3 +1,4 @@
 RECURSE(
     accessservice
+    iam
 )

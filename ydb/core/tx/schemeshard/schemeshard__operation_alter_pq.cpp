@@ -2,9 +2,15 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for PQGroupReserve
+
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/persqueue/config/config.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/utils.h>
+#include <ydb/services/lib/sharding/sharding.h>
+
 
 namespace {
 
@@ -12,6 +18,9 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TAlterPQ: public TSubOperation {
+    // Make sure we make decisions using a consistent runtime value
+    const bool EnableTopicSplitMerge = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
+
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -55,7 +64,9 @@ public:
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
     {
-        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
+        bool splitMergeEnabled = EnableTopicSplitMerge
+            && NPQ::SplitMergeEnabled(*tabletConfig)
+            && (!alter.HasPQTabletConfig() || !alter.GetPQTabletConfig().HasPartitionStrategy() || NPQ::SplitMergeEnabled(alter.GetPQTabletConfig()));
 
         TTopicInfo::TPtr params = new TTopicInfo();
         const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
@@ -64,6 +75,7 @@ public:
             errStr = "Split and merge operations disabled";
             return nullptr;
         }
+
         if (alter.SplitSize()) {
             for (const auto& split : alter.GetSplit()) {
                 if (!split.HasPartition()) {
@@ -105,7 +117,7 @@ public:
                 params->TotalGroupCount = totalGroupCount;
             }
         }
-        if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()) {
+        if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy() && NPQ::SplitMergeEnabled(alter.GetPQTabletConfig())) {
             const auto strategy = alter.GetPQTabletConfig().GetPartitionStrategy();
             if (strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
                 errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
@@ -127,6 +139,10 @@ public:
 
             if (!CheckPersQueueConfig(alterConfig, false, &errStr)) {
                 return nullptr;
+            }
+
+            if (!alterConfig.HasPartitionStrategy() && tabletConfig->HasPartitionStrategy()) {
+                alterConfig.MutablePartitionStrategy()->CopyFrom(tabletConfig->GetPartitionStrategy());
             }
 
             if (alterConfig.GetPartitionConfig().HasLifetimeSeconds()) {
@@ -168,6 +184,16 @@ public:
                 return nullptr;
             }
 
+            if (alterConfig.HasPartitionStrategy() && !NPQ::SplitMergeEnabled(alterConfig)
+                && tabletConfig->HasPartitionStrategy() && NPQ::SplitMergeEnabled(*tabletConfig)) {
+                errStr = TStringBuilder() << "Can`t disable auto partitioning.";
+                return nullptr;
+            }
+
+            if (!alterConfig.HasPartitionStrategy() && tabletConfig->HasPartitionStrategy()) {
+                alterConfig.MutablePartitionStrategy()->CopyFrom(tabletConfig->GetPartitionStrategy());
+            }
+
             const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
             if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
                 auto cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
@@ -183,6 +209,13 @@ public:
             }
             const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
             alterConfig.SetYdbDatabasePath(databasePath);
+
+
+            if (alterConfig.HasOffloadConfig()) {
+                // TODO: check validity
+                auto* pathId = alterConfig.MutableOffloadConfig()->MutableIncrementalBackup()->MutableDstPathId();
+                TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId.ToProto(pathId);
+            }
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
             Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
@@ -227,7 +260,9 @@ public:
             ui64 shardsToCreate,
             const TChannelsBindings& rbChannelsBinding,
             const TChannelsBindings& pqChannelsBinding,
-            TOperationContext& context)
+            TOperationContext& context,
+            const NKikimrPQ::TPQTabletConfig& tabletConfig,
+            const NKikimrPQ::TPQTabletConfig& newTabletConfig)
     {
         TPathElement::TPtr item = path.Base();
         NIceDb::TNiceDb db(context.GetDB());
@@ -243,10 +278,44 @@ public:
             context.SS->PersistUpdateNextShardIdx(db);
         }
 
-        for (auto& shard : pqGroup->Shards) {
-            auto shardIdx = shard.first;
-            for (const auto& pqInfo : shard.second->Partitions) {
-                context.SS->PersistPersQueue(db, item->PathId, shardIdx, *pqInfo.Get());
+        bool splitMergeWasDisabled = NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
+                && !NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
+        bool splitMergeWasEnabled = !NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
+                && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
+
+        if (splitMergeWasEnabled) {
+            auto partitions = pqGroup->GetPartitions();
+
+            TString prevBound;
+            for (size_t i = 0; i < partitions.size(); ++i) {
+                auto* partitionInfo = partitions[i].second;
+                if (i) {
+                    partitionInfo->KeyRange.ConstructInPlace();
+                    partitionInfo->KeyRange->FromBound = prevBound;
+                }
+                if (i != (partitions.size() - 1)) {
+                    if (!partitionInfo->KeyRange) {
+                        partitionInfo->KeyRange.ConstructInPlace();
+                    }
+                    auto range = NDataStreams::V1::RangeFromShardNumber(i, partitions.size());
+                    prevBound = NPQ::AsKeyBound(range.End);
+                    partitionInfo->KeyRange->ToBound = prevBound;
+                }
+
+                context.SS->PersistPersQueue(db, item->PathId, partitions[i].first, *partitionInfo);
+            }
+        } else {
+            for (auto& [shardIdx, tabletInfo] : pqGroup->Shards) {
+                for (const auto& partitionInfo : tabletInfo->Partitions) {
+                    if (splitMergeWasDisabled) {
+                        // clear all splitmerge fields
+                        partitionInfo->Status = NKikimrPQ::ETopicPartitionStatus::Active;
+                        partitionInfo->KeyRange.Clear();
+                        partitionInfo->ParentPartitionIds.clear();
+                        partitionInfo->ChildPartitionIds.clear();
+                    }
+                    context.SS->PersistPersQueue(db, item->PathId, shardIdx, *partitionInfo.Get());
+                }
             }
         }
 
@@ -465,7 +534,7 @@ public:
                 .IsPQGroup()
                 .NotUnderOperation();
 
-            if (!Transaction.GetAllowAccessToPrivatePaths()) {
+            if (!Transaction.GetAllowAccessToPrivatePaths() && !Transaction.GetInternal()) {
                 checks.IsCommonSensePath();
             }
 
@@ -487,12 +556,8 @@ public:
             return result;
         }
 
-        NKikimrPQ::TPQTabletConfig tabletConfig, newTabletConfig;
-        if (!topic->TabletConfig.empty()) {
-            bool parseOk = ParseFromStringNoSizeLimit(tabletConfig, topic->TabletConfig);
-            Y_ABORT_UNLESS(parseOk, "Previously serialized pq tablet config cannot be parsed");
-        }
-        newTabletConfig = tabletConfig;
+        NKikimrPQ::TPQTabletConfig tabletConfig = topic->GetTabletConfig();
+        NKikimrPQ::TPQTabletConfig newTabletConfig = tabletConfig;
 
         TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
 
@@ -517,12 +582,24 @@ public:
             return result;
         }
 
-        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
+        alterData->ActivePartitionCount = topic->ActivePartitionCount;
+
+        bool splitMergeEnabled = EnableTopicSplitMerge
+                && NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
+                && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
+
+        THashSet<ui32> involvedPartitions;
         if (splitMergeEnabled) {
-            THashSet<ui32> involvedPartitions;
+            auto Hex = [](const auto& value) {
+                return HexText(TBasicStringBuf(value));
+            };
+
+            ui32 nextId = topic->NextPartitionId;
+            ui32 nextGroupId = topic->TotalGroupCount;
 
             for (const auto& split : alter.GetSplit()) {
                 alterData->TotalGroupCount += 2;
+                ++alterData->ActivePartitionCount;
 
                 const auto splittedPartitionId = split.GetPartition();
                 if (!topic->Partitions.contains(splittedPartitionId)) {
@@ -554,15 +631,16 @@ public:
                 if (keyRange) {
                     if (keyRange->FromBound && splitBoundary <= *keyRange->FromBound) {
                         errStr = TStringBuilder()
-                                 << "Split boundary less or equals FromBound of partition: " << splitBoundary
-                                 << " <= " << *keyRange->FromBound;
+                                 << "Split boundary less or equals FromBound of partition: '" << Hex(splitBoundary)
+                                 << "' <= '" << Hex(*keyRange->FromBound) << "'";
                         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }
                     if (keyRange->ToBound && splitBoundary >= *keyRange->ToBound) {
                         errStr = TStringBuilder()
-                                 << "Split boundary greate or equals ToBound of partition: " << splitBoundary
-                                 << " >= " << *keyRange->ToBound;
+                                 << "Split boundary greate or equals ToBound of partition: '" << Hex(splitBoundary)
+                                 << "' >= '" << Hex(*keyRange->ToBound)
+                                 << "' (FromBound is '" << Hex(keyRange->FromBound ? *keyRange->FromBound : TString{}) << "')";
                         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }
@@ -574,16 +652,16 @@ public:
                 range.FromBound = keyRange ? keyRange->FromBound : Nothing();
                 range.ToBound = splitBoundary;
 
-                alterData->PartitionsToAdd.emplace(topic->NextPartitionId, topic->TotalGroupCount + 1, range, parents);
+                alterData->PartitionsToAdd.emplace(nextId++, ++nextGroupId, range, parents);
 
                 range.FromBound = splitBoundary;
                 range.ToBound = keyRange ? keyRange->ToBound : Nothing();
 
-                alterData->PartitionsToAdd.emplace(topic->NextPartitionId + 1, topic->TotalGroupCount + 2, range,
-                                                   parents);
+                alterData->PartitionsToAdd.emplace(nextId++, ++nextGroupId, range, parents);
             }
             for (const auto& merge : alter.GetMerge()) {
                 alterData->TotalGroupCount += 1;
+                --alterData->ActivePartitionCount;
 
                 const auto partitionId = merge.GetPartition();
                 if (!topic->Partitions.contains(partitionId)) {
@@ -650,7 +728,7 @@ public:
                     rangem = range;
                 }
 
-                alterData->PartitionsToAdd.emplace(topic->NextPartitionId, topic->TotalGroupCount + 1, rangem, parents);
+                alterData->PartitionsToAdd.emplace(nextId++, ++nextGroupId, rangem, parents);
             }
         }
 
@@ -667,6 +745,10 @@ public:
         }
 
         alterData->TotalPartitionCount = topic->TotalPartitionCount + alterData->PartitionsToAdd.size();
+        if (!splitMergeEnabled) {
+            alterData->ActivePartitionCount = alterData->TotalPartitionCount;
+        }
+
         alterData->NextPartitionId = topic->NextPartitionId;
         for (const auto& p : alterData->PartitionsToAdd) {
             if (p.GroupId == 0 || p.GroupId > alterData->TotalGroupCount) {
@@ -710,10 +792,11 @@ public:
             return result;
         }
 
-        const PQGroupReserve reserve(newTabletConfig, alterData->TotalPartitionCount);
-        const PQGroupReserve oldReserve(tabletConfig, topic->TotalPartitionCount);
+        const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount);
+        const PQGroupReserve reserveForCheckLimit(newTabletConfig, alterData->ActivePartitionCount + involvedPartitions.size());
+        const PQGroupReserve oldReserve(tabletConfig, topic->ActivePartitionCount);
 
-        const ui64 storageToReserve = reserve.Storage > oldReserve.Storage ? reserve.Storage - oldReserve.Storage : 0;
+        const ui64 storageToReserve = reserveForCheckLimit.Storage > oldReserve.Storage ? reserveForCheckLimit.Storage - oldReserve.Storage : 0;
 
         {
             TPath::TChecker checks = path.Check();
@@ -774,14 +857,14 @@ public:
         }
 
         topic->PrepareAlter(alterData);
-        const TTxState& txState =
-            PrepareChanges(OperationId, path, topic, shardsToCreate, tabletChannelsBinding, pqChannelsBinding, context);
+        const TTxState& txState = PrepareChanges(OperationId, path, topic, shardsToCreate, tabletChannelsBinding,
+                pqChannelsBinding, context, tabletConfig, newTabletConfig);
 
         context.OnComplete.ActivateTx(OperationId);
         context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
 
-        path.DomainInfo()->AddInternalShards(txState);
+        path.DomainInfo()->AddInternalShards(txState, context.SS);
         path.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
         path.DomainInfo()->UpdatePQReservedStorage(oldReserve.Storage, reserve.Storage);
         path.Base()->IncShardsInside(shardsToCreate);

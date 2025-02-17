@@ -23,10 +23,11 @@ enum class EInitPhase {
 };
 
 enum EOwner {
-    OwnerSystem = 0, // Chunk0, SysLog chunks and CommonLog + just common log tracking, mens "for dynamic" in requests
-    OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands
+    OwnerSystem = 0, // Chunk0, SysLog chunks and CommonLog + just common log tracking, means "for dynamic" in requests
+    OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands, common log records owned by OwnerUnallocated = padding 
     OwnerBeginUser = 2,
     OwnerEndUser = 241,
+    OwnerMetadata = 250, // Metadata chunks, the real owner
     OwnerSystemLog = 251, // Not used to actually mark chunks, just for space tracking
     OwnerSystemReserve = 252, // Not used to actually mark chunks, just for space tracking, means "for static" in requests
     OwnerCommonStaticLog = 253, // Not used to actually mark chunks, just for space tracking
@@ -56,6 +57,13 @@ struct TOwnerData {
         VDISK_STATUS_SENT_INIT = 2,
         VDISK_STATUS_READING_LOG = 3,
         VDISK_STATUS_LOGGED = 4,
+    };
+    enum EVDiskShredState {
+        VDISK_SHRED_STATE_NOT_REQUESTED = 0,
+        VDISK_SHRED_STATE_COMPACT_REQUESTED = 1,
+        VDISK_SHRED_STATE_COMPACT_FINISHED = 2,
+        VDISK_SHRED_STATE_SHRED_REQUESTED = 3,
+        VDISK_SHRED_STATE_SHRED_FINISHED = 4,
     };
     struct TLogEndPosition {
         ui32 ChunkIdx;
@@ -91,6 +99,8 @@ struct TOwnerData {
     TIntrusivePtr<TOwnerInflight> InFlight;
 
     bool OnQuarantine = false;
+    ui64 LastShredGeneration = 0;
+    EVDiskShredState ShredState = VDISK_SHRED_STATE_NOT_REQUESTED;
 
     TOperationLog<8> OperationLog;
 
@@ -132,6 +142,26 @@ struct TOwnerData {
         return RenderStatus(Status);
     }
 
+    const char* GetStringShredState() const {
+        return RenderShredState(ShredState);
+    }
+
+    static const char* RenderShredState(const EVDiskShredState shredState) {
+        switch(shredState) {
+        case EVDiskShredState::VDISK_SHRED_STATE_NOT_REQUESTED:
+            return "Not requested";
+        case EVDiskShredState::VDISK_SHRED_STATE_COMPACT_REQUESTED:
+            return "Compact requested";
+        case EVDiskShredState::VDISK_SHRED_STATE_COMPACT_FINISHED:
+            return "Compact finished";
+        case EVDiskShredState::VDISK_SHRED_STATE_SHRED_REQUESTED:
+            return "Shred requested";
+        case EVDiskShredState::VDISK_SHRED_STATE_SHRED_FINISHED:
+            return "Shred finished";
+        }
+        return "Unexpected enum value";
+    }
+
     static const char* RenderStatus(const EVDiskStatus status) {
         switch(status) {
         case VDISK_STATUS_DEFAULT:
@@ -156,10 +186,14 @@ struct TOwnerData {
         return LogReader || InFlight->ChunkWrites.load() || InFlight->ChunkReads.load() || InFlight->LogWrites.load();
     }
 
+    bool ReadingLog() const {
+        return bool(LogReader);
+    }
+
     TString ToString() const {
         TStringStream str;
         str << "TOwnerData {";
-        str << "VDiskId# " << VDiskId.ToString();
+        str << "VDiskId# " << VDiskId.ToStringWOGeneration();
         str << " Status# " << RenderStatus(Status);
         str << " CurrentFirstLsnToKeep# " << CurrentFirstLsnToKeep;
         str << " LastWrittenCommitLsn# " << LastWrittenCommitLsn;
@@ -216,6 +250,8 @@ struct TOwnerData {
             InFlight.Reset(TIntrusivePtr<TOwnerInflight>(new TOwnerInflight));
         }
         OnQuarantine = quarantine;
+        LastShredGeneration = 0;
+        ShredState = VDISK_SHRED_STATE_NOT_REQUESTED;
     }
 };
 
@@ -243,8 +279,9 @@ struct TChunkState {
     std::atomic<i64> OperationsInProgress;
     TOwner OwnerId;
     ECommitState CommitState;
+    std::atomic<bool> IsDirty;
     ui64 CommitsInProgress;
-
+    ui64 ShredGeneration;
     TChunkState()
         : Nonce(0)
         , CurrentNonce(0)
@@ -252,7 +289,9 @@ struct TChunkState {
         , OperationsInProgress(0)
         , OwnerId(OwnerUnallocated)
         , CommitState(FREE)
+        , IsDirty(false)
         , CommitsInProgress(0)
+        , ShredGeneration(0)
     {}
 
     bool HasAnyOperationsInProgress() const {
@@ -272,7 +311,9 @@ struct TChunkState {
         OUT_VAR(OperationsInProgress.load());
         OUT_VAR(OwnerId);
         OUT_VAR(CommitState);
+        OUT_VAR(IsDirty.load());
         OUT_VAR(CommitsInProgress);
+        OUT_VAR(ShredGeneration);
         str << "}";
         return str.Str();
     }

@@ -43,23 +43,19 @@ public:
 
         if (Ev->Get()->IsSuccess()) {
             for (const auto& target : Ev->Get()->ToAdd) {
-                const auto kind = TargetKindFromEntryType(target.first.Type);
-                const auto& srcPath = target.first.Name;
-                const auto& dstPath = target.second;
-
-                const auto tid = Replication->AddTarget(kind, srcPath, dstPath);
+                const auto tid = Replication->AddTarget(target.Kind, target.SrcPath, target.DstPath);
                 db.Table<Schema::Targets>().Key(rid, tid).Update(
-                    NIceDb::TUpdate<Schema::Targets::Kind>(kind),
-                    NIceDb::TUpdate<Schema::Targets::SrcPath>(srcPath),
-                    NIceDb::TUpdate<Schema::Targets::DstPath>(dstPath)
+                    NIceDb::TUpdate<Schema::Targets::Kind>(target.Kind),
+                    NIceDb::TUpdate<Schema::Targets::SrcPath>(target.SrcPath),
+                    NIceDb::TUpdate<Schema::Targets::DstPath>(target.DstPath)
                 );
 
                 CLOG_N(ctx, "Add target"
                     << ": rid# " << rid
                     << ", tid# " << tid
-                    << ", kind# " << kind
-                    << ", srcPath# " << srcPath
-                    << ", dstPath# " << dstPath);
+                    << ", kind# " << target.Kind
+                    << ", srcPath# " << target.SrcPath
+                    << ", dstPath# " << target.DstPath);
             }
         } else {
             const auto error = JoinSeq(", ", Ev->Get()->Failed);

@@ -1,16 +1,17 @@
+# cython: language_level=3
 
 cdef extern from "_ruamel_yaml.h":
 
-    void malloc(int l)
-    void memcpy(char *d, char *s, int l)
-    int strlen(char *s)
+    void malloc(size_t l)
+    void memcpy(void *d, const void *s, size_t l)
+    int strlen(const char *s)
     int PyString_CheckExact(object o)
     int PyUnicode_CheckExact(object o)
     char *PyString_AS_STRING(object o)
-    int PyString_GET_SIZE(object o)
-    object PyString_FromStringAndSize(char *v, int l)
-    object PyUnicode_FromString(char *u)
-    object PyUnicode_DecodeUTF8(char *u, int s, char *e)
+    Py_ssize_t PyString_GET_SIZE(object o)
+    object PyString_FromStringAndSize(char *v, Py_ssize_t l)
+    object PyUnicode_FromString(const char *u)
+    object PyUnicode_DecodeUTF8(const char *u, int s, const char *e)
     object PyUnicode_AsUTF8String(object o)
     int PY_MAJOR_VERSION
 
@@ -85,11 +86,11 @@ cdef extern from "_ruamel_yaml.h":
         YAML_MAPPING_START_EVENT
         YAML_MAPPING_END_EVENT
 
-    ctypedef int yaml_read_handler_t(void *data, char *buffer,
-            int size, int *size_read) except 0
+    ctypedef int yaml_read_handler_t(void *data, unsigned char *buffer,
+            size_t size, size_t *size_read) except 0
 
-    ctypedef int yaml_write_handler_t(void *data, char *buffer,
-            int size) except 0
+    ctypedef int yaml_write_handler_t(void *data, unsigned char *buffer,
+            size_t size) except 0
 
     ctypedef struct yaml_mark_t:
         int index

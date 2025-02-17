@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package Ydb.View.V1;
+option java_package = "com.yandex.ydb.view.v1";
+
+import "ydb/public/api/protos/draft/ydb_view.proto";
+
+service ViewService {
+    rpc DescribeView(View.DescribeViewRequest) returns (View.DescribeViewResponse);
+}

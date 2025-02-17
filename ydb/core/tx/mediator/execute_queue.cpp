@@ -154,6 +154,7 @@ namespace NTxMediator {
             const NKikimrTxMediatorTimecast::TEvWatch &record = ev->Get()->Record;
             // todo: check config coherence
             const TActorId &sender = ev->Sender;
+            const TActorId &server = ev->Recipient;
             LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "Actor# " << ctx.SelfID.ToString()
                 << " MediatorId# " << MediatorId << " HANDLE TEvWatch");
 
@@ -161,14 +162,54 @@ namespace NTxMediator {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "Actor# " << ctx.SelfID.ToString()
                     << " MediatorId# " << MediatorId << " SEND TEvWatchBucket to# "
                     << Buckets[bucketIdx].ActiveActor.ToString() << " bucket.ActiveActor");
-                ctx.Send(Buckets[bucketIdx].ActiveActor, new TEvTxMediator::TEvWatchBucket(sender));
+                ctx.Send(Buckets[bucketIdx].ActiveActor, new TEvTxMediator::TEvWatchBucket(sender, server));
+            }
+        }
+
+        void Handle(TEvMediatorTimecast::TEvGranularWatch::TPtr &ev, const TActorContext &ctx) {
+            const auto &record = ev->Get()->Record;
+            const ui32 bucketIdx = record.GetBucket();
+
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "Actor# " << ctx.SelfID
+                << " MediatorId# " << MediatorId << " HANDLE TEvGranularWatch from# " << ev->Sender
+                << " bucket# " << bucketIdx);
+
+            if (bucketIdx < Buckets.size()) {
+                ev->Rewrite(ev->GetTypeRewrite(), Buckets[bucketIdx].ActiveActor);
+                ctx.Send(ev.Release());
+            }
+        }
+
+        void Handle(TEvMediatorTimecast::TEvGranularWatchModify::TPtr &ev, const TActorContext &ctx) {
+            const auto &record = ev->Get()->Record;
+            const ui32 bucketIdx = record.GetBucket();
+
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "Actor# " << ctx.SelfID
+                << " MediatorId# " << MediatorId << " HANDLE TEvGranularWatchModify from# " << ev->Sender
+                << " bucket# " << bucketIdx);
+
+            if (bucketIdx < Buckets.size()) {
+                ev->Rewrite(ev->GetTypeRewrite(), Buckets[bucketIdx].ActiveActor);
+                ctx.Send(ev.Release());
+            }
+        }
+
+        void Handle(TEvTxMediator::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
+            const auto* msg = ev->Get();
+
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "Actor# " << ctx.SelfID
+                << " MediatorId# " << MediatorId << " HANDLE TEvServerDisconnected server# " << msg->ServerId);
+
+            // Broadcast to buckets
+            for (const TBucket &bucket : Buckets) {
+                ctx.Send(bucket.ActiveActor, new TEvTxMediator::TEvServerDisconnected(msg->ServerId));
             }
         }
 
         void Bootstrap(const TActorContext &ctx) {
             Buckets.resize(BucketSelector.Buckets());
             for (ui32 bucketIdx = 0; bucketIdx < Buckets.size(); ++bucketIdx)
-                Buckets[bucketIdx].ActiveActor = ctx.ExecutorThread.RegisterActor(CreateTxMediatorTabletQueue(ctx.SelfID, MediatorId, 1, bucketIdx), TMailboxType::ReadAsFilled);
+                Buckets[bucketIdx].ActiveActor = ctx.Register(CreateTxMediatorTabletQueue(ctx.SelfID, MediatorId, 1, bucketIdx), TMailboxType::ReadAsFilled);
         }
 
     public:
@@ -196,6 +237,9 @@ namespace NTxMediator {
                 HFunc(TEvTxMediator::TEvCommitStep, Handle);
                 HFunc(TEvTxMediator::TEvRequestLostAcks, Handle);
                 HFunc(TEvMediatorTimecast::TEvWatch, Handle);
+                HFunc(TEvMediatorTimecast::TEvGranularWatch, Handle);
+                HFunc(TEvMediatorTimecast::TEvGranularWatchModify, Handle);
+                HFunc(TEvTxMediator::TEvServerDisconnected, Handle);
                 CFunc(TEvents::TSystem::PoisonPill, Die);
                 CFunc(TEvents::TSystem::Bootstrap, Bootstrap);
             }

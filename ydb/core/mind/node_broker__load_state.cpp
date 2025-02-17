@@ -2,6 +2,7 @@
 #include "node_broker__scheme.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/counters_node_broker.pb.h>
 
 namespace NKikimr {
 namespace NNodeBroker {
@@ -12,6 +13,8 @@ public:
         : TBase(self)
     {
     }
+
+    TTxType GetTxType() const override { return TXTYPE_LOAD_STATE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {

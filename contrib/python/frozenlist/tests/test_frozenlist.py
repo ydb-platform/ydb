@@ -11,7 +11,15 @@ from frozenlist import FrozenList, PyFrozenList
 class FrozenListMixin:
     FrozenList = NotImplemented
 
-    SKIP_METHODS = {"__abstractmethods__", "__slots__"}
+    SKIP_METHODS = {
+        "__abstractmethods__",
+        "__slots__",
+        "__static_attributes__",
+        "__firstlineno__",
+    }
+
+    def test___class_getitem__(self) -> None:
+        assert self.FrozenList[str] is not None
 
     def test_subclass(self) -> None:
         assert issubclass(self.FrozenList, MutableSequence)

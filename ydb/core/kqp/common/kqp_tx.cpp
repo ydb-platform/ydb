@@ -7,23 +7,53 @@ namespace NKqp {
 
 using namespace NYql;
 
-TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TMaybe<TKqpTxLock>& invalidatedLock) {
+NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKikimrPathId& pathId) {
     TStringBuilder message;
     message << "Transaction locks invalidated.";
 
-    TMaybe<TString> tableName;
-    if (invalidatedLock) {
-        TKikimrPathId id(invalidatedLock->GetSchemeShard(), invalidatedLock->GetPathId());
-        auto table = txCtx.TableByIdMap.FindPtr(id);
-        if (table) {
-            tableName = *table;
+    if (pathId.OwnerId() != 0) {
+        auto table = txCtx.TableByIdMap.FindPtr(pathId);
+        if (!table) {
+            return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table.");
         }
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << "`" << *table << "`");
+    } else {
+        // Olap tables don't return SchemeShard in locks, thus we use tableId here.
+        for (const auto& [pathId, table] : txCtx.TableByIdMap) {
+            if (pathId.TableId() == pathId.TableId()) {
+                return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << "`" << table << "`");
+            }
+        }
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table."); 
     }
+}
 
-    if (tableName) {
-        message << " Table: " << *tableName;
+TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpTxLock& invalidatedLock) {
+    return GetLocksInvalidatedIssue(
+        txCtx,
+        TKikimrPathId(
+            invalidatedLock.GetSchemeShard(),
+            invalidatedLock.GetPathId()));
+}
+
+NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId) {
+    TStringBuilder message;
+    message << "Transaction locks invalidated.";
+
+    if (auto tableInfoPtr = shardIdToTableInfo.GetPtr(shardId); tableInfoPtr) {
+        message << " Tables: ";
+        bool first = true;
+        for (const auto& path : tableInfoPtr->Pathes) {
+            if (!first) {
+                message << ", ";
+                first = false;
+            }
+            message << "`" << path << "`";
+        }
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+    } else {
+        message << " Unknown table.";   
     }
-
     return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
 }
 
@@ -127,7 +157,9 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 {
     Y_UNUSED(config);
 
-    if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE)
+    if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE &&
+        *txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO &&
+        *txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW)
         return false;
 
     if (txCtx.GetSnapshot().IsValid())
@@ -140,6 +172,8 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
     size_t readPhases = 0;
     bool hasEffects = false;
+    bool hasStreamLookup = false;
+    bool hasSinkWrite = false;
 
     for (const auto &tx : physicalQuery.GetTransactions()) {
         switch (tx.GetType()) {
@@ -155,28 +189,65 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         if (tx.GetHasEffects()) {
             hasEffects = true;
         }
+
+        for (const auto &stage : tx.GetStages()) {
+            hasSinkWrite |= !stage.GetSinks().empty();
+
+            for (const auto &input : stage.GetInputs()) {
+                hasStreamLookup |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup;
+            }
+
+            for (const auto &tableOp : stage.GetTableOps()) {
+                if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
+                    // always need snapshot for OLAP reads
+                    return true;
+                }
+            }
+        }
     }
 
-    if (txCtx.HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-        YQL_ENSURE(txCtx.EnableImmediateEffects);
+    if (txCtx.NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
         return true;
     }
 
-    // We don't want snapshot when there are effects at the moment,
-    // because it hurts performance when there are multiple single-shard
-    // reads and a single distributed commit. Taking snapshot costs
-    // similar to an additional distributed transaction, and it's very
-    // hard to predict when that happens, causing performance
-    // degradation.
-    if (hasEffects) {
-        return false;
+    YQL_ENSURE(!hasSinkWrite || hasEffects);
+
+    // We need snapshot for stream lookup, besause it's used for dependent reads
+    if (hasStreamLookup) {
+        return true;
     }
+
+    if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
+        if (hasEffects && !txCtx.HasTableRead) {
+            YQL_ENSURE(txCtx.HasTableWrite);
+            // Don't need snapshot for WriteOnly transaction.
+            return false;
+        } else if (hasEffects) {
+            YQL_ENSURE(txCtx.HasTableWrite);
+            // ReadWrite transaction => need snapshot
+            return true;
+        }
+        // ReadOnly transaction here
+    } else {
+        // We don't want snapshot when there are effects at the moment,
+        // because it hurts performance when there are multiple single-shard
+        // reads and a single distributed commit. Taking snapshot costs
+        // similar to an additional distributed transaction, and it's very
+        // hard to predict when that happens, causing performance
+        // degradation.
+        if (hasEffects) {
+            return false;
+        }
+    }
+
+    YQL_ENSURE(!hasEffects && !hasStreamLookup);
 
     // We need snapshot when there are multiple table read phases, most
     // likely it involves multiple tables and we would have to use a
     // distributed commit otherwise. Taking snapshot helps as avoid TLI
     // for read-only transactions, and costs less than a final distributed
     // commit.
+    // NOTE: In case of read from single shard, we won't take snapshot.
     return readPhases > 1;
 }
 
@@ -193,23 +264,12 @@ bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     return false;
 }
 
-bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage, const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& tables) {
+bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage) {
     for (const auto& sink : stage.GetSinks()) {
         if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
             NKikimrKqp::TKqpTableSinkSettings settings;
             YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-
-            const bool isOlapSink = std::any_of(
-                std::begin(tables),
-                std::end(tables),
-                [&](const NKqpProto::TKqpPhyTable& table) {
-                    return table.GetKind() == NKqpProto::EKqpPhyTableKind::TABLE_KIND_OLAP
-                        && google::protobuf::util::MessageDifferencer::Equals(table.GetId(), settings.GetTable());
-            });
-
-            if (isOlapSink) {
-                return true;
-            }
+            return settings.GetIsOlap();
         }
     }
     return false;
@@ -218,7 +278,7 @@ bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage, const google
 bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     for (const auto &tx : physicalQuery.GetTransactions()) {
         for (const auto &stage : tx.GetStages()) {
-            if (HasOlapTableWriteInStage(stage, tx.GetTables())) {
+            if (HasOlapTableWriteInStage(stage)) {
                 return true;
             }
         }
@@ -267,18 +327,83 @@ bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    return !settings.GetIsOlap();
+                }
+            }
+        }
+    }
+    return false;
+}
 
-                    const bool isOltpSink = std::any_of(
-                        std::begin(tx.GetTables()),
-                        std::end(tx.GetTables()),
-                        [&](const NKqpProto::TKqpPhyTable& table) {
-                            return table.GetKind() == NKqpProto::EKqpPhyTableKind::TABLE_KIND_DS
-                                && google::protobuf::util::MessageDifferencer::Equals(table.GetId(), settings.GetTable());
-                    });
+bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery) {
+    auto getTable = [](const NKqpProto::TKqpPhyTableId& table) {
+        return NKikimr::TTableId(table.GetOwnerId(), table.GetTableId());
+    };
 
-                    if (isOltpSink) {
+    for (size_t index = 0; index < physicalQuery.TransactionsSize(); ++index) {
+        const auto &tx = physicalQuery.GetTransactions()[index];
+        for (const auto &stage : tx.GetStages()) {
+            for (const auto &tableOp : stage.GetTableOps()) {
+                switch (tableOp.GetTypeCase()) {
+                    case NKqpProto::TKqpPhyTableOperation::kReadRange:
+                    case NKqpProto::TKqpPhyTableOperation::kLookup:
+                    case NKqpProto::TKqpPhyTableOperation::kReadRanges: {
+                        if (modifiedTables.contains(getTable(tableOp.GetTable()))) {
+                            return true;
+                        }
+                        break;
+                    }
+                    case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
+                    case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
+                    case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
+                        modifiedTables.insert(getTable(tableOp.GetTable()));
+                        break;
+                    default:
+                        YQL_ENSURE(false, "unexpected type");
+                }
+            }
+
+            for (const auto& input : stage.GetInputs()) {
+                switch (input.GetTypeCase()) {
+                case NKqpProto::TKqpPhyConnection::kStreamLookup:
+                    if (modifiedTables.contains(getTable(input.GetStreamLookup().GetTable()))) {
                         return true;
                     }
+                    break;
+                case NKqpProto::TKqpPhyConnection::kSequencer:
+                    return true;
+                case NKqpProto::TKqpPhyConnection::kUnionAll:
+                case NKqpProto::TKqpPhyConnection::kMap:
+                case NKqpProto::TKqpPhyConnection::kHashShuffle:
+                case NKqpProto::TKqpPhyConnection::kBroadcast:
+                case NKqpProto::TKqpPhyConnection::kMapShard:
+                case NKqpProto::TKqpPhyConnection::kShuffleShard:
+                case NKqpProto::TKqpPhyConnection::kResult:
+                case NKqpProto::TKqpPhyConnection::kValue:
+                case NKqpProto::TKqpPhyConnection::kMerge:
+                case NKqpProto::TKqpPhyConnection::TYPE_NOT_SET:
+                    break;
+                }
+            }
+
+            for (const auto& source : stage.GetSources()) {
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    if (modifiedTables.contains(getTable(source.GetReadRangesSource().GetTable()))) {
+                        return true;
+                    }
+                } else {
+                    return true;
+                }
+            }
+
+            for (const auto& sink : stage.GetSinks()) {
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    modifiedTables.insert(getTable(settings.GetTable()));
+                } else {
+                    return true;
                 }
             }
         }

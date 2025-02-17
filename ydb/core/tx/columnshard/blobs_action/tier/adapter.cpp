@@ -18,6 +18,8 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(std::uni
         AFL_VERIFY(!!ev->Body)("key", ev->Key)("interval_from", ev->GetReadInterval().first)("interval_to", ev->GetReadInterval().second);
         return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(bRange, NKikimrProto::EReplyStatus::OK, ev->Body, false, StorageId);
     } else {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "s3_request_failed")("request_type", "get_object")(
+            "exception", ev->GetError().GetExceptionName())("message", ev->GetError().GetMessage())("storage_id", StorageId)("blob", logoBlobId);
         return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(bRange, NKikimrProto::EReplyStatus::ERROR, TStringBuilder() << ev->Result, false, StorageId);
     }
 }
@@ -28,9 +30,11 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(std::uni
     Y_ABORT_UNLESS(ev->Key);
     AFL_VERIFY(TLogoBlobID::Parse(logoBlobId, *ev->Key, error))("error", error)("str_blob_id", *ev->Key);
     if (ev->IsSuccess()) {
-        return std::make_unique<TEvBlobStorage::TEvPutResult>(NKikimrProto::EReplyStatus::OK, logoBlobId, 0, Max<ui32>(), 0, StorageId);
+        return std::make_unique<TEvBlobStorage::TEvPutResult>(NKikimrProto::EReplyStatus::OK, logoBlobId, 0, TGroupId::FromValue(Max<ui32>()), 0, StorageId);
     } else {
-        return std::make_unique<TEvBlobStorage::TEvPutResult>(NKikimrProto::EReplyStatus::ERROR, logoBlobId, 0, Max<ui32>(), 0, StorageId);
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "s3_request_failed")("request_type", "put_object")(
+            "exception", ev->GetError().GetExceptionName())("message", ev->GetError().GetMessage())("storage_id", StorageId)("blob", logoBlobId);
+        return std::make_unique<TEvBlobStorage::TEvPutResult>(NKikimrProto::EReplyStatus::ERROR, logoBlobId, 0, TGroupId::FromValue(Max<ui32>()), 0, StorageId);
     }
 }
 

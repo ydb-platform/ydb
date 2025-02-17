@@ -3,7 +3,8 @@
 namespace NKikimr::NTestShard {
 
     void TLoadActor::RegisterTransition(TKey& key, ::NTestShard::TStateServer::EEntityState from,
-            ::NTestShard::TStateServer::EEntityState to, std::unique_ptr<TEvKeyValue::TEvRequest> ev) {
+            ::NTestShard::TStateServer::EEntityState to, std::unique_ptr<TEvKeyValue::TEvRequest> ev,
+            NWilson::TTraceId traceId) {
         STLOG(PRI_DEBUG, TEST_SHARD, TS14, "RegisterTransition", (TabletId, TabletId), (Key, key.first), (From, from),
             (To, to));
 
@@ -38,7 +39,7 @@ namespace NKikimr::NTestShard {
                     : key.second.ConfirmedKeyIndex == Max<size_t>());
             }
             if (ev) {
-                Send(TabletActorId, ev.release());
+                Send(TabletActorId, ev.release(), 0, 0, std::move(traceId));
             }
             if (!DoSomeActionInFlight) {
                 TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
@@ -61,6 +62,7 @@ namespace NKikimr::NTestShard {
         // update local state
         key.second.PendingState = to;
         key.second.Request = std::move(ev);
+        key.second.TraceId = std::move(traceId);
         TransitionInFlight.push_back(&key);
     }
 
@@ -108,7 +110,7 @@ namespace NKikimr::NTestShard {
             if (const auto it = WritesInFlight.find(r->Record.GetCookie()); it != WritesInFlight.end()) {
                 StateServerWriteLatency.Add(TActivationContext::Monotonic(), TDuration::Seconds(it->second.Timer.PassedReset()));
             }
-            Send(TabletActorId, r.release());
+            Send(TabletActorId, r.release(), 0, 0, std::move(key.second.TraceId));
         }
         if (key.second.ConfirmedState == ::NTestShard::TStateServer::DELETED) {
             Y_ABORT_UNLESS(key.second.ConfirmedKeyIndex == Max<size_t>());

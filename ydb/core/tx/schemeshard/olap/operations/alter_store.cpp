@@ -1,6 +1,9 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/library/formats/arrow/accessor/common/const.h>
+
+#include "checks.h"
 
 namespace {
 
@@ -71,7 +74,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterOlapStore TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -120,8 +123,8 @@ public:
         }
 
         TString columnShardTxBody;
+        const auto seqNo = context.SS->StartRound(*txState);
         {
-            auto seqNo = context.SS->StartRound(*txState);
             NKikimrTxColumnShard::TSchemaTxBody tx;
             context.SS->FillSeqNo(tx, seqNo);
 
@@ -149,7 +152,7 @@ public:
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
-                    columnShardTxBody,
+                    columnShardTxBody, seqNo,
                     context.SS->SelectProcessingParams(txState->TargetPathId));
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
@@ -175,7 +178,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterOlapStore TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -270,7 +273,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterOlapStore TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -434,6 +437,18 @@ class TAlterOlapStore: public TSubOperation {
         }
     }
 
+    bool IsAlterCompression() const {
+        const auto& alter = Transaction.GetAlterColumnStore();
+        for (const auto& alterSchema : alter.GetAlterSchemaPresets()) {
+            for (const auto& alterColumn : alterSchema.GetAlterSchema().GetAlterColumns()) {
+                if (alterColumn.HasSerializer()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
 public:
     using TSubOperation::TSubOperation;
 
@@ -458,7 +473,13 @@ public:
             return result;
         }
 
-        TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        if (!AppData()->FeatureFlags.GetEnableOlapCompression() && IsAlterCompression()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Compression is disabled for OLAP tables");
+            return result;
+        }
+
+        TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+        TPath path = parentPath.Dive(name);
         {
             TPath::TChecker checks = path.Check();
             checks
@@ -504,6 +525,38 @@ public:
         if (!alterData) {
             return result;
         }
+
+        for (auto&& tPathId: alterData->ColumnTables) {
+            auto table = context.SS->ColumnTables.GetVerifiedPtr(tPathId);
+            if (!table->Description.HasTtlSettings()) {
+                continue;
+            }
+            auto it = alterData->SchemaPresets.find(table->Description.GetSchemaPresetId());
+            AFL_VERIFY(it != alterData->SchemaPresets.end())("preset_info", table->Description.DebugString());
+            if (!it->second.ValidateTtlSettings(table->Description.GetTtlSettings(), context, errors)) {
+                return result;
+            }
+        }
+
+        if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
+            for (auto& [_, preset]: alterData->SchemaPresets) {
+                for (auto& [_, column]: preset.GetColumns().GetColumns()) {
+                    if (column.GetDefaultValue().GetValue() || (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
+                        result->SetError(NKikimrScheme::StatusSchemeError,"schema update error: sparsed columns are disabled");
+                        return result;
+                    }
+                }
+            }
+        }
+
+        auto domainInfo = parentPath.DomainInfo();
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+
+        if (!NKikimr::NSchemeShard::NOlap::CheckLimits(limits, alterData, errStr)) {
+            result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+            return result;
+        }
+
         storeInfo->AlterData = alterData;
 
         NIceDb::TNiceDb db(context.GetDB());

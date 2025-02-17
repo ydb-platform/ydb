@@ -10,18 +10,49 @@ namespace NYT::NChaosClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationCardCacheConfig
-    : public TAsyncExpiringCacheConfig
+class TChaosCacheChannelConfig
+    : public NRpc::TRetryingChannelConfig
     , public NRpc::TBalancingChannelConfig
-    , public NRpc::TRetryingChannelConfig
 {
-    REGISTER_YSON_STRUCT(TReplicationCardCacheConfig);
+public:
+    REGISTER_YSON_STRUCT(TChaosCacheChannelConfig);
 
-    static void Register(TRegistrar)
+    static void Register(TRegistrar /*registrar*/)
     { }
 };
 
+DEFINE_REFCOUNTED_TYPE(TChaosCacheChannelConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TReplicationCardCacheConfig
+    : public TAsyncExpiringCacheConfig
+    , public TChaosCacheChannelConfig
+{
+public:
+    bool EnableWatching;
+
+    REGISTER_YSON_STRUCT(TReplicationCardCacheConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
 DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TReplicationCardCacheDynamicConfig
+    : public virtual NYTree::TYsonStruct
+{
+public:
+    std::optional<bool> EnableWatching;
+
+    REGISTER_YSON_STRUCT(TReplicationCardCacheDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,0 +1,65 @@
+{% extends '//builtin/pycargo.ym' %}
+
+{% block mod_name %}
+cryptography_rust
+{% endblock %}
+
+{% block arcadia_tools %}
+{{super()}}
+devtools/yamaker/libym2/scripts/python3
+{% endblock %}
+
+{% block platforms %}
+x86_64-unknown-linux-gnu
+x86_64-unknown-linux-musl
+{% endblock %}
+
+{% block py_register %}
+_rust
+_openssl
+{% endblock %}
+
+{% block current_version %}41.0.6{% endblock %}
+{% block current_url %}https://github.com/pyca/cryptography/archive/refs/tags/{{self.version().strip()}}.tar.gz{% endblock %}
+
+{% block patch_source %}
+{{super()}}
+sed -e 's|cdylib|staticlib|' -i Cargo.toml
+{% endblock %}
+
+{% block build_source %}
+{% for p in self.platforms().strip().split('\n') %}
+export CC_{{p.replace('-', '_')}}=target-cc
+{% endfor %}
+export CC_x86_64_unknown_linux_musl=musl-gcc
+export DEP_OPENSSL_INCLUDE={{arcadia_root}}/contrib/libs/openssl/include
+export PYO3_CROSS_PYTHON_VERSION=3.12
+rm -rf docs vectors tests
+cd src/rust
+{{super()}}
+rm -r .git
+{% endblock %}
+
+{% block sanitize_output %}
+{{super()}}
+{% for p in self.platforms().strip().split('\n') %}
+rm -rf ${OUTPUT}/a/{{p}}/release/build
+{% endfor %}
+{% endblock %}
+
+{% block prepare_env %}
+{{super()}}
+export CLANG=$(ya tool c++ --print-path)
+
+cat << EOF > ${BIN}/musl-gcc
+#!/usr/bin/env sh
+exec ${CLANG} -DUSE_PYTHON3 -I{{arcadia_root}} -I{{arcadia_root}}/contrib/libs/python/Include -I{{arcadia_root}}/contrib/libs/openssl/include -x c "\${@}"
+EOF
+
+cat << EOF > ${BIN}/target-cc
+#!/usr/bin/env sh
+exec ${CLANG} -DUSE_PYTHON3 -I{{arcadia_root}} -I{{arcadia_root}}/contrib/libs/python/Include -I{{arcadia_root}}/contrib/libs/openssl/include -x c "\${@}"
+EOF
+
+chmod +x ${BIN}/musl-gcc ${BIN}/target-cc
+{% endblock %}

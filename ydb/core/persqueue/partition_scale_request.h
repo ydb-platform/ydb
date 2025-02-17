@@ -12,7 +12,7 @@
 
 namespace NKikimr {
 namespace NPQ {
-    
+
 class TPartitionScaleRequest: public NActors::TActorBootstrapped<TPartitionScaleRequest> {
     using TBase = NActors::TActorBootstrapped<TPartitionScaleRequest>;
 
@@ -26,7 +26,10 @@ public:
     };
 
 public:
-    TPartitionScaleRequest(TString topicName, TString databasePath, ui64 pathId, ui64 pathVersion, std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit> splits, const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge> merges, NActors::TActorId parentActorId);
+    TPartitionScaleRequest(const TString& topicName, const TString& topicPath, const TString& databasePath, ui64 pathId, ui64 pathVersion,
+        const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit>& splits,
+        const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge>& merges,
+        const NActors::TActorId& parentActorId);
 
 public:
     void Bootstrap(const NActors::TActorContext &ctx);
@@ -48,10 +51,11 @@ private:
     }
     std::pair<TString, TString> SplitPath(const TString& path);
     void SendProposeRequest(const NActors::TActorContext &ctx);
-    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TString& workingDir, const TString& topicName);
+    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const NActors::TActorContext &ctx);
 
 private:
     const TString Topic;
+    const TString TopicPath;
     const TString DatabasePath;
     const ui64 PathId;
     const ui64 PathVersion;

@@ -31,6 +31,7 @@ import abc
 import copy
 from dataclasses import dataclass
 import datetime
+import functools
 import io
 import json
 import re
@@ -52,7 +53,7 @@ _STS_REQUESTED_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
 # Cloud resource manager URL used to retrieve project information.
 _CLOUD_RESOURCE_MANAGER = "https://cloudresourcemanager.googleapis.com/v1/projects/"
 # Default Google sts token url.
-_DEFAULT_TOKEN_URL = "https://sts.googleapis.com/v1/token"
+_DEFAULT_TOKEN_URL = "https://sts.{universe_domain}/v1/token"
 
 
 @dataclass
@@ -147,7 +148,12 @@ class Credentials(
         super(Credentials, self).__init__()
         self._audience = audience
         self._subject_token_type = subject_token_type
+        self._universe_domain = universe_domain
         self._token_url = token_url
+        if self._token_url == _DEFAULT_TOKEN_URL:
+            self._token_url = self._token_url.replace(
+                "{universe_domain}", self._universe_domain
+            )
         self._token_info_url = token_info_url
         self._credential_source = credential_source
         self._service_account_impersonation_url = service_account_impersonation_url
@@ -160,7 +166,6 @@ class Credentials(
         self._scopes = scopes
         self._default_scopes = default_scopes
         self._workforce_pool_user_project = workforce_pool_user_project
-        self._universe_domain = universe_domain or credentials.DEFAULT_UNIVERSE_DOMAIN
         self._trust_boundary = {
             "locations": [],
             "encoded_locations": "0x0",
@@ -181,6 +186,7 @@ class Credentials(
         self._supplier_context = SupplierContext(
             self._subject_token_type, self._audience
         )
+        self._cred_file_path = None
 
         if not self.is_workforce_pool and self._workforce_pool_user_project:
             # Workload identity pools do not support workforce pool user projects.
@@ -316,11 +322,24 @@ class Credentials(
 
         return self._token_info_url
 
+    @_helpers.copy_docstring(credentials.Credentials)
+    def get_cred_info(self):
+        if self._cred_file_path:
+            cred_info_json = {
+                "credential_source": self._cred_file_path,
+                "credential_type": "external account credentials",
+            }
+            if self.service_account_email:
+                cred_info_json["principal"] = self.service_account_email
+            return cred_info_json
+        return None
+
     @_helpers.copy_docstring(credentials.Scoped)
     def with_scopes(self, scopes, default_scopes=None):
         kwargs = self._constructor_args()
         kwargs.update(scopes=scopes, default_scopes=default_scopes)
         scoped = self.__class__(**kwargs)
+        scoped._cred_file_path = self._cred_file_path
         scoped._metrics_options = self._metrics_options
         return scoped
 
@@ -390,6 +409,12 @@ class Credentials(
     def refresh(self, request):
         scopes = self._scopes if self._scopes is not None else self._default_scopes
 
+        # Inject client certificate into request.
+        if self._mtls_required():
+            request = functools.partial(
+                request, cert=self._get_mtls_cert_and_key_paths()
+            )
+
         if self._should_initialize_impersonated_credentials():
             self._impersonated_credentials = self._initialize_impersonated_credentials()
 
@@ -431,30 +456,31 @@ class Credentials(
 
             self.expiry = now + lifetime
 
+    def _make_copy(self):
+        kwargs = self._constructor_args()
+        new_cred = self.__class__(**kwargs)
+        new_cred._cred_file_path = self._cred_file_path
+        new_cred._metrics_options = self._metrics_options
+        return new_cred
+
     @_helpers.copy_docstring(credentials.CredentialsWithQuotaProject)
     def with_quota_project(self, quota_project_id):
         # Return copy of instance with the provided quota project ID.
-        kwargs = self._constructor_args()
-        kwargs.update(quota_project_id=quota_project_id)
-        new_cred = self.__class__(**kwargs)
-        new_cred._metrics_options = self._metrics_options
-        return new_cred
+        cred = self._make_copy()
+        cred._quota_project_id = quota_project_id
+        return cred
 
     @_helpers.copy_docstring(credentials.CredentialsWithTokenUri)
     def with_token_uri(self, token_uri):
-        kwargs = self._constructor_args()
-        kwargs.update(token_url=token_uri)
-        new_cred = self.__class__(**kwargs)
-        new_cred._metrics_options = self._metrics_options
-        return new_cred
+        cred = self._make_copy()
+        cred._token_url = token_uri
+        return cred
 
     @_helpers.copy_docstring(credentials.CredentialsWithUniverseDomain)
     def with_universe_domain(self, universe_domain):
-        kwargs = self._constructor_args()
-        kwargs.update(universe_domain=universe_domain)
-        new_cred = self.__class__(**kwargs)
-        new_cred._metrics_options = self._metrics_options
-        return new_cred
+        cred = self._make_copy()
+        cred._universe_domain = universe_domain
+        return cred
 
     def _should_initialize_impersonated_credentials(self):
         return (
@@ -518,6 +544,33 @@ class Credentials(
             metrics_options["config-lifetime"] = "false"
 
         return metrics_options
+
+    def _mtls_required(self):
+        """Returns a boolean representing whether the current credential is configured
+        for mTLS and should add a certificate to the outgoing calls to the sts and service
+        account impersonation endpoint.
+
+        Returns:
+            bool: True if the credential is configured for mTLS, False if it is not.
+        """
+        return False
+
+    def _get_mtls_cert_and_key_paths(self):
+        """Gets the file locations for a certificate and private key file
+        to be used for configuring mTLS for the sts and service account
+        impersonation calls. Currently only expected to return a value when using
+        X509 workload identity federation.
+
+        Returns:
+            Tuple[str, str]: The cert and key file locations as strings in a tuple.
+
+        Raises:
+            NotImplementedError: When the current credential is not configured for
+                mTLS.
+        """
+        raise NotImplementedError(
+            "_get_mtls_cert_and_key_location must be implemented."
+        )
 
     @classmethod
     def from_info(cls, info, **kwargs):

@@ -51,7 +51,7 @@ public:
     }
 };
 
-struct TEvSchemeShard {
+namespace TEvSchemeShard {
     enum EEv {
         EvModifySchemeTransaction = EventSpaceBegin(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD),  // 271122432
         EvModifySchemeTransactionResult = EvModifySchemeTransaction + 1 * 512,
@@ -94,6 +94,9 @@ struct TEvSchemeShard {
         EvProcessingResponse,
 
         EvOwnerActorAck,
+
+        EvListUsers,
+        EvListUsersResult,
 
         EvEnd
     };
@@ -660,6 +663,14 @@ struct TEvSchemeShard {
 
     struct TEvOwnerActorAck : TEventPB<TEvOwnerActorAck, NKikimrScheme::TEvOwnerActorAck, EvOwnerActorAck> {
         TEvOwnerActorAck() = default;
+    };
+
+    struct TEvListUsers : TEventPB<TEvListUsers, NKikimrScheme::TEvListUsers, EvListUsers> {
+        TEvListUsers() = default;
+    };
+
+    struct TEvListUsersResult : TEventPB<TEvListUsersResult, NKikimrScheme::TEvListUsersResult, EvListUsersResult> {
+        TEvListUsersResult() = default;
     };
 };
 

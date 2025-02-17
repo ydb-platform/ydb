@@ -1,0 +1,149 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     APSL-2.0             1d515ca9f03c1c884ee87fdbbafed30b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: APSL-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.apple.com/license/apsl/, https://spdx.org/licenses/APSL-2.0
+    Files with this license:
+        source/darwin/common_cryptor_spi.h [4:21]
+
+KEEP     Apache-2.0           314e21a036e4ea071f111cb5deff83c1
+BELONGS ya.make
+FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LICENSE at line 112, LICENSE at line 117, LICENSE at line 120, LICENSE at line 142
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:175]
+
+KEEP     Apache-2.0           43f57e875cdc02e8385ff667f85d702e
+BELONGS ya.make
+    License text:
+        SPDX-License-Identifier: Apache-2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        NOTICE [3:3]
+
+SKIP     LicenseRef-scancode-generic-cla 4c121fbba45df428a6eec824e562d4f8
+BELONGS ya.make
+    # Skip CLA
+    License text:
+        Contributor License Agreement (CLA)](
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 22.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [61:61]
+
+KEEP     Apache-2.0           6c901454b872854c0dea3ec06b67701a
+BELONGS ya.make
+    License text:
+        \## License
+        This library is licensed under the Apache 2.0 License.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [5:7]
+
+KEEP     Apache-2.0           d591512e466bb957030b8857f753349e
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: Apache-2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/aws/cal/cal.h [5:5]
+        include/aws/cal/ecc.h [5:5]
+        include/aws/cal/exports.h [5:5]
+        include/aws/cal/hash.h [5:5]
+        include/aws/cal/hmac.h [5:5]
+        include/aws/cal/private/der.h [5:5]
+        include/aws/cal/private/ecc.h [5:5]
+        include/aws/cal/private/symmetric_cipher_priv.h [5:5]
+        include/aws/cal/symmetric_cipher.h [5:5]
+        source/cal.c [3:3]
+        source/darwin/commoncrypto_aes.c [3:3]
+        source/darwin/commoncrypto_hmac.c [3:3]
+        source/darwin/commoncrypto_md5.c [3:3]
+        source/darwin/commoncrypto_platform_init.c [3:3]
+        source/darwin/commoncrypto_sha1.c [3:3]
+        source/darwin/commoncrypto_sha256.c [3:3]
+        source/darwin/securityframework_ecc.c [3:3]
+        source/der.c [3:3]
+        source/ecc.c [3:3]
+        source/hash.c [3:3]
+        source/hmac.c [3:3]
+        source/symmetric_cipher.c [3:3]
+        source/unix/openssl_aes.c [3:3]
+        source/unix/openssl_platform_init.c [3:3]
+        source/unix/opensslcrypto_ecc.c [3:3]
+        source/unix/opensslcrypto_hash.c [3:3]
+        source/unix/opensslcrypto_hmac.c [3:3]
+        source/windows/bcrypt_aes.c [3:3]
+        source/windows/bcrypt_ecc.c [3:3]
+        source/windows/bcrypt_hash.c [3:3]
+        source/windows/bcrypt_hmac.c [3:3]
+        source/windows/bcrypt_platform_init.c [3:3]
+
+SKIP     LicenseRef-scancode-generic-cla ee24fdc60600747c7d12c32055b0011d
+BELONGS ya.make
+    # Skip CLA
+    License text:
+        Contributor_License_Agreement)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [61:61]

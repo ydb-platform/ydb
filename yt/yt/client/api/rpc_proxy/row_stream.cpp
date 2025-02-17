@@ -1,8 +1,9 @@
 #include "row_stream.h"
 
-#include <library/cpp/yt/memory/ref.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/misc/error.h>
+
+#include <library/cpp/yt/memory/ref.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -35,14 +36,14 @@ std::tuple<TSharedRef, TMutableRef> SerializeRowStreamBlockEnvelope(
     */
 
     i64 totalSize = 0;
-    totalSize += sizeof (i32); // partCount
-    totalSize += sizeof (i64) * 2; // partLength * 2
+    totalSize += sizeof(i32); // partCount
+    totalSize += sizeof(i64) * 2; // partLength * 2
     totalSize += descriptor.ByteSizeLong(); // descriptor
     totalSize += payloadSize;
     if (statistics) {
-        totalSize += sizeof (i32); // partCount
-        totalSize += sizeof (i64) * 2; // partLength * 2
-        totalSize += statistics->ByteSize();
+        totalSize += sizeof(i32); // partCount
+        totalSize += sizeof(i64) * 2; // partLength * 2
+        totalSize += statistics->ByteSizeLong();
     }
 
     struct TSerializedRowStreamBlockTag { };
@@ -52,12 +53,12 @@ std::tuple<TSharedRef, TMutableRef> SerializeRowStreamBlockEnvelope(
 
     auto writeInt32 = [&] (i32 value) {
         *reinterpret_cast<i32*>(current) = value;
-        current += sizeof (i32);
+        current += sizeof(i32);
     };
 
     auto writeInt64 = [&] (i64 value) {
         *reinterpret_cast<i64*>(current) = value;
-        current += sizeof (i64);
+        current += sizeof(i64);
     };
 
     TMutableRef payloadRef;
@@ -72,7 +73,7 @@ std::tuple<TSharedRef, TMutableRef> SerializeRowStreamBlockEnvelope(
 
     if (statistics) {
         writeInt32(2); // partCount
-        writeInt64(sizeof (i32) + 2 * sizeof (i64) + descriptor.ByteSizeLong() + payloadSize); // partLength
+        writeInt64(sizeof(i32) + 2 * sizeof(i64) + descriptor.ByteSizeLong() + payloadSize); // partLength
     }
 
     writeInt32(2); // partCount
@@ -82,7 +83,7 @@ std::tuple<TSharedRef, TMutableRef> SerializeRowStreamBlockEnvelope(
     skipPayload();
 
     if (statistics) {
-        writeInt64(statistics->ByteSize()); // partLength
+        writeInt64(statistics->ByteSizeLong()); // partLength
         writeProto(*statistics);
     }
 

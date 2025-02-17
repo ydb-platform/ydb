@@ -57,6 +57,11 @@ TDuration TBackoffStrategy::GetBackoff() const
     return BackoffWithJitter_;
 }
 
+TExponentialBackoffOptions TBackoffStrategy::GetOptions() const
+{
+    return Options_;
+}
+
 void TBackoffStrategy::ApplyJitter()
 {
     BackoffWithJitter_ = ::NYT::ApplyJitter(

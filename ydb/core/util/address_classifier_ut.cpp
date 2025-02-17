@@ -43,6 +43,20 @@ Y_UNIT_TEST_SUITE(AddressClassifierTest) {
         UNIT_ASSERT_STRINGS_EQUAL(ExtractAddress("192.168.0.1"), "192.168.0.1");
     }
 
+    Y_UNIT_TEST(TestAddressParsing) {
+        auto parse = [](const TString& address) {
+            TString host;
+            ui32 port = 0;
+            ParseAddress(address, host, port);
+            return std::make_pair(host, port);
+        };
+        UNIT_ASSERT_VALUES_EQUAL(parse("[::1]:58100"), std::make_pair("::1", 58100));
+        UNIT_ASSERT_VALUES_EQUAL(parse("192.168.0.1:1550"), std::make_pair("192.168.0.1", 1550));
+        UNIT_ASSERT_VALUES_EQUAL(parse("192.168.0.1"), std::make_pair("192.168.0.1", 0));
+        UNIT_ASSERT_VALUES_EQUAL(parse("[2a02:6b8:bf00::]"), std::make_pair("2a02:6b8:bf00::", 0));
+        UNIT_ASSERT_VALUES_EQUAL(parse("[2a02:6b8:bf00::]:1551"), std::make_pair("2a02:6b8:bf00::", 1551));
+    }
+
     Y_UNIT_TEST(TestClassfierWithAllIpTypes) {
         TAddressClassifier classifier;
 

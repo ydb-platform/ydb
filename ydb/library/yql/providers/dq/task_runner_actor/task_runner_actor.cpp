@@ -9,7 +9,7 @@
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -255,11 +255,12 @@ private:
 
         bool fallback = false;
         bool retry = false;
+        bool rpcReaderFalledBack = false;
         for (TStringBuf line: StringSplitter(input).SplitByString("\n")) {
             if (line.Contains("mlockall failed")) {
                 // skip
             } else {
-                if (!fallback) {
+                if (!fallback || rpcReaderFalledBack) {
                     if (line.Contains("FindColumnInfo(): requirement memberType->GetKind() == TType::EKind::Data")) {
                     // YQL-14757: temporary workaround for part6/produce-reduce_lambda_list_table-default.txt
                         fallback = true;
@@ -272,6 +273,10 @@ private:
                     } else if (line.Contains("YT RPC Reader exception:")) {
                         // RPC reader fallback to YT
                         fallback = true;
+                        rpcReaderFalledBack = true;
+                    } else if (line.Contains("Attachments stream write timed out") || line.Contains("No alive peers found")) {
+                        // RPC reader DQ retry
+                        retry = true;
                     } else if (line.Contains("Transaction") && line.Contains("aborted")) {
                         // YQL-15542
                         fallback = true;
@@ -411,7 +416,7 @@ private:
         i64 space,
         bool finish) override
     {
-        auto* actorSystem = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
+        auto* actorSystem = NActors::TActivationContext::ActorSystem();
         auto selfId = SelfId();
 
         YQL_ENSURE(!batch.IsWide());
@@ -607,7 +612,7 @@ private:
             StageId = taskMeta.GetStageId();
 
             NDq::TDqTaskSettings settings(&ev->Get()->Task);
-            TaskRunner = Factory->GetOld(*Alloc.get(), settings, TraceId);
+            TaskRunner = Factory->GetOld(Alloc, settings, TraceId);
         } catch (...) {
             TString message = "Could not create TaskRunner for " + ToString(taskId) + " on node " + ToString(replyTo.NodeId()) + ", error: " + CurrentExceptionMessage();
             Send(replyTo, TEvDq::TEvAbortExecution::Unavailable(message), 0, cookie); // retries, fallback on retries limit

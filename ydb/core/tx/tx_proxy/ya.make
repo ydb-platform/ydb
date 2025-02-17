@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     mon.cpp
     proxy_impl.cpp
@@ -12,11 +16,14 @@ SRCS(
     rpc_long_tx.cpp
     snapshotreq.cpp
     commitreq.cpp
+    upload_rows_counters.cpp
     upload_rows_common_impl.cpp
     upload_rows.cpp
+    global.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(read_table_impl.h)
+GENERATE_ENUM_SERIALIZATION(upload_rows_counters.h)
 
 PEERDIR(
     ydb/library/actors/core
@@ -30,7 +37,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/formats
     ydb/core/grpc_services/local_rpc
-    ydb/core/io_formats/arrow
+    ydb/core/io_formats/arrow/scheme
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view/common
@@ -56,5 +63,6 @@ RECURSE_FOR_TESTS(
     ut_base_tenant
     ut_encrypted_storage
     ut_ext_tenant
+    ut_schemereq
     ut_storage_tenant
 )

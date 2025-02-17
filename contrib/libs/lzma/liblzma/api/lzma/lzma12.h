@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: 0BSD */
+
 /**
  * \file        lzma/lzma12.h
  * \brief       LZMA1 and LZMA2 filters
@@ -6,9 +8,6 @@
 
 /*
  * Author: Lasse Collin
- *
- * This file has been put into the public domain.
- * You can do whatever you want with this file.
  */
 
 #ifndef LZMA_H_INTERNAL
@@ -289,7 +288,7 @@ typedef struct {
 	 * \brief       Number of literal context bits
 	 *
 	 * How many of the highest bits of the previous uncompressed
-	 * eight-bit byte (also known as `literal') are taken into
+	 * eight-bit byte (also known as 'literal') are taken into
 	 * account when predicting the bits of the next literal.
 	 *
 	 * E.g. in typical English text, an upper-case letter is
@@ -462,7 +461,7 @@ typedef struct {
 	 *
 	 * ext_size_low holds the least significant 32 bits of the
 	 * uncompressed size. The most significant 32 bits must be set
-	 * in ext_size_high. The macro lzma_ext_size_set(opt_lzma, u64size)
+	 * in ext_size_high. The macro lzma_set_ext_size(opt_lzma, u64size)
 	 * can be used to set these members.
 	 *
 	 * The 64-bit uncompressed size is split into two uint32_t variables

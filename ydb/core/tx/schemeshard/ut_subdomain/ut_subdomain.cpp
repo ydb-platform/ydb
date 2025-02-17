@@ -130,6 +130,7 @@ constexpr const char* EntireDatabaseTag = "entire_database";
 
 NLs::TCheckFunc LsCheckDiskQuotaExceeded(
     const TMap<TString, EDiskUsageStatus>& expectedExceeders,
+    bool enableSeparateQuotasFeatureFlag,
     const TString& debugHint = ""
 ) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -166,8 +167,19 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(
                                              receivedQuotas.data_size_soft_quota()
                                  }
             );
-            
+
             TMap<TString, EDiskUsageStatus> exceeders = CheckStoragePoolsQuotas(parsedUsage, parsedQuotas);
+            if (enableSeparateQuotasFeatureFlag) {
+                // ignore the status of the overall quota
+                exceeders.erase(EntireDatabaseTag);
+            } else {
+                // ignore the statuses of the separate storage pool quotas
+                TMap<TString, EDiskUsageStatus> onlyOverallStatus;
+                if (auto* overallStatus = exceeders.FindPtr(EntireDatabaseTag)) {
+                    onlyOverallStatus.emplace(EntireDatabaseTag, *overallStatus);
+                }
+                std::swap(exceeders, onlyOverallStatus);
+            }
             UNIT_ASSERT_VALUES_EQUAL_C(exceeders, expectedExceeders,
                 debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
             );
@@ -181,9 +193,9 @@ void CheckQuotaExceedance(TTestActorRuntime& runtime,
                           bool expectExceeded,
                           const TString& debugHint = ""
 ) {
-    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain),
-                       { LsCheckDiskQuotaExceeded(expectExceeded, debugHint) }
-    );
+    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
+        LsCheckDiskQuotaExceeded(expectExceeded, debugHint)
+    });
 }
 
 void CheckQuotaExceedance(TTestActorRuntime& runtime,
@@ -192,9 +204,13 @@ void CheckQuotaExceedance(TTestActorRuntime& runtime,
                           const TMap<TString, EDiskUsageStatus>& expectedExceeders,
                           const TString& debugHint = ""
 ) {
-    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain),
-                       { LsCheckDiskQuotaExceeded(expectedExceeders, debugHint) }
-    );
+    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
+        LsCheckDiskQuotaExceeded(
+            expectedExceeders,
+            runtime.GetAppData().FeatureFlags.GetEnableSeparateDiskSpaceQuotas(),
+            debugHint
+        )
+    });
 }
 
 TVector<ui64> GetTableShards(TTestActorRuntime& runtime,
@@ -513,7 +529,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::IsSubDomain("USER_0"),
-                            NLs::PathVersionEqual(7),
+                            NLs::PathVersionEqual(8),
                             NLs::PathsInsideDomain(3),
                             NLs::ShardsInsideDomain(4)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/table_0"),
@@ -789,7 +805,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            {NLs::PathExist,
                             NLs::Finished,
                             NLs::NotInSubdomain,
-                            NLs::PathVersionEqual(7), // it is 6 if drop simultaneous with create
+                            NLs::PathVersionOneOf({6, 7}), // it is 6 if drop simultaneous with create
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomainOneOf({0, 1, 2, 3})});
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
@@ -1096,7 +1112,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathVersionEqual(7), // version 6 if deletion is simultaneous with creation
+                            NLs::PathVersionOneOf({6, 7}), // version 6 if deletion is simultaneous with creation
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomain(0)});
 
@@ -1222,7 +1238,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         env.TestWaitNotification(runtime, {100, 101, 102});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {LsCheckSubDomainParamsInMassiveCase("USER_0"),
-                            NLs::PathVersionEqual(5),
+                            NLs::PathVersionEqual(6),
                             NLs::PathsInsideDomain(2),
                             NLs::ShardsInsideDomain(7)});
 
@@ -2174,7 +2190,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, {txId - 1, txId - 2, txId -3});
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(5),
+                                NLs::PathVersionEqual(6),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(2),
                                 NLs::ShardsInsideDomain(2)});
@@ -2185,7 +2201,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, {txId - 1, txId - 2});
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(5),
+                                NLs::PathVersionEqual(6),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions),
                                 NLs::PathsInsideDomain(3),
                                 NLs::ShardsInsideDomain(2),
@@ -2199,7 +2215,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(7),
+                                NLs::PathVersionEqual(8),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2245,7 +2261,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(10),
+                                NLs::PathVersionEqual(12),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2347,7 +2363,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(14),
+                                NLs::PathVersionEqual(17),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2393,7 +2409,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(18),
+                                NLs::PathVersionEqual(21),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2423,7 +2439,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(23),
+                                NLs::PathVersionEqual(26),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2470,7 +2486,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(27),
+                                NLs::PathVersionEqual(31),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2491,7 +2507,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(27),
+                                NLs::PathVersionEqual(31),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2508,7 +2524,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(27),
+                                NLs::PathVersionEqual(31),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2526,7 +2542,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(29),
+                                NLs::PathVersionEqual(33),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(1),
                                 NLs::ShardsInsideDomain(4)});
@@ -2543,7 +2559,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(29),
+                                NLs::PathVersionEqual(33),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(1),
                                 NLs::ShardsInsideDomain(5)});
@@ -2560,13 +2576,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(29),
+                                NLs::PathVersionEqual(33),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(1),
                                 NLs::ShardsInsideDomain(5)});
 
 
         }
+
 
         //clear subdomain
         {
@@ -2582,6 +2599,151 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(0)});
+        }
+    }
+
+    Y_UNIT_TEST(ColumnSchemeLimitsRejects) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TSchemeLimits lowLimits;
+        lowLimits.MaxDepth = 4;
+        lowLimits.MaxPaths = 3;
+        lowLimits.MaxChildrenInDir = 3;
+        lowLimits.MaxAclBytesSize = 25;
+        lowLimits.MaxTableColumns = 3;
+        lowLimits.MaxColumnTableColumns = 3;
+        lowLimits.MaxTableColumnNameLength = 10;
+        lowLimits.MaxTableKeyColumns = 1;
+        lowLimits.MaxShards = 6;
+        lowLimits.MaxShardsInPath = 4;
+        lowLimits.MaxPQPartitions = 20;
+
+
+        //lowLimits.ExtraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PathExist,
+                            NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions)});
+
+        {
+            TestCreateSubDomain(runtime, txId++,  "/MyRoot",
+                                "PlanResolution: 50 "
+                                "Coordinators: 1 "
+                                "Mediators: 1 "
+                                "TimeCastBucketsPerMediator: 2 "
+                                "Name: \"USER_0\""
+                                " DatabaseQuotas {"
+                                "    data_stream_shards_quota: 2"
+                                "    data_stream_reserved_storage_quota: 200000"
+                                "}");
+        }
+
+        //create column tables, column limits
+        {
+            TestMkDir(runtime, txId++, "/MyRoot/USER_0", "C");
+            env.TestWaitNotification(runtime, txId - 1);
+
+            // MaxColumnTableColumns
+            TestCreateColumnTable(runtime, txId++, "/MyRoot/USER_0/C", R"(
+                            Name: "C2"
+                            ColumnShardCount: 1
+                            Schema {
+                                Columns { Name: "RowId" Type: "Uint64", NotNull: true }
+                                Columns { Name: "Value0" Type: "Utf8" }
+                                Columns { Name: "Value1" Type: "Utf8" }
+                                KeyColumnNames: "RowId"
+                            }
+                )", {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestAlterColumnTable(runtime, txId++, "/MyRoot/USER_0/C", R"(
+                Name: "C2"
+                AlterSchema {
+                    DropColumns {Name: "Value0"}
+                }
+            )", {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestAlterColumnTable(runtime, txId++, "/MyRoot/USER_0/C", R"(
+                Name: "C2"
+                AlterSchema {
+                    DropColumns {Name: "Value1"}
+                    AddColumns { Name: "Value2" Type: "Utf8" }
+                    AddColumns { Name: "Value3" Type: "Utf8" }
+                    AddColumns { Name: "Value4" Type: "Utf8" }
+                }
+            )", {NKikimrScheme::StatusSchemeError});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestCreateColumnTable(runtime, txId++, "/MyRoot/USER_0/C", R"(
+                            Name: "C1"
+                            ColumnShardCount: 1
+                            Schema {
+                                Columns { Name: "RowId" Type: "Uint64", NotNull: true }
+                                Columns { Name: "Value0" Type: "Utf8" }
+                                Columns { Name: "Value1" Type: "Utf8" }
+                                Columns { Name: "Value2" Type: "Utf8" }
+                                KeyColumnNames: "RowId"
+                            }
+                )", {NKikimrScheme::StatusSchemeError});
+
+            TString olapSchema = R"(
+                Name: "OlapStore1"
+                ColumnShardCount: 1
+                SchemaPresets {
+                    Name: "default"
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                        Columns { Name: "data" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                    }
+                }
+            )";
+
+            TestCreateOlapStore(runtime, txId++, "/MyRoot", olapSchema, {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TString olapSchemaBig = R"(
+                Name: "OlapStoreBig"
+                ColumnShardCount: 1
+                SchemaPresets {
+                    Name: "default"
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                        Columns { Name: "data" Type: "Utf8" }
+                        Columns { Name: "data2" Type: "Utf8" }
+                        Columns { Name: "data3" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                    }
+                }
+            )";
+
+            TestCreateOlapStore(runtime, txId++, "/MyRoot", olapSchemaBig, {NKikimrScheme::StatusSchemeError});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestAlterOlapStore(runtime, txId++, "/MyRoot", R"(
+                Name: "OlapStore1"
+                AlterSchemaPresets {
+                    Name: "default"
+                    AlterSchema {
+                        AddColumns { Name: "comment" Type: "Utf8" }
+                    }
+                }
+            )", {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestAlterOlapStore(runtime, txId++, "/MyRoot", R"(
+                Name: "OlapStore1"
+                AlterSchemaPresets {
+                    Name: "default"
+                    AlterSchema {
+                        AddColumns { Name: "comment2" Type: "Utf8" }
+                    }
+                }
+            )", {NKikimrScheme::StatusSchemeError});
+            env.TestWaitNotification(runtime, txId - 1);
         }
     }
 
@@ -3061,6 +3223,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         opts.EnableTopicDiskSubDomainQuota(false);
 
         TTestEnv env(runtime, opts);
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(false);
+
         ui64 txId = 100;
 
         auto waitForTableStats = [&](ui32 shards) {
@@ -3289,6 +3453,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NLog::PRI_TRACE);
 
         runtime.GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(false);
 
         ui64 txId = 100;
 
@@ -3336,7 +3501,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         auto stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
         UNIT_ASSERT_EQUAL_C(false, stats->Record.GetSubDomainOutOfSpace(), "SubDomainOutOfSpace from ReadBalancer");
-        
+
         auto msg = TString(24_MB, '_');
 
         ui32 seqNo = 100;
@@ -3364,14 +3529,16 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
     Y_UNIT_TEST_FLAG(DisableWritesToDatabase, IsExternalSubdomain) {
         TTestBasicRuntime runtime;
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
 
         TTestEnvOptions opts;
         opts.DisableStatsBatching(true);
         opts.EnablePersistentPartitionStats(true);
         opts.EnableBackgroundCompaction(false);
         TTestEnv env(runtime, opts);
-        
+
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(true);
+
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 1;
         NDataShard::gDbStatsRowCountResolution = 1;
@@ -3464,7 +3631,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         UpdateRow(runtime, "SomeTable", 1, "some_value_for_the_key", shards[0]);
         {
             const auto tableStats = WaitTableStats(runtime, shards[0]).GetTableStats();
-            // channels' usage statistics appears only after a table compaction 
+            // channels' usage statistics appears only after a table compaction
             UNIT_ASSERT_VALUES_EQUAL_C(tableStats.ChannelsSize(), 0, tableStats.DebugString());
         }
         CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
@@ -3486,11 +3653,11 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
     Y_UNIT_TEST_FLAG(QuoteNonexistentPool, IsExternalSubdomain) {
         TTestBasicRuntime runtime;
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
 
         TTestEnvOptions opts;
         TTestEnv env(runtime, opts);
-        
+
         ui64 txId = 100;
 
         constexpr const char* databaseDescription = R"(
@@ -3532,17 +3699,17 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
     // This test might start failing, because disk space usage of the created table might change
     // due to changes in the storage implementation.
-    // To fix the test you need to update canonical quotas and / or batch sizes.
-    Y_UNIT_TEST_FLAG(DifferentQuotasInteraction, IsExternalSubdomain) {
+    // To fix the test you need to update canonical quotas and the content of the table.
+    Y_UNIT_TEST_FLAGS(DifferentQuotasInteraction, IsExternalSubdomain, EnableSeparateQuotas) {
         TTestBasicRuntime runtime;
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
 
         TTestEnvOptions opts;
         opts.DisableStatsBatching(true);
         opts.EnablePersistentPartitionStats(true);
         opts.EnableBackgroundCompaction(false);
         TTestEnv env(runtime, opts);
-        
+
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 1;
         NDataShard::gDbStatsRowCountResolution = 1;
@@ -3651,43 +3818,46 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
         const auto updateAndCheck = [&](ui32 rowsToUpdate,
                                         const TString& value,
-                                        bool compact,
                                         const TMap<TString, EDiskUsageStatus>& expectedExceeders,
                                         const TString& debugHint = ""
         ) {
             for (ui32 i = 0; i < rowsToUpdate; ++i) {
                 UpdateRow(runtime, "SomeTable", i, value, shards[0]);
             }
-            if (compact) {
-                CompactTableAndCheckResult(runtime, shards[0], tableId);
-            }
+            CompactTableAndCheckResult(runtime, shards[0], tableId);
             WaitTableStats(runtime, shards[0]);
             CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", expectedExceeders, debugHint);
         };
 
-        // Warning: calculated empirically, might need an update if the test fails.
-        // The logic of the test expects:
-        // batchSizes[0] <= batchSizes[1] <= batchSizes[2],
-        // because rows are never deleted, only updated.
-        constexpr std::array<ui32, 3> batchSizes = {25, 35, 50};
+        // Warning: calculated empirically, might need an update if the test fails!
+        constexpr ui32 lessRows = 37u;
+        const ui32 moreRows = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex() ? 60u : 50u;
 
-        constexpr const char* longText = "this_text_is_very_long_and_takes_a_lot_of_disk_space";
-        constexpr const char* middleLengthText = "this_text_is_significantly_shorter";
+        const TString longText = TString(64, 'a');;
+        const TString mediumText = TString(32, 'a');
+        const TString shortText = TString(16, 'a');
+        const TString tinyText = TString(8, 'a');
 
-        // Test scenario:
-        // 1) break only the entire database hard quota, don't break others,
-        updateAndCheck(batchSizes[0], longText, false, {{EntireDatabaseTag, EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
-        updateAndCheck(0, "", true, {}, DEBUG_HINT);
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(EnableSeparateQuotas);
+        if (!EnableSeparateQuotas) {
+            // write a lot of data to break the overall hard quota
+            updateAndCheck(lessRows, longText, {{EntireDatabaseTag, EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+        } else {
+            // There are two columns in the table: key and value. Key is stored at the fast storage, value at the large storage.
+            // We can:
+            // - simultaneously increase the consumption of the both storage pools by increasing the number of rows in the table
+            // - increase or decrease the consumption of the large storage by making the value longer / shorter
+            // Test scenario:
+            // 1) write a small number of rows (little fast storage consumption), but a long text that breaks the large kind hard quota
+            // 2) the same small number of rows, but a medium text that gets the large kind storage consumption in between the soft and the large quotas
+            // 3) the same small number of rows, but a short text that gets the large kind storage consumption below the soft quota
+            // 4) a bigger number of rows, but a tiny text to break only the fast kind hard quota
+            updateAndCheck(lessRows, longText, {{"large_kind", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+            updateAndCheck(lessRows, mediumText, {{"large_kind", EDiskUsageStatus::InBetween}}, DEBUG_HINT);
+            updateAndCheck(lessRows, shortText, {}, DEBUG_HINT);
 
-        // 2) break only the large_kind hard quota, don't break other hard quotas,
-        updateAndCheck(batchSizes[1], longText, true,
-            {{"large_kind", EDiskUsageStatus::AboveHardQuota}, {EntireDatabaseTag, EDiskUsageStatus::InBetween}}, DEBUG_HINT
-        );
-        updateAndCheck(batchSizes[1], middleLengthText, true, {{"large_kind", EDiskUsageStatus::InBetween}}, DEBUG_HINT);
-        updateAndCheck(batchSizes[1], "extra_short_text", true, {}, DEBUG_HINT);
-
-        // 3) break only the fast_kind hard quota, don't break others.
-        updateAndCheck(batchSizes[2], "shortest", true, {{"fast_kind", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+            updateAndCheck(moreRows, tinyText, {{"fast_kind", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+        }
 
         // step 4: drop the table
         TestDropTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/SomeDatabase", "SomeTable");

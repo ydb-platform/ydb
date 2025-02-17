@@ -26,6 +26,7 @@ SRCS(
     log.cpp
     list_dead_letter_source_queues.cpp
     list_permissions.cpp
+    list_queue_tags.cpp
     list_queues.cpp
     list_users.cpp
     local_rate_limiter_allocator.cpp
@@ -45,9 +46,11 @@ SRCS(
     send_message.cpp
     service.cpp
     set_queue_attributes.cpp
+    tag_queue.cpp
     proxy_service.cpp
     queues_list_reader.cpp
     queue_schema.cpp
+    untag_queue.cpp
     user_settings_names.cpp
     user_settings_reader.cpp
 )
@@ -58,7 +61,7 @@ PEERDIR(
     ydb/library/actors/core
     library/cpp/containers/intrusive_rb_tree
     library/cpp/digest/md5
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/ycloud/impl
     library/cpp/logger
     library/cpp/lwtrace/mon
@@ -88,8 +91,8 @@ PEERDIR(
     ydb/library/mkql_proto/protos
     ydb/public/lib/scheme_types
     ydb/public/lib/value
-    ydb/public/sdk/cpp/client/ydb_types/credentials
-    ydb/library/yql/minikql
+    ydb/public/sdk/cpp/src/client/types/credentials
+    yql/essentials/minikql
     ydb/public/lib/deprecated/client
 )
 

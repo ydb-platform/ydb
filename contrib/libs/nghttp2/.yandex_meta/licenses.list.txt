@@ -1,0 +1,283 @@
+====================COPYRIGHT====================
+   Copyright (C) 1994-1996, 1999-2002, 2004-2017, 2020-2021 Free
+Software Foundation, Inc.
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2012 Tatsuhiro Tsujikawa
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2012, 2013 Tatsuhiro Tsujikawa
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2013 Tatsuhiro Tsujikawa
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2013, 2014 Tatsuhiro Tsujikawa
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2014 Tatsuhiro Tsujikawa
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2015 Tatsuhiro Tsujikawa
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2016 Tatsuhiro Tsujikawa
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2017 ngtcp2 contributors
+ * Copyright (c) 2012 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2022 nghttp3 contributors
+ * Copyright (c) 2022 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2023 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2023 sfparse contributors
+ * Copyright (c) 2019 nghttp3 contributors
+ * Copyright (c) 2015 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+Copyright (c) 2012, 2014, 2015, 2016 Tatsuhiro Tsujikawa
+Copyright (c) 2012, 2014, 2015, 2016 nghttp2 contributors
+
+
+====================FSFAP====================
+   Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.  This file is offered as-is,
+without warranty of any kind.
+
+
+====================File: AUTHORS====================
+nghttp2 project was started as a fork of spdylay project [1].  Both
+projects were started by Tatsuhiro Tsujikawa, who is still the main
+author of these projects.  Meanwhile, we have many contributions, and
+we are not here without them.  We sincerely thank you to all who made
+a contribution.  Here is the all individuals/organizations who
+contributed to nghttp2 and spdylay project at which we forked.  These
+names are retrieved from git commit log.  If you have made a
+contribution, but you are missing in the list, please let us know via
+github issues [2].
+
+[1] https://github.com/tatsuhiro-t/spdylay
+[2] https://github.com/nghttp2/nghttp2/issues
+
+--------
+
+187j3x1
+Adam Gołębiowski
+Alek Storm
+Alex Nalivko
+Alexandr Vlasov
+Alexandros Konstantinakis-Karmis
+Alexis La Goutte
+Alyssa Ross
+Amir Livneh
+Amir Pakdel
+Anders Bakken
+Andreas Pohl
+Andrew Penkrat
+Andy Davies
+Angus Gratton
+Anna Henningsen
+Ant Bryan
+Anthony Alayo
+Asra Ali
+Benedikt Christoph Wolters
+Benjamin Peterson
+Bernard Spil
+Bernhard Walle
+Brendan Heinonen
+Brian Card
+Brian Suh
+Daniel Bevenius
+Daniel Evers
+Daniel Stenberg
+Dave Reisner
+David Beitey
+David Korczynski
+David Weekly
+Deel
+Dimitris Apostolou
+Dmitri Tikhonov
+Dmitriy Vetutnev
+Don
+Dylan Plecki
+Etienne Cimon
+Fabian Möller
+Fabian Wiesel
+Fred Sundvik
+Gabi Davar
+Gaël PORTAY
+Geoff Hill
+George Liu
+Gitai
+Google Inc.
+Hajime Fujita
+Jacky Tian
+Jacky_Yin
+Jacob Champion
+James M Snell
+Jan Kundrát
+Jan-E
+Janusz Dziemidowicz
+Jay Satiro
+Jeff 'Raid' Baitis
+Jianqing Wang
+Jim Morrison
+Jiwoo Park
+Jonas Kvinge
+Josh Braegger
+José F. Calcerrada
+Kamil Dudka
+Kazuho Oku
+Kenny (kang-yen) Peng
+Kenny Peng
+Kit Chan
+Kyle Schomp
+LazyHamster
+Leo Neat
+Lorenz Nickel
+Lucas Pardue
+MATSUMOTO Ryosuke
+Marc Bachmann
+Marcelo Trylesinski
+Mark Boddington
+Matt Rudary
+Matt Way
+Michael Kaufmann
+Mike Conlen
+Mike Frysinger
+Mike Lothian
+Nicholas Hurley
+Nora Shoemaker
+Paweł Wegner
+Pedro Santos
+Peeyush Aggarwal
+Peter Wu
+Piotr Sikora
+PufferOverflow
+Raul Gutierrez Segales
+Remo E
+Renaud
+Reza Tavakoli
+Richard Wolfert
+Rick Lei
+Ross Smith II
+Rudi Heitbaum
+Ryan Carsten Schmidt
+Ryo Ota
+Scott Mitchell
+Sebastiaan Deckers
+Sergey Fedorov
+Shelley Vohr
+Simon Frankenberger
+Simone Basso
+Soham Sinha
+Stefan Eissing
+Stephen Ludin
+Sunpoet Po-Chuan Hsieh
+Svante Signell
+Syohei YOSHIDA
+Tapanito
+Tatsuhiko Kubo
+Tatsuhiro Tsujikawa
+Thomas Devoogdt
+Tobias Geerinckx-Rice
+Tom Harwood
+Tomas Krizek
+Tomasz Buchert
+Tomasz Torcz
+Vernon Tang
+Viacheslav Biriukov
+Viktor Szakats
+Viktor Szépe
+Wenfeng Liu
+William A Rowe Jr
+Xiaoguang Sun
+Zhuoyun Wei
+acesso
+ayanamist
+bxshi
+clemahieu
+dalf
+dawg
+es
+fangdingjun
+hrxi
+jwchoi
+kumagi
+lhuang04
+lstefani
+makovich
+mod-h2-dev
+moparisthebest
+robaho
+snnn
+yuuki-kodama
+
+
+====================MIT====================
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+====================MIT====================
+License
+-------
+
+The MIT License
+
+====================MIT====================
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+====================MIT====================
+The MIT License

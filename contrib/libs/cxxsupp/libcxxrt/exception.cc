@@ -35,7 +35,7 @@
 #include "dwarf_eh.h"
 #include "atomic.h"
 #include "cxxabi.h"
-#include "msan.h"
+#include <sanitizer/msan_interface.h>
 
 using namespace ABI_NAMESPACE;
 
@@ -282,7 +282,7 @@ namespace std
 {
 	// Forward declaration of standard library terminate() function used to
 	// abort execution.
-	void terminate(void) _LIBCXXRT_NOEXCEPT;
+	[[noreturn]] void terminate(void) _LIBCXXRT_NOEXCEPT;
 }
 
 using namespace ABI_NAMESPACE;
@@ -811,7 +811,7 @@ static void report_failure(_Unwind_Reason_Code err, __cxa_exception *thrown_exce
 		case _URC_END_OF_STACK:
 			__cxa_begin_catch (&(thrown_exception->unwindHeader));
  			std::terminate();
-			fprintf(stderr, "uncaught exception:\n    address -> %p\n", 
+			fprintf(stderr, "Terminating due to uncaught exception %p", 
 					static_cast<void*>(thrown_exception));
 			thrown_exception = realExceptionFromException(thrown_exception);
 			static const __class_type_info *e_ti =
@@ -825,7 +825,7 @@ static void report_failure(_Unwind_Reason_Code err, __cxa_exception *thrown_exce
 							throw_ti));
 				if (e)
 				{
-					fprintf(stderr, " what() -> \"%s\"\n", e->what());
+					fprintf(stderr, " '%s'", e->what());
 				}
 			}
 
@@ -834,7 +834,7 @@ static void report_failure(_Unwind_Reason_Code err, __cxa_exception *thrown_exce
 			const char *mangled = thrown_exception->exceptionType->name();
 			int status;
 			demangled = __cxa_demangle(mangled, demangled, &bufferSize, &status);
-			fprintf(stderr, "    type -> %s\n", 
+			fprintf(stderr, " of type %s\n", 
 				status == 0 ? demangled : mangled);
 			if (status == 0) { free(demangled); }
 			// Print a back trace if no handler is found.
@@ -1552,6 +1552,19 @@ extern "C" void __cxa_call_unexpected(void*exception)
 }
 
 /**
+ * ABI function, called when an object destructor exits due to an
+ * exception during stack unwinding.
+ *
+ * This function does not return.
+ */
+extern "C" void __cxa_call_terminate(void*exception) _LIBCXXRT_NOEXCEPT
+{
+	std::terminate();
+	// Should not be reached.
+	abort();
+}
+
+/**
  * ABI function, returns the adjusted pointer to the exception object.
  */
 extern "C" void *__cxa_get_exception_ptr(void *exceptionObject)
@@ -1623,7 +1636,7 @@ namespace std
 	 * Terminates the program, calling a custom terminate implementation if
 	 * required.
 	 */
-	void terminate() _LIBCXXRT_NOEXCEPT
+	[[noreturn]] void terminate() _LIBCXXRT_NOEXCEPT
 	{
 		static __cxa_thread_info *info = thread_info();
 		if (0 != info && 0 != info->terminateHandler)

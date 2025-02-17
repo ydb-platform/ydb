@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
-#include <ydb/library/yql/ast/yql_pos_handle.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_pos_handle.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 namespace NYql {
 
@@ -46,8 +46,31 @@ struct TKqpPhyTxSettings {
 constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
 constexpr TStringBuf KqpTableSinkName = "KqpTableSinkName";
 
-static constexpr std::string_view TKqpStreamLookupStrategyName = "LookupRows"sv;
-static constexpr std::string_view TKqpStreamLookupJoinStrategyName = "LookupJoinRows"sv;
+enum class EStreamLookupStrategyType {
+    Unspecified,
+    LookupRows,
+    LookupJoinRows,
+    LookupSemiJoinRows,
+};
+
+struct TKqpStreamLookupSettings {
+    static constexpr TStringBuf StrategySettingName = "Strategy";
+    static constexpr TStringBuf AllowNullKeysSettingName = "AllowNullKeysPrefixSize";
+
+    // stream lookup strategy types
+    static constexpr std::string_view LookupStrategyName = "LookupRows"sv;
+    static constexpr std::string_view LookupJoinStrategyName = "LookupJoinRows"sv;
+    static constexpr std::string_view LookupSemiJoinStrategyName = "LookupSemiJoinRows"sv;
+
+    TMaybe<ui32> AllowNullKeysPrefixSize;
+    EStreamLookupStrategyType Strategy = EStreamLookupStrategyType::Unspecified;
+
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
+    static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupTable& node);
+    static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupIndex& node);
+    static TKqpStreamLookupSettings Parse(const NNodes::TKqpCnStreamLookup& node);
+    static TKqpStreamLookupSettings Parse(const NNodes::TCoNameValueTupleList& node);
+};
 
 struct TKqpReadTableSettings {
     static constexpr TStringBuf SkipNullKeysSettingName = "SkipNullKeys";
@@ -81,15 +104,35 @@ struct TKqpReadTableSettings {
 struct TKqpUpsertRowsSettings {
     static constexpr TStringBuf InplaceSettingName = "Inplace";
     static constexpr TStringBuf IsUpdateSettingName = "IsUpdate";
+    static constexpr TStringBuf IsConditionalUpdateSettingName = "IsConditionalUpdate";
+    static constexpr TStringBuf AllowInconsistentWritesSettingName = "AllowInconsistentWrites";
+    static constexpr TStringBuf ModeSettingName = "Mode";
 
     bool Inplace = false;
     bool IsUpdate = false;
+    bool IsConditionalUpdate = false;
+    bool AllowInconsistentWrites = false;
+    TString Mode = "";
 
     void SetInplace() { Inplace = true; }
     void SetIsUpdate() { IsUpdate = true; }
+    void SetIsConditionalUpdate() { IsConditionalUpdate = true; }
+    void SetAllowInconsistentWrites() { AllowInconsistentWrites = true; }
+    void SetMode(TStringBuf mode) { Mode = mode; }
 
     static TKqpUpsertRowsSettings Parse(const NNodes::TCoNameValueTupleList& settingsList);
     static TKqpUpsertRowsSettings Parse(const NNodes::TKqpUpsertRows& node);
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
+};
+
+struct TKqpDeleteRowsSettings {
+    static constexpr TStringBuf IsConditionalDeleteSettingName = "IsConditionalDelete";
+
+    bool IsConditionalDelete = false;
+
+    void SetIsConditionalDelete() { IsConditionalDelete = true; }
+
+    static TKqpDeleteRowsSettings Parse(const NNodes::TCoNameValueTupleList& settingsList);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 
@@ -123,5 +166,9 @@ TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx);
 TString KqpExprToPrettyString(const NNodes::TExprBase& expr, TExprContext& ctx);
 
 TString PrintKqpStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx);
+
+class IGraphTransformer;
+struct TTypeAnnotationContext;
+TAutoPtr<IGraphTransformer> GetDqIntegrationPeepholeTransformer(bool beforeDqTransforms, TIntrusivePtr<TTypeAnnotationContext> typesCtx);
 
 } // namespace NYql

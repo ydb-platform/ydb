@@ -6,7 +6,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ut_helpers/write_topic.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(Worker) {
             return CreateLocalTableWriter(tablePathId);
         };
 
-        auto worker = env.GetRuntime().Register(CreateWorker(std::move(createReaderFn), std::move(createWriterFn)));
+        auto worker = env.GetRuntime().Register(CreateWorker(env.GetSender(), std::move(createReaderFn), std::move(createWriterFn)));
         Y_UNUSED(worker);
 
         UNIT_ASSERT(WriteTopic(env, "/Root/topic", R"({"key":[1], "update":{"value":"10"}})"));

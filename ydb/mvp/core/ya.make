@@ -4,8 +4,6 @@ RECURSE_FOR_TESTS(
 
 LIBRARY()
 
-OWNER(xenoxeno g:kikimr)
-
 SRCS(
     appdata.h
     filter.cpp
@@ -44,6 +42,7 @@ PEERDIR(
     ydb/public/api/client/yc_private/ydb/v1
     ydb/public/api/client/yc_private/resourcemanager/v1
     ydb/public/api/client/yc_private/iam/v1
+    ydb/public/api/client/nc_private/iam
     contrib/libs/googleapis-common-protos
     contrib/libs/jwt-cpp
     contrib/libs/yaml-cpp
@@ -54,19 +53,20 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http
     ydb/library/actors/protos
+    ydb/library/security
     library/cpp/lwtrace/protos
     library/cpp/lfalloc/alloc_profiler
     ydb/core/viewer/json
     ydb/core/protos
-    ydb/public/sdk/cpp/client/draft
-    ydb/public/sdk/cpp/client/ydb_datastreams
-    ydb/public/sdk/cpp/client/ydb_topic
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
-    ydb/public/sdk/cpp/client/ydb_persqueue_core
+    ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/datastreams
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/persqueue_public
+    ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/api/protos
     ydb/public/api/grpc
-    ydb/public/lib/operation_id
 )
 
 END()

@@ -4,9 +4,16 @@
 
 Основные материалы:
 
-- [{#T}](access-management.md)
+- [{#T}](authentication.md)
+- [{#T}](authorization.md)
+- [{#T}](builtin-security.md)
 - [{#T}](audit-log.md)
+- Шифрование:
+
+  - [{#T}](encryption/data-at-rest.md)
+  - [{#T}](encryption/data-in-transit.md)
+
 - [{#T}](short-access-control-notation.md)
 - Концепции:
-    - [{#T}](../concepts/auth.md)
-    - [{#T}](../concepts/connect.md)
+
+  - [{#T}](../concepts/connect.md)

@@ -15,6 +15,7 @@
 #include "helpers.h"
 #include "../src/syscall.h"
 
+#ifndef CONFIG_USE_SANITIZER
 static uint64_t r[1] = {0xffffffffffffffff};
 
 int main(int argc, char *argv[])
@@ -58,3 +59,9 @@ int main(int argc, char *argv[])
   __sys_io_uring_register(r[0], 2, (const void *) 0x20000280, 1);
   return T_EXIT_PASS;
 }
+#else
+int main(int argc, char *argv[])
+{
+	return T_EXIT_SKIP;
+}
+#endif

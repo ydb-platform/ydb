@@ -1,6 +1,6 @@
 #include "execution_planner.h"
 
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
 #include <ydb/library/yql/providers/dq/opt/logical_optimize.h>
@@ -8,25 +8,24 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/mkql/dqs_mkql_compiler.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <ydb/library/actors/core/event_pb.h>
 
 #include <stack>
@@ -40,6 +39,15 @@ using namespace NYql::NNodes;
 using namespace NKikimr::NMiniKQL;
 
 using namespace Yql::DqsProto;
+
+namespace {
+    TString RemoveAliases(TString attributeName) {
+        if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
+            return attributeName.substr(idx+1);
+        }
+        return attributeName;
+    }
+}
 
 namespace NYql::NDqs {
     namespace {
@@ -434,7 +442,7 @@ namespace NYql::NDqs {
 
             bool enableSpilling = false;
             if (task.Outputs.size() > 1) {
-                enableSpilling = Settings->IsSpillingEnabled();
+                enableSpilling = Settings->IsSpillingInChannelsEnabled();
             }
             for (auto& output : task.Outputs) {
                 FillOutputDesc(*taskDesc.AddOutputs(), output, enableSpilling);
@@ -449,6 +457,7 @@ namespace NYql::NDqs {
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
+            taskDesc.SetEnableSpilling(Settings->GetEnabledSpillingNodes());
 
             if (Settings->DisableLLVMForBlockStages.Get().GetOrElse(true)) {
                 auto& stage = TasksGraph.GetStageInfo(task.StageId).Meta.Stage;
@@ -535,12 +544,18 @@ namespace NYql::NDqs {
         TVector<TString> parts;
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
             TString clusterName;
-            _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*Settings, maxPartitions, *read, parts, &clusterName, ExprContext, canFallback));
+            IDqIntegration::TPartitionSettings settings {
+                .DataSizePerJob = Settings->DataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::DataSizePerJob),
+                .MaxPartitions = maxPartitions,
+                .EnableComputeActor = Settings->EnableComputeActor.Get(),
+                .CanFallback = canFallback
+            };
+            _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*read, parts, &clusterName, ExprContext, settings));
             TMaybe<::google::protobuf::Any> sourceSettings;
             TString sourceType;
             if (dqSource) {
                 sourceSettings.ConstructInPlace();
-                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions);
+                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions, ExprContext);
                 YQL_ENSURE(!sourceSettings->type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
                 YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
             }
@@ -569,32 +584,47 @@ namespace NYql::NDqs {
         {TDqCnMerge::CallableName(), &BuildMergeChannels},
     };
 
-    NDqProto::TDqStreamLookupSource FillLookupSource(const NNodes::TExprBase& node) {
-        NDqProto::TDqStreamLookupSource result;
-        //TODO use provider to fill DataSource, see FillSourcePlanProperties
-        auto rowType = node.Raw()->GetTypeAnn();
-        result.SetSerializedRowType(NYql::NCommon::GetSerializedTypeAnnotation(rowType));
-        return result;
-    }
-
     void TDqsExecutionPlanner::ConfigureInputTransformStreamLookup(const NNodes::TDqCnStreamLookup& streamLookup, const NNodes::TDqPhyStage& stage, ui32 inputIndex) {
-        //TODO use provider, see FillSourcePlanProperties
-        auto rightSource = FillLookupSource(streamLookup.RightInputRowType());
+        auto rightInput = streamLookup.RightInput().Cast<TDqLookupSourceWrap>();
+        auto dataSourceName = rightInput.DataSource().Category().StringValue();
+        auto dataSource = TypeContext->DataSourceMap.FindPtr(dataSourceName);
+        YQL_ENSURE(dataSource);
+        auto dqIntegration = (*dataSource)->GetDqIntegration();
+        YQL_ENSURE(dqIntegration);
+
+        google::protobuf::Any providerSpecificLookupSourceSettings;
+        TString sourceType;
+        dqIntegration->FillLookupSourceSettings(*rightInput.Raw(), providerSpecificLookupSourceSettings, sourceType);
+        YQL_ENSURE(!providerSpecificLookupSourceSettings.type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
+        YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
+
+        NDqProto::TDqStreamLookupSource streamLookupSource;
+        streamLookupSource.SetProviderName(sourceType);
+        *streamLookupSource.MutableLookupSource() = providerSpecificLookupSourceSettings;
+        streamLookupSource.SetSerializedRowType(NYql::NCommon::GetSerializedTypeAnnotation(rightInput.RowType().Raw()->GetTypeAnn()));
         NDqProto::TDqInputTransformLookupSettings settings;
         settings.SetLeftLabel(streamLookup.LeftLabel().Cast<NNodes::TCoAtom>().StringValue());
-        *settings.MutableRightSource() = rightSource;
+        *settings.MutableRightSource() = streamLookupSource;
         settings.SetRightLabel(streamLookup.RightLabel().StringValue());
         settings.SetJoinType(streamLookup.JoinType().StringValue());
         for (const auto& k: streamLookup.LeftJoinKeyNames()) {
-            *settings.AddLeftJoinKeyNames() = k.StringValue();
+            *settings.AddLeftJoinKeyNames() = streamLookup.LeftLabel().StringValue().empty() ? k.StringValue() : RemoveAliases(k.StringValue());
         }
         for (const auto& k: streamLookup.RightJoinKeyNames()) {
-            *settings.AddRightJoinKeyNames() = k.StringValue();
+            *settings.AddRightJoinKeyNames() = RemoveAliases(k.StringValue());
         }
+        const auto narrowInputRowType = GetSeqItemType(streamLookup.Output().Ptr()->GetTypeAnn());
+        Y_ABORT_UNLESS(narrowInputRowType->GetKind() == ETypeAnnotationKind::Struct);
+        settings.SetNarrowInputRowType(NYql::NCommon::GetSerializedTypeAnnotation(narrowInputRowType));
+        const auto narrowOutputRowType = GetSeqItemType(streamLookup.Ptr()->GetTypeAnn());
+        Y_ABORT_UNLESS(narrowOutputRowType->GetKind() == ETypeAnnotationKind::Struct);
+        settings.SetNarrowOutputRowType(NYql::NCommon::GetSerializedTypeAnnotation(narrowOutputRowType));
+        settings.SetCacheLimit(FromString<ui64>(streamLookup.MaxCachedRows().StringValue()));
+        settings.SetCacheTtlSeconds(FromString<ui64>(streamLookup.TTL().StringValue()));
+        settings.SetMaxDelayedRows(FromString<ui64>(streamLookup.MaxDelayedRows().StringValue()));
 
-        const auto inputRowType = GetSeqItemType(streamLookup.Output().Ptr()->GetTypeAnn());
-        const auto outputRowType = GetSeqItemType(streamLookup.Ptr()->GetTypeAnn());
-
+        const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
+        const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());
         TTransform streamLookupTransform {
             .Type = "StreamLookupInputTransform",
             .InputType = NYql::NCommon::GetSerializedTypeAnnotation(inputRowType),
@@ -664,10 +694,11 @@ namespace NYql::NDqs {
                 Y_ABORT_UNLESS(false);
             }
 */
+            TSpillingSettings spillingSettings{Settings->GetEnabledSpillingNodes()};
             StagePrograms[stageInfo.first] = std::make_tuple(
                 NDq::BuildProgram(
                     stage.Program(), *paramsType, compiler, typeEnv, *FunctionRegistry,
-                    ExprContext, fakeReads),
+                    ExprContext, fakeReads, spillingSettings),
                 stageId, publicId);
         }
     }

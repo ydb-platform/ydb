@@ -1,7 +1,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2022 The OpenLDAP Foundation.
+ * Copyright 1998-2024 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -543,6 +543,9 @@ ldap_int_destroy_global_options(void)
 		LDAP_FREE( gopts->ldo_def_sasl_authcid );
 		gopts->ldo_def_sasl_authcid = NULL;
 	}
+#endif
+#ifdef HAVE_TLS
+	ldap_int_tls_destroy( gopts );
 #endif
 }
 

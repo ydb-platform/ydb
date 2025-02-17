@@ -93,6 +93,7 @@ public:
         , ReqId(reqId)
         , Span(std::move(span))
     {
+        TCompletionAction::ShouldBeExecutedInCompletionThread = false;
     }
 
     ~TCompletionChunkWrite() {
@@ -102,15 +103,18 @@ public:
     void Exec(TActorSystem *actorSystem) override {
         auto execSpan = Span.CreateChild(TWilson::PDiskDetailed, "PDisk.CompletionChunkWrite.Exec");
         double responseTimeMs = HPMilliSecondsFloat(HPNow() - StartTime);
-        LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK,
-                "PDiskId# " << PDiskId << " ReqId# " << ReqId
-            << "TCompletionChunkWrite " << Event->ToString().data()
-            << " PriorityClass# " << (ui32)PriorityClass
-            << " timeMs# " << ui64(responseTimeMs) << " sizeBytes# " << SizeBytes);
+        STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "TCompletionChunkWrite::Exec",
+                (DiskId, PDiskId),
+                (ReqId, ReqId),
+                (Event, Event->ToString()),
+                (PriorityClass, (ui32)PriorityClass),
+                (timeMs, responseTimeMs),
+                (sizeBytes, SizeBytes));
         if (Mon) {
             Mon->IncrementResponseTime(PriorityClass, responseTimeMs, SizeBytes);
         }
         LWTRACK(PDiskChunkResponseTime, Orbit, PDiskId, ReqId.Id, PriorityClass, responseTimeMs, SizeBytes);
+        Event->Orbit = std::move(Orbit);
         actorSystem->Send(Recipient, Event.Release());
         if (Mon) {
             Mon->GetWriteCounter(PriorityClass)->CountResponse();
@@ -141,7 +145,9 @@ public:
         , LogWriteQueue(std::move(logWriteQueue))
         , Commits(std::move(commits))
         , CommitedLogChunks(std::move(commitedLogChunks))
-    {}
+    {
+        TCompletionAction::ShouldBeExecutedInCompletionThread = false;
+    }
 
     TVector<ui32>* GetCommitedLogChunksPtr() {
         return &CommitedLogChunks;
@@ -163,6 +169,7 @@ class TCompletionChunkRead : public TCompletionAction {
     TPDisk *PDisk;
     TIntrusivePtr<TChunkRead> Read;
     TBufferWithGaps CommonBuffer;
+    TMutex CommonBufferMutex; // used to protect CommonBuffer when gaps are being add
     TAtomic PartsPending;
     TAtomic Deletes;
     std::function<void()> OnDestroy;
@@ -200,6 +207,11 @@ public:
         return &CommonBuffer;
     }
 
+    void AddGap(ui32 start, ui32 end) {
+        TGuard<TMutex> g(CommonBufferMutex);
+        CommonBuffer.AddGap(start, end);
+    }
+
     ui64 GetChunkNonce() {
         return ChunkNonce;
     }
@@ -222,14 +234,15 @@ class TCompletionChunkReadPart : public TCompletionAction {
     ui64 PayloadReadSize;
     ui64 CommonBufferOffset;
     TCompletionChunkRead *CumulativeCompletion;
+    ui64 ChunkNonce;
+    ui8 *Destination = nullptr;
     TBuffer::TPtr Buffer;
     bool IsTheLastPart;
-    TControlWrapper UseT1ha0Hasher;
     NWilson::TSpan Span;
 public:
     TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, ui64 rawReadSize, ui64 payloadReadSize,
             ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart,
-            const TControlWrapper& useT1ha0Hasher, NWilson::TSpan&& span);
+            NWilson::TSpan&& span);
 
 
     bool CanHandleResult() const override {
@@ -334,6 +347,30 @@ public:
     TChunkTrimCompletion(TPDisk *pdisk, NHPTimer::STime startTime, size_t sizeBytes, TReqId reqId)
         : PDisk(pdisk)
         , StartTime(startTime)
+        , SizeBytes(sizeBytes)
+        , ReqId(reqId)
+    {}
+
+    void Exec(TActorSystem *actorSystem) override;
+
+    void Release(TActorSystem *actorSystem) override {
+        Y_UNUSED(actorSystem);
+        delete this;
+    }
+};
+
+class TChunkShredCompletion : public TCompletionAction {
+    TPDisk *PDisk;
+    TChunkIdx Chunk;
+    ui32 SectorIdx;
+    size_t SizeBytes;
+    TReqId ReqId;
+
+public:
+    TChunkShredCompletion(TPDisk *pdisk, TChunkIdx chunk, ui32 sectorIdx, size_t sizeBytes, TReqId reqId)
+        : PDisk(pdisk)
+        , Chunk(chunk)
+        , SectorIdx(sectorIdx)
         , SizeBytes(sizeBytes)
         , ReqId(reqId)
     {}

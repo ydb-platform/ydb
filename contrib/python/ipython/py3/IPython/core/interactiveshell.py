@@ -900,7 +900,7 @@ class InteractiveShell(SingletonConfigurable):
             return
 
         p = Path(sys.executable)
-        p_venv = Path(os.environ["VIRTUAL_ENV"])
+        p_venv = Path(os.environ["VIRTUAL_ENV"]).resolve()
 
         # fallback venv detection:
         # stdlib venv may symlink sys.executable, so we can't use realpath.
@@ -909,11 +909,11 @@ class InteractiveShell(SingletonConfigurable):
         paths = self.get_path_links(p)
 
         # In Cygwin paths like "c:\..." and '\cygdrive\c\...' are possible
-        if p_venv.parts[1] == "cygdrive":
+        if len(p_venv.parts) > 2 and p_venv.parts[1] == "cygdrive":
             drive_name = p_venv.parts[2]
             p_venv = (drive_name + ":/") / Path(*p_venv.parts[3:])
 
-        if any(p_venv == p.parents[1] for p in paths):
+        if any(p_venv == p.parents[1].resolve() for p in paths):
             # Our exe is inside or has access to the virtualenv, don't need to do anything.
             return
 
@@ -1627,7 +1627,7 @@ class InteractiveShell(SingletonConfigurable):
         Returns
         -------
         parts_ok: bool
-            wether we were properly able to parse parts.
+            whether we were properly able to parse parts.
         parts: list of str
             extracted parts
 
@@ -2033,7 +2033,7 @@ class InteractiveShell(SingletonConfigurable):
                     print(self.InteractiveTB.stb2text(stb))
                     print("The original exception:")
                     stb = self.InteractiveTB.structured_traceback(
-                                            (etype,value,tb), tb_offset=tb_offset
+                        etype, value, tb, tb_offset=tb_offset
                     )
                 return stb
 
@@ -2093,6 +2093,8 @@ class InteractiveShell(SingletonConfigurable):
         sys.last_type = etype
         sys.last_value = value
         sys.last_traceback = tb
+        if sys.version_info >= (3, 12):
+            sys.last_exc = value
 
         return etype, value, tb
 
@@ -3654,10 +3656,17 @@ class InteractiveShell(SingletonConfigurable):
             make sense in all contexts, for example a terminal ipython can't
             display figures inline.
         """
+        from .pylabtools import _matplotlib_manages_backends
+
+        if not _matplotlib_manages_backends() and gui in (None, "auto"):
+            # Early import of backend_inline required for its side effect of
+            # calling _enable_matplotlib_integration()
+            import matplotlib_inline.backend_inline
+
         from IPython.core import pylabtools as pt
         gui, backend = pt.find_gui_and_backend(gui, self.pylab_gui_select)
 
-        if gui != 'inline':
+        if gui != None:
             # If we have our first gui selection, store it
             if self.pylab_gui_select is None:
                 self.pylab_gui_select = gui

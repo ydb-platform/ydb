@@ -1,0 +1,73 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-3-Clause         132868e8af7e99148e4cf802925f8898
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [4:28]
+
+KEEP     BSD-3-Clause         6aa235708ac9f5dd8e5c6ac415fc5837
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/sparsehash/dense_hash_map [4:28]
+        src/sparsehash/dense_hash_set [4:28]
+        src/sparsehash/internal/densehashtable.h [4:28]
+        src/sparsehash/internal/hashtable-common.h [4:28]
+        src/sparsehash/internal/libc_allocator_with_realloc.h [4:28]
+        src/sparsehash/internal/sparsehashtable.h [4:28]
+        src/sparsehash/sparse_hash_map [4:28]
+        src/sparsehash/sparse_hash_set [4:28]
+        src/sparsehash/sparsetable [4:28]
+        src/sparsehash/template_util.h [4:28]
+        src/sparsehash/type_traits.h [4:28]
+
+SKIP     FSFAP                d02cc4799cbd521d2aa8c3ff19e655f6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FSFAP
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/prep/maintain/html_node/License-Notices-for-Other-Files.html, https://spdx.org/licenses/FSFAP
+    Files with this license:
+        INSTALL [7:10]

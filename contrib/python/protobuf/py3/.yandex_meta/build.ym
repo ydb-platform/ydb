@@ -1,0 +1,80 @@
+{% extends '//builtin/bag.ym' %}
+
+{% block ya_module_type %}PY3_LIBRARY{% endblock %}
+
+{% block current_version %}4.22.5{% endblock %}
+
+{% block current_url %}
+https://github.com/protocolbuffers/protobuf/archive/refs/tags/v{{self.version().strip()}}.tar.gz
+{% endblock %}
+
+{% block patch_source %}
+{{super()}}
+rm -rf CMakeLists.txt
+(find . -type f -name '*_test.py') | while read l; do
+    rm -rf ${l}
+done
+rm -rf python/google/protobuf/internal/import_test_package
+rm -rf python/google/protobuf/internal/test_util.py
+{% endblock %}
+
+{% block ya_make %}
+PEERDIR(
+    contrib/libs/protobuf
+    contrib/libs/protobuf/builtin_proto/protos_from_protobuf
+    contrib/libs/protobuf/builtin_proto/protos_from_protoc
+    contrib/libs/python
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings
+    contrib/restricted/abseil-cpp-tstring/y_absl/log
+)
+
+NO_LINT()
+ADDINCL(contrib/python/protobuf/py3)
+CFLAGS(-DPYTHON_PROTO2_CPP_IMPL_V2)
+
+INCLUDE(ya.make.inc)
+
+PY_REGISTER(
+    google.protobuf.internal._api_implementation
+    google.protobuf.pyext._message
+)
+
+{% endblock %}
+
+
+{% block prepare_yamake %}
+{{super()}}
+cd ${SRC}/python/google
+(
+echo 'PY_SRCS('
+echo '    TOP_LEVEL'
+find . -type f -name '*.py' | sed -En 's|\.\/|    google\/|p' | env LANG=C sort
+echo ')'
+) > ya.make.inc
+
+cd ${SRC}/python/google
+(
+echo 'SRCS('
+find . -type f -name '*.cc' | sed -En 's|\.\/|    google\/|p' | env LANG=C sort
+echo ')'
+) >> ya.make.inc
+
+cd -
+{% endblock %}
+
+
+{% block move_to_output %}
+{{super()}}
+
+cd ${SRC}/python/google
+(
+    find . -type f -name '*.cc'
+    find . -type f -name '*.h'
+    find . -type f -name '*.py'
+) | while read l; do
+    install -v -D -m 0644 ${l} ${OUTPUT}/google/${l}
+done
+
+cp ya.make.inc ${OUTPUT}/
+
+{% endblock %}

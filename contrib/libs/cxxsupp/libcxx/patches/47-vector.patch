@@ -1,0 +1,141 @@
+diff --git a/include/vector b/include/vector
+index 1defc43..8d5b846 100644
+--- a/include/vector
++++ b/include/vector
+@@ -348,6 +348,7 @@ template<class T, class charT> requires is-vector-bool-reference<T> // Since C++
+ #include <__type_traits/is_allocator.h>
+ #include <__type_traits/is_constructible.h>
+ #include <__type_traits/is_nothrow_assignable.h>
++#include <__type_traits/is_trivially_destructible.h>
+ #include <__type_traits/noexcept_move_assign_container.h>
+ #include <__type_traits/type_identity.h>
+ #include <__utility/exception_guard.h>
+@@ -705,12 +706,22 @@ public:
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __position);
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __first, const_iterator __last);
+ 
+-  _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void clear() _NOEXCEPT {
++  _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void clear() _NOEXCEPT {
+     size_type __old_size = size();
+     __clear();
+     __annotate_shrink(__old_size);
+   }
+ 
++#if _YNDX_LIBCXX_ENABLE_VECTOR_POD_RESIZE_UNINITIALIZED
++  // This function works only for POD types, otherwise memory leak may occur.
++#  if _LIBCPP_STD_VER >= 20
++  void resize_uninitialized(size_type __sz)
++    requires is_trivially_destructible_v<_Tp>;
++#  else
++  void resize_uninitialized(size_type __sz);
++#  endif
++#endif
++
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void resize(size_type __sz);
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void resize(size_type __sz, const_reference __x);
+ 
+@@ -793,7 +804,7 @@ private:
+   template <class _InputIterator, class _Sentinel>
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void
+   __construct_at_end(_InputIterator __first, _Sentinel __last, size_type __n);
+-
++  void __append_uninitialized(size_type __n);
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __append(size_type __n);
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __append(size_type __n, const_reference __x);
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI iterator __make_iter(pointer __p) _NOEXCEPT {
+@@ -1100,6 +1111,19 @@ vector<_Tp, _Allocator>::__construct_at_end(_InputIterator __first, _Sentinel __
+   __tx.__pos_ = std::__uninitialized_allocator_copy(__alloc(), __first, __last, __tx.__pos_);
+ }
+ 
++template <class _Tp, class _Allocator>
++void vector<_Tp, _Allocator>::__append_uninitialized(size_type __n) {
++  if (static_cast<size_type>(this->__end_cap() - this->__end_) >= __n) {
++    __annotate_increase(__n);
++    this->__end_ += __n;
++  } else {
++    allocator_type& __a = this->__alloc();
++    __split_buffer<value_type, allocator_type&> __v(__recommend(size() + __n), size(), __a);
++    __v.__uninitialized_at_end(__n);
++    __swap_out_circular_buffer(__v);
++  }
++}
++
+ //  Default constructs __n objects starting at __end_
+ //  throws if construction throws
+ //  Postcondition:  size() == size() + __n
+@@ -1778,6 +1802,25 @@ _LIBCPP_CONSTEXPR_SINCE_CXX20 void vector<_Tp, _Allocator>::resize(size_type __s
+     this->__destruct_at_end(this->__begin_ + __sz);
+ }
+ 
++#if _YNDX_LIBCXX_ENABLE_VECTOR_POD_RESIZE_UNINITIALIZED
++
++template <class _Tp, class _Allocator>
++void vector<_Tp, _Allocator>::resize_uninitialized(size_type __sz)
++#  if _LIBCPP_STD_VER >= 20
++  requires is_trivially_destructible_v<_Tp>
++#  endif
++{
++  size_type __cs = size();
++  if (__cs < __sz)
++    this->__append_uninitialized(__sz - __cs);
++  else if (__cs > __sz) {
++    this->__end_ = this->__begin_ + __sz;
++    __annotate_shrink(__cs);
++  }
++}
++
++#endif
++
+ template <class _Tp, class _Allocator>
+ _LIBCPP_CONSTEXPR_SINCE_CXX20 void vector<_Tp, _Allocator>::swap(vector& __x)
+ #if _LIBCPP_STD_VER >= 14
+@@ -1813,6 +1856,7 @@ _LIBCPP_CONSTEXPR_SINCE_CXX20 bool vector<_Tp, _Allocator>::__invariants() const
+   return true;
+ }
+ 
++#if _YNDX_LIBCXX_ENABLE_VECTOR_BOOL_COMPRESSION == 1
+ // vector<bool>
+ 
+ template <class _Allocator>
+@@ -2118,7 +2162,9 @@ public:
+   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 iterator erase(const_iterator __position);
+   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 iterator erase(const_iterator __first, const_iterator __last);
+ 
+-  _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 void clear() _NOEXCEPT { __size_ = 0; }
++  _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 void clear() _NOEXCEPT {
++    __size_ = 0;
++  }
+ 
+   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 void swap(vector&)
+ #if _LIBCPP_STD_VER >= 14
+@@ -2872,6 +2918,30 @@ struct _LIBCPP_TEMPLATE_VIS hash<vector<bool, _Allocator> >
+     return __vec.__hash_code();
+   }
+ };
++#else  // _YNDX_LIBCXX_ENABLE_VECTOR_BOOL_COMPRESSION
++// Hash function implementation for uncompressed std::vector<bool> which returns the same result.
++template <class _Allocator>
++struct _LIBCPP_TEMPLATE_VIS hash<vector<bool, _Allocator> > : public unary_function<vector<bool, _Allocator>, size_t> {
++  _LIBCPP_HIDE_FROM_ABI
++  size_t operator()(const vector<bool, _Allocator>& __vec) const _NOEXCEPT {
++    size_t __h                       = 0;
++    size_t __idx                     = 0;
++    size_t __n                       = __vec.size();
++    constexpr size_t __bits_per_word = sizeof(typename allocator_traits<_Allocator>::size_type) * CHAR_BIT;
++    static_assert(
++        sizeof(typename allocator_traits<_Allocator>::size_type) <= sizeof(size_t), "size_type constraint violated");
++    for (; __idx + __bits_per_word <= __n;) {
++      for (size_t __bit = 0; __bit < __bits_per_word; __bit++, __idx++) {
++        __h ^= static_cast<size_t>(__vec[__idx]) << __bit;
++      }
++    }
++    for (size_t __bit = 0; __idx < __n; __bit++, __idx++) {
++      __h ^= static_cast<size_t>(__vec[__idx]) << __bit;
++    }
++    return __h;
++  }
++};
++#endif // _YNDX_LIBCXX_ENABLE_VECTOR_BOOL_COMPRESSION
+ 
+ template <class _Tp, class _Allocator>
+ _LIBCPP_CONSTEXPR_SINCE_CXX20 inline _LIBCPP_HIDE_FROM_ABI bool

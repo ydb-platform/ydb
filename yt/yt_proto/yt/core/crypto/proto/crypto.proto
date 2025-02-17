@@ -8,4 +8,9 @@ message TMD5Hasher
     required bytes state = 1;
 }
 
+message TMD5Hash
+{
+    required bytes data = 1;
+}
+
 ////////////////////////////////////////////////////////////////////////////////

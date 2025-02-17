@@ -1,11 +1,11 @@
 #include "yql_s3_provider_impl.h"
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 
@@ -44,6 +44,10 @@ TExprNode::TPtr GetTimestampFormatName(const TExprNode& settings) {
 
 TExprNode::TPtr GetTimestampFormat(const TExprNode& settings) {
     return GetSetting(settings, "data.timestamp.format"sv);
+}
+
+TExprNode::TPtr GetDateFormat(const TExprNode& settings) {
+    return GetSetting(settings, "data.date.format"sv);
 }
 
 TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
@@ -120,13 +124,15 @@ public:
         auto keys = GetPartitionKeys(partBy);
 
         auto sinkSettingsBuilder = Build<TExprList>(ctx, target.Pos());
-        if (partBy)
+        if (partBy) {
             sinkSettingsBuilder.Add(std::move(partBy));
+        }
 
         auto compression = GetCompression(settings);
         const auto& extension = GetExtension(target.Format().Value(), compression ? compression->Tail().Content() : ""sv);
-        if (compression)
+        if (compression) {
             sinkSettingsBuilder.Add(std::move(compression));
+        }
 
         auto sinkOutputSettingsBuilder = Build<TExprList>(ctx, target.Pos());
         if (auto csvDelimiter = GetCsvDelimiter(settings)) {
@@ -171,6 +177,10 @@ public:
             sinkOutputSettingsBuilder.Add(ctx.NewList(target.Pos(), std::move(pair)));
         }
 
+        if (auto dateFormat = GetDateFormat(settings)) {
+            sinkOutputSettingsBuilder.Add(std::move(dateFormat));
+        }
+
         const TStringBuf format = target.Format();
         if (format != "raw" && format != "json_list") { // multipart
             {
@@ -191,7 +201,7 @@ public:
             }
         }
 
-        if (!FindNode(input.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {
+        if (IsDqPureExpr(input)) {
             YQL_CLOG(INFO, ProviderS3) << "Rewrite pure S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as stage with sink.";
             return keys.empty() ?
                 Build<TDqStage>(ctx, writePos)
@@ -297,23 +307,26 @@ public:
                 .Build()
             .Done();
 
-        auto outputsBuilder = Build<TDqStageOutputsList>(ctx, target.Pos());
-        if (inputStage.Outputs() && keys.empty()) {
-            outputsBuilder.InitFrom(inputStage.Outputs().Cast());
-        }
-        outputsBuilder.Add(sink);
+        auto outputsBuilder = Build<TDqStageOutputsList>(ctx, target.Pos())
+            .Add(sink);
 
         if (keys.empty()) {
-            const auto outputBuilder = Build<TS3SinkOutput>(ctx, target.Pos())
-                .Input(inputStage.Program().Body().Ptr())
-                .Format(target.Format())
-                .KeyColumns().Add(std::move(keys)).Build()
-                .Settings(sinkOutputSettingsBuilder.Done())
-                .Done();
-
             return Build<TDqStage>(ctx, writePos)
-                .InitFrom(inputStage)
-                .Program(ctx.DeepCopyLambda(inputStage.Program().Ref(), outputBuilder.Ptr()))
+                .Inputs()
+                    .Add<TDqCnMap>()
+                        .Output(dqUnion.Output())
+                        .Build()
+                    .Build()
+                .Program<TCoLambda>()
+                    .Args({"in"})
+                    .Body<TS3SinkOutput>()
+                        .Input("in")
+                        .Format(target.Format())
+                        .KeyColumns().Add(std::move(keys)).Build()
+                        .Settings(sinkOutputSettingsBuilder.Done())
+                        .Build()
+                    .Build()
+                .Settings().Build()
                 .Outputs(outputsBuilder.Done())
                 .Done();
         } else {

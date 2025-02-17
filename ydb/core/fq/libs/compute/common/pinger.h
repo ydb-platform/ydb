@@ -2,7 +2,7 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/core/fq/libs/config/protos/pinger.pb.h>
-#include <ydb/library/yql/providers/common/metrics/service_counters.h>
+#include <yql/essentials/providers/common/metrics/service_counters.h>
 #include <ydb/public/lib/fq/scope.h>
 
 namespace NFq {

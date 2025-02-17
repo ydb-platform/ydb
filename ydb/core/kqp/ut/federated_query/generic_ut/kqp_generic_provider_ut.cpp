@@ -1,12 +1,13 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/database_resolver_mock.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/query/query.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -34,7 +35,7 @@ namespace NKikimr::NKqp {
         Ydb,
     };
 
-    NApi::TDataSourceInstance MakeDataSourceInstance(EProviderType providerType) {
+    NYql::TGenericDataSourceInstance MakeDataSourceInstance(EProviderType providerType) {
         switch (providerType) {
             case EProviderType::PostgreSQL:
                 return TConnectorClientMock::TPostgreSQLDataSourceInstanceBuilder<>().GetResult();
@@ -95,7 +96,7 @@ namespace NKikimr::NKqp {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
-            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
 
             // step 1: DescribeTable
             // clang-format off
@@ -124,6 +125,7 @@ namespace NKikimr::NKqp {
             // step 3: ReadSplits
             std::vector<ui16> colData = {10, 20, 30, 40, 50};
             clientMock->ExpectReadSplits()
+                .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -144,7 +146,8 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -158,7 +161,7 @@ namespace NKikimr::NKqp {
             auto db = kikimr->GetQueryClient();
             auto scriptExecutionOperation = db.ExecuteScript(query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+            UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
             UNIT_ASSERT_C(readyOp.Metadata().ExecStatus == EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
@@ -189,7 +192,7 @@ namespace NKikimr::NKqp {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
-            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
 
             constexpr size_t ROWS_COUNT = 5;
 
@@ -219,6 +222,7 @@ namespace NKikimr::NKqp {
 
             // step 3: ReadSplits
             clientMock->ExpectReadSplits()
+                .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -236,7 +240,8 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -280,7 +285,7 @@ namespace NKikimr::NKqp {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
-            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
 
             constexpr size_t ROWS_COUNT = 5;
 
@@ -310,6 +315,7 @@ namespace NKikimr::NKqp {
 
             // step 3: ReadSplits
             clientMock->ExpectReadSplits()
+                .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -327,7 +333,8 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -367,7 +374,7 @@ namespace NKikimr::NKqp {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
-            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
             // clang-format off
             const NApi::TSelect select = TConnectorClientMock::TSelectBuilder<>()
                 .DataSourceInstance(dataSourceInstance)
@@ -414,13 +421,14 @@ namespace NKikimr::NKqp {
             std::vector<i32> filterColumnData = {42, 24};
             // clang-format off
             clientMock->ExpectReadSplits()
+                .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
                     .Select(select)
                     .Done()
                 .Result()
                     .AddResponse(MakeRecordBatch(
-                        MakeArray<arrow::StringBuilder>("data_column", colData, arrow::utf8()),
+                        MakeArray<arrow::BinaryBuilder>("data_column", colData, arrow::binary()),
                         MakeArray<arrow::Int32Builder>("filtered_column", filterColumnData, arrow::int32())),
                         NewSuccess());
             // clang-format on
@@ -430,7 +438,8 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
 
             CreateExternalDataSource(providerType, kikimr);
 

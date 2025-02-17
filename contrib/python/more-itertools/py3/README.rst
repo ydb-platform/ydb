@@ -63,8 +63,6 @@ Python iterables.
 |                        | `zip_offset <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.zip_offset>`_,                                                                         |
 |                        | `zip_equal <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.zip_equal>`_,                                                                           |
 |                        | `zip_broadcast <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.zip_broadcast>`_,                                                                   |
-|                        | `dotproduct <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.dotproduct>`_,                                                                         |
-|                        | `convolve <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.convolve>`_,                                                                             |
 |                        | `flatten <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.flatten>`_,                                                                               |
 |                        | `roundrobin <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.roundrobin>`_,                                                                         |
 |                        | `prepend <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.prepend>`_,                                                                               |
@@ -77,6 +75,7 @@ Python iterables.
 |                        | `consecutive_groups <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.consecutive_groups>`_,                                                         |
 |                        | `run_length <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.run_length>`_,                                                                         |
 |                        | `map_reduce <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.map_reduce>`_,                                                                         |
+|                        | `join_mappings <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.join_mappings>`_,                                                                   |
 |                        | `exactly_n <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.exactly_n>`_,                                                                           |
 |                        | `is_sorted <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.is_sorted>`_,                                                                           |
 |                        | `all_equal <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.all_equal>`_,                                                                           |
@@ -107,11 +106,27 @@ Python iterables.
 |                        | `tail <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.tail>`_,                                                                                     |
 |                        | `unique_everseen <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.unique_everseen>`_,                                                               |
 |                        | `unique_justseen <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.unique_justseen>`_,                                                               |
+|                        | `unique <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.unique>`_,                                                                                 |
 |                        | `duplicates_everseen <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.duplicates_everseen>`_,                                                       |
 |                        | `duplicates_justseen <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.duplicates_justseen>`_,                                                       |
 |                        | `classify_unique <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.classify_unique>`_,                                                               |
 |                        | `longest_common_prefix <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.longest_common_prefix>`_,                                                   |
 |                        | `takewhile_inclusive <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.takewhile_inclusive>`_                                                        |
++------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Math                   | `dft <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.dft>`_,                                                                                       |
+|                        | `idft <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.idft>`_,                                                                                     |
+|                        | `convolve <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.convolve>`_,                                                                             |
+|                        | `dotproduct <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.dotproduct>`_,                                                                         |
+|                        | `factor <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.factor>`_,                                                                                 |
+|                        | `is_prime <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.is_prime>`_,                                                                             |
+|                        | `nth_prime <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.nth_prime>`_,                                                                           |
+|                        | `matmul <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.matmul>`_,                                                                                 |
+|                        | `polynomial_from_roots <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.polynomial_from_roots>`_,                                                   |
+|                        | `polynomial_derivative <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.polynomial_derivative>`_,                                                   |
+|                        | `polynomial_eval <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.polynomial_eval>`_,                                                               |
+|                        | `sieve <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.sieve>`_,                                                                                   |
+|                        | `sum_of_squares <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.sum_of_squares>`_,                                                                 |
+|                        | `totient <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.totient>`_                                                                                |
 +------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | Combinatorics          | `distinct_permutations <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.distinct_permutations>`_,                                                   |
 |                        | `distinct_combinations <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.distinct_combinations>`_,                                                   |
@@ -125,6 +140,7 @@ Python iterables.
 |                        | `gray_product  <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.gray_product>`_,                                                                    |
 |                        | `outer_product  <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.outer_product>`_,                                                                  |
 |                        | `powerset <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.powerset>`_,                                                                             |
+|                        | `powerset_of_sets <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.powerset_of_sets>`_,                                                             |
 |                        | `random_product <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.random_product>`_,                                                                 |
 |                        | `random_permutation <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.random_permutation>`_,                                                         |
 |                        | `random_combination <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.random_combination>`_,                                                         |
@@ -147,6 +163,7 @@ Python iterables.
 |                        | `numeric_range <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.numeric_range>`_,                                                                   |
 |                        | `side_effect <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.side_effect>`_,                                                                       |
 |                        | `iterate <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.iterate>`_,                                                                               |
+|                        | `loops <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.loops>`_,                                                                                   |
 |                        | `difference <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.difference>`_,                                                                         |
 |                        | `make_decorator <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.make_decorator>`_,                                                                 |
 |                        | `SequenceView <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.SequenceView>`_,                                                                     |
@@ -156,15 +173,8 @@ Python iterables.
 |                        | `consume <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.consume>`_,                                                                               |
 |                        | `tabulate <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.tabulate>`_,                                                                             |
 |                        | `repeatfunc <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.repeatfunc>`_,                                                                         |
-|                        | `polynomial_from_roots <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.polynomial_from_roots>`_,                                                   |
-|                        | `polynomial_eval <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.polynomial_eval>`_,                                                               |
-|                        | `polynomial_derivative <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.polynomial_derivative>`_,                                                   |
-|                        | `sieve <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.sieve>`_,                                                                                   |
-|                        | `factor <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.factor>`_,                                                                                 |
-|                        | `matmul <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.matmul>`_,                                                                                 |
-|                        | `sum_of_squares <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.sum_of_squares>`_,                                                                 |
-|                        | `totient <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.totient>`_,                                                                               |
 |                        | `reshape <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.reshape>`_                                                                                |
+|                        | `doublestarmap <https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.doublestarmap>`_                                                                    |
 +------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
@@ -216,7 +226,7 @@ Blog posts about ``more-itertools``:
 
 * `Yo, I heard you like decorators <https://www.bbayles.com/index/decorator_factory>`__
 * `Tour of Python Itertools <https://martinheinz.dev/blog/16>`__ (`Alternate <https://dev.to/martinheinz/tour-of-python-itertools-4122>`__)
-* `Real-World Python More Itertools <https://www.gidware.com/real-world-more-itertools/>`_
+* `Real-World Python More Itertools <https://python.plainenglish.io/real-world-more-itertools-gideons-blog-a3901c607550>`_
 
 
 Development

@@ -16,12 +16,12 @@ links:
   - title: For DevOps
     description: How to run production YDB clusters
     href: devops/
-  - title: For DBA
-    description: How to run manage YDB databases
-    href: dba/
   - title: For Developers
     description: How to develop applications working with YDB
     href: dev/
+  - title: For Security Engineers
+    description: How to secure YDB clusters
+    href: security/
   - title: For Contributors
     description: How to contribute to YDB core and satellite projects
     href: contributor/
@@ -37,3 +37,6 @@ links:
   - title: PostgreSQL compatibility
     description: Integrate with PostgreSQL ecosystem
     href: postgresql/intro/
+  - title: Troubleshooting
+    description: Troubleshooting issues related to YDB databases and applications
+    href: troubleshooting/

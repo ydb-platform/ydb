@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import re
@@ -14,21 +15,23 @@ from urllib3.response import HTTPResponse
 from clickhouse_connect import common
 from clickhouse_connect.datatypes import registry
 from clickhouse_connect.datatypes.base import ClickHouseType
-from clickhouse_connect.driver.ctypes import RespBuffCls
 from clickhouse_connect.driver.client import Client
-from clickhouse_connect.driver.common import dict_copy, coerce_bool, coerce_int
+from clickhouse_connect.driver.common import dict_copy, coerce_bool, coerce_int, dict_add
 from clickhouse_connect.driver.compression import available_compression
+from clickhouse_connect.driver.ctypes import RespBuffCls
 from clickhouse_connect.driver.exceptions import DatabaseError, OperationalError, ProgrammingError
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.httputil import ResponseSource, get_pool_manager, get_response_data, \
-    default_pool_manager, get_proxy_manager, all_managers, check_env_proxy, check_conn_reset
+    default_pool_manager, get_proxy_manager, all_managers, check_env_proxy, check_conn_expiration
 from clickhouse_connect.driver.insert import InsertContext
+from clickhouse_connect.driver.query import QueryResult, QueryContext
+from clickhouse_connect.driver.binding import quote_identifier, bind_query
 from clickhouse_connect.driver.summary import QuerySummary
-from clickhouse_connect.driver.query import QueryResult, QueryContext, quote_identifier, bind_query
 from clickhouse_connect.driver.transform import NativeTransform
 
 logger = logging.getLogger(__name__)
 columns_only_re = re.compile(r'LIMIT 0\s*$', re.IGNORECASE)
+ex_header = 'X-ClickHouse-Exception-Code'
 
 
 # pylint: disable=too-many-instance-attributes
@@ -43,7 +46,7 @@ class HttpClient(Client):
                                    'enable_http_compression'}
     _owns_pool_manager = False
 
-    # pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements,unused-argument
+    # pylint: disable=too-many-positional-arguments,too-many-arguments,too-many-locals,too-many-branches,too-many-statements,unused-argument
     def __init__(self,
                  interface: str,
                  host: str,
@@ -57,7 +60,7 @@ class HttpClient(Client):
                  connect_timeout: int = 10,
                  send_receive_timeout: int = 300,
                  client_name: Optional[str] = None,
-                 verify: bool = True,
+                 verify: Union[bool, str] = True,
                  ca_cert: Optional[str] = None,
                  client_cert: Optional[str] = None,
                  client_cert_key: Optional[str] = None,
@@ -67,34 +70,39 @@ class HttpClient(Client):
                  http_proxy: Optional[str] = None,
                  https_proxy: Optional[str] = None,
                  server_host_name: Optional[str] = None,
-                 apply_server_timezone: Optional[Union[str, bool]] = True):
+                 apply_server_timezone: Optional[Union[str, bool]] = None,
+                 show_clickhouse_errors: Optional[bool] = None,
+                 autogenerate_session_id: Optional[bool] = None,
+                 tls_mode: Optional[str] = None):
         """
         Create an HTTP ClickHouse Connect client
         See clickhouse_connect.get_client for parameters
         """
         self.url = f'{interface}://{host}:{port}'
         self.headers = {}
+        self.params = dict_copy(HttpClient.params)
         ch_settings = dict_copy(settings, self.params)
         self.http = pool_mgr
         if interface == 'https':
+            if isinstance(verify, str) and verify.lower() == 'proxy':
+                verify = True
+                tls_mode = tls_mode or 'proxy'
             if not https_proxy:
                 https_proxy = check_env_proxy('https', host, port)
-            if client_cert:
+            verify = coerce_bool(verify)
+            if client_cert and (tls_mode is None or tls_mode == 'mutual'):
                 if not username:
                     raise ProgrammingError('username parameter is required for Mutual TLS authentication')
                 self.headers['X-ClickHouse-User'] = username
                 self.headers['X-ClickHouse-SSL-Certificate-Auth'] = 'on'
-            verify = coerce_bool(verify)
             # pylint: disable=too-many-boolean-expressions
             if not self.http and (server_host_name or ca_cert or client_cert or not verify or https_proxy):
-                options = {
-                    'ca_cert': ca_cert,
-                    'client_cert': client_cert,
-                    'verify': verify,
-                    'client_cert_key': client_cert_key
-                }
+                options = {'verify': verify}
+                dict_add(options, 'ca_cert', ca_cert)
+                dict_add(options, 'client_cert', client_cert)
+                dict_add(options, 'client_cert_key', client_cert_key)
                 if server_host_name:
-                    if verify:
+                    if options['verify']:
                         options['assert_hostname'] = server_host_name
                     options['server_hostname'] = server_host_name
                 self.http = get_pool_manager(https_proxy=https_proxy, **options)
@@ -107,13 +115,13 @@ class HttpClient(Client):
             else:
                 self.http = default_pool_manager()
 
-        if not client_cert and username:
+        if (not client_cert or tls_mode in ('strict', 'proxy')) and username:
             self.headers['Authorization'] = 'Basic ' + b64encode(f'{username}:{password}'.encode()).decode()
         self.headers['User-Agent'] = common.build_client_name(client_name)
         self._read_format = self._write_format = 'Native'
         self._transform = NativeTransform()
 
-        # There is use cases when client need to disable timeouts.
+        # There are use cases when the client needs to disable timeouts.
         if connect_timeout is not None:
             connect_timeout = coerce_int(connect_timeout)
         if send_receive_timeout is not None:
@@ -125,9 +133,14 @@ class HttpClient(Client):
         self._progress_interval = None
         self._active_session = None
 
+        # allow to override the global autogenerate_session_id setting via the constructor params
+        _autogenerate_session_id = common.get_setting('autogenerate_session_id') \
+            if autogenerate_session_id is None \
+            else autogenerate_session_id
+
         if session_id:
             ch_settings['session_id'] = session_id
-        elif 'session_id' not in ch_settings and common.get_setting('autogenerate_session_id'):
+        elif 'session_id' not in ch_settings and _autogenerate_session_id:
             ch_settings['session_id'] = str(uuid.uuid4())
 
         if coerce_bool(compress):
@@ -146,8 +159,9 @@ class HttpClient(Client):
                          query_limit=query_limit,
                          query_retries=query_retries,
                          server_host_name=server_host_name,
-                         apply_server_timezone=apply_server_timezone)
-        self.params = self._validate_settings(ch_settings)
+                         apply_server_timezone=apply_server_timezone,
+                         show_clickhouse_errors=show_clickhouse_errors)
+        self.params = dict_copy(self.params, self._validate_settings(ch_settings))
         comp_setting = self._setting_status('enable_http_compression')
         self._send_comp_setting = not comp_setting.is_set and comp_setting.is_writable
         if comp_setting.is_set or comp_setting.is_writable:
@@ -164,14 +178,16 @@ class HttpClient(Client):
             self.params[key] = str_value
 
     def get_client_setting(self, key) -> Optional[str]:
-        values = self.params.get(key)
-        return values[0] if values else None
+        return self.params.get(key)
 
     def _prep_query(self, context: QueryContext):
         final_query = super()._prep_query(context)
         if context.is_insert:
             return final_query
-        return f'{final_query}\n FORMAT {self._read_format}'
+        fmt = f'\n FORMAT {self._read_format}'
+        if isinstance(final_query, bytes):
+            return final_query + fmt.encode()
+        return final_query + fmt
 
     def _query_with_context(self, context: QueryContext) -> QueryResult:
         headers = {}
@@ -183,7 +199,7 @@ class HttpClient(Client):
             context.block_info = True
         params.update(context.bind_params)
         params.update(self._validate_settings(context.settings))
-        if columns_only_re.search(context.uncommented_query):
+        if not context.is_insert and columns_only_re.search(context.uncommented_query):
             response = self._raw_request(f'{context.final_query}\n FORMAT JSON',
                                          params, headers, retries=self.query_retries)
             json_result = json.loads(response.data)
@@ -332,7 +348,7 @@ class HttpClient(Client):
         params.update(self._validate_settings(settings or {}))
 
         method = 'POST' if payload or fields else 'GET'
-        response = self._raw_request(payload, params, headers, method, fields=fields)
+        response = self._raw_request(payload, params, headers, method, fields=fields, server_wait=False)
         if response.data:
             try:
                 result = response.data.decode()[:-1].split('\t')
@@ -347,17 +363,25 @@ class HttpClient(Client):
         return QuerySummary(self._summary(response))
 
     def _error_handler(self, response: HTTPResponse, retried: bool = False) -> None:
-        err_str = f'HTTPDriver for {self.url} returned response code {response.status})'
-        try:
-            err_content = get_response_data(response)
-        except Exception: # pylint: disable=broad-except
-            err_content = None
-        finally:
-            response.close()
+        if self.show_clickhouse_errors:
+            try:
+                err_content = get_response_data(response)
+            except Exception:  # pylint: disable=broad-except
+                err_content = None
+            finally:
+                response.close()
 
-        if err_content:
-            err_msg = common.format_error(err_content.decode(errors='backslashreplace'))
-            err_str = f':{err_str}\n {err_msg}'
+            err_str = f'HTTPDriver for {self.url} returned response code {response.status}'
+            err_code = response.headers.get(ex_header)
+            if err_code:
+                err_str = f'HTTPDriver for {self.url} received ClickHouse error code {err_code}'
+            if err_content:
+                err_msg = common.format_error(err_content.decode(errors='backslashreplace'))
+                if err_msg.startswith('Code'):
+                    err_str = f'{err_str}\n {err_msg}'
+        else:
+            err_str = 'The ClickHouse server returned an error.'
+
         raise OperationalError(err_str) if retried else DatabaseError(err_str) from None
 
     def _raw_request(self,
@@ -398,7 +422,7 @@ class HttpClient(Client):
             kwargs['fields'] = fields
         else:
             kwargs['body'] = data
-        check_conn_reset(self.http)
+        check_conn_expiration(self.http)
         query_session = final_params.get('session_id')
         while True:
             attempts += 1
@@ -421,11 +445,12 @@ class HttpClient(Client):
                         logger.debug('Retrying remotely closed connection')
                         continue
                 logger.warning('Unexpected Http Driver Exception')
-                raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts} {self.url}') from ex
+                err_url = f' ({self.url})' if self.show_clickhouse_errors else ''
+                raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
             finally:
                 if query_session:
                     self._active_session = None  # Make sure we always clear this
-            if 200 <= response.status < 300:
+            if 200 <= response.status < 300 and not response.headers.get(ex_header):
                 return response
             if response.status in (429, 503, 504):
                 if attempts > retries:
@@ -435,6 +460,55 @@ class HttpClient(Client):
                 error_handler(response)
             else:
                 self._error_handler(response)
+
+    def raw_query(self, query: str,
+                  parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
+                  settings: Optional[Dict[str, Any]] = None,
+                  fmt: str = None,
+                  use_database: bool = True,
+                  external_data: Optional[ExternalData] = None) -> bytes:
+        """
+        See BaseClient doc_string for this method
+        """
+        body, params, fields = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
+        return self._raw_request(body, params, fields=fields).data
+
+    def raw_stream(self, query: str,
+                   parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
+                   settings: Optional[Dict[str, Any]] = None,
+                   fmt: str = None,
+                   use_database: bool = True,
+                   external_data: Optional[ExternalData] = None) -> io.IOBase:
+        """
+        See BaseClient doc_string for this method
+        """
+        body, params, fields = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
+        return self._raw_request(body, params, fields=fields, stream=True, server_wait=False)
+
+    def _prep_raw_query(self, query: str,
+                        parameters: Optional[Union[Sequence, Dict[str, Any]]],
+                        settings: Optional[Dict[str, Any]],
+                        fmt: str,
+                        use_database: bool,
+                        external_data: Optional[ExternalData]):
+        if fmt:
+            query += f'\n FORMAT {fmt}'
+        final_query, bind_params = bind_query(query, parameters, self.server_tz)
+        params = self._validate_settings(settings or {})
+        if use_database and self.database:
+            params['database'] = self.database
+        params.update(bind_params)
+        if external_data:
+            if isinstance(final_query, bytes):
+                raise ProgrammingError('Cannot combine binary query data with `External Data`')
+            body = bytes()
+            params['query'] = final_query
+            params.update(external_data.query_params)
+            fields = external_data.form_data
+        else:
+            body = final_query
+            fields = None
+        return body, params, fields
 
     def ping(self):
         """
@@ -447,33 +521,8 @@ class HttpClient(Client):
             logger.debug('ping failed', exc_info=True)
             return False
 
-    def raw_query(self, query: str,
-                  parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                  settings: Optional[Dict[str, Any]] = None,
-                  fmt: str = None,
-                  use_database: bool = True,
-                  external_data: Optional[ExternalData] = None,
-                  stream: bool = False) -> Union[bytes, HTTPResponse]:
-        """
-        See BaseClient doc_string for this method
-        """
-        final_query, bind_params = bind_query(query, parameters, self.server_tz)
-        if fmt:
-            final_query += f'\n FORMAT {fmt}'
-        params = self._validate_settings(settings or {})
-        if use_database and self.database:
-            params['database'] = self.database
-        params.update(bind_params)
-        if external_data:
-            body = bytes()
-            params['query'] = final_query
-            params.update(external_data.query_params)
-            fields = external_data.form_data
-        else:
-            body = final_query
-            fields = None
-        response = self._raw_request(body, params, fields=fields, stream=stream)
-        return response if stream else response.data
+    def close_connections(self):
+        self.http.clear()
 
     def close(self):
         if self._owns_pool_manager:

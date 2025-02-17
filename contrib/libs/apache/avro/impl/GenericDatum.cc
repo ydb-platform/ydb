@@ -83,7 +83,7 @@ void GenericDatum::init(const NodePtr &schema) {
             value_ = GenericUnion(sc);
             break;
         default:
-            throw Exception(boost::format("Unknown schema type %1%") % toString(type_));
+            throw Exception("Unknown schema type {}", toString(type_));
     }
 }
 

@@ -13,7 +13,7 @@ struct IFairShareThreadPool
 {
     virtual IInvokerPtr GetInvoker(const TFairShareThreadPoolTag& tag) = 0;
 
-    virtual void Configure(int threadCount) = 0;
+    virtual void SetThreadCount(int threadCount) = 0;
 
     virtual void Shutdown() = 0;
 };

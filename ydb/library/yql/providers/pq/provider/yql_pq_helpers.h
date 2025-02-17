@@ -1,10 +1,10 @@
 #pragma once
 
 #include "yql_pq_provider_impl.h"
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/ast/yql_pos_handle.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_pos_handle.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 namespace NYql {
 
@@ -20,5 +20,7 @@ void FindYdsDbIdsForResolving(
 void FillSettingsWithResolvedYdsIds(
     const TPqState::TPtr& state,
     const TDatabaseResolverResponse::TDatabaseDescriptionMap& fullResolvedIds);
+
+NNodes::TMaybeNode<NNodes::TExprBase> FindSetting(TExprNode::TPtr settings, TStringBuf name);
 
 } // namespace NYql

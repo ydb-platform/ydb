@@ -142,8 +142,8 @@ public:
             userToken,
             topicPath,
             databaseName,
-            [this](const EKafkaErrors status, const TString& message) {
-                this->SendResult(status, message);
+            [this](const EKafkaErrors status, const std::string& message) {
+                this->SendResult(status,TString{message});
             })
         )
         , TopicPath(topicPath)
@@ -184,7 +184,7 @@ public:
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
-            const std::function<void(const EKafkaErrors, const TString&)> sendResultCallback)
+            const std::function<void(const EKafkaErrors, const std::string&)> sendResultCallback)
         : UserToken(userToken)
         , TopicPath(topicPath)
         , DatabaseName(databaseName)
@@ -209,7 +209,8 @@ public:
     }
 
     const TString& GetSerializedToken() const override {
-        return UserToken->GetSerializedToken();
+        static TString emptyString;
+        return UserToken == nullptr ? emptyString : UserToken->GetSerializedToken();
     }
 
     bool IsClientLost() const override {
@@ -292,10 +293,6 @@ public:
         return DummyAuditLogParts;
     };
 
-    google::protobuf::Message* GetRequestMut() override {
-        return nullptr;
-    };
-
     void SetRuHeader(ui64 ru) override {
         Y_UNUSED(ru);
     };
@@ -374,7 +371,7 @@ private:
     const NKikimr::NGRpcService::TAuditLogParts DummyAuditLogParts;
     const TString TopicPath;
     const TString DatabaseName;
-    const std::function<void(const EKafkaErrors status, const TString& message)> SendResultCallback;
+    const std::function<void(const EKafkaErrors status, const std::string& message)> SendResultCallback;
     NYql::TIssue Issue;
 
     void ProcessYdbStatusCode(Ydb::StatusIds::StatusCode& status) {

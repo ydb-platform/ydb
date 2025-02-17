@@ -4,14 +4,11 @@
 #include "pull_parser_deserialize.h"
 #endif
 
-#include "public.h"
-
-#include "pull_parser.h"
-#include "pull_parser_deserialize.h"
-
 #include <yt/yt/core/misc/error.h>
 
 #include <yt/yt/core/yson/token_writer.h>
+
+#include <library/cpp/yt/misc/cast.h>
 
 #include <vector>
 
@@ -43,7 +40,7 @@ void DeserializeVector(T& value, TYsonPullParserCursor* cursor)
 {
     int index = 0;
     auto itemVisitor = [&] (TYsonPullParserCursor* cursor) {
-        if (index < static_cast<int>(value.size())) {
+        if (index < std::ssize(value)) {
             Deserialize(value[index], cursor);
         } else {
             value.emplace_back();
@@ -244,6 +241,18 @@ void Deserialize(T& value, TYsonPullParserCursor* cursor)
     }
 }
 
+template <class T>
+requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void Deserialize(T& value, TYsonPullParserCursor* cursor)
+{
+    static_assert(CanFitSubtype<i64, std::underlying_type_t<T>>());
+
+    MaybeSkipAttributes(cursor);
+    EnsureYsonToken("enum", *cursor, EYsonItemType::Int64Value);
+    value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>((*cursor)->UncheckedAsInt64()));
+    cursor->Next();
+}
+
 // TCompactVector
 template <class T, size_t N>
 void Deserialize(TCompactVector<T, N>& value, TYsonPullParserCursor* cursor, std::enable_if_t<ArePullParserDeserializable<T>(), void*>)
@@ -358,6 +367,19 @@ template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, TYsonPullParserCursor* cursor)
 {
     Deserialize(value.Underlying(), cursor);
+}
+
+template <class T>
+    requires std::derived_from<T, google::protobuf::Message>
+void Deserialize(
+    T& message,
+    NYson::TYsonPullParserCursor* cursor)
+{
+    NYson::TProtobufWriterOptions options;
+    options.UnknownYsonFieldModeResolver = NYson::TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
+        NYson::EUnknownYsonFieldsMode::Keep);
+
+    DeserializeProtobufMessage(message, NYson::ReflectProtobufMessageType<T>(), cursor, options);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

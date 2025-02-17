@@ -1,0 +1,77 @@
+--- a/crypto/ec/ecp_nistz256.c
++++ b/crypto/ec/ecp_nistz256.c
+@@ -24,6 +24,7 @@
+ #include "crypto/bn.h"
+ #include "ec_local.h"
+ #include "internal/refcount.h"
++#include "sanitizers.h"
+ 
+ #if BN_BITS2 != 64
+ # define TOBN(hi,lo)    lo,hi
+@@ -1150,6 +1151,8 @@ __owur static int ecp_nistz256_points_mul(const EC_GROUP *group,
+             ecp_nistz256_point_add(&p.p, &p.p, out);
+     }
+ 
++    __msan_unpoison(&p.p, sizeof(p.p));
++
+     /* Not constant-time, but we're only operating on the public output. */
+     if (!bn_set_words(r->X, p.p.X, P256_LIMBS) ||
+         !bn_set_words(r->Y, p.p.Y, P256_LIMBS) ||
+@@ -1196,6 +1199,7 @@ __owur static int ecp_nistz256_get_affine(const EC_GROUP *group,
+ 
+     if (x != NULL) {
+         ecp_nistz256_from_mont(x_ret, x_aff);
++        __msan_unpoison(x_ret, sizeof(x_ret));
+         if (!bn_set_words(x, x_ret, P256_LIMBS))
+             return 0;
+     }
+@@ -1204,6 +1208,7 @@ __owur static int ecp_nistz256_get_affine(const EC_GROUP *group,
+         ecp_nistz256_mul_mont(z_inv3, z_inv3, z_inv2);
+         ecp_nistz256_mul_mont(y_aff, z_inv3, point_y);
+         ecp_nistz256_from_mont(y_ret, y_aff);
++        __msan_unpoison(y_ret, sizeof(y_ret));
+         if (!bn_set_words(y, y_ret, P256_LIMBS))
+             return 0;
+     }
+@@ -1446,6 +1451,7 @@ static int ecp_nistz256_inv_mod_ord(const EC_GROUP *group, BIGNUM *r,
+     }
+ #endif
+     ecp_nistz256_ord_mul_mont(out, out, one);
++    __msan_unpoison(out, sizeof(out));
+ 
+     /*
+      * Can't fail, but check return code to be consistent anyway.
+--- a/crypto/evp/e_aes.c
++++ b/crypto/evp/e_aes.c
+@@ -18,6 +18,7 @@
+ #include "modes_local.h"
+ #include <openssl/rand.h>
+ #include "evp_local.h"
++#include "sanitizers.h"
+ 
+ typedef struct {
+     union {
+@@ -304,6 +305,7 @@ static int aesni_cbc_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
+     aesni_cbc_encrypt(in, out, len, &EVP_C_DATA(EVP_AES_KEY,ctx)->ks.ks,
+                       EVP_CIPHER_CTX_iv_noconst(ctx),
+                       EVP_CIPHER_CTX_encrypting(ctx));
++    __msan_unpoison(out, len);
+ 
+     return 1;
+ }
+@@ -318,6 +320,7 @@ static int aesni_ecb_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
+ 
+     aesni_ecb_encrypt(in, out, len, &EVP_C_DATA(EVP_AES_KEY,ctx)->ks.ks,
+                       EVP_CIPHER_CTX_encrypting(ctx));
++    __msan_unpoison(out, len);
+ 
+     return 1;
+ }
+@@ -3293,6 +3296,7 @@ static int aes_gcm_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
+                     return -1;
+             }
+         }
++        __msan_unpoison(out, len);
+         return len;
+     } else {
+         if (!ctx->encrypt) {

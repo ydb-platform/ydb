@@ -6,7 +6,7 @@
 #include <ydb/core/grpc_services/local_grpc/local_grpc.h>
 #include <ydb/core/grpc_services/service_fq.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -127,6 +127,11 @@ public:
     )
 
     void HandleResultSets(const TString& queryId, const TActorContext& ctx) {
+        if (ResultSetSizes_.empty()) {
+            SendReply(ctx);
+            return;
+        }
+
         Become(&ExecuteDataQueryRPC::GatherResultSetsState);
         QueryId_ = queryId;
         MakeLocalCall(CreateResultSetRequest(queryId, 0, 0), ctx);

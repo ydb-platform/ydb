@@ -97,12 +97,6 @@ struct TStdOptionalTraits<std::optional<T>>
 } // namespace NYT
 
 template <class T>
-TString ToString(const std::optional<T>& nullable)
-{
-    return nullable ? ToString(*nullable) : "<Null>";
-}
-
-template <class T>
 struct THash<std::optional<T>>
 {
     size_t operator()(const std::optional<T>& nullable) const

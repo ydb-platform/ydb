@@ -65,7 +65,7 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
                 return false;
             }
             while (!slots.EndOfSet()) {
-                if (!slots.GetValue<Table::GroupID>()) {
+                if (!slots.GetValue<Table::GroupID>().GetRawId()) {
                     // item scheduled for deletion
                     eraseList.push_back(slots.GetKey());
                 }

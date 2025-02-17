@@ -35,6 +35,7 @@ TRunCommandConfigParser::TRunOpts::TRunOpts()
     , MonitoringPort(0)
     , MonitoringAddress()
     , MonitoringThreads(10)
+    , MonitoringMaxRequestsPerSecond(0)
     , RestartsCountFile("")
     , StartTracingBusProxy(true)
     , CompileInflightLimit(100000)
@@ -66,6 +67,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
     opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT");
     opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT");
+    opts.AddLongOption("kafka-port", "enable kafka proxy server on port").OptionalArgument("PORT");
     opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST");
     opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT");
     opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT");
@@ -162,6 +164,11 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         auto& conf = *Config.AppConfig.MutableGRpcConfig();
         conf.SetStartGRpcProxy(true);
         conf.SetSslPort(FromString<ui16>(res.Get("grpcs-port")));
+    }
+
+    if (res.Has("kafka-port")) {
+        auto& conf = *Config.AppConfig.MutableKafkaProxyConfig();
+        conf.SetListeningPort(FromString<ui16>(res.Get("kafka-port")));
     }
 
     if (res.Has("grpc-public-host")) {
@@ -365,6 +372,8 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringPort(RunOpts.MonitoringPort);
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringAddress(RunOpts.MonitoringAddress);
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringThreads(RunOpts.MonitoringThreads);
+    Config.AppConfig.MutableMonitoringConfig()->SetMaxRequestsPerSecond(RunOpts.MonitoringMaxRequestsPerSecond);
+    Config.AppConfig.MutableMonitoringConfig()->SetInactivityTimeout(ToString(RunOpts.MonitoringInactivityTimeout.Seconds()));
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCertificate(TUnbufferedFileInput(RunOpts.MonitoringCertificateFile).ReadAll());
     Config.AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RunOpts.RestartsCountFile);
 }

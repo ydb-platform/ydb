@@ -7,7 +7,7 @@ The current version of {{ ydb-short-name }} implements _synchronous_ and _asynch
 * For synchronous indexes: Transactionally when the main table changes.
 * For asynchronous indexes: In the background while getting the necessary changes from the main table.
 
-When a user sends an SQL query to insert, modify, or delete data, the database transparently generates commands to modify the index table. A table may have multiple secondary indexes. An index may include multiple columns, and the sequence of columns in an index matters. A single column may be included in multiple indexes. In addition to the specified columns, every index implicitly stores the table primary key columns, to enable nvaigation from an index record to the table row.
+When a user sends an SQL query to insert, modify, or delete data, the database transparently generates commands to modify the index table. A table may have multiple secondary indexes. An index may include multiple columns, and the sequence of columns in an index matters. A single column may be included in multiple indexes. In addition to the specified columns, every index implicitly stores the table primary key columns to enable navigation from an index record to the table row.
 
 ## Synchronous secondary index {#sync}
 
@@ -20,6 +20,16 @@ Unlike a synchronous index, an asynchronous index doesn't use distributed transa
 ## Covering secondary index {#covering}
 
 You can copy the contents of columns into a covering index. This eliminates the need to read data from the main table when performing reads by index and significantly reduces delays. At the same time, such denormalization leads to increased usage of disk space and may slow down inserts and updates due to the need for additional data copying.
+
+## Unique secondary index {#unique}
+
+This type of index enforces unique constraint behavior and, like other indexes, allows efficient point lookup queries. {{ ydb-short-name }} uses it to perform additional checks, ensuring that each distinct value in the indexed column set appears in the table no more than once. If a modifying query violates the constraint, it will be aborted with a `PRECONDITION_FAILED` status. Therefore, client code must be prepared to handle this status.
+
+A unique secondary index is a synchronous index, so the update process is the same as in the [Synchronous secondary index](#sync) section described above from a transaction perspective.
+
+### Limitations
+
+Currently, a unique index cannot be added to an existing table.
 
 ## Creating a secondary index online {#index-add}
 
@@ -52,12 +62,11 @@ Creating an index is an asynchronous operation. If the client-server connection 
 
 A secondary index can be:
 
-- Created when creating a table with the YQL [`CREATE TABLE`](../../yql/reference/syntax/create_table.md) statement.
-- Added to an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table.md) statement or the YDB CLI [`table index add`](../../reference/ydb-cli/commands/secondary_index.md#add) command.
-- Deleted from an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table.md) statement or the YDB CLI [`table index drop`](../../reference/ydb-cli/commands/secondary_index.md#drop) command.
+- Created when creating a table with the YQL [`CREATE TABLE`](../../yql/reference/syntax/create_table/index.md) statement.
+- Added to an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table/index.md) statement or the YDB CLI [`table index add`](../../reference/ydb-cli/commands/secondary_index.md#add) command.
+- Deleted from an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table/index.md) statement or the YDB CLI [`table index drop`](../../reference/ydb-cli/commands/secondary_index.md#drop) command.
 - Deleted together with the table using the YQL [`DROP TABLE`](../../yql/reference/syntax/drop_table.md) statement or the YDB CLI `table drop` command.
 
-## Purpose and use of secondary indexes {#best_practices}
+## Using secondary indexes {#use}
 
-For information about the purpose and use of secondary indexes for app development, see the [recommendations](../../dba/secondary-indexes.md).
-
+For detailed information on using secondary indexes in applications, refer to the [relevant article](../../dev/secondary-indexes.md) in the documentation section for developers.

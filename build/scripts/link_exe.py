@@ -2,13 +2,19 @@ import itertools
 import os
 import os.path
 import sys
+import json
 import subprocess
 import optparse
 import textwrap
 
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
+import thinlto_cache
 
 from process_whole_archive_option import ProcessWholeArchiveOption
+from fix_py2_protobuf import fix_py2
 
 
 def get_leaks_suppressions(cmd):
@@ -21,15 +27,19 @@ def get_leaks_suppressions(cmd):
     return supp, newcmd
 
 
-MUSL_LIBS = '-lc', '-lcrypt', '-ldl', '-lm', '-lpthread', '-lrt', '-lutil'
-
-
 CUDA_LIBRARIES = {
     '-lcublas_static': '-lcublas',
     '-lcublasLt_static': '-lcublasLt',
     '-lcudart_static': '-lcudart',
     '-lcudnn_static': '-lcudnn',
+    '-lcudnn_adv_infer_static': '-lcudnn',
+    '-lcudnn_adv_train_static': '-lcudnn',
+    '-lcudnn_cnn_infer_static': '-lcudnn',
+    '-lcudnn_cnn_train_static': '-lcudnn',
+    '-lcudnn_ops_infer_static': '-lcudnn',
+    '-lcudnn_ops_train_static': '-lcudnn',
     '-lcufft_static_nocallback': '-lcufft',
+    '-lcupti_static': '-lcupti',
     '-lcurand_static': '-lcurand',
     '-lcusolver_static': '-lcusolver',
     '-lcusparse_static': '-lcusparse',
@@ -44,6 +54,18 @@ CUDA_LIBRARIES = {
     '-lnvrtc_static': '-lnvrtc',
     '-lnvrtc-builtins_static': '-lnvrtc-builtins',
     '-lnvptxcompiler_static': '',
+    '-lnppc_static': '-lnppc',
+    '-lnppial_static': '-lnppial',
+    '-lnppicc_static': '-lnppicc',
+    '-lnppicom_static': '-lnppicom',
+    '-lnppidei_static': '-lnppidei',
+    '-lnppif_static': '-lnppif',
+    '-lnppig_static': '-lnppig',
+    '-lnppim_static': '-lnppim',
+    '-lnppist_static': '-lnppist',
+    '-lnppisu_static': '-lnppisu',
+    '-lnppitc_static': '-lnppitc',
+    '-lnpps_static': '-lnpps',
 }
 
 
@@ -68,7 +90,9 @@ class CUDAManager:
 
     def _known_fatbin_libs(self, libs):
         libs_wo_device_code = {
-            '-lcudart_static'
+            '-lcudart_static',
+            '-lcupti_static',
+            '-lnppc_static',
         }
         return set(libs) - libs_wo_device_code
 
@@ -231,14 +255,6 @@ def fix_sanitize_flag(cmd, opts):
     return flags
 
 
-def fix_cmd_for_musl(cmd):
-    flags = []
-    for flag in cmd:
-        if flag not in MUSL_LIBS:
-            flags.append(flag)
-    return flags
-
-
 def fix_cmd_for_dynamic_cuda(cmd):
     flags = []
     for flag in cmd:
@@ -246,6 +262,20 @@ def fix_cmd_for_dynamic_cuda(cmd):
             flags.append(CUDA_LIBRARIES[flag])
         else:
             flags.append(flag)
+    return flags
+
+
+def remove_libs(cmd, libs):
+    excluded_flags = ['-l{}'.format(lib) for lib in libs]
+
+    flags = []
+
+    for flag in cmd:
+        if flag in excluded_flags:
+            continue
+
+        flags.append(flag)
+
     return flags
 
 
@@ -281,133 +311,51 @@ def fix_blas_resolving(cmd):
     return cmd
 
 
-def parse_args():
+def parse_args(args):
     parser = optparse.OptionParser()
     parser.disable_interspersed_args()
-    parser.add_option('--musl', action='store_true')
     parser.add_option('--custom-step')
     parser.add_option('--python')
     parser.add_option('--source-root')
+    parser.add_option('--build-root')
     parser.add_option('--clang-ver')
     parser.add_option('--dynamic-cuda', action='store_true')
     parser.add_option('--cuda-architectures',
                       help='List of supported CUDA architectures, separated by ":" (e.g. "sm_52:compute_70:lto_90a"')
     parser.add_option('--nvprune-exe')
     parser.add_option('--objcopy-exe')
-    parser.add_option('--build-root')
     parser.add_option('--arch')
     parser.add_option('--linker-output')
     parser.add_option('--whole-archive-peers', action='append')
     parser.add_option('--whole-archive-libs', action='append')
-    return parser.parse_args()
+    parser.add_option('--exclude-libs', action='append')
+    thinlto_cache.add_options(parser)
+    return parser.parse_args(args)
 
-
-def run(*args):
-    # print >>sys.stderr, args
-    return subprocess.check_output(list(args), shell=False).strip()
-
-
-def gen_renames_1(d):
-    for l in d.split('\n'):
-        l = l.strip()
-
-        if ' ' in l:
-            yield l.split(' ')[-1]
-
-def gen_renames_2(p, d):
-    for s in gen_renames_1(d):
-        yield s + ' ' + p + s
-
-def gen_renames(p, d):
-    return '\n'.join(gen_renames_2(p, d)).strip() + '\n'
-
-def rename_syms(where, ret, libs):
-    p = 'py2_'
-
-    # join libs
-    run(where + 'llvm-ar', 'qL', ret, *libs)
-
-    # find symbols to rename
-    syms = run(where + 'llvm-nm', '--extern-only', '--defined-only', '-A', ret)
-
-    # prepare rename plan
-    renames = gen_renames(p, syms)
-
-    with open('syms', 'w') as f:
-        f.write(renames)
-
-    # rename symbols
-    run(where + 'llvm-objcopy', '--redefine-syms=syms', ret)
-
-    # back-rename some symbols
-    args = [
-        where + 'llvm-objcopy',
-        '--redefine-sym',
-        p + 'init_api_implementation=init6google8protobuf8internal19_api_implementation',
-        '--redefine-sym',
-        p + 'init_message=init6google8protobuf5pyext8_message',
-        '--redefine-sym',
-        p + 'init6google8protobuf8internal19_api_implementation=init6google8protobuf8internal19_api_implementation',
-        '--redefine-sym',
-        p + 'init6google8protobuf5pyext8_message=init6google8protobuf5pyext8_message',
-        '--redefine-sym',
-        p + '_init6google8protobuf8internal19_api_implementation=_init6google8protobuf8internal19_api_implementation',
-        '--redefine-sym',
-        p + '_init6google8protobuf5pyext8_message=_init6google8protobuf5pyext8_message',
-        ret
-    ]
-
-    run(*args)
-
-    return ret
-
-
-def fix_py2(cmd):
-    if 'protobuf_old' not in str(cmd):
-        return cmd
-
-    def my(x):
-        for v in ['libcontrib-libs-protobuf_old.a', 'libpypython-protobuf-py2.a']:
-            if v in x:
-                return True
-
-        return False
-
-    old = []
-    lib = []
-
-    where = ''
-
-    for x in cmd:
-        if '/clang++' in x:
-            where = os.path.dirname(x) + '/'
-
-        if my(x):
-            lib.append(x)
-        else:
-            old.append(x)
-
-    return old + [rename_syms(where, 'libprotoherobora.a', lib)]
 
 if __name__ == '__main__':
-    opts, args = parse_args()
+    args = sys.argv[1:]
+    plugins = []
+
+    if '--start-plugins' in args:
+        ib = args.index('--start-plugins')
+        ie = args.index('--end-plugins')
+        plugins = args[ib + 1:ie]
+        args = args[:ib] + args[ie + 1:]
+
+    for p in plugins:
+        res = subprocess.check_output([sys.executable, p] + args).decode().strip()
+
+        if res:
+            args = json.loads(res)
+
+    opts, args = parse_args(args)
     args = pcf.skip_markers(args)
 
     cmd = fix_blas_resolving(args)
     cmd = fix_py2(cmd)
     cmd = remove_excessive_flags(cmd)
-    if opts.musl:
-        cmd = fix_cmd_for_musl(cmd)
-
     cmd = fix_sanitize_flag(cmd, opts)
-
-    if 'ld.lld' in str(cmd):
-        if '-fPIE' in str(cmd) or '-fPIC' in str(cmd):
-            # support explicit PIE
-            pass
-        else:
-            cmd.append('-Wl,-no-pie')
-
 
     if opts.dynamic_cuda:
         cmd = fix_cmd_for_dynamic_cuda(cmd)
@@ -415,6 +363,10 @@ if __name__ == '__main__':
         cuda_manager = CUDAManager(opts.cuda_architectures, opts.nvprune_exe)
         cmd = process_cuda_libraries_by_nvprune(cmd, cuda_manager, opts.build_root)
         cmd = process_cuda_libraries_by_objcopy(cmd, opts.build_root, opts.objcopy_exe)
+
+    if opts.exclude_libs:
+        cmd = remove_libs(cmd, opts.exclude_libs)
+
     cmd = ProcessWholeArchiveOption(opts.arch, opts.whole_archive_peers, opts.whole_archive_libs).construct_cmd(cmd)
 
     if opts.custom_step:
@@ -432,5 +384,8 @@ if __name__ == '__main__':
     else:
         stdout = sys.stdout
 
+    thinlto_cache.preprocess(opts, cmd)
     rc = subprocess.call(cmd, shell=False, stderr=sys.stderr, stdout=stdout)
+    thinlto_cache.postprocess(opts)
+
     sys.exit(rc)

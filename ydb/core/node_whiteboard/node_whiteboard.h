@@ -7,10 +7,14 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/protos/whiteboard_disk_states.pb.h>
+#include <ydb/core/protos/whiteboard_flags.pb.h>
+#include <ydb/core/protos/memory_stats.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/tracing.h>
+#include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 
 namespace NKikimr {
 
@@ -60,6 +64,7 @@ struct TEvWhiteboard{
         EvVDiskStateGenerationChange,
         EvVDiskDropDonors,
         EvClockSkewUpdate,
+        EvMemoryStatsUpdate,
         EvEnd
     };
 
@@ -302,7 +307,7 @@ struct TEvWhiteboard{
         TEvBSGroupStateUpdate() = default;
 
         TEvBSGroupStateUpdate(const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo) {
-            Record.SetGroupID(groupInfo->GroupID);
+            Record.SetGroupID(groupInfo->GroupID.GetRawId());
             Record.SetGroupGeneration(groupInfo->GroupGeneration);
             Record.SetErasureSpecies(groupInfo->Type.ErasureSpeciesName(groupInfo->Type.GetErasure()));
             if (ui32 numVDisks = groupInfo->GetTotalVDisksNum()) {
@@ -361,23 +366,18 @@ struct TEvWhiteboard{
             }
         }
 
-        TEvSystemStateUpdate(const TVector<std::tuple<TString, double, ui32>>& poolStats) {
+        TEvSystemStateUpdate(const TVector<std::tuple<TString, double, ui32, ui32>>& poolStats) {
             for (const auto& row : poolStats) {
                 auto& pb = *Record.AddPoolStats();
                 pb.SetName(std::get<0>(row));
                 pb.SetUsage(std::get<1>(row));
                 pb.SetThreads(std::get<2>(row));
+                pb.SetLimit(std::get<3>(row));
             }
         }
 
         TEvSystemStateUpdate(const TNodeLocation& systemLocation) {
             systemLocation.Serialize(Record.MutableLocation(), false);
-            const auto& x = systemLocation.GetLegacyValue();
-            auto *pb = Record.MutableSystemLocation();
-            pb->SetDataCenter(x.DataCenter);
-            pb->SetRoom(x.Room);
-            pb->SetRack(x.Rack);
-            pb->SetBody(x.Body);
         }
 
         TEvSystemStateUpdate(const NKikimrWhiteboard::TSystemStateInfo& systemStateInfo) {
@@ -385,13 +385,7 @@ struct TEvWhiteboard{
         }
     };
 
-    static TEvSystemStateUpdate *CreateSharedCacheStatsUpdateRequest(ui64 memUsedBytes, ui64 memLimitBytes) {
-        TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
-        auto *pb = request->Record.MutableSharedCacheStats();
-        pb->SetUsedBytes(memUsedBytes);
-        pb->SetLimitBytes(memLimitBytes);
-        return request;
-    }
+    struct TEvMemoryStatsUpdate : TEventPB<TEvMemoryStatsUpdate, NKikimrMemory::TMemoryStats, EvMemoryStatsUpdate> {};
 
     static TEvSystemStateUpdate *CreateTotalSessionsUpdateRequest(ui32 totalSessions) {
         TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
@@ -437,28 +431,8 @@ struct TEvWhiteboard{
 
     struct TEvSystemStateResponse : public TEventPB<TEvSystemStateResponse, NKikimrWhiteboard::TEvSystemStateResponse, EvSystemStateResponse> {};
 
-    struct TEvClockSkewUpdate : TEventPB<TEvClockSkewUpdate, NKikimrWhiteboard::TNodeClockSkew, EvClockSkewUpdate> {
-        TEvClockSkewUpdate() = default;
-
-        TEvClockSkewUpdate(const ui32 peerNodeId, i64 clockSkewUs) {
-            Record.SetPeerNodeId(peerNodeId);
-            Record.SetClockSkewUs(clockSkewUs);
-        }
-    };
-
     struct TEvNodeStateUpdate : TEventPB<TEvNodeStateUpdate, NKikimrWhiteboard::TNodeStateInfo, EvNodeStateUpdate> {
         TEvNodeStateUpdate() = default;
-
-        TEvNodeStateUpdate(const TString& peerName, bool connected) {
-            Record.SetPeerName(peerName);
-            Record.SetConnected(connected);
-        }
-
-        TEvNodeStateUpdate(const TString& peerName, bool connected, NKikimrWhiteboard::EFlag connectStatus) {
-            Record.SetPeerName(peerName);
-            Record.SetConnected(connected);
-            Record.SetConnectStatus(connectStatus);
-        }
     };
 
     struct TEvNodeStateDelete : TEventPB<TEvNodeStateDelete, NKikimrWhiteboard::TNodeStateInfo, EvNodeStateDelete> {
@@ -506,5 +480,41 @@ inline TActorId MakeNodeWhiteboardServiceId(ui32 node) {
 
 IActor* CreateNodeWhiteboardService();
 
-} // NTabletState
+template<typename TRequestType>
+struct WhiteboardResponse {};
+
+template<>
+struct WhiteboardResponse<TEvWhiteboard::TEvTabletStateRequest> {
+    using Type = TEvWhiteboard::TEvTabletStateResponse;
+};
+
+template<>
+struct WhiteboardResponse<TEvWhiteboard::TEvPDiskStateRequest> {
+    using Type = TEvWhiteboard::TEvPDiskStateResponse;
+};
+
+template<>
+struct WhiteboardResponse<TEvWhiteboard::TEvVDiskStateRequest> {
+    using Type = TEvWhiteboard::TEvVDiskStateResponse;
+};
+
+template<>
+struct WhiteboardResponse<TEvWhiteboard::TEvSystemStateRequest> {
+    using Type = TEvWhiteboard::TEvSystemStateResponse;
+};
+
+template<>
+struct WhiteboardResponse<TEvWhiteboard::TEvBSGroupStateRequest> {
+    using Type = TEvWhiteboard::TEvBSGroupStateResponse;
+};
+
+template<>
+struct WhiteboardResponse<TEvWhiteboard::TEvNodeStateRequest> {
+    using Type = TEvWhiteboard::TEvNodeStateResponse;
+};
+
+template<typename TResponseType>
+::google::protobuf::RepeatedField<int> GetDefaultWhiteboardFields();
+
+} // NNodeWhiteboard
 } // NKikimr

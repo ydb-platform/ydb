@@ -319,8 +319,9 @@ private:
     void InitSession(const TActorContext& ctx);
     void RegisterSession(const TString& topic, const TActorId& pipe, const TVector<ui32>& groups, const TActorContext& ctx);
     void CloseSession(PersQueue::ErrorCode::ErrorCode code, const TString& reason, const TActorContext& ctx);
-    void SendLockPartitionToSelf(ui32 group, TString topicName, TTopicHolder topic, const TActorContext& ctx);
+    void SendLockPartitionToSelf(ui32 partitionId, TString topicName, TTopicHolder topic, const TActorContext& ctx);
 
+    void SetupBytesReadByUserAgentCounter();
     void SetupCounters();
     void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic);
     void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic,
@@ -335,6 +336,8 @@ private:
     void SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx);
     void InformBalancerAboutRelease(TPartitionsMapIterator it, const TActorContext& ctx);
 
+    std::tuple<TString, ui32, ui64> GetReadFrom(const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) const;
+
     static ui32 NormalizeMaxReadMessagesCount(ui32 sourceValue);
     static ui32 NormalizeMaxReadSize(ui32 sourceValue);
 
@@ -342,6 +345,9 @@ private:
     std::unique_ptr</* type alias */ TEvStreamReadRequest> Request;
     const TString ClientDC;
     const TInstant StartTimestamp;
+
+    TString SdkBuildInfo;
+    TString UserAgent = UseMigrationProtocol ? "pqv1 server" : "topic server";
 
     TActorId SchemeCache;
     TActorId NewSchemeCache;
@@ -425,6 +431,8 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
     ::NMonitoring::TDynamicCounters::TCounterPtr PipeReconnects;
     ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesReadByUserAgent;
+
     ui64 BytesInflight_;
     ui64 RequestedBytes;
     ui32 ReadsInfly;
@@ -451,6 +459,7 @@ private:
     NPersQueue::TTopicsToConverter TopicsList;
 
     bool DirectRead;
+    bool AutoPartitioningSupport;
 };
 
 }

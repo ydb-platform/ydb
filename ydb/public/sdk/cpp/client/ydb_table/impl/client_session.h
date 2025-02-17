@@ -13,13 +13,12 @@
 
 #include <functional>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NTable {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 using TSessionInspectorFn = std::function<void(TAsyncCreateSessionResult future)>;
-
 
 class TSession::TImpl : public TKqpSessionCommon {
     friend class TTableClient;

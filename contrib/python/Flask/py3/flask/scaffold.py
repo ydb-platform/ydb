@@ -1,18 +1,20 @@
 import importlib.util
 import mimetypes
+import json
 import os
+import pathlib
 import pkgutil
 import sys
 import typing as t
 from collections import defaultdict
+from datetime import timedelta
 from functools import update_wrapper
-from json import JSONDecoder
-from json import JSONEncoder
 
-from jinja2 import ChoiceLoader, FileSystemLoader, ResourceLoader
+from jinja2 import ChoiceLoader, FileSystemLoader, ResourceLoader, PackageLoader
 from werkzeug.exceptions import default_exceptions
 from werkzeug.exceptions import HTTPException
 
+from . import typing as ft
 from .cli import AppGroup
 from .globals import current_app
 from .helpers import get_root_path
@@ -20,42 +22,33 @@ from .helpers import locked_cached_property
 from .helpers import send_file
 from .helpers import send_from_directory
 from .templating import _default_template_ctx_processor
-from .typing import AfterRequestCallable
-from .typing import AppOrBlueprintKey
-from .typing import BeforeRequestCallable
-from .typing import GenericException
-from .typing import TeardownCallable
-from .typing import TemplateContextProcessorCallable
-from .typing import URLDefaultCallable
-from .typing import URLValuePreprocessorCallable
 
-if t.TYPE_CHECKING:
+if t.TYPE_CHECKING:  # pragma: no cover
     from .wrappers import Response
-    from .typing import ErrorHandlerCallable
 
 # a singleton sentinel value for parameter defaults
 _sentinel = object()
 
 F = t.TypeVar("F", bound=t.Callable[..., t.Any])
+T_after_request = t.TypeVar("T_after_request", bound=ft.AfterRequestCallable)
+T_before_request = t.TypeVar("T_before_request", bound=ft.BeforeRequestCallable)
+T_error_handler = t.TypeVar("T_error_handler", bound=ft.ErrorHandlerCallable)
+T_teardown = t.TypeVar("T_teardown", bound=ft.TeardownCallable)
+T_template_context_processor = t.TypeVar(
+    "T_template_context_processor", bound=ft.TemplateContextProcessorCallable
+)
+T_url_defaults = t.TypeVar("T_url_defaults", bound=ft.URLDefaultCallable)
+T_url_value_preprocessor = t.TypeVar(
+    "T_url_value_preprocessor", bound=ft.URLValuePreprocessorCallable
+)
+T_route = t.TypeVar("T_route", bound=ft.RouteCallable)
 
 
 def setupmethod(f: F) -> F:
-    """Wraps a method so that it performs a check in debug mode if the
-    first request was already handled.
-    """
+    f_name = f.__name__
 
     def wrapper_func(self, *args: t.Any, **kwargs: t.Any) -> t.Any:
-        if self._is_setup_finished():
-            raise AssertionError(
-                "A setup function was called after the first request "
-                "was handled. This usually indicates a bug in the"
-                " application where a module was not imported and"
-                " decorators or other functionality was called too"
-                " late.\nTo fix this make sure to import all your view"
-                " modules, database models, and everything related at a"
-                " central place before the application starts serving"
-                " requests."
-            )
+        self._check_setup_finished(f_name)
         return f(self, *args, **kwargs)
 
     return t.cast(F, update_wrapper(wrapper_func, f))
@@ -85,18 +78,24 @@ class Scaffold:
 
     #: JSON encoder class used by :func:`flask.json.dumps`. If a
     #: blueprint sets this, it will be used instead of the app's value.
-    json_encoder: t.Optional[t.Type[JSONEncoder]] = None
+    #:
+    #: .. deprecated:: 2.2
+    #:      Will be removed in Flask 2.3.
+    json_encoder: t.Union[t.Type[json.JSONEncoder], None] = None
 
     #: JSON decoder class used by :func:`flask.json.loads`. If a
     #: blueprint sets this, it will be used instead of the app's value.
-    json_decoder: t.Optional[t.Type[JSONDecoder]] = None
+    #:
+    #: .. deprecated:: 2.2
+    #:      Will be removed in Flask 2.3.
+    json_decoder: t.Union[t.Type[json.JSONDecoder], None] = None
 
     def __init__(
         self,
         import_name: str,
         static_folder: t.Optional[t.Union[str, os.PathLike]] = None,
         static_url_path: t.Optional[str] = None,
-        template_folder: t.Optional[str] = None,
+        template_folder: t.Optional[t.Union[str, os.PathLike]] = None,
         root_path: t.Optional[str] = None,
     ):
         #: The name of the package or module that this object belongs
@@ -139,7 +138,7 @@ class Scaffold:
         self.view_functions: t.Dict[str, t.Callable] = {}
 
         #: A data structure of registered error handlers, in the format
-        #: ``{scope: {code: {class: handler}}}```. The ``scope`` key is
+        #: ``{scope: {code: {class: handler}}}``. The ``scope`` key is
         #: the name of a blueprint the handlers are active for, or
         #: ``None`` for all requests. The ``code`` key is the HTTP
         #: status code for ``HTTPException``, or ``None`` for
@@ -152,11 +151,8 @@ class Scaffold:
         #: This data structure is internal. It should not be modified
         #: directly and its format may change at any time.
         self.error_handler_spec: t.Dict[
-            AppOrBlueprintKey,
-            t.Dict[
-                t.Optional[int],
-                t.Dict[t.Type[Exception], "ErrorHandlerCallable[Exception]"],
-            ],
+            ft.AppOrBlueprintKey,
+            t.Dict[t.Optional[int], t.Dict[t.Type[Exception], ft.ErrorHandlerCallable]],
         ] = defaultdict(lambda: defaultdict(dict))
 
         #: A data structure of functions to call at the beginning of
@@ -170,7 +166,7 @@ class Scaffold:
         #: This data structure is internal. It should not be modified
         #: directly and its format may change at any time.
         self.before_request_funcs: t.Dict[
-            AppOrBlueprintKey, t.List[BeforeRequestCallable]
+            ft.AppOrBlueprintKey, t.List[ft.BeforeRequestCallable]
         ] = defaultdict(list)
 
         #: A data structure of functions to call at the end of each
@@ -184,7 +180,7 @@ class Scaffold:
         #: This data structure is internal. It should not be modified
         #: directly and its format may change at any time.
         self.after_request_funcs: t.Dict[
-            AppOrBlueprintKey, t.List[AfterRequestCallable]
+            ft.AppOrBlueprintKey, t.List[ft.AfterRequestCallable]
         ] = defaultdict(list)
 
         #: A data structure of functions to call at the end of each
@@ -199,7 +195,7 @@ class Scaffold:
         #: This data structure is internal. It should not be modified
         #: directly and its format may change at any time.
         self.teardown_request_funcs: t.Dict[
-            AppOrBlueprintKey, t.List[TeardownCallable]
+            ft.AppOrBlueprintKey, t.List[ft.TeardownCallable]
         ] = defaultdict(list)
 
         #: A data structure of functions to call to pass extra context
@@ -214,7 +210,7 @@ class Scaffold:
         #: This data structure is internal. It should not be modified
         #: directly and its format may change at any time.
         self.template_context_processors: t.Dict[
-            AppOrBlueprintKey, t.List[TemplateContextProcessorCallable]
+            ft.AppOrBlueprintKey, t.List[ft.TemplateContextProcessorCallable]
         ] = defaultdict(list, {None: [_default_template_ctx_processor]})
 
         #: A data structure of functions to call to modify the keyword
@@ -229,8 +225,8 @@ class Scaffold:
         #: This data structure is internal. It should not be modified
         #: directly and its format may change at any time.
         self.url_value_preprocessors: t.Dict[
-            AppOrBlueprintKey,
-            t.List[URLValuePreprocessorCallable],
+            ft.AppOrBlueprintKey,
+            t.List[ft.URLValuePreprocessorCallable],
         ] = defaultdict(list)
 
         #: A data structure of functions to call to modify the keyword
@@ -245,13 +241,13 @@ class Scaffold:
         #: This data structure is internal. It should not be modified
         #: directly and its format may change at any time.
         self.url_default_functions: t.Dict[
-            AppOrBlueprintKey, t.List[URLDefaultCallable]
+            ft.AppOrBlueprintKey, t.List[ft.URLDefaultCallable]
         ] = defaultdict(list)
 
     def __repr__(self) -> str:
         return f"<{type(self).__name__} {self.name!r}>"
 
-    def _is_setup_finished(self) -> bool:
+    def _check_setup_finished(self, f_name: str) -> None:
         raise NotImplementedError
 
     @property
@@ -316,12 +312,15 @@ class Scaffold:
 
         .. versionadded:: 0.9
         """
-        value = current_app.send_file_max_age_default
+        value = current_app.config["SEND_FILE_MAX_AGE_DEFAULT"]
 
         if value is None:
             return None
 
-        return int(value.total_seconds())
+        if isinstance(value, timedelta):
+            return int(value.total_seconds())
+
+        return value
 
     def send_static_file(self, filename: str) -> "Response":
         """The view function used to serve files from
@@ -369,6 +368,7 @@ class Scaffold:
         if self.template_folder is not None:
             return ChoiceLoader([
                 FileSystemLoader(os.path.join(self.root_path, self.template_folder)),
+                PackageLoader(self.import_name, self.template_folder, skip_unknown_package=True),
                 ResourceLoader(os.path.join(self._builtin_resource_prefix, self.template_folder), self.module_loader),
             ])
         else:
@@ -397,48 +397,59 @@ class Scaffold:
 
         return open(os.path.join(self.root_path, resource), mode)
 
-    def _method_route(self, method: str, rule: str, options: dict) -> t.Callable:
+    def _method_route(
+        self,
+        method: str,
+        rule: str,
+        options: dict,
+    ) -> t.Callable[[T_route], T_route]:
         if "methods" in options:
             raise TypeError("Use the 'route' decorator to use the 'methods' argument.")
 
         return self.route(rule, methods=[method], **options)
 
-    def get(self, rule: str, **options: t.Any) -> t.Callable:
+    @setupmethod
+    def get(self, rule: str, **options: t.Any) -> t.Callable[[T_route], T_route]:
         """Shortcut for :meth:`route` with ``methods=["GET"]``.
 
         .. versionadded:: 2.0
         """
         return self._method_route("GET", rule, options)
 
-    def post(self, rule: str, **options: t.Any) -> t.Callable:
+    @setupmethod
+    def post(self, rule: str, **options: t.Any) -> t.Callable[[T_route], T_route]:
         """Shortcut for :meth:`route` with ``methods=["POST"]``.
 
         .. versionadded:: 2.0
         """
         return self._method_route("POST", rule, options)
 
-    def put(self, rule: str, **options: t.Any) -> t.Callable:
+    @setupmethod
+    def put(self, rule: str, **options: t.Any) -> t.Callable[[T_route], T_route]:
         """Shortcut for :meth:`route` with ``methods=["PUT"]``.
 
         .. versionadded:: 2.0
         """
         return self._method_route("PUT", rule, options)
 
-    def delete(self, rule: str, **options: t.Any) -> t.Callable:
+    @setupmethod
+    def delete(self, rule: str, **options: t.Any) -> t.Callable[[T_route], T_route]:
         """Shortcut for :meth:`route` with ``methods=["DELETE"]``.
 
         .. versionadded:: 2.0
         """
         return self._method_route("DELETE", rule, options)
 
-    def patch(self, rule: str, **options: t.Any) -> t.Callable:
+    @setupmethod
+    def patch(self, rule: str, **options: t.Any) -> t.Callable[[T_route], T_route]:
         """Shortcut for :meth:`route` with ``methods=["PATCH"]``.
 
         .. versionadded:: 2.0
         """
         return self._method_route("PATCH", rule, options)
 
-    def route(self, rule: str, **options: t.Any) -> t.Callable:
+    @setupmethod
+    def route(self, rule: str, **options: t.Any) -> t.Callable[[T_route], T_route]:
         """Decorate a view function to register it with the given URL
         rule and options. Calls :meth:`add_url_rule`, which has more
         details about the implementation.
@@ -462,7 +473,7 @@ class Scaffold:
             :class:`~werkzeug.routing.Rule` object.
         """
 
-        def decorator(f: t.Callable) -> t.Callable:
+        def decorator(f: T_route) -> T_route:
             endpoint = options.pop("endpoint", None)
             self.add_url_rule(rule, endpoint, f, **options)
             return f
@@ -474,7 +485,7 @@ class Scaffold:
         self,
         rule: str,
         endpoint: t.Optional[str] = None,
-        view_func: t.Optional[t.Callable] = None,
+        view_func: t.Optional[ft.RouteCallable] = None,
         provide_automatic_options: t.Optional[bool] = None,
         **options: t.Any,
     ) -> None:
@@ -537,7 +548,8 @@ class Scaffold:
         """
         raise NotImplementedError
 
-    def endpoint(self, endpoint: str) -> t.Callable:
+    @setupmethod
+    def endpoint(self, endpoint: str) -> t.Callable[[F], F]:
         """Decorate a view function to register it for the given
         endpoint. Used if a rule is added without a ``view_func`` with
         :meth:`add_url_rule`.
@@ -554,14 +566,14 @@ class Scaffold:
             function.
         """
 
-        def decorator(f):
+        def decorator(f: F) -> F:
             self.view_functions[endpoint] = f
             return f
 
         return decorator
 
     @setupmethod
-    def before_request(self, f: BeforeRequestCallable) -> BeforeRequestCallable:
+    def before_request(self, f: T_before_request) -> T_before_request:
         """Register a function to run before each request.
 
         For example, this can be used to open a database connection, or
@@ -578,12 +590,17 @@ class Scaffold:
         a non-``None`` value, the value is handled as if it was the
         return value from the view, and further request handling is
         stopped.
+
+        This is available on both app and blueprint objects. When used on an app, this
+        executes before every request. When used on a blueprint, this executes before
+        every request that the blueprint handles. To register with a blueprint and
+        execute before every request, use :meth:`.Blueprint.before_app_request`.
         """
         self.before_request_funcs.setdefault(None, []).append(f)
         return f
 
     @setupmethod
-    def after_request(self, f: AfterRequestCallable) -> AfterRequestCallable:
+    def after_request(self, f: T_after_request) -> T_after_request:
         """Register a function to run after each request to this object.
 
         The function is called with the response object, and must return
@@ -594,61 +611,71 @@ class Scaffold:
         ``after_request`` functions will not be called. Therefore, this
         should not be used for actions that must execute, such as to
         close resources. Use :meth:`teardown_request` for that.
+
+        This is available on both app and blueprint objects. When used on an app, this
+        executes after every request. When used on a blueprint, this executes after
+        every request that the blueprint handles. To register with a blueprint and
+        execute after every request, use :meth:`.Blueprint.after_app_request`.
         """
         self.after_request_funcs.setdefault(None, []).append(f)
         return f
 
     @setupmethod
-    def teardown_request(self, f: TeardownCallable) -> TeardownCallable:
-        """Register a function to be run at the end of each request,
-        regardless of whether there was an exception or not.  These functions
-        are executed when the request context is popped, even if not an
-        actual request was performed.
+    def teardown_request(self, f: T_teardown) -> T_teardown:
+        """Register a function to be called when the request context is
+        popped. Typically this happens at the end of each request, but
+        contexts may be pushed manually as well during testing.
 
-        Example::
+        .. code-block:: python
 
-            ctx = app.test_request_context()
-            ctx.push()
-            ...
-            ctx.pop()
+            with app.test_request_context():
+                ...
 
-        When ``ctx.pop()`` is executed in the above example, the teardown
-        functions are called just before the request context moves from the
-        stack of active contexts.  This becomes relevant if you are using
-        such constructs in tests.
+        When the ``with`` block exits (or ``ctx.pop()`` is called), the
+        teardown functions are called just before the request context is
+        made inactive.
 
-        Teardown functions must avoid raising exceptions, since they . If they
-        execute code that might fail they
-        will have to surround the execution of these code by try/except
-        statements and log occurring errors.
+        When a teardown function was called because of an unhandled
+        exception it will be passed an error object. If an
+        :meth:`errorhandler` is registered, it will handle the exception
+        and the teardown will not receive it.
 
-        When a teardown function was called because of an exception it will
-        be passed an error object.
+        Teardown functions must avoid raising exceptions. If they
+        execute code that might fail they must surround that code with a
+        ``try``/``except`` block and log any errors.
 
         The return values of teardown functions are ignored.
 
-        .. admonition:: Debug Note
-
-           In debug mode Flask will not tear down a request on an exception
-           immediately.  Instead it will keep it alive so that the interactive
-           debugger can still access it.  This behavior can be controlled
-           by the ``PRESERVE_CONTEXT_ON_EXCEPTION`` configuration variable.
+        This is available on both app and blueprint objects. When used on an app, this
+        executes after every request. When used on a blueprint, this executes after
+        every request that the blueprint handles. To register with a blueprint and
+        execute after every request, use :meth:`.Blueprint.teardown_app_request`.
         """
         self.teardown_request_funcs.setdefault(None, []).append(f)
         return f
 
     @setupmethod
     def context_processor(
-        self, f: TemplateContextProcessorCallable
-    ) -> TemplateContextProcessorCallable:
-        """Registers a template context processor function."""
+        self,
+        f: T_template_context_processor,
+    ) -> T_template_context_processor:
+        """Registers a template context processor function. These functions run before
+        rendering a template. The keys of the returned dict are added as variables
+        available in the template.
+
+        This is available on both app and blueprint objects. When used on an app, this
+        is called for every rendered template. When used on a blueprint, this is called
+        for templates rendered from the blueprint's views. To register with a blueprint
+        and affect every template, use :meth:`.Blueprint.app_context_processor`.
+        """
         self.template_context_processors[None].append(f)
         return f
 
     @setupmethod
     def url_value_preprocessor(
-        self, f: URLValuePreprocessorCallable
-    ) -> URLValuePreprocessorCallable:
+        self,
+        f: T_url_value_preprocessor,
+    ) -> T_url_value_preprocessor:
         """Register a URL value preprocessor function for all view
         functions in the application. These functions will be called before the
         :meth:`before_request` functions.
@@ -660,26 +687,33 @@ class Scaffold:
 
         The function is passed the endpoint name and values dict. The return
         value is ignored.
+
+        This is available on both app and blueprint objects. When used on an app, this
+        is called for every request. When used on a blueprint, this is called for
+        requests that the blueprint handles. To register with a blueprint and affect
+        every request, use :meth:`.Blueprint.app_url_value_preprocessor`.
         """
         self.url_value_preprocessors[None].append(f)
         return f
 
     @setupmethod
-    def url_defaults(self, f: URLDefaultCallable) -> URLDefaultCallable:
+    def url_defaults(self, f: T_url_defaults) -> T_url_defaults:
         """Callback function for URL defaults for all view functions of the
         application.  It's called with the endpoint and values and should
         update the values passed in place.
+
+        This is available on both app and blueprint objects. When used on an app, this
+        is called for every request. When used on a blueprint, this is called for
+        requests that the blueprint handles. To register with a blueprint and affect
+        every request, use :meth:`.Blueprint.app_url_defaults`.
         """
         self.url_default_functions[None].append(f)
         return f
 
     @setupmethod
     def errorhandler(
-        self, code_or_exception: t.Union[t.Type[GenericException], int]
-    ) -> t.Callable[
-        ["ErrorHandlerCallable[GenericException]"],
-        "ErrorHandlerCallable[GenericException]",
-    ]:
+        self, code_or_exception: t.Union[t.Type[Exception], int]
+    ) -> t.Callable[[T_error_handler], T_error_handler]:
         """Register a function to handle errors by code or exception class.
 
         A decorator that is used to register a function given an
@@ -695,6 +729,11 @@ class Scaffold:
             def special_exception_handler(error):
                 return 'Database connection failed', 500
 
+        This is available on both app and blueprint objects. When used on an app, this
+        can handle errors from every request. When used on a blueprint, this can handle
+        errors from requests that the blueprint handles. To register with a blueprint
+        and affect every request, use :meth:`.Blueprint.app_errorhandler`.
+
         .. versionadded:: 0.7
             Use :meth:`register_error_handler` instead of modifying
             :attr:`error_handler_spec` directly, for application wide error
@@ -709,9 +748,7 @@ class Scaffold:
                                   an arbitrary exception
         """
 
-        def decorator(
-            f: "ErrorHandlerCallable[GenericException]",
-        ) -> "ErrorHandlerCallable[GenericException]":
+        def decorator(f: T_error_handler) -> T_error_handler:
             self.register_error_handler(code_or_exception, f)
             return f
 
@@ -720,8 +757,8 @@ class Scaffold:
     @setupmethod
     def register_error_handler(
         self,
-        code_or_exception: t.Union[t.Type[GenericException], int],
-        f: "ErrorHandlerCallable[GenericException]",
+        code_or_exception: t.Union[t.Type[Exception], int],
+        f: ft.ErrorHandlerCallable,
     ) -> None:
         """Alternative error attach function to the :meth:`errorhandler`
         decorator that is more straightforward to use for non decorator
@@ -729,25 +766,8 @@ class Scaffold:
 
         .. versionadded:: 0.7
         """
-        if isinstance(code_or_exception, HTTPException):  # old broken behavior
-            raise ValueError(
-                "Tried to register a handler for an exception instance"
-                f" {code_or_exception!r}. Handlers can only be"
-                " registered for exception classes or HTTP error codes."
-            )
-
-        try:
-            exc_class, code = self._get_exc_class_and_code(code_or_exception)
-        except KeyError:
-            raise KeyError(
-                f"'{code_or_exception}' is not a recognized HTTP error"
-                " code. Use a subclass of HTTPException with that code"
-                " instead."
-            ) from None
-
-        self.error_handler_spec[None][code][exc_class] = t.cast(
-            "ErrorHandlerCallable[Exception]", f
-        )
+        exc_class, code = self._get_exc_class_and_code(code_or_exception)
+        self.error_handler_spec[None][code][exc_class] = f
 
     @staticmethod
     def _get_exc_class_and_code(
@@ -761,14 +781,32 @@ class Scaffold:
             code as an integer.
         """
         exc_class: t.Type[Exception]
+
         if isinstance(exc_class_or_code, int):
-            exc_class = default_exceptions[exc_class_or_code]
+            try:
+                exc_class = default_exceptions[exc_class_or_code]
+            except KeyError:
+                raise ValueError(
+                    f"'{exc_class_or_code}' is not a recognized HTTP"
+                    " error code. Use a subclass of HTTPException with"
+                    " that code instead."
+                ) from None
         else:
             exc_class = exc_class_or_code
 
-        assert issubclass(
-            exc_class, Exception
-        ), "Custom exceptions must be subclasses of Exception."
+        if isinstance(exc_class, Exception):
+            raise TypeError(
+                f"{exc_class!r} is an instance, not a class. Handlers"
+                " can only be registered for Exception classes or HTTP"
+                " error codes."
+            )
+
+        if not issubclass(exc_class, Exception):
+            raise ValueError(
+                f"'{exc_class.__name__}' is not a subclass of Exception."
+                " Handlers can only be registered for Exception classes"
+                " or HTTP error codes."
+            )
 
         if issubclass(exc_class, HTTPException):
             return exc_class, exc_class.code
@@ -809,30 +847,55 @@ def _matching_loader_thinks_module_is_package(loader, mod_name):
     )
 
 
-def _find_package_path(root_mod_name):
-    """Find the path that contains the package or module."""
+def _path_is_relative_to(path: pathlib.PurePath, base: str) -> bool:
+    # Path.is_relative_to doesn't exist until Python 3.9
     try:
-        spec = importlib.util.find_spec(root_mod_name)
+        path.relative_to(base)
+        return True
+    except ValueError:
+        return False
 
-        if spec is None:
+
+def _find_package_path(import_name):
+    """Find the path that contains the package or module."""
+    root_mod_name, _, _ = import_name.partition(".")
+
+    try:
+        root_spec = importlib.util.find_spec(root_mod_name)
+
+        if root_spec is None:
             raise ValueError("not found")
     # ImportError: the machinery told us it does not exist
     # ValueError:
     #    - the module name was invalid
     #    - the module name is __main__
-    #    - *we* raised `ValueError` due to `spec` being `None`
+    #    - *we* raised `ValueError` due to `root_spec` being `None`
     except (ImportError, ValueError):
         pass  # handled below
     else:
         # namespace package
-        if spec.origin in {"namespace", None}:
-            return os.path.dirname(next(iter(spec.submodule_search_locations)))
+        if root_spec.origin in {"namespace", None}:
+            package_spec = importlib.util.find_spec(import_name)
+            if package_spec is not None and package_spec.submodule_search_locations:
+                # Pick the path in the namespace that contains the submodule.
+                package_path = pathlib.Path(
+                    os.path.commonpath(package_spec.submodule_search_locations)
+                )
+                search_locations = (
+                    location
+                    for location in root_spec.submodule_search_locations
+                    if _path_is_relative_to(package_path, location)
+                )
+            else:
+                # Pick the first path.
+                search_locations = iter(root_spec.submodule_search_locations)
+            return os.path.dirname(next(search_locations))
         # a package (with __init__.py)
-        elif spec.submodule_search_locations:
-            return os.path.dirname(os.path.dirname(spec.origin))
+        elif root_spec.submodule_search_locations:
+            return os.path.dirname(os.path.dirname(root_spec.origin))
         # just a normal module
         else:
-            return os.path.dirname(spec.origin)
+            return os.path.dirname(root_spec.origin)
 
     # we were unable to find the `package_path` using PEP 451 loaders
     loader = pkgutil.get_loader(root_mod_name)
@@ -874,12 +937,11 @@ def find_package(import_name: str):
     for import. If the package is not installed, it's assumed that the
     package was imported from the current working directory.
     """
-    root_mod_name, _, _ = import_name.partition(".")
-    package_path = _find_package_path(root_mod_name)
+    package_path = _find_package_path(import_name)
     py_prefix = os.path.abspath(sys.prefix)
 
     # installed to the system
-    if package_path.startswith(py_prefix):
+    if _path_is_relative_to(pathlib.PurePath(package_path), py_prefix):
         return py_prefix, package_path
 
     site_parent, site_folder = os.path.split(package_path)

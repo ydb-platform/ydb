@@ -4,15 +4,11 @@
 
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
-#include <library/cpp/yt/logging/logger.h>
-
 #include <atomic>
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-extern const NLogging::TLogger LockFreePtrLogger;
 
 void ReclaimHazardPointers(bool flush = true);
 

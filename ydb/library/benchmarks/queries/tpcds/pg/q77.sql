@@ -8,8 +8,8 @@ with ss as
       {{date_dim}},
       {{store}}
  where ss_sold_date_sk = d_date_sk
-       and d_date between cast('2000-08-16' as date)
-                  and (cast('2000-08-16' as date) + interval '30' day)::date
+       and d_date between cast('2000-08-23' as date)
+                  and (cast('2000-08-23' as date) + interval '30' day)::date
        and ss_store_sk = s_store_sk
  group by s_store_sk)
  ,
@@ -21,8 +21,8 @@ with ss as
       {{date_dim}},
       {{store}}
  where sr_returned_date_sk = d_date_sk
-       and d_date between cast('2000-08-16' as date)
-                  and (cast('2000-08-16' as date) + interval '30' day)::date
+       and d_date between cast('2000-08-23' as date)
+                  and (cast('2000-08-23' as date) + interval '30' day)::date
        and sr_store_sk = s_store_sk
  group by s_store_sk),
  cs as
@@ -32,8 +32,8 @@ with ss as
  from {{catalog_sales}},
       {{date_dim}}
  where cs_sold_date_sk = d_date_sk
-       and d_date between cast('2000-08-16' as date)
-                  and (cast('2000-08-16' as date) + interval '30' day)::date
+       and d_date between cast('2000-08-23' as date)
+                  and (cast('2000-08-23' as date) + interval '30' day)::date
  group by cs_call_center_sk
  ),
  cr as
@@ -43,8 +43,8 @@ with ss as
  from {{catalog_returns}},
       {{date_dim}}
  where cr_returned_date_sk = d_date_sk
-       and d_date between cast('2000-08-16' as date)
-                  and (cast('2000-08-16' as date) + interval '30' day)::date
+       and d_date between cast('2000-08-23' as date)
+                  and (cast('2000-08-23' as date) + interval '30' day)::date
  group by cr_call_center_sk
  ),
  ws as
@@ -55,8 +55,8 @@ with ss as
       {{date_dim}},
       {{web_page}}
  where ws_sold_date_sk = d_date_sk
-       and d_date between cast('2000-08-16' as date)
-                  and (cast('2000-08-16' as date) + interval '30' day)::date
+       and d_date between cast('2000-08-23' as date)
+                  and (cast('2000-08-23' as date) + interval '30' day)::date
        and ws_web_page_sk = wp_web_page_sk
  group by wp_web_page_sk),
  wr as
@@ -67,8 +67,8 @@ with ss as
       {{date_dim}},
       {{web_page}}
  where wr_returned_date_sk = d_date_sk
-       and d_date between cast('2000-08-16' as date)
-                  and (cast('2000-08-16' as date) + interval '30' day)::date
+       and d_date between cast('2000-08-23' as date)
+                  and (cast('2000-08-23' as date) + interval '30' day)::date
        and wr_web_page_sk = wp_web_page_sk
  group by wp_web_page_sk)
   select  channel
@@ -80,8 +80,8 @@ with ss as
  (select 'store channel' as channel
         , ss.s_store_sk as id
         , sales
-        , coalesce(returns, 0::numeric) as returns
-        , (profit - coalesce(profit_loss,0::numeric)) as profit
+        , coalesce(returns, 0) as returns
+        , (profit - coalesce(profit_loss,0)) as profit
  from   ss left join sr
         on  ss.s_store_sk = sr.s_store_sk
  union all
@@ -96,14 +96,15 @@ with ss as
  select 'web channel' as channel
         , ws.wp_web_page_sk as id
         , sales
-        , coalesce(returns, 0::numeric) returns
-        , (profit - coalesce(profit_loss,0::numeric)) as profit
+        , coalesce(returns, 0) returns
+        , (profit - coalesce(profit_loss,0)) as profit
  from   ws left join wr
         on  ws.wp_web_page_sk = wr.wp_web_page_sk
  ) x
  group by rollup (channel, id)
  order by channel nulls first
          ,id nulls first
+         ,sales nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query77.tpl

@@ -1,7 +1,9 @@
-#include "schemeshard_xxport__tx_base.h"
-#include "schemeshard_export_flow_proposals.h"
+#include "schemeshard_audit_log.h"
 #include "schemeshard_export.h"
+#include "schemeshard_export_flow_proposals.h"
+#include "schemeshard_export_helpers.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -57,6 +59,10 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
             return true;
         }
 
+        LOG_D("TExport::TTxCancel, cancelling manually"
+            << ", info: " << exportInfo->ToString()
+        );
+
         exportInfo->Issue = "Cancelled manually";
 
         if (exportInfo->State < TExportInfo::EState::Transferring) {
@@ -79,11 +85,20 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
             }
         }
 
+        if (exportInfo->State == TExportInfo::EState::Cancelled) {
+            exportInfo->EndTime = TAppData::TimeProvider->Now();
+        }
+
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistExportState(db, exportInfo);
 
         Send(Request->Sender, std::move(response), 0, Request->Cookie);
         SendNotificationsIfFinished(exportInfo);
+
+        if (exportInfo->IsFinished()) {
+            AuditLogExportEnd(*exportInfo.Get(), Self);
+        }
+
         return true;
     }
 
@@ -158,10 +173,16 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
 
         if (cancelledItems == cancellableItems) {
             exportInfo->State = TExportInfo::EState::Cancelled;
+            exportInfo->EndTime = TAppData::TimeProvider->Now();
             Self->PersistExportState(db, exportInfo);
         }
 
         SendNotificationsIfFinished(exportInfo);
+
+        if (exportInfo->IsFinished()) {
+            AuditLogExportEnd(*exportInfo.Get(), Self);
+        }
+
         return true;
     }
 

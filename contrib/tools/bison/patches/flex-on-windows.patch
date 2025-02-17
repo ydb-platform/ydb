@@ -1,0 +1,25 @@
+--- a/src/scan-skel.l	(index)
++++ b/src/scan-skel.l	(working tree)
+@@ -72,11 +69,12 @@ static void fail_for_invalid_at (char const *at);
+   at_directive at_ptr = NULL;
+ %}
+ 
++\r+  continue;
+ "@@" fputc ('@', yyout);
+ "@{" fputc ('[', yyout);
+ "@}" fputc (']', yyout);
+ "@'" continue;  /* Used by b4_cat in ../data/bison.m4.  */
+-@\n  continue;
++@\r*\n  continue;
+ 
+ "@oline@"  fprintf (yyout, "%d", out_lineno + 1);
+ "@ofile@"  fputs (quotearg_style (c_quoting_style, out_name), yyout);
+@@ -249,7 +245,7 @@ at_output (int argc, char *argv[], char **out_namep, int *out_linenop)
+   *out_namep = xstrdup (argv[1]);
+   output_file_name_check (out_namep, true);
+   /* If there were errors, do not generate the output.  */
+-  yyout = xfopen (complaint_status ? "/dev/null" : *out_namep, "w");
++  yyout = xfopen (complaint_status ? "/dev/null" : *out_namep, "wb");
+   *out_linenop = 1;
+ }
+ 

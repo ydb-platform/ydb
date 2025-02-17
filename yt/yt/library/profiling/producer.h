@@ -20,13 +20,13 @@ struct ISensorWriter
     virtual void PushTag(TTag tag) = 0;
     virtual void PopTag() = 0;
 
-    virtual void AddGauge(const TString& name, double value) = 0;
+    virtual void AddGauge(const std::string& name, double value) = 0;
 
     //! AddCounter emits single counter value.
     /*!
      *  #value MUST be monotonically increasing.
      */
-    virtual void AddCounter(const TString& name, i64 value) = 0;
+    virtual void AddCounter(const std::string& name, i64 value) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -42,12 +42,12 @@ public:
     explicit TWithTagGuard(ISensorWriter* writer);
     // NB: For convenience.
     [[nodiscard]]
-    TWithTagGuard(ISensorWriter* writer, TString tagKey, TString tagValue);
+    TWithTagGuard(ISensorWriter* writer, const std::string& tagKey, const std::string& tagValue);
 
     ~TWithTagGuard();
 
     void AddTag(TTag tag);
-    void AddTag(TString tagKey, TString tagValue);
+    void AddTag(const std::string& tagKey, const std::string& tagValue);
 
 private:
     ISensorWriter* const Writer_;
@@ -63,19 +63,19 @@ public:
     void PushTag(TTag tag) override;
     void PopTag() override;
 
-    void AddGauge(const TString& name, double value) override;
-    void AddCounter(const TString& name, i64 value) override;
+    void AddGauge(const std::string& name, double value) override;
+    void AddCounter(const std::string& name, i64 value) override;
 
     void WriteTo(ISensorWriter* writer);
 
-    const std::vector<std::tuple<TString, TTagList, i64>>& GetCounters() const;
-    const std::vector<std::tuple<TString, TTagList, double>>& GetGauges() const;
+    const std::vector<std::tuple<std::string, TTagList, i64>>& GetCounters() const;
+    const std::vector<std::tuple<std::string, TTagList, double>>& GetGauges() const;
 
 private:
     TTagList Tags_;
 
-    std::vector<std::tuple<TString, TTagList, i64>> Counters_;
-    std::vector<std::tuple<TString, TTagList, double>> Gauges_;
+    std::vector<std::tuple<std::string, TTagList, i64>> Counters_;
+    std::vector<std::tuple<std::string, TTagList, double>> Gauges_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

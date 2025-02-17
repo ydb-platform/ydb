@@ -2,14 +2,15 @@
 #include <util/generic/size_literals.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/library/grpc/client/grpc_common.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/query/query.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/discovery/discovery.h>
 
 using namespace NYdbGrpc;
 using namespace NYdb;
@@ -79,6 +80,65 @@ static TStats ExecuteQuery(NYdbGrpc::TGRpcClientLow& clientLow, const TGRpcClien
     promise.GetFuture().GetValueSync()->Cancel();
 
     return stats;
+}
+
+Y_UNIT_TEST_SUITE(NodeIdDescribe)
+{
+    Y_UNIT_TEST(HasDistribution)
+    {
+        TString connectionString = GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE");
+        auto config = TDriverConfig(connectionString);
+        auto driver = TDriver(config);
+        auto db = TQueryClient(driver);
+
+        {
+            auto res = db.ExecuteQuery(R"(
+                CREATE TABLE `/local/UniformDist` (
+                    Key Uint32,
+                    Value String,
+                    PRIMARY KEY (Key),
+                )
+                WITH (
+                    AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4096,
+                    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 4096,
+                    UNIFORM_PARTITIONS = 4096);
+            )", TTxControl::NoTx(), TExecuteQuerySettings()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        TSet<ui32> nodes;
+        {
+            using NYdb::NTable::TDescribeTableSettings;
+            NYdb::NTable::TTableClient client(driver);
+            auto sessionRes = client.CreateSession().ExtractValueSync();
+            UNIT_ASSERT_EQUAL_C(sessionRes.GetStatus(), EStatus::SUCCESS, sessionRes.GetIssues().ToString());
+            auto session = sessionRes.GetSession();
+            TDescribeTableSettings describeTableSettings =
+                TDescribeTableSettings()
+                    .WithTableStatistics(true)
+                    .WithPartitionStatistics(true)
+                    .WithShardNodesInfo(true);
+
+            auto res = session.DescribeTable("/local/UniformDist", describeTableSettings).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionsCount(), 4096);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats().size(), 4096);
+            for (const auto& x : res.GetTableDescription().GetPartitionStats()) {
+                nodes.insert(x.LeaderNodeId);
+            }
+        }
+
+        {
+            auto res = TDiscoveryClient(driver).ListEndpoints().GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            UNIT_ASSERT(res.GetEndpointsInfo().size() > 2);
+            for (const auto& x : res.GetEndpointsInfo()) {
+                UNIT_ASSERT(nodes.contains(x.NodeId));
+            }
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpQueryService)

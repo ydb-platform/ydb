@@ -15,8 +15,6 @@ using ::testing::StrictMock;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// TODO(sandello): Fix this test under clang.
-#ifndef __clang__
 // String-like Scalars {{{
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -187,7 +185,7 @@ TEST(TYTreeFluentMapTest, Items)
     StrictMock<TMockYsonConsumer> mock;
     InSequence dummy;
 
-    auto node = ConvertToNode(TYsonString("{bar = 10}"));
+    auto node = ConvertToNode(TYsonString(TString("{bar = 10}")));
 
     EXPECT_CALL(mock, OnBeginMap());
     EXPECT_CALL(mock, OnKeyedItem("bar"));
@@ -275,7 +273,7 @@ TEST(TYTreeFluentListTest, Items)
     StrictMock<TMockYsonConsumer> mock;
     InSequence dummy;
 
-    auto node = ConvertToNode(TYsonString("[10; 20; 30]"));
+    auto node = ConvertToNode(TYsonString(TString("[10; 20; 30]")));
 
     EXPECT_CALL(mock, OnBeginList());
     EXPECT_CALL(mock, OnListItem());
@@ -420,8 +418,37 @@ TEST(TYTreeFluentTest, Complex)
         .EndList();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-#endif
+TEST(TYTreeFluentTest, DoMap)
+{
+    StrictMock<TMockYsonConsumer> mock;
+
+    EXPECT_CALL(mock, OnBeginMap());
+    EXPECT_CALL(mock, OnKeyedItem("key"));
+    EXPECT_CALL(mock, OnEntity);
+    EXPECT_CALL(mock, OnEndMap());
+
+    BuildYsonFluently(&mock)
+        .DoMap([] (TFluentMap map) {
+            map.Item("key").Entity();
+        });
+}
+
+TEST(TYTreeFluentTest, DoAttributes)
+{
+    StrictMock<TMockYsonConsumer> mock;
+
+    EXPECT_CALL(mock, OnBeginAttributes());
+    EXPECT_CALL(mock, OnKeyedItem("key"));
+    EXPECT_CALL(mock, OnStringScalar("value"));
+    EXPECT_CALL(mock, OnEndAttributes());
+    EXPECT_CALL(mock, OnEntity());
+
+    BuildYsonFluently(&mock)
+        .DoAttributes([] (TFluentAttributes attributes) {
+            attributes.Item("key").Value("value");
+        })
+        .Entity();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

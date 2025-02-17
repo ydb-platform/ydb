@@ -1,0 +1,22 @@
+diff --git a/include/__locale b/include/__locale
+index 0c6fe3c..6692046 100644
+--- a/include/__locale
++++ b/include/__locale
+@@ -16,6 +16,7 @@
+ #include <__mutex/once_flag.h>
+ #include <__type_traits/make_unsigned.h>
+ #include <__utility/no_destroy.h>
++#include <atomic>
+ #include <cctype>
+ #include <clocale>
+ #include <cstdint>
+@@ -125,8 +126,7 @@ private:
+ };
+ 
+ class _LIBCPP_EXPORTED_FROM_ABI locale::id {
+-  once_flag __flag_;
+-  int32_t __id_;
++  std::atomic<int32_t> __id_;
+ 
+   static int32_t __next_id;
+ 

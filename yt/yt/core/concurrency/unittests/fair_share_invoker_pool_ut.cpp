@@ -23,7 +23,8 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr auto Margin = TDuration::MilliSeconds(20);
+// NB(arkady-e1ppa): Margin is that bad while we can't simulate time.
+constexpr auto Margin = TDuration::MilliSeconds(50);
 constexpr auto Quantum = TDuration::MilliSeconds(100);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -251,7 +252,7 @@ protected:
 
         auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), switchToCount + 1);
 
-        auto callback = BIND([this, invokerPool, switchToCount] () {
+        auto callback = BIND([this, invokerPool, switchToCount] {
             for (int i = 1; i <= switchToCount; ++i) {
                 ExpectInvokerIndex(i - 1);
                 Spin(Quantum * i);
@@ -614,13 +615,6 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateUncorrelatedWithOtherInvok
     secondaryLeash.NotifyOne();
     WaitFor(std::move(secondaryAction)).ThrowOnError();
     WaitFor(std::move(actions[1])).ThrowOnError();
-
-    statistics = invokerPool->GetInvokerStatistics(0);
-    expectedTotalTimeEstimate = (expectedTotalTimeEstimate + (GetInstant() - start)) / 3.0;
-
-    EXPECT_EQ(statistics.WaitingActionCount, 0);
-    EXPECT_LE(statistics.TotalTimeEstimate, expectedTotalTimeEstimate + Margin);
-    EXPECT_GE(statistics.TotalTimeEstimate, expectedTotalTimeEstimate - Margin);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

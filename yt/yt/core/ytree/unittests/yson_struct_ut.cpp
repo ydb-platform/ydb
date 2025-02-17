@@ -4,6 +4,7 @@
 
 #include <yt/yt/core/ytree/ephemeral_node_factory.h>
 #include <yt/yt/core/ytree/fluent.h>
+#include <yt/yt/core/ytree/polymorphic_yson_struct.h>
 #include <yt/yt/core/ytree/tree_builder.h>
 #include <yt/yt/core/ytree/tree_visitor.h>
 #include <yt/yt/core/ytree/ypath_client.h>
@@ -189,6 +190,10 @@ auto GetCompleteConfigNode(int offset = 0)
 
 void TestCompleteSubconfig(TTestSubconfig* subconfig, int offset = 0)
 {
+    for (auto field : {"my_int", "my_uint", "my_bool", "my_enum", "my_string_list"}) {
+        EXPECT_TRUE(subconfig->IsSet(field));
+    }
+
     EXPECT_EQ(99 + offset, subconfig->MyInt);
     EXPECT_EQ(101u + offset, subconfig->MyUint);
     EXPECT_TRUE(subconfig->MyBool);
@@ -202,11 +207,18 @@ void TestCompleteSubconfig(TTestSubconfig* subconfig, int offset = 0)
 void TestCompleteConfig(TIntrusivePtr<TTestConfig> config, int offset = 0)
 {
     EXPECT_EQ("TestString" + std::to_string(offset), config->MyString);
+    EXPECT_TRUE(config->IsSet("my_string"));
+
+    EXPECT_TRUE(config->IsSet("sub"));
     TestCompleteSubconfig(config->Subconfig.Get(), offset);
+
     EXPECT_EQ(2u, config->SubconfigList.size());
+    EXPECT_TRUE(config->IsSet("sub_list"));
     TestCompleteSubconfig(config->SubconfigList[0].Get(), offset);
     TestCompleteSubconfig(config->SubconfigList[1].Get(), offset);
+
     EXPECT_EQ(2u, config->SubconfigMap.size());
+    EXPECT_TRUE(config->IsSet("sub_map"));
     auto it1 = config->SubconfigMap.find("sub1");
     EXPECT_FALSE(it1 == config->SubconfigMap.end());
     TestCompleteSubconfig(it1->second.Get(), offset);
@@ -283,12 +295,21 @@ TEST_P(TYsonStructParseTest, MissingParameter)
     auto config = Load<TTestConfig>(configNode->AsMap());
 
     EXPECT_EQ("TestString", config->MyString);
+    EXPECT_TRUE(config->IsSet("my_string"));
+    EXPECT_TRUE(config->IsSet("sub"));
+    EXPECT_FALSE(config->IsSet("sub_list"));
+    EXPECT_FALSE(config->IsSet("sub_map"));
+
     EXPECT_EQ(200, config->Subconfig->MyInt);
     EXPECT_TRUE(config->Subconfig->MyBool);
     EXPECT_EQ(0u, config->Subconfig->MyStringList.size());
     EXPECT_EQ(ETestEnum::Value1, config->Subconfig->MyEnum);
     EXPECT_EQ(0u, config->SubconfigList.size());
     EXPECT_EQ(0u, config->SubconfigMap.size());
+    EXPECT_TRUE(config->Subconfig->IsSet("my_bool"));
+    for (auto field : {"my_int", "my_uint", "my_enum", "my_string_list"}) {
+        EXPECT_FALSE(config->Subconfig->IsSet(field));
+    }
 }
 
 TEST_P(TYsonStructParseTest, MissingSubconfig)
@@ -307,6 +328,9 @@ TEST_P(TYsonStructParseTest, MissingSubconfig)
     EXPECT_EQ(ETestEnum::Value1, config->Subconfig->MyEnum);
     EXPECT_EQ(0u, config->SubconfigList.size());
     EXPECT_EQ(0u, config->SubconfigMap.size());
+    for (auto field : {"my_int", "my_uint", "my_bool", "my_enum", "my_string_list"}) {
+        EXPECT_FALSE(config->Subconfig->IsSet(field));
+    }
 }
 
 TEST_P(TYsonStructParseTest, UnrecognizedSimple)
@@ -411,6 +435,20 @@ TEST_P(TYsonStructParseTest, UnrecognizedRecursive)
     auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
     auto deserializedConfig = ConvertTo<TTestConfigPtr>(output);
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(config), ConvertToNode(deserializedConfig)));
+}
+
+TEST_P(TYsonStructParseTest, UnknownIsSet)
+{
+    auto configNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("my_string").Value("TestString")
+            .Item("foo").Value(1)
+        .EndMap();
+
+    auto config = Load<TTestConfig>(configNode->AsMap());
+
+    EXPECT_THROW(config->IsSet("foo"), std::exception);
+    EXPECT_THROW(config->IsSet("bar"), std::exception);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -605,6 +643,8 @@ TEST(TYsonStructTest, LoadSingleParameter)
     config->LoadParameter("my_string", ConvertToNode("test"));
     EXPECT_EQ("test", config->MyString);
     EXPECT_EQ(10, config->NullableInt);
+    EXPECT_TRUE(config->IsSet("my_string"));
+    EXPECT_FALSE(config->IsSet("sub"));
 }
 
 TEST(TYsonStructTest, LoadSingleParameterOverwriteDefaults)
@@ -622,6 +662,9 @@ TEST(TYsonStructTest, LoadSingleParameterOverwriteDefaults)
     config1->LoadParameter("sub", subConfig);
     EXPECT_EQ(100, config1->Subconfig->MyInt);
     EXPECT_FALSE(config1->Subconfig->MyBool);  // Subconfig is overwritten.
+    EXPECT_TRUE(config1->IsSet("sub"));
+    EXPECT_TRUE(config1->Subconfig->IsSet("my_int"));
+    EXPECT_FALSE(config1->Subconfig->IsSet("my_bool"));
 }
 
 TEST(TYsonStructTest, ResetSingleParameter)
@@ -633,6 +676,7 @@ TEST(TYsonStructTest, ResetSingleParameter)
     config->ResetParameter("my_int");
     EXPECT_EQ(100, config->MyInt);  // Default value.
     EXPECT_EQ(10u, config->MyUint);
+    EXPECT_FALSE(config->IsSet("my_int"));
 }
 
 TEST(TYsonStructTest, Save)
@@ -684,11 +728,25 @@ TEST(TYsonStructTest, TestConfigUpdate)
     {
         auto newConfig = UpdateYsonStruct(config, ConvertToNode(TYsonString(TStringBuf("{\"sub\"={\"my_int\"=150}}"))));
         EXPECT_EQ(newConfig->Subconfig->MyInt, 150);
+        EXPECT_TRUE(newConfig->IsSet("sub"));
+        EXPECT_TRUE(newConfig->Subconfig->IsSet("my_int"));
+
+        // UpdateYsonStruct fully materializes the source node and loads is back.
+        // After such process all fields (expect those that weren't saved) will be
+        // explicitly loaded and thus marked as set.
+        // Note that nullable_int is not saved thus is not loaded back during the update.
+        EXPECT_TRUE(newConfig->Subconfig->IsSet("my_bool"));
+        EXPECT_TRUE(newConfig->IsSet("sub_list"));
+        EXPECT_FALSE(newConfig->IsSet("nullable_int"));
     }
 
     {
-        auto newConfig = UpdateYsonStruct(config, ConvertToNode(TYsonString(TStringBuf("{\"sub\"={\"my_int_\"=150}}"))));
+        auto newConfig = UpdateYsonStruct(config, ConvertToNode(TYsonString(TStringBuf("{\"sub\"={\"my_int_with_typo\"=150}}"))));
         EXPECT_EQ(newConfig->Subconfig->MyInt, 200);
+        EXPECT_TRUE(newConfig->IsSet("sub"));
+
+        // The comment above applies.
+        EXPECT_TRUE(newConfig->Subconfig->IsSet("my_int"));
     }
 }
 
@@ -716,6 +774,8 @@ TEST(TYsonStructTest, Reconfigure)
     EXPECT_EQ("y", config->MyString);
     EXPECT_EQ(subconfig, config->Subconfig);
     EXPECT_EQ(200, subconfig->MyInt);
+    EXPECT_TRUE(config->IsSet("my_string"));
+    EXPECT_FALSE(config->IsSet("sub"));
 
     auto patch2 = BuildYsonNodeFluently()
         .BeginMap()
@@ -729,6 +789,10 @@ TEST(TYsonStructTest, Reconfigure)
     EXPECT_EQ("z", config->MyString);
     EXPECT_EQ(subconfig, config->Subconfig);
     EXPECT_EQ(95, subconfig->MyInt);
+    EXPECT_TRUE(config->IsSet("my_string"));
+    EXPECT_TRUE(config->IsSet("sub"));
+    EXPECT_TRUE(config->Subconfig->IsSet("my_int"));
+    EXPECT_FALSE(config->Subconfig->IsSet("my_bool"));
 }
 
 struct TTestYsonStructWithFieldInitializer
@@ -751,6 +815,299 @@ TEST(TYsonStructTest, TestNestedWithFieldInitializer)
     using TPtr = TIntrusivePtr<TConfig>;
 
     auto yson = ConvertTo<TPtr>(TYsonString(TStringBuf("{}")));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+#define FOR_EACH_FIELD_1(XX) \
+    XX(Field00, field00) \
+    XX(Field01, field01) \
+    XX(Field02, field02) \
+    XX(Field03, field03) \
+    XX(Field04, field04) \
+    XX(Field05, field05) \
+    XX(Field06, field06) \
+    XX(Field07, field07) \
+    XX(Field08, field08) \
+    XX(Field09, field09) \
+    XX(Field10, field10) \
+    XX(Field11, field11) \
+    XX(Field12, field12) \
+    XX(Field13, field13) \
+    XX(Field14, field14) \
+    XX(Field15, field15) \
+    XX(Field16, field16) \
+    XX(Field17, field17) \
+    XX(Field18, field18) \
+    XX(Field19, field19) \
+    XX(Field20, field20) \
+    XX(Field21, field21) \
+    XX(Field22, field22) \
+    XX(Field23, field23) \
+    XX(Field24, field24) \
+    XX(Field25, field25) \
+    XX(Field26, field26) \
+    XX(Field27, field27) \
+    XX(Field28, field28) \
+    XX(Field29, field29) \
+
+#define FOR_EACH_FIELD_2(XX) \
+    XX(Field30, field30) \
+    XX(Field31, field31) \
+    XX(Field32, field32) \
+    XX(Field33, field33) \
+    XX(Field34, field34) \
+    XX(Field35, field35) \
+    XX(Field36, field36) \
+    XX(Field37, field37) \
+    XX(Field38, field38) \
+    XX(Field39, field39) \
+    XX(Field40, field40) \
+    XX(Field41, field41) \
+    XX(Field42, field42) \
+    XX(Field43, field43) \
+    XX(Field44, field44) \
+    XX(Field45, field45) \
+    XX(Field46, field46) \
+    XX(Field47, field47) \
+    XX(Field48, field48) \
+    XX(Field49, field49) \
+    XX(Field50, field50) \
+    XX(Field51, field51) \
+    XX(Field52, field52) \
+    XX(Field53, field53) \
+    XX(Field54, field54) \
+    XX(Field55, field55) \
+    XX(Field56, field56) \
+    XX(Field57, field57) \
+    XX(Field58, field58) \
+    XX(Field59, field59) \
+
+#define FOR_EACH_FIELD_3(XX) \
+    XX(Field60, field60) \
+    XX(Field61, field61) \
+    XX(Field62, field62) \
+    XX(Field63, field63) \
+    XX(Field64, field64) \
+    XX(Field65, field65) \
+    XX(Field66, field66) \
+    XX(Field67, field67) \
+    XX(Field68, field68) \
+    XX(Field69, field69) \
+    XX(Field70, field70) \
+    XX(Field71, field71) \
+    XX(Field72, field72) \
+    XX(Field73, field73) \
+    XX(Field74, field74) \
+    XX(Field75, field75) \
+    XX(Field76, field76) \
+    XX(Field77, field77) \
+    XX(Field78, field78) \
+    XX(Field79, field79) \
+    XX(Field80, field80) \
+    XX(Field81, field81) \
+    XX(Field82, field82) \
+    XX(Field83, field83) \
+    XX(Field84, field84) \
+    XX(Field85, field85) \
+    XX(Field86, field86) \
+    XX(Field87, field87) \
+    XX(Field88, field88) \
+    XX(Field89, field89) \
+
+#define DECLARE_FIELD(CamelCase, snake_case) \
+    int CamelCase;
+
+#define REGISTER_FIELD(CamelCase, snake_case) \
+    registrar.Parameter(#snake_case, &TThis::CamelCase) \
+        .Optional();
+
+struct TTestConfigWithManyFieldsBase
+    : public virtual TYsonStruct
+{
+    FOR_EACH_FIELD_1(DECLARE_FIELD);
+
+    REGISTER_YSON_STRUCT(TTestConfigWithManyFieldsBase);
+
+    static void Register(TRegistrar registrar)
+    {
+        FOR_EACH_FIELD_1(REGISTER_FIELD);
+    }
+};
+
+struct TTestConfigWithManyFieldsDerived1
+    : public virtual TTestConfigWithManyFieldsBase
+{
+    FOR_EACH_FIELD_2(DECLARE_FIELD);
+
+    REGISTER_YSON_STRUCT(TTestConfigWithManyFieldsDerived1);
+
+    static void Register(TRegistrar registrar)
+    {
+        FOR_EACH_FIELD_2(REGISTER_FIELD);
+    }
+};
+
+struct TTestConfigWithManyFieldsDerived2
+    : public virtual TTestConfigWithManyFieldsBase
+{
+    FOR_EACH_FIELD_3(DECLARE_FIELD);
+
+    REGISTER_YSON_STRUCT(TTestConfigWithManyFieldsDerived2);
+
+    static void Register(TRegistrar registrar)
+    {
+        FOR_EACH_FIELD_3(REGISTER_FIELD);
+    }
+};
+
+struct TTestConfigWithManyFieldsFinal
+    : public TTestConfigWithManyFieldsDerived1
+    , public TTestConfigWithManyFieldsDerived2
+{
+    TString String;
+
+    REGISTER_YSON_STRUCT(TTestConfigWithManyFieldsFinal);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("string", &TThis::String)
+            .Default();
+    }
+};
+
+struct TTestConfigWithManyFieldsBaseLite
+    : public virtual TYsonStructLiteWithFieldTracking
+{
+    FOR_EACH_FIELD_1(DECLARE_FIELD);
+
+    REGISTER_YSON_STRUCT_LITE(TTestConfigWithManyFieldsBaseLite);
+
+    static void Register(TRegistrar registrar)
+    {
+        FOR_EACH_FIELD_1(REGISTER_FIELD);
+    }
+};
+
+struct TTestConfigWithManyFieldsDerivedLite1
+    : public virtual TTestConfigWithManyFieldsBaseLite
+{
+    FOR_EACH_FIELD_2(DECLARE_FIELD);
+
+    REGISTER_YSON_STRUCT_LITE(TTestConfigWithManyFieldsDerivedLite1);
+
+    static void Register(TRegistrar registrar)
+    {
+        FOR_EACH_FIELD_2(REGISTER_FIELD);
+    }
+};
+
+struct TTestConfigWithManyFieldsDerivedLite2
+    : public virtual TTestConfigWithManyFieldsBaseLite
+{
+    FOR_EACH_FIELD_3(DECLARE_FIELD);
+
+    REGISTER_YSON_STRUCT_LITE(TTestConfigWithManyFieldsDerivedLite2);
+
+    static void Register(TRegistrar registrar)
+    {
+        FOR_EACH_FIELD_3(REGISTER_FIELD);
+    }
+};
+
+struct TTestConfigWithManyFieldsFinalLite
+    : public TTestConfigWithManyFieldsDerivedLite1
+    , public TTestConfigWithManyFieldsDerivedLite2
+{
+    TString String;
+
+    REGISTER_YSON_STRUCT_LITE(TTestConfigWithManyFieldsFinalLite);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("string", &TThis::String)
+            .Default();
+    }
+};
+
+#undef FOR_EACH_FIELD_1
+#undef FOR_EACH_FIELD_2
+#undef FOR_EACH_FIELD_3
+#undef DECLARE_FIELD
+#undef REGISTER_FIELD
+
+TEST(TYsonStructTest, TestIsSetWithManyFields)
+{
+    // Test compact bitmap with >62 fields to require allocations.
+
+    auto config = ConvertTo<TIntrusivePtr<TTestConfigWithManyFieldsFinal>>(
+        TYsonString(TStringBuf(
+            "{field04=4;field19=19;field55=55;string=foo;}"
+        ))
+    );
+
+    EXPECT_TRUE(config->IsSet("field04"));
+    EXPECT_TRUE(config->IsSet("field19"));
+    EXPECT_TRUE(config->IsSet("field55"));
+    EXPECT_TRUE(config->IsSet("string"));
+
+    EXPECT_FALSE(config->IsSet("field14"));
+    EXPECT_FALSE(config->IsSet("field49"));
+    EXPECT_FALSE(config->IsSet("field76"));
+}
+
+TEST(TYsonStructTest, TestIsSetWithManyFieldsLite)
+{
+    // Test compact bitmap with >62 fields to require allocations.
+
+    auto config = ConvertTo<TTestConfigWithManyFieldsFinalLite>(
+        TYsonString(TStringBuf(
+            "{field04=4;field19=19;field55=55;string=foo;}"
+        ))
+    );
+
+    EXPECT_TRUE(config.IsSet("field04"));
+    EXPECT_TRUE(config.IsSet("field19"));
+    EXPECT_TRUE(config.IsSet("field55"));
+    EXPECT_TRUE(config.IsSet("string"));
+
+    EXPECT_FALSE(config.IsSet("field14"));
+    EXPECT_FALSE(config.IsSet("field49"));
+    EXPECT_FALSE(config.IsSet("field76"));
+
+    auto copy = config;
+
+    EXPECT_TRUE(copy.IsSet("field04"));
+    EXPECT_TRUE(copy.IsSet("field19"));
+    EXPECT_TRUE(copy.IsSet("field55"));
+    EXPECT_TRUE(copy.IsSet("string"));
+
+    EXPECT_FALSE(copy.IsSet("field14"));
+    EXPECT_FALSE(copy.IsSet("field49"));
+    EXPECT_FALSE(copy.IsSet("field76"));
+
+    auto moved = std::move(copy);
+
+    EXPECT_TRUE(moved.IsSet("field04"));
+    EXPECT_TRUE(moved.IsSet("field19"));
+    EXPECT_TRUE(moved.IsSet("field55"));
+    EXPECT_TRUE(moved.IsSet("string"));
+
+    EXPECT_FALSE(moved.IsSet("field14"));
+    EXPECT_FALSE(moved.IsSet("field49"));
+    EXPECT_FALSE(moved.IsSet("field76"));
+
+    EXPECT_FALSE(copy.IsSet("field04"));
+    EXPECT_FALSE(copy.IsSet("field19"));
+    EXPECT_FALSE(copy.IsSet("field55"));
+    EXPECT_FALSE(copy.IsSet("string"));
+
+    copy.Load(ConvertToNode(TYsonString(TStringBuf("{field05=5;field77=7;}"))));
+    EXPECT_TRUE(copy.IsSet("field05"));
+    EXPECT_TRUE(copy.IsSet("field77"));
+    EXPECT_FALSE(copy.IsSet("field10"));
+    EXPECT_FALSE(copy.IsSet("field55"));
+    EXPECT_FALSE(copy.IsSet("string"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -838,16 +1195,109 @@ TEST(TYsonStructTest, TestConvertToLite)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TTestConfigLiteWithFieldTracking
+    : public TYsonStructLiteWithFieldTracking
+{
+public:
+    TString MyString;
+    std::optional<i64> NullableInt;
+
+    REGISTER_YSON_STRUCT_LITE(TTestConfigLiteWithFieldTracking);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("my_string", &TThis::MyString).Default("foo");
+        registrar.Parameter("nullable_int", &TThis::NullableInt).Default();
+    }
+};
+
+TEST(TYsonStructTest, TestLiteFieldTracking)
+{
+    TTestConfigLiteWithFieldTracking config;
+    EXPECT_FALSE(config.IsSet("my_string"));
+    EXPECT_FALSE(config.IsSet("nullable_int"));
+
+    config.Load(ConvertToNode(TYsonString(TStringBuf("{my_string=foo}"))));
+    EXPECT_TRUE(config.IsSet("my_string"));
+    EXPECT_FALSE(config.IsSet("nullable_int"));
+}
+
+TEST(TYsonStructTest, TestLiteFieldTrackingCopy)
+{
+    auto config1 = ConvertTo<TTestConfigLiteWithFieldTracking>(TYsonString(TStringBuf("{my_string=foo}")));
+
+    auto config2(config1);
+    EXPECT_TRUE(config2.IsSet("my_string"));
+    EXPECT_FALSE(config2.IsSet("nullable_int"));
+
+    auto config3 = ConvertTo<TTestConfigLiteWithFieldTracking>(TYsonString(TStringBuf("{nullable_int=1234}")));
+    EXPECT_FALSE(config3.IsSet("my_string"));
+    EXPECT_TRUE(config3.IsSet("nullable_int"));
+    config3 = config1;
+    EXPECT_TRUE(config3.IsSet("my_string"));
+    EXPECT_FALSE(config3.IsSet("nullable_int"));
+}
+
+TEST(TYsonStructTest, TestLiteFieldTrackingMove)
+{
+    auto config1 = ConvertTo<TTestConfigLiteWithFieldTracking>(TYsonString(TStringBuf("{my_string=foo}")));
+
+    auto config2(std::move(config1));
+    EXPECT_TRUE(config2.IsSet("my_string"));
+    EXPECT_FALSE(config2.IsSet("nullable_int"));
+    EXPECT_EQ(config2.MyString, "foo");
+
+    // IsSet() will always return false for a moved-from config.
+    EXPECT_FALSE(config1.IsSet("my_string"));
+    EXPECT_FALSE(config1.IsSet("nullable_int"));
+
+    auto config3 = ConvertTo<TTestConfigLiteWithFieldTracking>(TYsonString(TStringBuf("{nullable_int=1234}")));
+    EXPECT_FALSE(config3.IsSet("my_string"));
+    EXPECT_TRUE(config3.IsSet("nullable_int"));
+    config3 = std::move(config2);
+    EXPECT_TRUE(config3.IsSet("my_string"));
+    EXPECT_FALSE(config3.IsSet("nullable_int"));
+
+    // IsSet() will always return false for a moved-from config.
+    EXPECT_FALSE(config2.IsSet("my_string"));
+    EXPECT_FALSE(config2.IsSet("nullable_int"));
+}
+
+TEST(TYsonStructTest, TestLiteLoadToMovedFrom)
+{
+    auto config1 = ConvertTo<TTestConfigLiteWithFieldTracking>(TYsonString(TStringBuf("{my_string=foo}")));
+
+    auto config2(std::move(config1));
+    EXPECT_TRUE(config2.IsSet("my_string"));
+    EXPECT_FALSE(config2.IsSet("nullable_int"));
+    EXPECT_EQ(config2.MyString, "foo");
+
+    // IsSet() will always return false for a moved-from config.
+    EXPECT_FALSE(config1.IsSet("my_string"));
+    EXPECT_FALSE(config1.IsSet("nullable_int"));
+
+    config1.Load(ConvertToNode(TYsonString(TStringBuf("{nullable_int=123}"))));
+    EXPECT_FALSE(config1.IsSet("my_string"));
+    EXPECT_TRUE(config1.IsSet("nullable_int"));
+    EXPECT_EQ(config1.MyString, "foo");
+    EXPECT_EQ(config1.NullableInt, 123);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TTestLiteFieldNormalYson
     : public virtual TYsonStruct
 {
     TTestLiteWithDefaults SubLite;
+    TTestConfigLiteWithFieldTracking SubTracked;
 
     REGISTER_YSON_STRUCT(TTestLiteFieldNormalYson);
 
     static void Register(TRegistrar registrar)
     {
         registrar.Parameter("sub_lite", &TThis::SubLite)
+            .Default();
+        registrar.Parameter("sub_tracked", &TThis::SubTracked)
             .Default();
     }
 };
@@ -856,12 +1306,15 @@ struct TTestLiteFieldNormalYsonSecondBase
     : public virtual TYsonStruct
 {
     TTestLiteWithDefaults SubLite2;
+    TTestConfigLiteWithFieldTracking SubTracked2;
 
     REGISTER_YSON_STRUCT(TTestLiteFieldNormalYsonSecondBase);
 
     static void Register(TRegistrar registrar)
     {
         registrar.Parameter("sub_lite_2", &TThis::SubLite2)
+            .Default();
+        registrar.Parameter("sub_tracked_2", &TThis::SubTracked2)
             .Default();
     }
 };
@@ -871,12 +1324,15 @@ struct TTestLiteFieldNormalYsonDoubleDerived
     , public TTestLiteFieldNormalYsonSecondBase
 {
     TTestLiteWithDefaults SubLite3;
+    TTestConfigLiteWithFieldTracking SubTracked3;
 
     REGISTER_YSON_STRUCT(TTestLiteFieldNormalYsonDoubleDerived);
 
     static void Register(TRegistrar registrar)
     {
         registrar.Parameter("sub_lite_3", &TThis::SubLite3)
+            .Default();
+        registrar.Parameter("sub_tracked_3", &TThis::SubTracked3)
             .Default();
     }
 };
@@ -911,11 +1367,23 @@ TEST(TYsonStructTest, DoubleDerivedYsonStructWithLiteFields)
     {
         auto yson = ConvertTo<TConfigPtr>(TYsonString(TStringBuf("{}")));
 
+        EXPECT_FALSE(yson->IsSet("sub_lite"));
+        EXPECT_FALSE(yson->IsSet("sub_tracked"));
+        EXPECT_FALSE(yson->IsSet("sub_lite_2"));
+        EXPECT_FALSE(yson->IsSet("sub_tracked_2"));
+
         {
             auto& sub = yson->SubLite;
             EXPECT_EQ(sub.MyString, "y");
             EXPECT_EQ(sub.MyInt, 10);
             EXPECT_TRUE(sub.Subconfig);
+        }
+        {
+            auto& sub = yson->SubTracked;
+            EXPECT_EQ(sub.MyString, "foo");
+            EXPECT_EQ(sub.NullableInt, std::nullopt);
+            EXPECT_FALSE(sub.IsSet("my_string"));
+            EXPECT_FALSE(sub.IsSet("nullable_int"));
         }
         {
             auto& sub = yson->SubLite2;
@@ -924,10 +1392,24 @@ TEST(TYsonStructTest, DoubleDerivedYsonStructWithLiteFields)
             EXPECT_TRUE(sub.Subconfig);
         }
         {
+            auto& sub = yson->SubTracked2;
+            EXPECT_EQ(sub.MyString, "foo");
+            EXPECT_EQ(sub.NullableInt, std::nullopt);
+            EXPECT_FALSE(sub.IsSet("my_string"));
+            EXPECT_FALSE(sub.IsSet("nullable_int"));
+        }
+        {
             auto& sub = yson->SubLite3;
             EXPECT_EQ(sub.MyString, "y");
             EXPECT_EQ(sub.MyInt, 10);
             EXPECT_TRUE(sub.Subconfig);
+        }
+        {
+            auto& sub = yson->SubTracked3;
+            EXPECT_EQ(sub.MyString, "foo");
+            EXPECT_EQ(sub.NullableInt, std::nullopt);
+            EXPECT_FALSE(sub.IsSet("my_string"));
+            EXPECT_FALSE(sub.IsSet("nullable_int"));
         }
     }
 
@@ -951,6 +1433,34 @@ TEST(TYsonStructTest, DoubleDerivedYsonStructWithLiteFields)
             EXPECT_EQ(sub.MyString, "y");
             EXPECT_EQ(sub.MyInt, 10);
             EXPECT_TRUE(sub.Subconfig);
+        }
+    }
+
+    {
+        auto yson = ConvertTo<TConfigPtr>(TYsonString(TStringBuf(
+            "{sub_lite={my_string=foo};sub_tracked_2={nullable_int=555}}")));
+
+        EXPECT_TRUE(yson->IsSet("sub_lite"));
+        EXPECT_TRUE(yson->IsSet("sub_tracked_2"));
+        for (auto key : {"sub_lite_2", "sub_lite_3", "sub_tracked", "sub_tracked_3"}) {
+            EXPECT_FALSE(yson->IsSet(key))
+                << key;
+        }
+
+    {
+            auto& sub = yson->SubTracked2;
+            EXPECT_TRUE(sub.IsSet("nullable_int"));
+            EXPECT_FALSE(sub.IsSet("my_string"));
+            EXPECT_EQ(sub.NullableInt, 555);
+            EXPECT_EQ(sub.MyString, "foo");
+        }
+
+        {
+            auto& sub = yson->SubTracked;
+            EXPECT_FALSE(sub.IsSet("nullable_int"));
+            EXPECT_FALSE(sub.IsSet("my_string"));
+            EXPECT_EQ(sub.NullableInt, std::nullopt);
+            EXPECT_EQ(sub.MyString, "foo");
         }
     }
 }
@@ -1104,6 +1614,8 @@ TEST(TYsonStructTest, Aliases1)
     config->Load(configNode->AsMap(), false);
 
     EXPECT_EQ("value", config->Value);
+    EXPECT_TRUE(config->IsSet("key"));
+    EXPECT_TRUE(config->IsSet("alias1"));
 }
 
 TEST(TYsonStructTest, Aliases2)
@@ -1120,6 +1632,8 @@ TEST(TYsonStructTest, Aliases2)
     config->Load(configNode->AsMap(), false);
 
     EXPECT_EQ("value", config->Value);
+    EXPECT_TRUE(config->IsSet("key"));
+    EXPECT_TRUE(config->IsSet("alias1"));
 }
 
 TEST(TYsonStructTest, Aliases3)
@@ -1153,6 +1667,7 @@ TEST(TYsonStructTest, Aliases4)
     auto config = New<TTestConfigWithAliases>();
 
     EXPECT_THROW(config->Load(configNode->AsMap()), std::exception);
+    EXPECT_FALSE(config->IsSet("key"));
 }
 
 TEST(TYsonStructTest, Aliases5)
@@ -1167,6 +1682,7 @@ TEST(TYsonStructTest, Aliases5)
     auto config = New<TTestConfigWithAliases>();
 
     EXPECT_THROW(config->Load(configNode->AsMap()), std::exception);
+    EXPECT_FALSE(config->IsSet("key"));
 }
 
 class TTestConfigWithContainers
@@ -1275,12 +1791,14 @@ TEST(TYsonStructTest, NullableWithNonNullDefault)
         auto config = ConvertTo<TIntrusivePtr<TConfigWithOptional>>(TYsonString(TStringBuf("{}")));
         EXPECT_EQ(123, *config->Value);
         EXPECT_EQ(123, ConvertToNode(config)->AsMap()->GetChildOrThrow("value")->GetValue<i64>());
+        EXPECT_FALSE(config->IsSet("value"));
     }
 
     {
         auto config = ConvertTo<TIntrusivePtr<TConfigWithOptional>>(TYsonString(TStringBuf("{value=#}")));
         EXPECT_FALSE(config->Value);
         EXPECT_EQ(ENodeType::Entity, ConvertToNode(config)->AsMap()->GetChildOrThrow("value")->GetType());
+        EXPECT_TRUE(config->IsSet("value"));
     }
 }
 
@@ -1356,6 +1874,7 @@ TEST(TYsonStructTest, UniversalParameterAccessor)
     {
         auto config = New<TConfigWithUniversalParameterAccessor>();
         EXPECT_EQ(123, config->NestedStruct.Value);
+        EXPECT_FALSE(config->IsSet("value"));
 
         config->NestedStruct.Value = 3;
         auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
@@ -1371,6 +1890,7 @@ TEST(TYsonStructTest, UniversalParameterAccessor)
         auto config = ConvertTo<TIntrusivePtr<TConfigWithUniversalParameterAccessor>>(TYsonString(TStringBuf(sourceYson)));
 
         EXPECT_EQ(3, config->NestedStruct.Value);
+        EXPECT_TRUE(config->IsSet("value"));
     }
 }
 
@@ -1544,7 +2064,7 @@ public:
     static void Register(TRegistrar registrar)
     {
         registrar.Parameter("yson_struct", &TThis::YsonStruct)
-            .DefaultCtor([] () { return CreateCustomDefault<TSimpleYsonStruct>(); });
+            .DefaultCtor([] { return CreateCustomDefault<TSimpleYsonStruct>(); });
     }
 };
 
@@ -1620,9 +2140,18 @@ public:
 
 TEST(TYsonStructTest, TestHierarchiesWithCustomInitializationOfBaseParameters)
 {
-    auto deserialized = ConvertTo<TIntrusivePtr<TDerivedWithCustomConfigure>>(TYsonString(TStringBuf("{}")));
-    EXPECT_EQ(deserialized->Int, 10);
-    EXPECT_EQ(deserialized->Double, 2.2);
+    {
+        auto deserialized = ConvertTo<TIntrusivePtr<TDerivedWithCustomConfigure>>(TYsonString(TStringBuf("{}")));
+        EXPECT_EQ(deserialized->Int, 10);
+        EXPECT_EQ(deserialized->Double, 2.2);
+        EXPECT_FALSE(deserialized->IsSet("int"));
+    }
+
+    {
+        auto deserialized = ConvertTo<TIntrusivePtr<TDerivedWithCustomConfigure>>(TYsonString(TStringBuf("{int=123}")));
+        EXPECT_EQ(deserialized->Int, 123);
+        EXPECT_TRUE(deserialized->IsSet("int"));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1755,6 +2284,27 @@ TEST(TYsonStructTest, TestOptionalNoInit)
     EXPECT_EQ(0, x.FieldWithInit);
     EXPECT_EQ(1, x.FieldNoInit);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestNonLiteralStruct
+{
+    TTestNonLiteralStruct()
+    { }
+};
+
+class TTestNonLiteralStructSerializer
+    : public virtual TExternalizedYsonStruct
+{
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestNonLiteralStruct, TTestNonLiteralStructSerializer);
+
+    static void Register(TRegistrar)
+    { }
+};
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestNonLiteralStruct, TTestNonLiteralStructSerializer);
+
+static_assert(CExternallySerializable<TTestNonLiteralStruct>);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -2213,9 +2763,6 @@ TEST(TYsonStructTest, CustomSubStruct)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// NB: Currently TYsonStructLite cannot be used as a field in another config as is.
-// Thus test below uses std::optional + MergeStrategy::Combine instead of plain struct.
-
 class TTestSubConfigLiteWithDefaults
     : public TYsonStructLite
 {
@@ -2552,7 +3099,625 @@ TEST(TYsonStructTest, OuterYsonStructWithValidation)
     EXPECT_EQ(deserialized->Inner->MyInt, 42);
 }
 
+struct TWithYsonString
+    : public TYsonStructLite
+{
+    NYson::TYsonString MyString;
+
+    REGISTER_YSON_STRUCT_LITE(TWithYsonString);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("my_string", &TThis::MyString)
+            .Default();
+    }
+};
+
+TEST(TYsonStructTest, TYsonStringFieldSimple)
+{
+    TWithYsonString value;
+
+    {
+        auto node = BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("my_string").Value(ConvertToYsonString(42))
+            .EndMap();
+
+        Deserialize(value, node->AsMap());
+        EXPECT_TRUE(value.MyString);
+        EXPECT_EQ(ConvertTo<i32>(value.MyString), 42);
+    }
+
+    {
+        std::string message{"Hi mom!"};
+
+        auto node = BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("my_string").Value(ConvertToYsonString(message))
+            .EndMap();
+
+        Deserialize(value, node->AsMap());
+        EXPECT_TRUE(value.MyString);
+        EXPECT_EQ(ConvertTo<std::string>(value.MyString), message);
+    }
+
+    {
+        auto config = New<TTestConfig>();
+        config->MyString = "Hello, world!";
+
+        auto node = BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("my_string").Value(ConvertToYsonString(config))
+            .EndMap();
+
+        Deserialize(value, node->AsMap());
+        EXPECT_TRUE(value.MyString);
+
+        auto extracted = ConvertTo<TTestConfigPtr>(value.MyString);
+        EXPECT_EQ(extracted->NullableInt, config->NullableInt);
+        EXPECT_EQ(extracted->MyString, extracted->MyString);
+    }
+}
+
+TEST(TYsonStructTest, TYsonStringFieldCompound)
+{
+    TWithYsonString value;
+
+    auto config = New<TTestConfig>();
+    config->MyString = "Hello, world!";
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("my_string").Value(ConvertToYsonString(config))
+        .EndMap();
+
+    Deserialize(value, node->AsMap());
+    EXPECT_TRUE(value.MyString);
+
+    auto extracted = ConvertTo<TTestConfigPtr>(value.MyString);
+    EXPECT_EQ(extracted->NullableInt, config->NullableInt);
+    EXPECT_EQ(extracted->MyString, extracted->MyString);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TPolyBase
+    : public TYsonStruct
+{
+    int BaseField;
+
+    REGISTER_YSON_STRUCT(TPolyBase);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("base_field", &TThis::BaseField)
+            .Default(42);
+    }
+};
+
+struct TPolyDerived1
+    : public TPolyBase
+{
+    int Field1;
+
+    REGISTER_YSON_STRUCT(TPolyDerived1);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field1", &TThis::Field1)
+            .Default(33);
+    }
+};
+
+struct TPolyDerived2
+    : public TPolyBase
+{
+    int Field2;
+
+    REGISTER_YSON_STRUCT(TPolyDerived2);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field2", &TThis::Field2)
+            .Default(11);
+
+        registrar.UnrecognizedStrategy(EUnrecognizedStrategy::Throw);
+    }
+};
+
+TEST(TYsonStructTest, TestSlicing1)
+{
+    TIntrusivePtr<TPolyBase> sliced = New<TPolyDerived1>();
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("base_field").Value(11)
+            .Item("field1").Value(123)
+        .EndMap();
+
+    Deserialize(sliced, node->AsMap());
+
+    auto concrete = DynamicPointerCast<TPolyDerived1>(sliced);
+
+    EXPECT_TRUE(concrete.operator bool());
+    EXPECT_EQ(concrete->BaseField, 11);
+    EXPECT_EQ(concrete->Field1, 123);
+}
+
+TEST(TYsonStructTest, TestSlicing2)
+{
+    TIntrusivePtr<TPolyBase> sliced = New<TPolyBase>();
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("base_field").Value(11)
+            .Item("field1").Value(123)
+        .EndMap();
+
+    Deserialize(sliced, node->AsMap());
+
+    auto concrete = DynamicPointerCast<TPolyDerived1>(sliced);
+
+    EXPECT_FALSE(concrete.operator bool());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_POLYMORPHIC_YSON_STRUCT(MyPoly,
+    ((Base) (TPolyBase))
+    ((Drv1) (TPolyDerived1))
+    ((Drv2) (TPolyDerived2))
+);
+
+TEST(TYsonStructTest, TestPolymorphicYsonStruct)
+{
+    TMyPoly poly;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("base")
+            .Item("base_field").Value(11)
+            .Item("field1").Value(123)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Base);
+
+    auto basePtr = poly.TryGetConcrete<TPolyBase>();
+    EXPECT_TRUE(basePtr.operator bool());
+    EXPECT_EQ(basePtr->BaseField, 11);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv1")
+            .Item("base_field").Value(14)
+            .Item("field1").Value(111)
+            .Item("field2").Value(1337) // Unrecognized but will be dropped.
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Drv1);
+
+    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 14);
+    EXPECT_EQ(drv1Ptr->Field1, 111);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv2")
+            .Item("base_field").Value(7)
+            .Item("field1").Value(188)
+        .EndMap();
+
+    // Now field1 is unrecognized.
+    EXPECT_THROW(Deserialize(poly, node->AsMap()), std::exception);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv2")
+            .Item("base_field").Value(17)
+            .Item("field2").Value(144)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Drv2);
+
+    auto drv2Ptr = poly.TryGetConcrete<TPolyDerived2>();
+    EXPECT_TRUE(drv2Ptr.operator bool());
+    EXPECT_EQ(drv2Ptr->BaseField, 17);
+    EXPECT_EQ(drv2Ptr->Field2, 144);
+}
+
+TEST(TYsonStructTest, TestPolymorphicYsonStructSaveLoad)
+{
+    auto drv = New<TPolyDerived2>();
+    drv->Field2 = 5;
+    drv->BaseField = 0;
+
+    auto poly = TMyPoly{EMyPolyType::Drv2, std::move(drv)};
+
+    auto serialized = ConvertToYsonString(poly);
+    auto deserialized = ConvertTo<TMyPoly>(serialized);
+
+    EXPECT_EQ(deserialized.GetCurrentType(), EMyPolyType::Drv2);
+
+    drv = poly.TryGetConcrete<TPolyDerived2>();
+
+    EXPECT_TRUE(drv.operator bool());
+    EXPECT_EQ(drv->BaseField, 0);
+    EXPECT_EQ(drv->Field2, 5);
+}
+
+TEST(TYsonStructTest, TestPolymorphicYsonStructMergeIfPossible)
+{
+    TMyPoly poly;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv1")
+            .Item("base_field").Value(14)
+            // Field1 is missing -- default is 33
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Drv1);
+
+    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 14);
+    EXPECT_EQ(drv1Ptr->Field1, 33);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv1")
+            .Item("field1").Value(18)
+            // BaseField is missing -- default is 42
+        .EndMap();
+
+    poly.Load(node->AsMap(), /*postprocess*/false, /*setDefaults*/false);
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Drv1);
+
+    drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 14); // <- Field must remain the same.
+    EXPECT_EQ(drv1Ptr->Field1, 18);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TPolyHolder
+    : public TYsonStructLite
+{
+    TMyPoly PolyField;
+
+    REGISTER_YSON_STRUCT_LITE(TPolyHolder);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("poly_field", &TThis::PolyField)
+            .Default();
+
+        registrar.UnrecognizedStrategy(EUnrecognizedStrategy::ThrowRecursive);
+    }
+};
+
+TEST(TYsonStructTest, TestPolymorphicYsonStructSerializeEmpty)
+{
+    TPolyHolder holder;
+
+    auto node = ConvertToNode(holder);
+
+    Deserialize(holder, node->AsMap());
+}
+
+TEST(TYsonStructTest, TestPolymorphicYsonStructAsField)
+{
+    TPolyHolder holder;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("poly_field").BeginMap()
+                .Item("type").Value("drv2")
+                .Item("base_field").Value(17)
+                .Item("field2").Value(144)
+            .EndMap()
+        .EndMap();
+
+    Deserialize(holder, node->AsMap());
+
+    EXPECT_EQ(holder.PolyField.GetCurrentType(), EMyPolyType::Drv2);
+    auto drv = holder.PolyField.TryGetConcrete<TPolyDerived2>();
+
+    EXPECT_TRUE(drv);
+    EXPECT_EQ(drv->BaseField, 17);
+    EXPECT_EQ(drv->Field2, 144);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("poly_field").BeginMap()
+                .Item("type").Value("drv1")
+                .Item("base_field").Value(17)
+                .Item("field2").Value(144)
+            .EndMap()
+        .EndMap();
+
+    // field2 is unrecognized for drv1. Its unrecognized strategy is
+    // Drop by default but holder has recursive throw so it must
+    // throw.
+    EXPECT_THROW(Deserialize(holder, node->AsMap()), std::exception);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TNonComparable
+{ };
+
+static_assert(!std::equality_comparable<TNonComparable>);
+
+void Deserialize(TNonComparable& /*value*/, auto /*node*/)
+{ }
+
+[[maybe_unused]] void Serialize(const TNonComparable& /*value*/, NYson::IYsonConsumer* consumer)
+{
+    consumer->OnBeginMap();
+    consumer->OnEndMap();
+}
+
+struct TComparableYsonStruct
+    : public TYsonStructLite
+{
+    int Value;
+
+    std::vector<int> Values;
+    TIntrusivePtr<TSimpleYsonStruct> SimpleSubStruct;
+    THashMap<int, TIntrusivePtr<TSimpleYsonStruct>> Mapping;
+    IMapNodePtr MapNode;
+
+    bool UnregisteredValue = false;
+
+    REGISTER_YSON_STRUCT_LITE(TComparableYsonStruct);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("value", &TThis::Value)
+            .Default(0);
+        registrar.Parameter("simple_sub_struct", &TThis::SimpleSubStruct)
+            .DefaultCtor([] {
+                auto ptr = New<TSimpleYsonStruct>();
+                ptr->IntValue = 77;
+                return ptr;
+            });
+        registrar.Parameter("mapping", &TThis::Mapping)
+            .DefaultCtor([] {
+                THashMap<int, TIntrusivePtr<TSimpleYsonStruct>> mapping = {};
+                mapping[42] = New<TSimpleYsonStruct>();
+                return mapping;
+            });
+
+        registrar.Parameter("values", &TThis::Values)
+            .Default({1, 2, 3});
+
+        registrar.Parameter("map_node", &TThis::MapNode)
+            .Default();
+    }
+};
+
+static_assert(std::equality_comparable<TComparableYsonStruct>);
+
+struct TNonComparableYsonStruct
+    : public TYsonStructLite
+{
+    TNonComparable Value;
+
+    REGISTER_YSON_STRUCT_LITE(TNonComparableYsonStruct);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("value", &TThis::Value)
+            .Default();
+    }
+};
+
+static_assert(std::equality_comparable<TNonComparableYsonStruct>);
+
+struct TComparableBase
+{
+    static inline int BaseComparisonCalls = 0;
+
+    bool operator==(const TComparableBase&) const
+    {
+        ++BaseComparisonCalls;
+        return true;
+    }
+};
+
+inline int TemplatedComparisonCalls = 0;
+
+template <class T>
+concept CWithTemplatedComparison = requires {
+    typename T::TEnableTemplatedComparison;
+};
+
+template <CWithTemplatedComparison T>
+bool operator==(const T&, const T&)
+{
+    ++TemplatedComparisonCalls;
+    return true;
+}
+
+struct TYsonStructWithComparableBase
+    : public TYsonStructLite
+    , public TComparableBase
+{
+    REGISTER_YSON_STRUCT_LITE(TYsonStructWithComparableBase);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
+};
+
+static_assert(std::equality_comparable<TYsonStructWithComparableBase>);
+
+struct TYsonStructWithTemplatedComparison
+    : public TYsonStructLite
+{
+    using TEnableTemplatedComparison = void;
+
+    REGISTER_YSON_STRUCT_LITE(TYsonStructWithTemplatedComparison);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
+};
+
+static_assert(std::equality_comparable<TYsonStructWithTemplatedComparison>);
+
+TEST(TYsonStructTest, CompareComparable)
+{
+    TComparableYsonStruct lhs;
+    TComparableYsonStruct rhs;
+
+    EXPECT_TRUE(lhs == lhs);
+    EXPECT_TRUE(lhs == rhs);
+
+    rhs.Value = 42;
+    EXPECT_FALSE(lhs == rhs);
+}
+
+TEST(TYsonStructTest, CompareNonComparable)
+{
+    TNonComparableYsonStruct lhs;
+    TNonComparableYsonStruct rhs;
+
+    EXPECT_TRUE(lhs == lhs);
+    EXPECT_FALSE(lhs == rhs);
+}
+
+TEST(TYsonStructTest, CompareRecursively)
+{
+    TComparableYsonStruct lhs;
+    TComparableYsonStruct rhs;
+
+    rhs.SimpleSubStruct->IntValue = 11;
+    EXPECT_FALSE(lhs == rhs);
+}
+
+TEST(TYsonStructTest, CompareDifferentType)
+{
+    TComparableYsonStruct lhs;
+    auto rhs = New<TSimpleYsonStruct>();
+
+    EXPECT_FALSE(static_cast<const TYsonStructBase&>(lhs) == static_cast<const TYsonStructBase&>(*rhs));
+}
+
+TEST(TYsonStructTest, CompareWithDifferentUnregistered)
+{
+    TComparableYsonStruct lhs;
+    TComparableYsonStruct rhs;
+
+    EXPECT_TRUE(lhs == rhs);
+
+    lhs.UnregisteredValue = false;
+    rhs.UnregisteredValue = true;
+    EXPECT_TRUE(lhs == rhs);
+}
+
+TEST(TYsonStructTest, DontOverrideWithComparisonFromBase)
+{
+    TYsonStructWithComparableBase::BaseComparisonCalls = 0;
+    auto cleanup = Finally([] {
+        TYsonStructWithComparableBase::BaseComparisonCalls = 0;
+    });
+
+    TYsonStructWithComparableBase value;
+    EXPECT_TRUE(value == value);
+
+    EXPECT_EQ(TYsonStructWithComparableBase::BaseComparisonCalls, 0);
+}
+
+TEST(TYsonStructTest, OverrideWithComparisonFromTemplatedFunction)
+{
+    TemplatedComparisonCalls = 0;
+    auto cleanup = Finally([] {
+        TemplatedComparisonCalls = 0;
+    });
+
+    TYsonStructWithTemplatedComparison value;
+    EXPECT_TRUE(value == value);
+
+    EXPECT_EQ(TemplatedComparisonCalls, 1);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct THasFieldWithDefaultedStrategy
+    : public TYsonStructLite
+{
+    TIntrusivePtr<TConfigWithOneLevelNesting> Field;
+
+    REGISTER_YSON_STRUCT_LITE(THasFieldWithDefaultedStrategy);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field", &TThis::Field)
+            .Default()
+            .DefaultUnrecognizedStrategy(EUnrecognizedStrategy::Throw);
+    }
+};
+
+struct THasFieldWithDefaultedStrategyAndOwnRecursiveStrategy
+    : public TYsonStructLite
+{
+    TIntrusivePtr<TConfigWithOneLevelNesting> Field;
+
+    REGISTER_YSON_STRUCT_LITE(THasFieldWithDefaultedStrategyAndOwnRecursiveStrategy);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.UnrecognizedStrategy(EUnrecognizedStrategy::KeepRecursive);
+
+        registrar.Parameter("field", &TThis::Field)
+            .Default()
+            .DefaultUnrecognizedStrategy(EUnrecognizedStrategy::Throw)
+            .EnforceDefaultUnrecognizedStrategy();
+    }
+};
+
+TEST(TYsonStructTest, DefaultUnrecognizedStrategy1)
+{
+    auto source = BuildYsonNodeFluently().BeginMap()
+        .Item("field").BeginMap()
+            .Item("unrecognized").Value(42)
+        .EndMap()
+    .EndMap();
+
+    THasFieldWithDefaultedStrategy yson = {};
+    EXPECT_ANY_THROW(Deserialize(yson, source->AsMap()));
+}
+
+TEST(TYsonStructTest, DefaultUnrecognizedStrategy2)
+{
+    auto source = BuildYsonNodeFluently().BeginMap()
+        .Item("field").BeginMap()
+            .Item("sub").BeginMap()
+            .EndMap()
+        .EndMap()
+    .EndMap();
+
+    THasFieldWithDefaultedStrategy yson = {};
+    Deserialize(yson, source->AsMap());
+}
+
+TEST(TYsonStructTest, DefaultUnrecognizedStrategy3)
+{
+    auto source = BuildYsonNodeFluently().BeginMap()
+        .Item("field").BeginMap()
+            .Item("unrecognized").Value(42)
+        .EndMap()
+    .EndMap();
+
+    THasFieldWithDefaultedStrategyAndOwnRecursiveStrategy yson = {};
+    EXPECT_ANY_THROW(Deserialize(yson, source->AsMap()));
+}
 
 } // namespace
 } // namespace NYT::NYTree

@@ -18,13 +18,13 @@ DEFINE_REFCOUNTED_TYPE(TProducerCounters)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const static auto& Logger = SolomonLogger;
+static constexpr auto& Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void TProducerCounters::ClearOutdated(i64 lastIteration)
 {
-    std::vector<TString> countersToRemove;
+    std::vector<std::string> countersToRemove;
     for (const auto& [name, counter] : Counters) {
         if (std::get<1>(counter) != lastIteration) {
             countersToRemove.push_back(name);
@@ -34,7 +34,7 @@ void TProducerCounters::ClearOutdated(i64 lastIteration)
         Counters.erase(name);
     }
 
-    std::vector<TString> gaugesToRemove;
+    std::vector<std::string> gaugesToRemove;
     for (const auto& [name, gauge] : Gauges) {
         if (gauge.second != lastIteration) {
             gaugesToRemove.push_back(name);
@@ -65,7 +65,7 @@ bool TProducerCounters::IsEmpty() const
 ////////////////////////////////////////////////////////////////////////////////
 
 TCounterWriter::TCounterWriter(
-    IRegistryImplPtr registry,
+    IRegistryPtr registry,
     TProducerCountersPtr counters,
     i64 iteration)
     : Registry_(std::move(registry))
@@ -94,7 +94,7 @@ void TCounterWriter::PopTag()
     Counters_.pop_back();
 }
 
-void TCounterWriter::AddGauge(const TString& name, double value)
+void TCounterWriter::AddGauge(const std::string& name, double value)
 {
     auto& [gauge, iteration] = Counters_.back()->Gauges[name];
     iteration = Iteration_;
@@ -114,7 +114,7 @@ void TCounterWriter::AddGauge(const TString& name, double value)
     gauge.Update(value);
 }
 
-void TCounterWriter::AddCounter(const TString& name, i64 value)
+void TCounterWriter::AddCounter(const std::string& name, i64 value)
 {
     auto& [counter, iteration, lastValue] = Counters_.back()->Counters[name];
     iteration = Iteration_;
@@ -150,7 +150,7 @@ struct TOwningProducer
 };
 
 void DoCollectBatch(
-    const IRegistryImplPtr& profiler,
+    const IRegistryPtr& profiler,
     std::vector<TOwningProducer>&& batchArg,
     const TEventTimer& collectDuration)
 {
@@ -186,7 +186,7 @@ void DoCollectBatch(
 
 TFuture<void> CollectBatchAsync(
     const IInvokerPtr& invoker,
-    const IRegistryImplPtr& profiler,
+    const IRegistryPtr& profiler,
     std::vector<TOwningProducer>&& batch,
     const TEventTimer& collectDuration)
 {
@@ -200,7 +200,7 @@ void TProducerSet::AddProducer(TProducerStatePtr state)
     Producers_.insert(std::move(state));
 }
 
-void TProducerSet::Collect(IRegistryImplPtr profiler, IInvokerPtr invoker)
+void TProducerSet::Collect(IRegistryPtr profiler, IInvokerPtr invoker)
 {
     std::vector<TFuture<void>> offloadFutures;
     std::deque<TProducerStatePtr> toRemove;
@@ -251,7 +251,7 @@ void TProducerSet::Collect(IRegistryImplPtr profiler, IInvokerPtr invoker)
     }
 }
 
-void TProducerSet::Profile(const TProfiler& profiler)
+void TProducerSet::Profile(const TWeakProfiler& profiler)
 {
     SelfProfiler_ = profiler;
     ProducerCollectDuration_ = profiler.Timer("/producer_collect_duration");

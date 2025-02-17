@@ -85,6 +85,7 @@ public:
     TPipeline(TDataShard * self);
     ~TPipeline();
 
+    void Reset();
     bool Load(NIceDb::TNiceDb& db);
     void UpdateConfig(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TPipelineConfig& cfg);
 
@@ -171,6 +172,8 @@ public:
     bool HasCreateCdcStream() const { return SchemaTx && SchemaTx->IsCreateCdcStream(); }
     bool HasAlterCdcStream() const { return SchemaTx && SchemaTx->IsAlterCdcStream(); }
     bool HasDropCdcStream() const { return SchemaTx && SchemaTx->IsDropCdcStream(); }
+    bool HasCreateIncrementalRestoreSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalRestoreSrc(); }
+    bool HasCreateIncrementalBackupSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalBackupSrc(); }
 
     ui64 CurrentSchemaTxId() const {
         if (SchemaTx)
@@ -424,11 +427,13 @@ private:
             ui64 Step;
             ui64 TxId;
             mutable ui32 Counter;
+            mutable ui32 TxCounter;
 
             TItem(const TRowVersion& from)
                 : Step(from.Step)
                 , TxId(from.TxId)
                 , Counter(1u)
+                , TxCounter(0u)
             {}
 
             friend constexpr bool operator<(const TItem& a, const TItem& b) {
@@ -442,6 +447,7 @@ private:
 
         using TItemsSet = TSet<TItem>;
         using TTxIdMap = THashMap<ui64, TItemsSet::iterator>;
+
     public:
         inline void Add(ui64 txId, TRowVersion version) {
             auto res = ItemsSet.emplace(version);
@@ -450,6 +456,7 @@ private:
             auto res2 = TxIdMap.emplace(txId, res.first);
             Y_VERIFY_S(res2.second, "Unexpected duplicate immediate tx " << txId
                     << " committing at " << version);
+            res.first->TxCounter += 1;
         }
 
         inline void Add(TRowVersion version) {
@@ -458,17 +465,34 @@ private:
                 res.first->Counter += 1;
         }
 
-        inline void Remove(ui64 txId) {
-            if (auto it = TxIdMap.find(txId); it != TxIdMap.end()) {
-                if (--it->second->Counter == 0)
-                    ItemsSet.erase(it->second);
-                TxIdMap.erase(it);
-            }
+        inline void Remove(ui64 txId, TRowVersion version) {
+            auto it = TxIdMap.find(txId);
+            Y_VERIFY_S(it != TxIdMap.end(), "Removing immediate tx " << txId << " " << version
+                    << " does not match a previous Add");
+            Y_VERIFY_S(TRowVersion(it->second->Step, it->second->TxId) == version, "Removing immediate tx " << txId << " " << version
+                    << " does not match a previous Add " << TRowVersion(it->second->Step, it->second->TxId));
+            Y_VERIFY_S(it->second->TxCounter > 0, "Removing immediate tx " << txId << " " << version
+                    << " with a mismatching TxCounter");
+            --it->second->TxCounter;
+            if (--it->second->Counter == 0)
+                ItemsSet.erase(it->second);
+            TxIdMap.erase(it);
         }
 
         inline void Remove(TRowVersion version) {
-            if (auto it = ItemsSet.find(version); it != ItemsSet.end() && --it->Counter == 0)
+            auto it = ItemsSet.find(version);
+            Y_VERIFY_S(it != ItemsSet.end(), "Removing version " << version
+                    << " does not match a previous Add");
+            if (--it->Counter == 0) {
+                Y_VERIFY_S(it->TxCounter == 0, "Removing version " << version
+                    << " while TxCounter has active references, possible Add/Remove mismatch");
                 ItemsSet.erase(it);
+            }
+        }
+
+        void Reset() {
+            TxIdMap.clear();
+            ItemsSet.clear();
         }
 
         inline bool HasOpsBelow(TRowVersion upperBound) const {
@@ -518,12 +542,26 @@ private:
     TWaitingSchemeOpsOrder WaitingSchemeOpsOrder;
     TWaitingSchemeOps WaitingSchemeOps;
 
-    TMultiMap<TRowVersion, TAutoPtr<IEventHandle>> WaitingDataTxOps;
+    struct TWaitingDataTxOp {
+        TAutoPtr<IEventHandle> Event;
+        NWilson::TSpan Span;
+
+        TWaitingDataTxOp(TAutoPtr<IEventHandle>&& ev);
+    };
+
+    TMultiMap<TRowVersion, TWaitingDataTxOp> WaitingDataTxOps;
     TCommittingDataTxOps CommittingOps;
 
     THashMap<ui64, TOperation::TPtr> CompletingOps;
 
-    TMultiMap<TRowVersion, TEvDataShard::TEvRead::TPtr> WaitingDataReadIterators;
+    struct TWaitingReadIterator {
+        TEvDataShard::TEvRead::TPtr Event;
+        NWilson::TSpan Span;
+
+        TWaitingReadIterator(TEvDataShard::TEvRead::TPtr&& ev);
+    };
+
+    TMultiMap<TRowVersion, TWaitingReadIterator> WaitingDataReadIterators;
     THashMap<TReadIteratorId, TEvDataShard::TEvRead*, TReadIteratorId::THash> WaitingReadIteratorsById;
 
     bool GetPlannedTx(NIceDb::TNiceDb& db, ui64& step, ui64& txId);

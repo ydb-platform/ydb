@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.17.2)
+VERSION(2.18.0)
 
 LICENSE(BSD-3-Clause)
 
@@ -47,6 +47,7 @@ PY_SRCS(
     pygments/lexers/_lasso_builtins.py
     pygments/lexers/_lilypond_builtins.py
     pygments/lexers/_lua_builtins.py
+    pygments/lexers/_luau_builtins.py
     pygments/lexers/_mapping.py
     pygments/lexers/_mql_builtins.py
     pygments/lexers/_mysql_builtins.py
@@ -180,6 +181,7 @@ PY_SRCS(
     pygments/lexers/ml.py
     pygments/lexers/modeling.py
     pygments/lexers/modula2.py
+    pygments/lexers/mojo.py
     pygments/lexers/monte.py
     pygments/lexers/mosel.py
     pygments/lexers/ncl.py
@@ -234,6 +236,7 @@ PY_SRCS(
     pygments/lexers/smv.py
     pygments/lexers/snobol.py
     pygments/lexers/solidity.py
+    pygments/lexers/soong.py
     pygments/lexers/sophia.py
     pygments/lexers/special.py
     pygments/lexers/spice.py
@@ -241,6 +244,7 @@ PY_SRCS(
     pygments/lexers/srcinfo.py
     pygments/lexers/stata.py
     pygments/lexers/supercollider.py
+    pygments/lexers/tact.py
     pygments/lexers/tal.py
     pygments/lexers/tcl.py
     pygments/lexers/teal.py
@@ -257,6 +261,7 @@ PY_SRCS(
     pygments/lexers/tnt.py
     pygments/lexers/trafficscript.py
     pygments/lexers/typoscript.py
+    pygments/lexers/typst.py
     pygments/lexers/ul4.py
     pygments/lexers/unicon.py
     pygments/lexers/urbi.py
@@ -294,6 +299,7 @@ PY_SRCS(
     pygments/styles/autumn.py
     pygments/styles/borland.py
     pygments/styles/bw.py
+    pygments/styles/coffee.py
     pygments/styles/colorful.py
     pygments/styles/default.py
     pygments/styles/dracula.py

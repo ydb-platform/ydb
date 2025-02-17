@@ -1,6 +1,7 @@
 #pragma once
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/core/tx/columnshard/counters/common/owner.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NOlap::NBlobOperations {
 
@@ -15,10 +16,21 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RepliesCount;
     NMonitoring::TDynamicCounters::TCounterPtr ReplyBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr GCFinishedCount;
+    NMonitoring::THistogramPtr GCFinishedBlobsCount;
+    NMonitoring::THistogramPtr GCFinishedBytes;
+
     NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
     NMonitoring::TDynamicCounters::TCounterPtr FailBytes;
+
 public:
     TRemoveGCCounters(const TConsumerCounters& owner);
+
+    void OnGCFinished(const ui64 bytes, const ui32 count) const {
+        GCFinishedCount->Add(1);
+        GCFinishedBytes->Collect(bytes);
+        GCFinishedBlobsCount->Collect(count);
+    }
 
     void OnRequest(const ui64 bytes) const {
         RequestsCount->Add(1);
@@ -36,4 +48,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations

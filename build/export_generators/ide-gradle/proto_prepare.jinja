@@ -1,0 +1,39 @@
+{#- empty string #}
+{%- if target.proto_files|length %}
+val prepareMainProtos = tasks.register<Copy>("prepareMainProtos") {
+    from("$project_root") {
+{#- list of all current project proto files -#}
+{%-     for proto in target.proto_files %}
+        include("{{ proto }}")
+{%-     endfor %}
+    }
+    into(mainProtosDir)
+}
+{%- endif %}
+
+{%  if libraries|length -%}
+val extractMainLibrariesProtos = tasks.register<Copy>("extractMainLibrariesProtos") {
+    from("$project_root") {
+{#- list of all library directories -#}
+{%-     for library in libraries -%}
+{%-         set path_and_jar = rsplit(library.jar, '/', 2) %}
+        include("{{ path_and_jar[0] }}/**/*.proto")
+{%-     endfor %}
+    }
+    into(mainExtractedIncludeProtosDir)
+}
+
+{% endif -%}
+afterEvaluate {
+{%- if target.proto_files|length %}
+    tasks.getByName("extractProto").dependsOn(prepareMainProtos)
+{%- endif %}
+{%- if libraries|length %}
+    tasks.getByName("extractProto").dependsOn(extractMainLibrariesProtos)
+{%- endif %}
+}
+
+tasks.getByName("sourcesJar").dependsOn("generateProto")
+{%- if with_kotlin %}
+tasks.getByName("compileKotlin").dependsOn("generateProto")
+{%- endif %}

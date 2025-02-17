@@ -2,59 +2,28 @@
 
 #include "public.h"
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <yt/yt/core/misc/intrusive_mpsc_stack.h>
 
 namespace NYT::NTracing {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAllocationTags : public TRefCounted
+//! An immutable ref-counted list of allocation tags.
+class TAllocationTagList
+    : public TRefCounted
+    , public TIntrusiveListItem<TAllocationTagList>
 {
 public:
-    using TKey = TString;
-    using TValue = TString;
-    using TTags = std::vector<std::pair<TKey, TValue>>;
+    explicit TAllocationTagList(TAllocationTags tags);
 
-    explicit TAllocationTags(TTags tags);
-
-    const TTags& GetTags() const noexcept;
-
-    const TTags* GetTagsPtr() const noexcept;
-
-    std::optional<TValue> FindTagValue(const TKey& key) const;
-
-    static std::optional<TValue> FindTagValue(
-        const TTags& tags,
-        const TKey& key);
+    const TAllocationTags& GetTags() const noexcept;
+    std::optional<TAllocationTagValue> FindTagValue(const TAllocationTagKey& key) const;
 
 private:
-    friend class TAllocationTagsFreeList;
-
-    const TTags Tags_;
-    TAllocationTags* Next_ = nullptr;
+    const TAllocationTags Tags_;
 };
 
-DEFINE_REFCOUNTED_TYPE(TAllocationTags)
-
-class TAllocationTagsFreeList
-{
-public:
-    //! Decreases refcount of tagsRawPtr. If refcount becomes zero, puts the pointer into queue.
-    //!
-    //! The intended usage is
-    //! list->ScheduleFree(tags.Release());
-    //! where tags is TAllocationTagsPtr.
-    void ScheduleFree(TAllocationTags* tagsRawPtr);
-
-    //! Free all the pointers in the queue.
-    void Cleanup();
-
-    ~TAllocationTagsFreeList();
-
-private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Spinlock_);
-    TAllocationTags* Head_ = nullptr;
-};
+DEFINE_REFCOUNTED_TYPE(TAllocationTagList)
 
 ////////////////////////////////////////////////////////////////////////////////
 

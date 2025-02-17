@@ -11,9 +11,9 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -370,11 +370,11 @@ public:
         TSmallVec<NTable::TUpdateOp> ops;
         ConvertTableValues(Scheme, tableInfo, commands, ops, nullptr);
 
-        UserDb.UpdateRow(tableId, key, ops);
+        UserDb.UpsertRow(tableId, key, ops);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
-        UserDb.UpdateRow(tableId, key, ops);
+    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+        UserDb.UpsertRow(tableId, key, ops);
     }
 
     void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
@@ -383,6 +383,10 @@ public:
 
     void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
         UserDb.InsertRow(tableId, key, ops);
+    }
+
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+        UserDb.UpdateRow(tableId, key, ops);
     }
 
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
@@ -502,7 +506,7 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
 
     auto tabletId = self->TabletID();
     auto txId = stepTxId.TxId;
-    const TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+    const TActorSystem* actorSystem = ctx.ActorSystem();
     EngineSettings->LogErrorWriter = [actorSystem, tabletId, txId](const TString& message) {
         LOG_ERROR_S(*actorSystem, NKikimrServices::MINIKQL_ENGINE,
             "Shard %" << tabletId << ", txid %" <<txId << ", engine error: " << message);
@@ -527,7 +531,7 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
     ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, GetUserDb(), EngineHost->GetSettings().DisableByKeyFilter);
     ComputeCtx->Database = &txc.DB;
 
-    KqpAlloc = MakeHolder<TScopedAlloc>(__LOCATION__, TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
+    KqpAlloc = std::make_shared<TScopedAlloc>(__LOCATION__, TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
     KqpTypeEnv = MakeHolder<TTypeEnvironment>(*KqpAlloc);
     KqpAlloc->Release();
 
@@ -725,7 +729,7 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(NKikimrTxDataShard::TKqpTra
         settings.TerminateOnError = false;
         Y_ABORT_UNLESS(KqpAlloc);
         KqpAlloc->SetLimit(10_MB);
-        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), *KqpAlloc.Get(), KqpExecCtx, settings, KqpLogFunc);
+        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), KqpAlloc, KqpExecCtx, settings, KqpLogFunc);
     }
 
     return *KqpTasksRunner;

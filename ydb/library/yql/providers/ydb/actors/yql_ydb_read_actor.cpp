@@ -1,7 +1,7 @@
 #include "yql_ydb_read_actor.h"
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/yql/providers/ydb/proto/range.pb.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
@@ -10,6 +10,7 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <util/generic/size_literals.h>
@@ -109,8 +110,8 @@ public:
     static constexpr char ActorName[] = "YQL_YDB_READ_ACTOR";
 
 private:
-    void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
-    void LoadState(const NDqProto::TSourceState&) final {}
+    void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {}
+    void LoadState(const TSourceState&) final {}
     void CommitState(const NDqProto::TCheckpoint&) final {}
     
     ui64 GetInputIndex() const final {
@@ -201,7 +202,7 @@ private:
             RequestsDone = true;
             while(!Blocks.empty())
                 Blocks.pop();
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, res.GetIssues(), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, ::NYdb::NAdapters::ToYqlIssues(res.GetIssues()), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
         } else {
             WakeUpTime = TMonotonic::Now() + Min(TDuration::Seconds(3), TDuration::MilliSeconds(0x30U * (1U << ++Retried)));
             ActorSystem->Schedule(WakeUpTime, new IEventHandle(SelfId(), TActorId(), new TEvPrivate::TEvRetryTime));
@@ -269,7 +270,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateYdbReadActor(
     keyColumnTypes.reserve(params.GetKeyColumnTypes().size());
     for (auto i = 0; i < params.GetKeyColumnTypes().size(); ++i)
         // TODO support pg types
-        keyColumnTypes.emplace_back(NKikimr::NScheme::TTypeInfo(params.GetKeyColumnTypes().Get(i), nullptr));
+        keyColumnTypes.emplace_back(NKikimr::NScheme::TTypeInfo(params.GetKeyColumnTypes().Get(i)));
 
     ui64 maxRowsInRequest = 0ULL;
     ui64 maxBytesInRequest = 0ULL;

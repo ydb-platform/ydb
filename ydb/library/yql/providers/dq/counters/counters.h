@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_execution.h>
+#include <yql/essentials/core/yql_execution.h>
 
 #include <util/string/split.h>
 

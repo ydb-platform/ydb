@@ -7,11 +7,15 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/group_stat.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+#include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
@@ -19,6 +23,7 @@
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/mind/table_adapter.h>
+#include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
@@ -36,6 +41,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/core/util/format.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

@@ -22,7 +22,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = TransactionClientLogger;
+static constexpr auto& Logger = TransactionClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -38,7 +38,7 @@ IChannelPtr CreateTimestampProviderChannel(
     auto channel = CreateBalancingChannel(
         config,
         std::move(channelFactory),
-        std::move(endpointDescription),
+        endpointDescription,
         std::move(endpointAttributes));
     channel = CreateRetryingChannel(
         config,
@@ -49,7 +49,7 @@ IChannelPtr CreateTimestampProviderChannel(
 IChannelPtr CreateTimestampProviderChannelFromAddresses(
     TRemoteTimestampProviderConfigPtr config,
     IChannelFactoryPtr channelFactory,
-    const std::vector<TString>& discoveredAddresses)
+    const std::vector<std::string>& discoveredAddresses)
 {
     auto channelConfig = CloneYsonStruct(config);
     if (!discoveredAddresses.empty()) {
@@ -66,9 +66,11 @@ class TRemoteTimestampProvider
 public:
     TRemoteTimestampProvider(
         IChannelPtr channel,
-        TRemoteTimestampProviderConfigPtr config)
+        TRemoteTimestampProviderConfigPtr config,
+        bool allowOldClocks)
         : TTimestampProviderBase(config->LatestTimestampUpdatePeriod)
         , Config_(std::move(config))
+        , AllowOldClocks_(allowOldClocks)
         , Proxy_(std::move(channel))
     {
         Proxy_.SetDefaultTimeout(Config_->RpcTimeout);
@@ -76,6 +78,7 @@ public:
 
 private:
     const TRemoteTimestampProviderConfigPtr Config_;
+    const bool AllowOldClocks_ = false;
 
     TTimestampServiceProxy Proxy_;
 
@@ -85,8 +88,13 @@ private:
         req->SetResponseHeavy(true);
         req->set_count(count);
         if (clockClusterTag != InvalidCellTag) {
-            req->set_clock_cluster_tag(ToProto<int>(clockClusterTag));
+            if (!AllowOldClocks_) {
+                req->RequireServerFeature(ETimestampProviderFeature::AlienClocks);
+            }
+
+            req->set_clock_cluster_tag(ToProto(clockClusterTag));
         }
+
         return req->Invoke().Apply(
             BIND([clockClusterTag] (const TTimestampServiceProxy::TRspGenerateTimestampsPtr& rsp) {
             auto responseClockClusterTag = rsp->has_clock_cluster_tag()
@@ -97,7 +105,7 @@ private:
             if (clockClusterTag != InvalidCellTag && responseClockClusterTag != InvalidCellTag &&
                 clockClusterTag != responseClockClusterTag)
             {
-                THROW_ERROR_EXCEPTION(EErrorCode::ClockClusterTagMismatch, "Clock cluster tag mismatch")
+                THROW_ERROR_EXCEPTION(NTransactionClient::EErrorCode::ClockClusterTagMismatch, "Clock cluster tag mismatch")
                     << TErrorAttribute("request_clock_cluster_tag", clockClusterTag)
                     << TErrorAttribute("response_clock_cluster_tag", responseClockClusterTag);
             }
@@ -111,19 +119,58 @@ private:
 
 ITimestampProviderPtr CreateRemoteTimestampProvider(
     TRemoteTimestampProviderConfigPtr config,
+    IChannelPtr channel,
+    bool allowOldClocks)
+{
+    return New<TRemoteTimestampProvider>(
+        std::move(channel),
+        std::move(config),
+        allowOldClocks);
+}
+
+ITimestampProviderPtr CreateRemoteTimestampProvider(
+    TRemoteTimestampProviderConfigPtr config,
     IChannelPtr channel)
 {
-    return New<TRemoteTimestampProvider>(std::move(channel), std::move(config));
+    return CreateRemoteTimestampProvider(
+        std::move(config),
+        std::move(channel),
+        /*allowOldClocks*/ false);
+}
+
+ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
+    TRemoteTimestampProviderConfigPtr config,
+    IChannelPtr channel,
+    bool allowOldClocks)
+{
+    auto underlying = CreateRemoteTimestampProvider(
+        config,
+        std::move(channel),
+        allowOldClocks);
+    return CreateBatchingTimestampProvider(
+        std::move(underlying),
+        config->BatchPeriod);
 }
 
 ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
     TRemoteTimestampProviderConfigPtr config,
     IChannelPtr channel)
 {
-    auto underlying = CreateRemoteTimestampProvider(config, std::move(channel));
-    return CreateBatchingTimestampProvider(
-        std::move(underlying),
-        config->BatchPeriod);
+    return CreateBatchingRemoteTimestampProvider(
+        std::move(config),
+        std::move(channel),
+        /*allowOldClocks*/ false);
+}
+
+ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
+    const TRemoteTimestampProviderConfigPtr& config,
+    const IChannelFactoryPtr& channelFactory,
+    bool allowOldClocks)
+{
+    return CreateBatchingRemoteTimestampProvider(
+        config,
+        CreateTimestampProviderChannel(config, channelFactory),
+        allowOldClocks);
 }
 
 ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
@@ -132,7 +179,8 @@ ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
 {
     return CreateBatchingRemoteTimestampProvider(
         config,
-        CreateTimestampProviderChannel(config, channelFactory));
+        channelFactory,
+        /*allowOldClocks*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -164,7 +212,10 @@ TAlienRemoteTimestampProvidersMap CreateAlienTimestampProvidersMap(
         EmplaceOrCrash(
             alienProvidersMap,
             alienClockCellTag,
-            CreateBatchingRemoteTimestampProvider(foreignProviderConfig->TimestampProvider, channelFactory));
+            CreateBatchingRemoteTimestampProvider(
+                foreignProviderConfig->TimestampProvider,
+                channelFactory,
+                /*allowOldClocks*/ true));
     }
 
     return alienProvidersMap;
@@ -173,4 +224,3 @@ TAlienRemoteTimestampProvidersMap CreateAlienTimestampProvidersMap(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTransactionClient
-

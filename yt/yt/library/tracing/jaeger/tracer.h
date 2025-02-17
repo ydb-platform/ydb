@@ -1,6 +1,6 @@
 #pragma once
 
-#include "public.h"
+#include "private.h"
 
 #include <yt/yt/library/tracing/tracer.h>
 
@@ -10,12 +10,12 @@
 #include <yt/yt/library/tvm/service/public.h>
 
 #include <yt/yt/core/misc/mpsc_stack.h>
-#include <yt/yt/core/misc/atomic_object.h>
 
 #include <yt/yt/core/rpc/grpc/config.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
@@ -28,7 +28,7 @@ class TJaegerTracerDynamicConfig
     : public NYTree::TYsonStruct
 {
 public:
-    NRpc::NGrpc::TChannelConfigPtr CollectorChannelConfig;
+    NRpc::NGrpc::TChannelConfigPtr CollectorChannel;
 
     std::optional<i64> MaxRequestSize;
 
@@ -82,6 +82,9 @@ public:
 
     NAuth::TTvmServiceConfigPtr TvmService;
 
+    // Does not send spans to a collector, but just drops them instead. Logs batch and span count.
+    bool TestDropSpans;
+
     TJaegerTracerConfigPtr ApplyDynamic(const TJaegerTracerDynamicConfigPtr& dynamicConfig) const;
 
     bool IsEnabled() const;
@@ -95,13 +98,11 @@ DEFINE_REFCOUNTED_TYPE(TJaegerTracerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TJaegerTracer)
-
 class TBatchInfo
 {
 public:
-    TBatchInfo();
-    TBatchInfo(const TString& endpoint);
+    TBatchInfo() = default;
+    explicit TBatchInfo(const TString& endpoint);
 
     void PopFront();
     void EmplaceBack(int size, NYT::TSharedRef&& value);
@@ -110,18 +111,21 @@ public:
     std::tuple<std::vector<TSharedRef>, int, int> PeekQueue(const TJaegerTracerConfigPtr& config, std::optional<TSharedRef> processInfo);
 
 private:
+    const NProfiling::TCounter TracesDequeued_;
+    const NProfiling::TCounter TracesDropped_;
+    const NProfiling::TGauge MemoryUsage_;
+    const NProfiling::TGauge TraceQueueSize_;
+
     std::deque<std::pair<int, TSharedRef>> BatchQueue_;
 
     i64 QueueMemory_ = 0;
     i64 QueueSize_ = 0;
-
-    NProfiling::TCounter TracesDequeued_;
-    NProfiling::TCounter TracesDropped_;
-    NProfiling::TGauge MemoryUsage_;
-    NProfiling::TGauge TraceQueueSize_;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 class TJaegerChannelManager
+    : public TRefCounted
 {
 public:
     TJaegerChannelManager();
@@ -137,25 +141,29 @@ public:
     TInstant GetReopenTime();
 
 private:
+    const NAuth::ITvmServicePtr TvmService_;
+    const TString Endpoint_;
+
+    const TInstant ReopenTime_;
+    const TDuration RpcTimeout_;
+
+    const NProfiling::TCounter PushedBytes_;
+    const NProfiling::TCounter PushErrors_;
+    const NProfiling::TSummary PayloadSize_;
+    const NProfiling::TEventTimer PushDuration_;
+
     NRpc::IChannelPtr Channel_;
-    NAuth::ITvmServicePtr TvmService_;
-
-    TString Endpoint_;
-
-    TInstant ReopenTime_;
-    TDuration RpcTimeout_;
-
-    NProfiling::TCounter PushedBytes_;
-    NProfiling::TCounter PushErrors_;
-    NProfiling::TSummary PayloadSize_;
-    NProfiling::TEventTimer PushDuration_;
 };
+
+DEFINE_REFCOUNTED_TYPE(TJaegerChannelManager)
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TJaegerTracer
     : public ITracer
 {
 public:
-    TJaegerTracer(const TJaegerTracerConfigPtr& config);
+    explicit TJaegerTracer(TJaegerTracerConfigPtr config);
 
     TFuture<void> WaitFlush();
 
@@ -168,6 +176,7 @@ public:
 private:
     const NConcurrency::TActionQueuePtr ActionQueue_;
     const NConcurrency::TPeriodicExecutorPtr FlushExecutor_;
+    const NAuth::ITvmServicePtr TvmService_;
 
     TAtomicIntrusivePtr<TJaegerTracerConfig> Config_;
 
@@ -179,14 +188,13 @@ private:
     i64 TotalMemory_ = 0;
     i64 TotalSize_ = 0;
 
-    TAtomicObject<TPromise<void>> QueueEmptyPromise_ = NewPromise<void>();
+    NThreading::TAtomicObject<TPromise<void>> QueueEmptyPromise_ = NewPromise<void>();
 
-    THashMap<TString, TJaegerChannelManager> CollectorChannels_;
+    THashMap<TString, TJaegerChannelManagerPtr> CollectorChannels_;
     NRpc::NGrpc::TChannelConfigPtr OpenChannelConfig_;
 
-    NAuth::ITvmServicePtr TvmService_;
 
-    void Flush();
+    void DoFlush();
     void DequeueAll(const TJaegerTracerConfigPtr& config);
     void NotifyEmptyQueue();
 

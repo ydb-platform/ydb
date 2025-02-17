@@ -35,7 +35,9 @@ namespace NPageCollection {
                 Buffer.append(chunk.data(), chunk.size());
                 offset += piece;
 
-                if (Buffer.size() >= MaxBlobSize) Flush();
+                if (Buffer.size() >= MaxBlobSize) {
+                    Flush();
+                }
             }
 
             return Record.Push(type, body);

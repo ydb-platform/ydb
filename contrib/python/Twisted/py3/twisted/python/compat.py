@@ -27,7 +27,6 @@ import os
 import platform
 import socket
 import urllib.parse as urllib_parse
-import warnings
 from collections.abc import Sequence
 from functools import reduce
 from html import escape
@@ -421,16 +420,16 @@ def intToBytes(i: int) -> bytes:
 
 def lazyByteSlice(object, offset=0, size=None):
     """
-    Return a copy of the given bytes-like object.
+    Return a memory view of the given bytes-like object.
 
-    If an offset is given, the copy starts at that offset. If a size is
-    given, the copy will only be of that length.
+    If an offset is given, the view starts at that offset. If a size is
+    given, the view will only be of that length.
 
-    @param object: C{bytes} to be copied.
+    @param object: C{bytes} to be sliced.
 
-    @param offset: C{int}, starting index of copy.
+    @param offset: C{int}, starting index of view.
 
-    @param size: Optional, if an C{int} is given limit the length of copy
+    @param size: Optional, if an C{int} is given limit the length of the view
         to this size.
     """
     view = memoryview(object)
@@ -495,35 +494,6 @@ def _constructMethod(cls, name, self):
     """
     func = cls.__dict__[name]
     return _MethodType(func, self)
-
-
-def _get_async_param(isAsync=None, **kwargs):
-    """
-    Provide a backwards-compatible way to get async param value that does not
-    cause a syntax error under Python 3.7.
-
-    @param isAsync: isAsync param value (should default to None)
-    @type isAsync: L{bool}
-
-    @param kwargs: keyword arguments of the caller (only async is allowed)
-    @type kwargs: L{dict}
-
-    @raise TypeError: Both isAsync and async specified.
-
-    @return: Final isAsync param value
-    @rtype: L{bool}
-    """
-    if "async" in kwargs:
-        warnings.warn(
-            "'async' keyword argument is deprecated, please use isAsync",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-    if isAsync is None and "async" in kwargs:
-        isAsync = kwargs.pop("async")
-    if kwargs:
-        raise TypeError
-    return bool(isAsync)
 
 
 def _pypy3BlockingHack():
@@ -645,6 +615,5 @@ __all__ = [
     "intern",
     "unichr",
     "raw_input",
-    "_get_async_param",
     "Sequence",
 ]

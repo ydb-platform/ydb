@@ -1,6 +1,8 @@
 #pragma once
 #include "defs.h"
 
+#include <google/protobuf/message.h>
+
 namespace NKikimrProto {
     class TLogoBlobID;
 }

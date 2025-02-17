@@ -1,6 +1,6 @@
 #include "table_bindings_from_bindings.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 
 #include <library/cpp/scheme/scheme.h>

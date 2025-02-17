@@ -13,6 +13,8 @@
 #include <tuple>
 #include <vector>
 
+#include <ydb-cpp-sdk/client/result/result.h>
+
 namespace NKikimr::NPQ::NClusterTracker {
 
 inline auto& Ctx() {
@@ -132,6 +134,7 @@ private:
         req->Record.MutableRequest()->SetKeepSession(false);
         req->Record.MutableRequest()->SetQuery(MakeListClustersQuery());
         req->Record.MutableRequest()->SetDatabase(GetDatabase());
+        req->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
         // useless without explicit session
         // req->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
         req->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
@@ -143,46 +146,53 @@ private:
     void HandleWhileWorking(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "HandleWhileWorking TEvQueryResponse");
 
-        const auto& record = ev->Get()->Record.GetRef();
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS && record.GetResponse().GetResults(0).GetValue().GetStruct(0).ListSize()) {
-            LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "HandleWhileWorking TEvQueryResponse UpdateClustersList");
-            UpdateClustersList(record);
+        const auto& record = ev->Get()->Record;
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
+            if (parser.RowsCount()) {
+                LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "HandleWhileWorking TEvQueryResponse UpdateClustersList");
+                UpdateClustersList(parser);
 
-            Y_ABORT_UNLESS(ClustersList);
-            Y_ABORT_UNLESS(ClustersList->Clusters.size());
-            Y_ABORT_UNLESS(ClustersListUpdateTimestamp && *ClustersListUpdateTimestamp);
+                Y_ABORT_UNLESS(ClustersList);
+                Y_ABORT_UNLESS(ClustersList->Clusters.size());
+                Y_ABORT_UNLESS(ClustersListUpdateTimestamp && *ClustersListUpdateTimestamp);
 
-            BroadcastClustersUpdate();
+                BroadcastClustersUpdate();
 
-            Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutSec()), new TEvents::TEvWakeup);
-        } else {
-            LOG_ERROR_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "failed to list clusters: " << record);
-
-            ClustersList = nullptr;
-
-            Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutOnErrorSec()), new TEvents::TEvWakeup);
+                Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutSec()), new TEvents::TEvWakeup);
+                return;
+            }
         }
+
+        LOG_ERROR_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "failed to list clusters: " << record);
+
+        ClustersList = nullptr;
+        Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutOnErrorSec()), new TEvents::TEvWakeup);
     }
 
     template<typename TProtoRecord>
-    void UpdateClustersList(const TProtoRecord& record) {
+    void UpdateClustersList(TProtoRecord& parser) {
         auto clustersList = MakeIntrusive<TClustersList>();
-        auto& t = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
-        clustersList->Clusters.resize(t.ListSize());
+        clustersList->Clusters.resize(parser.RowsCount());
 
-        for (size_t i = 0; i < t.ListSize(); ++i) {
+        bool firstRow = parser.TryNextRow();
+        YQL_ENSURE(firstRow);
+        clustersList->Version = *parser.ColumnParser(5).GetOptionalInt64();
+        size_t i = 0;
+
+        do {
             auto& cluster = clustersList->Clusters[i];
 
-            cluster.Name = t.GetList(i).GetStruct(0).GetOptional().GetText();
+            cluster.Name = *parser.ColumnParser(0).GetOptionalUtf8();
             cluster.Datacenter = cluster.Name;
-            cluster.Balancer = t.GetList(i).GetStruct(1).GetOptional().GetText();
+            cluster.Balancer = *parser.ColumnParser(1).GetOptionalUtf8();
 
-            cluster.IsLocal = t.GetList(i).GetStruct(2).GetOptional().GetBool();
-            cluster.IsEnabled = t.GetList(i).GetStruct(3).GetOptional().GetBool();
-            cluster.Weight = t.GetList(i).GetStruct(4).GetOptional().GetUint64();
-        }
+            cluster.IsLocal = *parser.ColumnParser(2).GetOptionalBool();
+            cluster.IsEnabled = *parser.ColumnParser(3).GetOptionalBool();
+            cluster.Weight = *parser.ColumnParser(4).GetOptionalUint64();
 
-        clustersList->Version = t.GetList(0).GetStruct(5).GetOptional().GetInt64();
+            ++i;
+        } while (parser.TryNextRow());
 
         ClustersList = std::move(clustersList);
         ClustersListUpdateTimestamp = Ctx().Now();

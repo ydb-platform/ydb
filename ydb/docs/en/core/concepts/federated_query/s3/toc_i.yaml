@@ -1,8 +1,7 @@
 items:
-- { name: Reading data through connections,             href: external_data_source.md }
-- { name: Reading data through external tables,         href: external_table.md }
-- { name: Upload data to S3 buckets,                    href: write_data.md }
-- { name: Data formats and compression algorithms,      href: formats.md }
-- { name: Data partitioning,                            href: partitioning.md }
-- { name: Advanced partitioning,                        href: partition_projection.md }
-
+- { name: Reading data through connections,        href: external_data_source.md }
+- { name: Reading data through external tables,    href: external_table.md }
+- { name: Writing data to S3 buckets,              href: write_data.md }
+- { name: Data formats and compression algorithms, href: formats.md }
+- { name: Data partitioning,                       href: partitioning.md }
+- { name: Extended data partitioning,              href: partition_projection.md }

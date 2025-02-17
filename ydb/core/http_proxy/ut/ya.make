@@ -1,10 +1,5 @@
 UNITTEST_FOR(ydb/core/http_proxy)
 
-OWNER(
-    g:kikimr
-    g:logbroker
-)
-
 SIZE(MEDIUM)
 
 FORK_SUBTESTS()
@@ -22,14 +17,15 @@ PEERDIR(
     ydb/library/grpc/server/actors
     ydb/library/persqueue/tests
     ydb/library/testlib/service_mocks
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql/pg_dummy
-    ydb/public/sdk/cpp/client/ydb_discovery
-    ydb/public/sdk/cpp/client/ydb_types
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
+    ydb/public/sdk/cpp/src/client/discovery
+    ydb/public/sdk/cpp/src/client/types
     ydb/services/datastreams
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery
     ydb/services/ydb
+    ydb/services/ymq
 )
 
 SRCS(

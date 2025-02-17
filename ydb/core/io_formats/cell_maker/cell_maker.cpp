@@ -1,14 +1,14 @@
 #include "cell_maker.h"
 
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/types/uuid/uuid.h>
 
-#include <ydb/library/yql/minikql/dom/yson.h>
-#include <ydb/library/yql/minikql/dom/json.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/utils/utf8.h>
+#include <yql/essentials/minikql/dom/yson.h>
+#include <yql/essentials/minikql/dom/json.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/utils/utf8.h>
 
 #include <contrib/libs/double-conversion/double-conversion/double-conversion.h>
 #include <library/cpp/json/json_writer.h>
@@ -54,9 +54,9 @@ namespace {
         };
 
         int processed = 0;
-        result = Singleton<TCvt>()->StringToDouble(value.Data(), value.Size(), &processed);
+        result = Singleton<TCvt>()->StringToDouble(value.data(), value.size(), &processed);
 
-        return static_cast<size_t>(processed) == value.Size();
+        return static_cast<size_t>(processed) == value.size();
     }
 
     template <>
@@ -81,24 +81,19 @@ namespace {
     }
 
     template <>
-    bool TryParse(TStringBuf value, NYql::NDecimal::TInt128& result) {
-        if (!NYql::NDecimal::IsValid(value)) {
-            return false;
-        }
-
-        result = NYql::NDecimal::FromString(value, NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
-        return true;
-    }
-
-    template <>
     bool TryParse(TStringBuf value, TMaybe<NBinaryJson::TBinaryJson>& result) {
         TString unescaped;
         if (!CheckedUnescape(value, unescaped)) {
             return false;
         }
 
-        result = NBinaryJson::SerializeToBinaryJson(unescaped);
-        return result.Defined();
+        auto serializedJson = NBinaryJson::SerializeToBinaryJson(unescaped);
+        if (std::holds_alternative<TString>(serializedJson)) {
+            return false;
+        }
+
+        result = std::get<NBinaryJson::TBinaryJson>(std::move(serializedJson));
+        return true;
     }
 
     template <>
@@ -108,23 +103,35 @@ namespace {
     }
 
     template <typename T>
-    bool TryParse(TStringBuf value, T& result, TString& err, void* parseParam) {
+    bool TryParse(TStringBuf value, T& result, TString& err, const NScheme::TTypeInfo& typeInfo) {
         Y_UNUSED(value);
         Y_UNUSED(result);
         Y_UNUSED(err);
-        Y_UNUSED(parseParam);
-        Y_ABORT("TryParse with parseParam is unimplemented");
+        Y_UNUSED(typeInfo);
+        Y_ABORT("TryParse with typeInfo is unimplemented");
     }
 
     template <>
-    bool TryParse(TStringBuf value, NPg::TConvertResult& result, TString& err, void* typeDesc) {
+    bool TryParse(TStringBuf value, NYql::NDecimal::TInt128& result, TString& err, const NScheme::TTypeInfo& typeInfo) {
+        Y_UNUSED(err);
+        
+        if (!NYql::NDecimal::IsValid(value)) {
+            return false;
+        }
+
+        result = NYql::NDecimal::FromString(value, typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
+        return true;
+    }
+
+    template<>
+    bool TryParse<NPg::TConvertResult>(TStringBuf value, NPg::TConvertResult& result, TString& err, const NScheme::TTypeInfo& typeInfo) {
         TString unescaped;
         if (!CheckedUnescape(value, unescaped)) {
             err = MakeError<NPg::TConvertResult>();
             return false;
         }
 
-        result = NPg::PgNativeBinaryFromNativeText(unescaped, typeDesc);
+        result = NPg::PgNativeBinaryFromNativeText(unescaped, typeInfo.GetPgTypeDesc());
         if (result.Error) {
             err = *result.Error;
             return false;
@@ -203,6 +210,15 @@ namespace {
             return Conv(c, t, pool, conv);
         }
 
+        static bool Make(TCell& c, TStringBuf v, TMemoryPool& pool, TString& err, TConverter<T, U> conv, const NScheme::TTypeInfo& typeInfo) {
+            T t;
+            if (!TryParse(v, t, err, typeInfo)) {
+                return false;
+            }
+
+            return Conv(c, t, pool, conv);
+        }        
+
         static bool MakeDirect(TCell& c, const T& v, TMemoryPool& pool, TString&, TConverter<T, U> conv = &Implicit<T, U>) {
             return Conv(c, v, pool, conv);
         }
@@ -233,9 +249,9 @@ namespace {
             return Conv(c, v, pool, conv);
         }
 
-        static bool Make(TCell& c, TStringBuf v, TMemoryPool& pool, TString& err, TConverter<T, TStringBuf> conv, void* parseParam) {
+        static bool Make(TCell& c, TStringBuf v, TMemoryPool& pool, TString& err, TConverter<T, TStringBuf> conv, const NScheme::TTypeInfo& typeInfo) {
             T t;
-            if (!TryParse<T>(v, t, err, parseParam)) {
+            if (!TryParse(v, t, err, typeInfo)) {
                 return false;
             }
 
@@ -266,12 +282,12 @@ namespace {
 
 } // anonymous
 
-bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeInfo type, TMemoryPool& pool, TString& err) {
+bool MakeCell(TCell& cell, TStringBuf value, const NScheme::TTypeInfo& typeInfo, TMemoryPool& pool, TString& err) {
     if (value == "null") {
         return true;
     }
 
-    switch (type.GetTypeId()) {
+    switch (typeInfo.GetTypeId()) {
     case NScheme::NTypeIds::Bool:
         return TCellMaker<bool>::Make(cell, value, pool, err);
     case NScheme::NTypeIds::Int8:
@@ -302,6 +318,12 @@ bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeInfo type, TMemoryPoo
         return TCellMaker<TInstant, ui64>::Make(cell, value, pool, err, &MicroSeconds);
     case NScheme::NTypeIds::Interval:
         return TCellMaker<i64>::Make(cell, value, pool, err);
+    case NScheme::NTypeIds::Date32:
+        return TCellMaker<i32>::Make(cell, value, pool, err);
+    case NScheme::NTypeIds::Datetime64:
+    case NScheme::NTypeIds::Timestamp64:
+    case NScheme::NTypeIds::Interval64:
+        return TCellMaker<i64>::Make(cell, value, pool, err);
     case NScheme::NTypeIds::String:
     case NScheme::NTypeIds::String4k:
     case NScheme::NTypeIds::String2m:
@@ -314,9 +336,9 @@ bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeInfo type, TMemoryPoo
     case NScheme::NTypeIds::DyNumber:
         return TCellMaker<TMaybe<TString>, TStringBuf>::Make(cell, value, pool, err, &DyNumberToStringBuf);
     case NScheme::NTypeIds::Decimal:
-        return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value, pool, err, &Int128ToPair);
+        return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value, pool, err, &Int128ToPair, typeInfo);
     case NScheme::NTypeIds::Pg:
-        return TCellMaker<NPg::TConvertResult, TStringBuf>::Make(cell, value, pool, err, &PgToStringBuf, type.GetTypeDesc());
+        return TCellMaker<NPg::TConvertResult, TStringBuf>::Make(cell, value, pool, err, &PgToStringBuf, typeInfo);
     case NScheme::NTypeIds::Uuid:
         return TCellMaker<TUuidHolder, TStringBuf>::Make(cell, value, pool, err, &UuidToStringBuf);
     default:
@@ -324,13 +346,13 @@ bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeInfo type, TMemoryPoo
     }
 }
 
-bool MakeCell(TCell& cell, const NJson::TJsonValue& value, NScheme::TTypeInfo type, TMemoryPool& pool, TString& err) {
+bool MakeCell(TCell& cell, const NJson::TJsonValue& value, const NScheme::TTypeInfo& typeInfo, TMemoryPool& pool, TString& err) {
     if (value.IsNull()) {
         return true;
     }
 
     try {
-        switch (type.GetTypeId()) {
+        switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
             return TCellMaker<bool>::MakeDirect(cell, value.GetBooleanSafe(), pool, err);
         case NScheme::NTypeIds::Int8:
@@ -361,6 +383,12 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, NScheme::TTypeInfo ty
             return TCellMaker<TInstant, ui64>::Make(cell, value.GetStringSafe(), pool, err, &MicroSeconds);
         case NScheme::NTypeIds::Interval:
             return TCellMaker<i64>::MakeDirect(cell, value.GetIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::Date32:
+            return TCellMaker<i32>::MakeDirect(cell, value.GetIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+        case NScheme::NTypeIds::Interval64:
+            return TCellMaker<i64>::MakeDirect(cell, value.GetIntegerSafe(), pool, err);
         case NScheme::NTypeIds::String:
         case NScheme::NTypeIds::String4k:
         case NScheme::NTypeIds::String2m:
@@ -372,15 +400,22 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, NScheme::TTypeInfo ty
         case NScheme::NTypeIds::Json:
             return TCellMaker<TString, TStringBuf>::MakeDirect(cell, NFormats::WriteJson(value), pool, err);
         case NScheme::NTypeIds::JsonDocument:
-            if (const auto& result = NBinaryJson::SerializeToBinaryJson(NFormats::WriteJson(value))) {
-                return TCellMaker<TMaybe<NBinaryJson::TBinaryJson>, TStringBuf>::MakeDirect(cell, result, pool, err, &BinaryJsonToStringBuf);
+            if (auto result = NBinaryJson::SerializeToBinaryJson(NFormats::WriteJson(value)); std::holds_alternative<NBinaryJson::TBinaryJson>(result)) {
+                return TCellMaker<TMaybe<NBinaryJson::TBinaryJson>, TStringBuf>::MakeDirect(cell, std::get<NBinaryJson::TBinaryJson>(std::move(result)), pool, err, &BinaryJsonToStringBuf);
             } else {
                 return false;
             }
         case NScheme::NTypeIds::DyNumber:
             return TCellMaker<TMaybe<TString>, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &DyNumberToStringBuf);
         case NScheme::NTypeIds::Decimal:
-            return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value.GetStringSafe(), pool, err, &Int128ToPair);
+            return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value.GetStringSafe(), pool, err, &Int128ToPair, typeInfo);
+        case NScheme::NTypeIds::Pg:
+            if (auto result = NPg::PgNativeBinaryFromNativeText(value.GetStringSafe(), typeInfo.GetPgTypeDesc()); result.Error) {
+                err = *result.Error;
+                return false;
+            } else {
+                return TCellMaker<NPg::TConvertResult, TStringBuf>::MakeDirect(cell, result, pool, err, &PgToStringBuf);
+            }
         case NScheme::NTypeIds::Uuid:
             return TCellMaker<TUuidHolder, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &UuidToStringBuf);
         default:
@@ -391,12 +426,12 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, NScheme::TTypeInfo ty
     }
 }
 
-bool CheckCellValue(const TCell& cell, NScheme::TTypeInfo type) {
+bool CheckCellValue(const TCell& cell, const NScheme::TTypeInfo& typeInfo) {
     if (cell.IsNull()) {
         return true;
     }
 
-    switch (type.GetTypeId()) {
+    switch (typeInfo.GetTypeId()) {
     case NScheme::NTypeIds::Bool:
     case NScheme::NTypeIds::Int8:
     case NScheme::NTypeIds::Uint8:
@@ -424,6 +459,14 @@ bool CheckCellValue(const TCell& cell, NScheme::TTypeInfo type) {
         return cell.AsValue<ui64>() < NUdf::MAX_TIMESTAMP;
     case NScheme::NTypeIds::Interval:
         return (ui64)std::abs(cell.AsValue<i64>()) < NUdf::MAX_TIMESTAMP;
+    case NScheme::NTypeIds::Date32:
+        return cell.AsValue<i32>() < NUdf::MAX_DATE32;
+    case NScheme::NTypeIds::Datetime64:
+        return cell.AsValue<i64>() < NUdf::MAX_DATETIME64;
+    case NScheme::NTypeIds::Timestamp64:
+        return cell.AsValue<i64>() < NUdf::MAX_TIMESTAMP64;
+    case NScheme::NTypeIds::Interval64:
+        return std::abs(cell.AsValue<i64>()) < NUdf::MAX_INTERVAL64;
     case NScheme::NTypeIds::Utf8:
         return NYql::IsUtf8(cell.AsBuf());
     case NScheme::NTypeIds::Yson:

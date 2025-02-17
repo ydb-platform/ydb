@@ -14,6 +14,12 @@ namespace NKikimr::NFlatTxCoordinator {
         return true;
     }
 
+    void ICoordinatorHooks::BeginPlanStep(ui64 tabletId, ui64 generation, ui64 planStep) {
+        Y_UNUSED(tabletId);
+        Y_UNUSED(generation);
+        Y_UNUSED(planStep);
+    }
+
     ICoordinatorHooks* ICoordinatorHooks::Get() {
         return CoordinatorHooks.load(std::memory_order_acquire);
     }

@@ -5,7 +5,7 @@ from hamcrest import is_
 
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.common.wait_for import wait_for_and_assert
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.predicates import blobstorage
 
@@ -15,7 +15,7 @@ TIMEOUT_SECONDS = 480
 
 class TestReplicationAfterNodesRestart(object):
     def __setup_cluster(self, erasure):
-        self.cluster = kikimr_cluster_factory(configurator=KikimrConfigGenerator(erasure=erasure))
+        self.cluster = KiKiMR(configurator=KikimrConfigGenerator(erasure=erasure))
         self.cluster.start()
 
     def teardown_method(self, method=None):

@@ -5,6 +5,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 
@@ -18,7 +19,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TFinalizeBuildIndex TConfigureParts"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -68,7 +69,7 @@ public:
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             auto* op = tx.MutableFinalizeBuildIndex();
-            PathIdFromPathId(pathId, op->MutablePathId());
+            pathId.ToProto(op->MutablePathId());
 
             op->SetSnapshotTxId(ui64(snapshotTxId));
             op->SetSnapshotStep(ui64(snapshotStepId));
@@ -104,7 +105,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TFinalizeBuildIndex TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -235,7 +236,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
             LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

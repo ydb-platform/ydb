@@ -14,7 +14,12 @@ from typing import List, Optional, Union
 
 import attr
 
-from hypothesis.errors import Flaky, HypothesisException, StopTest
+from hypothesis.errors import (
+    FlakyReplay,
+    FlakyStrategyDefinition,
+    HypothesisException,
+    StopTest,
+)
 from hypothesis.internal import floats as flt
 from hypothesis.internal.compat import int_to_bytes
 from hypothesis.internal.conjecture.data import (
@@ -30,6 +35,7 @@ from hypothesis.internal.conjecture.data import (
     Status,
     StringKWargs,
 )
+from hypothesis.internal.escalation import InterestingOrigin
 from hypothesis.internal.floats import (
     count_between_floats,
     float_to_int,
@@ -43,7 +49,7 @@ class PreviouslyUnseenBehaviour(HypothesisException):
 
 
 def inconsistent_generation():
-    raise Flaky(
+    raise FlakyStrategyDefinition(
         "Inconsistent data generation! Data generation behaved differently "
         "between different runs. Is your data generation depending on external "
         "state?"
@@ -62,6 +68,15 @@ class Killed:
 
     next_node = attr.ib()
 
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        p.text("Killed")
+
+
+def _node_pretty(ir_type, value, kwargs, *, forced):
+    forced_marker = " [forced]" if forced else ""
+    return f"{ir_type} {value}{forced_marker} {kwargs}"
+
 
 @attr.s(slots=True)
 class Branch:
@@ -78,13 +93,32 @@ class Branch:
         assert max_children > 0
         return max_children
 
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        for i, (value, child) in enumerate(self.children.items()):
+            if i > 0:
+                p.break_()
+            p.text(_node_pretty(self.ir_type, value, self.kwargs, forced=False))
+            with p.indent(2):
+                p.break_()
+                p.pretty(child)
+
 
 @attr.s(slots=True, frozen=True)
 class Conclusion:
     """Represents a transition to a finished state."""
 
-    status = attr.ib()
-    interesting_origin = attr.ib()
+    status: Status = attr.ib()
+    interesting_origin: Optional[InterestingOrigin] = attr.ib()
+
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        o = self.interesting_origin
+        # avoid str(o), which can include multiple lines of context
+        origin = (
+            "" if o is None else f", {o.exc_type.__name__} at {o.filename}:{o.lineno}"
+        )
+        p.text(f"Conclusion ({self.status!r}{origin})")
 
 
 # The number of max children where, beyond this, it is practically impossible
@@ -112,9 +146,31 @@ class Conclusion:
 MAX_CHILDREN_EFFECTIVELY_INFINITE = 100_000
 
 
-def compute_max_children(ir_type, kwargs):
-    from hypothesis.internal.conjecture.data import DRAW_STRING_DEFAULT_MAX_SIZE
+def _count_distinct_strings(*, alphabet_size, min_size, max_size):
+    # We want to estimate if we're going to have more children than
+    # MAX_CHILDREN_EFFECTIVELY_INFINITE, without computing a potentially
+    # extremely expensive pow. We'll check if the number of strings in
+    # the largest string size alone is enough to put us over this limit.
+    # We'll also employ a trick of estimating against log, which is cheaper
+    # than computing a pow.
+    #
+    # x = max_size
+    # y = alphabet_size
+    # n = MAX_CHILDREN_EFFECTIVELY_INFINITE
+    #
+    #     x**y > n
+    # <=> log(x**y)  > log(n)
+    # <=> y * log(x) > log(n)
+    definitely_too_large = max_size * math.log(alphabet_size) > math.log(
+        MAX_CHILDREN_EFFECTIVELY_INFINITE
+    )
+    if definitely_too_large:
+        return MAX_CHILDREN_EFFECTIVELY_INFINITE
 
+    return sum(alphabet_size**k for k in range(min_size, max_size + 1))
+
+
+def compute_max_children(ir_type, kwargs):
     if ir_type == "integer":
         min_value = kwargs["min_value"]
         max_value = kwargs["max_value"]
@@ -144,50 +200,27 @@ def compute_max_children(ir_type, kwargs):
             return 1
         return 2
     elif ir_type == "bytes":
-        return 2 ** (8 * kwargs["size"])
+        return _count_distinct_strings(
+            alphabet_size=2**8, min_size=kwargs["min_size"], max_size=kwargs["max_size"]
+        )
     elif ir_type == "string":
         min_size = kwargs["min_size"]
         max_size = kwargs["max_size"]
         intervals = kwargs["intervals"]
-
-        if max_size is None:
-            max_size = DRAW_STRING_DEFAULT_MAX_SIZE
 
         if len(intervals) == 0:
             # Special-case the empty alphabet to avoid an error in math.log(0).
             # Only possibility is the empty string.
             return 1
 
-        # We want to estimate if we're going to have more children than
-        # MAX_CHILDREN_EFFECTIVELY_INFINITE, without computing a potentially
-        # extremely expensive pow. We'll check if the number of strings in
-        # the largest string size alone is enough to put us over this limit.
-        # We'll also employ a trick of estimating against log, which is cheaper
-        # than computing a pow.
-        #
-        # x = max_size
-        # y = len(intervals)
-        # n = MAX_CHILDREN_EFFECTIVELY_INFINITE
-        #
-        #     x**y > n
-        # <=> log(x**y)  > log(n)
-        # <=> y * log(x) > log(n)
-
-        # avoid math.log(1) == 0 and incorrectly failing the below estimate,
-        # even when we definitely are too large.
-        if len(intervals) == 1:
-            definitely_too_large = max_size > MAX_CHILDREN_EFFECTIVELY_INFINITE
-        else:
-            definitely_too_large = max_size * math.log(len(intervals)) > math.log(
-                MAX_CHILDREN_EFFECTIVELY_INFINITE
-            )
-
-        if definitely_too_large:
+        # avoid math.log(1) == 0 and incorrectly failing our effectively_infinite
+        # estimate, even when we definitely are too large.
+        if len(intervals) == 1 and max_size > MAX_CHILDREN_EFFECTIVELY_INFINITE:
             return MAX_CHILDREN_EFFECTIVELY_INFINITE
 
-        # number of strings of length k, for each k in [min_size, max_size].
-        return sum(len(intervals) ** k for k in range(min_size, max_size + 1))
-
+        return _count_distinct_strings(
+            alphabet_size=len(intervals), min_size=min_size, max_size=max_size
+        )
     elif ir_type == "float":
         min_value = kwargs["min_value"]
         max_value = kwargs["max_value"]
@@ -235,20 +268,33 @@ def all_children(ir_type, kwargs):
         min_value = kwargs["min_value"]
         max_value = kwargs["max_value"]
         weights = kwargs["weights"]
-        # it's a bit annoying (but completely feasible) to implement the cases
-        # other than "both sides bounded" here. We haven't needed to yet because
-        # in practice we don't struggle with unbounded integer generation.
-        assert min_value is not None
-        assert max_value is not None
 
-        if weights is None:
-            yield from range(min_value, max_value + 1)
+        if min_value is None and max_value is None:
+            # full 128 bit range.
+            yield from range(-(2**127) + 1, 2**127 - 1)
+
+        elif min_value is not None and max_value is not None:
+            if weights is None:
+                yield from range(min_value, max_value + 1)
+            else:
+                # skip any values with a corresponding weight of 0 (can never be drawn).
+                for weight, n in zip(weights, range(min_value, max_value + 1)):
+                    if weight == 0:
+                        continue
+                    yield n
         else:
-            # skip any values with a corresponding weight of 0 (can never be drawn).
-            for weight, n in zip(weights, range(min_value, max_value + 1)):
-                if weight == 0:
-                    continue
-                yield n
+            assert (min_value is None) ^ (max_value is None)
+            # hard case: only one bound was specified. Here we probe in 128 bits
+            # around shrink_towards, and discard those above max_value or below
+            # min_value respectively.
+            shrink_towards = kwargs["shrink_towards"]
+            if min_value is None:
+                shrink_towards = min(max_value, shrink_towards)
+                yield from range(shrink_towards - (2**127) + 1, max_value)
+            else:
+                assert max_value is None
+                shrink_towards = max(min_value, shrink_towards)
+                yield from range(min_value, shrink_towards + (2**127) - 1)
 
     if ir_type == "boolean":
         p = kwargs["p"]
@@ -259,8 +305,8 @@ def all_children(ir_type, kwargs):
         else:
             yield from [False, True]
     if ir_type == "bytes":
-        size = kwargs["size"]
-        yield from (int_to_bytes(i, size) for i in range(2 ** (8 * size)))
+        for size in range(kwargs["min_size"], kwargs["max_size"] + 1):
+            yield from (int_to_bytes(i, size) for i in range(2 ** (8 * size)))
     if ir_type == "string":
         min_size = kwargs["min_size"]
         max_size = kwargs["max_size"]
@@ -420,7 +466,7 @@ class TreeNode:
         Splits the tree so that it can incorporate a decision at the draw call
         corresponding to the node at position i.
 
-        Raises Flaky if node i was forced.
+        Raises FlakyStrategyDefinition if node i was forced.
         """
 
         if i in self.forced:
@@ -491,6 +537,26 @@ class TreeNode:
                     v.is_exhausted for v in self.transition.children.values()
                 )
         return self.is_exhausted
+
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        indent = 0
+        for i, (ir_type, kwargs, value) in enumerate(
+            zip(self.ir_types, self.kwargs, self.values)
+        ):
+            with p.indent(indent):
+                if i > 0:
+                    p.break_()
+                p.text(_node_pretty(ir_type, value, kwargs, forced=i in self.forced))
+            indent += 2
+
+        with p.indent(indent):
+            if len(self.values) > 0:
+                p.break_()
+            if self.transition is not None:
+                p.pretty(self.transition)
+            else:
+                p.text("unknown")
 
 
 class DataTree:
@@ -681,7 +747,14 @@ class DataTree:
                     attempts = 0
                     while True:
                         if attempts <= 10:
-                            (v, buf) = self._draw(ir_type, kwargs, random=random)
+                            try:
+                                (v, buf) = self._draw(ir_type, kwargs, random=random)
+                            except StopTest:  # pragma: no cover
+                                # it is possible that drawing from a fresh data can
+                                # overrun BUFFER_SIZE, due to eg unlucky rejection sampling
+                                # of integer probes. Retry these cases.
+                                attempts += 1
+                                continue
                         else:
                             (v, buf) = self._draw_from_cache(
                                 ir_type, kwargs, key=id(current_node), random=random
@@ -707,9 +780,13 @@ class DataTree:
                 attempts = 0
                 while True:
                     if attempts <= 10:
-                        (v, buf) = self._draw(
-                            branch.ir_type, branch.kwargs, random=random
-                        )
+                        try:
+                            (v, buf) = self._draw(
+                                branch.ir_type, branch.kwargs, random=random
+                            )
+                        except StopTest:  # pragma: no cover
+                            attempts += 1
+                            continue
                     else:
                         (v, buf) = self._draw_from_cache(
                             branch.ir_type, branch.kwargs, key=id(branch), random=random
@@ -758,7 +835,10 @@ class DataTree:
         tree. This will likely change in future."""
         node = self.root
 
-        def draw(ir_type, kwargs, *, forced=None):
+        def draw(ir_type, kwargs, *, forced=None, convert_forced=True):
+            if ir_type == "float" and forced is not None and convert_forced:
+                forced = int_to_float(forced)
+
             draw_func = getattr(data, f"draw_{ir_type}")
             value = draw_func(**kwargs, forced=forced)
 
@@ -798,16 +878,9 @@ class DataTree:
         return TreeRecordingObserver(self)
 
     def _draw(self, ir_type, kwargs, *, random, forced=None):
-        # we should possibly pull out BUFFER_SIZE to a common file to avoid this
-        # circular import.
-        from hypothesis.internal.conjecture.engine import BUFFER_SIZE
+        from hypothesis.internal.conjecture.data import ir_to_buffer
 
-        cd = ConjectureData(max_length=BUFFER_SIZE, prefix=b"", random=random)
-        draw_func = getattr(cd, f"draw_{ir_type}")
-
-        value = draw_func(**kwargs, forced=forced)
-        buf = cd.buffer
-
+        (value, buf) = ir_to_buffer(ir_type, kwargs, forced=forced, random=random)
         # using floats as keys into branch.children breaks things, because
         # e.g. hash(0.0) == hash(-0.0) would collide as keys when they are
         # in fact distinct child branches.
@@ -887,6 +960,10 @@ class DataTree:
         # the drawn child has been used.
         if child in children:
             children.remove(child)
+
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        return p.pretty(self.root)
 
 
 class TreeRecordingObserver(DataObserver):
@@ -1042,9 +1119,13 @@ class TreeRecordingObserver(DataObserver):
                 node.transition.status != Status.INTERESTING
                 or new_transition.status != Status.VALID
             ):
-                raise Flaky(
-                    f"Inconsistent test results! Test case was {node.transition!r} "
-                    f"on first run but {new_transition!r} on second"
+                old_origin = node.transition.interesting_origin
+                new_origin = new_transition.interesting_origin
+                raise FlakyReplay(
+                    f"Inconsistent results from replaying a test case!\n"
+                    f"  last: {node.transition.status.name} from {old_origin}\n"
+                    f"  this: {new_transition.status.name} from {new_origin}",
+                    (old_origin, new_origin),
                 )
         else:
             node.transition = new_transition

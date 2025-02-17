@@ -11,11 +11,12 @@
 #include <ydb/core/scheme/scheme_borders.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -91,24 +92,24 @@ namespace {
     };
 
     bool ParseRangeKey(
-            const NKikimrMiniKQL::TParams& proto,
-            TConstArrayRef<NScheme::TTypeInfo> keyTypes,
+            const Ydb::TypedValue* proto,
+            TConstArrayRef<TConversionTypeInfo> keyTypes,
             TSerializedCellVec& buf,
             EParseRangeKeyExp exp,
             TVector<TString>& unresolvedKeys)
     {
         TVector<TCell> key;
-        TVector<TString> memoryOwner;
-        if (proto.HasValue()) {
-            if (!proto.HasType()) {
+        TMemoryPool pool(256);
+        if (proto) {
+            if (!proto->Hastype()) {
                 unresolvedKeys.push_back("No type was specified in the range key tuple");
                 return false;
             }
 
-            auto& value = proto.GetValue();
-            auto& type = proto.GetType();
+            auto& value = proto->Getvalue();
+            auto& type = proto->Gettype();
             TString errStr;
-            bool res = NMiniKQL::CellsFromTuple(&type, value, keyTypes, true, key, errStr, memoryOwner);
+            bool res = NKikimr::CellsFromTuple(&type, value, keyTypes, true, true, key, errStr, pool);
             if (!res) {
                 unresolvedKeys.push_back("Failed to parse range key tuple: " + errStr);
                 return false;
@@ -486,6 +487,77 @@ private:
         Become(&TThis::StateWaitNavigate);
     }
 
+    TMaybe<TTableRange> BuildTableRange(TConstArrayRef<TConversionTypeInfo> keyTypeInfos) {
+        bool fromInclusive;
+        EParseRangeKeyExp fromExpand;
+        const Ydb::TypedValue* fromBound;
+        switch (Settings.KeyRange.from_bound_case()) {
+            case Ydb::Table::KeyRange::kGreaterOrEqual: {
+                fromInclusive = true;
+                fromExpand = EParseRangeKeyExp::TO_NULL;
+                fromBound = &Settings.KeyRange.Getgreater_or_equal();
+                break;
+            }
+            case Ydb::Table::KeyRange::kGreater: {
+                fromInclusive = false;
+                fromExpand = EParseRangeKeyExp::NONE;
+                fromBound = &Settings.KeyRange.Getgreater();
+                break;
+            }
+            default: {
+                fromInclusive = true;
+                fromExpand = EParseRangeKeyExp::TO_NULL;
+                fromBound = nullptr;
+                break;
+            }
+        }
+
+        bool toInclusive;
+        EParseRangeKeyExp toExpand;
+        const Ydb::TypedValue* toBound;
+        switch (Settings.KeyRange.to_bound_case()) {
+            case Ydb::Table::KeyRange::kLessOrEqual: {
+                toInclusive = true;
+                toExpand = EParseRangeKeyExp::NONE;
+                toBound = &Settings.KeyRange.Getless_or_equal();
+                break;
+            }
+            case Ydb::Table::KeyRange::kLess: {
+                toInclusive = false;
+                toExpand = EParseRangeKeyExp::TO_NULL;
+                toBound = &Settings.KeyRange.Getless();
+                break;
+            }
+            default: {
+                toInclusive = false;
+                toExpand = EParseRangeKeyExp::NONE;
+                toBound = nullptr;
+                break;
+            }
+        }
+
+        if (!ParseRangeKey(fromBound, keyTypeInfos, KeyFromValues, fromExpand, UnresolvedKeys) ||
+            !ParseRangeKey(toBound, keyTypeInfos,  KeyToValues, toExpand, UnresolvedKeys))
+        {
+            return Nothing();
+        }
+
+        if (KeyFromValues.GetCells().size() < keyTypeInfos.size() && !Settings.KeyRange.has_greater_or_equal()) {
+            // Default: non-inclusive for incomplete From, except when From is empty
+            fromInclusive = KeyFromValues.GetCells().size() == 0;
+        }
+
+        if (KeyToValues.GetCells().size() < keyTypeInfos.size() && !Settings.KeyRange.has_less_or_equal()) {
+            // Default: inclusive for incomplete To
+            toInclusive = true;
+        }
+
+        return {{
+            KeyFromValues.GetCells(), fromInclusive,
+            KeyToValues.GetCells(), toInclusive
+        }};
+    }
+
     void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
@@ -535,6 +607,7 @@ private:
 
         TVector<NScheme::TTypeInfo> keyTypes(res.Columns.size());
         TVector<TKeyDesc::TColumnOp> columns(res.Columns.size());
+        TVector<TConversionTypeInfo> keyConversionTypesInfos(res.Columns.size());
         {
             size_t no = 0;
             size_t keys = 0;
@@ -544,6 +617,7 @@ private:
 
                 if (col.KeyOrder != -1) {
                     keyTypes[col.KeyOrder] = col.PType;
+                    keyConversionTypesInfos[col.KeyOrder] = {col.PType, col.PTypeMod, col.IsNotNullColumn};
                     ++keys;
                 }
 
@@ -564,6 +638,7 @@ private:
             }
 
             keyTypes.resize(keys);
+            keyConversionTypesInfos.resize(keys);
         }
 
         if (!colNameToPos.empty()) {
@@ -584,42 +659,15 @@ private:
             return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, ctx);
         }
 
-        bool fromInclusive = Settings.KeyRange.GetFromInclusive();
-        bool toInclusive = Settings.KeyRange.GetToInclusive();
-        const EParseRangeKeyExp fromExpand = (
-            Settings.KeyRange.HasFrom()
-                ? (fromInclusive ? EParseRangeKeyExp::TO_NULL : EParseRangeKeyExp::NONE)
-                : EParseRangeKeyExp::TO_NULL);
-        const EParseRangeKeyExp toExpand = (
-            Settings.KeyRange.HasTo()
-                ? (toInclusive ? EParseRangeKeyExp::NONE : EParseRangeKeyExp::TO_NULL)
-                : EParseRangeKeyExp::NONE);
-
-        if (!ParseRangeKey(Settings.KeyRange.GetFrom(), keyTypes,
-                        KeyFromValues, fromExpand, UnresolvedKeys) ||
-            !ParseRangeKey(Settings.KeyRange.GetTo(), keyTypes,
-                        KeyToValues, toExpand, UnresolvedKeys))
-        {
+        const auto& maybeRange = BuildTableRange(keyConversionTypesInfos);
+        if (!maybeRange) {
             TxProxyMon->ResolveKeySetWrongRequest->Inc();
 
             IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::KEY_PARSE_ERROR, "Failed to parse key ranges"));
 
             return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::QUERY_ERROR, ctx);
         }
-
-        if (KeyFromValues.GetCells().size() < keyTypes.size() && !Settings.KeyRange.HasFromInclusive()) {
-            // Default: non-inclusive for incomplete From, except when From is empty
-            fromInclusive = KeyFromValues.GetCells().size() == 0;
-        }
-
-        if (KeyToValues.GetCells().size() < keyTypes.size() && !Settings.KeyRange.HasToInclusive()) {
-            // Default: inclusive for incomplete To
-            toInclusive = true;
-        }
-
-        TTableRange range(
-                KeyFromValues.GetCells(), fromInclusive,
-                KeyToValues.GetCells(), toInclusive);
+        const auto& range = *maybeRange;
 
         if (range.IsEmptyRange({keyTypes.begin(), keyTypes.end()})) {
             TxProxyMon->ResolveKeySetWrongRequest->Inc();
@@ -1443,6 +1491,9 @@ private:
             case EReadTableFormat::YdbResultSet:
                 tx.SetApiVersion(NKikimrTxUserProxy::TReadTableTransaction::YDB_V1);
                 break;
+            case EReadTableFormat::YdbResultSetWithNotNullSupport:
+                tx.SetApiVersion(NKikimrTxUserProxy::TReadTableTransaction::YDB_V2);
+                break;
         }
 
         for (auto &col : Columns) {
@@ -1454,6 +1505,7 @@ private:
             if (columnType.TypeInfo) {
                 *c.MutableTypeInfo() = *columnType.TypeInfo;
             }
+            c.SetNotNull(col.IsNotNullColumn);
         }
 
         auto& txRange = *tx.MutableRange();
@@ -1735,34 +1787,34 @@ private:
     void SendEmptyResponseData(const TActorContext& ctx) {
         TString data;
         ui32 apiVersion = 0;
+        bool allowNotNull = false;
 
         switch (Settings.DataFormat) {
             case EReadTableFormat::OldResultSet:
                 // we don't support empty result sets
                 return;
 
+            case EReadTableFormat::YdbResultSetWithNotNullSupport:
+                allowNotNull = true;
             case EReadTableFormat::YdbResultSet: {
                 Ydb::ResultSet res;
                 for (auto& col : Columns) {
+                    bool notNullResp = allowNotNull && col.IsNotNullColumn;
                     auto* meta = res.add_columns();
                     meta->set_name(col.Name);
 
                     if (col.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                        auto* typeDesc = col.PType.GetTypeDesc();
+                        auto typeDesc = col.PType.GetPgTypeDesc();
                         auto* pg = meta->mutable_type()->mutable_pg_type();
                         pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
                         pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
                     } else {
+                        auto xType = notNullResp ? meta->mutable_type() : meta->mutable_type()->mutable_optional_type()->mutable_item();
                         auto id = static_cast<NYql::NProto::TypeIds>(col.PType.GetTypeId());
                         if (id == NYql::NProto::Decimal) {
-                            auto decimalType = meta->mutable_type()->mutable_optional_type()->mutable_item()
-                                ->mutable_decimal_type();
-                            //TODO: Pass decimal params here
-                            decimalType->set_precision(22);
-                            decimalType->set_scale(9);
+                            NScheme::ProtoFromDecimalType(col.PType.GetDecimalType(), *xType->mutable_decimal_type());
                         } else {
-                            meta->mutable_type()->mutable_optional_type()->mutable_item()
-                                ->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+                            xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
                         }
                     }
                 }

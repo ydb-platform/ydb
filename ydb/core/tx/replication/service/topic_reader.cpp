@@ -58,10 +58,17 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         for (auto& msg : result.Messages) {
             Y_ABORT_UNLESS(msg.GetCodec() == NYdb::NTopic::ECodec::RAW);
-            records.emplace_back(msg.GetOffset(), std::move(msg.GetData()));
+            records.emplace_back(msg.GetOffset(), std::move(msg.GetData()), msg.GetCreateTime());
         }
 
-        Send(Worker, new TEvWorker::TEvData(std::move(records)));
+        Send(Worker, new TEvWorker::TEvData(ToString(result.PartitionId), std::move(records)));
+    }
+
+    void Handle(TEvYdbProxy::TEvTopicEndPartition::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        auto& result = ev->Get()->Result;
+        Send(Worker, new TEvWorker::TEvDataEnd(result.PartitionId, std::move(result.AdjacentPartitionsIds), std::move(result.ChildPartitionsIds)));
     }
 
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
@@ -69,15 +76,17 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         switch (ev->Get()->Result.GetStatus()) {
         case NYdb::EStatus::SCHEME_ERROR:
-            return Leave(TEvWorker::TEvGone::SCHEME_ERROR);
+            return Leave(TEvWorker::TEvGone::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         default:
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         }
     }
 
-    void Leave(TEvWorker::TEvGone::EStatus status) {
+    template <typename... Args>
+    void Leave(Args&&... args) {
         LOG_I("Leave");
-        Send(Worker, new TEvWorker::TEvGone(status));
+
+        Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
         PassAway();
     }
 
@@ -110,6 +119,7 @@ public:
             hFunc(TEvWorker::TEvPoll, Handle);
             hFunc(TEvYdbProxy::TEvCreateTopicReaderResponse, Handle);
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
+            hFunc(TEvYdbProxy::TEvTopicEndPartition, Handle);
             hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }

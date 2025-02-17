@@ -14,6 +14,7 @@ SRCS(
     lease_holder.h
     local.cpp
     local.h
+    node_broker__graceful_shutdown.cpp
     node_broker.cpp
     node_broker.h
     node_broker_impl.h

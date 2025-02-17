@@ -5,6 +5,7 @@
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/abstract/initialization.h>
 #include <ydb/services/metadata/ds_table/config.h>
+#include <ydb/services/metadata/ds_table/registration.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -22,7 +23,7 @@ private:
     const NRequest::TConfig Config;
     IInitializationBehaviour::TPtr InitializationBehaviour;
     IInitializerOutput::TPtr ExternalController;
-    std::shared_ptr<TSnapshot> InitializationSnapshot;
+    const std::shared_ptr<NProvider::TInitializationSnapshotOwner> InitializationSnapshotOwner;
     const TString ComponentId;
     std::shared_ptr<TDSAccessorInitialized> SelfPtr;
 
@@ -38,12 +39,12 @@ private:
     TDSAccessorInitialized(const NRequest::TConfig& config,
         const TString& componentId,
         IInitializationBehaviour::TPtr initializationBehaviour,
-        IInitializerOutput::TPtr controller, std::shared_ptr<TSnapshot> initializationSnapshot);
+        IInitializerOutput::TPtr controller, const std::shared_ptr<NProvider::TInitializationSnapshotOwner>& snapshotOwner);
 public:
     static void Execute(const NRequest::TConfig& config,
         const TString& componentId,
         IInitializationBehaviour::TPtr initializationBehaviour,
-        IInitializerOutput::TPtr controller, std::shared_ptr<TSnapshot> initializationSnapshot);
+        IInitializerOutput::TPtr controller, const std::shared_ptr<NProvider::TInitializationSnapshotOwner>& initializationSnapshotOwner);
 
 };
 

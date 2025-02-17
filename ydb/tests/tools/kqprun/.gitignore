@@ -1,7 +1,12 @@
+storage
 sync_dir
 example
 udfs
+
 *.log
 *.json
 *.sql
 *.bin
+*.txt
+*.svg
+*.old

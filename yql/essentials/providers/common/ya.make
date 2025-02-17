@@ -1,0 +1,18 @@
+RECURSE(
+    activation
+    arrow_resolve
+    codec
+    comp_nodes
+    config
+    dq
+    gateway
+    metrics
+    mkql
+    mkql_simple_file
+    proto
+    provider
+    schema
+    structured_token
+    transform
+    udf_resolve
+)

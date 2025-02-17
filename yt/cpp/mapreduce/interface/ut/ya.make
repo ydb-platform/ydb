@@ -1,4 +1,4 @@
-UNITTEST_FOR(yt/cpp/mapreduce/interface)
+GTEST()
 
 SRCS(
     common_ut.cpp
@@ -17,9 +17,9 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/protobuf
-    library/cpp/testing/unittest
+    library/cpp/testing/gtest
     yt/yt_proto/yt/formats
+    yt/cpp/mapreduce/interface
 )
 
 END()

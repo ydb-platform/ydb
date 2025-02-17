@@ -28,7 +28,7 @@ public:
 
 public:
     TComparator() = default;
-    TComparator(std::vector<ESortOrder> sortOrders, TCallback<TUUComparerSignature> CGComparator = {});
+    explicit TComparator(std::vector<ESortOrder> sortOrders, TCallback<TUUComparerSignature> cgComparator = {});
 
     void Persist(const TPersistenceContext& context);
 
@@ -94,7 +94,6 @@ private:
 };
 
 void FormatValue(TStringBuilderBase* builder, const TComparator& comparator, TStringBuf spec);
-TString ToString(const TComparator& comparator);
 
 void Serialize(const TComparator& comparator, NYson::IYsonConsumer* consumer);
 
@@ -106,7 +105,7 @@ using TPrefixComparer = TUUComparerSignature;
 
 int GetCompareSign(int value);
 
-//! Obeys the usual rule: the result's sign incidates the comparison outcome.
+//! Obeys the usual rule: the result's sign indicates the comparison outcome.
 //! Also |abs(result) - 1| is equal to index of first non-equal component.
 template <typename TComparer>
 int CompareKeys(TUnversionedValueRange lhs, TUnversionedValueRange rhs, const TComparer& prefixComparer);

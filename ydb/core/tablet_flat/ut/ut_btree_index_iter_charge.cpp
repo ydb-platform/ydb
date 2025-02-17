@@ -446,10 +446,17 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     void CheckChargeRowId(TTestParams params, const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
+        #if !defined(_tsan_enabled_) && !defined(_msan_enabled_) && !defined(_asan_enabled_)
         for (bool reverse : {false, true}) {
             for (ui64 itemsLimit : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
                 for (TRowId rowId1 : xrange<TRowId>(0, part.Stat.Rows - 1)) {
                     for (TRowId rowId2 : xrange<TRowId>(rowId1, part.Stat.Rows - 1)) {
+        #else
+        for (bool reverse : {false, true}) {
+            for (ui64 itemsLimit : TVector<ui64>{0, 5, part.Stat.Rows - 1}) {
+                for (TRowId rowId1 : xrange<TRowId>(0, part.Stat.Rows - 1, 3)) {
+                    for (TRowId rowId2 : xrange<TRowId>(rowId1, part.Stat.Rows - 1, 3)) {
+        #endif
                         TTouchEnv bTreeEnv, flatEnv;
                         TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                         TChargeFlatIndex flat(&flatEnv, part, tags, true);
@@ -467,12 +474,21 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     void CheckChargeKeys(TTestParams params, const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
+        #if !defined(_tsan_enabled_) && !defined(_msan_enabled_) && !defined(_asan_enabled_)
         for (bool reverse : {false, true}) {
             for (ui64 itemsLimit : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
                 for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                     for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
                         for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                             for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
+        #else
+        for (bool reverse : {false, true}) {
+            for (ui64 itemsLimit : TVector<ui64>{0, 5, part.Stat.Rows - 1}) {
+                for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                    for (ui32 secondCellKey1 : xrange<ui32>(10, 14)) {
+                        for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                            for (ui32 secondCellKey2 : xrange<ui32>(10, 14)) {
+        #endif
                                 TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
                                 TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
 
@@ -511,10 +527,17 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     void CheckChargeBytesLimit(TTestParams params, const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
+        #if !defined(_tsan_enabled_) && !defined(_msan_enabled_) && !defined(_asan_enabled_)
         for (bool reverse : {false, true}) {
             for (ui64 bytesLimit : xrange<ui64>(1, part.Stat.Bytes + 100, part.Stat.Bytes / 100)) {
                 for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                     for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
+        #else
+        for (bool reverse : {false, true}) {
+            for (ui64 bytesLimit : TVector<ui64>{1l, part.Stat.Bytes / 3}) {
+                for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                    for (ui32 secondCellKey1 : xrange<ui32>(10, 14)) {
+        #endif
                         TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
 
                         TTouchEnv limitedEnv, unlimitedEnv;
@@ -752,9 +775,15 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
             tags.push_back(c.Tag);
         }
 
+        #if !defined(_tsan_enabled_) && !defined(_msan_enabled_) && !defined(_asan_enabled_)
         for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
             for (ui32 firstCell : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                 for (ui32 secondCell : xrange<ui32>(0, 14)) {
+        #else
+        for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
+            for (ui32 firstCell : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                for (ui32 secondCell : xrange<ui32>(10, 14)) {
+        #endif
                     TVector<TCell> key = MakeKey(firstCell, secondCell);
 
                     TTouchEnv bTreeEnv, flatEnv;
@@ -804,11 +833,19 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
             tags.push_back(c.Tag);
         }
 
+        #if !defined(_tsan_enabled_) && !defined(_msan_enabled_) && !defined(_asan_enabled_)
         for (ui64 itemsLimit : part.Slices->size() > 1 ? TVector<ui64>{0, 1, 2, 5} : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
             for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                 for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
                     for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                         for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
+        #else
+        for (ui64 itemsLimit : part.Slices->size() > 1 ? TVector<ui64>{0, 3} : TVector<ui64>{0, 5, part.Stat.Rows - 1}) {
+            for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                for (ui32 secondCellKey1 : xrange<ui32>(10, 14)) {
+                    for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                        for (ui32 secondCellKey2 : xrange<ui32>(10, 14)) {
+        #endif
                             TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
                             TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
 

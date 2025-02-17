@@ -58,12 +58,14 @@ namespace NKikimr {
         : public TEventLocal<TEvDelLogoBlobDataSyncLogResult, TEvBlobStorage::EvDelLogoBlobDataSyncLogResult>
         , public TEvVResultBase
     {
+        const TLogoBlobID Id;
         const ui64 OrderId;
 
-        TEvDelLogoBlobDataSyncLogResult(ui64 orderId, const TInstant &now,
+        TEvDelLogoBlobDataSyncLogResult(const TLogoBlobID &id, ui64 orderId, const TInstant &now,
                 ::NMonitoring::TDynamicCounters::TCounterPtr counterPtr, NVDiskMon::TLtcHistoPtr histoPtr)
             : TEvVResultBase(now, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, counterPtr,
                 histoPtr)
+            , Id(id)
             , OrderId(orderId)
         {}
     };
@@ -83,15 +85,21 @@ namespace NKikimr {
         // mask of databases to compact in terms of EHullDbType type (can compact several databases at once)
         const ui32 Mask;
         const EMode Mode;
+        THashSet<ui64> TablesToCompact;
 
-        TEvCompactVDisk(ui32 mask, EMode mode = EMode::FULL)
+        TEvCompactVDisk(ui32 mask, EMode mode = EMode::FULL, THashSet<ui64> tablesToCompact = {})
             : Mask(mask)
             , Mode(mode)
+            , TablesToCompact(std::move(tablesToCompact))
         {}
 
         // create a message for compaction one database of type 'type'
         static TEvCompactVDisk *Create(EHullDbType type, EMode mode = EMode::FULL) {
             return new TEvCompactVDisk(::NKikimr::Mask(type), mode);
+        }
+
+        static TEvCompactVDisk *Create(EHullDbType type, THashSet<ui64> tablesToCompact) {
+            return new TEvCompactVDisk(::NKikimr::Mask(type), EMode::FULL, std::move(tablesToCompact));
         }
 
         static const char *ModeToString(EMode mode) {
@@ -119,11 +127,13 @@ namespace NKikimr {
         const EHullDbType Type;
         const ui64 RequestId;
         const TEvCompactVDisk::EMode Mode;
+        THashSet<ui64> TablesToCompact;
 
-        TEvHullCompact(EHullDbType type, ui64 requestId, TEvCompactVDisk::EMode mode)
+        TEvHullCompact(EHullDbType type, ui64 requestId, TEvCompactVDisk::EMode mode, THashSet<ui64> tablesToCompact)
             : Type(type)
             , RequestId(requestId)
             , Mode(mode)
+            , TablesToCompact(std::move(tablesToCompact))
         {}
 
         TString ToString() const {
@@ -143,6 +153,34 @@ namespace NKikimr {
             : Type(type)
             , RequestId(requestId)
         {}
+    };
+
+    struct TEvHullShredDefrag : TEventLocal<TEvHullShredDefrag, TEvBlobStorage::EvHullShredDefrag> {
+        THashSet<TChunkIdx> ChunksToShred;
+        TEvHullShredDefrag(THashSet<TChunkIdx> chunksToShred) : ChunksToShred(std::move(chunksToShred)) {}
+    };
+
+    struct TEvHullShredDefragResult : TEventLocal<TEvHullShredDefragResult, TEvBlobStorage::EvHullShredDefragResult> {
+    };
+
+    struct TEvNotifyChunksDeleted : TEventLocal<TEvNotifyChunksDeleted, TEvBlobStorage::EvNotifyChunksDeleted> {
+        ui64 Lsn;
+        std::vector<TChunkIdx> Chunks;
+
+        TEvNotifyChunksDeleted(ui64 lsn, std::vector<TChunkIdx> chunks)
+            : Lsn(lsn)
+            , Chunks(std::move(chunks))
+        {}
+    };
+
+    struct TEvListChunks : TEventLocal<TEvListChunks, TEvBlobStorage::EvListChunks> {
+        THashSet<TChunkIdx> ChunksOfInterest;
+        TEvListChunks(THashSet<TChunkIdx> chunksOfInterest) : ChunksOfInterest(std::move(chunksOfInterest)) {}
+    };
+
+    struct TEvListChunksResult : TEventLocal<TEvListChunksResult, TEvBlobStorage::EvListChunksResult> {
+        THashSet<TChunkIdx> ChunksHuge;
+        THashSet<TChunkIdx> ChunksSyncLog;
     };
 
 } // NKikimr

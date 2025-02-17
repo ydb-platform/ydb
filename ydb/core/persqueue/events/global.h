@@ -10,9 +10,11 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NKikimr {
 
-struct TEvPersQueue {
+namespace TEvPersQueue {
     enum EEv {
         EvRequest = EventSpaceBegin(TKikimrEvents::ES_PQ),
         EvUpdateConfig, //change config for all partitions and count of partitions
@@ -36,7 +38,7 @@ struct TEvPersQueue {
         EvDescribeResponse,
         EvGetReadSessionsInfo,
         EvReadSessionsInfoResponse,
-        EvWakeupClient,
+        EvWakeupClient, // deprecated
         EvUpdateACL,
         EvCheckACL,
         EvCheckACLResponse,
@@ -71,9 +73,13 @@ struct TEvPersQueue {
         TEvResponse() {}
     };
 
-    struct TEvUpdateConfig: public TEventPB<TEvUpdateConfig,
+    struct TEvUpdateConfig: public TEventPreSerializedPB<TEvUpdateConfig,
             NKikimrPQ::TUpdateConfig, EvUpdateConfig> {
             TEvUpdateConfig() {}
+    };
+
+    struct TEvUpdateConfigBuilder: public TEvUpdateConfig {
+        using TBase::Record;
     };
 
     struct TEvUpdateBalancerConfig: public TEventPB<TEvUpdateBalancerConfig,
@@ -198,16 +204,6 @@ struct TEvPersQueue {
         TEvPartitionClientInfoResponse() = default;
     };
 
-    struct TEvWakeupClient : TEventLocal<TEvWakeupClient, EvWakeupClient> {
-        TEvWakeupClient(const TString& client, const ui32 group)
-            : Client(client)
-            , Group(group)
-        {}
-
-        TString Client;
-        ui32 Group;
-    };
-
     struct TEvDescribe : public TEventPB<TEvDescribe, NKikimrPQ::TDescribe, EvDescribe> {
         TEvDescribe()
         {}
@@ -253,7 +249,11 @@ struct TEvPersQueue {
         {}
     };
 
-    struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrPQ::TEvProposeTransaction, EvProposeTransaction> {
+    struct TEvProposeTransaction : public TEventPreSerializedPB<TEvProposeTransaction, NKikimrPQ::TEvProposeTransaction, EvProposeTransaction> {
+    };
+
+    struct TEvProposeTransactionBuilder: public TEvProposeTransaction {
+        using TBase::Record;
     };
 
     struct TEvProposeTransactionResult : public TEventPB<TEvProposeTransactionResult, NKikimrPQ::TEvProposeTransactionResult, EvProposeTransactionResult> {
@@ -271,7 +271,6 @@ struct TEvPersQueue {
     };
 
     using TEvProposeTransactionAttach = TEvDataShard::TEvProposeTransactionAttach;
-    using TEvProposeTransactionAttachResult = TEvDataShard::TEvProposeTransactionAttachResult;
 
     struct TEvReadingPartitionFinishedRequest : public TEventPB<TEvReadingPartitionFinishedRequest, NKikimrPQ::TEvReadingPartitionFinishedRequest, EvReadingPartitionFinished> {
         TEvReadingPartitionFinishedRequest() = default;

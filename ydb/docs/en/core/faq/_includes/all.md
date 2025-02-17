@@ -20,3 +20,6 @@
 
 {% include notitle [yql.md](../yql.md) %}
 
+## Analytics {#analytics}
+
+{% include notitle [analytics.md](../analytics.md) %}

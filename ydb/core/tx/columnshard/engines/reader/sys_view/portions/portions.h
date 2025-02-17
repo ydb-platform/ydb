@@ -36,4 +36,30 @@ public:
     using TBase::TBase;
 };
 
+class TStoreSysViewPolicy: public NAbstract::ISysViewPolicy {
+protected:
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TScannerConstructorContext& request) const override {
+        return std::make_unique<TConstructor>(request);
+    }
+    virtual std::shared_ptr<NAbstract::IMetadataFiller> DoCreateMetadataFiller() const override {
+        return std::make_shared<NAbstract::TMetadataFromStore>();
+    }
+public:
+    static const inline TFactory::TRegistrator<TStoreSysViewPolicy> Registrator = TFactory::TRegistrator<TStoreSysViewPolicy>(TString(::NKikimr::NSysView::StorePrimaryIndexPortionStatsName));
+
+};
+
+class TTableSysViewPolicy: public NAbstract::ISysViewPolicy {
+protected:
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TScannerConstructorContext& request) const override {
+        return std::make_unique<TConstructor>(request);
+    }
+    virtual std::shared_ptr<NAbstract::IMetadataFiller> DoCreateMetadataFiller() const override {
+        return std::make_shared<NAbstract::TMetadataFromTable>();
+    }
+public:
+    static const inline TFactory::TRegistrator<TTableSysViewPolicy> Registrator = TFactory::TRegistrator<TTableSysViewPolicy>(TString(::NKikimr::NSysView::TablePrimaryIndexPortionStatsName));
+
+};
+
 }

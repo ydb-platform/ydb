@@ -11,8 +11,8 @@ select
 from
     `{path}orders`
 where
-    CAST(o_orderdate AS Timestamp) >= $border
-    and CAST(o_orderdate AS Timestamp) < DateTime::MakeDate(DateTime::ShiftMonths($border, 3))
+    o_orderdate >= $border
+    and o_orderdate < DateTime::MakeDate(DateTime::ShiftMonths($border, 3))
 );
 
 $l = (

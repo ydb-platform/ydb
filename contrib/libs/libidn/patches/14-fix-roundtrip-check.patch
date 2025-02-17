@@ -1,0 +1,15 @@
+--- contrib/libs/libidn/lib/idna.c
++++ contrib/libs/libidn/lib/idna.c
+@@ -423,6 +423,12 @@ step3:
+    * step 3, using a case-insensitive ASCII comparison.
+    */
+
++  if (c_strncasecmp (tmpout, IDNA_ACE_PREFIX, STRLEN (IDNA_ACE_PREFIX)) != 0)
++    {
++      free (utf8in);
++      return IDNA_ROUNDTRIP_VERIFY_ERROR;
++    }
++
+   if (c_strcasecmp (utf8in, tmpout + STRLEN (IDNA_ACE_PREFIX)) != 0)
+     {
+       free (utf8in);

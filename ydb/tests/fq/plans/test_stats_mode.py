@@ -9,16 +9,14 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 
 class TestStatsMode:
-
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    @pytest.mark.parametrize("stats_mode", ["STATS_MODE_NONE", "STATS_MODE_BASIC", "STATS_MODE_FULL", "STATS_MODE_PROFILE"])
-    def test_mode(self, kikimr, s3, client, stats_mode):
+    @pytest.mark.parametrize(
+        "stats_mode", ["STATS_MODE_NONE", "STATS_MODE_BASIC", "STATS_MODE_FULL", "STATS_MODE_PROFILE"]
+    )
+    def test_mode(self, kikimr, s3, client, stats_mode, yq_version):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("pbucket")
@@ -51,6 +49,10 @@ class TestStatsMode:
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        if yq_version == "v2":
+            result = client.describe_query(query_id).result
+            assert "<svg" in result.query.timeline.svg
 
         data = client.get_result_data(query_id)
         result_set = data.result.result_set

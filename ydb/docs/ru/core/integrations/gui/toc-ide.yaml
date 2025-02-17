@@ -1,0 +1,7 @@
+items:
+- name: DBeaver
+  href: dbeaver.md
+- name: DataGrip
+  href: datagrip.md
+- name: Jupyter Notebook
+  href: jupyter.md

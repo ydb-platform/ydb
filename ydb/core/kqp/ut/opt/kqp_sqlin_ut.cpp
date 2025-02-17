@@ -1,5 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -19,13 +19,23 @@ const char* FormatPragma(bool disableOpt) {
 const bool DisableOpt = true;
 const bool EnableOpt = false;
 
+TKikimrRunner GetKikimrRunner(bool enableKqpDataQueryStreamLookup = true) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(enableKqpDataQueryStreamLookup);
+
+    auto serverSettings = TKikimrSettings()
+        .SetAppConfig(appConfig);
+
+    return {serverSettings};
+}
+
 } // namespace
 
 
 Y_UNIT_TEST_SUITE(KqpSqlIn) {
 
     Y_UNIT_TEST(TableSource) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -65,7 +75,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(CantRewrite) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -81,7 +91,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
 
         // empty parameters
         {
-            TMap<TString, TType> paramsType;
+            std::map<std::string, TType> paramsType;
             paramsType.emplace("$in", TTypeBuilder().BeginList().Primitive(EPrimitiveType::Uint64).EndList().Build());
             auto params = TParamsBuilder(paramsType);
 
@@ -104,7 +114,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(SimpleKey) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -130,7 +140,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 }
             }
             if (optionalParam) {
-                pl.AddListItem().OptionalUint64(Nothing());
+                pl.AddListItem().OptionalUint64(std::nullopt);
             }
             pl.EndList().Build();
 
@@ -157,7 +167,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(SimpleKey_Negated) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -173,7 +183,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 .AddListItem().OptionalUint64(1)
                 .AddListItem().OptionalUint64(2)
                 .AddListItem().OptionalUint64(42)
-                .AddListItem().OptionalUint64(Nothing())
+                .AddListItem().OptionalUint64(std::nullopt)
                 .EndList().Build().Build();
         auto result = ExecQueryAndTestResult(session, query, params,
                 R"([[[3u];["Three"]];
@@ -183,7 +193,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(KeySuffix) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -211,7 +221,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 }
             }
             if (optionalParam) {
-                pl.AddListItem().OptionalString(Nothing());
+                pl.AddListItem().OptionalString(std::nullopt);
             }
             pl.EndList().Build();
 
@@ -237,7 +247,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(KeySuffix_OnlyTail) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -257,7 +267,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 .AddListItem().OptionalString("Tony")
                 .AddListItem().OptionalString("Hugo")
                 .AddListItem().OptionalString("Logan")
-                .AddListItem().OptionalString(Nothing())
+                .AddListItem().OptionalString(std::nullopt)
                 .EndList().Build().Build();
         auto result = ExecQueryAndTestResult(session, query, params,
                 R"([[[1u];["Anna"];[3500u];["None"]];
@@ -267,7 +277,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(KeySuffix_NotPointPrefix) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -286,7 +296,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 .AddListItem().OptionalString("Tony")
                 .AddListItem().OptionalString("Harry")
                 .AddListItem().OptionalString("Hugo")
-                .AddListItem().OptionalString(Nothing())
+                .AddListItem().OptionalString(std::nullopt)
                 .EndList().Build().Build();
         auto result = ExecQueryAndTestResult(session, query, params,
                 R"([[[2u];["Tony"];[7200u];["None"]];
@@ -295,7 +305,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(ComplexKey) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -322,7 +332,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                     .AddListItem().OptionalString("Tony")
                     .AddListItem().OptionalString("Jack")
                     .AddListItem().OptionalString("Hugo")
-                    .AddListItem().OptionalString(Nothing())
+                    .AddListItem().OptionalString(std::nullopt)
                     .EndList().Build()
                 .Build();
 
@@ -333,7 +343,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(KeyTypeMissmatch_Int) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -363,7 +373,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(KeyTypeMissmatch_Str) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -388,7 +398,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(Dict) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -426,7 +436,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(TupleParameter) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -468,7 +478,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(TupleLiteral) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -503,7 +513,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(TupleSelect) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -535,7 +545,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(SelectNotAllElements) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -554,13 +564,13 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                     .AddListItem().OptionalInt32(1)
                     .AddListItem().OptionalInt32(2)
                     .AddListItem().OptionalInt32(42)
-                    .AddListItem().OptionalInt32(Nothing())
+                    .AddListItem().OptionalInt32(std::nullopt)
                 .EndList().Build()
                 .AddParam("$in2").BeginList()
                     .AddListItem().OptionalString("Payload1")
                     .AddListItem().OptionalString("Payload2")
                     .AddListItem().OptionalString("Payload0")
-                    .AddListItem().OptionalString(Nothing())
+                    .AddListItem().OptionalString(std::nullopt)
                 .EndList().Build()
                 .Build();
 
@@ -568,8 +578,45 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/SecondaryKeys", 2);
     }
 
+    Y_UNIT_TEST_TWIN(SecondaryIndex_PgKey, EnableKqpDataQueryStreamLookup) {
+        TKikimrRunner kikimr = GetKikimrRunner(EnableKqpDataQueryStreamLookup);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTablesWithIndex(session, true, true);
+
+        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
+            const TString query = Q1_(Sprintf(R"(
+                    %s
+                    DECLARE $in AS List<pgint4>;
+                    SELECT Value FROM `/Root/SecondaryPgTypeKeys` VIEW Index WHERE Fk IN $in
+                    ORDER BY Value
+                )", FormatPragma(disableOpt)));
+
+            auto params = TParamsBuilder().AddParam("$in").BeginList()
+                    .AddListItem().Pg(TPgValue(TPgValue::VK_TEXT, "1", TPgType("pgint4")))
+                    .AddListItem().Pg(TPgValue(TPgValue::VK_TEXT, "2", TPgType("pgint4")))
+                    .AddListItem().Pg(TPgValue(TPgValue::VK_TEXT, "42", TPgType("pgint4")))
+                    .AddListItem().Pg(TPgValue(TPgValue::VK_NULL, "", TPgType("pgint4")))
+                    .EndList().Build().Build();
+
+            auto result = ExecQueryAndTestResult(session, query, params, R"([[["Payload1"]];[["Payload2"]]])");
+            assertFn(result);
+        };
+
+        test(DisableOpt, [](const TDataQueryResult& result) {
+            AssertTableReads(result, "/Root/SecondaryPgTypeKeys/Index/indexImplTable", 2);
+            AssertTableReads(result, "/Root/SecondaryPgTypeKeys", 2);
+        });
+
+        test(EnableOpt, [](const TDataQueryResult& result) {
+            AssertTableReads(result, "/Root/SecondaryPgTypeKeys/Index/indexImplTable", 2);
+            AssertTableReads(result, "/Root/SecondaryPgTypeKeys", 2);
+        });
+    }
+
     Y_UNIT_TEST(SecondaryIndex_SimpleKey) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -587,7 +634,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                     .AddListItem().OptionalInt32(1)
                     .AddListItem().OptionalInt32(2)
                     .AddListItem().OptionalInt32(42)
-                    .AddListItem().OptionalInt32(Nothing())
+                    .AddListItem().OptionalInt32(std::nullopt)
                     .EndList().Build().Build();
 
             auto result = ExecQueryAndTestResult(session, query, params, R"([[["Payload1"]];[["Payload2"]]])");
@@ -606,7 +653,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(SecondaryIndex_SimpleKey_In_And) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -625,7 +672,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                     .AddListItem().OptionalInt32(1)
                     .AddListItem().OptionalInt32(2)
                     .AddListItem().OptionalInt32(42)
-                    .AddListItem().OptionalInt32(Nothing())
+                    .AddListItem().OptionalInt32(std::nullopt)
                     .EndList().Build().Build();
 
             auto result = ExecQueryAndTestResult(session, query, params, R"([[[1];[1];["Payload1"]]])");
@@ -646,7 +693,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(SimpleKey_In_And_In) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -685,7 +732,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(SecondaryIndex_SimpleKey_In_And_In) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -727,7 +774,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(SecondaryIndex_ComplexKey_In_And_In) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -776,7 +823,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(SecondaryIndex_TupleParameter) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -796,7 +843,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                     .AddListItem().BeginTuple().AddElement().OptionalInt32(1).AddElement().String("Fk1").EndTuple()
                     .AddListItem().BeginTuple().AddElement().OptionalInt32(2).AddElement().String("Fk2").EndTuple()
                     .AddListItem().BeginTuple().AddElement().OptionalInt32(42).AddElement().String("Fk5").EndTuple()
-                    .AddListItem().BeginTuple().AddElement().OptionalInt32(Nothing()).AddElement().String("FkNull").EndTuple()
+                    .AddListItem().BeginTuple().AddElement().OptionalInt32(std::nullopt).AddElement().String("FkNull").EndTuple()
                     .EndList().Build().Build();
 
             auto result = ExecQueryAndTestResult(session, query, params, R"([[["Payload1"]];[["Payload2"]]])");
@@ -815,7 +862,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(SecondaryIndex_TupleLiteral) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -846,7 +893,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(SecondaryIndex_TupleSelect) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -864,7 +911,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).AddMember("v").String("Fk1").EndStruct()
             .AddListItem().BeginStruct().AddMember("k").OptionalInt32(2).AddMember("v").String("Fk2").EndStruct()
             .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).AddMember("v").String("Fk5").EndStruct()
-            .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).AddMember("v").String("FkNull").EndStruct()
+            .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt).AddMember("v").String("FkNull").EndStruct()
             .EndList().Build().Build();
 
         auto result = ExecQueryAndTestResult(session, query, params, R"([[["Payload1"]];[["Payload2"]]])");
@@ -874,7 +921,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(TupleNotOnlyOfKeys) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -924,7 +971,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(Delete) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -956,7 +1003,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(InWithCast) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

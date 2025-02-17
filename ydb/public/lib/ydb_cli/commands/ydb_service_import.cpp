@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/import/import.h>
 #include <ydb/library/backup/util.h>
 
@@ -17,10 +18,6 @@
 #elif defined(_unix_)
 #include <unistd.h>
 #endif
-
-namespace NYdb::NDump {
-    extern const char SCHEME_FILE_NAME[];
-}
 
 namespace NYdb::NConsoleClient {
 
@@ -47,7 +44,12 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
-    config.Opts->AddLongOption("scheme", "S3 endpoint scheme")
+    auto colors = NColorizer::AutoColors(Cout);
+    config.Opts->AddLongOption("scheme", TStringBuilder()
+            << "S3 endpoint scheme - "
+            << colors.BoldColor() << "http" << colors.OldColor()
+            << " or "
+            << colors.BoldColor() << "https" << colors.OldColor())
         .RequiredArgument("SCHEME").StoreResult(&AwsScheme).DefaultValue(AwsScheme);
 
     config.Opts->AddLongOption("bucket", "S3 bucket")
@@ -92,17 +94,28 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
-    config.Opts->AddLongOption("use-virtual-addressing", "S3 bucket virtual addressing")
+    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
+            << "Sets bucket URL style. Value "
+            << colors.BoldColor() << "true" << colors.OldColor()
+            << " means use Virtual-Hosted-Style URL, "
+            << colors.BoldColor() << "false" << colors.OldColor()
+            << " - Path-Style URL.")
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
 
+    config.Opts->AddLongOption("no-acl", "Prevent importing of ACL and owner")
+        .RequiredArgument("BOOL").StoreTrue(&NoACL).DefaultValue("false");
+
+    config.Opts->AddLongOption("skip-checksum-validation", "Skip checksum validation during import")
+        .RequiredArgument("BOOL").StoreTrue(&SkipChecksumValidation).DefaultValue("false");
+
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 
 void TCommandImportFromS3::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     ParseAwsProfile(config, "aws-profile");
     ParseAwsAccessKey(config, "access-key");
@@ -113,9 +126,18 @@ void TCommandImportFromS3::Parse(TConfig& config) {
         throw TMisuseException() << "At least one item should be provided";
     }
 
+}
+
+void TCommandImportFromS3::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Destination, config);
     }
+}
+
+bool IsSupportedObject(TStringBuf& key) {
+    return key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
+        || key.ChopSuffix(NDump::NFiles::CreateView().FileName);
 }
 
 int TCommandImportFromS3::Run(TConfig& config) {
@@ -128,12 +150,15 @@ int TCommandImportFromS3::Run(TConfig& config) {
     settings.Bucket(AwsBucket);
     settings.AccessKey(AwsAccessKey);
     settings.SecretKey(AwsSecretKey);
+    settings.UseVirtualAddressing(UseVirtualAddressing);
 
     if (Description) {
         settings.Description(Description);
     }
 
     settings.NumberOfRetries(NumberOfRetries);
+    settings.NoACL(NoACL);
+    settings.SkipChecksumValidation(SkipChecksumValidation);
 #if defined(_win32_)
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});
@@ -157,8 +182,14 @@ int TCommandImportFromS3::Run(TConfig& config) {
                 auto listResult = s3Client->ListObjectKeys(item.Source, token);
                 token = listResult.NextToken;
                 for (TStringBuf key : listResult.Keys) {
-                    if (key.ChopSuffix(NDump::SCHEME_FILE_NAME)) {
-                        TString destination = item.Destination + key.substr(item.Source.Size());
+                    if (IsSupportedObject(key)) {
+                        key.ChopSuffix("/");
+                        TString destination;
+                        if (const auto suffix = key.substr(item.Source.size())) {
+                            destination = item.Destination + suffix;
+                        } else {
+                            destination = NormalizePath(item.Destination);
+                        }
                         settings.AppendItem({TString(key), std::move(destination)});
                     }
                 }
@@ -219,7 +250,6 @@ void TCommandImportFileBase::Config(TConfig& config) {
 
 void TCommandImportFileBase::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
-    AdjustPath(config);
 
     if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) {
         if (bytesPerRequest > TImportFileSettings::MaxBytesPerRequest) {
@@ -248,6 +278,11 @@ void TCommandImportFileBase::Parse(TConfig& config) {
     }
 }
 
+void TCommandImportFileBase::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    AdjustPath(config);
+}
+
 /// Import CSV
 
 void TCommandImportFromCsv::Config(TConfig& config) {
@@ -265,12 +300,12 @@ void TCommandImportFromCsv::Config(TConfig& config) {
     config.Opts->AddLongOption("newline-delimited",
             "No newline characters inside records, enables some import optimizations (see docs)")
         .StoreTrue(&NewlineDelimited);
-    if (InputFormat == EOutputFormat::Csv) {
+    if (InputFormat == EDataFormat::Csv) {
         config.Opts->AddLongOption("delimiter", "Field delimiter in rows")
             .RequiredArgument("STRING").StoreResult(&Delimiter).DefaultValue(Delimiter);
     }
-    config.Opts->AddLongOption("null-value", "Value that would be interpreted as NULL")
-            .RequiredArgument("STRING").StoreResult(&NullValue).DefaultValue(NullValue);
+    config.Opts->AddLongOption("null-value", "Value that would be interpreted as NULL, no NULL value by default")
+            .RequiredArgument("STRING").StoreResult(&NullValue);
     // TODO: quoting/quote_char
 }
 
@@ -286,9 +321,8 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     settings.Header(Header);
     settings.NewlineDelimited(NewlineDelimited);
     settings.HeaderRow(HeaderRow);
-    if (config.ParseResult->Has("null-value")) {
-        settings.NullValue(NullValue);
-    }
+    settings.NullValue(NullValue);
+    settings.Verbose(config.IsVerbose());
 
     if (Delimiter.size() != 1) {
         throw TMisuseException()
@@ -297,8 +331,8 @@ int TCommandImportFromCsv::Run(TConfig& config) {
         settings.Delimiter(Delimiter);
     }
 
-    TImportFileClient client(CreateDriver(config), config);
-    ThrowOnError(client.Import(FilePaths, Path, settings));
+    TImportFileClient client(CreateDriver(config), config, settings);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }
@@ -309,28 +343,26 @@ int TCommandImportFromCsv::Run(TConfig& config) {
 void TCommandImportFromJson::Config(TConfig& config) {
     TCommandImportFileBase::Config(config);
 
-    AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
-    });
+    AddLegacyJsonInputFormats(config);
 }
 
 void TCommandImportFromJson::Parse(TConfig& config) {
     TCommandImportFileBase::Parse(config);
 
-    ParseFormats();
+    ParseInputFormats();
 }
 
 int TCommandImportFromJson::Run(TConfig& config) {
     TImportFileSettings settings;
     settings.OperationTimeout(OperationTimeout);
-    settings.Format(InputFormat);
+    settings.Format(EDataFormat::Json);
+    settings.BinaryStringsEncoding(InputBinaryStringEncoding);
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
     settings.Threads(Threads);
 
-    TImportFileClient client(CreateDriver(config), config);
-    ThrowOnError(client.Import(FilePaths, Path, settings));
+    TImportFileClient client(CreateDriver(config), config, settings);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }
@@ -348,8 +380,8 @@ int TCommandImportFromParquet::Run(TConfig& config) {
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
     settings.Threads(Threads);
 
-    TImportFileClient client(CreateDriver(config), config);
-    ThrowOnError(client.Import(FilePaths, Path, settings));
+    TImportFileClient client(CreateDriver(config), config, settings);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }

@@ -6,7 +6,9 @@
 
 #include <yt/yt/core/actions/future.h>
 
-#include <yt/yt/core/misc/range.h>
+#include <yt/yt/core/crypto/crypto.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 namespace NYT::NTableClient {
 
@@ -28,6 +30,16 @@ struct IUnversionedRowsetWriter
      *  Every row must contain exactly one value for each column in schema, in the same order.
      */
     [[nodiscard]] virtual bool Write(TRange<TUnversionedRow> rows) = 0;
+
+    /*!
+     * Returns the digest of the written rows.
+     *
+     * Useful for checking the determinism of user jobs.
+     * Returns nullopt when hash is not computed.
+     *
+     * Must not be called concurrently with Write method.
+     */
+    virtual std::optional<NCrypto::TMD5Hash> GetDigest() const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IUnversionedRowsetWriter)
@@ -47,6 +59,17 @@ struct IUnversionedWriter
 };
 
 DEFINE_REFCOUNTED_TYPE(IUnversionedWriter)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct IUnversionedTableFragmentWriter
+    : public IUnversionedWriter
+{
+    //! Returns signed write result. Only safe to use after |Stop|.
+    virtual TSignedWriteFragmentResultPtr GetWriteFragmentResult() const = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IUnversionedTableFragmentWriter)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,0 +1,62 @@
+diff --git a/include/string b/include/string
+index a456f8c..804373b 100644
+--- a/include/string
++++ b/include/string
+@@ -83,6 +83,7 @@ template <> struct char_traits<char32_t>;
+ template<class charT, class traits = char_traits<charT>, class Allocator = allocator<charT> >
+ class basic_string
+ {
++    static_assert(sizeof(_CharT) <= 4, "libc++ implementation of std::basic_string does not support extra-wide character types");
+ public:
+ // types:
+     typedef traits traits_type;
+@@ -981,9 +982,10 @@ public:
+     __init(__s, traits_type::length(__s));
+   }
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+   basic_string(nullptr_t) = delete;
+ #endif
++  _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string(nullptr_t, size_t) = delete;
+ 
+   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string(const _CharT* __s, size_type __n)
+       : __r_(__default_init_tag(), __default_init_tag()) {
+@@ -991,6 +993,8 @@ public:
+     __init(__s, __n);
+   }
+ 
++  _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string(nullptr_t, size_t, const _Allocator&) = delete;
++
+   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
+   basic_string(const _CharT* __s, size_type __n, const _Allocator& __a)
+       : __r_(__default_init_tag(), __a) {
+@@ -1155,7 +1159,7 @@ public:
+   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(const value_type* __s) {
+     return assign(__s);
+   }
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+   basic_string& operator=(nullptr_t) = delete;
+ #endif
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(value_type __c);
+@@ -1212,6 +1216,10 @@ public:
+     return (__is_long() ? __get_long_cap() : static_cast<size_type>(__min_cap)) - 1;
+   }
+ 
++#if _YNDX_LIBCXX_ENABLE_STRING_RESIZE_UNINITIALIZED == 1
++  inline void resize_uninitialized(size_type __n) { __resize_default_init(__n); }
++#endif
++
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 void resize(size_type __n, value_type __c);
+   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 void resize(size_type __n) { resize(__n, value_type()); }
+ 
+@@ -1759,7 +1767,7 @@ public:
+   }
+ #endif
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+   constexpr _LIBCPP_HIDE_FROM_ABI bool contains(__self_view __sv) const noexcept {
+     return __self_view(data(), size()).contains(__sv);
+   }

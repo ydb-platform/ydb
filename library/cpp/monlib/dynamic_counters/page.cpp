@@ -105,6 +105,10 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     out.Flush();
 }
 
+THolder<ICountableConsumer> TDynamicCountersPage::CreateEncoder(IOutputStream* out, EFormat format, TStringBuf nameLabel, TCountableBase::EVisibility visibility) const {
+    return ::CreateEncoder(out, format, nameLabel, visibility);
+}
+
 void TDynamicCountersPage::HandleAbsentSubgroup(IMonHttpRequest& request) {
     if (UnknownGroupPolicy == EUnknownGroupPolicy::Error) {
         NotFound(request);

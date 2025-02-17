@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from ydb.tests.library.common import yatest_common
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.canonical import set_canondata_root
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -9,13 +8,15 @@ import os
 import logging
 import pytest
 
+import yatest
+
 
 logger = logging.getLogger(__name__)
 
 
 def ydb_bin():
     if os.getenv("YDB_CLI_BINARY"):
-        return yatest_common.binary_path(os.getenv("YDB_CLI_BINARY"))
+        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
     raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
 
 
@@ -50,7 +51,7 @@ def create_table_with_data(session, path):
 class BaseTestScriptingService(object):
     @classmethod
     def execute_ydb_cli_command(cls, args, stdin=None, env=None):
-        execution = yatest_common.execute([ydb_bin()] + args, stdin=stdin, env=env)
+        execution = yatest.common.execute([ydb_bin()] + args, stdin=stdin, env=env)
         result = execution.std_out
         logger.debug("std_out:\n" + result.decode('utf-8'))
         return result
@@ -59,7 +60,7 @@ class BaseTestScriptingService(object):
     def canonical_result(output_result, tmp_path):
         with (tmp_path / "result.output").open("w") as f:
             f.write(output_result.decode('utf-8'))
-        return yatest_common.canonical_file(str(tmp_path / "result.output"), local=True, universal_lines=True)
+        return yatest.common.canonical_file(str(tmp_path / "result.output"), local=True, universal_lines=True)
 
 
 class BaseTestScriptingServiceWithDatabase(BaseTestScriptingService):
@@ -67,7 +68,7 @@ class BaseTestScriptingServiceWithDatabase(BaseTestScriptingService):
     def setup_class(cls):
         set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
 
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.root_dir = "/Root"
         driver_config = ydb.DriverConfig(
@@ -134,16 +135,6 @@ class TestExecuteScriptWithParams(BaseTestScriptingServiceWithDatabase):
              "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]"]
         )
         return self.canonical_result(output, self.tmp_path)
-
-
-class TestScriptingServiceHelp(BaseTestScriptingService):
-    def test_help(self, tmp_path):
-        output = self.execute_ydb_cli_command(["scripting", "yql", "--help"])
-        return self.canonical_result(output, tmp_path)
-
-    def test_help_ex(self, tmp_path):
-        output = self.execute_ydb_cli_command(["scripting", "yql", "--help-ex"])
-        return self.canonical_result(output, tmp_path)
 
 
 class TestExecuteScriptWithFormats(BaseTestScriptingServiceWithDatabase):

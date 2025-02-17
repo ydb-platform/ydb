@@ -17,9 +17,9 @@ join
 on
     p.p_partkey = ps.ps_partkey
 where
-    p.p_brand <> 'Brand#33'
-    and (not StartsWith(p.p_type, 'PROMO POLISHED'))
-    and (p.p_size = 20 or p.p_size = 27 or p.p_size = 11 or p.p_size = 45 or p.p_size = 40 or p.p_size = 41 or p.p_size = 34 or p.p_size = 36)
+    p.p_brand <> 'Brand#45'
+    and p.p_type not like 'MEDIUM POLISHED%'
+    and (p.p_size = 49 or p.p_size = 14 or p.p_size = 23 or p.p_size = 45 or p.p_size = 19 or p.p_size = 3 or p.p_size = 36 or p.p_size = 9)
 );
 
 $s = (

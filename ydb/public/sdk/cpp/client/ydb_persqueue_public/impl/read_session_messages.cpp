@@ -1,10 +1,10 @@
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_events.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session_impl.ipp>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/aliases.h>
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 TReadSessionEvent::TDataReceivedEvent::TMessageInformation::TMessageInformation(
     ui64 offset,

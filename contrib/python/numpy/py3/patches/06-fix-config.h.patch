@@ -1,0 +1,19 @@
+--- contrib/python/numpy/py3/numpy/core/include/numpy/config-linux-x86_64.h	(index)
++++ contrib/python/numpy/py3/numpy/core/include/numpy/config-linux-x86_64.h	(working tree)
+@@ -31,3 +31,5 @@
+ #define HAVE_FALLOCATE 1
++/* breake test_extension_incref_elide and test_extension_incref_elide_stack
+ #define HAVE_BACKTRACE 1
++*/
+ #define HAVE_MADVISE 1
+@@ -90 +90 @@
+-#define NPY_CAN_LINK_SVML 1
++//#define NPY_CAN_LINK_SVML 1
+--- contrib/python/numpy/py3/numpy/core/include/numpy/config-osx-x86_64.h	(index)
++++ contrib/python/numpy/py3/numpy/core/include/numpy/config-osx-x86_64.h	(working tree)
+@@ -5,3 +5,5 @@
+ #define MATHLIB 
++/* breake test_extension_incref_elide and test_extension_incref_elide_stack
+ #define HAVE_BACKTRACE 1
++*/
+ #define HAVE_MADVISE 1

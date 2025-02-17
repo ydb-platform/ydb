@@ -29,6 +29,7 @@ message TUserToken {
     optional TProtoHashTable GroupSIDs = 2;
     optional string OriginalUserToken = 3;
     optional string AuthType = 4;
+    optional string SanitizedToken = 5; // Sanitized token that can be added to audit logs, but can not be used as token to access YDB or any other service.
 }
 
 message TSecurityObject {

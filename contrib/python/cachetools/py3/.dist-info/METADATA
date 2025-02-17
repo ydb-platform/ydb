@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.2
 Name: cachetools
-Version: 5.3.3
+Version: 5.5.1
 Summary: Extensible memoizing collections and decorators
 Home-page: https://github.com/tkem/cachetools/
 Author: Thomas Kemmer
@@ -19,6 +19,7 @@ Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Requires-Python: >=3.7
 License-File: LICENSE

@@ -18,6 +18,7 @@ __all__ = (
     "HTTPNoContent",
     "HTTPResetContent",
     "HTTPPartialContent",
+    "HTTPMove",
     "HTTPMultipleChoices",
     "HTTPMovedPermanently",
     "HTTPFound",
@@ -65,6 +66,10 @@ __all__ = (
     "HTTPNotExtended",
     "HTTPNetworkAuthenticationRequired",
 )
+
+
+class NotAppKeyWarning(UserWarning):
+    """Warning when not using AppKey in Application."""
 
 
 ############################################################
@@ -160,7 +165,7 @@ class HTTPPartialContent(HTTPSuccessful):
 ############################################################
 
 
-class _HTTPMove(HTTPRedirection):
+class HTTPMove(HTTPRedirection):
     def __init__(
         self,
         location: StrOrURL,
@@ -184,21 +189,21 @@ class _HTTPMove(HTTPRedirection):
         self.location = location
 
 
-class HTTPMultipleChoices(_HTTPMove):
+class HTTPMultipleChoices(HTTPMove):
     status_code = 300
 
 
-class HTTPMovedPermanently(_HTTPMove):
+class HTTPMovedPermanently(HTTPMove):
     status_code = 301
 
 
-class HTTPFound(_HTTPMove):
+class HTTPFound(HTTPMove):
     status_code = 302
 
 
 # This one is safe after a POST (the redirected location will be
 # retrieved with GET):
-class HTTPSeeOther(_HTTPMove):
+class HTTPSeeOther(HTTPMove):
     status_code = 303
 
 
@@ -208,16 +213,16 @@ class HTTPNotModified(HTTPRedirection):
     empty_body = True
 
 
-class HTTPUseProxy(_HTTPMove):
+class HTTPUseProxy(HTTPMove):
     # Not a move, but looks a little like one
     status_code = 305
 
 
-class HTTPTemporaryRedirect(_HTTPMove):
+class HTTPTemporaryRedirect(HTTPMove):
     status_code = 307
 
 
-class HTTPPermanentRedirect(_HTTPMove):
+class HTTPPermanentRedirect(HTTPMove):
     status_code = 308
 
 
@@ -273,7 +278,7 @@ class HTTPMethodNotAllowed(HTTPClientError):
             content_type=content_type,
         )
         self.headers["Allow"] = allow
-        self.allowed_methods = set(allowed_methods)  # type: Set[str]
+        self.allowed_methods: Set[str] = set(allowed_methods)
         self.method = method.upper()
 
 
@@ -366,7 +371,7 @@ class HTTPUnavailableForLegalReasons(HTTPClientError):
 
     def __init__(
         self,
-        link: str,
+        link: Optional[StrOrURL],
         *,
         headers: Optional[LooseHeaders] = None,
         reason: Optional[str] = None,
@@ -381,8 +386,14 @@ class HTTPUnavailableForLegalReasons(HTTPClientError):
             text=text,
             content_type=content_type,
         )
-        self.headers["Link"] = '<%s>; rel="blocked-by"' % link
-        self.link = link
+        self._link = None
+        if link:
+            self._link = URL(link)
+            self.headers["Link"] = f'<{str(self._link)}>; rel="blocked-by"'
+
+    @property
+    def link(self) -> Optional[URL]:
+        return self._link
 
 
 ############################################################

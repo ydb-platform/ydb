@@ -1,7 +1,5 @@
 LIBRARY()
 
-OWNER(xenoxeno g:kikimr)
-
 RESOURCE(
     api/css/print.css /mvp/content/api/css/print.css
     api/css/reset.css /mvp/content/api/css/reset.css

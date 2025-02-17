@@ -42,6 +42,7 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, con
             queryBuilder.AddString("query_id", task.QueryId);
             queryBuilder.AddInt64("query_type", task.Query.content().type());
             queryBuilder.AddString("query", task.Query.SerializeAsString());
+            queryBuilder.AddInt64("status", task.Query.meta().status());
             queryBuilder.AddString("internal", task.Internal.SerializeAsString());
             queryBuilder.AddTimestamp("now", nowTimestamp);
             queryBuilder.AddTimestamp("zero_timestamp", TInstant::Zero());
@@ -52,7 +53,7 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, con
 
             // update queries
             queryBuilder.AddText(
-                "UPDATE `" QUERIES_TABLE_NAME "` SET `" GENERATION_COLUMN_NAME "` = $generation, `" QUERY_COLUMN_NAME "` = $query, `" INTERNAL_COLUMN_NAME "` = $internal, `" TENANT_COLUMN_NAME "` = $new_tenant\n"
+                "UPDATE `" QUERIES_TABLE_NAME "` SET `" GENERATION_COLUMN_NAME "` = $generation, `" QUERY_COLUMN_NAME "` = $query, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" TENANT_COLUMN_NAME "` = $new_tenant\n"
                 "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
             );
 
@@ -116,7 +117,7 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, con
 
 } // namespace
 
-std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> MakeGetTaskUpdateQuery(
+std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>> MakeGetTaskUpdateQuery(
     const TTaskInternal& taskInternal,
     const std::shared_ptr<TResponseTasks>& responseTasks,
     const TInstant& nowTimestamp,
@@ -144,7 +145,7 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
         "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" ASSIGNED_UNTIL_COLUMN_NAME "` < $now;\n"
     );
 
-    auto prepareParams = [=, taskInternal=taskInternal, responseTasks=responseTasks, tenantInfo=tenantInfo](const TVector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [=, taskInternal=taskInternal, responseTasks=responseTasks, tenantInfo=tenantInfo](const std::vector<TResultSet>& resultSets) mutable {
         auto& task = taskInternal.Task;
         const auto shouldAbortTask = taskInternal.ShouldAbortTask;
         constexpr size_t expectedResultSetsSize = 2;
@@ -156,17 +157,17 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
         {
             TResultSetParser parser(resultSets[0]);
             while (parser.TryNextRow()) {
-                task.Generation = parser.ColumnParser(GENERATION_COLUMN_NAME).GetOptionalUint64().GetOrElse(0) + 1;
+                task.Generation = parser.ColumnParser(GENERATION_COLUMN_NAME).GetOptionalUint64().value_or(0) + 1;
 
                 if (!task.Query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
                     commonCounters->ParseProtobufError->Inc();
-                    throw TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+                    throw NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
                 }
                 const TInstant deadline = TInstant::Now() + (task.Query.content().automatic() ? std::min(automaticQueriesTtl, resultSetsTtl) : resultSetsTtl);
                 task.Deadline = deadline;
                 if (!task.Internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                     commonCounters->ParseProtobufError->Inc();
-                    throw TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
+                    throw NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
                 }
 
                 *task.Internal.mutable_result_ttl() = NProtoInterop::CastToProto(resultSetsTtl);
@@ -178,10 +179,10 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
         }
 
         if (shouldAbortTask) {
-            Ydb::Issue::IssueMessage abortIssueMsg;
-            abortIssueMsg.set_message("Query was aborted by system due to high failure rate");
-            abortIssueMsg.set_severity(NYql::TSeverityIds::S_ERROR);
-            *task.Query.add_issue() = abortIssueMsg;
+            NYql::TIssue abortIssueMsg;
+            abortIssueMsg.SetMessage("Query was aborted by system due to high failure rate");
+            abortIssueMsg.SetCode(0, NYql::TSeverityIds::S_ERROR);
+            AddTransientIssues(task.Query.mutable_transient_issue(), NYql::TIssues{abortIssueMsg});
             task.Query.mutable_meta()->set_status(FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM);
         }
 
@@ -297,7 +298,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                              actorSystem=NActors::TActivationContext::ActorSystem(),
                              responseTasks=responseTasks,
                              tenantInfo=ev->Get()->TenantInfo
-                        ](const TVector<TResultSet>& resultSets) mutable {
+                        ](const std::vector<TResultSet>& resultSets) mutable {
         TVector<TTaskInternal> tasks;
         TVector<TPickTaskParams> pickTaskParams;
         const auto now = TInstant::Now();
@@ -320,13 +321,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             auto previousOwner = *parser.ColumnParser(OWNER_COLUMN_NAME).GetOptionalString();
 
             taskInternal.RetryLimiter.Assign(
-                parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().GetOrElse(0),
-                parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero()),
-                parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().GetOrElse(0.0)
+                parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().value_or(0),
+                parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Zero()),
+                parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().value_or(0.0)
             );
-            auto lastSeenAt = parser.ColumnParser(LAST_SEEN_AT_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero());
+            auto lastSeenAt = parser.ColumnParser(LAST_SEEN_AT_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Zero());
 
-            if (previousOwner) { // task lease timeout case only, other cases are updated at ping time
+            if (!previousOwner.empty()) { // task lease timeout case only, other cases are updated at ping time
                 CPS_LOG_AS_T(*actorSystem, "Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryLimiter.RetryCounterUpdatedAt
                     << " LastSeenAt: " << lastSeenAt);
                 taskInternal.ShouldAbortTask = !taskInternal.RetryLimiter.UpdateOnRetry(lastSeenAt, Config->TaskLeaseRetryPolicy, now);
@@ -392,7 +393,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                     debugInfo->insert(debugInfo->end(), info->begin(), info->end());
                 }
             }
-            NYql::TIssues issues;
+            NYdb::NIssue::TIssues issues;
             auto status = MakeFuture(TStatus{EStatus::SUCCESS, std::move(issues)});
             try {
                 future.GetValue();
@@ -447,6 +448,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             newTask->set_result_limit(task.Internal.result_limit());
             *newTask->mutable_execution_limit() = NProtoInterop::CastToProto(ExtractLimit(task));
             *newTask->mutable_request_started_at() = task.Query.meta().started_at();
+            *newTask->mutable_request_submitted_at() = task.Query.meta().submitted_at();
 
             newTask->set_restart_count(task.RetryCount);
             auto* jobId = newTask->mutable_job_id();
@@ -455,7 +457,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             for (const auto& connection: task.Internal.connection()) {
                 const auto serviceAccountId = ExtractServiceAccountId(connection);
                 if (!serviceAccountId) {
-                        continue;
+                    continue;
                 }
                 auto* account = newTask->add_service_accounts();
                 account->set_value(serviceAccountId);

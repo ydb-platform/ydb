@@ -1,18 +1,28 @@
+RECURSE_FOR_TESTS(
+    ut
+)
+
 LIBRARY()
 
 SRCS(
     constructor.cpp
     meta.cpp
     checker.cpp
-    program.cpp
     GLOBAL composite.cpp
     simple.cpp
+    tree.cpp
+    coverage.cpp
+    like.cpp
 )
 
 PEERDIR(
-    ydb/core/protos
     ydb/core/formats/arrow
+    ydb/library/formats/arrow/protos
+    yql/essentials/core/arrow_kernels/request
+    ydb/core/formats/arrow/program
 )
+
+GENERATE_ENUM_SERIALIZATION(tree.h)
 
 YQL_LAST_ABI_VERSION()
 

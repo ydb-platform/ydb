@@ -75,7 +75,7 @@ TYsonString::TYsonString(const TYsonStringBuf& ysonStringBuf)
         auto holder = NDetail::TYsonStringHolder::Allocate(data.length());
         ::memcpy(holder->GetData(), data.data(), data.length());
         Begin_ = holder->GetData();
-        Size_ = data.Size();
+        Size_ = data.size();
         Type_ = ysonStringBuf.GetType();
         Payload_ = std::move(holder);
     } else {
@@ -197,14 +197,14 @@ void TYsonString::Load(IInputStream* s)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TYsonString& yson)
+void FormatValue(TStringBuilderBase* builder, const TYsonString& yson, TStringBuf spec)
 {
-    return yson.ToString();
+    FormatValue(builder, yson.ToString(), spec);
 }
 
-TString ToString(const TYsonStringBuf& yson)
+void FormatValue(TStringBuilderBase* builder, const TYsonStringBuf& yson, TStringBuf spec)
 {
-    return TString(yson.AsStringBuf());
+    FormatValue(builder, yson.AsStringBuf(), spec);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

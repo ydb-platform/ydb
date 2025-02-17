@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+// import "nebius/annotations.proto";
+import "ydb/public/api/client/nc_private/iam/token.proto";
+
+// DO NOT REMOVE! THESE OPTIONS ARE NEEDED FOR Bazel BUILD TO CORRESPOND TO buf generate:
+option java_multiple_files = true;
+option java_outer_classname = "TokenServiceProto";
+option java_package = "ai.nebius.iam.token.v1";
+// END
+
+service TokenService {
+  rpc Exchange(ExchangeTokenRequest) returns (CreateTokenResponse); // not auth for jwt exchange
+  rpc Create(CreateTokenRequest) returns (CreateTokenResponse); // auth, used under service acc
+  rpc Revoke(RevokeTokenRequest) returns (RevokeTokenResponse); // auth
+  rpc CreateDBToken(CreateDbTokenRequest) returns (CreateTokenResponse); //not auth
+  rpc GetSignaturePublicKeys(GetSignaturePublicKeysRequest) returns (GetSignaturePublicKeysResponse);
+  rpc GetLimitedTokenInfo(GetLimitedTokenInfoRequest) returns (GetLimitedTokenInfoResponse); // return limited info about token for cpl
+}
+
+//https://www.rfc-editor.org/rfc/rfc8693.html
+message ExchangeTokenRequest {
+  string grant_type = 1; // required - urn:ietf:params:oauth:grant-type:token-exchange
+  string requested_token_type = 2; // optional type of requested token, default is urn:ietf:params:oauth:token-type:access_token
+  string subject_token = 3; // required - could be self signed JWT token
+  string subject_token_type = 4; //required, in case of jwt - urn:ietf:params:oauth:token-type:jwt
+  repeated string scopes = 5; // optional (scopes of the token)
+  string audience = 6; //optional, name of the oauth client id on which this token will be used
+}
+
+message CreateTokenRequest {
+  string token_type = 1; // optional, by default - urn:ietf:params:oauth:token-type:access_token
+  string subject_id = 2; // optional - used for impersonation subject creation and for metadata service token creation
+  string audience = 3; //optional,  name of the client id on which this token will be used
+  repeated string scopes = 4; // optional
+}
+
+message CreateTokenResponse {
+  string access_token = 1; // required
+  string issued_token_type = 2; //required
+  string token_type = 3; // required - Bearer
+  int64 expires_in = 4; //
+  repeated string scopes = 5;
+}
+
+message RevokeTokenRequest {
+  oneof revoke {
+    string token = 1; // to revoke only token
+    string key = 2; // to revoke all token created under service acc key
+    string subject_id = 3; // to revoke all tokens for some subject
+    string aud = 4; // to revoke all tokens created for some oauth client id
+  }
+}
+
+message RevokeTokenResponse {}
+
+message CreateDbTokenRequest {
+  string token = 1;
+}
+
+message GetSignaturePublicKeysRequest {}
+
+message GetSignaturePublicKeysResponse {
+  repeated SignaturePublicKey items = 1;
+}
+
+message GetLimitedTokenInfoRequest {
+  string token = 1;
+}
+
+message GetLimitedTokenInfoResponse {
+  string id = 1;
+  string subject_id = 2;
+  Actor actor = 3;
+}

@@ -1,46 +1,54 @@
-
 #include "manager.h"
 
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
-#include <ydb/core/kqp/gateway/actors/scheme.h>
-#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
-#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
-#include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
-#include <util/string/type.h>
+#include <ydb/library/conclusion/generic/result.h>
 
 namespace NKikimr::NKqp {
 
 namespace {
+
+using TYqlConclusionStatus = TExternalDataSourceManager::TYqlConclusionStatus;
+using TAsyncStatus = TExternalDataSourceManager::TAsyncStatus;
+
+template <typename TValue>
+using TYqlConclusion = TConclusionImpl<TYqlConclusionStatus, TValue>;
+
+//// Async actions
+
+TAsyncStatus ValidateExternalDatasourceSecrets(const NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc, const TExternalDataSourceManager::TInternalModificationContext& context) {
+    const auto& externalData = context.GetExternalData();
+    const auto& userToken = externalData.GetUserToken();
+    auto describeFuture = DescribeExternalDataSourceSecrets(externaDataSourceDesc.GetAuth(), userToken ? userToken->GetUserSID() : "", externalData.GetActorSystem());
+
+    return describeFuture.Apply([](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& f) {
+        if (const auto& value = f.GetValue(); value.Status != Ydb::StatusIds::SUCCESS) {
+            return TExternalDataSourceManager::TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(value.Status), value.Issues.ToString());   
+        }
+        return TExternalDataSourceManager::TYqlConclusionStatus::Success();
+    });
+}
+
+//// Sync actions
 
 TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& key) {
     auto fValue = container.GetFeaturesExtractor().Extract(key);
     return fValue ? *fValue : TString{};
 }
 
-void CheckFeatureFlag(TExternalDataSourceManager::TInternalModificationContext& context) {
-    auto* actorSystem = context.GetExternalData().GetActorSystem();
-    if (!actorSystem) {
-        ythrow yexception() << "This place needs an actor system. Please contact internal support";
-    }
-
-    if (!AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSources()) {
-        throw std::runtime_error("External data sources are disabled. Please contact your system administrator to enable it");
-    }
-}
-
-void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc,
-                                      const TString& name,
-                                      const NYql::TCreateObjectSettings& settings) {
+[[nodiscard]] TYqlConclusionStatus FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc, const TString& name, const NYql::TCreateObjectSettings& settings) {
     externaDataSourceDesc.SetName(name);
     externaDataSourceDesc.SetSourceType(GetOrEmpty(settings, "source_type"));
     externaDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
     externaDataSourceDesc.SetInstallation(GetOrEmpty(settings, "installation"));
     externaDataSourceDesc.SetReplaceIfExists(settings.GetReplaceIfExists());
 
-    TString authMethod = GetOrEmpty(settings, "auth_method");
+    const TString& authMethod = GetOrEmpty(settings, "auth_method");
     if (authMethod == "NONE") {
         externaDataSourceDesc.MutableAuth()->MutableNone();
     } else if (authMethod == "SERVICE_ACCOUNT") {
@@ -66,237 +74,194 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
         auto& token = *externaDataSourceDesc.MutableAuth()->MutableToken();
         token.SetTokenSecretName(GetOrEmpty(settings, "token_secret_name"));
     } else {
-        ythrow yexception() << "Internal error. Unknown auth method: " << authMethod;
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Unknown auth method: " << authMethod);
     }
 
     static const TSet<TString> properties {
         "database_name", 
         "protocol", // managed PG, CH
-        "mdb_cluster_id", // managed PG, CH
+        "mdb_cluster_id", // managed PG, CH, GP, MY
         "database_id", // managed YDB
         "use_tls",
-        "schema", // managed PG
+        "schema", // managed PG, GP
+        "service_name", // oracle
+        "folder_id" // logging
     };
 
+    auto& featuresExtractor = settings.GetFeaturesExtractor();
     for (const auto& property: properties) {
-        if (auto value = settings.GetFeaturesExtractor().Extract(property)) {
+        if (const auto value = featuresExtractor.Extract(property)) {
             externaDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
         }
     }
 
-    if (!settings.GetFeaturesExtractor().IsFinished()) {
-        ythrow yexception() << "Unknown property: " << settings.GetFeaturesExtractor().GetRemainedParamsString();
+    if (!featuresExtractor.IsFinished()) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Unknown property: " << featuresExtractor.GetRemainedParamsString());
     }
+    return TYqlConclusionStatus::Success();
 }
 
-void FillCreateExternalDataSourceCommand(NKikimrSchemeOp::TModifyScheme& modifyScheme, const NYql::TCreateObjectSettings& settings,
-                                         TExternalDataSourceManager::TInternalModificationContext& context) {
-    CheckFeatureFlag(context);
-
+TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& tableName, const TString& database, bool createDir) {
     std::pair<TString, TString> pathPair;
-    {
-        TString error;
-        if (!TrySplitPathByDb(settings.GetObjectId(), context.GetExternalData().GetDatabase(), pathPair, error)) {
-            throw std::runtime_error(error.c_str());
-        }
+    TString error;
+    if (!NSchemeHelpers::SplitTablePath(tableName, database, pathPair, error, createDir)) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid extarnal data source path: " << error);
+    }
+    return pathPair;
+}
+
+[[nodiscard]] TYqlConclusionStatus CheckFeatureFlag(const TExternalDataSourceManager::TInternalModificationContext& context) {
+    auto* actorSystem = context.GetExternalData().GetActorSystem();
+    if (!actorSystem) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. EXTERNAL_DATA_SOURCE creation and drop operations needs an actor system. Please contact internal support");
     }
 
-    modifyScheme.SetWorkingDir(pathPair.first);
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
-    modifyScheme.SetFailedOnAlreadyExists(!settings.GetExistingOk());
-
-    NKikimrSchemeOp::TExternalDataSourceDescription& dataSourceDesc = *modifyScheme.MutableCreateExternalDataSource();
-    FillCreateExternalDataSourceDesc(dataSourceDesc, pathPair.second, settings);
-}
-
-void FillDropExternalDataSourceCommand(NKikimrSchemeOp::TModifyScheme& modifyScheme, const NYql::TDropObjectSettings& settings,
-                                       TExternalDataSourceManager::TInternalModificationContext& context) {
-    CheckFeatureFlag(context);
-
-    std::pair<TString, TString> pathPair;
-    {
-        TString error;
-        if (!NSchemeHelpers::TrySplitTablePath(settings.GetObjectId(), pathPair, error)) {
-            throw std::runtime_error(error.c_str());
-        }
+    if (!AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSources()) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNSUPPORTED, "External data sources are disabled. Please contact your system administrator to enable it");
     }
-
-    modifyScheme.SetWorkingDir(pathPair.first);
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropExternalDataSource);
-    modifyScheme.SetSuccessOnNotExist(settings.GetMissingOk());
-
-    NKikimrSchemeOp::TDrop& drop = *modifyScheme.MutableDrop();
-    drop.SetName(pathPair.second);
+    return TYqlConclusionStatus::Success();
 }
 
-NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request, TActorSystem* actorSystem, bool failedOnAlreadyExists, bool successOnNotExist)
-{
-    auto promiseScheme = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
-    IActor* requestHandler = new TSchemeOpRequestHandler(request, promiseScheme, failedOnAlreadyExists, successOnNotExist);
-    actorSystem->Register(requestHandler);
-    return promiseScheme.GetFuture().Apply([](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& f) {
-        if (f.HasValue() && !f.HasException() && f.GetValue().Success()) {
-            return TExternalDataSourceManager::TYqlConclusionStatus::Success();
-        } else if (f.HasValue()) {
-            return TExternalDataSourceManager::TYqlConclusionStatus::Fail(f.GetValue().Status(), f.GetValue().Issues().ToString());
-        }
-        return TExternalDataSourceManager::TYqlConclusionStatus::Fail("no value in result");
-    });
+[[nodiscard]] TYqlConclusionStatus ErrorFromActivityType(TExternalDataSourceManager::EActivityType activityType) {
+    using EActivityType = TExternalDataSourceManager::EActivityType;
+
+    switch (activityType) {
+        case EActivityType::Undefined:
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Undefined operation for EXTERNAL_DATA_SOURCE object");
+        case EActivityType::Upsert:
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Upsert operation for EXTERNAL_DATA_SOURCE objects is not implemented");
+        case EActivityType::Alter:
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Alter operation for EXTERNAL_DATA_SOURCE objects is not implemented");
+        default:
+            throw yexception() << "Unexpected status to fail: " << activityType;
+    }
 }
 
-NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> ValidateCreateExternalDatasource(const NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc, const TExternalDataSourceManager::TInternalModificationContext& context) {
-    const auto& authDescription = externaDataSourceDesc.GetAuth();
-    const auto& externalData = context.GetExternalData();
-    const auto& userToken = externalData.GetUserToken();
-    auto describeFuture = DescribeExternalDataSourceSecrets(authDescription, userToken ? userToken->GetUserSID() : "", externalData.GetActorSystem());
+}  // anonymous namespace
 
-    return describeFuture.Apply([](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& f) mutable {
-        if (const auto& value = f.GetValue(); value.Status != Ydb::StatusIds::SUCCESS) {
-            return TExternalDataSourceManager::TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(value.Status), value.Issues.ToString());   
-        }
-        return TExternalDataSourceManager::TYqlConclusionStatus::Success();
-    });
-}
+//// Immediate modification
 
-}
+TAsyncStatus TExternalDataSourceManager::DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
+    Y_UNUSED(nodeId, manager);
 
-NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalDataSourceManager::DoModify(const NYql::TObjectSettingsImpl& settings,
-                                                                                                           const ui32 nodeId,
-                                                                                                           const NMetadata::IClassBehaviour::TPtr& manager,
-                                                                                                           TInternalModificationContext& context) const {
-    Y_UNUSED(nodeId, manager, settings);
     try {
         switch (context.GetActivityType()) {
-            case EActivityType::Upsert:
-            case EActivityType::Undefined:
-            case EActivityType::Alter:
-                return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("not implemented"));
             case EActivityType::Create:
                 return CreateExternalDataSource(settings, context);
             case EActivityType::Drop:
                 return DropExternalDataSource(settings, context);
+            default:
+                return NThreading::MakeFuture<TYqlConclusionStatus>(ErrorFromActivityType(context.GetActivityType()));
         }
     } catch (...) {
-        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(CurrentExceptionMessage()));
+        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during EXTERNAL_DATA_SOURCE modification operation: " << CurrentExceptionMessage()));
     }
 }
 
-NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalDataSourceManager::CreateExternalDataSource(const NYql::TCreateObjectSettings& settings,
-                                                                                                                           TInternalModificationContext& context) const {
-    using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-    NKikimrSchemeOp::TModifyScheme schemeTx;
-    FillCreateExternalDataSourceCommand(schemeTx, settings, context);
-
-    auto validationFuture = ValidateCreateExternalDatasource(schemeTx.GetCreateExternalDataSource(), context);
-
-    return validationFuture.Apply([context, schemeTx](const NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus>& f) {
-        if (const auto& value = f.GetValue(); value.IsFail()) {
-            return NThreading::MakeFuture(value);
-        }
-
-        auto ev = MakeHolder<TRequest>();
-        ev->Record.SetDatabaseName(context.GetExternalData().GetDatabase());
-        if (context.GetExternalData().GetUserToken()) {
-            ev->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
-        }
-
-        *ev->Record.MutableTransaction()->MutableModifyScheme() = schemeTx;
-
-        return SendSchemeRequest(ev.Release(), context.GetExternalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
-    });
-}
-
-NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalDataSourceManager::DropExternalDataSource(const NYql::TDropObjectSettings& settings,
-                                                                                                                         TInternalModificationContext& context) const {
-    using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-    auto ev = MakeHolder<TRequest>();
-    ev->Record.SetDatabaseName(context.GetExternalData().GetDatabase());
-    if (context.GetExternalData().GetUserToken()) {
-        ev->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
+TAsyncStatus TExternalDataSourceManager::CreateExternalDataSource(const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const {
+    NKqpProto::TKqpSchemeOperation schemeOperation;
+    if (auto status = PrepareCreateExternalDataSource(schemeOperation, settings, context); status.IsFail()) {
+        return NThreading::MakeFuture<TYqlConclusionStatus>(status);
     }
-
-    auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
-    FillDropExternalDataSourceCommand(schemeTx, settings, context);
-
-    return SendSchemeRequest(ev.Release(), context.GetExternalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
+    return ExecuteSchemeRequest(schemeOperation.GetCreateExternalDataSource(), context.GetExternalData(), NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource);
 }
 
-TExternalDataSourceManager::TYqlConclusionStatus TExternalDataSourceManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
-    const NMetadata::IClassBehaviour::TPtr& manager, NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context) const {
+TAsyncStatus TExternalDataSourceManager::DropExternalDataSource(const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
+    NKqpProto::TKqpSchemeOperation schemeOperation;
+    if (auto status = PrepareDropExternalDataSource(schemeOperation, settings, context); status.IsFail()) {
+        return NThreading::MakeFuture<TYqlConclusionStatus>(status);
+    }
+    return ExecuteSchemeRequest(schemeOperation.GetDropExternalDataSource(), context.GetExternalData(), NKqpProto::TKqpSchemeOperation::kDropExternalDataSource);
+}
+
+//// Deferred modification
+
+TYqlConclusionStatus TExternalDataSourceManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
     Y_UNUSED(manager);
 
     try {
         switch (context.GetActivityType()) {
-            case EActivityType::Undefined:
-                return TYqlConclusionStatus::Fail("Undefined operation for EXTERNAL_DATA_SOURCE object");
-            case EActivityType::Upsert:
-                return TYqlConclusionStatus::Fail("Upsert operation for EXTERNAL_DATA_SOURCE objects is not implemented");
-            case EActivityType::Alter:
-                return TYqlConclusionStatus::Fail("Alter operation for EXTERNAL_DATA_SOURCE objects is not implemented");
             case EActivityType::Create:
-                PrepareCreateExternalDataSource(schemeOperation, settings, context);
-                break;
+                return PrepareCreateExternalDataSource(schemeOperation, settings, context);
             case EActivityType::Drop:
-                PrepareDropExternalDataSource(schemeOperation, settings, context);
-                break;
+                return PrepareDropExternalDataSource(schemeOperation, settings, context);
+            default:
+                return ErrorFromActivityType(context.GetActivityType());
         }
-        return TYqlConclusionStatus::Success();
     } catch (...) {
-        return TYqlConclusionStatus::Fail(CurrentExceptionMessage());
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during preparation of EXTERNAL_DATA_SOURCE modification operation: " << CurrentExceptionMessage());
     }
 }
 
-void TExternalDataSourceManager::PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings,
-                                                                                                             TInternalModificationContext& context) const {
-    FillCreateExternalDataSourceCommand(*schemeOperation.MutableCreateExternalDataSource(), settings, context);
-}
-
-void TExternalDataSourceManager::PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings,
-                                                                                                           TInternalModificationContext& context) const {
-    FillDropExternalDataSourceCommand(*schemeOperation.MutableDropExternalDataSource(), settings, context);
-}
-
-NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus> TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,
-        const ui32 /*nodeId*/, const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& context) const {
-    using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-    auto validationFuture = NThreading::MakeFuture(TExternalDataSourceManager::TYqlConclusionStatus::Success());
-    NKikimrSchemeOp::TModifyScheme schemeTx;
-    switch (schemeOperation.GetOperationCase()) {
-        case NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource: {
-            const auto& createExternalDataSource = schemeOperation.GetCreateExternalDataSource();
-            validationFuture = ValidateCreateExternalDatasource(createExternalDataSource.GetCreateExternalDataSource(), context);
-            schemeTx.CopyFrom(createExternalDataSource);
-            break;
-        }
-        case NKqpProto::TKqpSchemeOperation::kAlterExternalDataSource:
-            schemeTx.CopyFrom(schemeOperation.GetAlterExternalDataSource());
-            break;
-        case NKqpProto::TKqpSchemeOperation::kDropExternalDataSource:
-            schemeTx.CopyFrom(schemeOperation.GetDropExternalDataSource());
-            break;
-        default:
-            return NThreading::MakeFuture(NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus::Fail(
-                TStringBuilder() << "Execution of prepare operation for EXTERNAL_DATA_SOURCE object: unsupported operation: " << int(schemeOperation.GetOperationCase())));
+TYqlConclusionStatus TExternalDataSourceManager::PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const {
+    if (auto status = CheckFeatureFlag(context); status.IsFail()) {
+        return status;
     }
 
-    return validationFuture.Apply([context, schemeTx](const NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus>& f) {
-        if (const auto& value = f.GetValue(); value.IsFail()) {
-            return NThreading::MakeFuture(value);
+    auto pathPairStatus = SplitPath(settings.GetObjectId(), context.GetExternalData().GetDatabase(), true);
+    if (pathPairStatus.IsFail()) {
+        return pathPairStatus;
+    }
+    const auto& [workingDir, name] = pathPairStatus.DetachResult();
+
+    auto& schemeTx = *schemeOperation.MutableCreateExternalDataSource();
+    schemeTx.SetWorkingDir(workingDir);
+    schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
+    schemeTx.SetFailedOnAlreadyExists(!settings.GetExistingOk());
+
+    return FillCreateExternalDataSourceDesc(*schemeTx.MutableCreateExternalDataSource(), name, settings);
+}
+
+TYqlConclusionStatus TExternalDataSourceManager::PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
+    if (auto status = CheckFeatureFlag(context); status.IsFail()) {
+        return status;
+    }
+
+    auto pathPairStatus = SplitPath(settings.GetObjectId(), context.GetExternalData().GetDatabase(), false);
+    if (pathPairStatus.IsFail()) {
+        return pathPairStatus;
+    }
+    const auto& [workingDir, name] = pathPairStatus.DetachResult();
+
+    auto& schemeTx = *schemeOperation.MutableDropExternalDataSource();
+    schemeTx.SetWorkingDir(workingDir);
+    schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropExternalDataSource);
+    schemeTx.SetSuccessOnNotExist(settings.GetMissingOk());
+
+    schemeTx.MutableDrop()->SetName(name);
+
+    return TYqlConclusionStatus::Success();
+}
+
+//// Apply deferred modification
+
+TAsyncStatus TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation, const ui32 nodeId, const NMetadata::IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
+    Y_UNUSED(nodeId, manager);
+
+    try {
+        switch (schemeOperation.GetOperationCase()) {
+            case NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource:
+                return ExecuteSchemeRequest(schemeOperation.GetCreateExternalDataSource(), context, schemeOperation.GetOperationCase());
+            case NKqpProto::TKqpSchemeOperation::kDropExternalDataSource:
+                return ExecuteSchemeRequest(schemeOperation.GetDropExternalDataSource(), context, schemeOperation.GetOperationCase());
+            default:
+                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Execution of prepared operation for EXTERNAL_DATA_SOURCE object: unsupported operation: " << static_cast<i32>(schemeOperation.GetOperationCase())));
         }
+    } catch (...) {
+        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during execution of EXTERNAL_DATA_SOURCE modification operation: " << CurrentExceptionMessage()));
+    }
+}
 
-        auto ev = MakeHolder<TRequest>();
-        ev->Record.SetDatabaseName(context.GetDatabase());
-        if (context.GetUserToken()) {
-            ev->Record.SetUserToken(context.GetUserToken()->GetSerializedToken());
-        }
-
-        *ev->Record.MutableTransaction()->MutableModifyScheme() = schemeTx;
-
-        return SendSchemeRequest(ev.Release(), context.GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
+TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
+    TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
+        validationFuture = ChainFeatures(validationFuture, [desc = schemeTx.GetCreateExternalDataSource(), context] {
+            return ValidateExternalDatasourceSecrets(desc, context);
+        });
+    }
+    return ChainFeatures(validationFuture, [schemeTx, context] {
+        return SendSchemeRequest(schemeTx, context);
     });
 }
 
-}
+}  // namespace NKikimr::NKqp

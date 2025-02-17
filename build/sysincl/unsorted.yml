@@ -3,6 +3,14 @@
     - types.h
     - stat.h
 
+- source_filter: "^contrib(?!/restricted/libnl)"
+  includes:
+    - netlink/genl/genl.h
+    - netlink/genl/family.h
+    - netlink/genl/ctrl.h
+    - netlink/msg.h
+    - netlink/attr.h
+
 - source_filter: ".*contrib.*"
   includes:
   - stat.h
@@ -52,7 +60,6 @@
   - gdbm.h
   - gmp.h
   - hp-timing.h
-  - httpd_wrap.h
   - i86.h
   - ieeedef.h
   - in.h
@@ -73,14 +80,7 @@
   - libavcodec/pcm_tables.h
   - libavcodec/qdm2_tables.h
   - libavcodec/sinewin_tables.h
-  - libio/iolibio.h
-  - libio/libioP.h
   - libs/regex/test/config_info/regex_config_info.cpp
-  - locale/coll-lookup.h
-  - locale/elem-hash.h
-  - locale/localeinfo.h
-  - locale/weight.h
-  - locale/weightwc.h
   - lqr.h
   - m68881.h
   - mach/cthreads.h
@@ -103,12 +103,9 @@
   - opcdef.h
   - paper.h
   - pire/config.h
-  - pngusr.h
   - pth.h
-  - relocatable.h
   - rtl.h
   - shlib-compat.h
-  - sigsegv.h
   - socket.h
   - socketshr.h
   - socklib.h
@@ -138,31 +135,17 @@
   - yca/yca.h
   - prof.h
   - ll_alloc_hook.c
-  - cpptl/config.h
-  - cpptl/conststring.h
-  - cpptl/forwards.h
-  - cpptl/smallmap.h
   - forwards.h
   - json_valueiterator.inl
   - value.h
   - sljit/sljitLir.c
   - pcre_printint.c
-  #if defined(_LIBC) && CONTRIB && TRASH
-  - not-cancel.h
-  - local-setxid.h
-  - vasprintf.h
-  #endif
-
-- source_filter: "^contrib/(libs/(apache|httpd|libuv)|python/uWSGI)"
-  includes:
-  - port.h
 
 - includes:
   - cpu-features.h
   - cpuid.h
   - nan.h
   - omp.h
-  - unlocked-io.h
   - cygwin/version.h
   - zircon/syscalls.h
   - zircon/types.h
@@ -229,21 +212,6 @@
   - varargs.h
   - vm/vm_param.h
   #endif
-  #if defined(_MSC_VER)
-  - comdef.h
-  - comutil.h
-  - concrt.h
-  - crtdefs.h
-  - crtversion.h
-  - eh.h
-  - excpt.h
-  - ppl.h
-  - ppltasks.h
-  - rtcapi.h
-  - vadefs.h
-  - varargs.h
-  - crtassem.h
-  #endif
   #if defined(_unix_) && TODO
   - bits/types/mbstate_t.h
   - sys/atomic.h
@@ -288,11 +256,8 @@
   #if defined(HAVE_DMALLOC)
   - dmalloc.h
   #endif
-  #if defined(_TRASH_) && TODO
+	#if defined(_TRASH_) && TODO
   - gcrypt.h
-  - gdwmfapi.h
-  - winmmap.h
-  - sf_unistd.h
   #endif
   #if defined(__TURBOC__) || defined(__BORLANDC__)
   - alloc.h
@@ -341,10 +306,6 @@
   - sub_proc.h
   - w32err.h
   - procinfo.h
-  #if defined(__HAIKU__)
-  - FindDirectory.h
-  - StorageDefs.h
-  #endif
   - fpxcp.h
   - fptrap.h
   - fortran.h
@@ -352,21 +313,6 @@
   - SIOUX.h
   - sys/siginfo.h
   - lzmalib.h
-  # ICU
-  - uconfig_local.h
-  - ucln_local_hook.c
-  - unistrm.h
-  - udbgutil.h
-  - dll.h
-  - ascii_a.h
-  - qusec.h
-  - qusrjobi.h
-  - qliept.h
-  - mih/testptr.h
-  - sys/neutrino.h
-  - cics.h
-  - tbb/scalable_allocator.h
-  - libmemcached/dtrace_probes.h
   # unknown
   - win_stdint.h
   - probes.h
@@ -398,11 +344,6 @@
   - netdnet/dnetdb.h
   - sys/ethernet.h
   - sys/stream.h
-  - netlink/genl/genl.h
-  - netlink/genl/family.h
-  - netlink/genl/ctrl.h
-  - netlink/msg.h
-  - netlink/attr.h
   # end libpcap files
 
 # These includes are not used in autocheck builds, but might be necessary for
@@ -436,14 +377,6 @@
   - yandex/threads/boost_threaded.hpp
   - yasm-plugin.h
   #endif
-  #if CONTRIB && TRASH
-  - macconfig.h
-  - json_batchallocator.h
-  - json_internalarray.inl
-  - json_internalmap.inl
-  - mysql/mysql_version.h
-  - libiberty.h
-  #endif
 
 - includes:
   #if defined(__FreeBSD__)
@@ -464,7 +397,6 @@
   - md2.h
   - md4.h
   - mp.h
-  - pcap-int.h
   - sys/_iovec.h
   - sys/_null.h
   - sys/_pthreadtypes.h
@@ -481,17 +413,10 @@
   - sys/tree.h
   - tcpd.h
   #endif
-  #if defined(_TRASH_) && TODO
-  - google/profiler.h
-  #endif
-  - net/errno.h
   - sys/mode.h
-  - netware.h
-  - perldtrace.h
   - win32thread.h
-  - bsd/ctypes.h
-  - sfio.h
   - GL/glx.h
+  - GL/glcorearb.h
   - CL/va_ext.h
   - sys/sysconf.h
   - ivx.hpp

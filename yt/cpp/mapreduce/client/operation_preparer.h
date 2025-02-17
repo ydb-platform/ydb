@@ -28,16 +28,15 @@ public:
 
     TOperationId StartOperation(
         TOperation* operation,
-        const TString& operationType,
-        const TNode& spec,
-        bool useStartOperationRequest = false);
+        EOperationType type,
+        const TNode& spec);
 
     const IClientRetryPolicyPtr& GetClientRetryPolicy() const;
 
 private:
     TClientPtr Client_;
     TTransactionId TransactionId_;
-    THolder<TPingableTransaction> FileTransaction_;
+    std::unique_ptr<TPingableTransaction> FileTransaction_;
     IClientRetryPolicyPtr ClientRetryPolicy_;
     const TString PreparationId_;
 
@@ -54,7 +53,7 @@ struct IItemToUpload
     virtual ~IItemToUpload() = default;
 
     virtual TString CalculateMD5() const = 0;
-    virtual THolder<IInputStream> CreateInputStream() const = 0;
+    virtual std::unique_ptr<IInputStream> CreateInputStream() const = 0;
     virtual TString GetDescription() const = 0;
     virtual i64 GetDataSize() const = 0;
 };
@@ -80,8 +79,11 @@ public:
     const TUserJobSpec& GetSpec() const;
     bool ShouldMountSandbox() const;
     ui64 GetTotalFileSize() const;
+    bool ShouldRedirectStdoutToStderr() const;
 
 private:
+    const IRawClientPtr RawClient_;
+
     TOperationPreparer& OperationPreparer_;
     TUserJobSpec Spec_;
     TOperationOptions Options_;
@@ -94,6 +96,8 @@ private:
     TString ClassName_;
     TString Command_;
     ui64 TotalFileSize_ = 0;
+
+    bool IsCommandJob_ = false;
 
 private:
     TString GetFileStorage() const;

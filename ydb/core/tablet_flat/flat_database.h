@@ -42,16 +42,43 @@ class TDatabase {
 public:
     using TMemGlobs = TVector<NPageCollection::TMemGlob>;
     using TCookieAllocator = NPageCollection::TCookieAllocator;
-    using TCounters = TDbStats;
 
     struct TProd {
         THolder<TChange> Change;
         TVector<std::function<void()>> OnPersistent;
     };
 
-    struct TChg {
-        ui64 Serial;
-        TEpoch Epoch;
+    struct TChangeCounter {
+        /**
+         * Monotonic change counter for a table or an entire database. Serial
+         * is incremented and persisted on each successful Commit() that has
+         * data changes (i.e. not empty). Note: this may or may not be zero
+         * when table has no changes, or when all changes have been compacted.
+         */
+        ui64 Serial = 0;
+
+        /**
+         * Monotonic epoch of a table's current memtable. This is incremented
+         * each time a memtable is flushed and a new one is started. The
+         * current memtable may or may not have additional changes.
+         */
+        TEpoch Epoch = TEpoch::Zero();
+
+        TChangeCounter() = default;
+
+        TChangeCounter(ui64 serial, TEpoch epoch)
+            : Serial(serial)
+            , Epoch(epoch)
+        {}
+
+        bool operator==(const TChangeCounter& rhs) const = default;
+        bool operator!=(const TChangeCounter& rhs) const = default;
+
+        /**
+         * Compares two change counters, such that when a < b then b either
+         * has more changes than a, or it's impossible to determine.
+         */
+        bool operator<(const TChangeCounter& rhs) const;
     };
 
     TDatabase(const TDatabase&) = delete;
@@ -60,14 +87,11 @@ public:
 
     void SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) noexcept;
 
-    /* Returns durable monotonic change number for table or entire database
-        on default (table = Max<ui32>()). Serial is incremented for each
-        successful Commit(). AHTUNG: Serial may go to the past in case of
-        migration to older db versions with (Evolution < 18). Thus do not
-        rely on durability until of kikimr stable 18-08.
+    /**
+     * Returns durable monotonic change counter for a table (or a database when
+     * table = Max<ui32>() by default).
      */
-
-    TChg Head(ui32 table = Max<ui32>()) const noexcept;
+    TChangeCounter Head(ui32 table = Max<ui32>()) const noexcept;
 
     /*_ Call Next() before accessing each row including the 1st row. */
 
@@ -116,6 +140,7 @@ public:
                         EDirection direction = EDirection::Forward,
                         TRowVersion snapshot = TRowVersion::Max());
 
+    TSizeEnv CreateSizeEnv();
     void CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TRawVals maxKey,
                         TTagsRef tags, ui64 readFlags, ui64 itemsLimit, ui64 bytesLimit,
                         EDirection direction = EDirection::Forward,
@@ -167,6 +192,13 @@ public:
 
     void NoMoreReadsForTx();
 
+    /**
+     * Will debug assert when current transaction attempts to read tables that
+     * have not been precharged up to this point. Useful to detect missing
+     * precharges that avoid multiple transaction restarts.
+     */
+    void NoMoreUnprechargedReadsForTx();
+
     TAlter& Alter(); /* Begin DDL ALTER script */
 
     TEpoch TxSnapTable(ui32 table);
@@ -188,7 +220,10 @@ public:
     ui64 GetTableIndexSize(ui32 table) const;
     ui64 GetTableSearchHeight(ui32 table) const;
     ui64 EstimateRowSize(ui32 table) const;
-    const TCounters& Counters() const noexcept;
+    const TDbStats& Counters() const noexcept;
+    TDbRuntimeStats RuntimeCounters() const noexcept;
+
+    void UpdateApproximateFreeSharesByChannel(const THashMap<ui32, float>& approximateFreeSpaceShareByChannel);
     TString SnapshotToLog(ui32 table, TTxStamp);
 
     TAutoPtr<TSubset> Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const;
@@ -231,7 +266,6 @@ public:
     void RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper);
 
     size_t GetCommitRedoBytes() const;
-    bool ValidateCommit(TString&);
 
     TCompactionStats GetCompactionStats(ui32 table) const;
 
@@ -265,10 +299,14 @@ private:
     TTable* Require(ui32 tableId) const noexcept;
     TTable* RequireForUpdate(ui32 tableId) const noexcept;
 
+    void CheckReadAllowed(ui32 table) const noexcept;
+    void CheckPrechargeAllowed(ui32 table, TRawVals minKey, TRawVals maxKey) const noexcept;
+
 private:
     const THolder<TDatabaseImpl> DatabaseImpl;
 
-    bool NoMoreReadsFlag;
+    bool NoMoreReadsFlag = false;
+    bool NoMoreUnprechargedReadsFlag = false;
     IPages* Env = nullptr;
     THolder<TChange> Change;
     TAutoPtr<TAlter> Alter_;
@@ -279,7 +317,7 @@ private:
     TVector<TUpdateOp> ModifiedOps;
 
     mutable TDeque<TPartIter> TempIterators; // Keeps the last result of Select() valid
-    mutable THashSet<ui32> IteratedTables;
+    mutable TVector<ui32> PrechargedTables;
 
     TVector<std::function<void()>> OnCommit_;
     TVector<std::function<void()>> OnRollback_;

@@ -35,17 +35,26 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort",
+                                                "Node Type": "TopSort-Aggregate",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Limit": "10",
+                                                        "Name": "TopSort",
+                                                        "TopSortBy": "argument.Count0"
+                                                    },
                                                     {
                                                         "Inputs": [
                                                             {
                                                                 "ExternalPlanNodeId": 4
                                                             }
                                                         ],
-                                                        "Limit": "10",
-                                                        "Name": "TopSort",
-                                                        "TopSortBy": "argument.Count0"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Final"
                                                     }
                                                 ],
                                                 "PlanNodeId": 5,
@@ -59,17 +68,27 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate",
+                                                                "Node Type": "Aggregate-Aggregate",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
+                                                                        "Aggregation": "{Inc(state._yql_agg_0)}",
                                                                         "GroupBy": "item.SearchPhrase",
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
+                                                                    },
+                                                                    {
                                                                         "Inputs": [
                                                                             {
                                                                                 "ExternalPlanNodeId": 2
                                                                             }
                                                                         ],
-                                                                        "Name": "Aggregate"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Final"
                                                                     }
                                                                 ],
                                                                 "PlanNodeId": 3,
@@ -84,32 +103,45 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                                "Node Type": "Aggregate-Filter-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
                                                                                         "Aggregation": "state",
-                                                                                        "GroupBy": "",
+                                                                                        "GroupBy": "[item.SearchPhrase,item.UserID]",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
                                                                                             }
                                                                                         ],
-                                                                                        "Name": "Aggregate"
+                                                                                        "Name": "Aggregate",
+                                                                                        "Phase": "Intermediate"
+                                                                                    },
+                                                                                    {
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 2
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Filter",
+                                                                                        "Predicate": "SearchPhrase != \"\"",
+                                                                                        "Pushdown": "True"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/local/clickbench/plans/column/hits",
                                                                                         "ReadColumns": [
                                                                                             "SearchPhrase",
                                                                                             "UserID"
                                                                                         ],
                                                                                         "ReadRanges": [
-                                                                                            "EventTime (-\u221e, +\u221e)",
                                                                                             "CounterID (-\u221e, +\u221e)",
                                                                                             "EventDate (-\u221e, +\u221e)",
                                                                                             "UserID (-\u221e, +\u221e)",
+                                                                                            "EventTime (-\u221e, +\u221e)",
                                                                                             "WatchID (-\u221e, +\u221e)"
                                                                                         ],
+                                                                                        "Scan": "Parallel",
                                                                                         "SsaProgram": {
                                                                                             "Command": [
                                                                                                 {
@@ -189,147 +221,10 @@
                             }
                         ]
                     }
-                ]
-            },
-            "SimplifiedPlan": {
-                "Node Type": "Query",
-                "PlanNodeId": 0,
-                "PlanNodeType": "Query",
-                "Plans": [
-                    {
-                        "Node Type": "ResultSet",
-                        "PlanNodeId": 1,
-                        "PlanNodeType": "ResultSet",
-                        "Plans": [
-                            {
-                                "Node Type": "Limit",
-                                "Operators": [
-                                    {
-                                        "Limit": "10",
-                                        "Name": "Limit"
-                                    }
-                                ],
-                                "PlanNodeId": 2,
-                                "Plans": [
-                                    {
-                                        "Node Type": "TopSort",
-                                        "Operators": [
-                                            {
-                                                "Limit": "10",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "argument.Count0"
-                                            }
-                                        ],
-                                        "PlanNodeId": 4,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "Aggregate",
-                                                "Operators": [
-                                                    {
-                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
-                                                        "GroupBy": "item.SearchPhrase",
-                                                        "Name": "Aggregate"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 6,
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "Aggregate",
-                                                        "Operators": [
-                                                            {
-                                                                "Aggregation": "state",
-                                                                "GroupBy": "",
-                                                                "Name": "Aggregate"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 8,
-                                                        "Plans": [
-                                                            {
-                                                                "Node Type": "TableFullScan",
-                                                                "Operators": [
-                                                                    {
-                                                                        "Name": "TableFullScan",
-                                                                        "ReadColumns": [
-                                                                            "SearchPhrase",
-                                                                            "UserID"
-                                                                        ],
-                                                                        "ReadRanges": [
-                                                                            "EventTime (-\u221e, +\u221e)",
-                                                                            "CounterID (-\u221e, +\u221e)",
-                                                                            "EventDate (-\u221e, +\u221e)",
-                                                                            "UserID (-\u221e, +\u221e)",
-                                                                            "WatchID (-\u221e, +\u221e)"
-                                                                        ],
-                                                                        "SsaProgram": {
-                                                                            "Command": [
-                                                                                {
-                                                                                    "Assign": {
-                                                                                        "Column": {
-                                                                                            "Id": 106
-                                                                                        },
-                                                                                        "Constant": {
-                                                                                            "Bytes": ""
-                                                                                        }
-                                                                                    }
-                                                                                },
-                                                                                {
-                                                                                    "Assign": {
-                                                                                        "Column": {
-                                                                                            "Id": 107
-                                                                                        },
-                                                                                        "Function": {
-                                                                                            "Arguments": [
-                                                                                                {
-                                                                                                    "Id": 40
-                                                                                                },
-                                                                                                {
-                                                                                                    "Id": 106
-                                                                                                }
-                                                                                            ],
-                                                                                            "FunctionType": 2,
-                                                                                            "KernelIdx": 0,
-                                                                                            "YqlOperationId": 12
-                                                                                        }
-                                                                                    }
-                                                                                },
-                                                                                {
-                                                                                    "Filter": {
-                                                                                        "Predicate": {
-                                                                                            "Id": 107
-                                                                                        }
-                                                                                    }
-                                                                                },
-                                                                                {
-                                                                                    "Projection": {
-                                                                                        "Columns": [
-                                                                                            {
-                                                                                                "Id": 40
-                                                                                            },
-                                                                                            {
-                                                                                                "Id": 10
-                                                                                            }
-                                                                                        ]
-                                                                                    }
-                                                                                }
-                                                                            ],
-                                                                            "Version": 5
-                                                                        },
-                                                                        "Table": "clickbench/plans/column/hits"
-                                                                    }
-                                                                ],
-                                                                "PlanNodeId": 9
-                                                            }
-                                                        ]
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {
@@ -341,10 +236,10 @@
                                 "UserID"
                             ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

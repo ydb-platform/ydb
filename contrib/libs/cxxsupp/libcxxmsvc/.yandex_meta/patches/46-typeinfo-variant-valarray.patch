@@ -1,0 +1,97 @@
+diff --git a/include/typeinfo b/include/typeinfo
+index e46956e..7efe626 100644
+--- a/include/typeinfo
++++ b/include/typeinfo
+@@ -350,24 +350,46 @@ public:
+ class _LIBCPP_EXCEPTION_ABI bad_cast
+     : public exception
+ {
+- public:
++public:
++#ifdef _LIBCPP_ABI_MICROSOFT
++    bad_cast() _NOEXCEPT {}
++    virtual ~bad_cast() _NOEXCEPT {}
++    virtual const char* what() const _NOEXCEPT
++    {
++      return "std::bad_cast";
++    }
++#else
+   bad_cast() _NOEXCEPT;
+   bad_cast(const bad_cast&) _NOEXCEPT = default;
+   virtual ~bad_cast() _NOEXCEPT;
+   virtual const char* what() const _NOEXCEPT;
++#endif
+ };
+ 
+ class _LIBCPP_EXCEPTION_ABI bad_typeid
+     : public exception
+ {
+- public:
++public:
++#ifdef _LIBCPP_ABI_MICROSOFT
++    bad_typeid() _NOEXCEPT {}
++    virtual ~bad_typeid() _NOEXCEPT {}
++    virtual const char* what() const _NOEXCEPT
++    {
++      return "std::bad_typeid";
++    }
++#else
+   bad_typeid() _NOEXCEPT;
+   virtual ~bad_typeid() _NOEXCEPT;
+   virtual const char* what() const _NOEXCEPT;
++#endif
+ };
+ 
+ } // namespace std
+ 
++#ifdef _LIBCPP_ABI_MICROSOFT
++class type_info : public std::type_info {};
++#endif
++
+ #endif // defined(_LIBCPP_ABI_VCRUNTIME)
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+diff --git a/include/valarray b/include/valarray
+index ac1ca9b..90740f2 100644
+--- a/include/valarray
++++ b/include/valarray
+@@ -2779,7 +2779,7 @@ public:
+ };
+ 
+ template<class _ValExpr>
+-__val_expr<_ValExpr>::operator valarray<__val_expr::__result_type>() const
++__val_expr<_ValExpr>::operator valarray<typename __val_expr<_ValExpr>::__result_type>() const
+ {
+     valarray<__result_type> __r;
+     size_t __n = __expr_.size();
+diff --git a/include/variant b/include/variant
+index d102196..be8e44b 100644
+--- a/include/variant
++++ b/include/variant
+@@ -1246,18 +1246,21 @@ struct __all_overloads : _Bases... {
+   using _Bases::operator()...;
+ };
+ 
+-template <class IdxSeq>
++// Change metaprogramming to satisfy MSVC. It doesn't like expression
++// __overload<_Types, _Idx>... when _Types comes from using parameter but
++// _Idx comes from structure template parameter. So I made them both
++// structure template parameters.
++template <class _IdxSeq, class ..._Types>
+ struct __make_overloads_imp;
+ 
+-template <size_t ..._Idx>
+-struct __make_overloads_imp<__tuple_indices<_Idx...> > {
+-  template <class ..._Types>
++template <size_t ..._Idx, class ..._Types>
++struct __make_overloads_imp<__tuple_indices<_Idx...>, _Types... > {
+   using _Apply _LIBCPP_NODEBUG = __all_overloads<__overload<_Types, _Idx>...>;
+ };
+ 
+ template <class ..._Types>
+ using _MakeOverloads _LIBCPP_NODEBUG = typename __make_overloads_imp<
+-    __make_indices_imp<sizeof...(_Types), 0> >::template _Apply<_Types...>;
++    __make_indices_imp<_Sizeof<_Types...>::value, 0>, _Types...>::_Apply;
+ 
+ template <class _Tp, class... _Types>
+ using __best_match_t =

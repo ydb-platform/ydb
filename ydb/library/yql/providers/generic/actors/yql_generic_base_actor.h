@@ -2,15 +2,15 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NYql::NDq {
 
     template <typename TDerived>
     class TGenericBaseActor: public NActors::TActorBootstrapped<TDerived> {
-    protected: //Events
+    protected: // Events
         // Event ids
         enum EEventIds: ui32 {
             EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -21,6 +21,7 @@ namespace NYql::NDq {
             EvReadSplitsPart,
             EvReadSplitsFinished,
             EvError,
+            EvRetry,
             EvEnd
         };
 
@@ -89,7 +90,16 @@ namespace NYql::NDq {
             NConnector::NApi::TError Error;
         };
 
-    protected: //TODO move common logic here
+        struct TEvRetry: NActors::TEventLocal<TEvRetry, EvRetry> {
+            explicit TEvRetry(ui32 nextRetries)
+                : NextRetries(nextRetries)
+            {
+            }
+
+            ui32 NextRetries;
+        };
+
+    protected: // TODO move common logic here
     };
 
 } // namespace NYql::NDq

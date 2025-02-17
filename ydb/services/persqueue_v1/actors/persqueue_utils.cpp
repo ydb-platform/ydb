@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/path.h>
 
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -111,6 +111,7 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQ
         case READ_ERROR_TOO_BIG_OFFSET:
         case SET_OFFSET_ERROR_COMMIT_TO_FUTURE:
         case SET_OFFSET_ERROR_COMMIT_TO_PAST:
+        case UNKNOWN_READ_RULE:
             return Ydb::StatusIds::BAD_REQUEST;
         case WRONG_COOKIE:
         case CREATE_SESSION_ALREADY_LOCKED:
@@ -129,7 +130,8 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQ
             return Ydb::StatusIds::UNAVAILABLE;
         case UNKNOWN_TXID:
             return Ydb::StatusIds::NOT_FOUND;
-
+        case PRECONDITION_FAILED:
+            return Ydb::StatusIds::PRECONDITION_FAILED;
         default:
             return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     }
@@ -151,6 +153,25 @@ void FillIssue(Ydb::Issue::IssueMessage* issue, const Ydb::PersQueue::ErrorCode:
     issue->set_message(errorReason);
     issue->set_severity(NYql::TSeverityIds::S_ERROR);
     issue->set_issue_code(errorCode);
+}
+
+Ydb::PersQueue::ErrorCode::ErrorCode ConvertNavigateStatus(NSchemeCache::TSchemeCacheNavigate::EStatus status) {
+    switch(status) {
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+            return Ydb::PersQueue::ErrorCode::OK;
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
+            return Ydb::PersQueue::ErrorCode::ERROR;
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
+            return Ydb::PersQueue::ErrorCode::UNKNOWN_TOPIC;
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+            return Ydb::PersQueue::ErrorCode::ACCESS_DENIED;
+    }
 }
 
 } // namespace NKikimr::NGRpcProxy::V1

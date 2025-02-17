@@ -6,8 +6,6 @@ namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr TStringBuf SystemLoggingCategoryName = "Logging";
-
 constexpr TStringBuf DefaultStderrWriterName = "Stderr";
 constexpr TStringBuf DefaultFileWriterName = "File";
 

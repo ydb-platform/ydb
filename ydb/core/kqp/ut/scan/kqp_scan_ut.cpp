@@ -168,6 +168,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     Y_UNIT_TEST(IsNull) {
@@ -237,31 +238,56 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 .BeginTuple().AddElement().BeginOptional().Decimal(TDecimalValue("1.5", 22, 9)).EndOptional().EndTuple()
                 .Build());
 
-        auto ret = session.CreateTable("/Root/DecimalTest",
+       auto ret = session.CreateTable("/Root/DecimalTest",
                 TTableBuilder()
                     .AddNullableColumn("Key", TDecimalType(22, 9))
+                    .AddNullableColumn("Key35", TDecimalType(35, 10))
                     .AddNullableColumn("Value", TDecimalType(22, 9))
-                    .SetPrimaryKeyColumn("Key")
-                    // .SetPartitionAtKeys(partitions)  // Error at split boundary 0: Unsupported typeId 4865 at index 0
+                    .AddNullableColumn("Value35", TDecimalType(35, 10))
+                    .SetPrimaryKeyColumns({"Key", "Key35"})
+                    .SetPartitionAtKeys(partitions)
                     .Build()).GetValueSync();
         UNIT_ASSERT_C(ret.IsSuccess(), ret.GetIssues().ToString());
 
+        {
+            auto describeResult = session.DescribeTable("/Root/DecimalTest" , TDescribeTableSettings().WithKeyShardBoundary(true)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), NYdb::EStatus::SUCCESS);
+            const NYdb::NTable::TTableDescription& tableDescription = describeResult.GetTableDescription();
+            const std::vector<NYdb::NTable::TKeyRange>& keyRanges = tableDescription.GetKeyRanges();
+            const std::vector<NYdb::NTable::TTableColumn>& columns = tableDescription.GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
+            UNIT_ASSERT_STRINGS_EQUAL(columns[0].Type.ToString(), "Decimal(22,9)?");
+            UNIT_ASSERT_STRINGS_EQUAL(columns[1].Type.ToString(), "Decimal(35,10)?");
+            auto extractValue = [](const TValue& val) {
+                auto parser = TValueParser(val);
+                parser.OpenTuple();
+                UNIT_ASSERT(parser.TryNextElement());
+                return parser.GetOptionalDecimal()->ToString();
+            };
+            UNIT_ASSERT_VALUES_EQUAL(keyRanges.size(), 2);
+            UNIT_ASSERT_STRINGS_EQUAL(extractValue(keyRanges[0].To()->GetValue()), "1.5");
+        }
+
         auto params = TParamsBuilder().AddParam("$in").BeginList()
                 .AddListItem().BeginStruct()
-                    .AddMember("Key").Decimal(TDecimalValue("1.0"))
-                    .AddMember("Value").Decimal(TDecimalValue("10.123456789"))
+                    .AddMember("Key").Decimal(TDecimalValue("1.0", 22, 9))
+                    .AddMember("Key35").Decimal(TDecimalValue("155555555555555.0", 35, 10))
+                    .AddMember("Value").Decimal(TDecimalValue("10.123456789", 22, 9))
+                    .AddMember("Value35").Decimal(TDecimalValue("155555555555555.123456789", 35, 10))
                     .EndStruct()
                 .AddListItem().BeginStruct()
-                    .AddMember("Key").Decimal(TDecimalValue("2.0"))
-                    .AddMember("Value").Decimal(TDecimalValue("20.987654321"))
+                    .AddMember("Key").Decimal(TDecimalValue("2.0", 22, 9))
+                    .AddMember("Key35").Decimal(TDecimalValue("255555555555555.0", 35, 10))
+                    .AddMember("Value").Decimal(TDecimalValue("20.987654321", 22, 9))
+                    .AddMember("Value35").Decimal(TDecimalValue("255555555555555.987654321", 35, 10))
                     .EndStruct()
                 .EndList().Build().Build();
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            DECLARE $in AS List<Struct<Key: Decimal(22, 9), Value: Decimal(22, 9)>>;
+            DECLARE $in AS List<Struct<Key: Decimal(22, 9), Key35: Decimal(35, 10), Value: Decimal(22, 9), Value35: Decimal(35, 10)>>;
             REPLACE INTO `/Root/DecimalTest`
-                SELECT Key, Value FROM AS_TABLE($in);
+                SELECT Key, Key35, Value, Value35 FROM AS_TABLE($in);
         )", TTxControl::BeginTx().CommitTx(), params).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -271,6 +297,12 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             [["1"];["10.123456789"]];
             [["2"];["20.987654321"]]
         ])", StreamResultToYson(it));
+
+        auto it35 = db.StreamExecuteScanQuery("select Key35, max(Value35) from `/Root/DecimalTest` group by Key35 order by Key35").GetValueSync();
+        CompareYson(R"([
+            [["155555555555555"];["155555555555555.123456789"]];
+            [["255555555555555"];["255555555555555.987654321"]]
+        ])", StreamResultToYson(it35));
     }
 
     Y_UNIT_TEST(TaggedScalar) {
@@ -1319,8 +1351,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_EQUAL_C(part.GetStatus(), EStatus::PRECONDITION_FAILED, part.GetStatus());
         part.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(HasIssue(part.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-            [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("Requested too many execution units");
+            [](const auto& issue) {
+                return issue.GetMessage().contains("Requested too many execution units");
             }));
 
         part = it.ReadNext().GetValueSync();
@@ -1703,7 +1735,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         for (auto v : {1, 2, 3, 42, 50, 100}) {
             pl.AddListItem().OptionalUint64(v);
         }
-        pl.AddListItem().OptionalUint64(Nothing());
+        pl.AddListItem().OptionalUint64(std::nullopt);
         pl.EndList().Build();
 
         auto it = db.StreamExecuteScanQuery(query, params.Build()).GetValueSync();
@@ -1760,9 +1792,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             UNIT_ASSERT_C(!streamPart.IsSuccess(), streamPart.GetIssues().ToString());
             UNIT_ASSERT_C(!streamPart.EOS(), streamPart.GetIssues().ToString());
             UNIT_ASSERT(
-                HasIssue(streamPart.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("Terminate was called")   // general termination prefix
-                           && issue.GetMessage().Contains("Bad filter value.");  // test specific UDF exception
+                HasIssue(streamPart.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const auto& issue) {
+                    return issue.GetMessage().contains("Terminate was called")   // general termination prefix
+                           && issue.GetMessage().contains("Bad filter value.");  // test specific UDF exception
                 }));
         };
 
@@ -1772,7 +1804,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(SecondaryIndex) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2076,8 +2107,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto result = it.ReadNext().GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("ATOM evaluation is not supported in YDB queries.");
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const auto& issue) {
+            return issue.GetMessage().contains("ATOM evaluation is not supported in YDB queries.");
         }));
     }
 
@@ -2289,7 +2320,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(StreamLookupByFullPk) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
@@ -2364,9 +2394,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         bool firstAttemptToGetData = false;
 
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
-                IActor* actor = runtime->FindActor(ev->GetRecipientRewrite());
-                if (actor && actor->GetActivityType() == NKikimrServices::TActivity::KQP_STREAM_LOOKUP_ACTOR) {
+            if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvResolveKeySetResult::EventType) {
+                Cerr << "Captured TEvTxProxySchemeCache::TEvResolveKeySetResult from " << runtime->FindActorName(ev->Sender) << " to " << runtime->FindActorName(ev->GetRecipientRewrite()) << Endl;
+                if (runtime->FindActorName(ev->GetRecipientRewrite()) == "KQP_STREAM_LOOKUP_ACTOR") {
                     if (!firstAttemptToGetData) {
                         // capture response from scheme cache until CA calls GetAsyncInputData()
                         captured.push_back(ev.Release());
@@ -2383,9 +2413,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
                 Y_ASSERT(record.GetResultSet().rows().size() == 0);
 
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
-                resp->Record.SetSeqNo(record.GetSeqNo());
                 runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                 return true;
             }
@@ -2410,7 +2439,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         };
 
         auto sendQuery = [&](const TString& queryText) {
@@ -2423,24 +2452,23 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         };
 
         createTable(createSession(), R"(
             --!syntax_v1
-            CREATE TABLE `/Root/Table` (Key int32, Value int32, PRIMARY KEY(Key));
+            CREATE TABLE `/Root/Table` (Key int32, Fk int32, Value int32, PRIMARY KEY(Key), INDEX Index GLOBAL ON (Fk));
         )");
 
         server->GetRuntime()->SetEventFilter(captureEvents);
 
         sendQuery(R"(
-            SELECT Value FROM `/Root/Table` WHERE Key IN AsList(1, 2, 3);
+            SELECT Value FROM `/Root/Table` VIEW Index WHERE Fk IN AsList(1, 2, 3);
         )");
     }
 
     Y_UNIT_TEST(LimitOverSecondaryIndexRead) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2480,7 +2508,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(TopSortOverSecondaryIndexRead) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2570,49 +2597,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 }
 
-Y_UNIT_TEST_SUITE(KqpRequestContext) {
-
-    Y_UNIT_TEST(TraceIdInErrorMessage) {
-        auto settings = TKikimrSettings()
-            .SetAppConfig(AppCfg())
-            .SetEnableScriptExecutionOperations(true)
-            .SetNodeCount(4)
-            .SetUseRealThreads(false);
-        TKikimrRunner kikimr{settings};
-        auto db = kikimr.GetTableClient();
-
-        NKikimr::NKqp::TKqpPlanner::UseMockEmptyPlanner = true;
-        Y_DEFER {
-            NKikimr::NKqp::TKqpPlanner::UseMockEmptyPlanner = false;  // just in case if test fails
-        };
-
-        {
-            TDispatchOptions opts;
-            opts.FinalEvents.emplace_back(NKikimr::NKqp::TKqpResourceInfoExchangerEvents::EvSendResources, 4);
-            kikimr.GetTestServer().GetRuntime()->DispatchEvents(opts);
-        }
-
-        auto it = kikimr.RunCall([&db] {
-            return db.StreamExecuteScanQuery(R"(
-                SELECT Text, SUM(Key) AS Total FROM `/Root/EightShard`
-                GROUP BY Text
-                ORDER BY Total DESC;
-            )").GetValueSync();
-        });
-
-        UNIT_ASSERT(it.IsSuccess());
-        kikimr.RunCall([&it] {
-            try {
-                auto yson = StreamResultToYson(it, true, NYdb::EStatus::PRECONDITION_FAILED, "TraceId");
-            } catch (const std::exception& ex) {
-                UNIT_ASSERT_C(false, "Exception NYdb::EStatus::PRECONDITION_FAILED not found or IssueMessage doesn't contain 'TraceId'");
-            }
-            return true;
-        });
-
-        NKikimr::NKqp::TKqpPlanner::UseMockEmptyPlanner = false;
-    }
-}
 
 } // namespace NKqp
 } // namespace NKikimr

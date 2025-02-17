@@ -47,14 +47,21 @@ namespace NTest {
             return Store->PageCollectionBytes(0) + Store->PageCollectionBytes(Store->GetOuterRoom());
         }
 
-        ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId) const override
+        ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const override
         {
-            return Store->GetPageSize(groupId.Index, id);
+            return Store->GetPageSize(groupId.Index, pageId);
         }
 
-        NPage::EPage GetPageType(NPage::TPageId id, NPage::TGroupId groupId) const override
+        ui64 GetPageSize(ELargeObj lob, ui64 ref) const override
         {
-            return Store->GetPageType(groupId.Index, id);
+            Y_UNUSED(lob);
+            Y_UNUSED(ref);
+            return 0;
+        }
+
+        NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
+        {
+            return Store->GetPageType(groupId.Index, pageId);
         }
 
         ui8 GetGroupChannel(NPage::TGroupId groupId) const override
@@ -101,9 +108,9 @@ namespace NTest {
             return { true, Get(part, room, ref) };
         }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageId ref, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
         {
-            return Get(part, groupId.Index, ref);
+            return Get(part, groupId.Index, pageId);
         }
 
     private:

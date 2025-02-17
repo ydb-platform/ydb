@@ -6,6 +6,7 @@ namespace NYdb::NDump {
 
 using namespace NScheme;
 using namespace NTable;
+using namespace NCms;
 
 TStatus DescribeTable(TTableClient& tableClient, const TString& path, TMaybe<TTableDescription>& out) {
     auto func = [&path, &out](TSession session) {
@@ -34,4 +35,34 @@ TStatus MakeDirectory(TSchemeClient& schemeClient, const TString& path, const TM
     });
 }
 
+TStatus ModifyPermissions(TSchemeClient& schemeClient, const TString& path, const TModifyPermissionsSettings& settings) {
+    return NConsoleClient::RetryFunction([&]() -> TStatus {
+        return schemeClient.ModifyPermissions(path, settings).ExtractValueSync();
+    });
 }
+
+TListDirectoryResult ListDirectory(TSchemeClient& schemeClient, const TString& path, const TListDirectorySettings& settings) {
+    return NConsoleClient::RetryFunction([&]() -> TListDirectoryResult {
+        return schemeClient.ListDirectory(path, settings).ExtractValueSync();
+    });
+}
+
+TListDatabasesResult ListDatabases(TCmsClient& cmsClient, const TListDatabasesSettings& settings) {
+    return NConsoleClient::RetryFunction([&]() -> TListDatabasesResult {
+        return cmsClient.ListDatabases(settings).ExtractValueSync();
+    });
+}
+
+TGetDatabaseStatusResult GetDatabaseStatus(TCmsClient& cmsClient, const std::string& path, const TGetDatabaseStatusSettings& settings) {
+    return NConsoleClient::RetryFunction([&]() -> TGetDatabaseStatusResult {
+        return cmsClient.GetDatabaseStatus(path, settings).ExtractValueSync();
+    });
+}
+
+TStatus CreateDatabase(TCmsClient& cmsClient, const std::string& path, const TCreateDatabaseSettings& settings) {
+    return NConsoleClient::RetryFunction([&]() -> TStatus {
+        return cmsClient.CreateDatabase(path, settings).ExtractValueSync();
+    });
+}
+
+} // NYdb::NDump

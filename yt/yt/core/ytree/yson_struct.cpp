@@ -5,9 +5,9 @@
 #include <yt/yt/core/ytree/node.h>
 #include <yt/yt/core/ytree/ypath_detail.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <util/generic/algorithm.h>
+
+#include <util/system/platform.h>
 
 namespace NYT::NYTree {
 
@@ -19,6 +19,19 @@ using namespace NYson;
 TYsonStructFinalClassHolder::TYsonStructFinalClassHolder(std::type_index typeIndex)
     : FinalType_(typeIndex)
 { }
+
+#ifdef _win_
+
+// This constructor is not actually called.
+// This dummy implementation is only provided for MSVC
+// as the latter fails to link the binary in debug mode unless it is implemented.
+// If we just delete it, the default constructor of TYsonStructLite
+// will be implicitly deleted as well and compilation will fail.
+TYsonStructFinalClassHolder::TYsonStructFinalClassHolder()
+    : FinalType_{typeid(void)}
+{ }
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -42,7 +55,7 @@ void TYsonStructBase::SetUnrecognizedStrategy(EUnrecognizedStrategy strategy)
     InstanceUnrecognizedStrategy_ = strategy;
 }
 
-THashSet<TString> TYsonStructBase::GetRegisteredKeys() const
+THashSet<std::string> TYsonStructBase::GetRegisteredKeys() const
 {
     return Meta_->GetRegisteredKeys();
 }
@@ -51,16 +64,16 @@ void TYsonStructBase::Load(
     INodePtr node,
     bool postprocess,
     bool setDefaults,
-    const TYPath& path)
+    const NYPath::TYPath& path)
 {
-    Meta_->LoadStruct(this, node, postprocess, setDefaults, path);
+    Meta_->LoadStruct(this, std::move(node), postprocess, setDefaults, path);
 }
 
 void TYsonStructBase::Load(
     TYsonPullParserCursor* cursor,
     bool postprocess,
     bool setDefaults,
-    const TYPath& path)
+    const NYPath::TYPath& path)
 {
     Meta_->LoadStruct(this, cursor, postprocess, setDefaults, path);
 }
@@ -74,7 +87,12 @@ void TYsonStructBase::Load(IInputStream* input)
 void TYsonStructBase::Save(IYsonConsumer* consumer) const
 {
     consumer->OnBeginMap();
+    SaveAsMapFragment(consumer);
+    consumer->OnEndMap();
+}
 
+void TYsonStructBase::SaveAsMapFragment(NYson::IYsonConsumer* consumer) const
+{
     for (const auto& [name, parameter] : Meta_->GetParameterSortedList()) {
         if (!parameter->CanOmitValue(this)) {
             consumer->OnKeyedItem(name);
@@ -90,8 +108,6 @@ void TYsonStructBase::Save(IYsonConsumer* consumer) const
             Serialize(child, consumer);
         }
     }
-
-    consumer->OnEndMap();
 }
 
 void TYsonStructBase::Save(IOutputStream* output) const
@@ -112,17 +128,17 @@ void TYsonStructBase::SetDefaults()
     Meta_->SetDefaultsOfInitializedStruct(this);
 }
 
-void TYsonStructBase::SaveParameter(const TString& key, IYsonConsumer* consumer) const
+void TYsonStructBase::SaveParameter(const std::string& key, IYsonConsumer* consumer) const
 {
     Meta_->GetParameter(key)->Save(this, consumer);
 }
 
-void TYsonStructBase::LoadParameter(const TString& key, const NYTree::INodePtr& node)
+void TYsonStructBase::LoadParameter(const std::string& key, const NYTree::INodePtr& node)
 {
     Meta_->LoadParameter(this, key, node);
 }
 
-void TYsonStructBase::ResetParameter(const TString& key)
+void TYsonStructBase::ResetParameter(const std::string& key)
 {
     Meta_->GetParameter(key)->SetDefaultsInitialized(this);
 }
@@ -132,7 +148,7 @@ int TYsonStructBase::GetParameterCount() const
     return Meta_->GetParameterMap().size();
 }
 
-std::vector<TString> TYsonStructBase::GetAllParameterAliases(const TString& key) const
+std::vector<std::string> TYsonStructBase::GetAllParameterAliases(const std::string& key) const
 {
     auto parameter = Meta_->GetParameter(key);
     auto result = parameter->GetAliases();
@@ -145,6 +161,16 @@ void TYsonStructBase::WriteSchema(IYsonConsumer* consumer) const
     return Meta_->WriteSchema(this, consumer);
 }
 
+bool TYsonStructBase::IsEqual(const TYsonStructBase& rhs) const
+{
+    return Meta_->CompareStructs(this, &rhs);
+}
+
+const IYsonStructMeta* TYsonStructBase::GetMeta() const
+{
+    return Meta_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TYsonStruct::InitializeRefCounted()
@@ -155,6 +181,55 @@ void TYsonStruct::InitializeRefCounted()
     }
 }
 
+bool TYsonStruct::IsSet(const std::string& key) const
+{
+    return SetFields_[Meta_->GetParameter(key)->GetFieldIndex()];
+}
+
+TCompactBitmap* TYsonStruct::GetSetFieldsBitmap()
+{
+    return &SetFields_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TCompactBitmap* TYsonStructLite::GetSetFieldsBitmap()
+{
+    return nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TYsonStructLiteWithFieldTracking::IsSet(const std::string& key) const
+{
+    return SetFields_[Meta_->GetParameter(key)->GetFieldIndex()];
+}
+
+TCompactBitmap* TYsonStructLiteWithFieldTracking::GetSetFieldsBitmap()
+{
+    return &SetFields_;
+}
+
+TYsonStructLiteWithFieldTracking::TYsonStructLiteWithFieldTracking(const TYsonStructLiteWithFieldTracking& other)
+    : TYsonStructFinalClassHolder(other.FinalType_)
+    , TYsonStructLite(other)
+{
+    SetFields_.CopyFrom(other.SetFields_, GetParameterCount());
+}
+
+TYsonStructLiteWithFieldTracking& TYsonStructLiteWithFieldTracking::operator=(const TYsonStructLiteWithFieldTracking& other)
+{
+    TYsonStructLite::operator=(other);
+
+    SetFields_.CopyFrom(other.SetFields_, GetParameterCount());
+    return *this;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DEFINE_THREAD_LOCAL(IYsonStructMeta*, CurrentlyInitializingYsonMeta, nullptr);
+YT_DEFINE_THREAD_LOCAL(i64, YsonMetaRegistryDepth, 0);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TYsonStructRegistry* TYsonStructRegistry::Get()
@@ -164,20 +239,20 @@ TYsonStructRegistry* TYsonStructRegistry::Get()
 
 bool TYsonStructRegistry::InitializationInProgress()
 {
-    return CurrentlyInitializingMeta_ != nullptr;
+    return CurrentlyInitializingYsonMeta() != nullptr;
 }
 
 void TYsonStructRegistry::OnBaseCtorCalled()
 {
-    if (CurrentlyInitializingMeta_ != nullptr) {
-        ++RegistryDepth_;
+    if (CurrentlyInitializingYsonMeta() != nullptr) {
+        ++YsonMetaRegistryDepth();
     }
 }
 
 void TYsonStructRegistry::OnFinalCtorCalled()
 {
-    if (CurrentlyInitializingMeta_ != nullptr) {
-        --RegistryDepth_;
+    if (CurrentlyInitializingYsonMeta() != nullptr) {
+        --YsonMetaRegistryDepth();
     }
 }
 
@@ -216,7 +291,6 @@ DEFINE_REFCOUNTED_TYPE(TYsonStruct)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYTree
-
 
 namespace NYT {
 

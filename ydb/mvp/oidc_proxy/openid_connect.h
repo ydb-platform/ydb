@@ -1,36 +1,58 @@
 #pragma once
 
-#include <ydb/public/api/client/yc_private/oauth/v1/session_service.grpc.pb.h>
-#include <ydb/mvp/core/protos/mvp.pb.h>
-#include <ydb/library/actors/http/http_proxy.h>
+#include "context.h"
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/http/http.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
-#include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include <ydb/mvp/core/core_ydb.h>
+#include <ydb/public/api/client/yc_private/oauth/session_service.grpc.pb.h>
+#include <util/generic/ptr.h>
+#include <util/generic/string.h>
 
-struct TOpenIdConnectSettings {
-    static const inline TString CLIENT_ID = "yc.oauth.ydb-viewer";
-    static const inline TString YDB_OIDC_COOKIE = "ydb_oidc_cookie";
-    TString SessionServiceEndpoint;
-    TString SessionServiceTokenName;
-    TString AuthorizationServerAddress;
-    TString ClientSecret;
-    std::vector<TString> AllowedProxyHosts;
+namespace NMVP::NOIDC {
 
-    TString GetAuthorizationString() const {
-        return Base64Encode(CLIENT_ID + ":" + ClientSecret);
-    }
+struct TOpenIdConnectSettings;
+
+struct TRestoreOidcContextResult {
+    struct TStatus {
+        bool IsSuccess = true;
+        bool IsErrorRetryable = false;
+        TString ErrorMessage;
+    };
+
+    TContext Context;
+    TStatus Status;
+
+    TRestoreOidcContextResult(const TStatus& status = {.IsSuccess = true, .IsErrorRetryable = false, .ErrorMessage = ""}, const TContext& context = TContext());
+
+    bool IsSuccess() const;
+};
+
+struct TCheckStateResult {
+    bool Success = true;
+    TString ErrorMessage;
+
+    TCheckStateResult(bool success = true, const TString& errorMessage = "");
+
+    bool IsSuccess() const;
 };
 
 TString HmacSHA256(TStringBuf key, TStringBuf data);
+TString HmacSHA1(TStringBuf key, TStringBuf data);
 void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);
-TString GenerateCookie(TStringBuf state, TStringBuf redirectUrl, const TString& secret, bool isAjaxRequest);
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetails, const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, NHttp::THeadersBuilder& responseHeaders, bool isAjaxRequest = false);
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetails, const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, bool isAjaxRequest = false);
-bool DetectAjaxRequest(const NHttp::THeaders& headers);
+NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings);
 TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state);
+TString CreateNameSessionCookie(TStringBuf key);
+TString CreateNameImpersonatedCookie(TStringBuf key);
 const TString& GetAuthCallbackUrl();
+TString CreateSecureCookie(const TString& name, const TString& value, const ui32 expiredSeconds);
+TString ClearSecureCookie(const TString& name);
+void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
+TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key);
+TCheckStateResult CheckState(const TString& state, const TString& key);
+TString DecodeToken(const TStringBuf& cookie);
+TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName);
 
 template <typename TSessionService>
 std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcServiceConnection(const TString& endpoint) {
@@ -42,6 +64,7 @@ std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcService
     config.Locator = host;
     config.EnableSsl = (scheme == "grpcs");
     static NYdbGrpc::TGRpcClientLow client;
+    SetGrpcKeepAlive(config);
     return client.CreateGRpcServiceConnection<TSessionService>(config);
 }
 
@@ -122,3 +145,5 @@ struct TEvPrivate {
         }
     };
 };
+
+} // NMVP::NOIDC

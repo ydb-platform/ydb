@@ -1,6 +1,6 @@
 import pytest
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
 from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import Client
@@ -16,7 +16,7 @@ import ydb.library.yql.providers.generic.connector.tests.common_test_cases.selec
 
 # Global collection of test cases dependent on environment
 tc_collection = Collection(
-    Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EDataSourceKind.POSTGRESQL])
+    Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EGenericDataSourceKind.POSTGRESQL])
 )
 
 
@@ -46,19 +46,16 @@ def test_select_positive(
     "test_case", tc_collection.get('select_missing_database'), ids=tc_collection.ids('select_missing_database')
 )
 @pytest.mark.usefixtures("settings")
-@pytest.mark.usefixtures("postgresql_client")
 def test_select_missing_database(
     request: pytest.FixtureRequest,
     settings: Settings,
     runner_type: str,
-    postgresql_client: Client,
     test_case: select_missing_database.TestCase,
 ):
     runner = configure_runner(runner_type=runner_type, settings=settings)
-    scenario.select_missing_table(
+    scenario.select_missing_database(
         settings=settings,
         runner=runner,
-        client=postgresql_client,
         test_case=test_case,
         test_name=request.node.name,
     )

@@ -28,23 +28,28 @@ protected:
     NSignals::TSignalIgnore<SIGPIPE> SignalSIGPIPE;
 
 public:
-    static ui16 HttpPort;
-    static ui16 HttpsPort;
-    static bool Http;
-    static bool Https;
-    static TString GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr&);
+    ui16 HttpPort = {};
+    ui16 HttpsPort = {};
+    bool Http = false;
+    bool Https = false;
+    TString GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr&);
 
-    static TString MetaApiEndpoint;
-    static TString MetaDatabase;
+    TString MetaApiEndpoint;
+    TString MetaDatabase;
+    bool MetaCache = false;
+    static TString MetaDatabaseTokenName;
 
     TMVP(int argc, char** argv);
     int Init();
     int Run();
     int Shutdown();
 
-protected:
     THolder<NActors::TActorSystemSetup> BuildActorSystemSetup(int argc, char** argv);
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
+    void InitMeta();
+
+    TString static GetMetaDatabaseAuthToken(const TRequest& request);
+    NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
 
     void TryGetMetaOptionsFromConfig(const YAML::Node& config);
     void TryGetGenericOptionsFromConfig(
@@ -60,12 +65,12 @@ protected:
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;
     THolder<NActors::TActorSystemSetup> ActorSystemSetup;
     NActors::TActorSystem ActorSystem;
-    NActors::TActorId BaseHttpProxyId;
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
 
-    TString YdbUserToken;
     static NMvp::TTokensConfig TokensConfig;
 };
+
+extern TMVP* InstanceMVP;
 
 } // namespace NMVP

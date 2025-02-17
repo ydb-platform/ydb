@@ -25,6 +25,7 @@ struct Schema : NIceDb::Schema {
         struct Location : Column<12, NScheme::NTypeIds::String> {};
         struct ServicedSubDomain : Column<13, NScheme::NTypeIds::String> { using Type = NKikimrSubDomains::TDomainKey; };
         struct SlotIndex : Column<14, NScheme::NTypeIds::Uint32> {};
+        struct AuthorizedByCertificate : Column<15, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<
@@ -37,7 +38,8 @@ struct Schema : NIceDb::Schema {
             Expire,
             Location,
             ServicedSubDomain,
-            SlotIndex
+            SlotIndex,
+            AuthorizedByCertificate
         >;
     };
 

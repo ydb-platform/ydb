@@ -15,11 +15,22 @@
 
 static int no_cancel_flags;
 
-static int test1(struct io_uring *ring, int *fd)
+static int test1(struct io_uring *ring, int *fd, int fixed)
 {
 	struct io_uring_sqe *sqe;
 	struct io_uring_cqe *cqe;
-	int ret, i;
+	int ret, i, __fd = fd[0];
+
+	if (fixed)
+		__fd = 0;
+
+	if (fixed) {
+		ret = io_uring_register_files(ring, fd, 1);
+		if (ret) {
+			fprintf(stderr, "failed file register %d\n", ret);
+			return 1;
+		}
+	}
 
 	for (i = 0; i < 8; i++) {
 		sqe = io_uring_get_sqe(ring);
@@ -28,8 +39,10 @@ static int test1(struct io_uring *ring, int *fd)
 			return 1;
 		}
 
-		io_uring_prep_poll_add(sqe, fd[0], POLLIN);
+		io_uring_prep_poll_add(sqe, __fd, POLLIN);
 		sqe->user_data = i + 1;
+		if (fixed)
+			sqe->flags |= IOSQE_FIXED_FILE;
 	}
 
 	ret = io_uring_submit(ring);
@@ -52,7 +65,9 @@ static int test1(struct io_uring *ring, int *fd)
 	 */
 	io_uring_prep_cancel(sqe, 0, IORING_ASYNC_CANCEL_ALL);
 	sqe->cancel_flags |= IORING_ASYNC_CANCEL_FD;
-	sqe->fd = fd[0];
+	if (fixed)
+		sqe->cancel_flags |= IORING_ASYNC_CANCEL_FD_FIXED;
+	sqe->fd = __fd;
 	sqe->user_data = 100;
 
 	ret = io_uring_submit(ring);
@@ -93,6 +108,9 @@ static int test1(struct io_uring *ring, int *fd)
 		}
 		io_uring_cqe_seen(ring, cqe);
 	}
+
+	if (fixed)
+		io_uring_unregister_files(ring);
 
 	return 0;
 }
@@ -443,13 +461,19 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	ret = test1(&ring, fd);
+	ret = test1(&ring, fd, 0);
 	if (ret) {
 		fprintf(stderr, "test1 failed\n");
 		return ret;
 	}
 	if (no_cancel_flags)
 		return 0;
+
+	ret = test1(&ring, fd, 1);
+	if (ret) {
+		fprintf(stderr, "test1 fixed failed\n");
+		return ret;
+	}
 
 	ret = test2(&ring, fd);
 	if (ret) {

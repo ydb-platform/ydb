@@ -7,16 +7,21 @@
 namespace YAML {
 ostream_wrapper::ostream_wrapper()
     : m_buffer(1, '\0'),
-      m_pStream(0),
+      m_pStream(nullptr),
       m_pos(0),
       m_row(0),
       m_col(0),
       m_comment(false) {}
 
 ostream_wrapper::ostream_wrapper(std::ostream& stream)
-    : m_pStream(&stream), m_pos(0), m_row(0), m_col(0), m_comment(false) {}
+    : m_buffer{},
+      m_pStream(&stream),
+      m_pos(0),
+      m_row(0),
+      m_col(0),
+      m_comment(false) {}
 
-ostream_wrapper::~ostream_wrapper() {}
+ostream_wrapper::~ostream_wrapper() = default;
 
 void ostream_wrapper::write(const std::string& str) {
   if (m_pStream) {
@@ -26,8 +31,8 @@ void ostream_wrapper::write(const std::string& str) {
     std::copy(str.begin(), str.end(), m_buffer.begin() + m_pos);
   }
 
-  for (std::size_t i = 0; i < str.size(); i++) {
-    update_pos(str[i]);
+  for (char ch : str) {
+    update_pos(ch);
   }
 }
 
@@ -54,4 +59,4 @@ void ostream_wrapper::update_pos(char ch) {
     m_comment = false;
   }
 }
-}
+}  // namespace YAML

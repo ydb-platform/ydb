@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase
 
+from ydb.tests.library.sqs.requests_client import SqsSendMessageParams
+
 
 class TestSqsGettingCounters(KikimrSqsTestBase):
 
@@ -153,3 +155,32 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
             'sensor': 'MessagesPurged',
         })
         assert purged_derivative > 0
+
+    def test_action_duration_being_not_immediate(self):
+        queue_url = self._create_queue_and_assert(self.queue_name, False, True)
+
+        for i in range(100):
+            message_payload = "foobar" + str(i)
+            self._sqs_api.send_message(queue_url, message_payload)
+            self._read_while_not_empty(queue_url, 1)
+
+        sqs_counters = self._get_sqs_counters()
+
+        durations = self._get_counter(sqs_counters, {
+            'queue': self.queue_name,
+            'sensor': 'ReceiveMessage_Duration',
+        })
+        buckets_longer_than_5ms = durations['hist']['buckets'][1:]
+        assert any(map(lambda x: x > 0, buckets_longer_than_5ms))
+
+    def test_receive_attempts_are_counted_separately_for_messages_in_one_batch(self):
+        queue_url = self._create_queue_and_assert(self.queue_name, False, True)
+        self._sqs_api.send_message_batch(queue_url, [SqsSendMessageParams('data0'), SqsSendMessageParams('data1')])
+        self._read_while_not_empty(queue_url, 2)
+
+        sqs_counters = self._get_sqs_counters()
+        message_receive_attempts = self._get_counter(sqs_counters, {
+            'queue': self.queue_name,
+            'sensor': 'MessageReceiveAttempts',
+        })
+        assert message_receive_attempts['hist']['buckets'][0] == 2

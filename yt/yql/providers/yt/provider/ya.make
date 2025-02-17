@@ -1,0 +1,139 @@
+LIBRARY()
+
+SRCS(
+    yql_yt_block_input.cpp
+    yql_yt_block_io_filter.cpp
+    yql_yt_block_io_utils.cpp
+    yql_yt_block_output.cpp
+    yql_yt_datasink_constraints.cpp
+    yql_yt_datasink_exec.cpp
+    yql_yt_datasink_finalize.cpp
+    yql_yt_datasink_trackable.cpp
+    yql_yt_datasink_type_ann.cpp
+    yql_yt_datasink.cpp
+    yql_yt_datasource_constraints.cpp
+    yql_yt_datasource_exec.cpp
+    yql_yt_datasource_type_ann.cpp
+    yql_yt_datasource.cpp
+    yql_yt_epoch.cpp
+    yql_yt_forwarding_gateway.cpp
+    yql_yt_gateway.cpp
+    yql_yt_horizontal_join.cpp
+    yql_yt_helpers.cpp
+    yql_yt_intent_determination.cpp
+    yql_yt_io_discovery.cpp
+    yql_yt_io_discovery_walk_folders.cpp
+    yql_yt_join_impl.cpp
+    yql_yt_join_reorder.cpp
+    yql_yt_key.cpp
+    yql_yt_load_table_meta.cpp
+    yql_yt_load_columnar_stats.cpp
+    yql_yt_logical_optimize.cpp
+    yql_yt_mkql_compiler.cpp
+    yql_yt_op_hash.cpp
+    yql_yt_op_settings.cpp
+    yql_yt_optimize.cpp
+    yql_yt_peephole.cpp
+    yql_yt_physical_finalizing.cpp
+    yql_yt_physical_optimize.cpp
+    yql_yt_provider_context.cpp
+    yql_yt_provider_impl.cpp
+    yql_yt_provider.cpp
+    yql_yt_provider.h
+    yql_yt_provider_impl.h
+    yql_yt_table_desc.cpp
+    yql_yt_table.cpp
+    yql_yt_dq_integration.cpp
+    yql_yt_dq_optimize.cpp
+    yql_yt_dq_hybrid.cpp
+    yql_yt_wide_flow.cpp
+    yql_yt_ytflow_integration.cpp
+    yql_yt_ytflow_optimize.cpp
+
+    phy_opt/yql_yt_phy_opt.cpp
+    phy_opt/yql_yt_phy_opt_content.cpp
+    phy_opt/yql_yt_phy_opt_fuse.cpp
+    phy_opt/yql_yt_phy_opt_helper.h
+    phy_opt/yql_yt_phy_opt_lambda.cpp
+    phy_opt/yql_yt_phy_opt_misc.cpp
+    phy_opt/yql_yt_phy_opt_sort.cpp
+    phy_opt/yql_yt_phy_opt_join.cpp
+    phy_opt/yql_yt_phy_opt_map.cpp
+    phy_opt/yql_yt_phy_opt_partition.cpp
+    phy_opt/yql_yt_phy_opt_weak_fields.cpp
+    phy_opt/yql_yt_phy_opt_field_subset.cpp
+    phy_opt/yql_yt_phy_opt_helper.cpp
+    phy_opt/yql_yt_phy_opt_key_range.cpp
+    phy_opt/yql_yt_phy_opt_ytql.cpp
+    phy_opt/yql_yt_phy_opt_merge.cpp
+    phy_opt/yql_yt_phy_opt_push.cpp
+    phy_opt/yql_yt_phy_opt_write.cpp
+)
+
+PEERDIR(
+    library/cpp/yson/node
+    library/cpp/disjoint_sets
+    yt/cpp/mapreduce/common
+    yt/cpp/mapreduce/interface
+    yql/essentials/ast
+    yql/essentials/core/extract_predicate
+    yql/essentials/public/udf
+    yql/essentials/public/udf/tz
+    yql/essentials/sql
+    yql/essentials/sql/v1
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/utils
+    yql/essentials/utils/log
+    yql/essentials/core
+    yql/essentials/core/dq_expr_nodes
+    yql/essentials/core/dqs_expr_nodes
+    yql/essentials/core/expr_nodes
+    yql/essentials/core/issue
+    yql/essentials/core/issue/protos
+    yql/essentials/core/peephole_opt
+    yql/essentials/core/type_ann
+    yql/essentials/core/file_storage
+    yql/essentials/core/url_lister/interface
+    yql/essentials/core/dq_integration
+    yql/essentials/minikql
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/config
+    yql/essentials/providers/common/dq
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/activation
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/common/structured_token
+    yql/essentials/providers/common/transform
+    yql/essentials/providers/result/expr_nodes
+    yql/providers/stat/expr_nodes
+    yt/yql/providers/yt/common
+    yt/yql/providers/yt/expr_nodes
+    yt/yql/providers/yt/lib/expr_traits
+    yt/yql/providers/yt/lib/graph_reorder
+    yt/yql/providers/yt/lib/hash
+    yt/yql/providers/yt/lib/key_filter
+    yt/yql/providers/yt/lib/mkql_helpers
+    yt/yql/providers/yt/lib/res_pull
+    yt/yql/providers/yt/lib/row_spec
+    yt/yql/providers/yt/lib/schema
+    yt/yql/providers/yt/lib/skiff
+    yt/yql/providers/yt/lib/yson_helpers
+    yt/yql/providers/yt/opt
+    yt/yql/providers/yt/gateway/qplayer
+    yt/yql/providers/yt/proto
+    yt/yql/providers/ytflow/expr_nodes
+    yt/yql/providers/ytflow/integration/interface
+    yt/yql/providers/ytflow/integration/proto
+)
+
+YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(yql_yt_op_settings.h)
+
+END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

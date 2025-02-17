@@ -1,15 +1,15 @@
 #pragma once
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 
 #include <util/generic/string.h>
 
 #include <library/cpp/json/json_writer.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 namespace NFq {
 

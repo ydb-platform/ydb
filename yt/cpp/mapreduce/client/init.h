@@ -2,8 +2,7 @@
 
 #include <yt/cpp/mapreduce/interface/init.h>
 
-namespace NYT {
-namespace NDetail {
+namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -16,7 +15,8 @@ enum class EInitStatus : int
 
 EInitStatus& GetInitStatus();
 
+void EnsureInitialized();
+
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NDetail
-} // namespace NYT
+} // namespace NYT::NDetail

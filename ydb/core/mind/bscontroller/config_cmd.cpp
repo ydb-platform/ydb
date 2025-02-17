@@ -99,6 +99,9 @@ namespace NKikimr::NBsController {
                         for (bool value : settings.GetEnableDonorMode()) {
                             Self->DonorMode = value;
                             db.Table<T>().Key(true).Update<T::DonorModeEnable>(Self->DonorMode);
+                            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+                            ev->DonorMode = Self->DonorMode;
+                            Self->Send(Self->SelfHealId, ev.release());
                         }
                         for (ui64 value : settings.GetScrubPeriodicitySeconds()) {
                             Self->ScrubPeriodicity = TDuration::Seconds(value);
@@ -177,7 +180,7 @@ namespace NKikimr::NBsController {
                     Response->MutableStatus()->RemoveLast();
                 }
 
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+                State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 State->CheckConsistency();
 
                 TString m;
@@ -262,7 +265,8 @@ namespace NKikimr::NBsController {
 
                 const bool doLogCommand = Success && State->Changed();
                 Success = Success && Self->CommitConfigUpdates(*State, Cmd.GetIgnoreGroupFailModelChecks(),
-                    Cmd.GetIgnoreDegradedGroupsChecks(), Cmd.GetIgnoreDisintegratedGroupsChecks(), txc, &Error);
+                    Cmd.GetIgnoreDegradedGroupsChecks(), Cmd.GetIgnoreDisintegratedGroupsChecks(), txc, &Error,
+                    Response);
 
                 Finish();
                 if (doLogCommand) {
@@ -348,6 +352,9 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(CancelVirtualGroup)
                     HANDLE_COMMAND(SetVDiskReadOnly)
                     HANDLE_COMMAND(RestartPDisk)
+                    HANDLE_COMMAND(SetPDiskReadOnly)
+                    HANDLE_COMMAND(StopPDisk)
+                    HANDLE_COMMAND(GetInterfaceVersion)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:
@@ -362,7 +369,7 @@ namespace NKikimr::NBsController {
                         throw TExError() << "unsupported command";
                 }
 
-                Y_ABORT();
+                throw TExError() << "unsupported command";
             }
 
             void Complete(const TActorContext&) override {

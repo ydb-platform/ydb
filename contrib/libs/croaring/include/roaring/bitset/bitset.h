@@ -131,7 +131,10 @@ inline bool bitset_get(const bitset_t *bitset, size_t i) {
 /* Count number of bits set.  */
 size_t bitset_count(const bitset_t *bitset);
 
-/* Find the index of the first bit set. Or zero if the bitset is empty.  */
+/* Returns true if no bit is set.  */
+bool bitset_empty(const bitset_t *bitset);
+
+/* Find the index of the first bit set. Or SIZE_MAX if the bitset is empty.  */
 size_t bitset_minimum(const bitset_t *bitset);
 
 /* Find the index of the last bit set. Or zero if the bitset is empty.  */

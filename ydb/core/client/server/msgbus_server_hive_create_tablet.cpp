@@ -60,6 +60,7 @@ using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
     TActorId PipeClient;
 
     TDeque<TRequest> Requests;
+    std::optional<ui64> HiveId;
     NKikimrProto::EReplyStatus Status;
     ui32 ResponsesReceived;
     ui32 DomainUid;
@@ -111,7 +112,7 @@ public:
 
         DomainUid = isOk ? record.GetDomainUid() : 0;
         Status = isOk ? NKikimrProto::OK : NKikimrProto::ERROR;
-
+        HiveId = record.HasHiveId() ? std::make_optional(record.GetHiveId()) : std::nullopt;
         WithRetry = true;
         Timeout = TDuration::MilliSeconds(DefaultTimeout);
     }
@@ -268,7 +269,7 @@ public:
                 " or kikimr domian configuration, Marker# HC9", (ui64)DomainUid);
             return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx), ctx);
         }
-        ui64 hiveTabletId = domainsInfo->GetHive();
+        ui64 hiveTabletId = HiveId.value_or(domainsInfo->GetHive());
 
         if (Status == NKikimrProto::OK) {
             PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, hiveTabletId, clientConfig));

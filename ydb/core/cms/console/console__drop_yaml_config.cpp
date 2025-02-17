@@ -2,7 +2,7 @@
 #include "console_configs_provider.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 namespace NKikimr::NConsole {
 
@@ -69,7 +69,7 @@ public:
 
         if (!Error && Modify) {
             Self->YamlVersion = 0;
-            Self->YamlConfig.clear();
+            Self->MainYamlConfig.clear();
             Self->YamlDropped = true;
 
             Self->VolatileYamlConfigs.clear();

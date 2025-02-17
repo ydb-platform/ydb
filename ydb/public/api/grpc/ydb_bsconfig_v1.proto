@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package Ydb.BSConfig.V1;
+
+option java_package = "com.yandex.ydb.bsconfig.v1";
+option java_outer_classname = "BSConfigGrpc";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/ydb_bsconfig.proto";
+
+service BSConfigService {
+
+    // Initialize Blobstorage/single config
+    rpc ReplaceStorageConfig(BSConfig.ReplaceStorageConfigRequest) returns (BSConfig.ReplaceStorageConfigResponse);
+
+    // Fetch Blobstorage/single config
+    rpc FetchStorageConfig(BSConfig.FetchStorageConfigRequest) returns (BSConfig.FetchStorageConfigResponse);
+
+    // Bootstrap automatically configured cluster
+    rpc BootstrapCluster(BSConfig.BootstrapClusterRequest) returns (BSConfig.BootstrapClusterResponse);
+
+}

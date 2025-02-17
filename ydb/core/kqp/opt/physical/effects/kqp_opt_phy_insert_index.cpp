@@ -1,7 +1,7 @@
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -12,7 +12,7 @@ using namespace NYql::NNodes;
 namespace {
 
 TExprBase MakeInsertIndexRows(const TDqPhyPrecompute& inputRows, const TKikimrTableDescription& table,
-    const THashSet<TStringBuf>& inputColumns, const THashSet<TStringBuf>& indexColumns,
+    const THashSet<TStringBuf>& inputColumns, const TVector<TStringBuf>& indexColumns,
     TPositionHandle pos, TExprContext& ctx)
 {
     auto inputRowArg = TCoArgument(ctx.NewArgument(pos, "input_row"));
@@ -113,19 +113,24 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     effects.emplace_back(upsertTable);
 
     for (const auto& [tableNode, indexDesc] : indexes) {
-        THashSet<TStringBuf> indexTableColumns;
+        THashSet<TStringBuf> indexTableColumnsSet;
+        TVector<TStringBuf> indexTableColumns;
 
         for (const auto& column : indexDesc->KeyColumns) {
-            YQL_ENSURE(indexTableColumns.emplace(column).second);
+            YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+            indexTableColumns.emplace_back(column);
         }
 
         for (const auto& column : table.Metadata->KeyColumnNames) {
-            indexTableColumns.insert(column);
+            if (indexTableColumnsSet.insert(column).second) {
+                indexTableColumns.emplace_back(column);
+            }
         }
 
         for (const auto& column : indexDesc->DataColumns) {
             if (inputColumnsSet.contains(column)) {
-                YQL_ENSURE(indexTableColumns.emplace(column).second);
+                YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+                indexTableColumns.emplace_back(column);
             }
         }
 

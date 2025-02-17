@@ -3,8 +3,12 @@
 #include <ydb/core/tx/conveyor/usage/config.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
 #include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <queue>
 
 namespace NKikimr::NConveyor {
@@ -13,6 +17,8 @@ class TCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
 public:
+    const ::NMonitoring::TDynamicCounters::TCounterPtr ProcessesCount;
+
     const ::NMonitoring::TDynamicCounters::TCounterPtr WaitingQueueSize;
     const ::NMonitoring::TDynamicCounters::TCounterPtr WaitingQueueSizeLimit;
 
@@ -32,6 +38,7 @@ public:
 
     TCounters(const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
         : TBase("Conveyor/" + conveyorName, baseSignals)
+        , ProcessesCount(TBase::GetValue("Processes/Count"))
         , WaitingQueueSize(TBase::GetValue("WaitingQueueSize"))
         , WaitingQueueSizeLimit(TBase::GetValue("WaitingQueueSizeLimit"))
         , AvailableWorkersCount(TBase::GetValue("AvailableWorkersCount"))
@@ -70,26 +77,101 @@ public:
     }
 };
 
+class TProcessOrdered {
+private:
+    YDB_READONLY(ui64, ProcessId, 0);
+    YDB_READONLY(ui64, CPUTime, 0);
+public:
+    TProcessOrdered(const ui64 processId, const ui64 cpuTime)
+        : ProcessId(processId)
+        , CPUTime(cpuTime) {
+
+    }
+
+    bool operator<(const TProcessOrdered& item) const {
+        if (CPUTime < item.CPUTime) {
+            return true;
+        }
+        if (item.CPUTime < CPUTime) {
+            return false;
+        }
+        return ProcessId < item.ProcessId;
+    }
+};
+
+class TProcess {
+private:
+    YDB_READONLY(ui64, ProcessId, 0);
+    YDB_READONLY(ui64, CPUTime, 0);
+    YDB_ACCESSOR_DEF(TDequePriorityFIFO, Tasks);
+    ui32 LinksCount = 0;
+public:
+    void CleanCPUMetric() {
+        CPUTime = 0;
+    }
+
+    bool DecRegistration() {
+        AFL_VERIFY(LinksCount);
+        --LinksCount;
+        return LinksCount == 0;
+    }
+
+    void IncRegistration() {
+        ++LinksCount;
+    }
+
+    TProcess(const ui64 processId)
+        : ProcessId(processId) {
+        IncRegistration();
+    }
+
+    void AddCPUTime(const TDuration d) {
+        CPUTime += d.MicroSeconds();
+    }
+
+    TProcessOrdered GetAddress() const {
+        return TProcessOrdered(ProcessId, CPUTime);
+    }
+};
+
 class TDistributor: public TActorBootstrapped<TDistributor> {
 private:
     const TConfig Config;
     const TString ConveyorName = "common";
-    TDequePriorityFIFO Waiting;
-    std::vector<TActorId> Workers;
+    TPositiveControlInteger WaitingTasksCount;
+    THashMap<ui64, TProcess> Processes;
+    std::set<TProcessOrdered> ProcessesOrdered;
+    std::deque<TActorId> Workers;
+    std::optional<NActors::TActorId> SlowWorkerId;
     TCounters Counters;
     THashMap<TString, std::shared_ptr<TTaskSignals>> Signals;
+    TMonotonic LastAddProcessInstant = TMonotonic::Now();
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
+    void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);
+    void HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev);
     void HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev);
+
+    void AddProcess(const ui64 processId);
+
+    void AddCPUTime(const ui64 processId, const TDuration d);
+
+    TWorkerTask PopTask();
+
+    void PushTask(const TWorkerTask& task);
 
 public:
 
     STATEFN(StateMain) {
+        //        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("name", ConveyorName)
+        //            ("workers", Workers.size())("waiting", Waiting.size())("actor_id", SelfId());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExecution::TEvNewTask, HandleMain);
             hFunc(TEvInternal::TEvTaskProcessedResult, HandleMain);
+            hFunc(TEvExecution::TEvRegisterProcess, HandleMain);
+            hFunc(TEvExecution::TEvUnregisterProcess, HandleMain);
             default:
-                ALS_ERROR(NKikimrServices::TX_CONVEYOR) << ConveyorName << ": unexpected event for task executor: " << ev->GetTypeRewrite();
+                AFL_ERROR(NKikimrServices::TX_CONVEYOR)("problem", "unexpected event for task executor")("ev_type", ev->GetTypeName());
                 break;
         }
     }

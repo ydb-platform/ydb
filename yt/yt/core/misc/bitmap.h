@@ -4,7 +4,7 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <util/system/align.h>
 
@@ -25,20 +25,20 @@ namespace NBitmapDetail {
     // Alignment/padding in serialization should be used explicitly.
 
     using TByte = ui8;
-    constexpr static size_t Bits = 8 * sizeof(TByte);
+    static constexpr size_t Bits = 8 * sizeof(TByte);
     constexpr size_t SerializationAlignment = 8;
 
-    constexpr static TByte GetBitMask(size_t index)
+    static constexpr TByte GetBitMask(size_t index)
     {
         return TByte(1) << (index % Bits);
     }
 
-    constexpr static size_t GetWordIndex(size_t index)
+    static constexpr size_t GetWordIndex(size_t index)
     {
         return index / Bits;
     }
 
-    constexpr static size_t GetByteSize(size_t size)
+    static constexpr size_t GetByteSize(size_t size)
     {
         return (size + Bits - 1) / Bits;
     }
@@ -216,6 +216,62 @@ public:
 
 private:
     size_t BitSize_ = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! A data structure for storing a bit map in compact form. If the bit size
+//! does not exceed 62, all data is stored on stack, otherwise heap allocation
+//! is performed.
+class TCompactBitmap
+{
+public:
+    using TByte = NBitmapDetail::TByte;
+
+    TCompactBitmap();
+    ~TCompactBitmap();
+
+    TCompactBitmap(const TCompactBitmap& other) = delete;
+    TCompactBitmap& operator=(const TCompactBitmap& other) = delete;
+
+    TCompactBitmap(TCompactBitmap&& other);
+    TCompactBitmap& operator=(TCompactBitmap&& other);
+
+    void Initialize(int bitSize);
+    void CopyFrom(const TCompactBitmap& other, int bitSize);
+
+    bool operator[] (size_t index) const;
+
+    void Set(size_t index);
+
+private:
+    constexpr static int MaxInlineSize = 62;
+
+    constexpr static ui64 UninitializedSentinel = 0b10ull;
+    constexpr static ui64 CompactInitializedSentinel = 0b1ull;
+
+    // The pointer either holds the bitmap itself or points to the heap-allocated bitmap.
+    // Two least significant bits denote one of the options:
+    //   0b00: structure holds a pointer to the heap-allocated data.
+    //   0b01: 62 most significant bits represent a bitmap.
+    //   0b10: structure is not initialized.
+    TByte* Ptr_;
+
+    static_assert(sizeof(Ptr_) == sizeof(ui64));
+
+    ui64& DataAsUi64();
+    ui64 DataAsUi64() const;
+
+    //! Checks if the map is initialized and stores values inplace.
+    bool IsCompact() const;
+
+    //! Checks if the map is initialized.
+    bool IsInitialized() const;
+
+    //! Checks if the map is initializes and stores values on heap.
+    bool HoldsAllocation() const;
+
+    void SetUninitializedState();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

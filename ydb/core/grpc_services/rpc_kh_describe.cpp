@@ -1,4 +1,5 @@
 #include "service_coordination.h"
+#include <ydb/core/base/auth.h>
 #include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_common/rpc_common.h"
@@ -7,6 +8,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/public/api/protos/ydb_clickhouse_internal.pb.h>
@@ -93,12 +95,12 @@ private:
         auto path = ::NKikimr::SplitPath(table);
         TMaybe<ui64> tabletId = TryParseLocalDbPath(path);
         if (tabletId) {
-            if (Request->GetSerializedToken().empty() || !IsSuperUser(NACLib::TUserToken(Request->GetSerializedToken()), *AppData(ctx))) {
+            if (!IsAdministrator(AppData(ctx), Request->GetInternalToken().Get())) {
                 return ReplyWithError(Ydb::StatusIds::NOT_FOUND, "Invalid table path specified", ctx);
             }
 
             std::unique_ptr<TEvTablet::TEvLocalSchemeTx> ev(new TEvTablet::TEvLocalSchemeTx());
-            ctx.Send(MakePipePeNodeCacheID(true), new TEvPipeCache::TEvForward(ev.release(), *tabletId, true), IEventHandle::FlagTrackDelivery);
+            ctx.Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvForward(ev.release(), *tabletId, true), IEventHandle::FlagTrackDelivery);
 
             TBase::Become(&TThis::StateWaitResolveTable);
             WaitingResolveReply = true;
@@ -177,16 +179,8 @@ private:
             auto* colMeta = Result.add_columns();
             colMeta->set_name(col.second.Name);
             auto& typeInfo = col.second.PType;
-            auto* item = colMeta->mutable_type();
-            if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-                auto* typeDesc = typeInfo.GetTypeDesc();
-                auto* pg = item->mutable_pg_type();
-                pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-                pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
-            } else {
-                item->mutable_optional_type()->mutable_item()
-                    ->set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
-            }
+            ProtoFromTypeInfo(typeInfo, *colMeta->mutable_type(), false);
+
             if (col.second.KeyOrder == -1)
                 continue;
 

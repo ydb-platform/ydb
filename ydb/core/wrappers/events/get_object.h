@@ -1,15 +1,9 @@
 #pragma once
-#include "abstract.h"
+
 #include "common.h"
 
-#include <ydb/core/base/events.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/library/accessor/accessor.h>
-
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/HeadObjectRequest.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/HeadObjectResult.h>
-#include <ydb/library/actors/core/event_local.h>
-#include <util/generic/ptr.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/GetObjectRequest.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/GetObjectResult.h>
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
@@ -24,6 +18,7 @@ class TEvGetObjectResponse: public TResponseWithBody<TEvGetObjectResponse, EvGet
 private:
     using TBase = TResponseWithBody<TEvGetObjectResponse, EvGetObjectResponse, Aws::S3::Model::GetObjectResult, Aws::String>;
     std::pair<ui64, ui64> ReadInterval;
+
 public:
     ui32 GetReadIntervalLength() const {
         return ReadInterval.second - ReadInterval.first + 1;
@@ -41,8 +36,29 @@ public:
         }
     }
 
+    static bool TryParseRange(const TString& str, std::pair<ui64, ui64>& range) {
+        TStringBuf buf(str);
+        if (!buf.SkipPrefix("bytes=")) {
+            return false;
+        }
+
+        ui64 start;
+        if (!TryFromString(buf.NextTok('-'), start)) {
+            return false;
+        }
+
+        ui64 end;
+        if (!TryFromString(buf, end)) {
+            return false;
+        }
+
+        range = std::make_pair(start, end);
+        return true;
+    }
+
     explicit TEvGetObjectResponse(const TBase::TKey& key, const typename TBase::TOutcome& outcome)
-        : TBase(key, outcome) {
+        : TBase(key, outcome)
+    {
         Y_ABORT_UNLESS(false);
     }
 
@@ -57,6 +73,6 @@ public:
         , ReadInterval(range)
     {
     }
-
 };
+
 }

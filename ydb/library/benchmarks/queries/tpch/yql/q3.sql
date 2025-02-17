@@ -10,7 +10,7 @@ select
 from
     {{customer}}
 where
-    c_mktsegment = 'MACHINERY'
+    c_mktsegment = 'BUILDING'
 );
 
 $o = (
@@ -25,7 +25,7 @@ left semi join
 on
     c.c_custkey = o.o_custkey
 where
-    CAST(o_orderdate AS Timestamp) < Date('1995-03-08')
+    o_orderdate < Date('1995-03-15')
 );
 
 $join2 = (
@@ -42,12 +42,12 @@ join
 on
     l.l_orderkey = o.o_orderkey
 where
-    CAST(l_shipdate AS Timestamp) > Date('1995-03-08')
+    l_shipdate > Date('1995-03-15')
 );
 
 select
     l_orderkey,
-    sum(l_extendedprice * (1 - l_discount)) as revenue,
+    sum(l_extendedprice * ($z1_12 - l_discount)) as revenue,
     o_orderdate,
     o_shippriority
 from

@@ -11,4 +11,4 @@ CREATE TABLE people (
     sex                Text,
     social_card_number Int
 );
-``` 
+```

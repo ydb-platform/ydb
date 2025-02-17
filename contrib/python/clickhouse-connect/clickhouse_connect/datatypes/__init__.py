@@ -4,4 +4,7 @@ import clickhouse_connect.datatypes.numeric
 import clickhouse_connect.datatypes.special
 import clickhouse_connect.datatypes.string
 import clickhouse_connect.datatypes.temporal
+import clickhouse_connect.datatypes.geometric
+import clickhouse_connect.datatypes.dynamic
 import clickhouse_connect.datatypes.registry
+import clickhouse_connect.datatypes.postinit

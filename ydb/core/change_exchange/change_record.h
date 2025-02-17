@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/change_exchange/visitor.h>
+
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/stream/output.h>
@@ -19,6 +21,7 @@ public:
         AsyncIndex,
         CdcDataChange,
         CdcHeartbeat,
+        IncrementalRestore,
     };
 
 public:
@@ -29,28 +32,33 @@ public:
     virtual EKind GetKind() const = 0;
     virtual const TString& GetBody() const = 0;
     virtual ESource GetSource() const = 0;
+    virtual const TString& GetSourceId() const = 0;
     virtual bool IsBroadcast() const = 0;
+
+    virtual void Accept(IVisitor& visitor) const = 0;
+
+    virtual void RewriteTxId(ui64 value) = 0;
 
     virtual TString ToString() const = 0;
     virtual void Out(IOutputStream& out) const = 0;
 
-    template <typename T>
-    T* Get() {
-        return dynamic_cast<T*>(this);
-    }
-
 }; // IChangeRecord
 
-template <typename T, typename TDerived> class TChangeRecordBuilder;
+template <typename T, typename TDerived>
+class TChangeRecordBuilder;
 
 class TChangeRecordBase: public IChangeRecord {
-    template <typename T, typename TDerived> friend class TChangeRecordBuilder;
+    template <typename T, typename TDerived>
+    friend class TChangeRecordBuilder;
 
 public:
     ui64 GetOrder() const override { return Order; }
     const TString& GetBody() const override { return Body; }
     ESource GetSource() const override { return Source; }
+    const TString& GetSourceId() const override { return SourceId; }
     bool IsBroadcast() const override { return false; }
+
+    void RewriteTxId(ui64) override { Y_ABORT("not implemented"); }
 
     TString ToString() const override;
     void Out(IOutputStream& out) const override;
@@ -59,6 +67,7 @@ protected:
     ui64 Order = Max<ui64>();
     TString Body;
     ESource Source = ESource::Unspecified;
+    TString SourceId;
 
 }; // TChangeRecordBase
 
@@ -77,13 +86,11 @@ protected:
 public:
     TChangeRecordBuilder()
         : Record(MakeIntrusive<T>())
-    {
-    }
+    {}
 
-    explicit TChangeRecordBuilder(IChangeRecord::TPtr record)
+    explicit TChangeRecordBuilder(TIntrusivePtr<T> record)
         : Record(std::move(record))
-    {
-    }
+    {}
 
     TSelf& WithOrder(ui64 order) {
         GetRecord()->Order = order;
@@ -105,17 +112,21 @@ public:
         return static_cast<TSelf&>(*this);
     }
 
-    IChangeRecord::TPtr Build() {
+    TIntrusivePtr<T> Build() {
         return Record;
     }
 
 protected:
-    IChangeRecord::TPtr Record;
+    TIntrusivePtr<T> Record;
 
 }; // TChangeRecordBuilder
 
 }
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NChangeExchange::IChangeRecord::TPtr, out, value) {
+    return value->Out(out);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NChangeExchange::IChangeRecord*, out, value) {
     return value->Out(out);
 }

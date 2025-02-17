@@ -2,17 +2,17 @@ LIBRARY()
 
 PEERDIR(
     ydb/library/yql/providers/dq/expr_nodes
-    ydb/library/yql/providers/common/mkql
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/transform
-    ydb/library/yql/utils/log
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/transform
+    yql/essentials/utils/log
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
-    ydb/library/yql/dq/integration
-    ydb/library/yql/core
-    ydb/library/yql/core/peephole_opt
-    ydb/library/yql/core/type_ann
-    ydb/library/yql/minikql/computation
+    yql/essentials/core/dq_integration
+    yql/essentials/core
+    yql/essentials/core/peephole_opt
+    yql/essentials/core/type_ann
+    yql/essentials/minikql/computation
     library/cpp/yson/node
 )
 

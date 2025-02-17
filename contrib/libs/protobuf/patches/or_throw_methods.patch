@@ -1,0 +1,117 @@
+--- a/src/google/protobuf/message_lite.cc
++++ b/src/google/protobuf/message_lite.cc
+@@ -514,6 +514,33 @@ TProtoStringType MessageLite::SerializePartialAsString() const {
+   return output;
+ }
+ 
++#if PROTOBUF_USE_EXCEPTIONS && defined(__cpp_lib_string_view)
++void MessageLite::ParseFromStringOrThrow(std::string_view s) {
++  const bool isOk = ParseFromArray(s.data(), s.size());
++  if (!isOk) {
++    throw FatalException("message_lite.cc", __LINE__, "Failed to parse protobuf message " + GetTypeName());
++  }
++}
++#endif
++
++#if PROTOBUF_USE_EXCEPTIONS
++TProtoStringType NProtoBuf::MessageLite::SerializeAsStringOrThrow() const {
++  TProtoStringType s;
++  if (!IsInitialized()) {
++    //NOTE: SerializeToString (called inside SerializeAsString too) does not perform this check in release build
++    //    so SerializeToString in release build return false only if result size is greater than 2gb
++    //    but in debug build not properly inited message (without required filds) will lead to an exception
++    //    different control flow in debug and build release look like a bug
++    throw FatalException("message_lite.cc", __LINE__, "Some required fileds are not set in message " + GetTypeName());
++  }
++  const bool isOk = SerializeToString(&s);
++  if (!isOk) {
++    throw FatalException("message_lite.cc", __LINE__, "Failed to serialize protobuf message " + GetTypeName());
++  }
++  return s;
++}
++#endif
++
+ 
+ namespace internal {
+ 
+--- a/src/google/protobuf/message_lite.h
++++ b/src/google/protobuf/message_lite.h
+@@ -469,6 +469,14 @@ class PROTOBUF_EXPORT MessageLite {
+     return false;
+   }
+ 
++  #if PROTOBUF_USE_EXCEPTIONS && defined(__cpp_lib_string_view)
++  PROTOBUF_ATTRIBUTE_REINITIALIZES void ParseFromStringOrThrow(std::string_view s) noexcept(false);
++  #endif
++
++  #if PROTOBUF_USE_EXCEPTIONS
++  TProtoStringType SerializeAsStringOrThrow() const noexcept(false);
++  #endif
++
+  private:
+   friend class FastReflectionMessageMutator;
+   friend class FastReflectionStringSetter;
+
+--- a/src/google/protobuf/stubs/common.cc	(a305e8c438c21585e001abb5ada0122f6e1fc694)
++++ a/src/google/protobuf/stubs/common.cc	(109a04575819756fff3dc3e089008c9b1e971f85)
+@@ -159,6 +159,14 @@ arc_ui32 ghtonl(arc_ui32 x) {
+   return result;
+ }
+ 
++#if PROTOBUF_USE_EXCEPTIONS
++FatalException::~FatalException() throw() {}
++
++const char* FatalException::what() const throw() {
++  return message_.c_str();
++}
++#endif
++
+ }  // namespace protobuf
+ }  // namespace google
+ 
+--- a/src/google/protobuf/stubs/common.h	(a305e8c438c21585e001abb5ada0122f6e1fc694)
++++ a/src/google/protobuf/stubs/common.h	(109a04575819756fff3dc3e089008c9b1e971f85)
+@@ -45,6 +45,16 @@
+ #include "google/protobuf/stubs/platform_macros.h"
+ #include "google/protobuf/stubs/port.h"
+ 
++#ifndef PROTOBUF_USE_EXCEPTIONS
++#if defined(_MSC_VER) && defined(_CPPUNWIND)
++  #define PROTOBUF_USE_EXCEPTIONS 1
++#elif defined(__EXCEPTIONS)
++  #define PROTOBUF_USE_EXCEPTIONS 1
++#else
++  #define PROTOBUF_USE_EXCEPTIONS 0
++#endif
++#endif
++
+ #define Y_PROTOBUF_SUPPRESS_NODISCARD [[maybe_unused]] bool Y_GENERATE_UNIQUE_ID(pb_checker)=
+ 
+ #if defined(__APPLE__)
+@@ -101,6 +111,26 @@ ProtocVersionString(int version);  // NOLINT(runtime/string)
+ 
+ }  // namespace internal
+ 
++#if PROTOBUF_USE_EXCEPTIONS
++class FatalException : public std::exception {
++ public:
++  FatalException(const char* filename, int line, const TProtoStringType& message)
++      : filename_(filename), line_(line), message_(message) {}
++  virtual ~FatalException() throw();
++
++  const char* what() const throw() override;
++
++  const char* filename() const { return filename_; }
++  int line() const { return line_; }
++  const TProtoStringType& message() const { return message_; }
++
++ private:
++  const char* filename_;
++  const int line_;
++  const TProtoStringType message_;
++};
++#endif
++
+ // Place this macro in your main() function (or somewhere before you attempt
+ // to use the protobuf library) to verify that the version you link against
+ // matches the headers you compiled against.  If a version mismatch is

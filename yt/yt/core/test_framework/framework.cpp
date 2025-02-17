@@ -59,19 +59,35 @@ void WaitForPredicate(
             }
         }
     }
-    THROW_ERROR_EXCEPTION("Wait failed");
+    THROW_ERROR_EXCEPTION("Wait failed: %s", options.Message)
+        << TErrorAttribute("location", NYT::ToString(options.SourceLocation));
+}
+
+void WaitForPredicate(
+    std::function<bool()> predicate,
+    const TString& message,
+    TSourceLocation location)
+{
+    WaitForPredicate(
+        std::move(predicate),
+        TWaitForPredicateOptions{
+            .Message = message,
+            .SourceLocation = location,
+        });
 }
 
 void WaitForPredicate(
     std::function<bool()> predicate,
     int iterationCount,
-    TDuration period)
+    TDuration period,
+    TSourceLocation location)
 {
     WaitForPredicate(
         std::move(predicate),
         TWaitForPredicateOptions{
             .IterationCount = iterationCount,
             .Period = period,
+            .SourceLocation = location,
         });
 }
 

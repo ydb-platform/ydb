@@ -204,12 +204,14 @@ struct TScalarTypeTraits<i64>
         if (const auto* value = std::get_if<i64>(&result)) {
             return *value;
         } else if (const auto* value = std::get_if<ui64>(&result)) {
-            i64 typedResult;
-            if (TryIntegralCast(*value, &typedResult)) {
-                return typedResult;
+            auto typedResult = TryCheckedIntegralCast<i64>(*value);
+            if (!typedResult) {
+                return std::nullopt;
             }
+            return *typedResult;
+        } else {
+            return std::nullopt;
         }
-        return std::nullopt;
     }
 };
 
@@ -221,12 +223,14 @@ struct TScalarTypeTraits<ui64>
         if (const auto* value = std::get_if<ui64>(&result)) {
             return *value;
         } else if (const auto* value = std::get_if<i64>(&result)) {
-            ui64 typedResult;
-            if (TryIntegralCast(*value, &typedResult)) {
-                return typedResult;
+            auto typedResult = TryCheckedIntegralCast<ui64>(*value);
+            if (!typedResult) {
+                return std::nullopt;
             }
+            return *typedResult;
+        } else {
+            return std::nullopt;
         }
-        return std::nullopt;
     }
 };
 

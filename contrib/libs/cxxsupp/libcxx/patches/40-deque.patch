@@ -1,0 +1,33 @@
+diff --git a/include/deque b/include/deque
+index a6472e4..154926d 100644
+--- a/include/deque
++++ b/include/deque
+@@ -247,7 +247,9 @@ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+ template <class _ValueType, class _DiffType>
+ struct __deque_block_size {
+-  static const _DiffType value = sizeof(_ValueType) < 256 ? 4096 / sizeof(_ValueType) : 16;
++  static const _DiffType __buf_size = 64 * sizeof(void*);
++  static const _DiffType value      = (__buf_size / sizeof(_ValueType)) > 2 ? (__buf_size / sizeof(_ValueType)) : 2;
++  // static const _DiffType value = sizeof(_ValueType) < 256 ? 4096 / sizeof(_ValueType) : 16;
+ };
+ 
+ template <class _ValueType,
+@@ -796,7 +798,7 @@ public:
+ #else
+       _NOEXCEPT_(!__alloc_traits::propagate_on_container_swap::value || __is_nothrow_swappable<allocator_type>::value);
+ #endif
+-  _LIBCPP_HIDE_FROM_ABI void clear() _NOEXCEPT;
++  _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_HIDE_FROM_ABI void clear() _NOEXCEPT;
+ 
+   _LIBCPP_HIDE_FROM_ABI bool __invariants() const {
+     if (!__map_.__invariants())
+@@ -2492,7 +2494,7 @@ inline void deque<_Tp, _Allocator>::swap(deque& __c)
+ }
+ 
+ template <class _Tp, class _Allocator>
+-inline void deque<_Tp, _Allocator>::clear() _NOEXCEPT {
++_LIBCPP_REINITIALIZES_OBJECT inline void deque<_Tp, _Allocator>::clear() _NOEXCEPT {
+   __annotate_delete();
+   allocator_type& __a = __alloc();
+   for (iterator __i = begin(), __e = end(); __i != __e; ++__i)

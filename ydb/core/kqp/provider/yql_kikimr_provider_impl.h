@@ -6,8 +6,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_table_lookup.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 
 namespace NYql {
@@ -47,6 +46,10 @@ private:
     virtual TStatus HandleAlterReplication(NNodes::TKiAlterReplication node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropReplication(NNodes::TKiDropReplication node, TExprContext& ctx) = 0;
 
+    virtual TStatus HandleCreateTransfer(NNodes::TKiCreateTransfer node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterTransfer(NNodes::TKiAlterTransfer node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropTransfer(NNodes::TKiDropTransfer node, TExprContext& ctx) = 0;
+
     virtual TStatus HandleCreateUser(NNodes::TKiCreateUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterUser(NNodes::TKiAlterUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropUser(NNodes::TKiDropUser node, TExprContext& ctx) = 0;
@@ -69,10 +72,20 @@ private:
 
     virtual TStatus HandleCreateSequence(NNodes::TKiCreateSequence node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropSequence(NNodes::TKiDropSequence node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterSequence(NNodes::TKiAlterSequence node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleModifyPermissions(NNodes::TKiModifyPermissions node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleReturningList(NNodes::TKiReturningList node, TExprContext& ctx) = 0;
+
+    virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) = 0;
+
+    virtual TStatus HandleCreateBackupCollection(NNodes::TKiCreateBackupCollection node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterBackupCollection(NNodes::TKiAlterBackupCollection node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropBackupCollection(NNodes::TKiDropBackupCollection node, TExprContext& ctx) = 0;
+    virtual TStatus HandleBackup(NNodes::TKiBackup node, TExprContext& ctx) = 0;
+    virtual TStatus HandleBackupIncremental(NNodes::TKiBackupIncremental node, TExprContext& ctx) = 0;
+    virtual TStatus HandleRestore(NNodes::TKiRestore node, TExprContext& ctx) = 0;
 };
 
 class TKikimrKey {
@@ -87,11 +100,19 @@ public:
         Permission,
         PGObject,
         Replication,
+        BackupCollection,
+        Sequence,
+        Transfer,
     };
 
     struct TViewDescription {
         TString Name;
         bool PrimaryFlag = false;
+    };
+
+    struct TBackupCollectionDescription {
+        TString Prefix;
+        TString Name;
     };
 
 public:
@@ -115,9 +136,21 @@ public:
         return Target;
     }
 
+    TString GetSequencePath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Sequence);
+        return Target;
+    }
+
     TString GetReplicationPath() const {
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Replication);
+        return Target;
+    }
+
+    TString GetTransferPath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Transfer);
         return Target;
     }
 
@@ -169,6 +202,16 @@ public:
         return *ObjectType;
     }
 
+    TBackupCollectionDescription GetBackupCollectionPath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::BackupCollection);
+        Y_DEBUG_ABORT_UNLESS(ExplicitPrefix.Defined());
+        return TBackupCollectionDescription {
+                .Prefix = *ExplicitPrefix,
+                .Name = Target,
+            };
+    }
+
     bool Extract(const TExprNode& key);
 
 private:
@@ -177,6 +220,7 @@ private:
     TString Target;
     TMaybe<TString> ObjectType;
     TMaybe<TViewDescription> View;
+    TMaybe<TString> ExplicitPrefix;
 };
 
 struct TKiDataQueryBlockSettings {
@@ -194,6 +238,17 @@ struct TKiExecDataQuerySettings {
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 
     static TKiExecDataQuerySettings Parse(NNodes::TKiExecDataQuery exec);
+};
+
+struct TWriteBackupCollectionSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TKiBackupCollectionEntryList> Entries;
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> BackupCollectionSettings;
+    NNodes::TCoNameValueTupleList Other;
+
+    TWriteBackupCollectionSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other)
+    {}
 };
 
 TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
@@ -241,13 +296,19 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op,
     TVector<NKqpProto::TKqpTableInfo>& infos);
 
-void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKikimrMiniKQL::TResult& proto);
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance);
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity);
+Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);  
+
+bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
+std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto);
 // todo gvit switch to ydb typed value.
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLiteralValue& proto);
+void FillLiteralProto(const NNodes::TCoPgConst& literal, NKqpProto::TKqpPhyLiteralValue& proto);
 
 // Optimizer rules
-TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TIntrusivePtr<TKikimrTablesData> tablesData,
+TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
     TTypeAnnotationContext& types, bool sequentialResults);
 TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, TExprContext& ctx);
 
@@ -267,5 +328,7 @@ bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, 
 
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content);
 TString FillAuthProperties(THashMap<TString, TString>& properties, const TExternalSource& externalSource);
+
+TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(NNodes::TExprList node, TExprContext& ctx);
 
 } // namespace NYql

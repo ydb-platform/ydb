@@ -4,12 +4,13 @@
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/tx/sharding/unboxed_reader.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 #include <util/generic/map.h>
 
@@ -27,11 +28,11 @@ enum class ETableKind {
 
 struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
     TString Path;
-    TMap<TString, NSharding::TShardingBase::TColumn> Columns;
+    TMap<TString, NSharding::IShardingBase::TColumn> Columns;
     TVector<TString> KeyColumns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     ETableKind TableKind = ETableKind::Unknown;
-    THashMap<TString, TString> Sequences;
+    THashMap<TString, std::pair<TString, NYql::TKikimrPathId>> Sequences;
     THashMap<TString, Ydb::TypedValue> DefaultFromLiteral;
     bool IsBuildInProgress = false;
 
@@ -43,14 +44,24 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
             return;
         }
 
-        NSharding::TShardingBase::TColumn column;
+        NSharding::IShardingBase::TColumn column;
         column.Id = phyColumn.GetId().GetId();
 
-        if (phyColumn.GetTypeId() != NScheme::NTypeIds::Pg) {
+        switch (phyColumn.GetTypeId()) {
+        case NScheme::NTypeIds::Pg: {
+            column.Type = NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName(phyColumn.GetTypeParam().GetPgTypeName()));
+            break;
+        }
+        case NScheme::NTypeIds::Decimal: {
+            const auto& decimalProto = phyColumn.GetTypeParam().GetDecimal();
+            NScheme::TDecimalType decimal(decimalProto.precision(), decimalProto.scale());
+            column.Type = NScheme::TTypeInfo(decimal);
+            break;
+        }
+        default: {
             column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId());
-        } else {
-            column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId(),
-                NPg::TypeDescFromPgTypeName(phyColumn.GetPgTypeName()));
+            break;
+        }
         }
         column.NotNull = phyColumn.GetNotNull();
         column.IsBuildInProgress = phyColumn.GetIsBuildInProgress();
@@ -58,11 +69,11 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
         Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
         if (!phyColumn.GetDefaultFromSequence().empty()) {
             TString seq = phyColumn.GetDefaultFromSequence();
-            if (!seq.StartsWith(Path)) {
+            if (!seq.StartsWith("/")) {
                 seq = Path + "/" + seq;
             }
-
-            Sequences.emplace(phyColumn.GetId().GetName(), seq);
+            NYql::TKikimrPathId pathId(phyColumn.GetDefaultFromSequencePathId().GetOwnerId(), phyColumn.GetDefaultFromSequencePathId().GetLocalPathId());
+            Sequences.emplace(phyColumn.GetId().GetName(), std::make_pair(seq, pathId));
         }
 
         if (phyColumn.HasDefaultFromLiteral()) {
@@ -83,7 +94,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
             << ", table: " << Path
             << ", column: " << columnName);
 
-        NSharding::TShardingBase::TColumn column;
+        NSharding::IShardingBase::TColumn column;
         column.Id = systemColumn->ColumnId;
         column.Type = NScheme::TTypeInfo(systemColumn->TypeId);
         column.NotNull = false;
@@ -143,7 +154,7 @@ public:
             return TableConstInfo->Path;
         }
 
-        const TMap<TString, NSharding::TShardingBase::TColumn>& GetColumns() const {
+        const TMap<TString, NSharding::IShardingBase::TColumn>& GetColumns() const {
             return TableConstInfo->Columns;
         }
 
@@ -157,10 +168,6 @@ public:
 
         const ETableKind& GetTableKind() const {
             return TableConstInfo->TableKind;
-        }
-
-        const THashMap<TString, TString>& GetSequences() const {
-            return TableConstInfo->Sequences;
         }
 
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> GetColumnTableInfo() const {

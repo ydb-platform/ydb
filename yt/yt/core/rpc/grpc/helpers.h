@@ -9,12 +9,14 @@
 #include <library/cpp/yt/threading/event_count.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <contrib/libs/grpc/include/grpc/grpc.h>
 #include <contrib/libs/grpc/include/grpc/grpc_security.h>
 #include <contrib/libs/grpc/include/grpc/impl/codegen/grpc_types.h>
 #include <contrib/libs/grpc/include/grpc/byte_buffer_reader.h>
+
+typedef struct x509_st X509;
 
 namespace NYT::NRpc::NGrpc {
 
@@ -23,8 +25,10 @@ namespace NYT::NRpc::NGrpc {
 using TGprString = std::unique_ptr<char, void(*)(void*)>;
 TGprString MakeGprString(char* str);
 
+using TX509Ptr = std::unique_ptr<X509, void(*)(X509*)>;
+TX509Ptr MakeX509Ptr(X509* cert);
+
 TStringBuf ToStringBuf(const grpc_slice& slice);
-TString ToString(const grpc_slice& slice);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -240,7 +244,7 @@ private:
     size_t AvailableBytes_ = 0;
     size_t RemainingBytes_;
 
-    virtual size_t DoRead(void* buf, size_t len) override;
+    size_t DoRead(void* buf, size_t len) override;
 
     bool ReadNextSlice();
 };
@@ -290,11 +294,15 @@ TError DeserializeError(TStringBuf serializedError);
 TGrpcPemKeyCertPair LoadPemKeyCertPair(const TSslPemKeyCertPairConfigPtr& config);
 TGrpcChannelCredentialsPtr LoadChannelCredentials(const TChannelCredentialsConfigPtr& config);
 TGrpcServerCredentialsPtr LoadServerCredentials(const TServerCredentialsConfigPtr& config);
-std::optional<TString> ParseIssuerFromX509(TStringBuf x509String);
+TX509Ptr ParsePemCertToX509(TStringBuf pemCert);
+std::optional<TString> ParseIssuerFromX509(const TX509Ptr& pemCertX509);
+std::optional<TString> ParseSerialNumberFromX509(const TX509Ptr& pemCertX509);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpc::NGrpc
+
+void FormatValue(NYT::TStringBuilderBase* builder, const grpc_slice& slice, TStringBuf spec);
 
 #define HELPERS_INL_H_
 #include "helpers-inl.h"

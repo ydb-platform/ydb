@@ -1,0 +1,931 @@
+--- contrib/libs/pybind11/include/pybind11/cast.h	(54a9461a4d6f0255e1b2e17444ac91a53daeb018)
++++ contrib/libs/pybind11/include/pybind11/cast.h	(index)
+@@ -384,14 +384,35 @@ struct string_caster {
+     static constexpr size_t UTF_N = 8 * sizeof(CharT);
+ 
+     bool load(handle src, bool) {
++#if PY_MAJOR_VERSION < 3
++        object temp;
++#endif
+         handle load_src = src;
+         if (!src) {
+             return false;
+         }
+         if (!PyUnicode_Check(load_src.ptr())) {
++#if PY_MAJOR_VERSION >= 3
+             return load_raw(load_src);
++#else
++            if (std::is_same<CharT, char>::value) {
++                return load_raw(load_src);
++            }
++
++            // The below is a guaranteed failure in Python 3 when PyUnicode_Check returns false
++            if (!PYBIND11_BYTES_CHECK(load_src.ptr()))
++                return false;
++
++            temp = reinterpret_steal<object>(PyUnicode_FromObject(load_src.ptr()));
++            if (!temp) {
++                PyErr_Clear();
++                return false;
++            }
++            load_src = temp;
++#endif
+         }
+ 
++#if PY_VERSION_HEX >= 0x03030000
+         // For UTF-8 we avoid the need for a temporary `bytes` object by using
+         // `PyUnicode_AsUTF8AndSize`.
+         if (UTF_N == 8) {
+@@ -405,6 +426,7 @@ struct string_caster {
+             value = StringType(buffer, static_cast<size_t>(size));
+             return true;
+         }
++#endif
+ 
+         auto utfNbytes
+             = reinterpret_steal<object>(PyUnicode_AsEncodedString(load_src.ptr(),
+@@ -933,6 +955,18 @@ struct pyobject_caster {
+ 
+     template <typename T = type, enable_if_t<std::is_base_of<object, T>::value, int> = 0>
+     bool load(handle src, bool /* convert */) {
++#if PY_MAJOR_VERSION < 3 && !defined(PYBIND11_STR_LEGACY_PERMISSIVE)
++        // For Python 2, without this implicit conversion, Python code would
++        // need to be cluttered with six.ensure_text() or similar, only to be
++        // un-cluttered later after Python 2 support is dropped.
++        if ((std::is_same<T, str>::value) && isinstance<bytes>(src)) {
++            PyObject *str_from_bytes = PyUnicode_FromEncodedObject(src.ptr(), "utf-8", nullptr);
++            if (!str_from_bytes)
++                throw error_already_set();
++            value = reinterpret_steal<type>(str_from_bytes);
++            return true;
++        }
++#endif
+         if (!isinstance<type>(src)) {
+             return false;
+         }
+@@ -1666,7 +1666,7 @@ unpacking_collector<policy> collect_arguments(Args &&...args) {
+ template <typename Derived>
+ template <return_value_policy policy, typename... Args>
+ object object_api<Derived>::operator()(Args &&...args) const {
+-#ifndef NDEBUG
++#if !defined(NDEBUG) && PY_VERSION_HEX >= 0x03060000
+     if (!PyGILState_Check()) {
+         pybind11_fail("pybind11::object_api<>::operator() PyGILState_Check() failure.");
+     }
+--- contrib/libs/pybind11/include/pybind11/embed.h	(54a9461a4d6f0255e1b2e17444ac91a53daeb018)
++++ contrib/libs/pybind11/include/pybind11/embed.h	(index)
+@@ -19,9 +19,15 @@
+ #    error Embedding the interpreter is not supported with PyPy
+ #endif
+ 
+-#define PYBIND11_EMBEDDED_MODULE_IMPL(name)                                                       \
+-    extern "C" PyObject *pybind11_init_impl_##name();                                             \
+-    extern "C" PyObject *pybind11_init_impl_##name() { return pybind11_init_wrapper_##name(); }
++#if PY_MAJOR_VERSION >= 3
++#    define PYBIND11_EMBEDDED_MODULE_IMPL(name)                                                   \
++        extern "C" PyObject *pybind11_init_impl_##name();                                         \
++        extern "C" PyObject *pybind11_init_impl_##name() { return pybind11_init_wrapper_##name(); }
++#else
++#    define PYBIND11_EMBEDDED_MODULE_IMPL(name)                                                   \
++        extern "C" void pybind11_init_impl_##name();                                              \
++        extern "C" void pybind11_init_impl_##name() { pybind11_init_wrapper_##name(); }
++#endif
+ 
+ /** \rst
+     Add a new module to the table of builtins for the interpreter. Must be
+@@ -61,7 +67,11 @@ PYBIND11_NAMESPACE_BEGIN(detail)
+ 
+ /// Python 2.7/3.x compatible version of `PyImport_AppendInittab` and error checks.
+ struct embedded_module {
++#if PY_MAJOR_VERSION >= 3
+     using init_t = PyObject *(*) ();
++#else
++    using init_t = void (*)();
++#endif
+     embedded_module(const char *name, init_t init) {
+         if (Py_IsInitialized() != 0) {
+             pybind11_fail("Can't add new modules after the interpreter has been initialized");
+@@ -76,13 +86,42 @@ struct embedded_module {
+ 
+ struct wide_char_arg_deleter {
+     void operator()(wchar_t *ptr) const {
++#if PY_VERSION_HEX >= 0x030500f0
+         // API docs: https://docs.python.org/3/c-api/sys.html#c.Py_DecodeLocale
+         PyMem_RawFree(ptr);
++#else
++        delete[] ptr;
++#endif
+     }
+ };
+ 
+ inline wchar_t *widen_chars(const char *safe_arg) {
++#if PY_VERSION_HEX >= 0x030500f0
+     wchar_t *widened_arg = Py_DecodeLocale(safe_arg, nullptr);
++#else
++    wchar_t *widened_arg = nullptr;
++
++// warning C4996: 'mbstowcs': This function or variable may be unsafe.
++#    if defined(_MSC_VER)
++#        pragma warning(push)
++#        pragma warning(disable : 4996)
++#    endif
++
++#    if defined(HAVE_BROKEN_MBSTOWCS) && HAVE_BROKEN_MBSTOWCS
++    size_t count = std::strlen(safe_arg);
++#    else
++    size_t count = std::mbstowcs(nullptr, safe_arg, 0);
++#    endif
++    if (count != static_cast<size_t>(-1)) {
++        widened_arg = new wchar_t[count + 1];
++        std::mbstowcs(widened_arg, safe_arg, count + 1);
++    }
++
++#    if defined(_MSC_VER)
++#        pragma warning(pop)
++#    endif
++
++#endif
+     return widened_arg;
+ }
+ 
+@@ -118,6 +157,7 @@ inline void initialize_interpreter_pre_pyconfig(bool init_signal_handlers,
+     }
+ 
+     auto argv_size = static_cast<size_t>(argc);
++#if PY_MAJOR_VERSION >= 3
+     // SetArgv* on python 3 takes wchar_t, so we have to convert.
+     std::unique_ptr<wchar_t *[]> widened_argv(new wchar_t *[argv_size]);
+     std::vector<std::unique_ptr<wchar_t[], detail::wide_char_arg_deleter>> widened_argv_entries;
+@@ -133,6 +173,14 @@ inline void initialize_interpreter_pre_pyconfig(bool init_signal_handlers,
+     }
+ 
+     auto *pysys_argv = widened_argv.get();
++#else
++    // python 2.x
++    std::vector<std::string> strings{safe_argv, safe_argv + argv_size};
++    std::vector<char *> char_strings{argv_size};
++    for (std::size_t i = 0; i < argv_size; ++i)
++        char_strings[i] = &strings[i][0];
++    char **pysys_argv = char_strings.data();
++#endif
+ 
+     PySys_SetArgvEx(argc, pysys_argv, static_cast<int>(add_program_dir_to_path));
+ }
+--- contrib/libs/pybind11/include/pybind11/eval.h	(54a9461a4d6f0255e1b2e17444ac91a53daeb018)
++++ contrib/libs/pybind11/include/pybind11/eval.h	(index)
+@@ -94,7 +94,7 @@ void exec(const char (&s)[N], object global = globals(), object local = object()
+     eval<eval_statements>(s, std::move(global), std::move(local));
+ }
+ 
+-#if defined(PYPY_VERSION)
++#if defined(PYPY_VERSION) && PY_VERSION_HEX >= 0x03000000
+ template <eval_mode mode = eval_statements>
+ object eval_file(str, object, object) {
+     pybind11_fail("eval_file not supported in PyPy3. Use eval");
+@@ -133,18 +133,38 @@ object eval_file(str fname, object global = globals(), object local = object()) 
+ 
+     int closeFile = 1;
+     std::string fname_str = (std::string) fname;
++#    if PY_VERSION_HEX >= 0x03040000
+     FILE *f = _Py_fopen_obj(fname.ptr(), "r");
++#    else
++    /* No unicode support in open() :( */
++    auto fobj = reinterpret_steal<object>(
++        PyFile_FromString(const_cast<char *>(fname_str.c_str()), const_cast<char *>("r")));
++    FILE *f = nullptr;
++    if (fobj)
++        f = PyFile_AsFile(fobj.ptr());
++    closeFile = 0;
++#    endif
+     if (!f) {
+         PyErr_Clear();
+         pybind11_fail("File \"" + fname_str + "\" could not be opened!");
+     }
+ 
++    // In Python2, this should be encoded by getfilesystemencoding.
++    // We don't boher setting it since Python2 is past EOL anyway.
++    // See PR#3233
++#    if PY_VERSION_HEX >= 0x03000000
+     if (!global.contains("__file__")) {
+         global["__file__"] = std::move(fname);
+     }
++#    endif
+ 
++#    if PY_VERSION_HEX < 0x03000000 && defined(PYPY_VERSION)
++    PyObject *result = PyRun_File(f, fname_str.c_str(), start, global.ptr(), local.ptr());
++    (void) closeFile;
++#    else
+     PyObject *result
+         = PyRun_FileEx(f, fname_str.c_str(), start, global.ptr(), local.ptr(), closeFile);
++#    endif
+ 
+     if (!result) {
+         throw error_already_set();
+--- contrib/libs/pybind11/include/pybind11/numpy.h	(54a9461a4d6f0255e1b2e17444ac91a53daeb018)
++++ contrib/libs/pybind11/include/pybind11/numpy.h	(index)
+@@ -265,7 +265,11 @@ private:
+     static npy_api lookup() {
+         module_ m = detail::import_numpy_core_submodule("multiarray");
+         auto c = m.attr("_ARRAY_API");
++#if PY_MAJOR_VERSION >= 3
+         void **api_ptr = (void **) PyCapsule_GetPointer(c.ptr(), nullptr);
++#else
++        void **api_ptr = (void **) PyCObject_AsVoidPtr(c.ptr());
++#endif
+         if (api_ptr == nullptr) {
+             raise_from(PyExc_SystemError, "FAILURE obtaining numpy _ARRAY_API pointer.");
+             throw error_already_set();
+--- contrib/libs/pybind11/include/pybind11/operators.h	(54a9461a4d6f0255e1b2e17444ac91a53daeb018)
++++ contrib/libs/pybind11/include/pybind11/operators.h	(index)
+@@ -92,6 +92,16 @@ struct op_ {
+         using R_type = conditional_t<std::is_same<R, self_t>::value, Base, R>;
+         using op = op_impl<id, ot, Base, L_type, R_type>;
+         cl.def(op::name(), &op::execute, is_operator(), extra...);
++#if PY_MAJOR_VERSION < 3
++        if ((id == op_truediv)
++            || (id == op_itruediv))
++            cl.def(id == op_itruediv ? "__idiv__"
++                   : ot == op_l      ? "__div__"
++                                     : "__rdiv__",
++                   &op::execute,
++                   is_operator(),
++                   extra...);
++#endif
+     }
+     template <typename Class, typename... Extra>
+     void execute_cast(Class &cl, const Extra &...extra) const {
+@@ -100,6 +110,15 @@ struct op_ {
+         using R_type = conditional_t<std::is_same<R, self_t>::value, Base, R>;
+         using op = op_impl<id, ot, Base, L_type, R_type>;
+         cl.def(op::name(), &op::execute_cast, is_operator(), extra...);
++#if PY_MAJOR_VERSION < 3
++        if (id == op_truediv || id == op_itruediv)
++            cl.def(id == op_itruediv ? "__idiv__"
++                   : ot == op_l      ? "__div__"
++                                     : "__rdiv__",
++                   &op::execute,
++                   is_operator(),
++                   extra...);
++#endif
+     }
+ };
+ 
+--- contrib/libs/pybind11/include/pybind11/pybind11.h	(54a9461a4d6f0255e1b2e17444ac91a53daeb018)
++++ contrib/libs/pybind11/include/pybind11/pybind11.h	(index)
+@@ -455,6 +455,15 @@ protected:
+             pybind11_fail("Internal error while parsing type signature (2)");
+         }
+ 
++#if PY_MAJOR_VERSION < 3
++        if (std::strcmp(rec->name, "__next__") == 0) {
++            std::free(rec->name);
++            rec->name = guarded_strdup("next");
++        } else if (std::strcmp(rec->name, "__bool__") == 0) {
++            std::free(rec->name);
++            rec->name = guarded_strdup("__nonzero__");
++        }
++#endif
+         rec->signature = guarded_strdup(signature.c_str());
+         rec->args.shrink_to_fit();
+         rec->nargs = (std::uint16_t) args;
+@@ -1112,12 +1121,14 @@ protected:
+             }
+ 
+             append_note_if_missing_header_is_suspected(msg);
++#if PY_VERSION_HEX >= 0x03030000
+             // Attach additional error info to the exception if supported
+             if (PyErr_Occurred()) {
+                 // #HelpAppreciated: unit test coverage for this branch.
+                 raise_from(PyExc_TypeError, msg.c_str());
+                 return nullptr;
+             }
++#endif
+             set_error(PyExc_TypeError, msg.c_str());
+             return nullptr;
+         }
+@@ -1126,11 +1137,13 @@ protected:
+             assert(current_overload != nullptr);
+             msg += current_overload->signature;
+             append_note_if_missing_header_is_suspected(msg);
++#if PY_VERSION_HEX >= 0x03030000
+             // Attach additional error info to the exception if supported
+             if (PyErr_Occurred()) {
+                 raise_from(PyExc_TypeError, msg.c_str());
+                 return nullptr;
+             }
++#endif
+             set_error(PyExc_TypeError, msg.c_str());
+             return nullptr;
+         }
+@@ -1150,7 +1163,11 @@ public:
+     /// Create a new top-level Python module with the given name and docstring
+     PYBIND11_DEPRECATED("Use PYBIND11_MODULE or module_::create_extension_module instead")
+     explicit module_(const char *name, const char *doc = nullptr) {
++#if PY_MAJOR_VERSION >= 3
+         *this = create_extension_module(name, doc, new PyModuleDef());
++#else
++        *this = create_extension_module(name, doc, nullptr);
++#endif
+     }
+ 
+     /** \rst
+@@ -1235,18 +1252,24 @@ public:
+         PyModule_AddObject(ptr(), name, obj.inc_ref().ptr() /* steals a reference */);
+     }
+ 
++#if PY_MAJOR_VERSION >= 3
+     using module_def = PyModuleDef; // TODO: Can this be removed (it was needed only for Python 2)?
++#else
++    struct module_def {};
++#endif
+ 
+     /** \rst
+         Create a new top-level module that can be used as the main module of a C extension.
+ 
+-        ``def`` should point to a statically allocated module_def.
++        For Python 3, ``def`` should point to a statically allocated module_def.
++        For Python 2, ``def`` can be a nullptr and is completely ignored.
+     \endrst */
+     static module_ create_extension_module(const char *name,
+                                            const char *doc,
+                                            module_def *def,
+                                            mod_gil_not_used gil_not_used
+                                            = mod_gil_not_used(false)) {
++#if PY_MAJOR_VERSION >= 3
+         // module_def is PyModuleDef
+         // Placement new (not an allocation).
+         def = new (def)
+@@ -1256,6 +1279,12 @@ public:
+                         /* m_clear */ nullptr,
+                         /* m_free */ nullptr};
+         auto *m = PyModule_Create(def);
++#else
++        // Ignore module_def *def; only necessary for Python 3
++        (void) def;
++        auto m = Py_InitModule3(
++            name, nullptr, options::show_user_defined_docstrings() ? doc : nullptr);
++#endif
+         if (m == nullptr) {
+             if (PyErr_Occurred()) {
+                 throw error_already_set();
+@@ -1282,12 +1311,14 @@ inline dict globals() {
+     return reinterpret_borrow<dict>(p ? p : module_::import("__main__").attr("__dict__").ptr());
+ }
+ 
++#if PY_VERSION_HEX >= 0x03030000
+ template <typename... Args, typename = detail::enable_if_t<args_are_all_keyword_or_ds<Args...>()>>
+ PYBIND11_DEPRECATED("make_simple_namespace should be replaced with "
+                     "py::module_::import(\"types\").attr(\"SimpleNamespace\") ")
+ object make_simple_namespace(Args &&...args_) {
+     return module_::import("types").attr("SimpleNamespace")(std::forward<Args>(args_)...);
+ }
++#endif
+ 
+ PYBIND11_NAMESPACE_BEGIN(detail)
+ /// Generic support for creating new Python heap types
+@@ -2184,6 +2215,9 @@ public:
+         def_property_readonly("value", [](Type value) { return (Scalar) value; });
+         def("__int__", [](Type value) { return (Scalar) value; });
+         def("__index__", [](Type value) { return (Scalar) value; });
++#if PY_MAJOR_VERSION < 3
++        def("__long__", [](Type value) { return (Scalar) value; });
++#endif
+         attr("__setstate__") = cpp_function(
+             [](detail::value_and_holder &v_h, Scalar arg) {
+                 detail::initimpl::setstate<Base>(
+--- contrib/libs/pybind11/include/pybind11/pytypes.h	(54a9461a4d6f0255e1b2e17444ac91a53daeb018)
++++ contrib/libs/pybind11/include/pybind11/pytypes.h	(index)
+@@ -716,6 +716,8 @@ private:
+     static void m_fetched_error_deleter(detail::error_fetch_and_normalize *raw_ptr);
+ };
+ 
++#if PY_VERSION_HEX >= 0x03030000
++
+ /// Replaces the current Python error indicator with the chosen error, performing a
+ /// 'raise from' to indicate that the chosen error was caused by the original error.
+ inline void raise_from(PyObject *type, const char *message) {
+@@ -752,6 +754,8 @@ inline void raise_from(error_already_set &err, PyObject *type, const char *messa
+     raise_from(type, message);
+ }
+ 
++#endif
++
+ /** \defgroup python_builtins const_name
+     Unless stated otherwise, the following C++ functions behave the same
+     as their Python counterparts.
+@@ -868,9 +872,12 @@ inline ssize_t hash(handle obj) {
+ PYBIND11_NAMESPACE_BEGIN(detail)
+ inline handle get_function(handle value) {
+     if (value) {
++#if PY_MAJOR_VERSION >= 3
+         if (PyInstanceMethod_Check(value.ptr())) {
+             value = PyInstanceMethod_GET_FUNCTION(value.ptr());
+-        } else if (PyMethod_Check(value.ptr())) {
++        } else
++#endif
++            if (PyMethod_Check(value.ptr())) {
+             value = PyMethod_GET_FUNCTION(value.ptr());
+         }
+     }
+@@ -882,6 +889,7 @@ inline handle get_function(handle value) {
+ 
+ // copied from cpython _PyDict_GetItemStringWithError
+ inline PyObject *dict_getitemstring(PyObject *v, const char *key) {
++#if PY_MAJOR_VERSION >= 3
+     PyObject *kv = nullptr, *rv = nullptr;
+     kv = PyUnicode_FromString(key);
+     if (kv == nullptr) {
+@@ -894,14 +902,21 @@ inline PyObject *dict_getitemstring(PyObject *v, const char *key) {
+         throw error_already_set();
+     }
+     return rv;
++#else
++    return PyDict_GetItemString(v, key);
++#endif
+ }
+ 
+ inline PyObject *dict_getitem(PyObject *v, PyObject *key) {
++#if PY_MAJOR_VERSION >= 3
+     PyObject *rv = PyDict_GetItemWithError(v, key);
+     if (rv == nullptr && PyErr_Occurred()) {
+         throw error_already_set();
+     }
+     return rv;
++#else
++    return PyDict_GetItem(v, key);
++#endif
+ }
+ 
+ // Helper aliases/functions to support implicit casting of values given to python
+@@ -1544,6 +1559,13 @@ private:
+     /// Return string representation -- always returns a new reference, even if already a str
+     static PyObject *raw_str(PyObject *op) {
+         PyObject *str_value = PyObject_Str(op);
++#if PY_MAJOR_VERSION < 3
++        if (!str_value)
++            throw error_already_set();
++        PyObject *unicode = PyUnicode_FromEncodedObject(str_value, "utf-8", nullptr);
++        Py_XDECREF(str_value);
++        str_value = unicode;
++#endif
+         return str_value;
+     }
+ };
+@@ -1722,7 +1744,11 @@ PYBIND11_NAMESPACE_BEGIN(detail)
+ // unsigned type: (A)-1 != (B)-1 when A and B are unsigned types of different sizes).
+ template <typename Unsigned>
+ Unsigned as_unsigned(PyObject *o) {
+-    if (sizeof(Unsigned) <= sizeof(unsigned long)) {
++    if (sizeof(Unsigned) <= sizeof(unsigned long)
++#if PY_VERSION_HEX < 0x03000000
++        || PyInt_Check(o)
++#endif
++    ) {
+         unsigned long v = PyLong_AsUnsignedLong(o);
+         return v == (unsigned long) -1 && PyErr_Occurred() ? (Unsigned) -1 : (Unsigned) v;
+     }
+@@ -2254,6 +2280,7 @@ public:
+             const_cast<T *>(ptr), std::move(shape), std::move(strides), true);
+     }
+ 
++#if PY_MAJOR_VERSION >= 3
+     /** \rst
+         Creates ``memoryview`` from static memory.
+ 
+@@ -2279,10 +2306,12 @@ public:
+         return memoryview::from_memory(const_cast<void *>(mem), size, true);
+     }
+ 
+-#ifdef PYBIND11_HAS_STRING_VIEW
++#    ifdef PYBIND11_HAS_STRING_VIEW
+     static memoryview from_memory(std::string_view mem) {
+         return from_memory(const_cast<char *>(mem.data()), static_cast<ssize_t>(mem.size()), true);
+     }
++#    endif
++
+ #endif
+ };
+ 
+@@ -2337,7 +2366,11 @@ inline size_t len(handle h) {
+ /// Get the length hint of a Python object.
+ /// Returns 0 when this cannot be determined.
+ inline size_t len_hint(handle h) {
++#if PY_VERSION_HEX >= 0x03040000
+     ssize_t result = PyObject_LengthHint(h.ptr(), 0);
++#else
++    ssize_t result = PyObject_Length(h.ptr());
++#endif
+     if (result < 0) {
+         // Sometimes a length can't be determined at all (eg generators)
+         // In which case simply return 0
+@@ -2352,6 +2385,13 @@ inline str repr(handle h) {
+     if (!str_value) {
+         throw error_already_set();
+     }
++#if PY_MAJOR_VERSION < 3
++    PyObject *unicode = PyUnicode_FromEncodedObject(str_value, "utf-8", nullptr);
++    Py_XDECREF(str_value);
++    str_value = unicode;
++    if (!str_value)
++        throw error_already_set();
++#endif
+     return reinterpret_steal<str>(str_value);
+ }
+ 
+--- contrib/libs/pybind11/include/pybind11/detail/class.h	(54a9461a4d6f0255e1b2e17444ac91a53daeb018)
++++ contrib/libs/pybind11/include/pybind11/detail/class.h	(index)
+@@ -15,7 +15,7 @@
+ PYBIND11_NAMESPACE_BEGIN(PYBIND11_NAMESPACE)
+ PYBIND11_NAMESPACE_BEGIN(detail)
+ 
+-#if !defined(PYPY_VERSION)
++#if PY_VERSION_HEX >= 0x03030000 && !defined(PYPY_VERSION)
+ #    define PYBIND11_BUILTIN_QUALNAME
+ #    define PYBIND11_SET_OLDPY_QUALNAME(obj, nameobj)
+ #else
+@@ -165,6 +165,7 @@ extern "C" inline int pybind11_meta_setattro(PyObject *obj, PyObject *name, PyOb
+     }
+ }
+ 
++#if PY_MAJOR_VERSION >= 3
+ /**
+  * Python 3's PyInstanceMethod_Type hides itself via its tp_descr_get, which prevents aliasing
+  * methods via cls.attr("m2") = cls.attr("m1"): instead the tp_descr_get returns a plain function,
+@@ -179,6 +180,7 @@ extern "C" inline PyObject *pybind11_meta_getattro(PyObject *obj, PyObject *name
+     }
+     return PyType_Type.tp_getattro(obj, name);
+ }
++#endif
+ 
+ /// metaclass `__call__` function that is used to create all pybind11 objects.
+ extern "C" inline PyObject *pybind11_meta_call(PyObject *type, PyObject *args, PyObject *kwargs) {
+@@ -274,7 +276,9 @@ inline PyTypeObject *make_default_metaclass() {
+     type->tp_call = pybind11_meta_call;
+ 
+     type->tp_setattro = pybind11_meta_setattro;
++#if PY_MAJOR_VERSION >= 3
+     type->tp_getattro = pybind11_meta_getattro;
++#endif
+ 
+     type->tp_dealloc = pybind11_meta_dealloc;
+ 
+@@ -520,6 +524,33 @@ inline PyObject *make_object_base_type(PyTypeObject *metaclass) {
+     return (PyObject *) heap_type;
+ }
+ 
++#if PY_MAJOR_VERSION < 3
++/// dynamic_attr: Support for `d = instance.__dict__`.
++extern "C" inline PyObject *pybind11_get_dict(PyObject *self, void *) {
++    PyObject *&dict = *_PyObject_GetDictPtr(self);
++    if (!dict) {
++        dict = PyDict_New();
++    }
++    Py_XINCREF(dict);
++    return dict;
++}
++
++/// dynamic_attr: Support for `instance.__dict__ = dict()`.
++extern "C" inline int pybind11_set_dict(PyObject *self, PyObject *new_dict, void *) {
++    if (!PyDict_Check(new_dict)) {
++        PyErr_Format(PyExc_TypeError,
++                     "__dict__ must be set to a dictionary, not a '%.200s'",
++                     get_fully_qualified_tp_name(Py_TYPE(new_dict)).c_str());
++        return -1;
++    }
++    PyObject *&dict = *_PyObject_GetDictPtr(self);
++    Py_INCREF(new_dict);
++    Py_CLEAR(dict);
++    dict = new_dict;
++    return 0;
++}
++#endif
++
+ /// dynamic_attr: Allow the garbage collector to traverse the internal instance `__dict__`.
+ extern "C" inline int pybind11_traverse(PyObject *self, visitproc visit, void *arg) {
+     PyObject *&dict = *_PyObject_GetDictPtr(self);
+@@ -557,7 +588,11 @@ inline void enable_dynamic_attributes(PyHeapTypeObject *heap_type) {
+     type->tp_clear = pybind11_clear;
+ 
+     static PyGetSetDef getset[]
++#if PY_MAJOR_VERSION < 3
++        = {{"__dict__", pybind11_get_dict, pybind11_set_dict, nullptr, nullptr},
++#else
+         = {{"__dict__", PyObject_GenericGetDict, PyObject_GenericSetDict, nullptr, nullptr},
++#endif
+            {nullptr, nullptr, nullptr, nullptr, nullptr}};
+     type->tp_getset = getset;
+ }
+@@ -620,6 +656,9 @@ extern "C" inline void pybind11_releasebuffer(PyObject *, Py_buffer *view) {
+ /// Give this type a buffer interface.
+ inline void enable_buffer_protocol(PyHeapTypeObject *heap_type) {
+     heap_type->ht_type.tp_as_buffer = &heap_type->as_buffer;
++#if PY_MAJOR_VERSION < 3
++    heap_type->ht_type.tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
++#endif
+ 
+     heap_type->as_buffer.bf_getbuffer = pybind11_getbuffer;
+     heap_type->as_buffer.bf_releasebuffer = pybind11_releasebuffer;
+@@ -632,8 +671,12 @@ inline PyObject *make_new_python_type(const type_record &rec) {
+ 
+     auto qualname = name;
+     if (rec.scope && !PyModule_Check(rec.scope.ptr()) && hasattr(rec.scope, "__qualname__")) {
++#if PY_MAJOR_VERSION >= 3
+         qualname = reinterpret_steal<object>(
+             PyUnicode_FromFormat("%U.%U", rec.scope.attr("__qualname__").ptr(), name.ptr()));
++#else
++        qualname = str(rec.scope.attr("__qualname__").cast<std::string>() + "." + rec.name);
++#endif
+     }
+ 
+     object module_;
+@@ -697,10 +740,15 @@ inline PyObject *make_new_python_type(const type_record &rec) {
+     type->tp_as_number = &heap_type->as_number;
+     type->tp_as_sequence = &heap_type->as_sequence;
+     type->tp_as_mapping = &heap_type->as_mapping;
++#if PY_VERSION_HEX >= 0x03050000
+     type->tp_as_async = &heap_type->as_async;
++#endif
+ 
+     /* Flags */
+     type->tp_flags |= Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HEAPTYPE;
++#if PY_MAJOR_VERSION < 3
++    type->tp_flags |= Py_TPFLAGS_CHECKTYPES;
++#endif
+     if (!rec.is_final) {
+         type->tp_flags |= Py_TPFLAGS_BASETYPE;
+     }
+--- contrib/libs/pybind11/include/pybind11/detail/common.h	(54a9461a4d6f0255e1b2e17444ac91a53daeb018)
++++ contrib/libs/pybind11/include/pybind11/detail/common.h	(index)
+@@ -265,3 +265,0 @@ PYBIND11_WARNING_DISABLE_MSVC(4505)
+-#if PY_VERSION_HEX < 0x03070000
+-#    error "PYTHON < 3.7 IS UNSUPPORTED. pybind11 v2.12 was the last to support Python 3.6."
+-#endif
+@@ -346,33 +343,65 @@ PYBIND11_WARNING_POP
+ //               the transition from the legacy behavior to the non-permissive
+ //               behavior.
+ 
+-/// Compatibility macros for Python 2 / Python 3 versions TODO: remove
+-#define PYBIND11_INSTANCE_METHOD_NEW(ptr, class_) PyInstanceMethod_New(ptr)
+-#define PYBIND11_INSTANCE_METHOD_CHECK PyInstanceMethod_Check
+-#define PYBIND11_INSTANCE_METHOD_GET_FUNCTION PyInstanceMethod_GET_FUNCTION
+-#define PYBIND11_BYTES_CHECK PyBytes_Check
+-#define PYBIND11_BYTES_FROM_STRING PyBytes_FromString
+-#define PYBIND11_BYTES_FROM_STRING_AND_SIZE PyBytes_FromStringAndSize
+-#define PYBIND11_BYTES_AS_STRING_AND_SIZE PyBytes_AsStringAndSize
+-#define PYBIND11_BYTES_AS_STRING PyBytes_AsString
+-#define PYBIND11_BYTES_SIZE PyBytes_Size
+-#define PYBIND11_LONG_CHECK(o) PyLong_Check(o)
+-#define PYBIND11_LONG_AS_LONGLONG(o) PyLong_AsLongLong(o)
+-#define PYBIND11_LONG_FROM_SIGNED(o) PyLong_FromSsize_t((ssize_t) (o))
+-#define PYBIND11_LONG_FROM_UNSIGNED(o) PyLong_FromSize_t((size_t) (o))
+-#define PYBIND11_BYTES_NAME "bytes"
+-#define PYBIND11_STRING_NAME "str"
+-#define PYBIND11_SLICE_OBJECT PyObject
+-#define PYBIND11_FROM_STRING PyUnicode_FromString
+-#define PYBIND11_STR_TYPE ::pybind11::str
+-#define PYBIND11_BOOL_ATTR "__bool__"
+-#define PYBIND11_NB_BOOL(ptr) ((ptr)->nb_bool)
+-#define PYBIND11_BUILTINS_MODULE "builtins"
++#if PY_MAJOR_VERSION >= 3 /// Compatibility macros for various Python versions
++#    define PYBIND11_INSTANCE_METHOD_NEW(ptr, class_) PyInstanceMethod_New(ptr)
++#    define PYBIND11_INSTANCE_METHOD_CHECK PyInstanceMethod_Check
++#    define PYBIND11_INSTANCE_METHOD_GET_FUNCTION PyInstanceMethod_GET_FUNCTION
++#    define PYBIND11_BYTES_CHECK PyBytes_Check
++#    define PYBIND11_BYTES_FROM_STRING PyBytes_FromString
++#    define PYBIND11_BYTES_FROM_STRING_AND_SIZE PyBytes_FromStringAndSize
++#    define PYBIND11_BYTES_AS_STRING_AND_SIZE PyBytes_AsStringAndSize
++#    define PYBIND11_BYTES_AS_STRING PyBytes_AsString
++#    define PYBIND11_BYTES_SIZE PyBytes_Size
++#    define PYBIND11_LONG_CHECK(o) PyLong_Check(o)
++#    define PYBIND11_LONG_AS_LONGLONG(o) PyLong_AsLongLong(o)
++#    define PYBIND11_LONG_FROM_SIGNED(o) PyLong_FromSsize_t((ssize_t) (o))
++#    define PYBIND11_LONG_FROM_UNSIGNED(o) PyLong_FromSize_t((size_t) (o))
++#    define PYBIND11_BYTES_NAME "bytes"
++#    define PYBIND11_STRING_NAME "str"
++#    define PYBIND11_SLICE_OBJECT PyObject
++#    define PYBIND11_FROM_STRING PyUnicode_FromString
++#    define PYBIND11_STR_TYPE ::pybind11::str
++#    define PYBIND11_BOOL_ATTR "__bool__"
++#    define PYBIND11_NB_BOOL(ptr) ((ptr)->nb_bool)
++#    define PYBIND11_BUILTINS_MODULE "builtins"
+ // Providing a separate declaration to make Clang's -Wmissing-prototypes happy.
+ // See comment for PYBIND11_MODULE below for why this is marked "maybe unused".
+-#define PYBIND11_PLUGIN_IMPL(name)                                                                \
+-    extern "C" PYBIND11_MAYBE_UNUSED PYBIND11_EXPORT PyObject *PyInit_##name();                   \
+-    extern "C" PYBIND11_EXPORT PyObject *PyInit_##name()
++#    define PYBIND11_PLUGIN_IMPL(name)                                                            \
++        extern "C" PYBIND11_MAYBE_UNUSED PYBIND11_EXPORT PyObject *PyInit_##name();               \
++        extern "C" PYBIND11_EXPORT PyObject *PyInit_##name()
++
++#else
++#    define PYBIND11_INSTANCE_METHOD_NEW(ptr, class_) PyMethod_New(ptr, nullptr, class_)
++#    define PYBIND11_INSTANCE_METHOD_CHECK PyMethod_Check
++#    define PYBIND11_INSTANCE_METHOD_GET_FUNCTION PyMethod_GET_FUNCTION
++#    define PYBIND11_BYTES_CHECK PyString_Check
++#    define PYBIND11_BYTES_FROM_STRING PyString_FromString
++#    define PYBIND11_BYTES_FROM_STRING_AND_SIZE PyString_FromStringAndSize
++#    define PYBIND11_BYTES_AS_STRING_AND_SIZE PyString_AsStringAndSize
++#    define PYBIND11_BYTES_AS_STRING PyString_AsString
++#    define PYBIND11_BYTES_SIZE PyString_Size
++#    define PYBIND11_LONG_CHECK(o) (PyInt_Check(o) || PyLong_Check(o))
++#    define PYBIND11_LONG_AS_LONGLONG(o)                                                          \
++        (PyInt_Check(o) ? (long long) PyLong_AsLong(o) : PyLong_AsLongLong(o))
++#    define PYBIND11_LONG_FROM_SIGNED(o) PyInt_FromSsize_t((ssize_t) o) // Returns long if needed.
++#    define PYBIND11_LONG_FROM_UNSIGNED(o) PyInt_FromSize_t((size_t) o) // Returns long if needed.
++#    define PYBIND11_BYTES_NAME "str"
++#    define PYBIND11_STRING_NAME "unicode"
++#    define PYBIND11_SLICE_OBJECT PySliceObject
++#    define PYBIND11_FROM_STRING PyString_FromString
++#    define PYBIND11_STR_TYPE ::pybind11::bytes
++#    define PYBIND11_BOOL_ATTR "__nonzero__"
++#    define PYBIND11_NB_BOOL(ptr) ((ptr)->nb_nonzero)
++#    define PYBIND11_BUILTINS_MODULE "__builtin__"
++// Providing a separate PyInit decl to make Clang's -Wmissing-prototypes happy.
++// See comment for PYBIND11_MODULE below for why this is marked "maybe unused".
++#    define PYBIND11_PLUGIN_IMPL(name)                                                            \
++        static PyObject *pybind11_init_wrapper();                                                 \
++        extern "C" PYBIND11_MAYBE_UNUSED PYBIND11_EXPORT void init##name();                       \
++        extern "C" PYBIND11_EXPORT void init##name() { (void) pybind11_init_wrapper(); }          \
++        PyObject *pybind11_init_wrapper()
++#endif
+ 
+ #define PYBIND11_TRY_NEXT_OVERLOAD ((PyObject *) 1) // special failure return code
+ #define PYBIND11_STRINGIFY(x) #x
+@@ -397,15 +426,31 @@ PYBIND11_WARNING_POP
+         }                                                                                         \
+     }
+ 
+-#define PYBIND11_CATCH_INIT_EXCEPTIONS                                                            \
+-    catch (pybind11::error_already_set & e) {                                                     \
+-        pybind11::raise_from(e, PyExc_ImportError, "initialization failed");                      \
+-        return nullptr;                                                                           \
+-    }                                                                                             \
+-    catch (const std::exception &e) {                                                             \
+-        ::pybind11::set_error(PyExc_ImportError, e.what());                                       \
+-        return nullptr;                                                                           \
+-    }
++#if PY_VERSION_HEX >= 0x03030000
++
++#    define PYBIND11_CATCH_INIT_EXCEPTIONS                                                        \
++        catch (pybind11::error_already_set & e) {                                                 \
++            pybind11::raise_from(e, PyExc_ImportError, "initialization failed");                  \
++            return nullptr;                                                                       \
++        }                                                                                         \
++        catch (const std::exception &e) {                                                         \
++            ::pybind11::set_error(PyExc_ImportError, e.what());                                   \
++            return nullptr;                                                                       \
++        }
++
++#else
++
++#    define PYBIND11_CATCH_INIT_EXCEPTIONS                                                        \
++        catch (pybind11::error_already_set & e) {                                                 \
++            PyErr_SetString(PyExc_ImportError, e.what());                                         \
++            return nullptr;                                                                       \
++        }                                                                                         \
++        catch (const std::exception &e) {                                                         \
++            PyErr_SetString(PyExc_ImportError, e.what());                                         \
++            return nullptr;                                                                       \
++        }
++
++#endif
+ 
+ /** \rst
+     ***Deprecated in favor of PYBIND11_MODULE***
+--- contrib/libs/pybind11/include/pybind11/detail/internals.h	(54a9461a4d6f0255e1b2e17444ac91a53daeb018)
++++ contrib/libs/pybind11/include/pybind11/detail/internals.h	(index)
+@@ -316,6 +316,7 @@ inline internals **&get_internals_pp() {
+     return internals_pp;
+ }
+ 
++#if PY_VERSION_HEX >= 0x03030000
+ // forward decl
+ inline void translate_exception(std::exception_ptr);
+ 
+@@ -339,11 +340,21 @@ bool handle_nested_exception(const T &exc, const std::exception_ptr &p) {
+     return false;
+ }
+ 
++#else
++
++template <class T>
++bool handle_nested_exception(const T &, std::exception_ptr &) {
++    return false;
++}
++#endif
++
+ inline bool raise_err(PyObject *exc_type, const char *msg) {
++#if PY_VERSION_HEX >= 0x03030000
+     if (PyErr_Occurred()) {
+         raise_from(exc_type, msg);
+         return true;
+     }
++#endif
+     set_error(exc_type, msg);
+     return false;
+ }
+--- contrib/libs/pybind11/include/pybind11/detail/type_caster_base.h	(54a9461a4d6f0255e1b2e17444ac91a53daeb018)
++++ contrib/libs/pybind11/include/pybind11/detail/type_caster_base.h	(index)
+@@ -446,10 +446,17 @@ PYBIND11_NOINLINE void instance::allocate_layout() {
+         // efficient for small allocations like the one we're doing here;
+         // for larger allocations they are just wrappers around malloc.
+         // TODO: is this still true for pure Python 3.6?
++#if PY_VERSION_HEX >= 0x03050000
+         nonsimple.values_and_holders = (void **) PyMem_Calloc(space, sizeof(void *));
+         if (!nonsimple.values_and_holders) {
+             throw std::bad_alloc();
+         }
++#else
++        nonsimple.values_and_holders = (void **) PyMem_New(void *, space);
++        if (!nonsimple.values_and_holders)
++            throw std::bad_alloc();
++        std::memset(nonsimple.values_and_holders, 0, space * sizeof(void *));
++#endif
+         nonsimple.status
+             = reinterpret_cast<std::uint8_t *>(&nonsimple.values_and_holders[flags_at]);
+     }
+@@ -487,6 +494,8 @@ PYBIND11_NOINLINE handle get_object_handle(const void *ptr, const detail::type_i
+ inline PyThreadState *get_thread_state_unchecked() {
+ #if defined(PYPY_VERSION)
+     return PyThreadState_GET();
++#elif PY_VERSION_HEX < 0x03000000
++    return _PyThreadState_Current;
+ #elif PY_VERSION_HEX < 0x030D0000
+     return _PyThreadState_UncheckedGet();
+ #else
+--- contrib/libs/pybind11/include/pybind11/detail/internals.h	(index)
++++ contrib/libs/pybind11/include/pybind11/detail/internals.h	(working tree)
+@@ -460,8 +460,12 @@ inline object get_python_state_dict() {
+     }
+ #endif
+     if (!state_dict) {
++#if PY_VERSION_HEX >= 0x03030000
+         raise_from(PyExc_SystemError, "pybind11::detail::get_python_state_dict() FAILED");
+         throw error_already_set();
++#else
++        PyErr_SetString(PyExc_SystemError, "pybind11::detail::get_python_state_dict() FAILED");
++#endif
+     }
+     return state_dict;
+ }
+@@ -472,8 +476,12 @@ inline object get_internals_obj_from_state_dict(handle state_dict) {
+ inline internals **get_internals_pp_from_capsule(handle obj) {
+     void *raw_ptr = PyCapsule_GetPointer(obj.ptr(), /*name=*/nullptr);
+     if (raw_ptr == nullptr) {
++#if PY_VERSION_HEX >= 0x03030000
+         raise_from(PyExc_SystemError, "pybind11::detail::get_internals_pp_from_capsule() FAILED");
+         throw error_already_set();
++#else
++        PyErr_SetString(PyExc_SystemError, "pybind11::detail::get_internals_pp_from_capsule() FAILED");
++#endif
+     }
+     return static_cast<internals **>(raw_ptr);
+ }
+--- contrib/libs/pybind11/include/pybind11/gil.h	(index)
++++ contrib/libs/pybind11/include/pybind11/gil.h	(working tree)
+@@ -141,7 +141,9 @@ class gil_scoped_release {
+ public:
+     // PRECONDITION: The GIL must be held when this constructor is called.
+     explicit gil_scoped_release(bool disassoc = false) : disassoc(disassoc) {
++#ifdef PYBIND11_ASSERT_GIL_HELD_INCREF_DECREF
+         assert(PyGILState_Check());
++#endif
+         // `get_internals()` must be called here unconditionally in order to initialize
+         // `internals.tstate` for subsequent `gil_scoped_acquire` calls. Otherwise, an
+         // initialization race could occur as multiple threads try `gil_scoped_acquire`.
+@@ -207,7 +209,9 @@ class gil_scoped_release {
+ public:
+     // PRECONDITION: The GIL must be held when this constructor is called.
+     gil_scoped_release() {
++#ifdef PYBIND11_ASSERT_GIL_HELD_INCREF_DECREF
+         assert(PyGILState_Check());
++#endif
+         state = PyEval_SaveThread();
+     }
+     gil_scoped_release(const gil_scoped_release &) = delete;
+--- contrib/libs/pybind11/include/pybind11/detail/internals.h	(index)
++++ contrib/libs/pybind11/include/pybind11/detail/internals.h	(working tree)
+@@ -92,6 +92,23 @@ inline PyObject *make_object_base_type(PyTypeObject *metaclass);
+ #    define PYBIND11_TLS_REPLACE_VALUE(key, value) PyThread_tss_set(&(key), (value))
+ #    define PYBIND11_TLS_DELETE_VALUE(key) PyThread_tss_set(&(key), nullptr)
+ #    define PYBIND11_TLS_FREE(key) PyThread_tss_delete(&(key))
++#elif PY_MAJOR_VERSION < 3
++// Usually an int but a long on Cygwin64 with Python 3.x
++#    define PYBIND11_TLS_KEY_REF decltype(PyThread_create_key())
++#    define PYBIND11_TLS_KEY_INIT(var) PYBIND11_TLS_KEY_REF var = 0;
++#    define PYBIND11_TLS_KEY_CREATE(var) (((var) = PyThread_create_key()) != -1)
++#    define PYBIND11_TLS_GET_VALUE(key) PyThread_get_key_value((key))
++// On CPython < 3.4 and on PyPy, `PyThread_set_key_value` strangely does not set
++// the value if it has already been set.  Instead, it must first be deleted and
++// then set again.
++inline void tls_replace_value(PYBIND11_TLS_KEY_REF key, void *value) {
++    PyThread_delete_key_value(key);
++    PyThread_set_key_value(key, value);
++}
++#    define PYBIND11_TLS_DELETE_VALUE(key) PyThread_delete_key_value(key)
++#    define PYBIND11_TLS_REPLACE_VALUE(key, value)                                            \
++            ::pybind11::detail::tls_replace_value((key), (value))
++#    define PYBIND11_TLS_FREE(key) (void) key
+ #else
+ #    define PYBIND11_TLS_KEY_REF Py_tss_t *
+ #    define PYBIND11_TLS_KEY_INIT(var) Py_tss_t *var = nullptr;

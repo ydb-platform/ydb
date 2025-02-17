@@ -1,6 +1,0 @@
-items:
-- name: VM / Baremetal
-  href: manual/deploy-ydb-on-premises.md
-- name: Configuration
-  href: configuration/config.md
-

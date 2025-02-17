@@ -15,9 +15,9 @@
 
 namespace boost { namespace locale { namespace impl_win {
 
-    class utf16_converter : public converter<wchar_t> {
+    class wide_converter final : public converter<wchar_t> {
     public:
-        utf16_converter(const winlocale& lc, size_t refs = 0) : converter<wchar_t>(refs), lc_(lc) {}
+        wide_converter(const winlocale& lc, size_t refs = 0) : converter<wchar_t>(refs), lc_(lc) {}
         std::wstring convert(converter_base::conversion_type how,
                              const wchar_t* begin,
                              const wchar_t* end,
@@ -37,38 +37,36 @@ namespace boost { namespace locale { namespace impl_win {
         winlocale lc_;
     };
 
-    class utf8_converter : public converter<char> {
+    template<typename U8Char>
+    class utf8_converter final : public converter<U8Char> {
+        static_assert(sizeof(U8Char) == sizeof(char), "Not an UTF-8 char type");
+
     public:
-        utf8_converter(const winlocale& lc, size_t refs = 0) : converter<char>(refs), lc_(lc) {}
-        std::string
-        convert(converter_base::conversion_type how, const char* begin, const char* end, int flags = 0) const override
+        utf8_converter(const winlocale& lc, size_t refs = 0) : converter<U8Char>(refs), cvt_(lc) {}
+        std::basic_string<U8Char> convert(converter_base::conversion_type how,
+                                          const U8Char* begin,
+                                          const U8Char* end,
+                                          int flags = 0) const override
         {
             const std::wstring tmp = conv::utf_to_utf<wchar_t>(begin, end);
-            const wchar_t* wb = tmp.c_str();
-            const wchar_t* we = wb + tmp.size();
-
-            std::wstring res;
-
-            switch(how) {
-                case upper_case: res = towupper_l(wb, we, lc_); break;
-                case lower_case: res = towlower_l(wb, we, lc_); break;
-                case case_folding: res = wcsfold(wb, we); break;
-                case normalization: res = wcsnormalize(static_cast<norm_type>(flags), wb, we); break;
-                case title_case: break;
-            }
-            return conv::utf_to_utf<char>(res);
+            return conv::utf_to_utf<U8Char>(cvt_.convert(how, tmp.c_str(), tmp.c_str() + tmp.size(), flags));
         }
 
     private:
-        winlocale lc_;
+        wide_converter cvt_;
     };
 
     std::locale create_convert(const std::locale& in, const winlocale& lc, char_facet_t type)
     {
         switch(type) {
             case char_facet_t::nochar: break;
-            case char_facet_t::char_f: return std::locale(in, new utf8_converter(lc));
-            case char_facet_t::wchar_f: return std::locale(in, new utf16_converter(lc));
+            case char_facet_t::char_f: return std::locale(in, new utf8_converter<char>(lc));
+            case char_facet_t::wchar_f: return std::locale(in, new wide_converter(lc));
+#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+            case char_facet_t::char8_f: return std::locale(in, new utf8_converter<char8_t>(lc));
+#elif defined(__cpp_char8_t)
+            case char_facet_t::char8_f: break;
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
             case char_facet_t::char16_f: break;
 #endif

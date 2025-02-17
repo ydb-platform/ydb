@@ -2,14 +2,14 @@
 
 #include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/core/testlib/basics/runtime.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -32,7 +32,7 @@ TString GetDefaultPqDatabase();
 
 struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
     std::unique_ptr<TFakeCASetup> CaSetup = std::make_unique<TFakeCASetup>();
-    NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr")));
+    NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release())));
 
     TPqIoTestFixture();
     ~TPqIoTestFixture();
@@ -74,11 +74,11 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
     }
 
 
-    void SaveSourceState(NDqProto::TCheckpoint checkpoint, NDqProto::TSourceState& state) {
+    void SaveSourceState(NDqProto::TCheckpoint checkpoint, TSourceState& state) {
         CaSetup->SaveSourceState(checkpoint, state);
     }
 
-    void LoadSource(const NDqProto::TSourceState& state) {
+    void LoadSource(const TSourceState& state) {
         return CaSetup->LoadSource(state);
     }
 
@@ -94,7 +94,7 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
         InitAsyncOutput(BuildPqTopicSinkSettings(topic), freeSpace);
     }
 
-    void LoadSink(const NDqProto::TSinkState& state) {
+    void LoadSink(const TSinkState& state) {
         CaSetup->LoadSink(state);
     }
 
@@ -124,6 +124,7 @@ void AddReadRule(
     NYdb::TDriver& driver,
     const TString& streamName);
 
+std::vector<std::pair<ui64, TString>> UVPairParser(const NUdf::TUnboxedValue& item);
 std::vector<TString> UVParser(const NUdf::TUnboxedValue& item);
 
 }

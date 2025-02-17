@@ -31,6 +31,7 @@ namespace NTable {
 
 class TTableEpochs;
 class TKeyRangeCache;
+class TKeyRangeCacheNeedGCList;
 
 class TTable: public TAtomicRefCount<TTable> {
 public:
@@ -64,7 +65,7 @@ public:
         TIteratorStats Stats;
     };
 
-    explicit TTable(TEpoch);
+    explicit TTable(TEpoch, const TIntrusivePtr<TKeyRangeCacheNeedGCList>& gcList = nullptr);
     ~TTable();
 
     void PrepareRollback();
@@ -183,6 +184,9 @@ public:
 
     const absl::flat_hash_set<ui64>& GetOpenTxs() const;
     size_t GetOpenTxCount() const;
+    size_t GetTxsWithDataCount() const;
+    size_t GetCommittedTxCount() const;
+    size_t GetRemovedTxCount() const;
 
     TPartView GetPartView(const TLogoBlobID &bundle) const
     {
@@ -238,6 +242,8 @@ public:
     {
         return Stat_;
     }
+
+    TTableRuntimeStats RuntimeStats() const noexcept;
 
     ui64 GetMemSize(TEpoch epoch = TEpoch::Max()) const noexcept
     {
@@ -351,6 +357,7 @@ private:
 
     bool EraseCacheEnabled = false;
     TKeyRangeCacheConfig EraseCacheConfig;
+    const TIntrusivePtr<TKeyRangeCacheNeedGCList> EraseCacheGCList;
 
     TRowVersionRanges RemovedRowVersions;
 
@@ -359,7 +366,10 @@ private:
     absl::flat_hash_set<ui64> CheckTransactions;
     TTransactionMap CommittedTransactions;
     TTransactionSet RemovedTransactions;
+    TTransactionSet DecidedTransactions;
     TIntrusivePtr<ITableObserver> TableObserver;
+
+    ui64 RemovedCommittedTxs = 0;
 
 private:
     struct TRollbackRemoveTxRef {
@@ -400,6 +410,13 @@ private:
         TRollbackAddOpenTx,
         TRollbackRemoveOpenTx>;
 
+    struct TCommitAddDecidedTx {
+        ui64 TxId;
+    };
+
+    using TCommitOp = std::variant<
+        TCommitAddDecidedTx>;
+
     struct TRollbackState {
         TEpoch Epoch;
         TIntrusiveConstPtr<TRowScheme> Scheme;
@@ -408,6 +425,7 @@ private:
         bool EraseCacheEnabled;
         bool MutableExisted;
         bool MutableUpdated;
+        bool DisableEraseCache;
 
         TRollbackState(TEpoch epoch)
             : Epoch(epoch)
@@ -415,6 +433,7 @@ private:
     };
 
     std::optional<TRollbackState> RollbackState;
+    std::vector<TCommitOp> CommitOps;
     std::vector<TRollbackOp> RollbackOps;
     TIntrusivePtr<TMemTable> MutableBackup;
 };

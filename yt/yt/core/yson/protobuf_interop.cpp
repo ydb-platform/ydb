@@ -78,7 +78,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const NLogging::TLogger Logger("ProtobufInterop");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "ProtobufInterop");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -132,14 +132,15 @@ bool IsMapKeyType(FieldDescriptor::Type type)
 TString ToUnderscoreCase(const TString& protobufName)
 {
     TStringBuilder builder;
-    for (auto ch : protobufName) {
-        if (isupper(ch)) {
-            if (builder.GetLength() > 0 && builder.GetBuffer()[builder.GetLength() - 1] != '_') {
+    for (size_t i = 0; i < protobufName.size(); ++i) {
+        if (isupper(protobufName[i])) {
+            size_t length = builder.GetLength();
+            if (length && builder.GetBuffer()[length - 1] != '_' && !isupper(protobufName[i - 1])) {
                 builder.AppendChar('_');
             }
-            builder.AppendChar(tolower(ch));
+            builder.AppendChar(tolower(protobufName[i]));
         } else {
-            builder.AppendChar(ch);
+            builder.AppendChar(protobufName[i]);
         }
     }
     return builder.Flush();
@@ -147,11 +148,12 @@ TString ToUnderscoreCase(const TString& protobufName)
 
 TString DeriveYsonName(const TString& protobufName, const google::protobuf::FileDescriptor* fileDescriptor)
 {
-    if (fileDescriptor->options().GetExtension(NYT::NYson::NProto::derive_underscore_case_names)) {
+    if (fileDescriptor->options().GetExtension(NYT::NYson::NProto::derive_underscore_case_names)
+        || GetProtobufInteropConfig()->ForceSnakeCaseNames)
+    {
         return ToUnderscoreCase(protobufName);
-    } else {
-        return protobufName;
     }
+    return protobufName;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -166,9 +168,13 @@ TProtobufInteropConfigSingleton* GlobalProtobufInteropConfig()
     return LeakySingleton<TProtobufInteropConfigSingleton>();
 }
 
-TProtobufInteropConfigPtr GetProtobufInteropConfig()
+////////////////////////////////////////////////////////////////////////////////
+
+auto TryGetExtension(const auto* descriptor, const auto& id)
 {
-    return GlobalProtobufInteropConfig()->Config.Acquire();
+    return descriptor->options().HasExtension(id)
+        ? std::optional(descriptor->options().GetExtension(id))
+        : std::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -176,6 +182,11 @@ TProtobufInteropConfigPtr GetProtobufInteropConfig()
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TProtobufInteropConfigPtr GetProtobufInteropConfig()
+{
+    return GlobalProtobufInteropConfig()->Config.Acquire();
+}
 
 void SetProtobufInteropConfig(TProtobufInteropConfigPtr config)
 {
@@ -192,7 +203,7 @@ public:
     //! This method is called while reflecting types.
     TStringBuf GetYsonName(const FieldDescriptor* descriptor)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         return GetYsonNameFromDescriptor(
             descriptor,
@@ -202,7 +213,7 @@ public:
     //! This method is called while reflecting types.
     std::vector<TStringBuf> GetYsonNameAliases(const FieldDescriptor* descriptor)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         std::vector<TStringBuf> aliases;
         const auto& extensions = descriptor->options().GetRepeatedExtension(NYT::NYson::NProto::field_name_alias);
@@ -215,7 +226,7 @@ public:
     //! This method is called while reflecting types.
     TStringBuf GetYsonLiteral(const EnumValueDescriptor* descriptor)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         return GetYsonNameFromDescriptor(
             descriptor,
@@ -284,7 +295,7 @@ public:
         const Descriptor* descriptor) const
     {
         // No need to call Initialize: it has been already called within Reflect*Type higher up the stack.
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         auto it = MessageTypeConverterMap_.find(descriptor);
         if (it == MessageTypeConverterMap_.end()) {
@@ -300,7 +311,7 @@ public:
         int fieldIndex) const
     {
         // No need to call Initialize: it has been already called within Reflect*Type higher up the stack.
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         auto fieldNumber = descriptor->field(fieldIndex)->number();
         auto it = MessageFieldConverterMap_.find(std::pair(descriptor, fieldNumber));
@@ -341,7 +352,7 @@ private:
 
     TStringBuf InternString(const TString& str)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         return *InternedStrings_.emplace(str).first;
     }
@@ -388,9 +399,8 @@ public:
         , YsonMap_(descriptor->options().GetExtension(NYT::NYson::NProto::yson_map))
         , Required_(descriptor->options().GetExtension(NYT::NYson::NProto::required))
         , Converter_(registry->FindMessageBytesFieldConverter(descriptor->containing_type(), descriptor->index()))
-        , EnumYsonStorageType_(descriptor->options().HasExtension(NYT::NYson::NProto::enum_yson_storage_type) ?
-            std::optional(descriptor->options().GetExtension(NYT::NYson::NProto::enum_yson_storage_type)) :
-            std::nullopt)
+        , EnumYsonStorageType_(TryGetExtension(descriptor, NYT::NYson::NProto::enum_yson_storage_type))
+        , StrictEnumValueCheck_(TryGetExtension(descriptor, NYT::NYson::NProto::strict_enum_value_check))
     {
         if (YsonMap_ && !descriptor->is_map()) {
             THROW_ERROR_EXCEPTION("Field %v is not a map and cannot be annotated with \"yson_map\" option",
@@ -516,6 +526,11 @@ public:
         return config->DefaultEnumYsonStorageType;
     }
 
+    bool IsEnumValueCheckStrict() const
+    {
+        return StrictEnumValueCheck_.value_or(true);
+    }
+
     void WriteSchema(IYsonConsumer* consumer) const
     {
         if (IsYsonMap()) {
@@ -540,20 +555,20 @@ public:
         }
 
         switch (GetType()) {
-            case FieldDescriptor::TYPE_INT32:
             case FieldDescriptor::TYPE_FIXED32:
             case FieldDescriptor::TYPE_UINT32:
                 consumer->OnStringScalar("uint32");
                 break;
-            case FieldDescriptor::TYPE_INT64:
             case FieldDescriptor::TYPE_FIXED64:
             case FieldDescriptor::TYPE_UINT64:
                 consumer->OnStringScalar("uint64");
                 break;
+            case FieldDescriptor::TYPE_INT32:
             case FieldDescriptor::TYPE_SINT32:
             case FieldDescriptor::TYPE_SFIXED32:
                 consumer->OnStringScalar("int32");
                 break;
+            case FieldDescriptor::TYPE_INT64:
             case FieldDescriptor::TYPE_SINT64:
             case FieldDescriptor::TYPE_SFIXED64:
                 consumer->OnStringScalar("int64");
@@ -599,6 +614,7 @@ private:
     const bool Required_;
     const std::optional<TProtobufMessageBytesFieldConverter> Converter_;
     const std::optional<NYT::NYson::NProto::EEnumYsonStorageType> EnumYsonStorageType_;
+    const std::optional<bool> StrictEnumValueCheck_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -792,8 +808,9 @@ TProtobufElement TProtobufField::GetElement(bool insideRepeated) const
         });
     } else {
         return std::make_unique<TProtobufScalarElement>(TProtobufScalarElement{
-            static_cast<TProtobufScalarElement::TType>(GetType()),
-            GetEnumYsonStorageType()
+            static_cast<TProtobufElementType>(GetType()),
+            GetEnumYsonStorageType(),
+            EnumType_
         });
     }
 }
@@ -870,7 +887,7 @@ private:
 
 const TProtobufMessageType* TProtobufTypeRegistry::ReflectMessageTypeInternal(const Descriptor* descriptor)
 {
-    VERIFY_SPINLOCK_AFFINITY(Lock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
     TProtobufMessageType* type;
     auto it = MessageTypeMap_.find(descriptor);
@@ -890,7 +907,7 @@ const TProtobufMessageType* TProtobufTypeRegistry::ReflectMessageTypeInternal(co
 
 const TProtobufEnumType* TProtobufTypeRegistry::ReflectEnumTypeInternal(const EnumDescriptor* descriptor)
 {
-    VERIFY_SPINLOCK_AFFINITY(Lock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
     TProtobufEnumType* type;
     auto it = EnumTypeMap_.find(descriptor);
@@ -1022,13 +1039,18 @@ protected:
         }
     }
 
-    void ValidateString(TStringBuf data, TStringBuf fieldFullName)
+    void ValidateString(TStringBuf data, TStringBuf fieldFullName, std::optional<EUtf8Check> utf8Check)
     {
-        auto config = GetProtobufInteropConfig();
-        if (config->Utf8Check == EUtf8Check::Disable || IsUtf(data)) {
+        // TODO(kmokrov): `.or_else` when C++23 arrives.
+        auto effectiveCheck = utf8Check ? *utf8Check : std::invoke([] {
+            auto config = GetProtobufInteropConfig();
+            return config->Utf8Check;
+        });
+
+        if (effectiveCheck == EUtf8Check::Disable || IsUtf(data)) {
             return;
         }
-        switch (config->Utf8Check) {
+        switch (effectiveCheck) {
             case EUtf8Check::Disable:
                 return;
             case EUtf8Check::LogOnFail:
@@ -1148,7 +1170,9 @@ private:
             const auto* field = FieldStack_.back().Field;
             switch (field->GetType()) {
                 case FieldDescriptor::TYPE_STRING:
-                    ValidateString(value, field->GetFullName());
+                    ValidateString(value, field->GetFullName(), Options_.Utf8Check);
+                    [[fallthrough]];
+
                 case FieldDescriptor::TYPE_BYTES:
                     BodyCodedStream_.WriteVarint64(value.length());
                     BodyCodedStream_.WriteRaw(value.begin(), static_cast<int>(value.length()));
@@ -1536,7 +1560,7 @@ private:
 
     void BeginNestedMessage()
     {
-        auto index =  static_cast<int>(NestedMessages_.size());
+        auto index =  std::ssize(NestedMessages_);
         NestedMessages_.emplace_back(BodyCodedStream_.ByteCount(), -1);
         NestedIndexStack_.push_back(index);
     }
@@ -1832,8 +1856,7 @@ private:
             case FieldDescriptor::TYPE_ENUM: {
                 auto i32Value = CheckedCastField<i32>(value, TStringBuf("i32"), field);
                 const auto* enumType = field->GetEnumType();
-                auto literal = enumType->FindLiteralByValue(i32Value);
-                if (!literal) {
+                if (field->IsEnumValueCheckStrict() && !enumType->FindLiteralByValue(i32Value)) {
                     THROW_ERROR_EXCEPTION("Unknown value %v for field %v",
                         i32Value,
                         YPathStack_.GetHumanReadablePath())
@@ -1876,8 +1899,8 @@ private:
     template <class TTo, class TFrom>
     TTo CheckedCastField(TFrom value, TStringBuf toTypeName, const TProtobufField* field)
     {
-        TTo result;
-        if (!TryIntegralCast<TTo>(value, &result)) {
+        auto result = TryCheckedIntegralCast<TTo>(value);
+        if (!result) {
             THROW_ERROR_EXCEPTION("Value %v of field %v cannot fit into %Qv",
                 value,
                 YPathStack_.GetHumanReadablePath(),
@@ -1885,7 +1908,7 @@ private:
                 << TErrorAttribute("ypath", YPathStack_.GetPath())
                 << TErrorAttribute("proto_field", field->GetFullName());
         }
-        return result;
+        return *result;
     }
 
     void TryWriteCustomlyConvertibleType()
@@ -2480,7 +2503,7 @@ private:
     {
         auto storeEnumAsInt = [this, field] (auto value) {
             const auto* enumType = field->GetEnumType();
-            if (!enumType->FindLiteralByValue(value)) {
+            if (field->IsEnumValueCheckStrict() && !enumType->FindLiteralByValue(value)) {
                 THROW_ERROR_EXCEPTION("Unknown value %v for field %v",
                     value,
                     YPathStack_.GetHumanReadablePath())
@@ -2669,7 +2692,7 @@ private:
                         }
                         TStringBuf data(PooledString_.data(), length);
                         if (field->GetType() == FieldDescriptor::TYPE_STRING) {
-                            ValidateString(data, field->GetFullName());
+                            ValidateString(data, field->GetFullName(), Options_.Utf8Check);
                         }
                         ParseScalar([&] {
                             if (field->GetBytesFieldConverter()) {
@@ -2692,7 +2715,7 @@ private:
                             PooledString_.resize(length);
                             CodedStream_.ReadRaw(PooledString_.data(), PooledString_.size());
                             Y_UNUSED(message->ParseFromArray(PooledString_.data(), PooledString_.size()));
-                            converter.Serializer(Consumer_, message.get());
+                            converter.Serializer(Consumer_, message.get(), Options_);
                             YPathStack_.Pop();
                         } else {
                             LimitStack_.push_back(CodedStream_.PushLimit(static_cast<int>(length)));
@@ -3028,6 +3051,11 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
         }
 
         tokenizer.Advance();
+        if (options.AllowAsterisks && tokenizer.GetType() == NYPath::ETokenType::Asterisk) {
+            tokenizer.Advance();
+            tokenizer.Expect(NYPath::ETokenType::Slash);
+            tokenizer.Advance();
+        }
         tokenizer.Expect(NYPath::ETokenType::Literal);
 
         const auto& fieldName = tokenizer.GetLiteralValue();
@@ -3092,7 +3120,9 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
 
             tokenizer.Expect(NYPath::ETokenType::Slash);
             tokenizer.Advance();
-            tokenizer.ExpectListIndex();
+            if (!options.AllowAsterisks || tokenizer.GetType() != NYPath::ETokenType::Asterisk) {
+                tokenizer.ExpectListIndex();
+            }
 
             if (!field->IsMessage()) {
                 return GetProtobufElementFromField(

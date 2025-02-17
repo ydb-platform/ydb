@@ -8,7 +8,7 @@ namespace Monitoring {
 }
 }
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TProtoAccessor;
 
@@ -27,9 +27,9 @@ enum class EStatusFlag {
 };
 
 struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
-    FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
-    FLUENT_SETTING_OPTIONAL(EStatusFlag, MinimumStatus);
-    FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, ReturnVerboseStatus);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(EStatusFlag, MinimumStatus);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, MaximumLevel);
 };
 
 class TSelfCheckResult : public TStatus {

@@ -2,9 +2,11 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_devicemode.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/tx/datashard/export_iface.h>
+#include <ydb/core/tx/schemeshard/schemeshard_operation_factory.h>
 #include <ydb/core/persqueue/actor_persqueue_client_iface.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/base/grpc_service_factory.h>
+#include <ydb/core/security/ticket_parser_settings.h>
 
 #include <ydb/core/ymq/actor/auth_factory.h>
 #include <ydb/core/http_proxy/auth_factory.h>
@@ -14,7 +16,7 @@
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/core/fq/libs/config/protos/audit.pb.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
@@ -39,8 +41,10 @@ struct TModuleFactories {
     std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
     // Factory for Simple queue services implementation details
     std::shared_ptr<NSQS::IEventsWriterFactory> SqsEventsWriterFactory;
+    // Scheme operations
+    std::shared_ptr<NSchemeShard::IOperationFactory> SchemeOperationFactory;
 
-    IActor*(*CreateTicketParser)(const NKikimrProto::TAuthConfig&);
+    IActor*(*CreateTicketParser)(const TTicketParserSettings&);
     IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
 
     // Factory for grpc services

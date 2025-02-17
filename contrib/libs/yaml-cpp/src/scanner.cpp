@@ -9,12 +9,17 @@
 namespace YAML {
 Scanner::Scanner(std::istream& in)
     : INPUT(in),
+      m_tokens{},
       m_startedStream(false),
       m_endedStream(false),
       m_simpleKeyAllowed(false),
-      m_canBeJSONFlow(false) {}
+      m_canBeJSONFlow(false),
+      m_simpleKeys{},
+      m_indents{},
+      m_indentRefs{},
+      m_flows{} {}
 
-Scanner::~Scanner() {}
+Scanner::~Scanner() = default;
 
 bool Scanner::empty() {
   EnsureTokensInQueue();
@@ -46,7 +51,7 @@ Token& Scanner::peek() {
 Mark Scanner::mark() const { return INPUT.mark(); }
 
 void Scanner::EnsureTokensInQueue() {
-  while (1) {
+  while (true) {
     if (!m_tokens.empty()) {
       Token& token = m_tokens.front();
 
@@ -83,7 +88,7 @@ void Scanner::ScanNextToken() {
     return StartStream();
   }
 
-  // get rid of whitespace, etc. (in between tokens it should be irrelevent)
+  // get rid of whitespace, etc. (in between tokens it should be irrelevant)
   ScanToNextToken();
 
   // maybe need to end some blocks
@@ -169,7 +174,7 @@ void Scanner::ScanNextToken() {
 }
 
 void Scanner::ScanToNextToken() {
-  while (1) {
+  while (true) {
     // first eat whitespace
     while (INPUT && IsWhitespaceToBeEaten(INPUT.peek())) {
       if (InBlockContext() && Exp::Tab().Matches(INPUT)) {
@@ -282,7 +287,7 @@ Scanner::IndentMarker* Scanner::PushIndentTo(int column,
                                              IndentMarker::INDENT_TYPE type) {
   // are we in flow?
   if (InFlowContext()) {
-    return 0;
+    return nullptr;
   }
 
   std::unique_ptr<IndentMarker> pIndent(new IndentMarker(column, type));
@@ -291,12 +296,12 @@ Scanner::IndentMarker* Scanner::PushIndentTo(int column,
 
   // is this actually an indentation?
   if (indent.column < lastIndent.column) {
-    return 0;
+    return nullptr;
   }
   if (indent.column == lastIndent.column &&
       !(indent.type == IndentMarker::SEQ &&
         lastIndent.type == IndentMarker::MAP)) {
-    return 0;
+    return nullptr;
   }
 
   // push a start token

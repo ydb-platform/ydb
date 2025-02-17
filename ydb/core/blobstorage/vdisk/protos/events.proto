@@ -60,6 +60,7 @@ message FreshSegmentStat {
 
 message FreshStat {
     uint32 compaction_writes_in_flight = 1;
+    uint32 compaction_reads_in_flight = 5;
     FreshSegmentStat current = 2;
     FreshSegmentStat dreg = 3;
     FreshSegmentStat old = 4;

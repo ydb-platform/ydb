@@ -2,7 +2,9 @@
 #include "defs.h"
 
 #include "vdisk_config.h"
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_params.h>
+
 
 namespace NKikimr {
 
@@ -31,7 +33,7 @@ namespace NKikimr {
                 const TIntrusivePtr<TPDiskParams> &pDiskParams,
                 const TIntrusivePtr<TVDiskConfig> &cfg) {
             auto pdiskCtx = std::make_shared<TPDiskCtx>(pDiskParams, cfg->BaseInfo.PDiskActorID,
-                TStringBuilder() << TlsActivationContext->ExecutorThread.ActorSystem->NodeId << ":" << cfg->BaseInfo.PDiskId);
+                TStringBuilder() << TActivationContext::ActorSystem()->NodeId << ":" << cfg->BaseInfo.PDiskId);
             Y_ABORT_UNLESS(cfg->MaxLogoBlobDataSize < pdiskCtx->Dsk->ChunkSize + 1024u,
                     "Chunk size is too small, check your VDisk settings; "
                     "MaxLogoBlobDataSize=%" PRIu32 " chunkSize=%" PRIu64,

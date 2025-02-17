@@ -25,15 +25,15 @@
 #include "curl_setup.h"
 
 #if defined(USE_NGTCP2) && defined(USE_NGHTTP3)
-#error #include <ngtcp2/ngtcp2.h>
-#error #include <nghttp3/nghttp3.h>
+#include <ngtcp2/ngtcp2.h>
+#include <nghttp3/nghttp3.h>
 
 #ifdef USE_OPENSSL
 #include <openssl/err.h>
 #if defined(OPENSSL_IS_BORINGSSL) || defined(OPENSSL_IS_AWSLC)
 #error #include <ngtcp2/ngtcp2_crypto_boringssl.h>
 #else
-#error #include <ngtcp2/ngtcp2_crypto_quictls.h>
+#include <ngtcp2/ngtcp2_crypto_quictls.h>
 #endif
 #include "vtls/openssl.h"
 #elif defined(USE_GNUTLS)

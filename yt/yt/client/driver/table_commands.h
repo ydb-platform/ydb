@@ -46,8 +46,8 @@ private:
     NYPath::TRichYPath Path;
     NYTree::INodePtr TableReader;
 
-    std::optional<TString> PartIndexColumnName;
-    std::optional<TString> DataColumnName;
+    std::optional<std::string> PartIndexColumnName;
+    std::optional<std::string> DataColumnName;
 
     i64 StartPartIndex;
     i64 Offset;
@@ -81,6 +81,12 @@ public:
     REGISTER_YSON_STRUCT_LITE(TWriteTableCommand);
 
     static void Register(TRegistrar registrar);
+
+protected:
+    virtual NApi::ITableWriterPtr CreateTableWriter(
+        const ICommandContextPtr& context);
+
+    void DoExecuteImpl(const ICommandContextPtr& context);
 
 private:
     NYPath::TRichYPath Path;
@@ -241,6 +247,24 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TCancelTabletTransitionCommand
+    : public TTypedCommand<NApi::TCancelTabletTransitionOptions>
+{
+    NTabletClient::TTabletId TabletId;
+
+    REGISTER_YSON_STRUCT_LITE(TCancelTabletTransitionCommand);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("tablet_id", &TThis::TabletId);
+    }
+
+public:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TReshardTableCommand
     : public TTabletCommandBase<NApi::TReshardTableOptions>
 {
@@ -369,11 +393,12 @@ public:
 private:
     NYTree::INodePtr TableWriter;
     NYPath::TRichYPath Path;
-    std::optional<std::vector<TString>> ColumnNames;
+    std::optional<std::vector<std::string>> ColumnNames;
     bool Versioned;
     NTableClient::TRetentionConfigPtr RetentionConfig;
 
     void DoExecute(ICommandContextPtr context) override;
+    bool HasResponseParameters() const override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -393,7 +418,7 @@ public:
 private:
     NYPath::TRichYPath Path;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
     bool HasResponseParameters() const override;
 };
 
@@ -444,7 +469,7 @@ public:
 private:
     NYTree::INodePtr TableWriter;
     NYPath::TRichYPath Path;
-    std::vector<TString> Locks;
+    std::vector<std::string> Locks;
     NTableClient::ELockType LockType;
 
     void DoExecute(ICommandContextPtr context) override;
@@ -578,7 +603,7 @@ public:
 private:
     NApi::TBackupManifestPtr Manifest;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -594,7 +619,26 @@ public:
 private:
     NApi::TBackupManifestPtr Manifest;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TGetTableMountInfoCommandOptions
+{ };
+
+class TGetTableMountInfoCommand
+    : public TTypedCommand<TGetTableMountInfoCommandOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetTableMountInfoCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYTree::TYPath Path_;
+
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

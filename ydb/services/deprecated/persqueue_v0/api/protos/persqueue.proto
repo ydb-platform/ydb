@@ -335,6 +335,7 @@ message ReadResponse {
     }
 }
 
+// deprecated
 message MoveTopicRequest {
     string source_path = 1;
     string destination_path = 2;
@@ -343,8 +344,8 @@ message MoveTopicRequest {
     bool skip_destination_check = 5;
 }
 
+// deprecated
 message MoveTopicResponse {
     Ydb.StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
 }
-

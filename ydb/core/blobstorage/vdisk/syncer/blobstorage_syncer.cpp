@@ -110,7 +110,7 @@ namespace NKikimr {
             str << "\n";
 
             ctx.Send(ReplyId, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::SyncerInfoId));
-            ctx.Send(NotifyId, new TEvents::TEvActorDied());
+            ctx.Send(NotifyId, new TEvents::TEvGone());
             Die(ctx);
         }
 
@@ -257,7 +257,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSublogLine, Handle)
             HFunc(TEvVGenerationChange, SyncGuidModeHandle)
@@ -279,7 +279,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSublogLine, Handle)
             HFunc(TEvVGenerationChange, InconsistencyModeHandle)
@@ -298,10 +298,19 @@ namespace NKikimr {
             }
 
             Become(&TThis::RecoverLostDataStateFunc);
+            Phase = TPhaseVal::PhaseRecoverLostData;
+
+            if (SyncerCtx->Config->EnableVDiskCooldownTimeout) {
+                Schedule(SyncerCtx->Config->BaseInfo.YardInitDelay, new TEvents::TEvWakeup);
+            } else {
+                RecoverLostDataResumeAfterDelay(ctx);
+            }
+        }
+
+        void RecoverLostDataResumeAfterDelay(const TActorContext& ctx) {
             const TVDiskEternalGuid guid = GuidRecovOutcome->Guid;
             RecoverLostDataId = ctx.Register(CreateSyncerRecoverLostDataActor(SyncerCtx, GInfo, CommitterId, ctx.SelfID, guid));
             ActiveActors.Insert(RecoverLostDataId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-            Phase = TPhaseVal::PhaseRecoverLostData;
         }
 
         void Handle(TEvSyncerLostDataRecovered::TPtr &ev, const TActorContext &ctx) {
@@ -318,10 +327,11 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSublogLine, Handle)
             HFunc(TEvVGenerationChange, RecoverLostDataModeHandle)
+            CFunc(TEvents::TSystem::Wakeup, RecoverLostDataResumeAfterDelay);
         )
 
         ////////////////////////////////////////////////////////////////////////
@@ -358,7 +368,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSublogLine, Handle)
             HFunc(TEvVGenerationChange, ReadyModeHandle)
@@ -505,7 +515,7 @@ namespace NKikimr {
         }
 
         // This handler is called when TSyncerHttpInfoActor is finished
-        void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             ActiveActors.Erase(ev->Sender);
         }
@@ -567,7 +577,6 @@ namespace NKikimr {
             GInfo = msg->NewInfo;
 
             // reconfigure guid recovery actor
-            Y_ABORT_UNLESS(RecoverLostDataId != TActorId());
             ctx.Send(RecoverLostDataId, msg->Clone());
         }
 

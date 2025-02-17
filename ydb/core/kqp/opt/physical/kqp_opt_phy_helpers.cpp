@@ -83,6 +83,10 @@ TCoAtomList BuildColumnsList(const THashSet<TStringBuf>& columns, TPositionHandl
     return BuildColumnsListImpl(columns, pos, ctx);
 }
 
+TCoAtomList BuildColumnsList(const TVector<TStringBuf>& columns, NYql::TPositionHandle pos,NYql::TExprContext& ctx) {
+    return BuildColumnsListImpl(columns, pos, ctx);
+}
+
 TCoAtomList BuildColumnsList(const TVector<TString>& columns, TPositionHandle pos, TExprContext& ctx) {
     return BuildColumnsListImpl(columns, pos, ctx);
 }
@@ -168,49 +172,6 @@ NYql::NNodes::TDqStage ReplaceTableSourceSettings(NYql::NNodes::TDqStage stage, 
         .Outputs(stage.Outputs())
         .Program(stage.Program())
         .Done();
-}
-
-bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TKikimrTableDescription& tableDesc,
-    const TMaybe<THashSet<TStringBuf>>& passthroughFields)
-{
-    auto checkKey = [keySelector, &tableDesc, &passthroughFields] (NYql::NNodes::TExprBase key, ui32 index) {
-        if (!key.Maybe<TCoMember>()) {
-            return false;
-        }
-
-        auto member = key.Cast<TCoMember>();
-        if (member.Struct().Raw() != keySelector.Args().Arg(0).Raw()) {
-            return false;
-        }
-
-        auto column = TString(member.Name().Value());
-        auto columnIndex = tableDesc.GetKeyColumnIndex(column);
-        if (!columnIndex || *columnIndex != index) {
-            return false;
-        }
-
-        if (passthroughFields && !passthroughFields->contains(column)) {
-            return false;
-        }
-
-        return true;
-    };
-
-    auto lambdaBody = keySelector.Body();
-    if (auto maybeTuple = lambdaBody.Maybe<TExprList>()) {
-        auto tuple = maybeTuple.Cast();
-        for (size_t i = 0; i < tuple.Size(); ++i) {
-            if (!checkKey(tuple.Item(i), i)) {
-                return false;
-            }
-        }
-    } else {
-        if (!checkKey(lambdaBody, 0)) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections) {

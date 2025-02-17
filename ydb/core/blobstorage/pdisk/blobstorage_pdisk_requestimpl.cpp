@@ -25,6 +25,18 @@ void TRequestBase::AbortDelete(TRequestBase* request, TActorSystem* actorSystem)
         request->Abort(actorSystem);
         break;
     }
+    case ERequestType::RequestLogWrite:
+    {
+        auto* log = static_cast<TLogWrite*>(request);
+        while (log) {
+            auto batch = log->PopFromBatch();
+            log->Abort(actorSystem);
+            delete log;
+
+            log = batch;
+        }
+        break;
+    }
     default:
         request->Abort(actorSystem);
         delete request;
@@ -33,16 +45,8 @@ void TRequestBase::AbortDelete(TRequestBase* request, TActorSystem* actorSystem)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TChunkWrite
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-TAtomic TChunkWrite::LastIndex = 0;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkRead
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-TAtomic TChunkRead::LastIndex = 0;
 
 void TChunkRead::Abort(TActorSystem* actorSystem) {
     if (FinalCompletion) {
@@ -93,4 +97,3 @@ void TChunkReadPiece::OnSuccessfulDestroy(TActorSystem* actorSystem) {
 
 } // NPDisk
 } // NKikimr
-

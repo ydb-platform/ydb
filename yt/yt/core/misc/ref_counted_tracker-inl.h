@@ -74,13 +74,23 @@ public:
 
     TRefCountedTrackerStatistics::TNamedSlotStatistics GetStatistics() const;
 
-    TNamedSlot& operator += (const TLocalSlot& rhs)
+    #define REF_COUNTED_TRACKER_NO_TSAN
+    #if defined(__has_feature)
+        #if __has_feature(thread_sanitizer)
+            #undef REF_COUNTED_TRACKER_NO_TSAN
+            #define REF_COUNTED_TRACKER_NO_TSAN __attribute__((no_sanitize("thread")))
+        #endif
+    #endif
+
+    TNamedSlot& REF_COUNTED_TRACKER_NO_TSAN operator += (const TLocalSlot& rhs)
     {
         #define XX(name) name ## _ += rhs.name;
         ENUMERATE_SLOT_FIELDS()
         #undef XX
         return *this;
     }
+
+    #undef REF_COUNTED_TRACKER_NO_TSAN
 
     TNamedSlot& operator += (const TGlobalSlot& rhs)
     {
@@ -108,6 +118,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DECLARE_THREAD_LOCAL(TRefCountedTracker::TLocalSlot*, RefCountedTrackerLocalSlotsBegin);
+YT_DECLARE_THREAD_LOCAL(int, RefCountedTrackerLocalSlotsSize);
+
 Y_FORCE_INLINE TRefCountedTracker* TRefCountedTracker::Get()
 {
     return LeakySingleton<TRefCountedTracker>();
@@ -116,10 +129,10 @@ Y_FORCE_INLINE TRefCountedTracker* TRefCountedTracker::Get()
 #define INCREMENT_COUNTER(fallback, name, delta) \
     auto index = cookie.Underlying(); \
     YT_ASSERT(index >= 0); \
-    if (Y_UNLIKELY(index >= LocalSlotsSize_)) { \
+    if (Y_UNLIKELY(index >= RefCountedTrackerLocalSlotsSize())) { \
         Get()->fallback; \
     } else { \
-        LocalSlotsBegin_[index].name += delta; \
+        RefCountedTrackerLocalSlotsBegin()[index].name += delta; \
     }
 
 Y_FORCE_INLINE void TRefCountedTracker::AllocateInstance(TRefCountedTypeCookie cookie)

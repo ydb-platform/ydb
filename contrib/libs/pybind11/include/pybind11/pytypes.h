@@ -183,7 +183,15 @@ public:
     str_attr_accessor doc() const;
 
     /// Return the object's current reference count
-    int ref_count() const { return static_cast<int>(Py_REFCNT(derived().ptr())); }
+    ssize_t ref_count() const {
+#ifdef PYPY_VERSION
+        // PyPy uses the top few bits for REFCNT_FROM_PYPY & REFCNT_FROM_PYPY_LIGHT
+        // Following pybind11 2.12.1 and older behavior and removing this part
+        return static_cast<ssize_t>(static_cast<int>(Py_REFCNT(derived().ptr())));
+#else
+        return Py_REFCNT(derived().ptr());
+#endif
+    }
 
     // TODO PYBIND11_DEPRECATED(
     //     "Call py::type::handle_of(h) or py::type::of(h) instead of h.get_type()")
@@ -266,11 +274,6 @@ public:
         this function automatically. Returns a reference to itself.
     \endrst */
     const handle &dec_ref() const & {
-#ifdef Py_DEBUG
-        if (!Py_IsInitialized()) {
-            return *this;
-        }
-#endif
 #ifdef PYBIND11_ASSERT_GIL_HELD_INCREF_DECREF
         if (m_ptr != nullptr && !PyGILState_Check()) {
             throw_gilstate_error("pybind11::handle::dec_ref()");
@@ -992,6 +995,23 @@ inline PyObject *dict_getitem(PyObject *v, PyObject *key) {
 #endif
 }
 
+inline PyObject *dict_getitemstringref(PyObject *v, const char *key) {
+#if PY_VERSION_HEX >= 0x030D0000
+    PyObject *rv;
+    if (PyDict_GetItemStringRef(v, key, &rv) < 0) {
+        throw error_already_set();
+    }
+    return rv;
+#else
+    PyObject *rv = dict_getitemstring(v, key);
+    if (rv == nullptr && PyErr_Occurred()) {
+        throw error_already_set();
+    }
+    Py_XINCREF(rv);
+    return rv;
+#endif
+}
+
 // Helper aliases/functions to support implicit casting of values given to python
 // accessors/methods. When given a pyobject, this simply returns the pyobject as-is; for other C++
 // type, the value goes through pybind11::cast(obj) to convert it to an `object`.
@@ -1254,6 +1274,7 @@ protected:
     using pointer = arrow_proxy<const handle>;
 
     sequence_fast_readonly(handle obj, ssize_t n) : ptr(PySequence_Fast_ITEMS(obj.ptr()) + n) {}
+    sequence_fast_readonly() = default;
 
     // NOLINTNEXTLINE(readability-const-return-type) // PR #3263
     reference dereference() const { return *ptr; }
@@ -1276,6 +1297,7 @@ protected:
     using pointer = arrow_proxy<const sequence_accessor>;
 
     sequence_slow_readwrite(handle obj, ssize_t index) : obj(obj), index(index) {}
+    sequence_slow_readwrite() = default;
 
     reference dereference() const { return {obj, static_cast<size_t>(index)}; }
     void increment() { ++index; }
@@ -2203,6 +2225,11 @@ public:
                           ssize_t_cast(index),
                           detail::object_or_cast(std::forward<ValType>(val)).ptr())
             != 0) {
+            throw error_already_set();
+        }
+    }
+    void clear() /* py-non-const */ {
+        if (PyList_SetSlice(m_ptr, 0, PyList_Size(m_ptr), nullptr) == -1) {
             throw error_already_set();
         }
     }

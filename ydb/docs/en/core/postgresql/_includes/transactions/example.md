@@ -1,3 +1,4 @@
+
 ```sql
 -- Start of the transaction
 BEGIN;

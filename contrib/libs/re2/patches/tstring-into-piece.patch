@@ -1,0 +1,11 @@
+--- a/re2/re2.h	(index)
++++ a/re2/re2.h	(working tree)
+@@ -280,6 +280,8 @@ class RE2 {
+ #endif
+   RE2(absl::string_view pattern);
+   RE2(absl::string_view pattern, const Options& options);
++  // ambiguity resolution.
++  RE2(const TString& pattern) : RE2(StringPiece(pattern)) {}
+   ~RE2();
+ 
+   // Returns whether RE2 was created properly.

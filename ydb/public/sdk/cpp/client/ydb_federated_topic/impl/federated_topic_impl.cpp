@@ -3,10 +3,7 @@
 #include "federated_read_session.h"
 #include "federated_write_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/read_session.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session.h>
-
-namespace NYdb::NFederatedTopic {
+namespace NYdb::inline V2::NFederatedTopic {
 
 std::shared_ptr<IFederatedReadSession>
 TFederatedTopicClient::TImpl::CreateReadSession(const TFederatedReadSessionSettings& settings) {
@@ -38,7 +35,8 @@ TFederatedTopicClient::TImpl::CreateWriteSession(const TFederatedWriteSessionSet
             splitSettings.EventHandlers_.HandlersExecutor(ClientSettings.DefaultHandlersExecutor_);
         }
     }
-    auto session = std::make_shared<TFederatedWriteSession>(splitSettings, Connections, ClientSettings, GetObserver(), ProvidedCodecs);
+    auto session = std::make_shared<TFederatedWriteSession>(
+        splitSettings, Connections, ClientSettings, GetObserver(), ProvidedCodecs, GetSubsessionHandlersExecutor());
     session->Start();
     return std::move(session);
 }
@@ -49,6 +47,15 @@ void TFederatedTopicClient::TImpl::InitObserver() {
             Observer = std::make_shared<TFederatedDbObserver>(Connections, ClientSettings);
             Observer->Start();
         }
+    }
+}
+
+auto TFederatedTopicClient::TImpl::GetSubsessionHandlersExecutor() -> NTopic::IExecutor::TPtr {
+    with_lock (Lock) {
+        if (!SubsessionHandlersExecutor) {
+            SubsessionHandlersExecutor = NTopic::CreateThreadPoolExecutor(1);
+        }
+        return SubsessionHandlersExecutor;
     }
 }
 

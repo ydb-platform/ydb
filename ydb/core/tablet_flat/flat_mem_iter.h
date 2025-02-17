@@ -240,8 +240,12 @@ namespace NTable {
          */
         bool SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
                               NTable::ITransactionMapSimplePtr committedTransactions,
-                              NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
+                              NTable::ITransactionObserverSimplePtr transactionObserver,
+                              const NTable::ITransactionSet& decidedTransactions) noexcept
         {
+            // Temporary: we don't cache erases when there are uncompacted deltas
+            Y_UNUSED(decidedTransactions);
+
             Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to access an invalid row");
 
             auto* chain = GetCurrentVersion();
@@ -249,6 +253,9 @@ namespace NTable {
 
             // Skip uncommitted deltas
             while (chain->RowVersion.Step == Max<ui64>() && !committedTransactions.Find(chain->RowVersion.TxId)) {
+                // We cannot cache when there are uncompacted deltas
+                stats.UncertainErase = true;
+
                 transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
                 if (!(chain = chain->Next)) {
                     CurrentVersion = nullptr;
@@ -263,7 +270,14 @@ namespace NTable {
                     return true;
                 }
                 transactionObserver.OnSkipCommitted(chain->RowVersion);
+                if (chain->Rop != ERowOp::Erase) {
+                    // We are skipping non-erase op, so any erase below cannot be trusted
+                    stats.UncertainErase = true;
+                }
             } else {
+                // We cannot cache when there are uncompacted deltas
+                stats.UncertainErase = true;
+
                 auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                 Y_ABORT_UNLESS(commitVersion);
                 if (*commitVersion <= rowVersion) {
@@ -283,7 +297,14 @@ namespace NTable {
 
                     transactionObserver.OnSkipCommitted(chain->RowVersion);
                     stats.InvisibleRowSkips++;
+                    if (chain->Rop != ERowOp::Erase) {
+                        // We are skipping non-erase op, so any erase below cannot be trusted
+                        stats.UncertainErase = true;
+                    }
                 } else {
+                    // We cannot cache when there are uncompacted deltas
+                    stats.UncertainErase = true;
+
                     auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                     if (commitVersion && *commitVersion <= rowVersion) {
                         CurrentVersion = chain;
@@ -361,7 +382,7 @@ namespace NTable {
         void ApplyColumn(TRowState& row, const NMem::TColumnUpdate &up) const noexcept
         {
             const auto pos = Remap->Has(up.Tag);
-            auto op = TCellOp::Decode(up.Op);
+            auto op = up.Op;
 
             if (!pos || row.IsFinalized(pos)) {
                 /* Out of remap or row slot is already filled */

@@ -8,6 +8,8 @@
 
 #include <aws/common/common.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 enum aws_platform_os {
     AWS_PLATFORM_OS_WINDOWS,
     AWS_PLATFORM_OS_MAC,
@@ -101,5 +103,6 @@ AWS_COMMON_API
 void aws_backtrace_log(int log_level);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_SYSTEM_INFO_H */

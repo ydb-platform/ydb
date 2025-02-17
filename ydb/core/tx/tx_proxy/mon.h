@@ -2,7 +2,7 @@
 #include "defs.h"
 
 #include <ydb/core/mon/mon.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 
 namespace NKikimr {
 namespace NTxProxy {

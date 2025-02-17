@@ -5,7 +5,7 @@
 
 #include <yt/yt/core/misc/error.h>
 
-#include <yt/yt/core/misc/singleton.h>
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT::NYTree {
 
@@ -57,9 +57,9 @@ public:
         : NestingLevelLimit_(ysonNestingLevelLimit)
     { }
 
-    std::vector<TString> ListKeys() const override
+    std::vector<TKey> ListKeys() const override
     {
-        std::vector<TString> keys;
+        std::vector<TKey> keys;
         keys.reserve(Map_.size());
         for (const auto& [key, value] : Map_) {
             keys.push_back(key);
@@ -77,13 +77,13 @@ public:
         return pairs;
     }
 
-    TYsonString FindYson(TStringBuf key) const override
+    TValue FindYson(TKeyView key) const override
     {
         auto it = Map_.find(key);
         return it == Map_.end() ? TYsonString() : it->second;
     }
 
-    void SetYson(const TString& key, const TYsonString& value) override
+    void SetYson(TKeyView key, const TValue& value) override
     {
         YT_ASSERT(value.GetType() == EYsonType::Node);
         if (NestingLevelLimit_) {
@@ -92,13 +92,13 @@ public:
         Map_[key] = value;
     }
 
-    bool Remove(const TString& key) override
+    bool Remove(TKeyView key) override
     {
         return Map_.erase(key) > 0;
     }
 
 private:
-    THashMap<TString, TYsonString> Map_;
+    THashMap<TKey, TYsonString, THash<std::string_view>, TEqualTo<std::string_view>> Map_;
     std::optional<int> NestingLevelLimit_;
 };
 
@@ -113,7 +113,7 @@ class TEmptyAttributeDictionary
     : public IAttributeDictionary
 {
 public:
-    std::vector<TString> ListKeys() const override
+    std::vector<TKey> ListKeys() const override
     {
         return {};
     }
@@ -123,30 +123,29 @@ public:
         return {};
     }
 
-    TYsonString FindYson(TStringBuf /*key*/) const override
+    TValue FindYson(TKeyView /*key*/) const override
     {
         return {};
     }
 
-    void SetYson(const TString& /*key*/, const TYsonString& /*value*/) override
+    void SetYson(TKeyView /*key*/, const TValue& /*value*/) override
     {
         YT_ABORT();
     }
 
-    bool Remove(const TString& /*key*/) override
+    bool Remove(TKeyView /*key*/) override
     {
         return false;
     }
+
+private:
+    DECLARE_LEAKY_REF_COUNTED_SINGLETON_FRIEND()
+    TEmptyAttributeDictionary() = default;
 };
 
 const IAttributeDictionary& EmptyAttributes()
 {
-    struct TSingleton
-    {
-        IAttributeDictionaryPtr EmptyAttributes = New<TEmptyAttributeDictionary>();
-    };
-
-    return *LeakySingleton<TSingleton>()->EmptyAttributes;
+    return *LeakyRefCountedSingleton<TEmptyAttributeDictionary>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -159,7 +158,7 @@ public:
         : Underlying_(underlying)
     { }
 
-    std::vector<TString> ListKeys() const override
+    std::vector<TKey> ListKeys() const override
     {
         auto guard = ReaderGuard(Lock_);
         return Underlying_->ListKeys();
@@ -171,19 +170,19 @@ public:
         return Underlying_->ListPairs();
     }
 
-    NYson::TYsonString FindYson(TStringBuf key) const override
+    TValue FindYson(TKeyView key) const override
     {
         auto guard = ReaderGuard(Lock_);
         return Underlying_->FindYson(key);
     }
 
-    void SetYson(const TString& key, const NYson::TYsonString& value) override
+    void SetYson(TKeyView key, const TValue& value) override
     {
         auto guard = WriterGuard(Lock_);
         Underlying_->SetYson(key, value);
     }
 
-    bool Remove(const TString& key) override
+    bool Remove(TKeyView key) override
     {
         auto guard = WriterGuard(Lock_);
         return Underlying_->Remove(key);
@@ -223,7 +222,7 @@ void ToProto(NProto::TAttributeDictionary* protoAttributes, const IAttributeDict
     std::sort(pairs.begin(), pairs.end(), [] (const auto& lhs, const auto& rhs) {
         return lhs.first < rhs.first;
     });
-    protoAttributes->mutable_attributes()->Reserve(static_cast<int>(pairs.size()));
+    protoAttributes->mutable_attributes()->Reserve(std::ssize(pairs));
     for (const auto& [key, value] : pairs) {
         auto* protoAttribute = protoAttributes->add_attributes();
         protoAttribute->set_key(key);
@@ -302,7 +301,7 @@ void TAttributeDictionarySerializer::LoadNonNull(TStreamLoadContext& context, co
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ValidateYTreeKey(TStringBuf key)
+void ValidateYTreeKey(IAttributeDictionary::TKeyView key)
 {
     Y_UNUSED(key);
     // XXX(vvvv): Disabled due to existing data with empty keys, see https://st.yandex-team.ru/YQL-2640
@@ -313,7 +312,7 @@ void ValidateYTreeKey(TStringBuf key)
 #endif
 }
 
-void ValidateYPathResolutionDepth(const TYPath& path, int depth)
+void ValidateYPathResolutionDepth(TYPathBuf path, int depth)
 {
     if (depth > MaxYPathResolveIterations) {
         THROW_ERROR_EXCEPTION(

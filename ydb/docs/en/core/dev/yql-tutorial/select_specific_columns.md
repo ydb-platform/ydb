@@ -4,7 +4,7 @@ Select the data from the columns `series_id`, `release_date`, and `title`. At th
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT
     series_id,             -- The names of columns (series_id, release_date, title)
                            -- are separated by commas.

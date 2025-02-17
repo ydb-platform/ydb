@@ -10,9 +10,12 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/tx/datashard/export_iface.h>
 #include <ydb/core/tx/datashard/export_s3.h>
+#include <ydb/core/tx/schemeshard/schemeshard_operation_factory.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/resource_broker.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
@@ -55,6 +58,7 @@ namespace NKikimr {
             TIntrusivePtr<TFormatFactory> Formats;
             std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
             std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
+            std::shared_ptr<NSchemeShard::IOperationFactory> SchemeOperationFactory;
 
             ~TMine();
         };
@@ -87,6 +91,7 @@ namespace NKikimr {
         void SetEnablePqBilling(std::optional<bool> value);
         void SetEnableDbCounters(bool value);
         void SetAwsRegion(const TString& value);
+        void InitIcb(ui32 numNodes);
 
         TIntrusivePtr<TChannelProfiles> Channels;
         NKikimrBlobStorage::TNodeWardenServiceSet BSConf;
@@ -104,6 +109,9 @@ namespace NKikimr {
         NKikimrConfig::TAwsCompatibilityConfig AwsCompatibilityConfig;
         NKikimrConfig::TS3ProxyResolverConfig S3ProxyResolverConfig;
         NKikimrConfig::TGraphConfig GraphConfig;
+        NKikimrConfig::TImmediateControlsConfig ImmediateControlsConfig;
+        NKikimrResourceBroker::TResourceBrokerConfig ResourceBrokerConfig;
+        std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
 
     private:
         TAutoPtr<TMine> Mine;

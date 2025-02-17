@@ -3,8 +3,11 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/statistics.pb.h>
-#include <ydb/core/util/count_min_sketch.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <ydb/library/actors/core/events.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+
 
 namespace NKikimr {
 namespace NStat {
@@ -30,7 +33,7 @@ enum EStatType {
 
 struct TRequest {
     TPathId PathId;
-    std::optional<TString> ColumnName; // not used for simple stat
+    std::optional<ui32> ColumnTag; // not used for simple stat
 };
 
 struct TResponse {
@@ -64,13 +67,53 @@ struct TEvStatistics {
 
         EvStatTableCreationResponse,
         EvSaveStatisticsQueryResponse,
+        EvDeleteStatisticsQueryResponse,
         EvLoadStatisticsQueryResponse,
 
-        EvScanTable,
-        EvScanTableResponse,
+        EvAnalyze,
+        EvAnalyzeResponse,
+        EvAnalyzeStatus,
+        EvAnalyzeStatusResponse,
+
+        EvAnalyzeTable,
+        EvAnalyzeTableResponse,
+
+        EvStatisticsRequest,
+        EvStatisticsResponse,
+
+        EvAggregateStatistics,
+        EvAggregateStatisticsResponse,
+        EvAggregateKeepAlive,
+        EvAggregateKeepAliveAck,
+
+        EvFinishTraversal,
 
         EvEnd
     };
+
+    struct TEvAggregateKeepAlive : public TEventPB<
+        TEvAggregateKeepAlive,
+        NKikimrStat::TEvAggregateKeepAlive,
+        EvAggregateKeepAlive>
+    {};
+
+    struct TEvAggregateKeepAliveAck : public TEventPB<
+        TEvAggregateKeepAliveAck,
+        NKikimrStat::TEvAggregateKeepAliveAck,
+        EvAggregateKeepAliveAck>
+    {};
+
+    struct TEvAggregateStatistics : public TEventPB<
+        TEvAggregateStatistics,
+        NKikimrStat::TEvAggregateStatistics,
+        EvAggregateStatistics>
+    {};
+
+    struct TEvAggregateStatisticsResponse : public TEventPB<
+        TEvAggregateStatisticsResponse,
+        NKikimrStat::TEvAggregateStatisticsResponse,
+        EvAggregateStatisticsResponse>
+    {};
 
     struct TEvGetStatistics : public TEventLocal<TEvGetStatistics, EvGetStatistics> {
         EStatType StatType;
@@ -81,7 +124,7 @@ struct TEvStatistics {
         bool Success = true;
         std::vector<TResponse> StatResponses;
     };
-    
+
     struct TEvConfigureAggregator : public TEventPB<
         TEvConfigureAggregator,
         NKikimrStat::TEvConfigureAggregator,
@@ -147,6 +190,9 @@ struct TEvStatistics {
         TEvSaveStatisticsQueryResponse,
         EvSaveStatisticsQueryResponse>
     {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+        TPathId PathId;
         bool Success = true;
     };
 
@@ -154,23 +200,68 @@ struct TEvStatistics {
         TEvLoadStatisticsQueryResponse,
         EvLoadStatisticsQueryResponse>
     {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
         bool Success = true;
-        ui64 Cookie = 0;
         std::optional<TString> Data;
     };
 
-    struct TEvScanTable : public TEventPB<
-        TEvScanTable,
-        NKikimrStat::TEvScanTable,
-        EvScanTable>
+    struct TEvDeleteStatisticsQueryResponse : public TEventLocal<
+        TEvDeleteStatisticsQueryResponse,
+        EvDeleteStatisticsQueryResponse>
+    {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+        bool Success = true;
+    };
+
+    struct TEvAnalyze : public TEventPB<
+        TEvAnalyze,
+        NKikimrStat::TEvAnalyze,
+        EvAnalyze>
     {};
 
-    struct TEvScanTableResponse : public TEventPB<
-        TEvScanTableResponse,
-        NKikimrStat::TEvScanTableResponse,
-        EvScanTableResponse>
+    struct TEvAnalyzeResponse : public TEventPB<
+        TEvAnalyzeResponse,
+        NKikimrStat::TEvAnalyzeResponse,
+        EvAnalyzeResponse>
     {};
 
+    struct TEvAnalyzeStatus : public TEventPB<
+        TEvAnalyzeStatus,
+        NKikimrStat::TEvAnalyzeStatus,
+        EvAnalyzeStatus>
+    {};
+
+    struct TEvAnalyzeStatusResponse : public TEventPB<
+        TEvAnalyzeStatusResponse,
+        NKikimrStat::TEvAnalyzeStatusResponse,
+        EvAnalyzeStatusResponse>
+    {};
+
+    struct TEvAnalyzeTable : public TEventPB<
+        TEvAnalyzeTable,
+        NKikimrStat::TEvAnalyzeTable,
+        EvAnalyzeTable>
+    {};
+
+    struct TEvAnalyzeTableResponse : public TEventPB<
+        TEvAnalyzeTableResponse,
+        NKikimrStat::TEvAnalyzeTableResponse,
+        EvAnalyzeTableResponse>
+    {};    
+
+    struct TEvStatisticsRequest : public TEventPB<
+        TEvStatisticsRequest,
+        NKikimrStat::TEvStatisticsRequest,
+        EvStatisticsRequest>
+    {};
+
+    struct TEvStatisticsResponse : public TEventPB<
+        TEvStatisticsResponse,
+        NKikimrStat::TEvStatisticsResponse,
+        EvStatisticsResponse>
+    {};
 };
 
 } // NStat

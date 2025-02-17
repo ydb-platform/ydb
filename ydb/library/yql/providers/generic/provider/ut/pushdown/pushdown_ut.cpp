@@ -3,24 +3,24 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 
-#include <ydb/library/yql/ast/yql_ast.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/core/services/yql_out_transformers.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
-#include <ydb/library/yql/sql/sql.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/result/provider/yql_result_provider.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -74,7 +74,7 @@ struct TFakeDatabaseResolver: public IDatabaseAsyncResolver {
 };
 
 struct TFakeGenericClient: public NConnector::IClient {
-    NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request) {
+    NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request, TDuration) override {
         UNIT_ASSERT_VALUES_EQUAL(request.table(), "test_table");
         NConnector::TResult<NConnector::NApi::TDescribeTableResponse> result;
         auto& resp = result.Response.emplace();
@@ -123,7 +123,7 @@ struct TFakeGenericClient: public NConnector::IClient {
         return NThreading::MakeFuture<NConnector::TDescribeTableAsyncResult::value_type>(std::move(result));
     }
 
-    NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request) {
+    NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request, TDuration) override {
         Y_UNUSED(request);
         try {
             throw std::runtime_error("ListSplits unimplemented");
@@ -132,7 +132,7 @@ struct TFakeGenericClient: public NConnector::IClient {
         }
     }
 
-    NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request) {
+    NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request, TDuration) override {
         Y_UNUSED(request);
         try {
             throw std::runtime_error("ReadSplits unimplemented");
@@ -162,7 +162,7 @@ public:
         UNIT_ASSERT(genericDataSource != Types->DataSourceMap.end());
         auto dqIntegration = genericDataSource->second->GetDqIntegration();
         UNIT_ASSERT(dqIntegration);
-        auto newRead = dqIntegration->WrapRead(TDqSettings(), input.Ptr(), ctx);
+        auto newRead = dqIntegration->WrapRead(input.Ptr(), ctx, IDqIntegration::TWrapReadSettings{});
         BuildSettings(newRead, dqIntegration, ctx);
         return newRead;
     }
@@ -180,7 +180,7 @@ public:
                 .Ptr();
         ::google::protobuf::Any settings;
         TString sourceType;
-        dqIntegration->FillSourceSettings(*dqSourceNode, settings, sourceType, 1);
+        dqIntegration->FillSourceSettings(*dqSourceNode, settings, sourceType, 1, ctx);
         UNIT_ASSERT_STRINGS_EQUAL(sourceType, "PostgreSqlGeneric");
         UNIT_ASSERT(settings.Is<Generic::TSource>());
         settings.UnpackTo(DqSourceSettings_);
@@ -230,13 +230,13 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
 
             auto* cluster = GatewaysCfg.MutableGeneric()->AddClusterMapping();
             cluster->SetName("test_cluster");
-            cluster->SetKind(NConnector::NApi::POSTGRESQL);
+            cluster->SetKind(NYql::EGenericDataSourceKind::POSTGRESQL);
             cluster->MutableEndpoint()->set_host("host");
             cluster->MutableEndpoint()->set_port(42);
             cluster->MutableCredentials()->mutable_basic()->set_username("user");
             cluster->MutableCredentials()->mutable_basic()->set_password("password");
             cluster->SetDatabaseName("database");
-            cluster->SetProtocol(NConnector::NApi::NATIVE);
+            cluster->SetProtocol(NYql::EGenericProtocol::NATIVE);
         }
 
         GenericState = MakeIntrusive<TGenericState>(
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
             R"ast(
                 (Coalesce
                     (!= (Member $row '"col_optional_uint64") (Member $row '"col_uint32"))
-                    (Bool '"true")
+                    (Bool '"false")
                 )
                 )ast",
             R"proto(
@@ -383,6 +383,46 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     }
                     right_value {
                         column: "col_uint32"
+                    }
+                }
+            )proto");
+    }
+
+    Y_UNIT_TEST(TrueCoalesce) {
+        AssertFilter(
+            // Note that R"ast()ast" is empty string!
+            R"ast(
+                (Coalesce
+                    (!= (Member $row '"col_optional_uint64") (Member $row '"col_uint32"))
+                    (Bool '"true")
+                )
+                )ast",
+            R"proto(
+                coalesce {
+                    operands {
+                        comparison {
+                            operation: NE
+                            left_value {
+                                column: "col_optional_uint64"
+                            }
+                            right_value {
+                                column: "col_uint32"
+                            }
+                        }
+                    }
+                    operands {
+                        bool_expression {
+                            value {
+                                typed_value {
+                                    type {
+                                        type_id: BOOL
+                                    }
+                                    value {
+                                        bool_value: true
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             )proto");
@@ -421,7 +461,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                         (< (Unwrap (/ (Int64 '42) (Member $row '"col_int64"))) (Int64 '10))
                         (>= (Member $row '"col_uint32") (- (Uint32 '15) (Uint32 '1)))
                     )
-                    (Bool '"true")
+                    (Bool '"false")
                 )
                 )ast",
             R"proto(
@@ -515,7 +555,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                         (< (Unwrap (/ (Int64 '42) (Member $row '"col_int64"))) (Int64 '10))
                         (>= (Member $row '"col_uint32") (Uint32 '15))
                     )
-                    (Bool '"true")
+                    (Bool '"false")
                 )
                 )ast",
             R"proto(
@@ -600,7 +640,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                         (Member $row '"col_utf8")
                         (Member $row '"col_optional_utf8")
                     )
-                    (Bool '"true")
+                    (Bool '"false")
                 )
                 )ast");
     }

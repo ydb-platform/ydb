@@ -5,22 +5,21 @@ import six
 from hashlib import md5
 
 import ymake
-from _common import stripext, rootrel_arc_src, listid, pathid, lazy, get_no_lint_value
+from _common import stripext, rootrel_arc_src, listid, pathid, lazy, get_no_lint_value, ugly_conftest_exception
 
 
-YA_IDE_VENV_VAR = 'YA_IDE_VENV'
 PY_NAMESPACE_PREFIX = 'py/namespace'
 BUILTIN_PROTO = 'builtin_proto'
 DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
 DEFAULT_BLACK_FILE_PROCESSING_TIME = "1.5"  # in seconds
 
 
-def _split_macro_call(macro_call, data, item_size, chunk_size=1024):
+def _split_macro_call(macro_call, data, item_size, chunk_size=1024, compress=False):
     index = 0
     length = len(data)
     offset = item_size * chunk_size
     while index + 1 < length:
-        macro_call(data[index : index + offset])
+        macro_call(([] if compress else ['DONT_COMPRESS']) + data[index : index + offset])
         index += offset
 
 
@@ -37,8 +36,8 @@ def is_extended_source_search_enabled(path, unit):
         return False
     if unit.get('NO_EXTENDED_SOURCE_SEARCH') == 'yes':
         return False
-    # contrib is unfriendly to extended source search
-    if unit.resolve_arc_path(path).startswith('$S/contrib/'):
+    # Python itself and contrib/python are unfriendly to extended source search
+    if unit.resolve_arc_path(path).startswith(('$S/contrib/python', '$S/contrib/tools/python3')):
         return False
     return True
 
@@ -169,9 +168,11 @@ def add_python_lint_checks(unit, py_ver, files):
             "travel/",
             "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12
             "passport/backend/oauth/",  # PASSP-35982
-            "testenv/",  # CI-3229
+            "sdg/sdc/contrib/",  # SDC contrib
+            "sdg/sdc/third_party/",  # SDC contrib
             "yt/yt/",  # YT-20053
             "yt/python/",  # YT-20053
+            "yt/python_py2/",
         )
 
         if not upath.startswith(no_lint_allowed_paths):
@@ -180,62 +181,9 @@ def add_python_lint_checks(unit, py_ver, files):
     if files and no_lint_value not in ("none", "none_internal"):
         resolved_files = get_resolved_files()
         if resolved_files:
-            flake8_cfg = 'build/config/tests/flake8/flake8.conf'
-            migrations_cfg = 'build/rules/flake8/migrations.yaml'
-            resource = "build/external_resources/flake8_py{}".format(py_ver)
-            lint_name = "py2_flake8" if py_ver == 2 else "flake8"
-            params = [lint_name, "tools/flake8_linter/flake8_linter"]
-            params += ["FILES"] + resolved_files
-            params += ["GLOBAL_RESOURCES", resource]
-            params += [
-                "FILE_PROCESSING_TIME",
-                unit.get("FLAKE8_FILE_PROCESSING_TIME") or DEFAULT_FLAKE8_FILE_PROCESSING_TIME,
-            ]
-
-            extra_params = []
-            if unit.get("DISABLE_FLAKE8_MIGRATIONS") == "yes":
-                extra_params.append("DISABLE_FLAKE8_MIGRATIONS=yes")
-                config_files = [flake8_cfg, '']
-            else:
-                config_files = [flake8_cfg, migrations_cfg]
-            params += ["CONFIGS"] + config_files
-
-            if extra_params:
-                params += ["EXTRA_PARAMS"] + extra_params
-            unit.on_add_linter_check(params)
-
-    # ruff related stuff
-    if unit.get('STYLE_RUFF_VALUE') == 'yes':
-        if no_lint_value in ("none", "none_internal"):
-            ymake.report_configure_error(
-                'NO_LINT() and STYLE_RUFF() can\'t be enabled both at the same time',
-            )
-
-        resolved_files = get_resolved_files()
-        if resolved_files:
-            resource = "build/external_resources/ruff"
-            params = ["ruff", "tools/ruff_linter/bin/ruff_linter"]
-            params += ["FILES"] + resolved_files
-            params += ["GLOBAL_RESOURCES", resource]
-            configs = [
-                rootrel_arc_src(unit.get('RUFF_CONFIG_PATHS_FILE'), unit),
-                'build/config/tests/ruff/ruff.toml',
-            ] + get_ruff_configs(unit)
-            params += ['CONFIGS'] + configs
-            unit.on_add_linter_check(params)
-
-    if files and unit.get('STYLE_PYTHON_VALUE') == 'yes' and is_py3(unit):
-        resolved_files = get_resolved_files()
-        if resolved_files:
-            black_cfg = unit.get('STYLE_PYTHON_PYPROJECT_VALUE') or 'build/config/tests/py_style/config.toml'
-            params = ['black', 'tools/black_linter/black_linter']
-            params += ['FILES'] + resolved_files
-            params += ['CONFIGS', black_cfg]
-            params += [
-                "FILE_PROCESSING_TIME",
-                unit.get("BLACK_FILE_PROCESSING_TIME") or DEFAULT_BLACK_FILE_PROCESSING_TIME,
-            ]
-            unit.on_add_linter_check(params)
+            # repeated PY_SRCS, TEST_SCRS+PY_SRCS
+            collected = json.loads(unit.get('PY_LINTER_FILES')) if unit.get('PY_LINTER_FILES') else []
+            unit.set(['PY_LINTER_FILES', json.dumps(resolved_files + collected)])
 
 
 def is_py3(unit):
@@ -259,6 +207,11 @@ def py_program(unit, py3):
         if unit.get('PYTHON_SQLITE3') != 'no':
             peers.append('contrib/tools/python/src/Modules/_sqlite')
     unit.onpeerdir(peers)
+
+    # DEVTOOLSSUPPORT-53161
+    if os.name == 'nt':
+        unit.onwindows_long_path_manifest()
+
     if unit.get('MODULE_TYPE') == 'PROGRAM':  # can not check DLL
         unit.onadd_check_py_imports()
 
@@ -297,7 +250,7 @@ def onpy_srcs(unit, *args):
     with_py = not unit.get('PYBUILD_NO_PY')
     with_pyc = not unit.get('PYBUILD_NO_PYC')
     in_proto_library = unit.get('PY_PROTO') or unit.get('PY3_PROTO')
-    venv = unit.get(YA_IDE_VENV_VAR)
+    external_py_files_mode = unit.get('EXTERNAL_PY_FILES') or unit.get('YA_IDE_VENV')
     need_gazetteer_peerdir = False
     trim = 0
 
@@ -552,10 +505,10 @@ def onpy_srcs(unit, *args):
         if py_files2res:
             # Compile original and generated sources into target for proper cython coverage calculation
             for files2res in (py_files2res, cpp_files2res):
-                unit.onresource_files([x for name, path in files2res for x in ('DEST', name, path)])
+                unit.onresource_files(['DONT_COMPRESS'] + [x for name, path in files2res for x in ('DEST', name, path)])
 
         if include_map:
-            data = []
+            data = ['DONT_COMPRESS']
             prefix = 'resfs/cython/include'
             for line in sorted(
                 '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files)))
@@ -586,10 +539,22 @@ def onpy_srcs(unit, *args):
 
         if py3:
             mod_list_md5 = md5()
+            compress = False
+            resfs_mocks = []
+
             for path, mod in pys:
                 mod_list_md5.update(six.ensure_binary(mod))
-                if not (venv and is_extended_source_search_enabled(path, unit)):
-                    dest = 'py/' + mod.replace('.', '/') + '.py'
+                dest = 'py/' + mod.replace('.', '/') + '.py'
+                # In external_py_files mode we want to build python binaries without embedded python files.
+                # The application will still be able to load them from the file system.
+                # However, the import hook still needs meta information about the file locations to work correctly.
+                # That's why we manually register the files in resfs/src/resfs/file, but don't provide any actual files.
+                # For more info see:
+                # - library/python/runtime_py3
+                # - https://docs.yandex-team.ru/ya-make/manual/python/vars
+                if external_py_files_mode and is_extended_source_search_enabled(path, unit):
+                    resfs_mocks += ['-', 'resfs/src/resfs/file/' + dest + '=' + rootrel_arc_src(path, unit)]
+                else:
                     if with_py:
                         res += ['DEST', dest, path]
                     if with_pyc:
@@ -597,17 +562,24 @@ def onpy_srcs(unit, *args):
                         dst = path + uniq_suffix(path, unit)
                         unit.on_py3_compile_bytecode([root_rel_path + '-', path, dst])
                         res += ['DEST', dest + '.yapyc3', dst + '.yapyc3']
+                    if not compress and ugly_conftest_exception(path):
+                        compress = True
+
+            if resfs_mocks:
+                unit.onresource(['DONT_COMPRESS'] + resfs_mocks)
 
             if py_namespaces:
                 # Note: Add md5 to key to prevent key collision if two or more PY_SRCS() used in the same ya.make
-                ns_res = []
+                ns_res = ['DONT_COMPRESS']
                 for path, ns in sorted(py_namespaces.items()):
                     key = '{}/{}/{}'.format(PY_NAMESPACE_PREFIX, mod_list_md5.hexdigest(), path)
                     namespaces = ':'.join(sorted(ns))
                     ns_res += ['-', '{}="{}"'.format(key, namespaces)]
                 unit.onresource(ns_res)
 
-            _split_macro_call(unit.onresource_files, res, (3 if with_py else 0) + (3 if with_pyc else 0))
+            _split_macro_call(
+                unit.onresource_files, res, (3 if with_py else 0) + (3 if with_pyc else 0), compress=compress
+            )
             add_python_lint_checks(
                 unit, 3, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()
             )
@@ -616,12 +588,7 @@ def onpy_srcs(unit, *args):
                 root_rel_path = rootrel_arc_src(path, unit)
                 if with_py:
                     key = '/py_modules/' + mod
-                    res += [
-                        path,
-                        key,
-                        '-',
-                        'resfs/src/{}={}'.format(key, root_rel_path),
-                    ]
+                    res += [path, key, '-', 'resfs/src/{}=${{rootrel;input;context=TEXT:"{}"}}'.format(key, path)]
                 if with_pyc:
                     src = unit.resolve_arc_path(path) or path
                     dst = path + uniq_suffix(path, unit)
@@ -640,7 +607,7 @@ def onpy_srcs(unit, *args):
             pyis_dups = ', '.join(name for name in sorted(pyis_dups))
             ymake.report_configure_error('Duplicate(s) is found in the PY_SRCS macro: {}'.format(pyis_dups))
 
-        res = []
+        res = ['DONT_COMPRESS']
         for path, mod in pyis:
             dest = 'py/' + mod.replace('.', '/') + '.pyi'
             res += ['DEST', dest, path]
@@ -705,7 +672,11 @@ def _check_test_srcs(*args):
 def ontest_srcs(unit, *args):
     _check_test_srcs(*args)
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
-        unit.onpy_srcs(["NAMESPACE", "__tests__"] + list(args))
+        namespace = "__tests__"
+        # Avoid collision on test modules in venv mode
+        if unit.get('YA_IDE_VENV'):
+            namespace += "." + unit.path()[3:].replace('/', '.')
+        unit.onpy_srcs(["NAMESPACE", namespace] + list(args))
 
 
 def onpy_doctests(unit, *args):
@@ -716,7 +687,7 @@ def onpy_doctests(unit, *args):
     The packages should be part of a test (listed as sources of the test or its PEERDIRs).
     """
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
-        unit.onresource(['-', 'PY_DOCTEST_PACKAGES="{}"'.format(' '.join(args))])
+        unit.onresource(['DONT_COMPRESS', '-', 'PY_DOCTEST_PACKAGES="{}"'.format(' '.join(args))])
 
 
 def py_register(unit, func, py3):
@@ -761,7 +732,7 @@ def py_main(unit, arg):
     unit_needs_main = unit.get('MODULE_TYPE') in ('PROGRAM', 'DLL')
     if unit_needs_main:
         py_program(unit, is_py3(unit))
-    unit.onresource(['-', 'PY_MAIN={}'.format(arg)])
+    unit.onresource(['DONT_COMPRESS', '-', 'PY_MAIN={}'.format(arg)])
 
 
 def onpy_main(unit, arg):
@@ -793,7 +764,7 @@ def onpy_constructor(unit, arg):
         arg = arg + '=init'
     else:
         arg[arg.index(':')] = '='
-    unit.onresource(['-', 'py/constructors/{}'.format(arg)])
+    unit.onresource(['DONT_COMPRESS', '-', 'py/constructors/{}'.format(arg)])
 
 
 def onpy_enums_serialization(unit, *args):

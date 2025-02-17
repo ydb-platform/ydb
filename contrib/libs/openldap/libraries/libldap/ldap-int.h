@@ -2,7 +2,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2022 The OpenLDAP Foundation.
+ * Copyright 1998-2024 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -368,6 +368,7 @@ typedef struct ldap_conn {
 #define LDAP_CONNST_NEEDSOCKET		1
 #define LDAP_CONNST_CONNECTING		2
 #define LDAP_CONNST_CONNECTED		3
+#define LDAP_CONNST_TLS_INPROGRESS	4
 	LDAPURLDesc		*lconn_server;
 	BerElement		*lconn_ber;	/* ber receiving on this conn. */
 

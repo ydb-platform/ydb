@@ -1,0 +1,85 @@
+--- a/cpp/src/arrow/array/builder_binary.h
++++ b/cpp/src/arrow/array/builder_binary.h
+@@ -53,7 +53,7 @@ class BaseBinaryBuilder : public ArrayBuilder {
+   explicit BaseBinaryBuilder(MemoryPool* pool = default_memory_pool())
+       : ArrayBuilder(pool), offsets_builder_(pool), value_data_builder_(pool) {}
+ 
+-  BaseBinaryBuilder(const std::shared_ptr<DataType>& type, MemoryPool* pool)
++  BaseBinaryBuilder(const std::shared_ptr<DataType>& /*type*/, MemoryPool* pool)
+       : BaseBinaryBuilder(pool) {}
+ 
+   Status Append(const uint8_t* value, offset_type length) {
+--- a/cpp/src/arrow/array/builder_dict.h
++++ b/cpp/src/arrow/array/builder_dict.h
+@@ -400,11 +400,11 @@ class DictionaryBuilderBase<BuilderType, NullType> : public ArrayBuilder {
+   DictionaryBuilderBase(
+       enable_if_t<std::is_base_of<AdaptiveIntBuilderBase, B>::value, uint8_t>
+           start_int_size,
+-      const std::shared_ptr<DataType>& value_type,
++      const std::shared_ptr<DataType>& /*value_type*/,
+       MemoryPool* pool = default_memory_pool())
+       : ArrayBuilder(pool), indices_builder_(start_int_size, pool) {}
+ 
+-  explicit DictionaryBuilderBase(const std::shared_ptr<DataType>& value_type,
++  explicit DictionaryBuilderBase(const std::shared_ptr<DataType>& /*value_type*/,
+                                  MemoryPool* pool = default_memory_pool())
+       : ArrayBuilder(pool), indices_builder_(pool) {}
+ 
+@@ -418,7 +418,7 @@ class DictionaryBuilderBase<BuilderType, NullType> : public ArrayBuilder {
+   explicit DictionaryBuilderBase(MemoryPool* pool = default_memory_pool())
+       : ArrayBuilder(pool), indices_builder_(pool) {}
+ 
+-  explicit DictionaryBuilderBase(const std::shared_ptr<Array>& dictionary,
++  explicit DictionaryBuilderBase(const std::shared_ptr<Array>& /*dictionary*/,
+                                  MemoryPool* pool = default_memory_pool())
+       : ArrayBuilder(pool), indices_builder_(pool) {}
+ 
+--- a/cpp/src/arrow/array/builder_primitive.h
++++ b/cpp/src/arrow/array/builder_primitive.h
+@@ -31,7 +31,7 @@ namespace arrow {
+ class ARROW_EXPORT NullBuilder : public ArrayBuilder {
+  public:
+   explicit NullBuilder(MemoryPool* pool = default_memory_pool()) : ArrayBuilder(pool) {}
+-  explicit NullBuilder(const std::shared_ptr<DataType>& type,
++  explicit NullBuilder(const std::shared_ptr<DataType>& /*type*/,
+                        MemoryPool* pool = default_memory_pool())
+       : NullBuilder(pool) {}
+ 
+--- a/cpp/src/arrow/util/mutex.h
++++ b/cpp/src/arrow/util/mutex.h
+@@ -37,7 +37,7 @@ class ARROW_EXPORT Mutex {
+   /// A Guard is falsy if a lock could not be acquired.
+   class ARROW_EXPORT Guard {
+    public:
+-    Guard() : locked_(NULLPTR, [](Mutex* mutex) {}) {}
++    Guard() : locked_(NULLPTR, [](Mutex* /* mutex */) {}) {}
+     Guard(Guard&&) = default;
+     Guard& operator=(Guard&&) = default;
+ 
+--- a/cpp/src/arrow/util/variant.h
++++ b/cpp/src/arrow/util/variant.h
+@@ -144,11 +144,11 @@ struct VariantImpl<Variant<T...>> : VariantStorage<T...> {
+   void copy_to(...) const {}
+ 
+   template <typename R, typename Visitor>
+-  [[noreturn]] R visit_const(Visitor&& visitor) const {
++  [[noreturn]] R visit_const(Visitor&& /* visitor */) const {
+     std::terminate();
+   }
+   template <typename R, typename Visitor>
+-  [[noreturn]] R visit_mutable(Visitor&& visitor) {
++  [[noreturn]] R visit_mutable(Visitor&& /* visitor */) {
+     std::terminate();
+   }
+ };
+--- a/cpp/src/arrow/util/value_parsing.h
++++ b/cpp/src/arrow/util/value_parsing.h
+@@ -717,7 +717,7 @@ struct StringConverter<DATE_TYPE, enable_if_date<DATE_TYPE>> {
+                                 arrow_vendored::date::days,
+                                 std::chrono::milliseconds>::type;
+
+-  static bool Convert(const DATE_TYPE& type, const char* s, size_t length,
++  static bool Convert(const DATE_TYPE& /* type */, const char* s, size_t length,
+                       value_type* out) {
+     if (length != 10) return false;
+

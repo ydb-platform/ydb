@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.7.6)
+VERSION(0.8.10)
 
 LICENSE(Apache-2.0)
 
@@ -21,6 +21,10 @@ ADDINCL(
 NO_COMPILER_WARNINGS()
 
 NO_LINT()
+
+NO_CHECK_IMPORTS(
+    clickhouse_connect.cc_sqlalchemy.*
+)
 
 PY_SRCS(
     TOP_LEVEL
@@ -42,9 +46,12 @@ PY_SRCS(
     clickhouse_connect/datatypes/__init__.py
     clickhouse_connect/datatypes/base.py
     clickhouse_connect/datatypes/container.py
+    clickhouse_connect/datatypes/dynamic.py
     clickhouse_connect/datatypes/format.py
+    clickhouse_connect/datatypes/geometric.py
     clickhouse_connect/datatypes/network.py
     clickhouse_connect/datatypes/numeric.py
+    clickhouse_connect/datatypes/postinit.py
     clickhouse_connect/datatypes/registry.py
     clickhouse_connect/datatypes/special.py
     clickhouse_connect/datatypes/string.py
@@ -53,6 +60,8 @@ PY_SRCS(
     clickhouse_connect/dbapi/connection.py
     clickhouse_connect/dbapi/cursor.py
     clickhouse_connect/driver/__init__.py
+    clickhouse_connect/driver/asyncclient.py
+    clickhouse_connect/driver/binding.py
     clickhouse_connect/driver/buffer.py
     clickhouse_connect/driver/client.py
     clickhouse_connect/driver/common.py
@@ -78,6 +87,7 @@ PY_SRCS(
     clickhouse_connect/driver/tools.py
     clickhouse_connect/driver/transform.py
     clickhouse_connect/driver/types.py
+    clickhouse_connect/driver/tzutil.py
     clickhouse_connect/driverc/__init__.py
     clickhouse_connect/entry_points.py
     clickhouse_connect/json_impl.py

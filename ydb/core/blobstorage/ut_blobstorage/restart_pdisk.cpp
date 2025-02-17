@@ -35,6 +35,7 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
             auto& diskId =  it->first;
 
             NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreDegradedGroupsChecks(true);
 
             NKikimrBlobStorage::TRestartPDisk* cmd = request.AddCommand()->MutableRestartPDisk();
             auto pdiskId = cmd->MutableTargetPDiskId();
@@ -50,10 +51,117 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
                 // Restarting third disk will not be allowed.
                 UNIT_ASSERT_C(!response.GetSuccess(), "Restart should've been prohibited");
 
-                UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "ExpectedStatus# DISINTEGRATED");
+                UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "Disintegrated");
                 break;
             }
         }
+    }
+
+    auto GetGroupVDisks(TEnvironmentSetup& env) {
+        struct TVDisk {
+            ui32 NodeId;
+            ui32 PDiskId;
+            ui32 VSlotId;
+            TVDiskID VDiskId;
+        };
+
+        std::vector<TVDisk> vdisks;
+
+        auto config = env.FetchBaseConfig();
+
+        auto& group = config.get_idx_group(0);
+        
+        for (auto& vslot : config.GetVSlot()) {
+            if (group.GetGroupId() == vslot.GetGroupId()) {
+                auto slotId = vslot.GetVSlotId();
+                auto nodeId = slotId.GetNodeId();
+                auto pdiskId = slotId.GetPDiskId();
+                auto vdiskId = TVDiskID(group.GetGroupId(), group.GetGroupGeneration(), vslot.GetFailRealmIdx(), vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
+                vdisks.push_back({nodeId, pdiskId, slotId.GetVSlotId(), vdiskId});
+            }
+        }
+
+        return vdisks;
+    }
+
+    Y_UNIT_TEST(RestartBrokenDiskInBrokenGroup) {
+        TEnvironmentSetup env({
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+        });
+
+        env.UpdateSettings(false, false);
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+
+        auto vdisks = GetGroupVDisks(env);
+
+        // Making all vdisks bad, group is disintegrated
+        const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        for (auto& pdisk : env.PDiskActors) {
+            env.Runtime->WrapInActorContext(sender, [&] () {
+                env.Runtime->Send(new IEventHandle(EvBecomeError, 0, pdisk, sender, nullptr, 0));
+            });
+        }
+
+        env.Sim(TDuration::Minutes(1));
+
+        // Restarting the owner of an already broken disk in a broken group must be allowed
+        auto& [targetNodeId, targetPDiskId, unused1, unused2] = vdisks[0];
+
+        NKikimrBlobStorage::TConfigRequest request;
+
+        NKikimrBlobStorage::TRestartPDisk* cmd = request.AddCommand()->MutableRestartPDisk();
+        auto pdiskId = cmd->MutableTargetPDiskId();
+        pdiskId->SetNodeId(targetNodeId);
+        pdiskId->SetPDiskId(targetPDiskId);
+
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    Y_UNIT_TEST(RestartGoodDiskInBrokenGroupNotAllowed) {
+        TEnvironmentSetup env({
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+        });
+
+        env.UpdateSettings(false, false);
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+    
+        // Making all but one vdisks bad, group is disintegrated
+        const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        for (size_t i = 0; i < env.PDiskActors.size() - 1; i++) {
+            env.Runtime->WrapInActorContext(sender, [&] () {
+                env.Runtime->Send(new IEventHandle(EvBecomeError, 0, env.PDiskActors[i], sender, nullptr, 0));
+            });
+        }
+
+        env.Sim(TDuration::Minutes(1));
+
+        ui32 targetNodeId = 0;
+        ui32 targetPDiskId = 0;
+
+        for (auto& [k, v] : env.PDiskMockStates) {
+            if (v.Get()->GetStateErrorReason().empty()) {
+                targetNodeId = k.first;
+                targetPDiskId = k.second;
+            }
+        }
+
+        // However restarting the owner of a single good disk must be prohibited
+        NKikimrBlobStorage::TConfigRequest request;
+
+        NKikimrBlobStorage::TRestartPDisk* cmd = request.AddCommand()->MutableRestartPDisk();
+        auto pdiskId = cmd->MutableTargetPDiskId();
+        pdiskId->SetNodeId(targetNodeId);
+        pdiskId->SetPDiskId(targetPDiskId);
+
+        auto response = env.Invoke(request);
+
+        UNIT_ASSERT_C(!response.GetSuccess(), "Restart should've been prohibited");
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "Disintegrated");
     }
 
     Y_UNIT_TEST(RestartOneByOne) {
@@ -181,7 +289,7 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
                     if (serviceSetUpdate) {
                         const auto &pdisks = serviceSetUpdate->Record.GetServiceSet().GetPDisks();
                         const auto &pdisk = pdisks[0];
-                        UNIT_ASSERT(pdisk.GetEntityStatus() == NKikimrBlobStorage::RESTART);
+                        UNIT_ASSERT_EQUAL(NKikimrBlobStorage::RESTART, pdisk.GetEntityStatus());
                         gotServiceSetUpdate = true;
                     }
                 }

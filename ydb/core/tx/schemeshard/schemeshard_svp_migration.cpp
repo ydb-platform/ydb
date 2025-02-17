@@ -66,6 +66,9 @@ private:
         if (Current.CreateSA) {
             modifySubDomain.SetExternalStatisticsAggregator(true);
         }
+        if (Current.CreateBCT) {
+            modifySubDomain.SetExternalBackupController(true);
+        }
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TabletMigrator - send TEvModifySchemeTransaction"

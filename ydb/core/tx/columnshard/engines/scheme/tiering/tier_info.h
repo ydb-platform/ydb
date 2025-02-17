@@ -1,19 +1,23 @@
 #pragma once
 #include "common.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
+#include <ydb/core/tx/tiering/tier/identifier.h>
+
+#include <ydb/library/formats/arrow/common/validation.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
-#include <util/generic/set.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/set.h>
 
 namespace NKikimr::NOlap {
 
 class TTierInfo {
 private:
-    YDB_READONLY_DEF(TString, Name);
+    YDB_READONLY_DEF(std::optional<NColumnShard::NTiers::TExternalStorageId>, ExternalStorageId);
     YDB_READONLY_DEF(TString, EvictColumnName);
     YDB_READONLY_DEF(TDuration, EvictDuration);
 
@@ -24,13 +28,12 @@ public:
         return NTiering::NCommon::DeleteTierName;
     }
 
-    TTierInfo(const TString& tierName, TDuration evictDuration, const TString& column, ui32 unitsInSecond = 0)
-        : Name(tierName)
+    TTierInfo(const std::optional<NColumnShard::NTiers::TExternalStorageId>& storage, TDuration evictDuration, const TString& column,
+        ui32 unitsInSecond = 0)
+        : ExternalStorageId(storage)
         , EvictColumnName(column)
         , EvictDuration(evictDuration)
-        , TtlUnitsInSecond(unitsInSecond)
-    {
-        Y_ABORT_UNLESS(!!Name);
+        , TtlUnitsInSecond(unitsInSecond) {
         Y_ABORT_UNLESS(!!EvictColumnName);
     }
 
@@ -50,12 +53,28 @@ public:
     std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar) const;
 
     static std::shared_ptr<TTierInfo> MakeTtl(const TDuration evictDuration, const TString& ttlColumn, ui32 unitsInSecond = 0) {
-        return std::make_shared<TTierInfo>(NTiering::NCommon::DeleteTierName, evictDuration, ttlColumn, unitsInSecond);
+        return std::make_shared<TTierInfo>(std::nullopt, evictDuration, ttlColumn, unitsInSecond);
+    }
+
+    static ui32 GetUnitsInSecond(const NKikimrSchemeOp::TTTLSettings::EUnit timeUnit) {
+        switch (timeUnit) {
+            case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
+                return 1;
+            case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
+                return 1000;
+            case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
+                return 1000 * 1000;
+            case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
+                return 1000 * 1000 * 1000;
+            case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO:
+                return 0;
+        }
     }
 
     TString GetDebugString() const {
         TStringBuilder sb;
-        sb << "name=" << Name << ";duration=" << EvictDuration << ";column=" << EvictColumnName << ";serializer=";
+        sb << "storage=" << (ExternalStorageId ? ExternalStorageId->GetConfigPath() : NTiering::NCommon::DeleteTierName)
+           << ";duration=" << EvictDuration << ";column=" << EvictColumnName << ";serializer=";
         if (Serializer) {
             sb << Serializer->DebugString();
         } else {
@@ -78,19 +97,19 @@ public:
         if (Info->GetEvictDuration() > b.Info->GetEvictDuration()) {
             return true;
         } else if (Info->GetEvictDuration() == b.Info->GetEvictDuration()) {
-            if (Info->GetName() == NTiering::NCommon::DeleteTierName) {
+            if (!Info->GetExternalStorageId()) {
                 return true;
-            } else if (b.Info->GetName() == NTiering::NCommon::DeleteTierName) {
+            } else if (!b.Info->GetExternalStorageId()) {
                 return false;
             }
-            return Info->GetName() > b.Info->GetName(); // add stability: smaller name is hotter
+            return *Info->GetExternalStorageId() > *b.Info->GetExternalStorageId();   // add stability: smaller name is hotter
         }
         return false;
     }
 
     bool operator == (const TTierRef& b) const {
         return Info->GetEvictDuration() == b.Info->GetEvictDuration()
-            && Info->GetName() == b.Info->GetName();
+            && Info->GetExternalStorageId() == b.Info->GetExternalStorageId();
     }
 
     const TTierInfo& Get() const {
@@ -106,10 +125,10 @@ private:
 };
 
 class TTiering {
-    using TTiersMap = THashMap<TString, std::shared_ptr<TTierInfo>>;
-    TTiersMap TierByName;
+    using TProto = NKikimrSchemeOp::TColumnDataLifeCycle::TTtl;
+    using TTiersMap = THashMap<NColumnShard::NTiers::TExternalStorageId, std::shared_ptr<TTierInfo>>;
     TSet<TTierRef> OrderedTiers;
-    TString TTLColumnName;
+    std::optional<TString> TTLColumnName;
 public:
 
     class TTieringContext {
@@ -149,19 +168,7 @@ public:
         }
     };
 
-    TTieringContext GetTierToMove(const std::shared_ptr<arrow::Scalar>& max, const TInstant now) const;
-
-    const TTiersMap& GetTierByName() const {
-        return TierByName;
-    }
-
-    std::shared_ptr<TTierInfo> GetTierByName(const TString& name) const {
-        auto it = TierByName.find(name);
-        if (it == TierByName.end()) {
-            return nullptr;
-        }
-        return it->second;
-    }
+    TTieringContext GetTierToMove(const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction) const;
 
     const TSet<TTierRef>& GetOrderedTiers() const {
         return OrderedTiers;
@@ -174,41 +181,94 @@ public:
     [[nodiscard]] bool Add(const std::shared_ptr<TTierInfo>& tier) {
         AFL_VERIFY(tier);
         if (!TTLColumnName) {
+            if (tier->GetEvictColumnName().empty()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "empty_evict_column_name");
+                return false;
+            }
             TTLColumnName = tier->GetEvictColumnName();
-        } else if (TTLColumnName != tier->GetEvictColumnName()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect_tiering_metadata")("column_before", TTLColumnName)("column_new", tier->GetEvictColumnName());
+        } else if (*TTLColumnName != tier->GetEvictColumnName()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect_tiering_metadata")("column_before", *TTLColumnName)
+                ("column_new", tier->GetEvictColumnName());
             return false;
         }
 
-        TierByName.emplace(tier->GetName(), tier);
         OrderedTiers.emplace(tier);
         return true;
     }
 
-    std::optional<NArrow::NSerialization::TSerializerContainer> GetSerializer(const TString& name) const {
-        auto it = TierByName.find(name);
-        if (it != TierByName.end()) {
-            Y_ABORT_UNLESS(!name.empty());
-            return it->second->GetSerializer();
+    TConclusionStatus DeserializeFromProto(const TProto& serialized) {
+        if (serialized.HasExpireAfterBytes()) {
+            return TConclusionStatus::Fail("TTL by size is not supported.");
         }
-        return {};
-    }
+        if (!serialized.HasColumnName()) {
+            return TConclusionStatus::Fail("Missing column name in TTL settings");
+        }
 
-    const TString& GetTtlColumn() const {
-        AFL_VERIFY(TTLColumnName);
-        return TTLColumnName;
+        const TString ttlColumnName = serialized.GetColumnName();
+        const ui32 unitsInSecond = TTierInfo::GetUnitsInSecond(serialized.GetColumnUnit());
+
+        if (!serialized.TiersSize()) {
+            // legacy schema
+            if (!Add(TTierInfo::MakeTtl(TDuration::Seconds(serialized.GetExpireAfterSeconds()), ttlColumnName, unitsInSecond))) {
+                return TConclusionStatus::Fail("Invalid ttl settings");
+            }
+        }
+        for (const auto& tier : serialized.GetTiers()) {
+            if (!tier.HasApplyAfterSeconds()) {
+                return TConclusionStatus::Fail("Missing eviction delay in tier description");
+            }
+            std::shared_ptr<TTierInfo> tierInfo;
+            switch (tier.GetActionCase()) {
+                case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
+                    tierInfo = TTierInfo::MakeTtl(TDuration::Seconds(tier.GetApplyAfterSeconds()), ttlColumnName, unitsInSecond);
+                    break;
+                case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
+                    tierInfo = std::make_shared<TTierInfo>(CanonizePath(tier.GetEvictToExternalStorage().GetStorage()),
+                        TDuration::Seconds(tier.GetApplyAfterSeconds()), ttlColumnName, unitsInSecond);
+                    break;
+                case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
+                    return TConclusionStatus::Fail("No action in tier");
+            }
+            if (!Add(tierInfo)) {
+                return TConclusionStatus::Fail("Invalid tier settings");
+            }
+        }
+        return TConclusionStatus::Success();
     }
 
     const TString& GetEvictColumnName() const {
-        return TTLColumnName;
+        AFL_VERIFY(TTLColumnName);
+        return *TTLColumnName;
     }
 
     TString GetDebugString() const {
         TStringBuilder sb;
+        sb << "[";
         for (auto&& i : OrderedTiers) {
             sb << i.Get().GetDebugString() << "; ";
         }
+        sb << "]";
         return sb;
+    }
+
+    THashSet<NColumnShard::NTiers::TExternalStorageId> GetUsedTiers() const {
+        THashSet<NColumnShard::NTiers::TExternalStorageId> tiers;
+        for (const auto& tier : OrderedTiers) {
+            if (const auto& storageId = tier.Get().GetExternalStorageId()) {
+                tiers.emplace(*storageId);
+            }
+        }
+        return tiers;
+    }
+
+    static THashSet<NColumnShard::NTiers::TExternalStorageId> GetUsedTiers(const TProto& ttlSettings) {
+        THashSet<NColumnShard::NTiers::TExternalStorageId> usedTiers;
+        for (const auto& tier : ttlSettings.GetTiers()) {
+            if (tier.HasEvictToExternalStorage()) {
+                usedTiers.emplace(CanonizePath(tier.GetEvictToExternalStorage().GetStorage()));
+            }
+        }
+        return usedTiers;
     }
 };
 

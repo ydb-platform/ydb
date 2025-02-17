@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(ApproxMatchingTest) {
 			text += ystring(3, letter + 'a');
 		}
 		const ystring regexp = "^" + text + "$";
-		auto fsm = BuildFsm(regexp.Data());
+		auto fsm = BuildFsm(regexp.data());
 
 		APPROXIMATE_SCANNER(fsm, 1) {
 			ACCEPTS(text);
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(ApproxMatchingTest) {
 			text += ystring(1, (letter % 26) + 'a');
 		}
 		const ystring regexp = "^" + text + "$";
-		auto fsm = BuildFsm(regexp.Data());
+		auto fsm = BuildFsm(regexp.data());
 		auto changedText = text;
 
 		APPROXIMATE_SCANNER(fsm, 1) {

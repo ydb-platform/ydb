@@ -144,6 +144,7 @@ TFollowerTabletInfo& TLeaderTabletInfo::AddFollower(TFollowerGroup& followerGrou
     } else {
         follower.Id = followerId;
     }
+    follower.NodeFilter = followerGroup.NodeFilter;
     Hive.UpdateCounterTabletsTotal(+1);
     Hive.UpdateDomainTabletsTotal(ObjectDomain, +1);
     return follower;
@@ -200,8 +201,11 @@ TActorId TLeaderTabletInfo::SetLockedToActor(const TActorId& actor, const TDurat
 }
 
 void TLeaderTabletInfo::AcquireAllocationUnits() {
-    for (ui32 channel = 0; channel < TabletStorageInfo->Channels.size(); ++channel) {
-        AcquireAllocationUnit(channel);
+    for (const auto& channel : TabletStorageInfo->Channels) {
+        if (!channel.History.empty()) {
+            TStoragePoolInfo& storagePool = Hive.GetStoragePool(channel.StoragePool);
+            storagePool.AcquireAllocationUnit(this, channel.Channel, channel.History.back().GroupID);
+        }
     }
 }
 
@@ -364,6 +368,26 @@ void TLeaderTabletInfo::ActualizeTabletStatistics(TInstant now) {
     TTabletInfo::ActualizeTabletStatistics(now);
     for (TTabletInfo& follower : Followers) {
         follower.ActualizeTabletStatistics(now);
+    }
+}
+
+void TLeaderTabletInfo::RestoreDeletedHistory(TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+    while (!DeletedHistory.empty()) {
+        const auto& entry = DeletedHistory.front();
+        if (entry.Channel >= TabletStorageInfo->Channels.size()) {
+            continue;
+        }
+        TabletStorageInfo->Channels[entry.Channel].History.push_back(entry.Entry);
+        db.Table<Schema::TabletChannelGen>().Key(Id, entry.Channel, entry.Entry.FromGeneration).Update<Schema::TabletChannelGen::DeletedAtGeneration>(0);
+        DeletedHistory.pop();
+    }
+
+    for (auto& channel : TabletStorageInfo->Channels) {
+        using TEntry = decltype(channel.History)::value_type;
+        std::sort(channel.History.begin(), channel.History.end(), [] (const TEntry& lhs, const TEntry& rhs) {
+            return lhs.FromGeneration < rhs.FromGeneration;
+        });
     }
 }
 

@@ -198,7 +198,7 @@ namespace NMonitoring {
                 if (Style_ != EJsonStyle::Cloud) {
                     return;
                 }
-                if (CurrentMetricName_.Empty()) {
+                if (CurrentMetricName_.empty()) {
                     ythrow yexception() << "label '" << MetricNameLabel_ << "' is not defined";
                 }
                 Buf_.WriteKey("name");

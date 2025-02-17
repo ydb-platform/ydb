@@ -33,6 +33,15 @@ message TDqPqTopicSource {
     string DatabaseId = 9;
     repeated string MetadataFields = 10;
     TWatermarks Watermarks = 11;
+    repeated string Columns = 12;
+    repeated string ColumnTypes = 13;
+    string Predicate = 14;
+    bool SharedReading = 15;
+    string ReconnectPeriod = 16; // disabled by default, example of a parameter: 5m
+    bool EnabledLLVM = 17;
+    string ReadGroup = 18;
+    string Format = 19;
+    string RowType = 20; // Final row type with metadata columns
 }
 
 message TDqPqTopicSink {

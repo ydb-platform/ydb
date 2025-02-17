@@ -8,14 +8,25 @@
 #define BOOST_LOCALE_ICU_CDATA_HPP
 
 #include <boost/locale/config.hpp>
+#include <boost/locale/util/locale_data.hpp>
 #include <string>
 #include <unicode/locid.h>
 
 namespace boost { namespace locale { namespace impl_icu {
-    struct cdata {
-        icu::Locale locale;
-        std::string encoding;
-        bool utf8;
+    class cdata : util::locale_data {
+        icu::Locale locale_;
+
+    public:
+        cdata() = default;
+        void set(const std::string& id)
+        {
+            parse(id);
+            locale_ = icu::Locale::createCanonical(id.c_str());
+        }
+        const util::locale_data& data() { return *this; }
+        const icu::Locale& locale() const { return locale_; }
+        using locale_data::encoding;
+        using locale_data::is_utf8;
     };
 }}} // namespace boost::locale::impl_icu
 

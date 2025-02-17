@@ -1,0 +1,78 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 007553098113444e1e00e59675c01cee
+BELONGS ya.make
+    License text:
+        Copyright &copy; 2011&ndash;2015 Lua.org, PUC-Rio.
+        Freely available under the terms of the
+        <A HREF="http://www.lua.org/license.html">Lua license</A>.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lua-5.2.0/doc/contents.html [35:37]
+        lua-5.2.0/doc/manual.html [22:24]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 312ad4b3ae7f760a56461d89d79fd055
+BELONGS ya.make
+    License text:
+        * Copyright (C) 1994-2015 Lua.org, PUC-Rio.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lua-5.2.0/src/lua.h [421:421]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 41665b2fb4b1bfe0a48eb1a6bc19e373
+BELONGS ya.make
+    License text:
+        Copyright &copy; 1994&ndash;2015 Lua.org, PUC-Rio.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lua-5.2.0/doc/readme.html [382:382]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f10a3be3a71fa74bd86e270d2efd74bf
+BELONGS ya.make
+    License text:
+        \#define LUA_COPYRIGHT	LUA_RELEASE "  Copyright (C) 1994-2015 Lua.org, PUC-Rio"
+        \#define LUA_AUTHORS	"R. Ierusalimschy, L. H. de Figueiredo, W. Celes"
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lua-5.2.0/src/lua.h [26:27]

@@ -15,9 +15,9 @@
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/client/ydb_extension/extension.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 constexpr TDuration GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY = TDuration::Seconds(10);
 constexpr TDuration INITIAL_DEFERRED_CALL_DELAY = TDuration::MilliSeconds(10); // The delay before first deferred service call
@@ -209,7 +209,7 @@ public:
                     SetDatabaseHeader(meta, dbState->Database);
                 }
 
-                static const TStringType clientPid = GetClientPIDHeaderValue();
+                static const std::string clientPid = GetClientPIDHeaderValue();
 
                 meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
                 meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
@@ -538,6 +538,12 @@ public:
                 if (!dbState->Database.empty()) {
                     SetDatabaseHeader(meta, dbState->Database);
                 }
+
+                static const std::string clientPid = GetClientPIDHeaderValue();
+
+                meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
+                meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
+                meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
 
                 dbState->StatCollector.IncGRpcInFlight();
                 dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());

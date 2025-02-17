@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/iterator.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
@@ -12,11 +13,15 @@ class TStatScannerConstructor: public IScannerConstructor {
 private:
     using TBase = IScannerConstructor;
 
+    virtual std::shared_ptr<IScanCursor> DoBuildCursor() const override {
+        return nullptr;
+    }
+
     virtual std::shared_ptr<NAbstract::TReadStatsMetadata> BuildMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const = 0;
 
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const override {
         THashSet<ui32> readColumnIds(read.ColumnIds.begin(), read.ColumnIds.end());
-        for (auto& [id, name] : read.GetProgram().GetSourceColumns()) {
+        for (auto& id : read.GetProgram().GetSourceColumns()) {
             readColumnIds.insert(id);
         }
 
@@ -32,43 +37,17 @@ private:
         out->ReadColumnIds.assign(readColumnIds.begin(), readColumnIds.end());
         out->ResultColumnIds = read.ColumnIds;
 
-        const TColumnEngineForLogs* logsIndex = dynamic_cast<const TColumnEngineForLogs*>(self->GetIndexOptional());
-        if (!logsIndex) {
-            return dynamic_pointer_cast<TReadMetadataBase>(out);
+        auto policy = NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
+        if (!policy) {
+            return TConclusionStatus::Fail("undefined table name: " + TFsPath(read.TableName).GetName());
         }
-        THashSet<ui64> pathIds;
-        for (auto&& filter : read.PKRangesFilter) {
-            const ui64 fromPathId = *filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1);
-            const ui64 toPathId = *filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>());
-            if (read.TableName.EndsWith(IIndexInfo::TABLE_INDEX_STATS_TABLE) 
-                || read.TableName.EndsWith(IIndexInfo::TABLE_INDEX_PORTION_STATS_TABLE)
-                || read.TableName.EndsWith(IIndexInfo::TABLE_INDEX_GRANULE_STATS_TABLE)
-                ) {
-                if (fromPathId <= read.PathId && read.PathId <= toPathId) {
-                    auto pathInfo = logsIndex->GetGranuleOptional(read.PathId);
-                    if (!pathInfo) {
-                        continue;
-                    }
-                    if (pathIds.emplace(pathInfo->GetPathId()).second) {
-                        out->IndexGranules.emplace_back(NAbstract::TGranuleMetaView(*pathInfo, out->IsDescSorted()));
-                    }
-                }
-            } else if (read.TableName.EndsWith(IIndexInfo::STORE_INDEX_STATS_TABLE) 
-                || read.TableName.EndsWith(IIndexInfo::STORE_INDEX_PORTION_STATS_TABLE)
-                || read.TableName.EndsWith(IIndexInfo::STORE_INDEX_GRANULE_STATS_TABLE)
-                ) {
-                auto pathInfos = logsIndex->GetTables(fromPathId, toPathId);
-                for (auto&& pathInfo : pathInfos) {
-                    if (pathIds.emplace(pathInfo->GetPathId()).second) {
-                        out->IndexGranules.emplace_back(NAbstract::TGranuleMetaView(*pathInfo, out->IsDescSorted()));
-                    }
-                }
-            }
+        auto filler = policy->CreateMetadataFiller();
+
+        auto fillConclusion = filler->FillMetadata(self, out, read);
+        if (fillConclusion.IsFail()) {
+            return fillConclusion;
         }
-        std::sort(out->IndexGranules.begin(), out->IndexGranules.end());
-        if (out->IsDescSorted()) {
-            std::reverse(out->IndexGranules.begin(), out->IndexGranules.end());
-        }
+
         return dynamic_pointer_cast<TReadMetadataBase>(out);
     }
 public:

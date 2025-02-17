@@ -1,7 +1,6 @@
 #include "write_session_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -10,34 +9,9 @@
 #include <util/stream/buffer.h>
 
 
-namespace NYdb::NPersQueue {
-
-using ::NMonitoring::TDynamicCounterPtr;
-using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+namespace NYdb::inline V2::NPersQueue {
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
-
-namespace NCompressionDetails {
-    THolder<IOutputStream> CreateCoder(ECodec codec, TBuffer& result, int quality);
-}
-
-#define HISTOGRAM_SETUP NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
-TWriterCounters::TWriterCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
-    Errors = counters->GetCounter("errors", true);
-    CurrentSessionLifetimeMs = counters->GetCounter("currentSessionLifetimeMs", false);
-    BytesWritten = counters->GetCounter("bytesWritten", true);
-    MessagesWritten = counters->GetCounter("messagesWritten", true);
-    BytesWrittenCompressed = counters->GetCounter("bytesWrittenCompressed", true);
-    BytesInflightUncompressed = counters->GetCounter("bytesInflightUncompressed", false);
-    BytesInflightCompressed = counters->GetCounter("bytesInflightCompressed", false);
-    BytesInflightTotal = counters->GetCounter("bytesInflightTotal", false);
-    MessagesInflight = counters->GetCounter("messagesInflight", false);
-
-    TotalBytesInflightUsageByTime = counters->GetHistogram("totalBytesInflightUsageByTime", HISTOGRAM_SETUP);
-    UncompressedBytesInflightUsageByTime = counters->GetHistogram("uncompressedBytesInflightUsageByTime", HISTOGRAM_SETUP);
-    CompressedBytesInflightUsageByTime = counters->GetHistogram("compressedBytesInflightUsageByTime", HISTOGRAM_SETUP);
-}
-#undef HISTOGRAM_SETUP
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl
@@ -116,10 +90,7 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session is aborting and will not restart");
         return result;
     }
-    LOG_LAZY(DbDriverState->Log, TLOG_ERR,
-        LogPrefix() << "Got error. Status: " << status.Status
-            << ". Description: " << IssuesSingleLineString(status.Issues)
-    );
+
     SessionEstablished = false;
     TMaybe<TDuration> nextDelay = TDuration::Zero();
     if (!RetryState) {
@@ -130,13 +101,11 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
     if (nextDelay) {
         result.StartDelay = *nextDelay;
         result.DoRestart = true;
-        LOG_LAZY(DbDriverState->Log,
-            TLOG_DEBUG,
-            LogPrefix() << "Write session will restart in " << result.StartDelay.MilliSeconds() << " ms"
-        );
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Got error. " << status.ToDebugString());
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session will restart in " << result.StartDelay);
         ResetForRetryImpl();
-
     } else {
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Got error. " << status.ToDebugString());
         LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Write session will not restart after a fatal error");
         result.DoStop = true;
         CheckHandleResultImpl(result);
@@ -481,6 +450,10 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const TString& endpoin
         Cancel(prevClientContext);
         Y_ASSERT(connectContext);
         Y_ASSERT(connectTimeoutContext);
+
+        if (Processor) {
+            Processor->Cancel();
+        }
 
         reqSettings = TRpcRequestSettings::Make(Settings);
 

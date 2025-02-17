@@ -44,48 +44,36 @@ class TRealBlockDevice : public IBlockDevice {
     ////////////////////////////////////////////////////////
     // TCompletionThread
     ////////////////////////////////////////////////////////
-    class TCompletionThread : public TThread {
-        static constexpr ui32 NumOfWriters = 2;
+    class TCompletionThread : public ISimpleThread {
     public:
-        TCompletionThread(TRealBlockDevice &device, ui32 maxQueuedActions)
-            : TThread(&ThreadProc, this)
-            , Device(device)
-            , QueuedActions(0)
-            , MaxQueuedActions(maxQueuedActions)
+        TCompletionThread(TRealBlockDevice &device, TString name)
+            : Device(device)
+            , Name(name)
         {}
 
-        static void* ThreadProc(void* _this) {
-            SetCurrentThreadName("PdCmpl");
-            static_cast<TCompletionThread*>(_this)->Exec();
-            return nullptr;
-        }
-
-        void Exec() {
-            ui32 exitSignalsReceived = 0;
-            Device.Mon.L7.Set(false, AtomicGetAndIncrement(SeqnoL7));
+        void *ThreadProc() override {
+            SetCurrentThreadName(Name.data());
             auto prevCycleEnd = HPNow();
             bool isWorking = true;
             bool stateError = false;
 
+            auto cpuCounter = Device.Mon.PDiskGroup->GetCounter(Name + "CPU", true);
+
             while(isWorking) {
-                TAtomicBase actionCount = CompletionActions.GetWaitingSize();
+                TAtomicBase actionCount = Queue.GetWaitingSize();
 
                 if (actionCount > 0) {
                     for (TAtomicBase idx = 0; idx < actionCount; ++idx) {
-                        TCompletionAction *action = CompletionActions.Pop();
-                        AtomicDecrement(QueuedActions);
+                        TCompletionAction *action = Queue.Pop();
                         if (action == nullptr) {
-                            ++exitSignalsReceived;
-                            if (exitSignalsReceived == NumOfWriters) {
-                                isWorking = false;
-                            }
+                            isWorking = false;
                         } else {
                             if (!stateError && action->CanHandleResult()) {
-                                action->Exec(Device.ActorSystem);
+                                action->Exec(Device.PCtx->ActorSystem);
                             } else {
                                 TString errorReason = action->ErrorReason;
 
-                                action->Release(Device.ActorSystem);
+                                action->Release(Device.PCtx->ActorSystem);
 
                                 if (!stateError) {
                                     stateError = true;
@@ -96,8 +84,8 @@ class TRealBlockDevice : public IBlockDevice {
                         }
                     }
                 } else {
-                    *Device.Mon.CompletionThreadCPU = ThreadCPUTime();
-                    CompletionActions.ProducedWaitI();
+                    *cpuCounter = ThreadCPUTime();
+                    Queue.ProducedWaitI();
                 }
 
                 const auto cycleEnd = HPNow();
@@ -106,45 +94,148 @@ class TRealBlockDevice : public IBlockDevice {
                 }
                 prevCycleEnd = cycleEnd;
             }
+            return nullptr;
+        }
+
+        void Schedule(TCompletionAction *action) {
+            Queue.Push(action);
+        }
+
+        size_t GetQueuedActions() {
+            return Queue.GetWaitingSize();
+        }
+
+    private:
+        TCountedQueueManyOne<TCompletionAction, 4 << 10> Queue;
+        TRealBlockDevice& Device;
+        TString Name;
+    };
+
+    class TCompletionThreads {
+
+    public:
+        std::vector<std::unique_ptr<TCompletionThread>> Threads;
+
+        TCompletionThreads(TRealBlockDevice &device, size_t threadsCount, ui32 maxQueuedActions)
+            : Device(device)
+            , MaxQueuedActions(maxQueuedActions)
+        {
+            for (size_t i = 0; i < threadsCount; ++i) {
+                Threads.push_back(std::make_unique<TCompletionThread>(device, TStringBuilder() << "PdCmpl_" << i));
+                Threads.back()->Start();
+            }
         }
 
         // Schedule action execution
         // pass action = nullptr to quit
         void Schedule(TCompletionAction *action) noexcept {
-            TAtomicBase queueActions = AtomicIncrement(QueuedActions);
-            if (queueActions >= MaxQueuedActions) {
-                Device.Mon.L7.Set(true, AtomicGetAndIncrement(SeqnoL7));
-                while (AtomicGet(QueuedActions) >= MaxQueuedActions) {
-                    SpinLockPause();
-                }
-                Device.Mon.L7.Set(false, AtomicGetAndIncrement(SeqnoL7));
+            if (!action) {
+                StopWork();
+                return;
             }
-            CompletionActions.Push(action);
+
+            if (!action->ShouldBeExecutedInCompletionThread || Threads.empty()) {
+                ExecuteActionInPlace(action);
+                return;
+            }
+
+            while (true) {
+                auto min_it = Threads.begin();
+                auto minQueueSize = (*min_it)->GetQueuedActions();
+                auto totalSize = minQueueSize;
+                for (auto it = Threads.begin() + 1; it != Threads.end(); ++it) {
+                    auto queueSize = (*it)->GetQueuedActions();
+                    totalSize += queueSize;
+                    if (queueSize < minQueueSize) {
+                        minQueueSize = queueSize;
+                        min_it = it;
+                    }
+                }
+                if (totalSize >= MaxQueuedActions) {
+                    // We have a risk to run out of buffers from BufferPool, so MaxQueuedActions is expected
+                    // to counter that
+                    Device.Mon.L7.Set(true, AtomicGetAndIncrement(SeqnoL7));
+                    Sleep(TDuration::MilliSeconds(1));
+                    Device.Mon.L7.Set(false, AtomicGetAndIncrement(SeqnoL7));
+                    continue;
+                }
+
+                Y_ABORT_UNLESS(min_it != Threads.end());
+                if (action->CanBeExecutedInAdditionalCompletionThread) {
+                    (*min_it)->Schedule(action);
+                } else {
+                    // actions which are supposed to be executed from single thread always will be executer in 0 thread
+                    // scheduled here to pass MaxQueuedActions check above
+                    Threads[0]->Schedule(action);
+                }
+
+                return;
+            }
+        }
+
+        void ExecuteActionInPlace(TCompletionAction *action) {
+            if (action->CanHandleResult()) {
+                action->Exec(Device.PCtx->ActorSystem);
+            } else {
+                TString errorReason = action->ErrorReason;
+
+                action->Release(Device.PCtx->ActorSystem);
+
+                if (!Device.QuitCounter.IsBlocked()) {
+                    Device.BecomeErrorState(TStringBuilder()
+                            << " CompletionAction error, operation info# " << errorReason);
+                }
+            }
+        }
+
+        // This hack make it possible to execute some completion action beside of device but in ComplitionThread
+        void ScheduleHackForLogReader(TCompletionAction *action) noexcept {
+            action->Result = EIoResult::Ok;
+            if (Threads.empty()) {
+                action->Exec(Device.PCtx->ActorSystem);
+            } else {
+                Threads[0]->Schedule(action);
+            }
             return;
         }
 
-        // Schedule action execution
-        // pass action = nullptr to quit
-        void ScheduleHackForLogReader(TCompletionAction *action) noexcept {
-            AtomicIncrement(QueuedActions);
-            action->Result = EIoResult::Ok;
-            CompletionActions.Push(action);
-            return;
+        void StopWork() {
+            for (auto& thread : Threads) {
+                thread->Schedule(nullptr);
+            }
+        }
+
+        void Join() {
+            for (auto& thread : Threads) {
+                thread->Join();
+            }
+            Threads.clear();
         }
 
     private:
-        TCountedQueueManyOne<TCompletionAction, 4 << 10> CompletionActions;
         TRealBlockDevice &Device;
-        TAtomic QueuedActions;
-        const TAtomicBase MaxQueuedActions;
+        const size_t MaxQueuedActions;
         TAtomic SeqnoL7 = 0;
     };
 
     class TSubmitThreadBase : public TThread {
+    protected:
+        TRealBlockDevice &Device;
+        std::shared_ptr<TPDiskCtx> &PCtx;
+        TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> OperationsToBeSubmit;
+        static constexpr TAtomicBase SubmitInFlightBytesMax = 1ull << 15;
+        TMutex SubmitMtx;
+        TCondVar SubmitCondVar;
+        TAtomicBlockCounter SubmitQuitCounter;
+
+    public:
+        TAtomic SubmitInFlightBytes = 0;
+
     public:
         TSubmitThreadBase(TRealBlockDevice &device, TThread::TThreadProc threadProc, void *_this)
             : TThread(threadProc, _this)
             , Device(device)
+            , PCtx(device.PCtx)
         {}
 
         // Schedule op execution
@@ -169,30 +260,17 @@ class TRealBlockDevice : public IBlockDevice {
                 while (AtomicGet(SubmitInFlightBytes) > SubmitInFlightBytesMax) {
                     if (SubmitCondVar.WaitT(SubmitMtx, TDuration::Seconds(1))) {
                         return;
-                    } else if (Device.ActorSystem) {
-                        TAtomicBase maxInFlight = SubmitInFlightBytesMax;
-                        LOG_WARN_S(*Device.ActorSystem, NKikimrServices::BS_DEVICE,
-                                    "Exceed 1 second deadline in SubmitThreadQueue: " <<
-                                    " PDiskId# " << Device.PDiskId <<
-                                    " Path# \"" << Device.Path << "\"" <<
-                                    " Total time spent in waiting# " << NHPTimer::GetSeconds(HPNow() - start) << "sec" <<
-                                    " SubmitInFlightBytes# " << AtomicGet(SubmitInFlightBytes) <<
-                                    " SubmitInFlightBytesMax# " << maxInFlight);
+                    } else {
+                        P_LOG(PRI_WARN, BPD01, "Exceed 1 second deadline in SubmitThreadQueue",
+                                    (PDiskId, Device.PCtx->PDiskId),
+                                    (Path, Device.Path),
+                                    (TotalTimeInWaitingSec, NHPTimer::GetSeconds(HPNow() - start)),
+                                    (SubmitInFlightBytes, AtomicGet(SubmitInFlightBytes)),
+                                    (SubmitInFlightBytesMax, SubmitInFlightBytesMax));
                     }
                 }
             }
         }
-
-    public:
-        TAtomic SubmitInFlightBytes = 0;
-
-    protected:
-        TRealBlockDevice &Device;
-        TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> OperationsToBeSubmit;
-        static constexpr TAtomicBase SubmitInFlightBytesMax = 1ull << 15;
-        TMutex SubmitMtx;
-        TCondVar SubmitCondVar;
-        TAtomicBlockCounter SubmitQuitCounter;
     };
 
     ////////////////////////////////////////////////////////
@@ -242,6 +320,9 @@ class TRealBlockDevice : public IBlockDevice {
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
                 action->SubmitTime = HPNow();
+                if (action->FlushAction) {
+                    action->FlushAction->SubmitTime = action->SubmitTime;
+                }
 
                 if (op->GetType() == IAsyncIoOperation::EType::PWrite) {
                     PDISK_FAIL_INJECTION(1);
@@ -298,6 +379,9 @@ class TRealBlockDevice : public IBlockDevice {
     // TGetThread
     ////////////////////////////////////////////////////////
     class TGetThread : public TThread {
+    private:
+        TRealBlockDevice &Device;
+
     public:
         TGetThread(TRealBlockDevice &device)
             : TThread(&ThreadProc, this)
@@ -326,25 +410,25 @@ class TRealBlockDevice : public IBlockDevice {
                 }
             }
         }
-    private:
-        TRealBlockDevice &Device;
     };
 
 
     class TSharedCallback : public ICallback {
         ui64 NextPossibleNoop = 0;
         ui64 EndOffset = 0;
-        ui64 PrevEventGotAtCycle = HPNow();
-        ui64 PrevEstimationAtCycle = HPNow();
+        NHPTimer::STime PrevEventGotAtCycle = HPNow();
+        NHPTimer::STime PrevEstimationAtCycle = HPNow();
         ui64 PrevEstimatedCostNs = 0;
         ui64 PrevActualCostNs = 0;
 
         TCompletionAction* WaitingNoops[MaxWaitingNoops] = {nullptr};
         TRealBlockDevice &Device;
+        std::shared_ptr<TPDiskCtx> &PCtx;
 
     public:
         TSharedCallback(TRealBlockDevice &device)
             : Device(device)
+            , PCtx(device.PCtx)
         {}
 
         void FillCompletionAction(TCompletionAction *action, IAsyncIoOperation *op, EIoResult result) {
@@ -357,8 +441,7 @@ class TRealBlockDevice : public IBlockDevice {
                         << " offset# " << op->GetOffset()
                         << " size# " << op->GetSize()
                         << " Result# " << result);
-                LOG_ERROR_S(*Device.ActorSystem, NKikimrServices::BS_DEVICE, "IAsyncIoOperation error, reason# "
-                        << action->ErrorReason);
+                P_LOG(PRI_ERROR, BPD01, "IAsyncIoOperation error",  (Reason, action->ErrorReason));
                 ++*Device.Mon.DeviceIoErrors;
             }
         }
@@ -366,29 +449,32 @@ class TRealBlockDevice : public IBlockDevice {
         void Exec(TAsyncIoOperationResult *event) {
             IAsyncIoOperation *op = event->Operation;
             // Add up the execution time of all the events
-            ui64 totalExecutionCycles = 0;
-            ui64 totalCostNs = 0;
-            ui64 eventGotAtCycle = HPNow();
+            NHPTimer::STime eventGotAtCycle = HPNow();
             AtomicSet(Device.Mon.LastDoneOperationTimestamp, eventGotAtCycle);
 
             TCompletionAction *completionAction = static_cast<TCompletionAction*>(op->GetCookie());
             FillCompletionAction(completionAction, op, event->Result);
+            completionAction->GetTime = eventGotAtCycle;
+            LWTRACK(PDiskDeviceGetFromDevice, completionAction->Orbit);
+            if (completionAction->FlushAction) {
+                completionAction->FlushAction->GetTime = eventGotAtCycle;
+                LWTRACK(PDiskDeviceGetFromDevice, completionAction->FlushAction->Orbit);
+            }
 
             Device.QuitCounter.Decrement();
             Device.IdleCounter.Decrement();
             Device.FlightControl.MarkComplete(completionAction->OperationIdx);
 
-            ui64 startCycle = Max((ui64)completionAction->SubmitTime, PrevEventGotAtCycle);
-            ui64 durationCycles = (eventGotAtCycle > startCycle) ? eventGotAtCycle - startCycle : 0;
-            totalExecutionCycles = Max(totalExecutionCycles, durationCycles);
-            totalCostNs += completionAction->CostNs;
+            NHPTimer::STime startCycle = Max(completionAction->SubmitTime, (i64)PrevEventGotAtCycle);
+            NHPTimer::STime durationCycles = (eventGotAtCycle > startCycle) ? eventGotAtCycle - startCycle : 0;
+            NHPTimer::STime totalExecutionCycles = durationCycles;
+            NHPTimer::STime totalCostNs = completionAction->CostNs;
 
-            bool isSeekExpected =
-                ((ui64)completionAction->SubmitTime + Device.SeekCostNs / 25ull >= PrevEventGotAtCycle);
+            bool isSeekExpected = (completionAction->SubmitTime + (NHPTimer::STime)Device.SeekCostNs / 25ll >= PrevEventGotAtCycle);
 
             const ui64 opSize = op->GetSize();
             Device.DecrementMonInFlight(op->GetType(), opSize);
-            if (opSize == 0) {
+            if (opSize == 0) { // Special case for flush operation, which is a read operation with 0 bytes size
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
                     Y_ABORT_UNLESS(WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] == nullptr);
                     WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] = completionAction;
@@ -401,24 +487,25 @@ class TRealBlockDevice : public IBlockDevice {
                 }
                 EndOffset = op->GetOffset() + opSize;
 
-                ui64 duration = HPNow() - completionAction->SubmitTime;
-                ui64 durationMs = HPMilliSecondsFloat(duration);
+                double duration = HPMilliSecondsFloat(HPNow() - completionAction->SubmitTime);
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
                     NSan::Unpoison(op->GetData(), opSize);
                     REQUEST_VALGRIND_MAKE_MEM_DEFINED(op->GetData(), opSize);
-                    Device.Mon.DeviceReadDuration.Increment(durationMs);
-                    LWPROBE(PDiskDeviceReadDuration, Device.GetPDiskId(), HPMilliSecondsFloat(duration), opSize);
+                    Device.Mon.DeviceReadDuration.Increment(duration);
+                    LWPROBE(PDiskDeviceReadDuration, Device.GetPDiskId(), duration, opSize);
                 } else {
-                    Device.Mon.DeviceWriteDuration.Increment(durationMs);
-                    LWPROBE(PDiskDeviceWriteDuration, Device.GetPDiskId(), HPMilliSecondsFloat(duration), opSize);
+                    Device.Mon.DeviceWriteDuration.Increment(duration);
+                    LWPROBE(PDiskDeviceWriteDuration, Device.GetPDiskId(), duration, opSize);
                 }
+                P_LOG(PRI_TRACE, BPD01, "iop is done", (Type, op->GetType()), (Duration, duration),
+                    (Offset, op->GetOffset()), (Size, opSize));
                 if (completionAction->FlushAction) {
                     ui64 idx = completionAction->FlushAction->OperationIdx;
                     Y_ABORT_UNLESS(WaitingNoops[idx % MaxWaitingNoops] == nullptr);
                     WaitingNoops[idx % MaxWaitingNoops] = completionAction->FlushAction;
                     completionAction->FlushAction = nullptr;
                 }
-                Device.CompletionThread->Schedule(completionAction);
+                Device.CompletionThreads->Schedule(completionAction);
                 auto seqnoL6 = AtomicGetAndIncrement(Device.Mon.SeqnoL6);
                 Device.Mon.L6.Set(duration > Device.Reordering, seqnoL6);
             }
@@ -433,7 +520,10 @@ class TRealBlockDevice : public IBlockDevice {
             while (NextPossibleNoop < firstIncompleteIdx) {
                 ui64 i = NextPossibleNoop % MaxWaitingNoops;
                 if (WaitingNoops[i] && WaitingNoops[i]->OperationIdx == NextPossibleNoop) {
-                    Device.CompletionThread->Schedule(WaitingNoops[i]);
+                    LWTRACK(PDiskDeviceGetFromWaiting, WaitingNoops[i]->Orbit);
+                    double durationMs = HPMilliSecondsFloat(HPNow() - WaitingNoops[i]->GetTime);
+                    Device.Mon.DeviceFlushDuration.Increment(durationMs);
+                    Device.CompletionThreads->Schedule(WaitingNoops[i]);
                     WaitingNoops[i] = nullptr;
                 }
                 ++NextPossibleNoop;
@@ -476,11 +566,11 @@ class TRealBlockDevice : public IBlockDevice {
             // There are no Schedule() calls in progress
             for (ui64 idx = 0; idx < MaxWaitingNoops; ++idx) {
                 if (WaitingNoops[idx]) {
-                    WaitingNoops[idx]->Release(Device.ActorSystem);
+                    WaitingNoops[idx]->Release(Device.PCtx->ActorSystem);
                 }
             }
             // Stop the completion thread
-            Device.CompletionThread->Schedule(nullptr);
+            Device.CompletionThreads->Schedule(nullptr);
         }
     };
 
@@ -488,6 +578,8 @@ class TRealBlockDevice : public IBlockDevice {
     // TSubmitGetThread
     ////////////////////////////////////////////////////////
     class TSubmitGetThread : public TSubmitThreadBase {
+        NHPTimer::STime OpScheduleFailedTime = 0;
+
     public:
         TSubmitGetThread(TRealBlockDevice &device)
             : TSubmitThreadBase(device, &ThreadProc, this)
@@ -557,6 +649,9 @@ class TRealBlockDevice : public IBlockDevice {
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
                 action->SubmitTime = HPNow();
+                if (action->FlushAction) {
+                    action->FlushAction->SubmitTime = action->SubmitTime;
+                }
                 ret = Device.IoContext->Submit(op, Device.SharedCallback.Get());
                 if (ret == EIoResult::Ok) {
                     return true;
@@ -630,18 +725,21 @@ class TRealBlockDevice : public IBlockDevice {
 
             Y_ABORT_UNLESS(OperationsToBeSubmit.GetWaitingSize() == 0);
         }
-    private:
-        NHPTimer::STime OpScheduleFailedTime = 0;
     };
 
     ////////////////////////////////////////////////////////
     // TTrimThread
     ////////////////////////////////////////////////////////
     class TTrimThread : public TThread {
+        TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> TrimOperations;
+        TRealBlockDevice &Device;
+        std::shared_ptr<TPDiskCtx> &PCtx;
+
     public:
         TTrimThread(TRealBlockDevice &device)
             : TThread(&ThreadProc, this)
             , Device(device)
+            , PCtx(device.PCtx)
         {}
 
         static void* ThreadProc(void* _this) {
@@ -657,34 +755,31 @@ class TRealBlockDevice : public IBlockDevice {
                     for (TAtomicBase idx = 0; idx < actionCount; ++idx) {
                         IAsyncIoOperation *op = TrimOperations.Pop();
                         if (op == nullptr) {
-                            Device.CompletionThread->Schedule(nullptr);
                             return;
                         }
                         Y_ABORT_UNLESS(op->GetType() == IAsyncIoOperation::EType::PTrim);
                         auto *completion = static_cast<TCompletionAction*>(op->GetCookie());
                         if (Device.IsTrimEnabled) {
                             Device.IdleCounter.Increment();
-                            NHPTimer::STime beginTime = HPNow();
+                            NHPTimer::STime startTime = HPNow();
                             Device.IsTrimEnabled = Device.IoContext->DoTrim(op);
                             NHPTimer::STime endTime = HPNow();
                             Device.IdleCounter.Decrement();
-                            const ui64 durationUs = HPMicroSeconds(endTime - beginTime);
-                            Device.Mon.DeviceTrimDuration.Increment(durationUs);
+                            const double duration = HPMilliSecondsFloat(endTime - startTime);
+                            Device.Mon.DeviceTrimDuration.Increment(duration);
                             *Device.Mon.DeviceEstimatedCostNs += completion->CostNs;
-                            if (Device.ActorSystem && Device.IsTrimEnabled) {
-                                LOG_DEBUG_S(*Device.ActorSystem, NKikimrServices::BS_DEVICE,
-                                        "PDiskId# " << Device.GetPDiskId()
-                                        << " ReqId# " << op->GetReqId()
-                                        << " Trim duration# " << HPMilliSeconds(endTime - beginTime)
-                                        << " ms path# \"" << Device.Path
-                                        << "\" offset# " << op->GetOffset()
-                                        << " size# " << op->GetSize());
-                                LWPROBE(PDiskDeviceTrimDuration, Device.GetPDiskId(),
-                                        HPMilliSecondsFloat(endTime - beginTime), op->GetOffset());
+                            if (Device.PCtx->ActorSystem && Device.IsTrimEnabled) {
+                                P_LOG(PRI_DEBUG, BPD01, "trim is done",
+                                        (ReqId, op->GetReqId()),
+                                        (TrimDurationMs, HPMilliSeconds(endTime - startTime)),
+                                        (Path, Device.Path),
+                                        (Offset, op->GetOffset()),
+                                        (Size, op->GetSize()));
                             }
+                            LWPROBE(PDiskDeviceTrimDuration, Device.GetPDiskId(), duration, op->GetOffset());
                         }
                         completion->SetResult(EIoResult::Ok);
-                        Device.CompletionThread->Schedule(completion);
+                        completion->Exec(Device.PCtx->ActorSystem);
                         Device.IoContext->DestroyAsyncIoOperation(op);
                     }
                 } else {
@@ -699,22 +794,18 @@ class TRealBlockDevice : public IBlockDevice {
         void Schedule(IAsyncIoOperation *op) noexcept {
             TrimOperations.Push(op);
         }
-
-    private:
-        TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> TrimOperations;
-        TRealBlockDevice &Device;
     };
 
 
 protected:
+    std::shared_ptr<TPDiskCtx> PCtx;
     TPDiskMon &Mon;
-    TActorSystem *ActorSystem;
     TString Path;
-    ui32 PDiskId;
-    TActorId PDiskActor;
+
+    TPDiskConfig cfg{0, 0, 0};
 
 private:
-    THolder<TCompletionThread> CompletionThread;
+    THolder<TCompletionThreads> CompletionThreads;
     THolder<TTrimThread> TrimThread;
     THolder<TGetThread> GetEventsThread;
     THolder<TSubmitGetThread> SpdkSubmitGetThread;
@@ -727,7 +818,8 @@ private:
     ui64 Reordering;
     ui64 SeekCostNs;
     bool IsTrimEnabled;
-    ui32 MaxQueuedCompletionActions;
+    const ui32 MaxQueuedCompletionActions; // for all threads
+    const ui32 CompletionThreadsCount;
 
     TIdleCounter IdleCounter; // Includes reads, writes and trims
 
@@ -743,20 +835,19 @@ private:
     TFlightControl FlightControl;
     TAtomicBlockCounter QuitCounter;
     TString LastWarning;
+    bool ReadOnly;
     TDeque<IAsyncIoOperation*> Trash;
     TMutex TrashMutex;
 
     std::optional<TDriveData> DriveData;
 
 public:
-    TRealBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon &mon, ui64 reorderingCycles,
+    TRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            TIntrusivePtr<TSectorMap> sectorMap)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, bool readOnly)
         : Mon(mon)
-        , ActorSystem(nullptr)
         , Path(path)
-        , PDiskId(pDiskId)
-        , CompletionThread(nullptr)
+        , CompletionThreads(nullptr)
         , TrimThread(nullptr)
         , GetEventsThread(nullptr)
         , SharedCallback(nullptr)
@@ -767,12 +858,14 @@ public:
         , SeekCostNs(seekCostNs)
         , IsTrimEnabled(true)
         , MaxQueuedCompletionActions(maxQueuedCompletionActions)
+        , CompletionThreadsCount(completionThreadsCount)
         , IdleCounter(Mon.IdleLight)
         , Flags(flags)
         , SectorMap(sectorMap)
         , DeviceInFlight(FastClp2(deviceInFlight))
         , FlightControl(CountTrailingZeroBits(DeviceInFlight))
         , LastWarning(IsPowerOf2(deviceInFlight) ? "" : "Device inflight must be a power of 2")
+        , ReadOnly(readOnly)
     {
         if (sectorMap) {
             DriveData = TDriveData();
@@ -784,20 +877,19 @@ public:
     }
 
 protected:
-    void Initialize(TActorSystem *actorSystem, const TActorId& pdiskActor) override {
-        ActorSystem = actorSystem;
-        PDiskActor = pdiskActor;
-        Y_ABORT_UNLESS(ActorSystem);
+    void Initialize(std::shared_ptr<TPDiskCtx> pCtx) override {
+        PCtx = std::move(pCtx);
+        Y_ABORT_UNLESS(PCtx);
 
         TString errStr = TDeviceMode::Validate(Flags);
         if (errStr) {
             Y_FAIL_S(IoContext->GetPDiskInfo() << " Error in device flags: " << errStr);
         }
 
-        Y_ABORT_UNLESS(ActorSystem->AppData<TAppData>());
-        Y_ABORT_UNLESS(ActorSystem->AppData<TAppData>()->IoContextFactory);
-        auto *factory = ActorSystem->AppData<TAppData>()->IoContextFactory;
-        IoContext = factory->CreateAsyncIoContext(Path, PDiskId, Flags, SectorMap);
+        Y_ABORT_UNLESS(PCtx->ActorSystem->AppData<TAppData>());
+        Y_ABORT_UNLESS(PCtx->ActorSystem->AppData<TAppData>()->IoContextFactory);
+        auto *factory = PCtx->ActorSystem->AppData<TAppData>()->IoContextFactory;
+        IoContext = factory->CreateAsyncIoContext(Path, PCtx->PDiskId, Flags, SectorMap);
         if (Flags & TDeviceMode::UseSpdk) {
             SpdkState = factory->CreateSpdkState();
         }
@@ -824,13 +916,12 @@ protected:
 
         IoContext->InitializeMonitoring(Mon);
         //IoContext->InitializeMonitoring(Mon.DeviceOperationPoolTotalAllocations, Mon.DeviceOperationPoolFreeObjectsMin);
-        if (!LastWarning.empty() && ActorSystem) {
-            LOG_WARN_S(*ActorSystem, NKikimrServices::BS_DEVICE, "PDiskId# " << PDiskId
-                << " Warning# " << LastWarning);
+        if (!LastWarning.empty() && PCtx->ActorSystem) {
+            P_LOG(PRI_WARN, BPD01, "", (Warning, LastWarning));
         }
         if (IsFileOpened) {
-            IoContext->SetActorSystem(ActorSystem);
-            CompletionThread = MakeHolder<TCompletionThread>(*this, MaxQueuedCompletionActions);
+            IoContext->SetActorSystem(PCtx->ActorSystem);
+            CompletionThreads = MakeHolder<TCompletionThreads>(*this, CompletionThreadsCount, MaxQueuedCompletionActions);
             TrimThread = MakeHolder<TTrimThread>(*this);
             SharedCallback = MakeHolder<TSharedCallback>(*this);
             if (Flags & TDeviceMode::UseSpdk) {
@@ -847,7 +938,6 @@ protected:
                     GetEventsThread->Start();
                 }
             }
-            CompletionThread->Start();
             TrimThread->Start();
             IsInitialized = true;
         }
@@ -911,9 +1001,9 @@ protected:
         TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
 
         if (action->FlushAction) {
-            action->FlushAction->Release(ActorSystem);
+            action->FlushAction->Release(PCtx->ActorSystem);
         }
-        action->Release(ActorSystem);
+        action->Release(PCtx->ActorSystem);
         {
             TGuard<TMutex> guard(TrashMutex);
             Trash.push_back(op);
@@ -950,6 +1040,7 @@ protected:
     }
 
     void TrimSync(ui32 size, ui64 offset) override {
+        Y_ABORT_UNLESS(!ReadOnly);
         IAsyncIoOperation* op = IoContext->CreateAsyncIoOperation(nullptr, {}, nullptr);
         IoContext->PreparePTrim(op, size, offset);
         IsTrimEnabled = IoContext->DoTrim(op);
@@ -960,7 +1051,7 @@ protected:
             NWilson::TTraceId *traceId) override {
         Y_ABORT_UNLESS(completionAction);
         if (!IsInitialized) {
-            completionAction->Release(ActorSystem);
+            completionAction->Release(PCtx->ActorSystem);
             return;
         }
         if (data && size) {
@@ -976,8 +1067,9 @@ protected:
     void PwriteAsync(const void *data, ui64 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId,
             NWilson::TTraceId *traceId) override {
         Y_ABORT_UNLESS(completionAction);
+        Y_ABORT_UNLESS(!ReadOnly);
         if (!IsInitialized) {
-            completionAction->Release(ActorSystem);
+            completionAction->Release(PCtx->ActorSystem);
             return;
         }
         if (data && size) {
@@ -992,8 +1084,9 @@ protected:
 
     void FlushAsync(TCompletionAction *completionAction, TReqId reqId) override {
         Y_ABORT_UNLESS(completionAction);
+        Y_ABORT_UNLESS(!ReadOnly);
         if (!IsInitialized) {
-            completionAction->Release(ActorSystem);
+            completionAction->Release(PCtx->ActorSystem);
             return;
         }
 
@@ -1005,31 +1098,31 @@ protected:
     void NoopAsync(TCompletionAction *completionAction, TReqId /*reqId*/) override {
         Y_ABORT_UNLESS(completionAction);
         if (!IsInitialized) {
-            completionAction->Release(ActorSystem);
+            completionAction->Release(PCtx->ActorSystem);
             return;
         }
         if (QuitCounter.IsBlocked()) {
-            completionAction->Release(ActorSystem);
+            completionAction->Release(PCtx->ActorSystem);
             return;
         }
 
         completionAction->SetResult(EIoResult::Ok);
-        CompletionThread->Schedule(completionAction);
+        CompletionThreads->Schedule(completionAction);
     }
 
     void NoopAsyncHackForLogReader(TCompletionAction *completionAction, TReqId /*reqId*/) override {
         Y_ABORT_UNLESS(completionAction);
         if (!IsInitialized) {
-            completionAction->Release(ActorSystem);
+            completionAction->Release(PCtx->ActorSystem);
             return;
         }
         if (QuitCounter.IsBlocked()) {
-            completionAction->Release(ActorSystem);
+            completionAction->Release(PCtx->ActorSystem);
             return;
         }
 
         completionAction->SetResult(EIoResult::Ok);
-        CompletionThread->ScheduleHackForLogReader(completionAction);
+        CompletionThreads->ScheduleHackForLogReader(completionAction);
     }
 
     void TrimAsync(ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) override {
@@ -1051,15 +1144,10 @@ protected:
         if (!DriveData) {
             TStringStream details;
             if (DriveData = ::NKikimr::NPDisk::GetDriveData(Path, &details)) {
-                if (ActorSystem) {
-                    LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                            << " Gathered DriveData, data# " << DriveData->ToString(false));
-                }
+                P_LOG(PRI_NOTICE, BPD01, "Gathered DriveData", (Data, DriveData->ToString(false)),
+                    (Details, details.Str()));
             } else {
-                if (ActorSystem) {
-                    LOG_WARN_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                            << " error on GetDriveData, detail# " << details.Str());
-                }
+                P_LOG(PRI_WARN, BPD01, "Error on gathering DriveData", (Details, details.Str()));
             }
         }
         return DriveData.value_or(TDriveData());
@@ -1070,15 +1158,13 @@ protected:
             TStringStream details;
             EWriteCacheResult res = NKikimr::NPDisk::SetWriteCache(*handle, Path, isEnable, &details);
             if (res != WriteCacheResultOk) {
-                if (ActorSystem) {
-                    LOG_WARN_S(*ActorSystem, NKikimrServices::BS_DEVICE, details.Str());
-                }
+                P_LOG(PRI_WARN, BPD01, "Error on setting write cache", (Details, details.Str()));
             }
         }
     }
 
     ui32 GetPDiskId() override {
-        return PDiskId;
+        return PCtx->PDiskId;
     }
 
     virtual ~TRealBlockDevice() {
@@ -1094,8 +1180,8 @@ protected:
         // Block only B flag so device will not be working but when Stop() will be called AFlag will be toggled
         QuitCounter.BlockB();
         TString fullInfo = TStringBuilder() << IoContext->GetPDiskInfo() << info;
-        if (ActorSystem) {
-            ActorSystem->Send(PDiskActor, new TEvDeviceError(fullInfo));
+        if (PCtx) {
+            PCtx->ActorSystem->Send(PCtx->PDiskActor, new TEvDeviceError(fullInfo));
         } else {
             Y_FAIL_S(fullInfo);
         }
@@ -1107,7 +1193,7 @@ protected:
         if (res.PrevA ^ res.A) { // res.ToggledA()
             if (IsInitialized) {
                 Y_ABORT_UNLESS(TrimThread);
-                Y_ABORT_UNLESS(CompletionThread);
+                Y_ABORT_UNLESS(CompletionThreads);
                 TrimThread->Schedule(nullptr); // Stop the Trim thread
                 if (Flags & TDeviceMode::UseSpdk) {
                     Y_ABORT_UNLESS(SpdkSubmitGetThread);
@@ -1125,13 +1211,13 @@ protected:
                 }
                 SharedCallback->Destroy();
                 TrimThread->Join();
-                CompletionThread->Join();
+                CompletionThreads->Join();
                 IsInitialized = false;
             } else {
                 Y_ABORT_UNLESS(SubmitThread.Get() == nullptr);
                 Y_ABORT_UNLESS(GetEventsThread.Get() == nullptr);
                 Y_ABORT_UNLESS(TrimThread.Get() == nullptr);
-                Y_ABORT_UNLESS(CompletionThread.Get() == nullptr);
+                Y_ABORT_UNLESS(CompletionThreads.Get() == nullptr);
             }
             if (IsFileOpened) {
                 EIoResult ret = IoContext->Destroy();
@@ -1155,6 +1241,7 @@ class TCachedBlockDevice : public TRealBlockDevice {
         ui32 Size;
         ui64 Offset;
         TReqId ReqId;
+
     public:
         TCachedReadCompletion(TCachedBlockDevice &cachedBlockDevice, void *data, ui32 size, ui64 offset, TReqId reqId)
             : CachedBlockDevice(cachedBlockDevice)
@@ -1182,18 +1269,14 @@ class TCachedBlockDevice : public TRealBlockDevice {
 
         void Exec(TActorSystem *actorSystem) override {
             if (actorSystem) {
-                LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK,
-                        "PDisk# " << CachedBlockDevice.GetPDiskId() << " ReqId# " << ReqId
-                        << "Exec TCachedReadCompletion Offset# " << Offset);
+                STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "Exec TCachedReadCompletion", (ReqId, ReqId), (Offset, Offset));
             }
             CachedBlockDevice.ExecRead(this, actorSystem);
         }
 
         void Release(TActorSystem *actorSystem) override {
             if (actorSystem) {
-                LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK,
-                        "PDisk# " << CachedBlockDevice.GetPDiskId() << " ReqId# " << ReqId
-                        << "Release TCachedReadCompletion Offset# " << Offset);
+                STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "Release TCachedReadCompletion", (ReqId, ReqId), (Offset, Offset));
             }
             CachedBlockDevice.ReleaseRead(this, actorSystem);
         }
@@ -1225,7 +1308,7 @@ class TCachedBlockDevice : public TRealBlockDevice {
     TMutex CacheMutex;
     TLogCache Cache; // cache records MUST NOT cross chunk boundaries
     TMultiMap<ui64, TRead> ReadsForOffset;
-    TMap<ui64, TCachedReadCompletion*> CurrentReads;
+    TMap<ui64, std::shared_ptr<TCachedReadCompletion>> CurrentReads;
     ui64 ReadsInFly;
     TPDisk * const PDisk;
 
@@ -1256,11 +1339,9 @@ class TCachedBlockDevice : public TRealBlockDevice {
             TRead &read = it->second;
             auto currentIt = CurrentReads.find(read.Offset);
             if (currentIt == CurrentReads.end()) {
-                TCachedReadCompletion *ptr = new TCachedReadCompletion(*this, read.Data, read.Size, read.Offset,
-                        read.ReqId);
+                auto ptr = std::make_shared<TCachedReadCompletion>(*this, read.Data, read.Size, read.Offset, read.ReqId);
                 CurrentReads[read.Offset] = ptr;
-                ActorSystem->Send(PDiskActor, new TEvReadLogContinue(read.Data, read.Size, read.Offset,
-                            ptr, read.ReqId));
+                PCtx->ActorSystem->Send(PCtx->PDiskActor, new TEvReadLogContinue(read.Data, read.Size, read.Offset, ptr, read.ReqId));
                 ReadsInFly++;
                 if (ReadsInFly >= MaxReadsInFly) {
                     return;
@@ -1270,15 +1351,16 @@ class TCachedBlockDevice : public TRealBlockDevice {
     }
 
 public:
-    TCachedBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon &mon, ui64 reorderingCycles,
+    TCachedBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk)
-        : TRealBlockDevice(path, pDiskId, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-                maxQueuedCompletionActions, sectorMap)
-        , ReadsInFly(0), PDisk(pdisk)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly)
+        : TRealBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
+                maxQueuedCompletionActions, completionThreadsCount, sectorMap, readOnly)
+        , ReadsInFly(0)
+        , PDisk(pdisk)
     {}
 
-    void ExecRead(TCachedReadCompletion *completion, TActorSystem *actorSystem) {
+    void ExecRead(TCachedReadCompletion *completion, TActorSystem *) {
         Y_ASSERT(PDisk);
         TStackVec<TCompletionAction*, 32> pendingActions;
         {
@@ -1293,9 +1375,7 @@ public:
             if (TChunkState::DATA_COMMITTED == PDisk->ChunkState[chunkIdx].CommitState) {
                 if ((offset % PDisk->Format.ChunkSize) + completion->GetSize() > PDisk->Format.ChunkSize) {
                     // TODO: split buffer if crossing chunk boundary instead of completely discarding it
-                    LOG_INFO_S(
-                        *ActorSystem, NKikimrServices::BS_DEVICE,
-                        "Skip caching log read due to chunk boundary crossing");
+                    P_LOG(PRI_INFO, BPD01, "Skip caching log read due to chunk boundary crossing");
                 } else {
                     if (Cache.Size() >= MaxCount) {
                         Cache.Pop();
@@ -1328,14 +1408,13 @@ public:
                     ReadsForOffset.erase(it);
                 }
             }
-            delete currentReadIt->second;
             CurrentReads.erase(currentReadIt);
             ReadsInFly--;
             UpdateReads();
         }
 
         for (size_t i = 0; i < pendingActions.size(); ++i) {
-            pendingActions[i]->Exec(actorSystem);
+            pendingActions[i]->Exec(PCtx->ActorSystem);
         }
 
         {
@@ -1346,9 +1425,8 @@ public:
         }
     }
 
-    void ReleaseRead(TCachedReadCompletion *completion, TActorSystem *actorSystem) {
+    void ReleaseRead(TCachedReadCompletion *completion, TActorSystem *) {
         TGuard<TMutex> guard(CacheMutex);
-        Y_UNUSED(actorSystem);
 
         if (!completion->CanHandleResult()) {
             // If error, notify all underlying reads of that error.
@@ -1369,7 +1447,6 @@ public:
 
         auto it = CurrentReads.find(completion->GetOffset());
         Y_ABORT_UNLESS(it != CurrentReads.end());
-        delete it->second;
         CurrentReads.erase(it);
         ReadsInFly--;
     }
@@ -1402,30 +1479,27 @@ public:
 
     void Stop() override {
         TRealBlockDevice::Stop();
-        for (auto it = CurrentReads.begin(); it != CurrentReads.end(); ++it) {
-            delete it->second;
-        }
         CurrentReads.clear();
         for (auto it = ReadsForOffset.begin(); it != ReadsForOffset.end(); ++it) {
             if (it->second.CompletionAction) {
-                it->second.CompletionAction->Release(ActorSystem);
+                it->second.CompletionAction->Release(PCtx->ActorSystem);
             }
         }
         ReadsForOffset.clear();
     }
 };
 
-IBlockDevice* CreateRealBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon &mon, ui64 reorderingCycles,
+IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
         ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-        TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk) {
-    return new TCachedBlockDevice(path, pDiskId, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-            maxQueuedCompletionActions, sectorMap, pdisk);
+        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly) {
+    return new TCachedBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
+            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pdisk, readOnly);
 }
 
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk) {
-    IBlockDevice *device = CreateRealBlockDevice(path, 0, mon, 0, 0, 4, flags, 8, sectorMap, pdisk);
-    device->Initialize(actorSystem, {});
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk, bool readOnly) {
+    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, pdisk, readOnly);
+    device->Initialize(std::make_shared<TPDiskCtx>(actorSystem));
     return device;
 }
 

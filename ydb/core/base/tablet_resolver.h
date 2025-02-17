@@ -137,17 +137,17 @@ struct TEvTabletResolver {
 
     struct TEvTabletProblem : public TEventLocal<TEvTabletProblem, EvTabletProblem> {
         const ui64 TabletID;
-        const TActorId TabletActor;
+        const TActorId Actor;
 
-        TEvTabletProblem(ui64 tabletId, const TActorId &tabletActor)
+        TEvTabletProblem(ui64 tabletId, const TActorId &actor)
             : TabletID(tabletId)
-            , TabletActor(tabletActor)
+            , Actor(actor)
         {}
 
         TString ToString() const {
             TStringStream str;
             str << "{EvTabletProblem TabletID: " << TabletID;
-            str << " TabletActor: " << TabletActor.ToString();
+            str << " Actor: " << Actor;
             str << "}";
             return str.Str();
         }

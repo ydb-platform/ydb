@@ -15,6 +15,7 @@ and stores the results.
 
 For more details, see the class docstrings below.
 """
+
 from __future__ import annotations
 
 from warnings import warn
@@ -97,7 +98,7 @@ def num_ini_spaces(s):
     """
     warnings.warn(
         "`num_ini_spaces` is Pending Deprecation since IPython 8.17."
-        "It is considered fro removal in in future version. "
+        "It is considered for removal in in future version. "
         "Please open an issue if you believe it should be kept.",
         stacklevel=2,
         category=PendingDeprecationWarning,
@@ -320,7 +321,7 @@ class InputSplitter(object):
             prompt = '>>> ' + indent
             line = indent + raw_input(prompt)
             isp.push(line)
-        print 'Input source was:\n', isp.source_reset(),
+        print('Input source was:\n', isp.source_reset())
     """
     # A cache for storing the current indentation
     # The first value stores the most recently processed source input

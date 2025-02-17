@@ -48,160 +48,160 @@ namespace orc {
   template <typename T>
   class InternalStatisticsImpl {
    private:
-    bool _hasNull;
-    bool _hasMinimum;
-    bool _hasMaximum;
-    bool _hasSum;
-    bool _hasTotalLength;
-    uint64_t _totalLength;
-    uint64_t _valueCount;
-    T _minimum;
-    T _maximum;
-    T _sum;
+    bool hasNull_;
+    bool hasMinimum_;
+    bool hasMaximum_;
+    bool hasSum_;
+    bool hasTotalLength_;
+    uint64_t totalLength_;
+    uint64_t valueCount_;
+    T minimum_;
+    T maximum_;
+    T sum_;
 
    public:
     InternalStatisticsImpl() {
-      _hasNull = false;
-      _hasMinimum = false;
-      _hasMaximum = false;
-      _hasSum = false;
-      _hasTotalLength = false;
-      _totalLength = 0;
-      _valueCount = 0;
+      hasNull_ = false;
+      hasMinimum_ = false;
+      hasMaximum_ = false;
+      hasSum_ = false;
+      hasTotalLength_ = false;
+      totalLength_ = 0;
+      valueCount_ = 0;
     }
 
     ~InternalStatisticsImpl() {}
 
     // GET / SET _totalLength
     bool hasTotalLength() const {
-      return _hasTotalLength;
+      return hasTotalLength_;
     }
 
     void setHasTotalLength(bool hasTotalLength) {
-      _hasTotalLength = hasTotalLength;
+      hasTotalLength_ = hasTotalLength;
     }
 
     uint64_t getTotalLength() const {
-      return _totalLength;
+      return totalLength_;
     }
 
     void setTotalLength(uint64_t totalLength) {
-      _totalLength = totalLength;
+      totalLength_ = totalLength;
     }
 
     // GET / SET _sum
     bool hasSum() const {
-      return _hasSum;
+      return hasSum_;
     }
 
     void setHasSum(bool hasSum) {
-      _hasSum = hasSum;
+      hasSum_ = hasSum;
     }
 
     T getSum() const {
-      return _sum;
+      return sum_;
     }
 
     void setSum(T sum) {
-      _sum = sum;
+      sum_ = sum;
     }
 
     // GET / SET _maximum
     bool hasMaximum() const {
-      return _hasMaximum;
+      return hasMaximum_;
     }
 
     const T& getMaximum() const {
-      return _maximum;
+      return maximum_;
     }
 
     void setHasMaximum(bool hasMax) {
-      _hasMaximum = hasMax;
+      hasMaximum_ = hasMax;
     }
 
     void setMaximum(T max) {
-      _maximum = max;
+      maximum_ = max;
     }
 
     // GET / SET _minimum
     bool hasMinimum() const {
-      return _hasMinimum;
+      return hasMinimum_;
     }
 
     void setHasMinimum(bool hasMin) {
-      _hasMinimum = hasMin;
+      hasMinimum_ = hasMin;
     }
 
     const T& getMinimum() const {
-      return _minimum;
+      return minimum_;
     }
 
     void setMinimum(T min) {
-      _minimum = min;
+      minimum_ = min;
     }
 
     // GET / SET _valueCount
     uint64_t getNumberOfValues() const {
-      return _valueCount;
+      return valueCount_;
     }
 
     void setNumberOfValues(uint64_t numValues) {
-      _valueCount = numValues;
+      valueCount_ = numValues;
     }
 
     // GET / SET _hasNullValue
     bool hasNull() const {
-      return _hasNull;
+      return hasNull_;
     }
 
     void setHasNull(bool hasNull) {
-      _hasNull = hasNull;
+      hasNull_ = hasNull;
     }
 
     void reset() {
-      _hasNull = false;
-      _hasMinimum = false;
-      _hasMaximum = false;
-      _hasSum = false;
-      _hasTotalLength = false;
-      _totalLength = 0;
-      _valueCount = 0;
+      hasNull_ = false;
+      hasMinimum_ = false;
+      hasMaximum_ = false;
+      hasSum_ = false;
+      hasTotalLength_ = false;
+      totalLength_ = 0;
+      valueCount_ = 0;
     }
 
     void updateMinMax(T value) {
-      if (!_hasMinimum) {
-        _hasMinimum = _hasMaximum = true;
-        _minimum = _maximum = value;
-      } else if (compare(value, _minimum)) {
-        _minimum = value;
-      } else if (compare(_maximum, value)) {
-        _maximum = value;
+      if (!hasMinimum_) {
+        hasMinimum_ = hasMaximum_ = true;
+        minimum_ = maximum_ = value;
+      } else if (compare(value, minimum_)) {
+        minimum_ = value;
+      } else if (compare(maximum_, value)) {
+        maximum_ = value;
       }
     }
 
     // sum is not merged here as we need to check overflow
     void merge(const InternalStatisticsImpl& other) {
-      _hasNull = _hasNull || other._hasNull;
-      _valueCount += other._valueCount;
+      hasNull_ = hasNull_ || other.hasNull_;
+      valueCount_ += other.valueCount_;
 
-      if (other._hasMinimum) {
-        if (!_hasMinimum) {
-          _hasMinimum = _hasMaximum = true;
-          _minimum = other._minimum;
-          _maximum = other._maximum;
+      if (other.hasMinimum_) {
+        if (!hasMinimum_) {
+          hasMinimum_ = hasMaximum_ = true;
+          minimum_ = other.minimum_;
+          maximum_ = other.maximum_;
         } else {
           // all template types should support operator<
-          if (compare(_maximum, other._maximum)) {
-            _maximum = other._maximum;
+          if (compare(maximum_, other.maximum_)) {
+            maximum_ = other.maximum_;
           }
-          if (compare(other._minimum, _minimum)) {
-            _minimum = other._minimum;
+          if (compare(other.minimum_, minimum_)) {
+            minimum_ = other.minimum_;
           }
         }
       }
 
-      _hasTotalLength = _hasTotalLength && other._hasTotalLength;
-      _totalLength += other._totalLength;
+      hasTotalLength_ = hasTotalLength_ && other.hasTotalLength_;
+      totalLength_ += other.totalLength_;
     }
   };
 
@@ -240,7 +240,7 @@ namespace orc {
 
   class ColumnStatisticsImpl : public ColumnStatistics, public MutableColumnStatistics {
    private:
-    InternalCharStatistics _stats;
+    InternalCharStatistics stats_;
 
    public:
     ColumnStatisticsImpl() {
@@ -250,36 +250,36 @@ namespace orc {
     virtual ~ColumnStatisticsImpl() override;
 
     uint64_t getNumberOfValues() const override {
-      return _stats.getNumberOfValues();
+      return stats_.getNumberOfValues();
     }
 
     void setNumberOfValues(uint64_t value) override {
-      _stats.setNumberOfValues(value);
+      stats_.setNumberOfValues(value);
     }
 
     void increase(uint64_t count) override {
-      _stats.setNumberOfValues(_stats.getNumberOfValues() + count);
+      stats_.setNumberOfValues(stats_.getNumberOfValues() + count);
     }
 
     bool hasNull() const override {
-      return _stats.hasNull();
+      return stats_.hasNull();
     }
 
     void setHasNull(bool hasNull) override {
-      _stats.setHasNull(hasNull);
+      stats_.setHasNull(hasNull);
     }
 
     void merge(const MutableColumnStatistics& other) override {
-      _stats.merge(dynamic_cast<const ColumnStatisticsImpl&>(other)._stats);
+      stats_.merge(dynamic_cast<const ColumnStatisticsImpl&>(other).stats_);
     }
 
     void reset() override {
-      _stats.reset();
+      stats_.reset();
     }
 
     void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
-      pbStats.set_has_null(_stats.hasNull());
-      pbStats.set_number_of_values(_stats.getNumberOfValues());
+      pbStats.set_has_null(stats_.hasNull());
+      pbStats.set_number_of_values(stats_.getNumberOfValues());
     }
 
     std::string toString() const override {
@@ -292,7 +292,7 @@ namespace orc {
 
   class BinaryColumnStatisticsImpl : public BinaryColumnStatistics, public MutableColumnStatistics {
    private:
-    InternalCharStatistics _stats;
+    InternalCharStatistics stats_;
 
    public:
     BinaryColumnStatisticsImpl() {
@@ -303,63 +303,63 @@ namespace orc {
     virtual ~BinaryColumnStatisticsImpl() override;
 
     uint64_t getNumberOfValues() const override {
-      return _stats.getNumberOfValues();
+      return stats_.getNumberOfValues();
     }
 
     void setNumberOfValues(uint64_t value) override {
-      _stats.setNumberOfValues(value);
+      stats_.setNumberOfValues(value);
     }
 
     void increase(uint64_t count) override {
-      _stats.setNumberOfValues(_stats.getNumberOfValues() + count);
+      stats_.setNumberOfValues(stats_.getNumberOfValues() + count);
     }
 
     bool hasNull() const override {
-      return _stats.hasNull();
+      return stats_.hasNull();
     }
 
     void setHasNull(bool hasNull) override {
-      _stats.setHasNull(hasNull);
+      stats_.setHasNull(hasNull);
     }
 
     bool hasTotalLength() const override {
-      return _stats.hasTotalLength();
+      return stats_.hasTotalLength();
     }
 
     uint64_t getTotalLength() const override {
       if (hasTotalLength()) {
-        return _stats.getTotalLength();
+        return stats_.getTotalLength();
       } else {
         throw ParseError("Total length is not defined.");
       }
     }
 
     void setTotalLength(uint64_t length) {
-      _stats.setHasTotalLength(true);
-      _stats.setTotalLength(length);
+      stats_.setHasTotalLength(true);
+      stats_.setTotalLength(length);
     }
 
     void update(size_t length) {
-      _stats.setTotalLength(_stats.getTotalLength() + length);
+      stats_.setTotalLength(stats_.getTotalLength() + length);
     }
 
     void merge(const MutableColumnStatistics& other) override {
       const BinaryColumnStatisticsImpl& binStats =
           dynamic_cast<const BinaryColumnStatisticsImpl&>(other);
-      _stats.merge(binStats._stats);
+      stats_.merge(binStats.stats_);
     }
 
     void reset() override {
-      _stats.reset();
+      stats_.reset();
       setTotalLength(0);
     }
 
     void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
-      pbStats.set_has_null(_stats.hasNull());
-      pbStats.set_number_of_values(_stats.getNumberOfValues());
+      pbStats.set_has_null(stats_.hasNull());
+      pbStats.set_number_of_values(stats_.getNumberOfValues());
 
       proto::BinaryStatistics* binStats = pbStats.mutable_binary_statistics();
-      binStats->set_sum(static_cast<int64_t>(_stats.getTotalLength()));
+      binStats->set_sum(static_cast<int64_t>(stats_.getTotalLength()));
     }
 
     std::string toString() const override {
@@ -379,9 +379,9 @@ namespace orc {
   class BooleanColumnStatisticsImpl : public BooleanColumnStatistics,
                                       public MutableColumnStatistics {
    private:
-    InternalBooleanStatistics _stats;
-    bool _hasCount;
-    uint64_t _trueCount;
+    InternalBooleanStatistics stats_;
+    bool hasCount_;
+    uint64_t trueCount_;
 
    public:
     BooleanColumnStatisticsImpl() {
@@ -392,33 +392,33 @@ namespace orc {
     virtual ~BooleanColumnStatisticsImpl() override;
 
     bool hasCount() const override {
-      return _hasCount;
+      return hasCount_;
     }
 
     void increase(uint64_t count) override {
-      _stats.setNumberOfValues(_stats.getNumberOfValues() + count);
-      _hasCount = true;
+      stats_.setNumberOfValues(stats_.getNumberOfValues() + count);
+      hasCount_ = true;
     }
 
     uint64_t getNumberOfValues() const override {
-      return _stats.getNumberOfValues();
+      return stats_.getNumberOfValues();
     }
 
     void setNumberOfValues(uint64_t value) override {
-      _stats.setNumberOfValues(value);
+      stats_.setNumberOfValues(value);
     }
 
     bool hasNull() const override {
-      return _stats.hasNull();
+      return stats_.hasNull();
     }
 
     void setHasNull(bool hasNull) override {
-      _stats.setHasNull(hasNull);
+      stats_.setHasNull(hasNull);
     }
 
     uint64_t getFalseCount() const override {
       if (hasCount()) {
-        return getNumberOfValues() - _trueCount;
+        return getNumberOfValues() - trueCount_;
       } else {
         throw ParseError("False count is not defined.");
       }
@@ -426,43 +426,43 @@ namespace orc {
 
     uint64_t getTrueCount() const override {
       if (hasCount()) {
-        return _trueCount;
+        return trueCount_;
       } else {
         throw ParseError("True count is not defined.");
       }
     }
 
     void setTrueCount(uint64_t trueCount) {
-      _hasCount = true;
-      _trueCount = trueCount;
+      hasCount_ = true;
+      trueCount_ = trueCount;
     }
 
     void update(bool value, size_t repetitions) {
       if (value) {
-        _trueCount += repetitions;
+        trueCount_ += repetitions;
       }
     }
 
     void merge(const MutableColumnStatistics& other) override {
       const BooleanColumnStatisticsImpl& boolStats =
           dynamic_cast<const BooleanColumnStatisticsImpl&>(other);
-      _stats.merge(boolStats._stats);
-      _hasCount = _hasCount && boolStats._hasCount;
-      _trueCount += boolStats._trueCount;
+      stats_.merge(boolStats.stats_);
+      hasCount_ = hasCount_ && boolStats.hasCount_;
+      trueCount_ += boolStats.trueCount_;
     }
 
     void reset() override {
-      _stats.reset();
+      stats_.reset();
       setTrueCount(0);
     }
 
     void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
-      pbStats.set_has_null(_stats.hasNull());
-      pbStats.set_number_of_values(_stats.getNumberOfValues());
+      pbStats.set_has_null(stats_.hasNull());
+      pbStats.set_number_of_values(stats_.getNumberOfValues());
 
       proto::BucketStatistics* bucketStats = pbStats.mutable_bucket_statistics();
-      if (_hasCount) {
-        bucketStats->add_count(_trueCount);
+      if (hasCount_) {
+        bucketStats->add_count(trueCount_);
       } else {
         bucketStats->clear_count();
       }
@@ -485,7 +485,7 @@ namespace orc {
 
   class DateColumnStatisticsImpl : public DateColumnStatistics, public MutableColumnStatistics {
    private:
-    InternalDateStatistics _stats;
+    InternalDateStatistics stats_;
 
    public:
     DateColumnStatisticsImpl() {
@@ -495,36 +495,36 @@ namespace orc {
     virtual ~DateColumnStatisticsImpl() override;
 
     bool hasMinimum() const override {
-      return _stats.hasMinimum();
+      return stats_.hasMinimum();
     }
 
     bool hasMaximum() const override {
-      return _stats.hasMaximum();
+      return stats_.hasMaximum();
     }
 
     void increase(uint64_t count) override {
-      _stats.setNumberOfValues(_stats.getNumberOfValues() + count);
+      stats_.setNumberOfValues(stats_.getNumberOfValues() + count);
     }
 
     uint64_t getNumberOfValues() const override {
-      return _stats.getNumberOfValues();
+      return stats_.getNumberOfValues();
     }
 
     void setNumberOfValues(uint64_t value) override {
-      _stats.setNumberOfValues(value);
+      stats_.setNumberOfValues(value);
     }
 
     bool hasNull() const override {
-      return _stats.hasNull();
+      return stats_.hasNull();
     }
 
     void setHasNull(bool hasNull) override {
-      _stats.setHasNull(hasNull);
+      stats_.setHasNull(hasNull);
     }
 
     int32_t getMinimum() const override {
       if (hasMinimum()) {
-        return _stats.getMinimum();
+        return stats_.getMinimum();
       } else {
         throw ParseError("Minimum is not defined.");
       }
@@ -532,44 +532,44 @@ namespace orc {
 
     int32_t getMaximum() const override {
       if (hasMaximum()) {
-        return _stats.getMaximum();
+        return stats_.getMaximum();
       } else {
         throw ParseError("Maximum is not defined.");
       }
     }
 
     void setMinimum(int32_t minimum) {
-      _stats.setHasMinimum(true);
-      _stats.setMinimum(minimum);
+      stats_.setHasMinimum(true);
+      stats_.setMinimum(minimum);
     }
 
     void setMaximum(int32_t maximum) {
-      _stats.setHasMaximum(true);
-      _stats.setMaximum(maximum);
+      stats_.setHasMaximum(true);
+      stats_.setMaximum(maximum);
     }
 
     void update(int32_t value) {
-      _stats.updateMinMax(value);
+      stats_.updateMinMax(value);
     }
 
     void merge(const MutableColumnStatistics& other) override {
       const DateColumnStatisticsImpl& dateStats =
           dynamic_cast<const DateColumnStatisticsImpl&>(other);
-      _stats.merge(dateStats._stats);
+      stats_.merge(dateStats.stats_);
     }
 
     void reset() override {
-      _stats.reset();
+      stats_.reset();
     }
 
     void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
-      pbStats.set_has_null(_stats.hasNull());
-      pbStats.set_number_of_values(_stats.getNumberOfValues());
+      pbStats.set_has_null(stats_.hasNull());
+      pbStats.set_number_of_values(stats_.getNumberOfValues());
 
       proto::DateStatistics* dateStatistics = pbStats.mutable_date_statistics();
-      if (_stats.hasMinimum()) {
-        dateStatistics->set_maximum(_stats.getMaximum());
-        dateStatistics->set_minimum(_stats.getMinimum());
+      if (stats_.hasMinimum()) {
+        dateStatistics->set_maximum(stats_.getMaximum());
+        dateStatistics->set_minimum(stats_.getMinimum());
       } else {
         dateStatistics->clear_minimum();
         dateStatistics->clear_maximum();
@@ -599,7 +599,7 @@ namespace orc {
   class DecimalColumnStatisticsImpl : public DecimalColumnStatistics,
                                       public MutableColumnStatistics {
    private:
-    InternalDecimalStatistics _stats;
+    InternalDecimalStatistics stats_;
 
    public:
     DecimalColumnStatisticsImpl() {
@@ -610,40 +610,40 @@ namespace orc {
     virtual ~DecimalColumnStatisticsImpl() override;
 
     bool hasMinimum() const override {
-      return _stats.hasMinimum();
+      return stats_.hasMinimum();
     }
 
     bool hasMaximum() const override {
-      return _stats.hasMaximum();
+      return stats_.hasMaximum();
     }
 
     bool hasSum() const override {
-      return _stats.hasSum();
+      return stats_.hasSum();
     }
 
     void increase(uint64_t count) override {
-      _stats.setNumberOfValues(_stats.getNumberOfValues() + count);
+      stats_.setNumberOfValues(stats_.getNumberOfValues() + count);
     }
 
     uint64_t getNumberOfValues() const override {
-      return _stats.getNumberOfValues();
+      return stats_.getNumberOfValues();
     }
 
     void setNumberOfValues(uint64_t value) override {
-      _stats.setNumberOfValues(value);
+      stats_.setNumberOfValues(value);
     }
 
     bool hasNull() const override {
-      return _stats.hasNull();
+      return stats_.hasNull();
     }
 
     void setHasNull(bool hasNull) override {
-      _stats.setHasNull(hasNull);
+      stats_.setHasNull(hasNull);
     }
 
     Decimal getMinimum() const override {
       if (hasMinimum()) {
-        return _stats.getMinimum();
+        return stats_.getMinimum();
       } else {
         throw ParseError("Minimum is not defined.");
       }
@@ -651,39 +651,39 @@ namespace orc {
 
     Decimal getMaximum() const override {
       if (hasMaximum()) {
-        return _stats.getMaximum();
+        return stats_.getMaximum();
       } else {
         throw ParseError("Maximum is not defined.");
       }
     }
 
     void setMinimum(Decimal minimum) {
-      _stats.setHasMinimum(true);
-      _stats.setMinimum(minimum);
+      stats_.setHasMinimum(true);
+      stats_.setMinimum(minimum);
     }
 
     void setMaximum(Decimal maximum) {
-      _stats.setHasMaximum(true);
-      _stats.setMaximum(maximum);
+      stats_.setHasMaximum(true);
+      stats_.setMaximum(maximum);
     }
 
     Decimal getSum() const override {
       if (hasSum()) {
-        return _stats.getSum();
+        return stats_.getSum();
       } else {
         throw ParseError("Sum is not defined.");
       }
     }
 
     void setSum(Decimal sum) {
-      _stats.setHasSum(true);
-      _stats.setSum(sum);
+      stats_.setHasSum(true);
+      stats_.setSum(sum);
     }
 
     void update(const Decimal& value) {
-      _stats.updateMinMax(value);
+      stats_.updateMinMax(value);
 
-      if (_stats.hasSum()) {
+      if (stats_.hasSum()) {
         updateSum(value);
       }
     }
@@ -692,33 +692,33 @@ namespace orc {
       const DecimalColumnStatisticsImpl& decStats =
           dynamic_cast<const DecimalColumnStatisticsImpl&>(other);
 
-      _stats.merge(decStats._stats);
+      stats_.merge(decStats.stats_);
 
-      _stats.setHasSum(_stats.hasSum() && decStats.hasSum());
-      if (_stats.hasSum()) {
+      stats_.setHasSum(stats_.hasSum() && decStats.hasSum());
+      if (stats_.hasSum()) {
         updateSum(decStats.getSum());
       }
     }
 
     void reset() override {
-      _stats.reset();
+      stats_.reset();
       setSum(Decimal());
     }
 
     void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
-      pbStats.set_has_null(_stats.hasNull());
-      pbStats.set_number_of_values(_stats.getNumberOfValues());
+      pbStats.set_has_null(stats_.hasNull());
+      pbStats.set_number_of_values(stats_.getNumberOfValues());
 
       proto::DecimalStatistics* decStats = pbStats.mutable_decimal_statistics();
-      if (_stats.hasMinimum()) {
-        decStats->set_minimum(TString(_stats.getMinimum().toString(true)));
-        decStats->set_maximum(TString(_stats.getMaximum().toString(true)));
+      if (stats_.hasMinimum()) {
+        decStats->set_minimum(stats_.getMinimum().toString(true));
+        decStats->set_maximum(stats_.getMaximum().toString(true));
       } else {
         decStats->clear_minimum();
         decStats->clear_maximum();
       }
-      if (_stats.hasSum()) {
-        decStats->set_sum(TString(_stats.getSum().toString(true)));
+      if (stats_.hasSum()) {
+        decStats->set_sum(stats_.getSum().toString(true));
       } else {
         decStats->clear_sum();
       }
@@ -752,9 +752,9 @@ namespace orc {
 
    private:
     void updateSum(Decimal value) {
-      if (_stats.hasSum()) {
+      if (stats_.hasSum()) {
         bool overflow = false;
-        Decimal sum = _stats.getSum();
+        Decimal sum = stats_.getSum();
         if (sum.scale > value.scale) {
           value.value = scaleUpInt128ByPowerOfTen(value.value, sum.scale - value.scale, overflow);
         } else if (sum.scale < value.scale) {
@@ -766,14 +766,14 @@ namespace orc {
           bool wasPositive = sum.value >= 0;
           sum.value += value.value;
           if ((value.value >= 0) == wasPositive) {
-            _stats.setHasSum((sum.value >= 0) == wasPositive);
+            stats_.setHasSum((sum.value >= 0) == wasPositive);
           }
         } else {
-          _stats.setHasSum(false);
+          stats_.setHasSum(false);
         }
 
-        if (_stats.hasSum()) {
-          _stats.setSum(sum);
+        if (stats_.hasSum()) {
+          stats_.setSum(sum);
         }
       }
     }
@@ -781,7 +781,7 @@ namespace orc {
 
   class DoubleColumnStatisticsImpl : public DoubleColumnStatistics, public MutableColumnStatistics {
    private:
-    InternalDoubleStatistics _stats;
+    InternalDoubleStatistics stats_;
 
    public:
     DoubleColumnStatisticsImpl() {
@@ -791,40 +791,40 @@ namespace orc {
     virtual ~DoubleColumnStatisticsImpl() override;
 
     bool hasMinimum() const override {
-      return _stats.hasMinimum();
+      return stats_.hasMinimum();
     }
 
     bool hasMaximum() const override {
-      return _stats.hasMaximum();
+      return stats_.hasMaximum();
     }
 
     bool hasSum() const override {
-      return _stats.hasSum();
+      return stats_.hasSum();
     }
 
     void increase(uint64_t count) override {
-      _stats.setNumberOfValues(_stats.getNumberOfValues() + count);
+      stats_.setNumberOfValues(stats_.getNumberOfValues() + count);
     }
 
     uint64_t getNumberOfValues() const override {
-      return _stats.getNumberOfValues();
+      return stats_.getNumberOfValues();
     }
 
     void setNumberOfValues(uint64_t value) override {
-      _stats.setNumberOfValues(value);
+      stats_.setNumberOfValues(value);
     }
 
     bool hasNull() const override {
-      return _stats.hasNull();
+      return stats_.hasNull();
     }
 
     void setHasNull(bool hasNull) override {
-      _stats.setHasNull(hasNull);
+      stats_.setHasNull(hasNull);
     }
 
     double getMinimum() const override {
       if (hasMinimum()) {
-        return _stats.getMinimum();
+        return stats_.getMinimum();
       } else {
         throw ParseError("Minimum is not defined.");
       }
@@ -832,70 +832,70 @@ namespace orc {
 
     double getMaximum() const override {
       if (hasMaximum()) {
-        return _stats.getMaximum();
+        return stats_.getMaximum();
       } else {
         throw ParseError("Maximum is not defined.");
       }
     }
 
     void setMinimum(double minimum) {
-      _stats.setHasMinimum(true);
-      _stats.setMinimum(minimum);
+      stats_.setHasMinimum(true);
+      stats_.setMinimum(minimum);
     }
 
     void setMaximum(double maximum) {
-      _stats.setHasMaximum(true);
-      _stats.setMaximum(maximum);
+      stats_.setHasMaximum(true);
+      stats_.setMaximum(maximum);
     }
 
     double getSum() const override {
       if (hasSum()) {
-        return _stats.getSum();
+        return stats_.getSum();
       } else {
         throw ParseError("Sum is not defined.");
       }
     }
 
     void setSum(double sum) {
-      _stats.setHasSum(true);
-      _stats.setSum(sum);
+      stats_.setHasSum(true);
+      stats_.setSum(sum);
     }
 
     void update(double value) {
-      _stats.updateMinMax(value);
-      _stats.setSum(_stats.getSum() + value);
+      stats_.updateMinMax(value);
+      stats_.setSum(stats_.getSum() + value);
     }
 
     void merge(const MutableColumnStatistics& other) override {
       const DoubleColumnStatisticsImpl& doubleStats =
           dynamic_cast<const DoubleColumnStatisticsImpl&>(other);
-      _stats.merge(doubleStats._stats);
+      stats_.merge(doubleStats.stats_);
 
-      _stats.setHasSum(_stats.hasSum() && doubleStats.hasSum());
-      if (_stats.hasSum()) {
-        _stats.setSum(_stats.getSum() + doubleStats.getSum());
+      stats_.setHasSum(stats_.hasSum() && doubleStats.hasSum());
+      if (stats_.hasSum()) {
+        stats_.setSum(stats_.getSum() + doubleStats.getSum());
       }
     }
 
     void reset() override {
-      _stats.reset();
+      stats_.reset();
       setSum(0.0);
     }
 
     void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
-      pbStats.set_has_null(_stats.hasNull());
-      pbStats.set_number_of_values(_stats.getNumberOfValues());
+      pbStats.set_has_null(stats_.hasNull());
+      pbStats.set_number_of_values(stats_.getNumberOfValues());
 
       proto::DoubleStatistics* doubleStats = pbStats.mutable_double_statistics();
-      if (_stats.hasMinimum()) {
-        doubleStats->set_minimum(_stats.getMinimum());
-        doubleStats->set_maximum(_stats.getMaximum());
+      if (stats_.hasMinimum()) {
+        doubleStats->set_minimum(stats_.getMinimum());
+        doubleStats->set_maximum(stats_.getMaximum());
       } else {
         doubleStats->clear_minimum();
         doubleStats->clear_maximum();
       }
-      if (_stats.hasSum()) {
-        doubleStats->set_sum(_stats.getSum());
+      if (stats_.hasSum()) {
+        doubleStats->set_sum(stats_.getSum());
       } else {
         doubleStats->clear_sum();
       }
@@ -930,7 +930,7 @@ namespace orc {
   class IntegerColumnStatisticsImpl : public IntegerColumnStatistics,
                                       public MutableColumnStatistics {
    private:
-    InternalIntegerStatistics _stats;
+    InternalIntegerStatistics stats_;
 
    public:
     IntegerColumnStatisticsImpl() {
@@ -940,40 +940,40 @@ namespace orc {
     virtual ~IntegerColumnStatisticsImpl() override;
 
     bool hasMinimum() const override {
-      return _stats.hasMinimum();
+      return stats_.hasMinimum();
     }
 
     bool hasMaximum() const override {
-      return _stats.hasMaximum();
+      return stats_.hasMaximum();
     }
 
     bool hasSum() const override {
-      return _stats.hasSum();
+      return stats_.hasSum();
     }
 
     void increase(uint64_t count) override {
-      _stats.setNumberOfValues(_stats.getNumberOfValues() + count);
+      stats_.setNumberOfValues(stats_.getNumberOfValues() + count);
     }
 
     uint64_t getNumberOfValues() const override {
-      return _stats.getNumberOfValues();
+      return stats_.getNumberOfValues();
     }
 
     void setNumberOfValues(uint64_t value) override {
-      _stats.setNumberOfValues(value);
+      stats_.setNumberOfValues(value);
     }
 
     bool hasNull() const override {
-      return _stats.hasNull();
+      return stats_.hasNull();
     }
 
     void setHasNull(bool hasNull) override {
-      _stats.setHasNull(hasNull);
+      stats_.setHasNull(hasNull);
     }
 
     int64_t getMinimum() const override {
       if (hasMinimum()) {
-        return _stats.getMinimum();
+        return stats_.getMinimum();
       } else {
         throw ParseError("Minimum is not defined.");
       }
@@ -981,48 +981,48 @@ namespace orc {
 
     int64_t getMaximum() const override {
       if (hasMaximum()) {
-        return _stats.getMaximum();
+        return stats_.getMaximum();
       } else {
         throw ParseError("Maximum is not defined.");
       }
     }
 
     void setMinimum(int64_t minimum) {
-      _stats.setHasMinimum(true);
-      _stats.setMinimum(minimum);
+      stats_.setHasMinimum(true);
+      stats_.setMinimum(minimum);
     }
 
     void setMaximum(int64_t maximum) {
-      _stats.setHasMaximum(true);
-      _stats.setMaximum(maximum);
+      stats_.setHasMaximum(true);
+      stats_.setMaximum(maximum);
     }
 
     int64_t getSum() const override {
       if (hasSum()) {
-        return _stats.getSum();
+        return stats_.getSum();
       } else {
         throw ParseError("Sum is not defined.");
       }
     }
 
     void setSum(int64_t sum) {
-      _stats.setHasSum(true);
-      _stats.setSum(sum);
+      stats_.setHasSum(true);
+      stats_.setSum(sum);
     }
 
     void update(int64_t value, int repetitions) {
-      _stats.updateMinMax(value);
+      stats_.updateMinMax(value);
 
-      if (_stats.hasSum()) {
+      if (stats_.hasSum()) {
         if (repetitions > 1) {
-          _stats.setHasSum(multiplyExact(value, repetitions, &value));
+          stats_.setHasSum(multiplyExact(value, repetitions, &value));
         }
 
-        if (_stats.hasSum()) {
-          _stats.setHasSum(addExact(_stats.getSum(), value, &value));
+        if (stats_.hasSum()) {
+          stats_.setHasSum(addExact(stats_.getSum(), value, &value));
 
-          if (_stats.hasSum()) {
-            _stats.setSum(value);
+          if (stats_.hasSum()) {
+            stats_.setSum(value);
           }
         }
       }
@@ -1032,38 +1032,38 @@ namespace orc {
       const IntegerColumnStatisticsImpl& intStats =
           dynamic_cast<const IntegerColumnStatisticsImpl&>(other);
 
-      _stats.merge(intStats._stats);
+      stats_.merge(intStats.stats_);
 
       // update sum and check overflow
-      _stats.setHasSum(_stats.hasSum() && intStats.hasSum());
-      if (_stats.hasSum()) {
+      stats_.setHasSum(stats_.hasSum() && intStats.hasSum());
+      if (stats_.hasSum()) {
         int64_t value;
-        _stats.setHasSum(addExact(_stats.getSum(), intStats.getSum(), &value));
-        if (_stats.hasSum()) {
-          _stats.setSum(value);
+        stats_.setHasSum(addExact(stats_.getSum(), intStats.getSum(), &value));
+        if (stats_.hasSum()) {
+          stats_.setSum(value);
         }
       }
     }
 
     void reset() override {
-      _stats.reset();
+      stats_.reset();
       setSum(0);
     }
 
     void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
-      pbStats.set_has_null(_stats.hasNull());
-      pbStats.set_number_of_values(_stats.getNumberOfValues());
+      pbStats.set_has_null(stats_.hasNull());
+      pbStats.set_number_of_values(stats_.getNumberOfValues());
 
       proto::IntegerStatistics* intStats = pbStats.mutable_int_statistics();
-      if (_stats.hasMinimum()) {
-        intStats->set_minimum(_stats.getMinimum());
-        intStats->set_maximum(_stats.getMaximum());
+      if (stats_.hasMinimum()) {
+        intStats->set_minimum(stats_.getMinimum());
+        intStats->set_maximum(stats_.getMaximum());
       } else {
         intStats->clear_minimum();
         intStats->clear_maximum();
       }
-      if (_stats.hasSum()) {
-        intStats->set_sum(_stats.getSum());
+      if (stats_.hasSum()) {
+        intStats->set_sum(stats_.getSum());
       } else {
         intStats->clear_sum();
       }
@@ -1097,7 +1097,7 @@ namespace orc {
 
   class StringColumnStatisticsImpl : public StringColumnStatistics, public MutableColumnStatistics {
    private:
-    InternalStringStatistics _stats;
+    InternalStringStatistics stats_;
 
    public:
     StringColumnStatisticsImpl() {
@@ -1108,40 +1108,40 @@ namespace orc {
     virtual ~StringColumnStatisticsImpl() override;
 
     bool hasMinimum() const override {
-      return _stats.hasMinimum();
+      return stats_.hasMinimum();
     }
 
     bool hasMaximum() const override {
-      return _stats.hasMaximum();
+      return stats_.hasMaximum();
     }
 
     bool hasTotalLength() const override {
-      return _stats.hasTotalLength();
+      return stats_.hasTotalLength();
     }
 
     void increase(uint64_t count) override {
-      _stats.setNumberOfValues(_stats.getNumberOfValues() + count);
+      stats_.setNumberOfValues(stats_.getNumberOfValues() + count);
     }
 
     uint64_t getNumberOfValues() const override {
-      return _stats.getNumberOfValues();
+      return stats_.getNumberOfValues();
     }
 
     void setNumberOfValues(uint64_t value) override {
-      _stats.setNumberOfValues(value);
+      stats_.setNumberOfValues(value);
     }
 
     bool hasNull() const override {
-      return _stats.hasNull();
+      return stats_.hasNull();
     }
 
     void setHasNull(bool hasNull) override {
-      _stats.setHasNull(hasNull);
+      stats_.setHasNull(hasNull);
     }
 
     const std::string& getMinimum() const override {
       if (hasMinimum()) {
-        return _stats.getMinimum();
+        return stats_.getMinimum();
       } else {
         throw ParseError("Minimum is not defined.");
       }
@@ -1149,59 +1149,59 @@ namespace orc {
 
     const std::string& getMaximum() const override {
       if (hasMaximum()) {
-        return _stats.getMaximum();
+        return stats_.getMaximum();
       } else {
         throw ParseError("Maximum is not defined.");
       }
     }
 
     void setMinimum(std::string minimum) {
-      _stats.setHasMinimum(true);
-      _stats.setMinimum(minimum);
+      stats_.setHasMinimum(true);
+      stats_.setMinimum(minimum);
     }
 
     void setMaximum(std::string maximum) {
-      _stats.setHasMaximum(true);
-      _stats.setMaximum(maximum);
+      stats_.setHasMaximum(true);
+      stats_.setMaximum(maximum);
     }
 
     uint64_t getTotalLength() const override {
       if (hasTotalLength()) {
-        return _stats.getTotalLength();
+        return stats_.getTotalLength();
       } else {
         throw ParseError("Total length is not defined.");
       }
     }
 
     void setTotalLength(uint64_t length) {
-      _stats.setHasTotalLength(true);
-      _stats.setTotalLength(length);
+      stats_.setHasTotalLength(true);
+      stats_.setTotalLength(length);
     }
 
     void update(const char* value, size_t length) {
       if (value != nullptr) {
-        if (!_stats.hasMinimum()) {
+        if (!stats_.hasMinimum()) {
           std::string tempStr(value, value + length);
           setMinimum(tempStr);
           setMaximum(tempStr);
         } else {
           // update min
-          int minCmp = strncmp(_stats.getMinimum().c_str(), value,
-                               std::min(_stats.getMinimum().length(), length));
-          if (minCmp > 0 || (minCmp == 0 && length < _stats.getMinimum().length())) {
+          int minCmp = strncmp(stats_.getMinimum().c_str(), value,
+                               std::min(stats_.getMinimum().length(), length));
+          if (minCmp > 0 || (minCmp == 0 && length < stats_.getMinimum().length())) {
             setMinimum(std::string(value, value + length));
           }
 
           // update max
-          int maxCmp = strncmp(_stats.getMaximum().c_str(), value,
-                               std::min(_stats.getMaximum().length(), length));
-          if (maxCmp < 0 || (maxCmp == 0 && length > _stats.getMaximum().length())) {
+          int maxCmp = strncmp(stats_.getMaximum().c_str(), value,
+                               std::min(stats_.getMaximum().length(), length));
+          if (maxCmp < 0 || (maxCmp == 0 && length > stats_.getMaximum().length())) {
             setMaximum(std::string(value, value + length));
           }
         }
       }
 
-      _stats.setTotalLength(_stats.getTotalLength() + length);
+      stats_.setTotalLength(stats_.getTotalLength() + length);
     }
 
     void update(std::string value) {
@@ -1211,28 +1211,28 @@ namespace orc {
     void merge(const MutableColumnStatistics& other) override {
       const StringColumnStatisticsImpl& strStats =
           dynamic_cast<const StringColumnStatisticsImpl&>(other);
-      _stats.merge(strStats._stats);
+      stats_.merge(strStats.stats_);
     }
 
     void reset() override {
-      _stats.reset();
+      stats_.reset();
       setTotalLength(0);
     }
 
     void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
-      pbStats.set_has_null(_stats.hasNull());
-      pbStats.set_number_of_values(_stats.getNumberOfValues());
+      pbStats.set_has_null(stats_.hasNull());
+      pbStats.set_number_of_values(stats_.getNumberOfValues());
 
       proto::StringStatistics* strStats = pbStats.mutable_string_statistics();
-      if (_stats.hasMinimum()) {
-        strStats->set_minimum(TString(_stats.getMinimum()));
-        strStats->set_maximum(TString(_stats.getMaximum()));
+      if (stats_.hasMinimum()) {
+        strStats->set_minimum(stats_.getMinimum());
+        strStats->set_maximum(stats_.getMaximum());
       } else {
         strStats->clear_minimum();
         strStats->clear_maximum();
       }
-      if (_stats.hasTotalLength()) {
-        strStats->set_sum(static_cast<int64_t>(_stats.getTotalLength()));
+      if (stats_.hasTotalLength()) {
+        strStats->set_sum(static_cast<int64_t>(stats_.getTotalLength()));
       } else {
         strStats->clear_sum();
       }
@@ -1267,13 +1267,13 @@ namespace orc {
   class TimestampColumnStatisticsImpl : public TimestampColumnStatistics,
                                         public MutableColumnStatistics {
    private:
-    InternalIntegerStatistics _stats;
-    bool _hasLowerBound;
-    bool _hasUpperBound;
-    int64_t _lowerBound;
-    int64_t _upperBound;
-    int32_t _minimumNanos;  // last 6 digits of nanosecond of minimum timestamp
-    int32_t _maximumNanos;  // last 6 digits of nanosecond of maximum timestamp
+    InternalIntegerStatistics stats_;
+    bool hasLowerBound_;
+    bool hasUpperBound_;
+    int64_t lowerBound_;
+    int64_t upperBound_;
+    int32_t minimumNanos_;  // last 6 digits of nanosecond of minimum timestamp
+    int32_t maximumNanos_;  // last 6 digits of nanosecond of maximum timestamp
     static constexpr int32_t DEFAULT_MIN_NANOS = 0;
     static constexpr int32_t DEFAULT_MAX_NANOS = 999999;
 
@@ -1286,36 +1286,36 @@ namespace orc {
     virtual ~TimestampColumnStatisticsImpl() override;
 
     bool hasMinimum() const override {
-      return _stats.hasMinimum();
+      return stats_.hasMinimum();
     }
 
     bool hasMaximum() const override {
-      return _stats.hasMaximum();
+      return stats_.hasMaximum();
     }
 
     uint64_t getNumberOfValues() const override {
-      return _stats.getNumberOfValues();
+      return stats_.getNumberOfValues();
     }
 
     void setNumberOfValues(uint64_t value) override {
-      _stats.setNumberOfValues(value);
+      stats_.setNumberOfValues(value);
     }
 
     void increase(uint64_t count) override {
-      _stats.setNumberOfValues(_stats.getNumberOfValues() + count);
+      stats_.setNumberOfValues(stats_.getNumberOfValues() + count);
     }
 
     bool hasNull() const override {
-      return _stats.hasNull();
+      return stats_.hasNull();
     }
 
     void setHasNull(bool hasNull) override {
-      _stats.setHasNull(hasNull);
+      stats_.setHasNull(hasNull);
     }
 
     int64_t getMinimum() const override {
       if (hasMinimum()) {
-        return _stats.getMinimum();
+        return stats_.getMinimum();
       } else {
         throw ParseError("Minimum is not defined.");
       }
@@ -1323,46 +1323,46 @@ namespace orc {
 
     int64_t getMaximum() const override {
       if (hasMaximum()) {
-        return _stats.getMaximum();
+        return stats_.getMaximum();
       } else {
         throw ParseError("Maximum is not defined.");
       }
     }
 
     void setMinimum(int64_t minimum) {
-      _stats.setHasMinimum(true);
-      _stats.setMinimum(minimum);
+      stats_.setHasMinimum(true);
+      stats_.setMinimum(minimum);
     }
 
     void setMaximum(int64_t maximum) {
-      _stats.setHasMaximum(true);
-      _stats.setMaximum(maximum);
+      stats_.setHasMaximum(true);
+      stats_.setMaximum(maximum);
     }
 
     void update(int64_t value) {
-      _stats.updateMinMax(value);
+      stats_.updateMinMax(value);
     }
 
     void update(int64_t milli, int32_t nano) {
-      if (!_stats.hasMinimum()) {
-        _stats.setHasMinimum(true);
-        _stats.setHasMaximum(true);
-        _stats.setMinimum(milli);
-        _stats.setMaximum(milli);
-        _maximumNanos = _minimumNanos = nano;
+      if (!stats_.hasMinimum()) {
+        stats_.setHasMinimum(true);
+        stats_.setHasMaximum(true);
+        stats_.setMinimum(milli);
+        stats_.setMaximum(milli);
+        maximumNanos_ = minimumNanos_ = nano;
       } else {
-        if (milli <= _stats.getMinimum()) {
-          if (milli < _stats.getMinimum() || nano < _minimumNanos) {
-            _minimumNanos = nano;
+        if (milli <= stats_.getMinimum()) {
+          if (milli < stats_.getMinimum() || nano < minimumNanos_) {
+            minimumNanos_ = nano;
           }
-          _stats.setMinimum(milli);
+          stats_.setMinimum(milli);
         }
 
-        if (milli >= _stats.getMaximum()) {
-          if (milli > _stats.getMaximum() || nano > _maximumNanos) {
-            _maximumNanos = nano;
+        if (milli >= stats_.getMaximum()) {
+          if (milli > stats_.getMaximum() || nano > maximumNanos_) {
+            maximumNanos_ = nano;
           }
-          _stats.setMaximum(milli);
+          stats_.setMaximum(milli);
         }
       }
     }
@@ -1371,55 +1371,55 @@ namespace orc {
       const TimestampColumnStatisticsImpl& tsStats =
           dynamic_cast<const TimestampColumnStatisticsImpl&>(other);
 
-      _stats.setHasNull(_stats.hasNull() || tsStats.hasNull());
-      _stats.setNumberOfValues(_stats.getNumberOfValues() + tsStats.getNumberOfValues());
+      stats_.setHasNull(stats_.hasNull() || tsStats.hasNull());
+      stats_.setNumberOfValues(stats_.getNumberOfValues() + tsStats.getNumberOfValues());
 
       if (tsStats.hasMinimum()) {
-        if (!_stats.hasMinimum()) {
-          _stats.setHasMinimum(true);
-          _stats.setHasMaximum(true);
-          _stats.setMinimum(tsStats.getMinimum());
-          _stats.setMaximum(tsStats.getMaximum());
-          _minimumNanos = tsStats.getMinimumNanos();
-          _maximumNanos = tsStats.getMaximumNanos();
+        if (!stats_.hasMinimum()) {
+          stats_.setHasMinimum(true);
+          stats_.setHasMaximum(true);
+          stats_.setMinimum(tsStats.getMinimum());
+          stats_.setMaximum(tsStats.getMaximum());
+          minimumNanos_ = tsStats.getMinimumNanos();
+          maximumNanos_ = tsStats.getMaximumNanos();
         } else {
-          if (tsStats.getMaximum() >= _stats.getMaximum()) {
-            if (tsStats.getMaximum() > _stats.getMaximum() ||
-                tsStats.getMaximumNanos() > _maximumNanos) {
-              _maximumNanos = tsStats.getMaximumNanos();
+          if (tsStats.getMaximum() >= stats_.getMaximum()) {
+            if (tsStats.getMaximum() > stats_.getMaximum() ||
+                tsStats.getMaximumNanos() > maximumNanos_) {
+              maximumNanos_ = tsStats.getMaximumNanos();
             }
-            _stats.setMaximum(tsStats.getMaximum());
+            stats_.setMaximum(tsStats.getMaximum());
           }
-          if (tsStats.getMinimum() <= _stats.getMinimum()) {
-            if (tsStats.getMinimum() < _stats.getMinimum() ||
-                tsStats.getMinimumNanos() < _minimumNanos) {
-              _minimumNanos = tsStats.getMinimumNanos();
+          if (tsStats.getMinimum() <= stats_.getMinimum()) {
+            if (tsStats.getMinimum() < stats_.getMinimum() ||
+                tsStats.getMinimumNanos() < minimumNanos_) {
+              minimumNanos_ = tsStats.getMinimumNanos();
             }
-            _stats.setMinimum(tsStats.getMinimum());
+            stats_.setMinimum(tsStats.getMinimum());
           }
         }
       }
     }
 
     void reset() override {
-      _stats.reset();
-      _minimumNanos = DEFAULT_MIN_NANOS;
-      _maximumNanos = DEFAULT_MAX_NANOS;
+      stats_.reset();
+      minimumNanos_ = DEFAULT_MIN_NANOS;
+      maximumNanos_ = DEFAULT_MAX_NANOS;
     }
 
     void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
-      pbStats.set_has_null(_stats.hasNull());
-      pbStats.set_number_of_values(_stats.getNumberOfValues());
+      pbStats.set_has_null(stats_.hasNull());
+      pbStats.set_number_of_values(stats_.getNumberOfValues());
 
       proto::TimestampStatistics* tsStats = pbStats.mutable_timestamp_statistics();
-      if (_stats.hasMinimum()) {
-        tsStats->set_minimum_utc(_stats.getMinimum());
-        tsStats->set_maximum_utc(_stats.getMaximum());
-        if (_minimumNanos != DEFAULT_MIN_NANOS) {
-          tsStats->set_minimum_nanos(_minimumNanos + 1);
+      if (stats_.hasMinimum()) {
+        tsStats->set_minimum_utc(stats_.getMinimum());
+        tsStats->set_maximum_utc(stats_.getMaximum());
+        if (minimumNanos_ != DEFAULT_MIN_NANOS) {
+          tsStats->set_minimum_nanos(minimumNanos_ + 1);
         }
-        if (_maximumNanos != DEFAULT_MAX_NANOS) {
-          tsStats->set_maximum_nanos(_maximumNanos + 1);
+        if (maximumNanos_ != DEFAULT_MAX_NANOS) {
+          tsStats->set_maximum_nanos(maximumNanos_ + 1);
         }
       } else {
         tsStats->clear_minimum_utc();
@@ -1478,16 +1478,16 @@ namespace orc {
     }
 
     bool hasLowerBound() const override {
-      return _hasLowerBound;
+      return hasLowerBound_;
     }
 
     bool hasUpperBound() const override {
-      return _hasUpperBound;
+      return hasUpperBound_;
     }
 
     int64_t getLowerBound() const override {
       if (hasLowerBound()) {
-        return _lowerBound;
+        return lowerBound_;
       } else {
         throw ParseError("LowerBound is not defined.");
       }
@@ -1495,7 +1495,7 @@ namespace orc {
 
     int64_t getUpperBound() const override {
       if (hasUpperBound()) {
-        return _upperBound;
+        return upperBound_;
       } else {
         throw ParseError("UpperBound is not defined.");
       }
@@ -1503,7 +1503,7 @@ namespace orc {
 
     int32_t getMinimumNanos() const override {
       if (hasMinimum()) {
-        return _minimumNanos;
+        return minimumNanos_;
       } else {
         throw ParseError("Minimum is not defined.");
       }
@@ -1511,7 +1511,7 @@ namespace orc {
 
     int32_t getMaximumNanos() const override {
       if (hasMaximum()) {
-        return _maximumNanos;
+        return maximumNanos_;
       } else {
         throw ParseError("Maximum is not defined.");
       }
@@ -1521,7 +1521,7 @@ namespace orc {
   class CollectionColumnStatisticsImpl : public CollectionColumnStatistics,
                                          public MutableColumnStatistics {
    private:
-    InternalCollectionStatistics _stats;
+    InternalCollectionStatistics stats_;
 
    public:
     CollectionColumnStatisticsImpl() {
@@ -1531,40 +1531,40 @@ namespace orc {
     virtual ~CollectionColumnStatisticsImpl() override;
 
     bool hasMinimumChildren() const override {
-      return _stats.hasMinimum();
+      return stats_.hasMinimum();
     }
 
     bool hasMaximumChildren() const override {
-      return _stats.hasMaximum();
+      return stats_.hasMaximum();
     }
 
     bool hasTotalChildren() const override {
-      return _stats.hasSum();
+      return stats_.hasSum();
     }
 
     void increase(uint64_t count) override {
-      _stats.setNumberOfValues(_stats.getNumberOfValues() + count);
+      stats_.setNumberOfValues(stats_.getNumberOfValues() + count);
     }
 
     uint64_t getNumberOfValues() const override {
-      return _stats.getNumberOfValues();
+      return stats_.getNumberOfValues();
     }
 
     void setNumberOfValues(uint64_t value) override {
-      _stats.setNumberOfValues(value);
+      stats_.setNumberOfValues(value);
     }
 
     bool hasNull() const override {
-      return _stats.hasNull();
+      return stats_.hasNull();
     }
 
     void setHasNull(bool hasNull) override {
-      _stats.setHasNull(hasNull);
+      stats_.setHasNull(hasNull);
     }
 
     uint64_t getMinimumChildren() const override {
       if (hasMinimumChildren()) {
-        return _stats.getMinimum();
+        return stats_.getMinimum();
       } else {
         throw ParseError("MinimumChildren is not defined.");
       }
@@ -1572,7 +1572,7 @@ namespace orc {
 
     uint64_t getMaximumChildren() const override {
       if (hasMaximumChildren()) {
-        return _stats.getMaximum();
+        return stats_.getMaximum();
       } else {
         throw ParseError("MaximumChildren is not defined.");
       }
@@ -1580,78 +1580,78 @@ namespace orc {
 
     uint64_t getTotalChildren() const override {
       if (hasTotalChildren()) {
-        return _stats.getSum();
+        return stats_.getSum();
       } else {
         throw ParseError("TotalChildren is not defined.");
       }
     }
 
     void setMinimumChildren(uint64_t minimum) override {
-      _stats.setHasMinimum(true);
-      _stats.setMinimum(minimum);
+      stats_.setHasMinimum(true);
+      stats_.setMinimum(minimum);
     }
 
     void setMaximumChildren(uint64_t maximum) override {
-      _stats.setHasMaximum(true);
-      _stats.setMaximum(maximum);
+      stats_.setHasMaximum(true);
+      stats_.setMaximum(maximum);
     }
 
     void setTotalChildren(uint64_t sum) override {
-      _stats.setHasSum(true);
-      _stats.setSum(sum);
+      stats_.setHasSum(true);
+      stats_.setSum(sum);
     }
 
     void setHasTotalChildren(bool hasSum) override {
-      _stats.setHasSum(hasSum);
+      stats_.setHasSum(hasSum);
     }
 
     void merge(const MutableColumnStatistics& other) override {
       const CollectionColumnStatisticsImpl& collectionStats =
           dynamic_cast<const CollectionColumnStatisticsImpl&>(other);
 
-      _stats.merge(collectionStats._stats);
+      stats_.merge(collectionStats.stats_);
 
       // hasSumValue here means no overflow
-      _stats.setHasSum(_stats.hasSum() && collectionStats.hasTotalChildren());
-      if (_stats.hasSum()) {
-        uint64_t oldSum = _stats.getSum();
-        _stats.setSum(_stats.getSum() + collectionStats.getTotalChildren());
-        if (oldSum > _stats.getSum()) {
-          _stats.setHasSum(false);
+      stats_.setHasSum(stats_.hasSum() && collectionStats.hasTotalChildren());
+      if (stats_.hasSum()) {
+        uint64_t oldSum = stats_.getSum();
+        stats_.setSum(stats_.getSum() + collectionStats.getTotalChildren());
+        if (oldSum > stats_.getSum()) {
+          stats_.setHasSum(false);
         }
       }
     }
 
     void reset() override {
-      _stats.reset();
+      stats_.reset();
       setTotalChildren(0);
     }
 
     void update(uint64_t value) {
-      _stats.updateMinMax(value);
-      if (_stats.hasSum()) {
-        uint64_t oldSum = _stats.getSum();
-        _stats.setSum(_stats.getSum() + value);
-        if (oldSum > _stats.getSum()) {
-          _stats.setHasSum(false);
+      stats_.updateMinMax(value);
+      if (stats_.hasSum()) {
+        uint64_t oldSum = stats_.getSum();
+        stats_.setSum(stats_.getSum() + value);
+        if (oldSum > stats_.getSum()) {
+          stats_.setHasSum(false);
         }
       }
     }
 
     void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
-      pbStats.set_has_null(_stats.hasNull());
-      pbStats.set_number_of_values(_stats.getNumberOfValues());
+      pbStats.set_has_null(stats_.hasNull());
+      pbStats.set_number_of_values(stats_.getNumberOfValues());
 
       proto::CollectionStatistics* collectionStats = pbStats.mutable_collection_statistics();
-      if (_stats.hasMinimum()) {
-        collectionStats->set_min_children(_stats.getMinimum());
-        collectionStats->set_max_children(_stats.getMaximum());
+      if (stats_.hasMinimum()) {
+        collectionStats->set_min_children(stats_.getMinimum());
+        collectionStats->set_max_children(stats_.getMaximum());
       } else {
         collectionStats->clear_min_children();
         collectionStats->clear_max_children();
       }
-      if (_stats.hasSum()) {
-        collectionStats->set_total_children(_stats.getSum());
+      if (stats_.hasSum()) {
+        collectionStats->set_total_children(stats_.getSum());
       } else {
         collectionStats->clear_total_children();
       }
@@ -1688,7 +1688,7 @@ namespace orc {
 
   class StatisticsImpl : public Statistics {
    private:
-    std::vector<ColumnStatistics*> colStats;
+    std::vector<ColumnStatistics*> colStats_;
 
     // DELIBERATELY NOT IMPLEMENTED
     StatisticsImpl(const StatisticsImpl&);
@@ -1700,20 +1700,20 @@ namespace orc {
     StatisticsImpl(const proto::Footer& footer, const StatContext& statContext);
 
     virtual const ColumnStatistics* getColumnStatistics(uint32_t columnId) const override {
-      return colStats[columnId];
+      return colStats_[columnId];
     }
 
     virtual ~StatisticsImpl() override;
 
     uint32_t getNumberOfColumns() const override {
-      return static_cast<uint32_t>(colStats.size());
+      return static_cast<uint32_t>(colStats_.size());
     }
   };
 
   class StripeStatisticsImpl : public StripeStatistics {
    private:
-    std::unique_ptr<StatisticsImpl> columnStats;
-    std::vector<std::vector<std::shared_ptr<const ColumnStatistics> > > rowIndexStats;
+    std::unique_ptr<StatisticsImpl> columnStats_;
+    std::vector<std::vector<std::shared_ptr<const ColumnStatistics> > > rowIndexStats_;
 
     // DELIBERATELY NOT IMPLEMENTED
     StripeStatisticsImpl(const StripeStatisticsImpl&);
@@ -1725,23 +1725,23 @@ namespace orc {
                          const StatContext& statContext);
 
     virtual const ColumnStatistics* getColumnStatistics(uint32_t columnId) const override {
-      return columnStats->getColumnStatistics(columnId);
+      return columnStats_->getColumnStatistics(columnId);
     }
 
     uint32_t getNumberOfColumns() const override {
-      return columnStats->getNumberOfColumns();
+      return columnStats_->getNumberOfColumns();
     }
 
     virtual const ColumnStatistics* getRowIndexStatistics(uint32_t columnId,
                                                           uint32_t rowIndex) const override {
       // check id indices are valid
-      return rowIndexStats[columnId][rowIndex].get();
+      return rowIndexStats_[columnId][rowIndex].get();
     }
 
     virtual ~StripeStatisticsImpl() override;
 
     uint32_t getNumberOfRowIndexStats(uint32_t columnId) const override {
-      return static_cast<uint32_t>(rowIndexStats[columnId].size());
+      return static_cast<uint32_t>(rowIndexStats_[columnId].size());
     }
   };
 

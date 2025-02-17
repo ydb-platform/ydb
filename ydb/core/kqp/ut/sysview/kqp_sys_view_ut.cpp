@@ -4,7 +4,7 @@
 
 #include <util/system/getpid.h>
 #include <ydb/core/sys_view/service/query_history.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -16,8 +16,6 @@ using namespace NYdb::NScheme;
 Y_UNIT_TEST_SUITE(KqpSystemView) {
 
     Y_UNIT_TEST(Join) {
-        return; // nodes table is currently switched off
-
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
 
@@ -418,8 +416,6 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST(NodesSimple) {
-        return; // nodes table is currenty switched off
-
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 3);
         auto client = kikimr.GetTableClient();
 
@@ -442,8 +438,6 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST(NodesRange1) {
-        return; // nodes table is currenty switched off
-
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 5);
         auto client = kikimr.GetTableClient();
 
@@ -468,8 +462,6 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST(NodesRange2) {
-        return; // nodes table is currenty switched off
-
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 5);
         auto client = kikimr.GetTableClient();
 
@@ -672,6 +664,103 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
         driver.Stop(true);
     }
+
+    Y_UNIT_TEST(PartitionStatsFollower) {
+        auto settings = TKikimrSettings()
+            .SetEnableForceFollowers(true)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
+
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE Followers (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                READ_REPLICAS_SETTINGS = "ANY_AZ:3"
+            );
+        )").GetValueSync());
+
+        Cerr << "... UPSERT" << Endl;
+        AssertSuccessResult(session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            UPSERT INTO Followers (Key, Value) VALUES
+                (1u, "One"),
+                (11u, "Two"),
+                (21u, "Three"),
+                (31u, "Four");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+
+        Cerr << "... SELECT from leader" << Endl;
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                SELECT * FROM Followers WHERE Key = 11;
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            AssertSuccessResult(result);
+            
+            TString actual = FormatResultSetYson(result.GetResultSet(0));
+            CompareYson(R"([
+                [[11u];["Two"]]
+            ])", actual);
+        }
+
+        Cerr << "... SELECT from follower" << Endl;
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                SELECT * FROM Followers WHERE Key >= 21;
+            )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+            
+            TString actual = FormatResultSetYson(result.GetResultSet(0));
+            CompareYson(R"([
+                [[21u];["Three"]];
+                [[31u];["Four"]]
+            ])", actual);
+        }
+
+        for (size_t attempt = 0; attempt < 30; ++attempt)
+        {
+            Cerr << "... SELECT from partition_stats, attempt " << attempt << Endl;
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT OwnerId, PartIdx, Path, PathId, TabletId, 
+                    RowCount, RowUpdates, RowReads, RangeReadRows,
+                    IF(FollowerId = 0, 'L', 'F') AS LeaderFollower
+                FROM `/Root/.sys/partition_stats`
+                WHERE RowCount != 0
+                ORDER BY PathId, PartIdx, LeaderFollower;
+            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+
+            auto rs = result.GetResultSet(0);
+            if (rs.RowsCount() != 2) {
+                Sleep(TDuration::Seconds(5));
+                continue;
+            }
+
+            // Leader and follower have different row stats
+            TString actual = FormatResultSetYson(rs);
+            CompareYson(R"([
+                [[72057594046644480u];[0u];["/Root/Followers"];[2u];[72075186224037888u];[4u];[0u];[0u];[2u];"F"];
+                [[72057594046644480u];[0u];["/Root/Followers"];[2u];[72075186224037888u];[4u];[4u];[1u];[0u];"L"]
+            ])", actual);
+            return;
+        }
+
+        Y_FAIL("Timeout waiting for from partition_stats");
+    }    
 }
 
 } // namspace NKqp

@@ -1,5 +1,6 @@
 #include "job_writer.h"
 
+#include <yt/cpp/mapreduce/interface/helpers.h>
 #include <yt/cpp/mapreduce/interface/io.h>
 
 #include <util/system/file.h>
@@ -27,8 +28,11 @@ TJobWriterStream::TJobWriterStream(const TFile& file)
 
 TJobWriter::TJobWriter(size_t outputTableCount)
 {
+    int firstOutputTableFD = GetJobFirstOutputTableFD();
+
     for (size_t i = 0; i < outputTableCount; ++i) {
-        Streams_.emplace_back(std::make_unique<NDetail::TJobWriterStream>(static_cast<int>(i * 3 + 1)));
+        int fd = static_cast<int>(i * 3 + firstOutputTableFD);
+        Streams_.emplace_back(std::make_unique<NDetail::TJobWriterStream>(fd));
     }
 }
 
@@ -73,7 +77,7 @@ THolder<IProxyOutput> CreateRawJobWriter(size_t outputTableCount)
 
 TSingleStreamJobWriter::TSingleStreamJobWriter(size_t tableIndex)
     : TableIndex_(tableIndex)
-    , Stream_(std::make_unique<NDetail::TJobWriterStream>(static_cast<int>(tableIndex * 3 + 1)))
+    , Stream_(std::make_unique<NDetail::TJobWriterStream>(static_cast<int>(tableIndex * 3 + GetJobFirstOutputTableFD())))
 { }
 
 size_t TSingleStreamJobWriter::GetStreamCount() const

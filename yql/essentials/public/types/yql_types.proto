@@ -1,0 +1,40 @@
+syntax = "proto3";
+package NYql.NProto;
+option java_package = "ru.yandex.yql.proto";
+
+enum TypeIds {
+    UNUSED = 0x0000;
+    Bool = 0x0006;
+    Int8 = 0x0007;
+    Uint8 = 0x0005;
+    Int16 = 0x0008;
+    Uint16 = 0x0009;
+    Int32 = 0x0001;
+    Uint32 = 0x0002;
+    Int64 = 0x0003;
+    Uint64 = 0x0004;
+    Float = 0x0021;
+    Double = 0x0020;
+    String = 0x1001;
+    Utf8 = 0x1200;
+    Yson = 0x1201;
+    Json = 0x1202;
+    Uuid = 0x1203;
+    JsonDocument = 0x1204;
+    Date = 0x0030;
+    Datetime = 0x0031;
+    Timestamp = 0x0032;
+    Interval = 0x0033;
+    TzDate = 0x0034;
+    TzDatetime = 0x0035;
+    TzTimestamp = 0x0036;
+    Date32 = 0x0040;
+    Datetime64 = 0x0041;
+    Timestamp64 = 0x0042;
+    Interval64 = 0x0043;
+    TzDate32 = 0x0044;
+    TzDatetime64 = 0x0045;
+    TzTimestamp64 = 0x0046;
+    Decimal = 0x1301;
+    DyNumber = 0x1302;
+}

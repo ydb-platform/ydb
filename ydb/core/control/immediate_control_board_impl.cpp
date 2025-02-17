@@ -7,16 +7,18 @@
 namespace NKikimr {
 
 bool TControlBoard::RegisterLocalControl(TControlWrapper control, TString name) {
-    bool result = true;
-    if (Board.Has(name)) {
-        result = false;
-    }
-    Board.Insert(name, control.Control);
-    return result;
+    TIntrusivePtr<TControl> ptr;
+    bool result = Board.Swap(name, control.Control, ptr);
+    return !result;
 }
 
 bool TControlBoard::RegisterSharedControl(TControlWrapper& control, TString name) {
-    auto& ptr = Board.InsertIfAbsent(name, control.Control);
+    TIntrusivePtr<TControl> ptr;
+    if (Board.Get(name, ptr)) {
+        control.Control = ptr;
+        return false;
+    }
+    ptr = Board.InsertIfAbsent(name, control.Control);
     if (control.Control == ptr) {
         return true;
     } else {

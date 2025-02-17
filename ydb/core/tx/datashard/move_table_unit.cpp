@@ -60,20 +60,27 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         ChangeRecords.clear();
-        if (!DataShard.LoadChangeRecords(db, ChangeRecords)) {
-            return EExecutionStatus::Restart;
-        }
 
+        auto changesQueue = DataShard.TakeChangesQueue();
         auto lockChangeRecords = DataShard.TakeLockChangeRecords();
         auto committedLockChangeRecords = DataShard.TakeCommittedLockChangeRecords();
 
+        if (!DataShard.LoadChangeRecords(db, ChangeRecords)) {
+            DataShard.SetChangesQueue(std::move(changesQueue));
+            DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
+            DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
+            return EExecutionStatus::Restart;
+        }
+
         if (!DataShard.LoadLockChangeRecords(db)) {
+            DataShard.SetChangesQueue(std::move(changesQueue));
             DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
             DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
             return EExecutionStatus::Restart;
         }
 
         if (!DataShard.LoadChangeRecordCommits(db, ChangeRecords)) {
+            DataShard.SetChangesQueue(std::move(changesQueue));
             DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
             DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
             return EExecutionStatus::Restart;
@@ -99,7 +106,7 @@ public:
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {
         DataShard.CreateChangeSender(ctx);
         DataShard.MaybeActivateChangeSender(ctx);
-        DataShard.EnqueueChangeRecords(std::move(ChangeRecords));
+        DataShard.EnqueueChangeRecords(std::move(ChangeRecords), 0, true);
     }
 };
 

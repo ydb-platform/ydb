@@ -4,7 +4,6 @@
 #include "helpers.h"
 #include "service.h"
 
-#include <atomic>
 #include <yt/yt/core/concurrency/thread_affinity.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
@@ -241,9 +240,7 @@ public:
 
                     const auto& responseMessage = responseMessageOrError.Value();
 
-                    NProto::TResponseHeader header;
-                    YT_VERIFY(TryParseResponseHeader(responseMessage, &header));
-                    bool remember = FromProto<NRpc::EErrorCode>(header.error().code()) != NRpc::EErrorCode::Unavailable;
+                    auto remember = ValidateHeaderAndParseRememberOption(responseMessage);
 
                     if (auto setResponseKeeperPromise = EndRequest(mutationId, responseMessage, remember)) {
                         setResponseKeeperPromise();
@@ -256,7 +253,7 @@ public:
 
     bool IsWarmingUp() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         return NProfiling::GetCpuInstant() < WarmupDeadline_;
     }
@@ -293,7 +290,7 @@ private:
 
     TFuture<TSharedRefArray> DoTryBeginRequest(TMutationId id, bool isRetry)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         auto result = DoFindRequest(id, isRetry);
         if (!result) {
@@ -304,7 +301,7 @@ private:
 
     TFuture<TSharedRefArray> DoFindRequest(TMutationId id, bool isRetry) const
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
         YT_ASSERT(id);
 
         if (!Started_) {
@@ -313,20 +310,16 @@ private:
 
         auto pendingIt = PendingResponses_.find(id);
         if (pendingIt != PendingResponses_.end()) {
-            if (!isRetry) {
-                THROW_ERROR_EXCEPTION("Duplicate request is not marked as \"retry\"")
-                    << TErrorAttribute("mutation_id", id);
-            }
+            ValidateRetry(id, isRetry);
+
             YT_LOG_DEBUG("Replying with pending response (MutationId: %v)", id);
             return pendingIt->second;
         }
 
         auto finishedIt = FinishedResponses_.find(id);
         if (finishedIt != FinishedResponses_.end()) {
-            if (!isRetry) {
-                THROW_ERROR_EXCEPTION("Duplicate request is not marked as \"retry\"")
-                    << TErrorAttribute("mutation_id", id);
-            }
+            ValidateRetry(id, isRetry);
+
             YT_LOG_DEBUG("Replying with finished response (MutationId: %v)", id);
             return MakeFuture(finishedIt->second);
         }
@@ -380,6 +373,23 @@ private:
             counter);
     }
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool ValidateHeaderAndParseRememberOption(const TSharedRefArray& responseMessage)
+{
+    NProto::TResponseHeader header;
+    YT_VERIFY(TryParseResponseHeader(responseMessage, &header));
+    return header.error().code() != ToUnderlying(NRpc::EErrorCode::Unavailable);
+}
+
+void ValidateRetry(TMutationId mutationId, bool isRetry)
+{
+    if (!isRetry) {
+        THROW_ERROR_EXCEPTION("Duplicate request is not marked as \"retry\"")
+             << TErrorAttribute("mutation_id", mutationId);
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

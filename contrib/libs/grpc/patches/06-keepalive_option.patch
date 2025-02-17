@@ -1,0 +1,13 @@
+diff --git a/src/core/ext/transport/chttp2/transport/chttp2_transport.cc b/src/core/ext/transport/chttp2/transport/chttp2_transport.cc
+index 5852f55..eca889b 100644
+--- a/src/core/ext/transport/chttp2/transport/chttp2_transport.cc
++++ b/src/core/ext/transport/chttp2/transport/chttp2_transport.cc
+@@ -2727,7 +2727,7 @@ void grpc_chttp2_config_default_keepalive_args(grpc_channel_args* args,
+         const bool value = static_cast<uint32_t>(grpc_channel_arg_get_integer(
+             &args->args[i],
+             {is_client ? g_default_client_keepalive_permit_without_calls
+-                       : g_default_server_keepalive_timeout_ms,
++                       : g_default_server_keepalive_permit_without_calls,
+              0, 1}));
+         if (is_client) {
+           g_default_client_keepalive_permit_without_calls = value;

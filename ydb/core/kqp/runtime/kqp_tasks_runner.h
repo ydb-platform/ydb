@@ -10,13 +10,14 @@ namespace NKqp {
 NYql::NDq::IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NYql::NDqProto::TTaskOutput& outputDesc,
     const NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<NYql::NDq::IDqOutput::TPtr>&& outputs);
+    TVector<NYql::NDq::IDqOutput::TPtr>&& outputs,
+    TMaybe<ui8> minFillPercentage);
 
 
 class TKqpTasksRunner : public TSimpleRefCount<TKqpTasksRunner>, private TNonCopyable {
 public:
     TKqpTasksRunner(google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>&& tasks,
-                    NKikimr::NMiniKQL::TScopedAlloc& alloc,
+                    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
                     const NYql::NDq::TDqTaskRunnerContext& execCtx, const NYql::NDq::TDqTaskRunnerSettings& settings,
                     const NYql::NDq::TLogFunc& logFunc);
 
@@ -51,7 +52,7 @@ public:
     // otherwise use particular memory limit
     TGuard<NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit = Nothing());
 
-    ui64 GetAllocatedMemory() const { return Alloc.GetAllocated(); }
+    ui64 GetAllocatedMemory() const { return Alloc->GetAllocated(); }
 
     const TMap<ui64, const NYql::NDq::TDqTaskRunnerStats*> GetTasksStats() const { return Stats; }
 private:
@@ -59,7 +60,7 @@ private:
     TMap<ui64, NYql::NDq::TDqTaskSettings> Tasks;
     TMap<ui64, const NYql::NDq::TDqTaskRunnerStats*> Stats;
     NYql::NDq::TLogFunc LogFunc;
-    NMiniKQL::TScopedAlloc& Alloc;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NMiniKQL::TKqpComputeContextBase* ComputeCtx;
     NMiniKQL::TKqpDatashardApplyContext* ApplyCtx;
 
@@ -73,7 +74,7 @@ private:
 
 
 TIntrusivePtr<TKqpTasksRunner> CreateKqpTasksRunner(google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>&& tasks,
-    NKikimr::NMiniKQL::TScopedAlloc& alloc,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const NYql::NDq::TDqTaskRunnerContext& execCtx, const NYql::NDq::TDqTaskRunnerSettings& settings,
     const NYql::NDq::TLogFunc& logFunc);
 

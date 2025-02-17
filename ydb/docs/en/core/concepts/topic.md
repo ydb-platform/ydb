@@ -19,7 +19,7 @@ Messages may contain user-defined attributes in "key-value" format. They are ret
 
 ## Partitioning {#partitioning}
 
-To enable horizontal scaling, a topic is divided into `partitions` that are units of parallelism. Each partition has a limited bandwidth. The recommended write speed is 1 MBps.
+To enable horizontal scaling, a topic is divided into `partitions` that are units of parallelism. Each partition has a limited throughput. The recommended write speed is 1 MBps.
 
 {% note info %}
 
@@ -27,19 +27,64 @@ As for now, you can only reduce the number of partitions in a topic by deleting 
 
 {% endnote %}
 
+Partitions can be:
+
+ - **Active.** By default, all partitions are active. Both read and write operations are allowed on an active partition.
+ - **Inactive.** An inactive partition is read-only. A partition becomes inactive after splitting for [autopartitioning](#autopartitioning). It is automatically deleted once all messages are removed due to the expiration of the retention period.
+
 ### Offset {#offset}
 
 All messages within a partition have a unique sequence number called an `offset` An offset monotonically increases as new messages are written.
 
+## Autopartitioning {#autopartitioning}
+
+Total topic throughput is determined by the number of partitions in the topic and the throughput of each partition. The number of partitions and the throughput of each partition are set at the time of topic creation. If the maximum required write speed for a topic is unknown at the creation time, autopartitioning allows the topic to be scaled automatically. If autopartitioning is enabled for a topic, the number of partitions will increase automatically as the write speed increases (see [Autopartitioning strategies](#autopartitioning_strategies)).
+
+### Guarantees {#autopartitioning_guarantee}
+
+1. The SDK and server provide an exactly-once guarantee in the case of writing during a partition split. This means that any message will be written either to the parent partition or to one of the child partitions but never to both simultaneously. Additionally, a message cannot be written to the same partition multiple times.
+2. The SDK and server maintain the reading order. Data is read from the parent partition first, followed by the child partitions.
+3. As a result, the exactly-once writing guarantee and the reading order guarantee are preserved for a specific [producer identifier](#producer-id).
+
+### Autopartitioning strategies {#autopartitioning_strategies}
+
+The following autopartitioning strategies are available for any topic:
+
+#### DISABLED
+
+Autopartitioning is disabled for this topic. The number of partitions remains constant, and there is no automatic scaling.
+
+The initial number of partitions is set during topic creation. If the partition count is manually adjusted, new partitions are added. Both previously existing and new partitions are active.
+
+#### UP
+
+Upwards autopartitioning is enabled for this topic. This means that if the write speed to the topic increases, the number of partitions will automatically increase. However, if the write speed decreases, the number of partitions remains unchanged.
+
+The partition count increase algorithm works as follows: if the write speed for a partition exceeds a defined threshold (as a percentage of the maximum write speed for that partition) during a specified period, the partition is split into two child partitions. The original partition becomes inactive, allowing only read operations. When the retention period expires, and all messages in the original partition are deleted, the partition itself is also deleted. The two new child partitions become active, allowing both read and write operations.
+
+#### PAUSED
+
+Autopartitioning is paused for this topic, meaning that the number of partitions does not increase automatically. If needed, you can re-enable autopartitioning for this topic.
+
+Examples of YQL queries for switching between different autopartitioning strategies can be found [here](../yql/reference/syntax/alter-topic.md#autopartitioning).
+
+### Autopartitioning constraints {#autopartitioning_constraints}
+
+The following constraints apply when using autopartitioning:
+
+1. Once autopartitioning is enabled for a topic, it cannot be stopped, only paused.
+2. When autopartitioning is enabled for a topic, it is impossible to read from or write to it using the [Kafka API](../reference/kafka-api/index.md).
+3. Autopartitioning can only be enabled on topics that use the reserved capacity mode.
+
 ## Message sources and groups {#producer-id}
 
-Messages are ordered using the `producer_id` and `message_group_id`. The order of written messages is maintained within pairs: <producer ID, message group ID>.
+Messages are ordered using the `producer_id` and `message_group_id`. The order of written messages is maintained within pairs: `<producer ID, message group ID>`.
 
-When used for the first time, a pair of <producer ID, message group ID> is linked to a topic's [partition](#partition) using the round-robin algorithm and all messages with this pair of IDs get into the same partition. The link is removed if there are no new messages using this producer ID for 14 days.
+When used for the first time, a pair of `<producer ID, message group ID>` is linked to a topic's [partition](#partitioning) using the round-robin algorithm and all messages with this pair of IDs get into the same partition. The link is removed if there are no new messages using this producer ID for 14 days.
 
 {% note warning %}
 
-The recommended maximum number of <producer ID, message group ID> pairs is up to 100 thousand per partition in the last 14 days.
+The recommended maximum number of `<producer ID, message group ID>` pairs is up to 100 thousand per partition in the last 14 days.
 
 {% endnote %}
 
@@ -148,3 +193,27 @@ A consumer may be flagged as "important". This flag indicates that messages in a
 As a long timeout of an important consumer may result in full use of all available free space by unread messages, be sure to monitor important consumers' data read lags.
 
 {% endnote %}
+
+## Topic protocols {#topic-protocols}
+
+To work with topics, the {{ ydb-short-name }} SDK is used (see also [Reference](../reference/ydb-sdk/topic.md)).
+
+Kafka API version 3.4.0 is also supported with some restrictions (see [Work with Kafka API](../reference/kafka-api/index.md)).
+
+## Transactions with topics {#topic-transactions}
+
+{{ ydb-short-name }} supports working with topics within [transactions](./transactions.md).
+
+### Read from a topic within a transaction {#topic-transactions-read}
+
+Topic data does not change during a read operation. Therefore, within transactional reads from a topic, only the offset commit is a true transactional operation. The postponed offset commit occurs automatically at the transaction commit, and the SDK handles this transparently for the user.
+
+### Write into a topic within a transaction {#topic-transactions-write}
+
+During transactional writes to a topic, data is stored outside the partition until the transaction is committed. At the transaction commit, the data is published to the partition and appended to the end of the partition with sequential offsets. Changes made within the transaction are not visible in transactions with topics in {{ ydb-short-name }}.
+
+### Topic transaction constraints {#topic-transactions-constraints}
+
+There are no additional constraints when working with topics within a transaction. It is possible to write large amounts of data to a topic, write to multiple partitions, and read with multiple consumers.
+
+However, it is recommended to consider that data is published only at transaction commit. Therefore, if a transaction is long-running, the data will become visible only after a significant delay.

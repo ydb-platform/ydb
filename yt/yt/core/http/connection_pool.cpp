@@ -1,5 +1,7 @@
 #include "connection_pool.h"
 
+#include "private.h"
+
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
 #include <yt/yt/core/net/connection.h>
@@ -11,12 +13,16 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDuration TIdleConnection::GetIdleTime() const
+static constexpr auto& Logger = HttpLogger;
+
+////////////////////////////////////////////////////////////////////////////////
+
+TDuration TConnectionPool::TPooledConnection::GetIdleTime() const
 {
     return TInstant::Now() - InsertionTime;
 }
 
-bool TIdleConnection::IsOK() const
+bool TConnectionPool::TPooledConnection::IsValid() const
 {
     return Connection->IsIdle();
 }
@@ -29,27 +35,22 @@ TConnectionPool::TConnectionPool(
     IInvokerPtr invoker)
     : Dialer_(std::move(dialer))
     , Config_(std::move(config))
-    , Connections_(Config_->MaxIdleConnections)
-    , ExpiredConnectionsCollector_(
+    , Cache_(Config_->MaxIdleConnections)
+    , ExpirationExecutor_(
         New<TPeriodicExecutor>(
             std::move(invoker),
-            BIND([weakThis = MakeWeak(this)] {
-                auto this_ = weakThis.Lock();
-                if (this_) {
-                    this_->DropExpiredConnections();
-                }
-            }),
+            BIND(&TConnectionPool::DropExpiredConnections, MakeWeak(this)),
             TPeriodicExecutorOptions::WithJitter(
                 Config_->ConnectionIdleTimeout)))
 {
     if (Config_->MaxIdleConnections > 0) {
-        ExpiredConnectionsCollector_->Start();
+        ExpirationExecutor_->Start();
     }
 }
 
 TConnectionPool::~TConnectionPool()
 {
-    YT_UNUSED_FUTURE(ExpiredConnectionsCollector_->Stop());
+    YT_UNUSED_FUTURE(ExpirationExecutor_->Stop());
 }
 
 TFuture<IConnectionPtr> TConnectionPool::Connect(
@@ -58,10 +59,12 @@ TFuture<IConnectionPtr> TConnectionPool::Connect(
 {
     {
         auto guard = Guard(SpinLock_);
-
-        while (auto item = Connections_.Extract(address)) {
-            if (item->GetIdleTime() < Config_->ConnectionIdleTimeout && item->IsOK()) {
-                return MakeFuture<IConnectionPtr>(std::move(item->Connection));
+        while (auto pooledConnection = Cache_.TryExtract(address)) {
+            if (CheckPooledConnection(*pooledConnection)) {
+                auto connection = std::move(pooledConnection->Connection);
+                YT_LOG_DEBUG("Connection is extracted from cache (ConnectionId: %v)",
+                    connection->GetId());
+                return MakeFuture<IConnectionPtr>(std::move(connection));
             }
         }
     }
@@ -71,25 +74,47 @@ TFuture<IConnectionPtr> TConnectionPool::Connect(
 
 void TConnectionPool::Release(const IConnectionPtr& connection)
 {
-    auto guard = Guard(SpinLock_);
-    Connections_.Insert(connection->RemoteAddress(), {connection, TInstant::Now()});
+    YT_LOG_DEBUG("Connection is put to cache (ConnectionId: %v)",
+        connection->GetId());
+
+    {
+        auto guard = Guard(SpinLock_);
+        Cache_.Insert(connection->GetRemoteAddress(), {connection, TInstant::Now()});
+    }
+}
+
+bool TConnectionPool::CheckPooledConnection(const TPooledConnection& pooledConnection)
+{
+    auto idleTime = pooledConnection.GetIdleTime();
+    if (idleTime > Config_->ConnectionIdleTimeout) {
+        YT_LOG_DEBUG("Connection evicted from cache due to idle timeout (ConnectionId: %v)",
+            pooledConnection.Connection->GetId());
+        return false;
+    }
+
+    if (!pooledConnection.IsValid()) {
+        YT_LOG_DEBUG("Connection evicted from cache due to invalid state (ConnectionId: %v)",
+            pooledConnection.Connection->GetId());
+        return false;
+    }
+
+    return true;
 }
 
 void TConnectionPool::DropExpiredConnections()
 {
     auto guard = Guard(SpinLock_);
 
-    TMultiLruCache<TNetworkAddress, TIdleConnection> validConnections(
-        Config_->MaxIdleConnections);
+    decltype(Cache_) newCache(Config_->MaxIdleConnections);
 
-    while (Connections_.GetSize() > 0) {
-        auto idleConnection = Connections_.Pop();
-        if (idleConnection.GetIdleTime() < Config_->ConnectionIdleTimeout && idleConnection.IsOK()) {
-            validConnections.Insert(idleConnection.Connection->RemoteAddress(), idleConnection);
+    while (Cache_.GetSize() > 0) {
+        auto pooledConnection = Cache_.Pop();
+        if (CheckPooledConnection(pooledConnection)) {
+            newCache.Insert(pooledConnection.Connection->GetRemoteAddress(), pooledConnection);
         }
     }
 
-    Connections_ = std::move(validConnections);
+    Cache_ = std::move(newCache);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

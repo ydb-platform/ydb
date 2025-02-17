@@ -8,8 +8,8 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -18,11 +18,11 @@
 #include <ydb/library/actors/core/log.h>
 
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] QueryId: " << Params.QueryId << " " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] QueryId: " << Params.QueryId << " " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] QueryId: " << Params.QueryId << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] QueryId: " << Params.QueryId << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] QueryId: " << Params.QueryId << " " << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
+#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
+#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
 
 namespace NFq {
 
@@ -59,7 +59,7 @@ public:
         }
     };
 
-    TExecuterActor(const TRunActorParams& params, Ydb::Query::StatsMode statsMode, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TExecuterActor(const TRunActorParams& params, NYdb::NQuery::EStatsMode statsMode, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const ::NYql::NCommon::TServiceCounters& queryCounters)
         : TBaseComputeActor(queryCounters, "Executer")
         , Params(params)
         , StatsMode(statsMode)
@@ -88,14 +88,14 @@ public:
         pingCounters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
-            LOG_I("Information about the operation id and execution id is stored. ExecutionId: " << ExecutionId << " OperationId: " << ProtoToString(OperationId));
+            LOG_I("Information about the operation id and execution id is stored. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString());
             Send(Parent, new TEvYdbCompute::TEvExecuterResponse(OperationId, ExecutionId, NYdb::EStatus::SUCCESS));
             CompleteAndPassAway();
         } else {
             pingCounters->Error->Inc();
             // Without the idempotency key, we lose the running operation here
-            LOG_E("Error saving information about the operation id and execution id. ExecutionId: " << ExecutionId << " OperationId: " << ProtoToString(OperationId));
-            Send(Parent, new TEvYdbCompute::TEvExecuterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error saving information about the operation id and execution id. ExecutionId: " << ExecutionId << " OperationId: " << ProtoToString(OperationId)}}, NYdb::EStatus::INTERNAL_ERROR));
+            LOG_E("Error saving information about the operation id and execution id. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString());
+            Send(Parent, new TEvYdbCompute::TEvExecuterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error saving information about the operation id and execution id. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString()}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
     }
@@ -110,50 +110,50 @@ public:
         }
         ExecutionId = response.ExecutionId;
         OperationId = response.OperationId;
-        LOG_I("Execution has been created. ExecutionId: " << ExecutionId << " OperationId: " << ProtoToString(OperationId));
+        LOG_I("Execution has been created. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString());
         SendPingTask();
     }
 
     void SendExecuteScript() {
-        Register(new TRetryActor<TEvYdbCompute::TEvExecuteScriptRequest, TEvYdbCompute::TEvExecuteScriptResponse, TString, TString, TDuration, TDuration, Ydb::Query::Syntax, Ydb::Query::ExecMode, Ydb::Query::StatsMode, TString, std::map<TString, Ydb::TypedValue>>(Counters.GetCounters(ERequestType::RT_EXECUTE_SCRIPT), SelfId(), Connector, Params.Sql, Params.JobId, Params.ResultTtl, Params.ExecutionTtl, GetSyntax(), GetExecuteMode(), StatsMode, Params.JobId + "_" + ToString(Params.RestartCount), Params.QueryParameters));
+        Register(new TRetryActor<TEvYdbCompute::TEvExecuteScriptRequest, TEvYdbCompute::TEvExecuteScriptResponse, TString, TString, TDuration, TInstant, NYdb::NQuery::ESyntax, NYdb::NQuery::EExecMode, NYdb::NQuery::EStatsMode, TString, std::map<TString, Ydb::TypedValue>>(Counters.GetCounters(ERequestType::RT_EXECUTE_SCRIPT), SelfId(), Connector, Params.Sql, Params.JobId, Params.ResultTtl, Params.RequestSubmittedAt + Params.ExecutionTtl, GetSyntax(), GetExecuteMode(), StatsMode, Params.JobId + "_" + ToString(Params.RestartCount), Params.QueryParameters));
     }
 
-    Ydb::Query::Syntax GetSyntax() const {
+    NYdb::NQuery::ESyntax GetSyntax() const {
         switch (Params.QuerySyntax) {
             case FederatedQuery::QueryContent::PG:
-                return Ydb::Query::SYNTAX_PG;
+                return NYdb::NQuery::ESyntax::Pg;
             case FederatedQuery::QueryContent::YQL_V1:
-                return Ydb::Query::SYNTAX_YQL_V1;
+                return NYdb::NQuery::ESyntax::YqlV1;
             case FederatedQuery::QueryContent::QUERY_SYNTAX_UNSPECIFIED:
             case FederatedQuery::QueryContent_QuerySyntax_QueryContent_QuerySyntax_INT_MAX_SENTINEL_DO_NOT_USE_:
             case FederatedQuery::QueryContent_QuerySyntax_QueryContent_QuerySyntax_INT_MIN_SENTINEL_DO_NOT_USE_:
-                return Ydb::Query::SYNTAX_UNSPECIFIED;
+                return NYdb::NQuery::ESyntax::Unspecified;
         }
     }
 
-    Ydb::Query::ExecMode GetExecuteMode() const {
+    NYdb::NQuery::EExecMode GetExecuteMode() const {
         switch (Params.ExecuteMode) {
             case FederatedQuery::RUN:
-                return Ydb::Query::ExecMode::EXEC_MODE_EXECUTE;
+                return NYdb::NQuery::EExecMode::Execute;
             case FederatedQuery::PARSE:
-                return Ydb::Query::ExecMode::EXEC_MODE_PARSE;
+                return NYdb::NQuery::EExecMode::Parse;
             case FederatedQuery::VALIDATE:
-                return Ydb::Query::ExecMode::EXEC_MODE_VALIDATE;
+                return NYdb::NQuery::EExecMode::Validate;
             case FederatedQuery::EXPLAIN:
-                return Ydb::Query::ExecMode::EXEC_MODE_EXPLAIN;
+                return NYdb::NQuery::EExecMode::Explain;
             case FederatedQuery::EXECUTE_MODE_UNSPECIFIED:
             case FederatedQuery::COMPILE:
             case FederatedQuery::SAVE:
             case FederatedQuery::ExecuteMode_INT_MAX_SENTINEL_DO_NOT_USE_:
             case FederatedQuery::ExecuteMode_INT_MIN_SENTINEL_DO_NOT_USE_:
-                return Ydb::Query::ExecMode::EXEC_MODE_UNSPECIFIED;
+                return  NYdb::NQuery::EExecMode::Unspecified;
         }
     }
 
     void SendPingTask() {
         Fq::Private::PingTaskRequest pingTaskRequest;
         pingTaskRequest.set_execution_id(ExecutionId);
-        pingTaskRequest.set_operation_id(ProtoToString(OperationId));
+        pingTaskRequest.set_operation_id(OperationId.ToString());
         pingTaskRequest.set_status(::FederatedQuery::QueryMeta::RUNNING);
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Inc();
@@ -163,7 +163,7 @@ public:
 
 private:
     TRunActorParams Params;
-    Ydb::Query::StatsMode StatsMode;
+    NYdb::NQuery::EStatsMode StatsMode;
     TActorId Parent;
     TActorId Connector;
     TActorId Pinger;
@@ -174,7 +174,7 @@ private:
 };
 
 std::unique_ptr<NActors::IActor> CreateExecuterActor(const TRunActorParams& params,
-                                                     Ydb::Query::StatsMode statsMode,
+                                                     NYdb::NQuery::EStatsMode statsMode,
                                                      const TActorId& parent,
                                                      const TActorId& connector,
                                                      const TActorId& pinger,

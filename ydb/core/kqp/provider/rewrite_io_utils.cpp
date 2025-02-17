@@ -1,12 +1,14 @@
 #include "rewrite_io_utils.h"
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/sql/sql.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 namespace {
@@ -15,23 +17,24 @@ using namespace NNodes;
 
 constexpr const char* QueryGraphNodeSignature = "SavedQueryGraph";
 
-NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(const TString& cluster) {
-    NSQLTranslation::TTranslationSettings settings;
-
-    settings.DefaultCluster = cluster;
-    settings.ClusterMapping[cluster] = TString(NYql::KikimrProviderName);
-    settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
-
-    return settings;
-}
-
 TExprNode::TPtr CompileViewQuery(
-    const TString& query,
     TExprContext& ctx,
-    const TString& cluster
+    NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder,
+    IModuleResolver::TPtr moduleResolver,
+    const TViewPersistedData& viewData
 ) {
+    auto translationSettings = settingsBuilder.Build(ctx);
+    translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+    NSQLTranslation::Deserialize(viewData.CapturedContext, translationSettings);
+
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(),
+        nullptr
+    );
+
     TAstParseResult queryAst;
-    queryAst = NSQLTranslation::SqlToYql(query, CreateViewTranslationSettings(cluster));
+    queryAst = NSQLTranslation::SqlToYql(translators, viewData.QueryText, translationSettings);
 
     ctx.IssueManager.AddIssues(queryAst.Issues);
     if (!queryAst.IsOk()) {
@@ -39,7 +42,7 @@ TExprNode::TPtr CompileViewQuery(
     }
 
     TExprNode::TPtr queryGraph;
-    if (!CompileExpr(*queryAst.Root, queryGraph, ctx, nullptr, nullptr)) {
+    if (!CompileExpr(*queryAst.Root, queryGraph, ctx, moduleResolver.get(), nullptr)) {
         return nullptr;
     }
 
@@ -122,8 +125,9 @@ TExprNode::TPtr FindTopLevelRead(const TExprNode::TPtr& queryGraph) {
 TExprNode::TPtr RewriteReadFromView(
     const TExprNode::TPtr& node,
     TExprContext& ctx,
-    const TString& query,
-    const TString& cluster
+    NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder,
+    IModuleResolver::TPtr moduleResolver,
+    const TViewPersistedData& viewData
 ) {
     YQL_PROFILE_FUNC(DEBUG);
 
@@ -132,7 +136,7 @@ TExprNode::TPtr RewriteReadFromView(
 
     TExprNode::TPtr queryGraph = FindSavedQueryGraph(readNode.Ptr());
     if (!queryGraph) {
-        queryGraph = CompileViewQuery(query, ctx, cluster);
+        queryGraph = CompileViewQuery(ctx, settingsBuilder, moduleResolver, viewData);
         if (!queryGraph) {
             ctx.AddError(TIssue(ctx.GetPosition(readNode.Pos()),
                          "The query stored in the view cannot be compiled."));

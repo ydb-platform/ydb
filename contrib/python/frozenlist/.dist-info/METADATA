@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: frozenlist
-Version: 1.4.1
+Version: 1.5.0
 Summary: A list-like structure which implements collections.abc.MutableSequence
 Home-page: https://github.com/aio-libs/frozenlist
 Maintainer: aiohttp team <team@aiohttp.org>
@@ -29,6 +29,7 @@ Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Requires-Python: >=3.8
@@ -168,6 +169,62 @@ Changelog
 
 .. towncrier release notes start
 
+1.5.0 (2024-10-22)
+==================
+
+Bug fixes
+---------
+
+- An incorrect signature of the ``__class_getitem__`` class method
+  has been fixed, adding a missing ``class_item`` argument under
+  Python 3.8 and older.
+
+  This change also improves the code coverage of this method that
+  was previously missing -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+
+  *Related issues and pull requests on GitHub:*
+  `#567 <https://github.com/aio-libs/frozenlist/issues/567>`__, `#571 <https://github.com/aio-libs/frozenlist/issues/571>`__.
+
+
+Improved documentation
+----------------------
+
+- Rendered issue, PR, and commit links now lead to
+  ``frozenlist``'s repo instead of ``yarl``'s repo.
+
+
+  *Related issues and pull requests on GitHub:*
+  `#573 <https://github.com/aio-libs/frozenlist/issues/573>`__.
+
+- On the ``Contributing docs`` page,
+  a link to the ``Towncrier philosophy`` has been fixed.
+
+
+  *Related issues and pull requests on GitHub:*
+  `#574 <https://github.com/aio-libs/frozenlist/issues/574>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- A name of a temporary building directory now reflects
+  that it's related to ``frozenlist``, not ``yarl``.
+
+
+  *Related issues and pull requests on GitHub:*
+  `#573 <https://github.com/aio-libs/frozenlist/issues/573>`__.
+
+- Declared Python 3.13 supported officially in the distribution package metadata.
+
+
+  *Related issues and pull requests on GitHub:*
+  `#595 <https://github.com/aio-libs/frozenlist/issues/595>`__.
+
+
+----
+
+
 1.4.1 (2023-12-15)
 ==================
 
@@ -179,7 +236,7 @@ Packaging updates and notes for downstreams
 
 
   *Related issues and pull requests on GitHub:*
-  `#553 <https://github.com/aio-libs/yarl/issues/553>`__.
+  `#553 <https://github.com/aio-libs/frozenlist/issues/553>`__.
 
 - Replaced the packaging is replaced from an old-fashioned ``setup.py`` to an
   in-tree `PEP 517 <https://peps.python.org/pep-517>`__ build backend -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
@@ -208,7 +265,7 @@ Packaging updates and notes for downstreams
 
 
   *Related issues and pull requests on GitHub:*
-  `#560 <https://github.com/aio-libs/yarl/issues/560>`__.
+  `#560 <https://github.com/aio-libs/frozenlist/issues/560>`__.
 
 
 Contributor-facing changes
@@ -243,7 +300,7 @@ Contributor-facing changes
 
 
   *Related issues and pull requests on GitHub:*
-  `#560 <https://github.com/aio-libs/yarl/issues/560>`__.
+  `#560 <https://github.com/aio-libs/frozenlist/issues/560>`__.
 
 - Coverage collection has been implemented for the Cython modules
   -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
@@ -252,7 +309,7 @@ Contributor-facing changes
 
 
   *Related issues and pull requests on GitHub:*
-  `#561 <https://github.com/aio-libs/yarl/issues/561>`__.
+  `#561 <https://github.com/aio-libs/frozenlist/issues/561>`__.
 
 - A step-by-step ``Release Guide`` guide has
   been added, describing how to release *frozenlist* -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
@@ -261,7 +318,7 @@ Contributor-facing changes
 
 
   *Related issues and pull requests on GitHub:*
-  `#563 <https://github.com/aio-libs/yarl/issues/563>`__.
+  `#563 <https://github.com/aio-libs/frozenlist/issues/563>`__.
 
 - Detailed ``Contributing Guidelines`` on
   authoring the changelog fragments have been published in the
@@ -269,7 +326,7 @@ Contributor-facing changes
 
 
   *Related issues and pull requests on GitHub:*
-  `#564 <https://github.com/aio-libs/yarl/issues/564>`__.
+  `#564 <https://github.com/aio-libs/frozenlist/issues/564>`__.
 
 
 ----

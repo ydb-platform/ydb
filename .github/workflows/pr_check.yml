@@ -4,11 +4,10 @@ on:
     branches:
       - 'main'
       - 'stable-*'
+      - 'prestable-*'
       - 'stream-nb-*'
       - '*-stable-*'
-    paths-ignore:
-      - 'ydb/docs/**'
-      - '*'
+      - 'dev-*'
     types:
       - 'opened'
       - 'synchronize'
@@ -21,13 +20,20 @@ jobs:
   check-running-allowed:
     if: ${{vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true}}
     runs-on: ubuntu-latest
+    timeout-minutes: 600
     outputs:
       result: ${{ steps.check-ownership-membership.outputs.result == 'true' && steps.check-is-mergeable.outputs.result == 'true' }}
       commit_sha: ${{ steps.check-is-mergeable.outputs.commit_sha }}
     steps:
+      - name: Reset integrated status
+        run: |
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"pending","description":"Waiting for relevant checks to complete","context":"checks_integrated"}'
+
       - name: Check if running tests is allowed
         id: check-ownership-membership
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
@@ -78,7 +84,7 @@ jobs:
       - name: comment-if-waiting-on-ok
         if: steps.check-ownership-membership.outputs.result == 'false' &&
             github.event.action == 'opened'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             let externalContributorLabel = 'external';
@@ -97,7 +103,7 @@ jobs:
             });
 
       - name: cleanup-test-label
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             let labelsToRemove = ['ok-to-test', 'rebase-and-check'];
@@ -123,7 +129,7 @@ jobs:
       - name: check is mergeable
         id: check-is-mergeable
         if: steps.check-ownership-membership.outputs.result == 'true'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           result-encoding: string
           script: |
@@ -131,12 +137,12 @@ jobs:
             const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
             const header = `<!-- merge pr=${pr.number} -->\n`;
             
-            const fail_msg = header + ':red_circle: Unable to merge your PR into the `main` branch. '
-                + 'Please rebase or merge it with the `main` branch.'
+            const fail_msg = header + ':red_circle: Unable to merge your PR into the base branch. '
+                + 'Please rebase or merge it with the base branch.'
             
             let i = 0;
             
-            while (pr.mergeable == null || i >= 60) {
+            while (pr.mergeable == null && i < 60) {
                 console.log("get pull-request status");
     
                 let result = await github.rest.pulls.get({
@@ -155,6 +161,11 @@ jobs:
             
             console.log("pr.mergeable=%o", pr.mergeable);
             
+            if (pr.mergeable === null) {
+                core.setFailed("Unable to check if the PR is mergeable, please re-run the check.");
+                return false;
+            }
+            
             const { data: comments } = await github.rest.issues.listComments({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
@@ -163,7 +174,7 @@ jobs:
             
             const commentToUpdate = comments.find(comment => comment.body.startsWith(header));
             
-            if (pr.mergeable === false) {
+            if (!pr.mergeable) {
                 let commentParams = {
                     ...context.repo,
                     issue_number: context.issue.number,
@@ -197,28 +208,82 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_preset: ["relwithdebinfo", "release-asan", "release-clang14"]
+        include:
+          - build_preset: relwithdebinfo
+            threads_count: 52
+            timeout: 240
+            build_target: "ydb/"
+            test_size: small,medium
+          - build_preset: release-asan
+            threads_count: 52
+            timeout: 240
+            build_target: "ydb/"
+            test_size: small,medium
+          - build_preset: release-msan
+            threads_count: 20
+            timeout: 480
+            build_target: "ydb/"
+            test_size: small,medium
+          - build_preset: release-tsan
+            threads_count: 20
+            timeout: 600
+            build_target: "ydb/"
+            test_size: small,medium
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
     - name: Build and test
+      if: |
+          (matrix.build_preset == 'release-asan') || 
+          (matrix.build_preset == 'relwithdebinfo') || 
+            
+            (matrix.build_preset == 'release-tsan' && 
+            contains(github.event.pull_request.labels.*.name, 'run-tsan-tests') || 
+            contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests')) || 
+            
+            (matrix.build_preset == 'release-msan' && 
+            contains(github.event.pull_request.labels.*.name, 'run-msan-tests') || 
+            contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests'))
       uses: ./.github/actions/build_and_test_ya
       with:
         build_preset: ${{ matrix.build_preset }}
-        build_target: "ydb/"
+        build_target: ${{ matrix.build_target }}
         increment: true
-        run_tests: ${{ contains(fromJSON('["relwithdebinfo", "release-asan"]'), matrix.build_preset) }}
-        test_size: "small,medium"
-        test_type: "unittest,py3test,py2test,pytest"
-        test_threads: 52
+        run_tests: ${{ contains(fromJSON('["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]'), matrix.build_preset) }}
+        test_size: ${{ matrix.test_size }}
+        test_threads: ${{ matrix.threads_count }}
         put_build_results_to_cache: true
-        run_tests_if_build_fails: false
-        secs: ${{ format('{{"TESTMO_TOKEN":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}', 
-          secrets.TESTMO_TOKEN, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
+        additional_ya_make_args: -DDEBUGINFO_LINES_ONLY # we don't need full symbols in CI checks
+        secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',
+          secrets.TESTMO_TOKEN2, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
         vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","TESTMO_URL":"{3}","TESTMO_PROJECT_ID":"{4}"}}',
           vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.TESTMO_URL, vars.TESTMO_PROJECT_ID ) }}
+  update_integrated_status:
+    runs-on: ubuntu-latest
+    needs: build_and_test
+    if: always()
+    steps:
+      - name: Gather required checks results
+        shell: bash
+        run: |
+          successbuilds=$(curl -L -X GET -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/commits/${{github.event.pull_request.head.sha}}/status | \
+            jq -cr '.statuses | .[] | select(.state=="success") | select(.context | (startswith("build_relwithdebinfo") or startswith("build_release-asan") or startswith("test_relwithdebinfo")) ) | .context' | \
+            wc -l )
+          if [[ $successbuilds == "3" ]];then
+            integrated_status="success"
+          else
+            integrated_status="failure"
+          fi
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"'$integrated_status'","description":"All checks completed","context":"checks_integrated"}'

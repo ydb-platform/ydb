@@ -246,7 +246,7 @@ namespace NLWTrace {
     class TReceiver: public TOperand<T, OT_VARIABLE> {
     public:
         TReceiver(TSession::TTraceVariables& traceVariables, const TString& name)
-            : TOperand<T, OT_VARIABLE>(traceVariables, name, nullptr, 0)
+            : TOperand<T, OT_VARIABLE>(traceVariables, name, {}, 0)
         {
         }
     };

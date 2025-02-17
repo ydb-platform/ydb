@@ -62,6 +62,7 @@ namespace NKikimr {
             TVector<ui32>    CommitChunks;      // chunks to commit within this log entry
             TVector<ui32>    DeleteChunks;      // chunks to delete
             TDiskPartVec     RemovedHugeBlobs;  // freed huge blobs
+            TDiskPartVec     AllocatedHugeBlobs;
             TLevelSegmentPtr ReplSst;           // pointer to replicated SST
             ui32             NumRecoveredBlobs; // number of blobs in this SST (valid only for replicated tables)
             bool             DeleteToDecommitted;
@@ -70,10 +71,12 @@ namespace NKikimr {
             THullCommitMeta(TVector<ui32>&& chunksAdded,
                             TVector<ui32>&& chunksDeleted,
                             TDiskPartVec&&  removedHugeBlobs,
+                            TDiskPartVec&&  allocatedHugeBlobs,
                             bool            prevSliceActive)
                 : CommitChunks(std::move(chunksAdded))
                 , DeleteChunks(std::move(chunksDeleted))
                 , RemovedHugeBlobs(std::move(removedHugeBlobs))
+                , AllocatedHugeBlobs(std::move(allocatedHugeBlobs))
                 , NumRecoveredBlobs(0)
                 , DeleteToDecommitted(prevSliceActive)
             {}
@@ -102,6 +105,7 @@ namespace NKikimr {
         NPDisk::TCommitRecord CommitRecord;
         TStringStream DebugMessage;
         TString CallerInfo;
+        const ui64 WId;
 
         void Bootstrap(const TActorContext& ctx) {
             TThis::Become(&TThis::StateFunc);
@@ -119,9 +123,10 @@ namespace NKikimr {
             }
 
             LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS,
-                      VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "COMMIT: PDiskId# %s Lsn# %s type# %s msg# %s",
+                      VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "COMMIT: PDiskId# %s Lsn# %s type# %s msg# %s RemovedHugeBlobs# %s",
                             Ctx->PDiskCtx->PDiskIdString.data(), LsnSeg.ToString().data(),
-                            THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data()));
+                            THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data(),
+                            Metadata.RemovedHugeBlobs.ToString().data()));
 
             ctx.Send(Ctx->LoggerId, CommitMsg.release());
         }
@@ -139,9 +144,9 @@ namespace NKikimr {
             // notify delayed deleter when log record is actually written; we MUST ensure that updates are coming in
             // order of increasing LSN's; this is achieved automatically as all actors reside on the same mailbox
             LevelIndex->DelayedCompactionDeleterInfo->Update(LsnSeg.Last, std::move(Metadata.RemovedHugeBlobs),
-                CommitRecord.DeleteToDecommitted ? CommitRecord.DeleteChunks : TVector<TChunkIdx>(),
-                PDiskSignatureForHullDbKey<TKey>(), ctx, Ctx->HugeKeeperId, Ctx->SkeletonId, Ctx->PDiskCtx,
-                Ctx->HullCtx->VCtx);
+                std::move(Metadata.AllocatedHugeBlobs), CommitRecord.DeleteToDecommitted ? CommitRecord.DeleteChunks :
+                TVector<TChunkIdx>(), PDiskSignatureForHullDbKey<TKey>(), WId, ctx, Ctx->HugeKeeperId, Ctx->SkeletonId,
+                Ctx->PDiskCtx, Ctx->HullCtx->VCtx);
 
             NPDisk::TEvLogResult* msg = ev->Get();
 
@@ -153,14 +158,18 @@ namespace NKikimr {
             Y_DEBUG_ABORT_UNLESS(results.size() == 1 && results.front().Lsn == LsnSeg.Last);
 
             LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
-                     VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "%s lsn# %s done",
-                        THullCommitFinished::TypeToString(NotifyType), LsnSeg.ToString().data()));
+                     VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "%s lsn# %s done wId# %" PRIu64,
+                        THullCommitFinished::TypeToString(NotifyType), LsnSeg.ToString().data(), WId));
 
             LOG_INFO(ctx, NKikimrServices::BS_HULLRECS,
                     VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "%s", DebugMessage.Str().data()));
 
             // advance LSN
             LevelIndex->CurEntryPointLsn = LsnSeg.Last;
+
+            if (CommitRecord.DeleteChunks) {
+                ctx.Send(Ctx->SkeletonId, new TEvNotifyChunksDeleted(LsnSeg.Last, CommitRecord.DeleteChunks));
+            }
 
             Finish(ctx);
         }
@@ -222,6 +231,7 @@ namespace NKikimr {
             NKikimrVDiskData::THullDbEntryPoint pb;
             LevelIndex->SerializeToProto(*pb.MutableLevelIndex());
             Metadata.RemovedHugeBlobs.SerializeToProto(*pb.MutableRemovedHugeBlobs());
+            Metadata.AllocatedHugeBlobs.SerializeToProto(*pb.MutableAllocatedHugeBlobs());
             return THullDbSignatureRoutines::Serialize(pb);
         }
 
@@ -231,6 +241,13 @@ namespace NKikimr {
             CommitRecord.CommitChunks = std::move(Metadata.CommitChunks);
             CommitRecord.DeleteChunks = std::move(Metadata.DeleteChunks);
             CommitRecord.DeleteToDecommitted = Metadata.DeleteToDecommitted;
+
+            // notify PDisk about dirty chunks (the ones from which huge slots are being freed right now)
+            THashSet<TChunkIdx> chunkIds;
+            for (const TDiskPart& p : Metadata.RemovedHugeBlobs) {
+                chunkIds.insert(p.ChunkIdx);
+            }
+            CommitRecord.DirtyChunks = {chunkIds.begin(), chunkIds.end()};
 
             // validate its contents
             VerifyCommitRecord(CommitRecord);
@@ -284,7 +301,8 @@ namespace NKikimr {
                 const TActorId& notifyID,
                 const TActorId& secondNotifyID,
                 THullCommitMeta&& metadata,
-                const TString &callerInfo)
+                const TString &callerInfo,
+                ui64 wId)
             : HullLogCtx(std::move(hullLogCtx))
             , Ctx(std::move(ctx))
             , LevelIndex(std::move(levelIndex))
@@ -292,7 +310,9 @@ namespace NKikimr {
             , SecondNotifyID(secondNotifyID)
             , Metadata(std::move(metadata))
             , CallerInfo(callerInfo)
+            , WId(wId)
         {
+            Y_ABORT_UNLESS(!WId == Metadata.RemovedHugeBlobs.Empty());
             // we create commit message in the constructor to avoid race condition
             GenerateCommitMessage();
         }
@@ -319,8 +339,9 @@ namespace NKikimr {
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
-                    {TVector<ui32>(), TVector<ui32>(), TDiskPartVec(), false},
-                    callerInfo)
+                    {TVector<ui32>(), TVector<ui32>(), TDiskPartVec(), TDiskPartVec(), false},
+                    callerInfo,
+                    0)
         {}
     };
 
@@ -346,14 +367,17 @@ namespace NKikimr {
                 TVector<ui32>&& chunksAdded,
                 TVector<ui32>&& chunksDeleted,
                 TDiskPartVec&& removedHugeBlobs,
-                const TString &callerInfo)
+                TDiskPartVec&& allocatedHugeBlobs,
+                const TString &callerInfo,
+                ui64 wId)
             : TBase(std::move(hullLogCtx),
                     std::move(ctx),
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
-                    {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), false},
-                    callerInfo)
+                    {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), std::move(allocatedHugeBlobs), false},
+                    callerInfo,
+                    wId)
         {}
     };
 
@@ -375,14 +399,17 @@ namespace NKikimr {
                 const TActorId& notifyID,
                 TVector<ui32>&& chunksAdded,
                 TVector<ui32>&& chunksDeleted,
-                TDiskPartVec&& removedHugeBlobs)
+                TDiskPartVec&& removedHugeBlobs,
+                TDiskPartVec&& allocatedHugeBlobs,
+                ui64 wId)
             : TBase(std::move(hullLogCtx),
                     std::move(ctx),
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
-                    {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), true},
-                    TString())
+                    {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), std::move(allocatedHugeBlobs), true},
+                    TString(),
+                    wId)
         {}
     };
 
@@ -414,7 +441,8 @@ namespace NKikimr {
                     notifyID,
                     secondNotifyID,
                     {std::move(chunksAdded), std::move(chunksDeleted), std::move(replSst), numRecoveredBlobs},
-                    TString())
+                    TString(),
+                    0)
         {}
     };
 

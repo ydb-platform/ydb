@@ -1,11 +1,11 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/experimental/ydb_logstore.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 using namespace NYdb;
 
@@ -51,6 +51,12 @@ TVector<TString> TestSchemaKey() {
     return {"timestamp", "resource_type", "resource_id", "uid"};
 }
 
+NKikimrConfig::TAppConfig GetAppConfig() {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableFeatureFlags()->SetEnableColumnStore(true);
+    return appConfig;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(YdbLogStore) {
@@ -69,8 +75,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     void CreateDropStore(EPrimitiveType pkField) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -96,7 +101,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
             const auto& schema = descr.GetSchemaPresets().begin()->second;
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
-            UNIT_ASSERT(schema.GetColumns()[0].ToString().StartsWith("{ name: \"timestamp\", type:"));
+            UNIT_ASSERT(schema.GetColumns()[0].ToString().starts_with("{ name: \"timestamp\", type:"));
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8 }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),
@@ -128,8 +133,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     Y_UNIT_TEST(LogStoreNegative) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -192,8 +196,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     Y_UNIT_TEST(Dirs) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -249,8 +252,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     void CreateDropTable(EPrimitiveType pkField) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -280,7 +282,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_VALUES_EQUAL(descr.GetShardsCount(), 4);
             const auto& schema = descr.GetSchema();
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
-            UNIT_ASSERT(schema.GetColumns()[0].ToString().StartsWith("{ name: \"timestamp\", type:"));
+            UNIT_ASSERT(schema.GetColumns()[0].ToString().starts_with("{ name: \"timestamp\", type:"));
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8 }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),
@@ -302,7 +304,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_VALUES_EQUAL(descr.GetShardsCount(), 4);
             const auto& schema = descr.GetSchema();
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
-            UNIT_ASSERT(schema.GetColumns()[0].ToString().StartsWith("{ name: \"timestamp\", type:"));
+            UNIT_ASSERT(schema.GetColumns()[0].ToString().starts_with("{ name: \"timestamp\", type:"));
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8 }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),
@@ -333,10 +335,11 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto res = schemaClient.ListDirectory("/Root/LogStore/.sys").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
             auto children = res.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(children[0].Name, "store_primary_index_granule_stats");
-            UNIT_ASSERT_VALUES_EQUAL(children[1].Name, "store_primary_index_portion_stats");
-            UNIT_ASSERT_VALUES_EQUAL(children[2].Name, "store_primary_index_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[1].Name, "store_primary_index_optimizer_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[2].Name, "store_primary_index_portion_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[3].Name, "store_primary_index_stats");
         }
 
         {
@@ -353,10 +356,11 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto res = schemaClient.ListDirectory("/Root/LogStore/log1/.sys").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
             auto children = res.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(children[0].Name, "primary_index_granule_stats");
-            UNIT_ASSERT_VALUES_EQUAL(children[1].Name, "primary_index_portion_stats");
-            UNIT_ASSERT_VALUES_EQUAL(children[2].Name, "primary_index_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[1].Name, "primary_index_optimizer_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[2].Name, "primary_index_portion_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[3].Name, "primary_index_stats");
         }
 
         {
@@ -400,8 +404,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     Y_UNIT_TEST(AlterLogStore) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);

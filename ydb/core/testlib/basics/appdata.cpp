@@ -1,7 +1,11 @@
 #include "appdata.h"
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+
+#include <ydb/core/protos/netclassifier.pb.h>
+#include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 namespace NKikimr {
 
@@ -16,6 +20,7 @@ namespace NKikimr {
         Mine->Types->CalculateMetadataEtag();
         Mine->DataShardExportFactory = ef;
         Mine->IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
+        Mine->SchemeOperationFactory.reset(NSchemeShard::DefaultOperationFactory());
 
         Domains = new TDomainsInfo;
     }
@@ -34,6 +39,7 @@ namespace NKikimr {
         auto *app = new TAppData(0, 0, 0, 0, { }, Mine->Types.Get(), Mine->Funcs.Get(), Mine->Formats.Get(), nullptr);
         app->DataShardExportFactory = Mine->DataShardExportFactory.get();
         app->IoContextFactory = Mine->IoContext.get();
+        app->SchemeOperationFactory = Mine->SchemeOperationFactory.get();
 
         app->DomainsInfo = std::move(Domains);
         app->ChannelProfiles = Channels ? Channels : new TChannelProfiles;
@@ -59,7 +65,7 @@ namespace NKikimr {
         app->AwsCompatibilityConfig = AwsCompatibilityConfig;
         app->S3ProxyResolverConfig = S3ProxyResolverConfig;
         app->GraphConfig = GraphConfig;
-        app->FeatureFlags = FeatureFlags;
+        app->InitFeatureFlags(FeatureFlags);
 
         // This is a special setting active in test runtime only
         app->EnableMvccSnapshotWithLegacyDomainRoot = true;
@@ -71,7 +77,7 @@ namespace NKikimr {
                         NKikimrProto::TKeyConfig();
         };
 
-        return { app, Mine.Release(), keyGenerator};
+        return { app, Mine.Release(), keyGenerator, std::move(Icb) };
     }
 
     void TAppPrepare::AddDomain(TDomainsInfo::TDomain* domain)
@@ -199,5 +205,12 @@ namespace NKikimr {
     void TAppPrepare::SetAwsRegion(const TString& value)
     {
         AwsCompatibilityConfig.SetAwsRegion(value);
+    }
+
+    void TAppPrepare::InitIcb(ui32 numNodes)
+    {
+        for (ui32 i = 0; i < numNodes; ++i) {
+            Icb.emplace_back(new TControlBoard);
+        }
     }
 }

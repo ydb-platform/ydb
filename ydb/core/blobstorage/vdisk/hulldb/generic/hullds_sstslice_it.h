@@ -114,6 +114,11 @@ namespace NKikimr {
             return TLevelSstPtr(CurLevelNum, IntraLevelIt.Get());
         }
 
+        template <class Heap>
+        void PutToHeap(Heap& heap) {
+            heap.Add(this);
+        }
+
     private:
         void PositionItraLevelIt() {
             while (CurLevelIt != Levels->end()) {
@@ -259,6 +264,11 @@ namespace NKikimr {
             It.template PutToMerger<TRecordMerger>(merger);
         }
 
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            It.PutToHeap(heap);
+        }
+
         bool Valid() const {
             return It.Valid();
         }
@@ -312,6 +322,11 @@ namespace NKikimr {
         template <class TRecordMerger>
         void PutToMerger(TRecordMerger *merger) {
             It.template PutToMerger<TRecordMerger>(merger);
+        }
+
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            It.PutToHeap(heap);
         }
 
         bool Valid() const {
@@ -395,6 +410,7 @@ namespace NKikimr {
         using TBase::Seek;
         using TBase::SeekToFirst;
         using TBase::DumpAll;
+        using TBase::PutToHeap;
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -420,6 +436,7 @@ namespace NKikimr {
         using TBase::Valid;
         using TBase::GetCurKey;
         using TBase::Seek;
+        using TBase::PutToHeap;
     };
 
 } // NKikimr

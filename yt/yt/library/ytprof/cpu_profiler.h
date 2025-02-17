@@ -58,7 +58,7 @@ private:
 
     void EnableProfiler() override;
     void DisableProfiler() override;
-    void AnnotateProfile(NProto::Profile* profile, const std::function<i64(const TString&)>& stringify) override;
+    void AnnotateProfile(NProto::Profile* profile, const TStringify& stringify) override;
     i64 EncodeValue(i64 value) override;
 };
 

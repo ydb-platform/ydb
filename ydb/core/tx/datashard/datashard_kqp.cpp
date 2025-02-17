@@ -13,6 +13,7 @@
 #include <ydb/core/protos/kqp_stats.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 
 #include <util/generic/size_literals.h>
@@ -503,8 +504,8 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
                         const size_t outputDataSize = serialized.Size();
                         *outputData = std::move(serialized.Proto);
                         outputData->ClearPayloadId();
-                        if (!serialized.Payload.IsEmpty()) {
-                            outputData->SetPayloadId(dataEv->AddPayload(std::move(serialized.Payload)));
+                        if (!serialized.Payload.Empty()) {
+                            outputData->SetPayloadId(dataEv->AddPayload(NYql::MakeReadOnlyRope(std::move(serialized.Payload))));
                         }
                         dataEv->Record.MutableChannelData()->SetFinished(fetchStatus == NUdf::EFetchStatus::Finish);
                         if (outputDataSize > MaxDatashardReplySize) {
@@ -680,6 +681,14 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin
     return {true, {}};
 }
 
+bool KqpLocksHasArbiter(const NKikimrDataEvents::TKqpLocks* kqpLocks) {
+    return kqpLocks && kqpLocks->GetArbiterShard() != 0;
+}
+
+bool KqpLocksIsArbiter(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks) {
+    return KqpLocksHasArbiter(kqpLocks) && kqpLocks->GetArbiterShard() == tabletId;
+}
+
 std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets, TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets) {
     if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
         return {true, {}};
@@ -692,6 +701,9 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
     // We expect all stale data to be cleared on restarts
     Y_ABORT_UNLESS(outReadSets.empty());
     Y_ABORT_UNLESS(awaitingDecisions.empty());
+
+    const bool hasArbiter = KqpLocksHasArbiter(kqpLocks);
+    const bool isArbiter = KqpLocksIsArbiter(origin, kqpLocks);
 
     // Note: usually all shards send locks, since they either have side effects or need to validate locks
     // However it is technically possible to have pure-read shards, that don't contribute to the final decision
@@ -711,6 +723,11 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
                 continue;
             }
 
+            if (hasArbiter && !isArbiter && dstTabletId != kqpLocks->GetArbiterShard()) {
+                // Non-arbiter shards only send locks to the arbiter
+                continue;
+            }
+
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send commit decision from " << origin << " to " << dstTabletId);
 
             auto key = std::make_pair(origin, dstTabletId);
@@ -723,6 +740,8 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
 
             outReadSets[key] = std::move(bodyStr);
         }
+    } else {
+        Y_ABORT_UNLESS(!isArbiter, "Arbiter is not in the sending shards set");
     }
 
     bool receiveLocks = ReceiveLocks(*kqpLocks, origin);
@@ -732,6 +751,11 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
         for (ui64 srcTabletId : kqpLocks->GetSendingShards()) {
             if (srcTabletId == origin) {
                 // Don't await decision from ourselves
+                continue;
+            }
+
+            if (hasArbiter && !isArbiter && srcTabletId != kqpLocks->GetArbiterShard()) {
+                // Non-arbiter shards only await decision from the arbiter
                 continue;
             }
 
@@ -780,6 +804,8 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
         if (aborted) {
             return {false, {}};
         }
+    } else {
+        Y_ABORT_UNLESS(!isArbiter, "Arbiter is not in the receiving shards set");
     }
 
     return {true, {}};
@@ -975,8 +1001,11 @@ namespace {
 
 class TKqpTaskRunnerExecutionContext: public NDq::IDqTaskRunnerExecutionContext {
 public:
-    NDq::IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory, TVector<NDq::IDqOutput::TPtr>&& outputs) const override {
-        return NKqp::KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, holderFactory, std::move(outputs));
+    NDq::IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type,
+        NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        TVector<NDq::IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* /* pgBuilder */) const override
+    {
+        return NKqp::KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, holderFactory, std::move(outputs), {});
     }
 
     NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */) const override {
@@ -987,7 +1016,19 @@ public:
         return {};
     }
 
-    std::function<void()> GetWakeupCallback() const override {
+    NDq::TWakeUpCallback GetWakeupCallback() const override {
+        return {};
+    }
+
+    NDq::TErrorCallback GetErrorCallback() const override {
+        return {};
+    }
+
+    TIntrusivePtr<NDq::TSpillingTaskCounters> GetSpillingTaskCounters() const override {
+        return {};
+    }
+
+    NDq::TTxId GetTxId() const override {
         return {};
     }
 };

@@ -3,13 +3,12 @@ from itertools import cycle
 from time import sleep
 import datetime
 import time
-import uuid
 import logging
 import threading
 import dateutil.parser
 from sys import platform
 
-from moto.core import BaseBackend, BaseModel, CloudFormationModel, get_account_id
+from moto.core import BaseBackend, BaseModel, CloudFormationModel
 from moto.iam import iam_backends
 from moto.ec2 import ec2_backends
 from moto.ecs import ecs_backends
@@ -29,6 +28,7 @@ from moto.ec2.models.instance_types import INSTANCE_FAMILIES as EC2_INSTANCE_FAM
 from moto.iam.exceptions import IAMNotFoundException
 from moto.core.utils import unix_time_millis, BackendDict
 from moto.moto_api import state_manager
+from moto.moto_api._internal import mock_random
 from moto.moto_api._internal.managed_state_model import ManagedState
 from moto.utilities.docker_utilities import DockerModel
 from moto import settings
@@ -60,6 +60,7 @@ class ComputeEnvironment(CloudFormationModel):
         state,
         compute_resources,
         service_role,
+        account_id,
         region_name,
     ):
         self.name = compute_environment_name
@@ -68,7 +69,7 @@ class ComputeEnvironment(CloudFormationModel):
         self.compute_resources = compute_resources
         self.service_role = service_role
         self.arn = make_arn_for_compute_env(
-            get_account_id(), compute_environment_name, region_name
+            account_id, compute_environment_name, region_name
         )
 
         self.instances = []
@@ -97,9 +98,9 @@ class ComputeEnvironment(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
-        backend = batch_backends[region_name]
+        backend = batch_backends[account_id][region_name]
         properties = cloudformation_json["Properties"]
 
         env = backend.create_compute_environment(
@@ -122,7 +123,6 @@ class JobQueue(CloudFormationModel):
         state,
         environments,
         env_order_json,
-        region_name,
         backend,
         tags=None,
     ):
@@ -137,15 +137,13 @@ class JobQueue(CloudFormationModel):
         :type environments: list of ComputeEnvironment
         :param env_order_json: Compute Environments JSON for use when describing
         :type env_order_json: list of dict
-        :param region_name: Region name
-        :type region_name: str
         """
         self.name = name
         self.priority = priority
         self.state = state
         self.environments = environments
         self.env_order_json = env_order_json
-        self.arn = make_arn_for_job_queue(get_account_id(), name, region_name)
+        self.arn = make_arn_for_job_queue(backend.account_id, name, backend.region_name)
         self.status = "VALID"
         self.backend = backend
 
@@ -182,9 +180,9 @@ class JobQueue(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
-        backend = batch_backends[region_name]
+        backend = batch_backends[account_id][region_name]
         properties = cloudformation_json["Properties"]
 
         # Need to deal with difference case from cloudformation compute_resources, e.g. instanceRole vs InstanceRole
@@ -212,7 +210,6 @@ class JobDefinition(CloudFormationModel):
         parameters,
         _type,
         container_properties,
-        region_name,
         tags=None,
         revision=0,
         retry_strategy=0,
@@ -225,7 +222,7 @@ class JobDefinition(CloudFormationModel):
         self.retry_strategy = retry_strategy
         self.type = _type
         self.revision = revision
-        self._region = region_name
+        self._region = backend.region_name
         self.container_properties = container_properties
         self.arn = None
         self.status = "ACTIVE"
@@ -257,7 +254,7 @@ class JobDefinition(CloudFormationModel):
     def _update_arn(self):
         self.revision += 1
         self.arn = make_arn_for_task_def(
-            get_account_id(), self.name, self.revision, self._region
+            self.backend.account_id, self.name, self.revision, self._region
         )
 
     def _get_resource_requirement(self, req_type, default=None):
@@ -347,7 +344,6 @@ class JobDefinition(CloudFormationModel):
             parameters,
             _type,
             container_properties,
-            region_name=self._region,
             revision=self.revision,
             retry_strategy=retry_strategy,
             tags=tags,
@@ -392,9 +388,9 @@ class JobDefinition(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
-        backend = batch_backends[region_name]
+        backend = batch_backends[account_id][region_name]
         properties = cloudformation_json["Properties"]
         res = backend.register_job_definition(
             def_name=resource_name,
@@ -448,7 +444,7 @@ class Job(threading.Thread, BaseModel, DockerModel, ManagedState):
         )
 
         self.job_name = name
-        self.job_id = str(uuid.uuid4())
+        self.job_id = str(mock_random.uuid4())
         self.job_definition = job_def
         self.container_overrides = container_overrides or {}
         self.job_queue = job_queue
@@ -471,6 +467,7 @@ class Job(threading.Thread, BaseModel, DockerModel, ManagedState):
         self._log_backend = log_backend
         self.log_stream_name = None
 
+        self.container_details = {}
         self.attempts = []
         self.latest_attempt = None
 
@@ -496,24 +493,9 @@ class Job(threading.Thread, BaseModel, DockerModel, ManagedState):
         result = self.describe_short()
         result["jobQueue"] = self.job_queue.arn
         result["dependsOn"] = self.depends_on if self.depends_on else []
+        result["container"] = self.container_details
         if self.job_stopped:
             result["stoppedAt"] = datetime2int_milliseconds(self.job_stopped_at)
-            result["container"] = {}
-            result["container"]["command"] = self._get_container_property("command", [])
-            result["container"]["privileged"] = self._get_container_property(
-                "privileged", False
-            )
-            result["container"][
-                "readonlyRootFilesystem"
-            ] = self._get_container_property("readonlyRootFilesystem", False)
-            result["container"]["ulimits"] = self._get_container_property("ulimits", {})
-            result["container"]["vcpus"] = self._get_container_property("vcpus", 1)
-            result["container"]["memory"] = self._get_container_property("memory", 512)
-            result["container"]["volumes"] = self._get_container_property("volumes", [])
-            result["container"]["environment"] = self._get_container_property(
-                "environment", []
-            )
-            result["container"]["logStreamName"] = self.log_stream_name
         if self.timeout:
             result["timeout"] = self.timeout
         result["attempts"] = self.attempts
@@ -614,6 +596,29 @@ class Job(threading.Thread, BaseModel, DockerModel, ManagedState):
             # TODO setup ecs container instance
 
             self.job_started_at = datetime.datetime.now()
+
+            self.container_details["command"] = self._get_container_property(
+                "command", []
+            )
+            self.container_details["privileged"] = self._get_container_property(
+                "privileged", False
+            )
+            self.container_details[
+                "readonlyRootFilesystem"
+            ] = self._get_container_property("readonlyRootFilesystem", False)
+            self.container_details["ulimits"] = self._get_container_property(
+                "ulimits", {}
+            )
+            self.container_details["vcpus"] = self._get_container_property("vcpus", 1)
+            self.container_details["memory"] = self._get_container_property(
+                "memory", 512
+            )
+            self.container_details["volumes"] = self._get_container_property(
+                "volumes", []
+            )
+            self.container_details["environment"] = self._get_container_property(
+                "environment", []
+            )
             self._start_attempt()
 
             # add host.docker.internal host on linux to emulate Mac + Windows behavior
@@ -732,6 +737,8 @@ class Job(threading.Thread, BaseModel, DockerModel, ManagedState):
                 self._log_backend.create_log_stream(log_group, stream_name)
                 self._log_backend.put_log_events(log_group, stream_name, logs)
 
+                self.container_details["logStreamName"] = self.log_stream_name
+
                 result = container.wait() or {}
                 self.exit_code = result.get("StatusCode", 0)
                 job_failed = self.stop or self.exit_code > 0
@@ -844,7 +851,7 @@ class BatchBackend(BaseBackend):
         :return: IAM Backend
         :rtype: moto.iam.models.IAMBackend
         """
-        return iam_backends["global"]
+        return iam_backends[self.account_id]["global"]
 
     @property
     def ec2_backend(self):
@@ -852,7 +859,7 @@ class BatchBackend(BaseBackend):
         :return: EC2 Backend
         :rtype: moto.ec2.models.EC2Backend
         """
-        return ec2_backends[self.region_name]
+        return ec2_backends[self.account_id][self.region_name]
 
     @property
     def ecs_backend(self):
@@ -860,7 +867,7 @@ class BatchBackend(BaseBackend):
         :return: ECS Backend
         :rtype: moto.ecs.models.EC2ContainerServiceBackend
         """
-        return ecs_backends[self.region_name]
+        return ecs_backends[self.account_id][self.region_name]
 
     @property
     def logs_backend(self):
@@ -868,7 +875,7 @@ class BatchBackend(BaseBackend):
         :return: ECS Backend
         :rtype: moto.logs.models.LogsBackend
         """
-        return logs_backends[self.region_name]
+        return logs_backends[self.account_id][self.region_name]
 
     def reset(self):
         for job in self._jobs.values():
@@ -1077,6 +1084,7 @@ class BatchBackend(BaseBackend):
             state,
             compute_resources,
             service_role,
+            account_id=self.account_id,
             region_name=self.region_name,
         )
         self._compute_environments[new_comp_env.arn] = new_comp_env
@@ -1113,7 +1121,7 @@ class BatchBackend(BaseBackend):
 
         # Create ECS cluster
         # Should be of format P2OnDemand_Batch_UUID
-        cluster_name = "OnDemand_Batch_" + str(uuid.uuid4())
+        cluster_name = "OnDemand_Batch_" + str(mock_random.uuid4())
         ecs_cluster = self.ecs_backend.create_cluster(cluster_name)
         new_comp_env.set_ecs(ecs_cluster.arn, cluster_name)
 
@@ -1344,7 +1352,6 @@ class BatchBackend(BaseBackend):
             state,
             env_objects,
             compute_env_order,
-            self.region_name,
             backend=self,
             tags=tags,
         )
@@ -1450,7 +1457,6 @@ class BatchBackend(BaseBackend):
                 _type,
                 container_properties,
                 tags=tags,
-                region_name=self.region_name,
                 retry_strategy=retry_strategy,
                 timeout=timeout,
                 backend=self,
@@ -1590,22 +1596,34 @@ class BatchBackend(BaseBackend):
         return jobs
 
     def cancel_job(self, job_id, reason):
+        if job_id == "":
+            raise ClientException(
+                "'reason' is a required field (cannot be an empty string)"
+            )
+        if reason == "":
+            raise ClientException(
+                "'jobId' is a required field (cannot be an empty string)"
+            )
+
         job = self.get_job_by_id(job_id)
-        if job.status in ["SUBMITTED", "PENDING", "RUNNABLE"]:
-            job.terminate(reason)
-        # No-Op for jobs that have already started - user has to explicitly terminate those
+        if job is not None:
+            if job.status in ["SUBMITTED", "PENDING", "RUNNABLE"]:
+                job.terminate(reason)
+            # No-Op for jobs that have already started - user has to explicitly terminate those
 
     def terminate_job(self, job_id, reason):
-        if job_id is None:
-            raise ClientException("Job ID does not exist")
-        if reason is None:
-            raise ClientException("Reason does not exist")
+        if job_id == "":
+            raise ClientException(
+                "'reason' is a required field (cannot be a empty string)"
+            )
+        if reason == "":
+            raise ClientException(
+                "'jobId' is a required field (cannot be a empty string)"
+            )
 
         job = self.get_job_by_id(job_id)
-        if job is None:
-            raise ClientException("Job not found")
-
-        job.terminate(reason)
+        if job is not None:
+            job.terminate(reason)
 
     def tag_resource(self, resource_arn, tags):
         tags = self.tagger.convert_dict_to_tags_input(tags or {})

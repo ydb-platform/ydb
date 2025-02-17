@@ -10,14 +10,14 @@ Setup the development environment as described in [Working on a change - Setup e
 
 There's a `ya` script in the YDB repository root to run `Ya Make` commands from the console. You can add it to the PATH evniromnet variable to enable launching without specifiying a full path. For Linux/Bash and GitHub repo cloned to `~/ydbwork/ydb` you can use the following command:
 
-```
+```bash
 echo "alias ya='~/ydbwork/ydb/ya'" >> ~/.bashrc
 source ~/.bashrc
 ```
 
 Run `ya` without parameters to get help:
 
-```
+```bash
 $ ya
 Yet another build tool.
 
@@ -32,7 +32,7 @@ Available subcommands:
 
 You can get detailed help on any subcommand launching it with a `--help` flag, for instance:
 
-```
+```bash
 $ ya make --help
 Build and run tests
 To see more help use -hh/-hhh
@@ -57,7 +57,7 @@ If you're using IDE for development, there's a command `ya ide` which helps you 
 
 Go to the directory in the source code which you need to be a root of your project. Run the `ya ide` command specifying the IDE name, and the target directory to write the IDE project configuration in a `-P` parameter. For instance, to work on the YQL library changes in vscode you can run the following command:
 
-```
+```bash
 cd ~/ydbwork/ydb/library/yql
 ya ide vscode -P=~/ydbwork/vscode/yqllib
 ```
@@ -68,14 +68,14 @@ Now you can open the `~/ydbwork/vscode/yqllib/ide.code-workspace` from vscode.
 
 There are 3 basic types of targets in `Ya Make`: Program, Test, and Library. To build a target run `ya make` with the directory name. For instance, to build a YDB CLI run:
 
-```
+```bash
 cd ~/ydbwork/ydb
 ya make ydb/apps/ydb
 ```
 
 You can also run `ya make` from inside a target directory without parameters:
 
-```
+```bash
 cd ~/ydbwork/ydb/ydb/apps/ydb
 ya make
 ```
@@ -86,7 +86,7 @@ Running a `ya test` command in some directory will build all test binaries locat
 
 For instance, to run YDB Core small tests run:
 
-```
+```bash
 cd ~/ydbwork/ydb
 ya test ydb/core
 ```

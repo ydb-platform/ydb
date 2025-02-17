@@ -10,8 +10,8 @@
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 
-#include <ydb/library/yql/utils/range_walker.h>
-#include <ydb/library/yql/utils/bind_in_range.h>
+#include <yql/essentials/utils/range_walker.h>
+#include <yql/essentials/utils/network/bind_in_range.h>
 
 #include <library/cpp/messagebus/network.h>
 
@@ -31,7 +31,8 @@ public:
         NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
         IMetricsRegistryPtr metricsRegistry,
         const std::function<IActor*(void)>& metricsPusherFactory,
-        bool withSpilling)
+        bool withSpilling,
+        TVector<std::pair<TActorId, TActorSetupCmd>>&& additionalLocalServices)
         : MetricsRegistry(metricsRegistry
             ? metricsRegistry
             : CreateMetricsRegistry(GetSensorsGroupFor(NSensorComponent::kDq))
@@ -62,12 +63,12 @@ public:
         auto lwmGroup = MetricsRegistry->GetSensors()->GetSubgroup("component", "lwm");
         auto patternCache = std::make_shared<NKikimr::NMiniKQL::TComputationPatternLRUCache>(NKikimr::NMiniKQL::TComputationPatternLRUCache::Config(200_MB, 200_MB));
         NDqs::TLocalWorkerManagerOptions lwmOptions;
-        lwmOptions.Factory = NTaskRunnerProxy::CreateFactory(functionRegistry, compFactory, taskTransformFactory, patternCache, true);
+        lwmOptions.Factory = NTaskRunnerProxy::CreateFactory(functionRegistry, compFactory, taskTransformFactory, patternCache, false);
         lwmOptions.AsyncIoFactory = std::move(asyncIoFactory);
         lwmOptions.FunctionRegistry = functionRegistry;
         lwmOptions.TaskRunnerInvokerFactory = new NDqs::TTaskRunnerInvokerFactory();
         lwmOptions.TaskRunnerActorFactory = NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory(
-            [factory=lwmOptions.Factory](NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
+            [factory=lwmOptions.Factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
                 {
                     return factory->Get(alloc, task, statsMode);
                 });
@@ -80,15 +81,17 @@ public:
             TActorSetupCmd(resman, TMailboxType::Simple, 0));
 
         if (withSpilling) {
-            char tempDir[MAX_PATH];
-            if (MakeTempDir(tempDir, nullptr) != 0)
-                ythrow yexception() << "LocalServiceHolder: Can't create temporary directory " << tempDir;
+            auto tempDir = NDq::GetTmpSpillingRootForCurrentUser();
+            MakeDirIfNotExist(tempDir);
 
             auto spillingActor = NDq::CreateDqLocalFileSpillingService(NDq::TFileSpillingServiceConfig{.Root = tempDir, .CleanupOnShutdown = true}, MakeIntrusive<NDq::TSpillingCounters>(lwmGroup));
 
             ServiceNode->AddLocalService(
                 NDq::MakeDqLocalFileSpillingServiceID(nodeId),
                 TActorSetupCmd(spillingActor, TMailboxType::Simple, 0));
+        }
+        for (auto& [actorId, setupCmd] : additionalLocalServices) {
+            ServiceNode->AddLocalService(actorId, std::move(setupCmd));
         }
 
         auto statsCollector = CreateStatsCollector(1, *ServiceNode->GetSetup(), MetricsRegistry->GetSensors());
@@ -126,6 +129,7 @@ class TDqGatewayLocalImpl: public std::enable_shared_from_this<TDqGatewayLocalIm
         THashMap<TString, TString> ModulesMapping;
         bool Discard;
         NThreading::TPromise<IDqGateway::TResult> Result;
+        ui64 ExecutionTimeout;
     };
 
 public:
@@ -148,13 +152,13 @@ public:
                 const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
                 const TDqSettings::TPtr& settings,
                 const IDqGateway::TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-                bool discard)
+                bool discard, ui64 executionTimeout)
     {
 
         NThreading::TFuture<IDqGateway::TResult> result;
         {
             TGuard<TMutex> lock(Mutex);
-            Queue.emplace_back(TRequest{sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, NThreading::NewPromise<IDqGateway::TResult>()});
+            Queue.emplace_back(TRequest{sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, NThreading::NewPromise<IDqGateway::TResult>(), executionTimeout});
             result = Queue.back().Result;
         }
 
@@ -177,7 +181,7 @@ private:
 
             auto weak = weak_from_this();
 
-            Gateway->ExecutePlan(request.SessionId, std::move(request.Plan), request.Columns, request.SecureParams, request.GraphParams, request.Settings, request.ProgressWriter, request.ModulesMapping, request.Discard)
+            Gateway->ExecutePlan(request.SessionId, std::move(request.Plan), request.Columns, request.SecureParams, request.GraphParams, request.Settings, request.ProgressWriter, request.ModulesMapping, request.Discard, request.ExecutionTimeout)
                 .Apply([promise=request.Result, weak](const NThreading::TFuture<IDqGateway::TResult>& result) mutable {
                     try {
                         promise.SetValue(result.GetValue());
@@ -228,10 +232,10 @@ public:
         const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
         const TDqSettings::TPtr& settings,
         const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-        bool discard) override
+        bool discard, ui64 executionTimeout) override
     {
         return Impl->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams,
-            settings, progressWriter, modulesMapping, discard);
+            settings, progressWriter, modulesMapping, discard, executionTimeout);
     }
 
     void Stop() override {
@@ -248,7 +252,8 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
     NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort,
     NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
-    const std::function<IActor*(void)>& metricsPusherFactory, bool withSpilling)
+    const std::function<IActor*(void)>& metricsPusherFactory, bool withSpilling,
+    TVector<std::pair<TActorId, TActorSetupCmd>>&& additionalLocalServices)
 {
     return MakeHolder<TLocalServiceHolder>(functionRegistry,
         compFactory,
@@ -260,7 +265,8 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
         threads,
         metricsRegistry,
         metricsPusherFactory,
-        withSpilling);
+        withSpilling,
+        std::move(additionalLocalServices));
 }
 
 TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -268,7 +274,8 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
     TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories,
     bool withSpilling, NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
-    const std::function<IActor*(void)>& metricsPusherFactory)
+    const std::function<IActor*(void)>& metricsPusherFactory,
+    TVector<std::pair<TActorId, TActorSetupCmd>>&& additionalLocalServices)
 {
     int startPort = 31337;
     TRangeWalker<int> portWalker(startPort, startPort+100);
@@ -287,7 +294,8 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
             threads,
             metricsRegistry,
             metricsPusherFactory,
-            withSpilling),
+            withSpilling,
+            std::move(additionalLocalServices)),
         CreateDqGateway("[::1]", grpcPort.Addr.GetPort()));
 }
 

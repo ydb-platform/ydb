@@ -10,7 +10,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NFq {
 

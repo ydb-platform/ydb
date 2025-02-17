@@ -4,6 +4,8 @@
 #include "range.h"
 #include "shared_range.h"
 
+#include <library/cpp/yt/string/format.h>
+
 #include <type_traits>
 
 namespace NYT {
@@ -88,9 +90,12 @@ public:
     template <class T>
     static TMutableRef FromPod(T& data);
 
-    //! Creates a non-owning TMutableRef for a given string.
+    //! Creates a non-owning TMutableRef for a given TString.
     //! Ensures that the string is not shared.
     static TMutableRef FromString(TString& str);
+
+    //! Creates a non-owning TMutableRef for a given std::string.
+    static TMutableRef FromString(std::string& str);
 
     //! Creates a TMutableRef for a part of existing range.
     TMutableRef Slice(size_t startOffset, size_t endOffset) const;
@@ -129,21 +134,33 @@ public:
     operator TRef() const;
 
 
-    //! Creates a TSharedRef from a string.
-    //! Since strings are ref-counted, no data is copied.
+    //! Creates a TSharedRef from TString.
+    //! Since strings are ref-counted, no data is being copied.
     //! The memory is marked with a given tag.
     template <class TTag>
     static TSharedRef FromString(TString str);
 
-    //! Creates a TSharedRef from a string.
-    //! Since strings are ref-counted, no data is copied.
-    //! The memory is marked with TDefaultSharedBlobTag.
+    //! Same as above but the memory is marked with TDefaultSharedBlobTag.
     static TSharedRef FromString(TString str);
 
-    //! Creates a TSharedRef reference from a string.
-    //! Since strings are ref-counted, no data is copied.
-    //! The memory is marked with a given tag.
+    //! Same as above but the memory tag is specified in #tagCookie.
     static TSharedRef FromString(TString str, TRefCountedTypeCookie tagCookie);
+
+    //! Creates a TSharedRef from std::string.
+    //! No data is being copied in #FromString itself but since #str is passed by value
+    //! a copy may occur at caller's side.
+    //! The memory is marked with a given tag.
+    template <class TTag>
+    static TSharedRef FromString(std::string str);
+
+    //! Same as above but the memory is marked with TDefaultSharedBlobTag.
+    static TSharedRef FromString(std::string str);
+
+    //! Same as above but the memory tag is specified in #tagCookie.
+    static TSharedRef FromString(std::string str, TRefCountedTypeCookie tagCookie);
+
+    //! Creates a TSharedRef from a zero-terminated C string.
+    static TSharedRef FromString(const char* str);
 
     //! Creates a TSharedRef for a given blob taking ownership of its content.
     static TSharedRef FromBlob(TBlob&& blob);
@@ -171,6 +188,9 @@ public:
 
 private:
     friend class TSharedRefArrayImpl;
+
+    template <class TString>
+    static TSharedRef FromStringImpl(TString str, TRefCountedTypeCookie tagCookie);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -381,10 +401,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(TRef ref);
-TString ToString(const TMutableRef& ref);
-TString ToString(const TSharedRef& ref);
-TString ToString(const TSharedMutableRef& ref);
+void FormatValue(TStringBuilderBase* builder, const TRef& ref, TStringBuf spec);
+void FormatValue(TStringBuilderBase* builder, const TMutableRef& ref, TStringBuf spec);
+void FormatValue(TStringBuilderBase* builder, const TSharedRef& ref, TStringBuf spec);
+void FormatValue(TStringBuilderBase* builder, const TSharedMutableRef& ref, TStringBuf);
 
 size_t GetPageSize();
 size_t RoundUpToPage(size_t bytes);

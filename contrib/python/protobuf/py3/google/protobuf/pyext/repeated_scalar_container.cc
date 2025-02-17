@@ -31,30 +31,23 @@
 // Author: anuraag@google.com (Anuraag Agrawal)
 // Author: tibell@google.com (Johan Tibell)
 
-#include <google/protobuf/pyext/repeated_scalar_container.h>
+#include "google/protobuf/pyext/repeated_scalar_container.h"
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/stubs/logging.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/dynamic_message.h>
-#include <google/protobuf/message.h>
-#include <google/protobuf/pyext/descriptor.h>
-#include <google/protobuf/pyext/descriptor_pool.h>
-#include <google/protobuf/pyext/message.h>
-#include <google/protobuf/pyext/scoped_pyobject_ptr.h>
+#include "google/protobuf/stubs/common.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/dynamic_message.h"
+#include "google/protobuf/message.h"
+#include "google/protobuf/pyext/descriptor.h"
+#include "google/protobuf/pyext/descriptor_pool.h"
+#include "google/protobuf/pyext/message.h"
+#include "google/protobuf/pyext/scoped_pyobject_ptr.h"
 
-#if PY_MAJOR_VERSION >= 3
-#define PyInt_FromLong PyLong_FromLong
-#if PY_VERSION_HEX < 0x03030000
-#error "Python 3.0 - 3.2 are not supported."
-#else
 #define PyString_AsString(ob) \
   (PyUnicode_Check(ob) ? PyUnicode_AsUTF8(ob) : PyBytes_AsString(ob))
-#endif
-#endif
 
 namespace google {
 namespace protobuf {
@@ -115,37 +108,37 @@ static int AssignItem(PyObject* pself, Py_ssize_t index, PyObject* arg) {
 
   switch (field_descriptor->cpp_type()) {
     case FieldDescriptor::CPPTYPE_INT32: {
-      GOOGLE_CHECK_GET_INT32(arg, value, -1);
+      PROTOBUF_CHECK_GET_INT32(arg, value, -1);
       reflection->SetRepeatedInt32(message, field_descriptor, index, value);
       break;
     }
     case FieldDescriptor::CPPTYPE_INT64: {
-      GOOGLE_CHECK_GET_INT64(arg, value, -1);
+      PROTOBUF_CHECK_GET_INT64(arg, value, -1);
       reflection->SetRepeatedInt64(message, field_descriptor, index, value);
       break;
     }
     case FieldDescriptor::CPPTYPE_UINT32: {
-      GOOGLE_CHECK_GET_UINT32(arg, value, -1);
+      PROTOBUF_CHECK_GET_UINT32(arg, value, -1);
       reflection->SetRepeatedUInt32(message, field_descriptor, index, value);
       break;
     }
     case FieldDescriptor::CPPTYPE_UINT64: {
-      GOOGLE_CHECK_GET_UINT64(arg, value, -1);
+      PROTOBUF_CHECK_GET_UINT64(arg, value, -1);
       reflection->SetRepeatedUInt64(message, field_descriptor, index, value);
       break;
     }
     case FieldDescriptor::CPPTYPE_FLOAT: {
-      GOOGLE_CHECK_GET_FLOAT(arg, value, -1);
+      PROTOBUF_CHECK_GET_FLOAT(arg, value, -1);
       reflection->SetRepeatedFloat(message, field_descriptor, index, value);
       break;
     }
     case FieldDescriptor::CPPTYPE_DOUBLE: {
-      GOOGLE_CHECK_GET_DOUBLE(arg, value, -1);
+      PROTOBUF_CHECK_GET_DOUBLE(arg, value, -1);
       reflection->SetRepeatedDouble(message, field_descriptor, index, value);
       break;
     }
     case FieldDescriptor::CPPTYPE_BOOL: {
-      GOOGLE_CHECK_GET_BOOL(arg, value, -1);
+      PROTOBUF_CHECK_GET_BOOL(arg, value, -1);
       reflection->SetRepeatedBool(message, field_descriptor, index, value);
       break;
     }
@@ -157,7 +150,7 @@ static int AssignItem(PyObject* pself, Py_ssize_t index, PyObject* arg) {
       break;
     }
     case FieldDescriptor::CPPTYPE_ENUM: {
-      GOOGLE_CHECK_GET_INT32(arg, value, -1);
+      PROTOBUF_CHECK_GET_INT32(arg, value, -1);
       if (reflection->SupportsUnknownEnumValues()) {
         reflection->SetRepeatedEnumValue(message, field_descriptor, index,
                                          value);
@@ -210,7 +203,7 @@ static PyObject* Item(PyObject* pself, Py_ssize_t index) {
     case FieldDescriptor::CPPTYPE_INT32: {
       int32_t value =
           reflection->GetRepeatedInt32(*message, field_descriptor, index);
-      result = PyInt_FromLong(value);
+      result = PyLong_FromLong(value);
       break;
     }
     case FieldDescriptor::CPPTYPE_INT64: {
@@ -253,7 +246,7 @@ static PyObject* Item(PyObject* pself, Py_ssize_t index) {
       const EnumValueDescriptor* enum_value =
           message->GetReflection()->GetRepeatedEnum(*message, field_descriptor,
                                                     index);
-      result = PyInt_FromLong(enum_value->number());
+      result = PyLong_FromLong(enum_value->number());
       break;
     }
     case FieldDescriptor::CPPTYPE_STRING: {
@@ -279,22 +272,17 @@ static PyObject* Subscript(PyObject* pself, PyObject* slice) {
   Py_ssize_t length;
   Py_ssize_t slicelength;
   bool return_list = false;
-#if PY_MAJOR_VERSION < 3
-  if (PyInt_Check(slice)) {
-    from = to = PyInt_AsLong(slice);
-  } else  // NOLINT
-#endif
-      if (PyLong_Check(slice)) {
+  if (PyLong_Check(slice)) {
     from = to = PyLong_AsLong(slice);
+  } else if (PyIndex_Check(slice)) {
+    from = to = PyNumber_AsSsize_t(slice, PyExc_ValueError);
+    if (from == -1 && PyErr_Occurred()) {
+      return nullptr;
+    }
   } else if (PySlice_Check(slice)) {
     length = Len(pself);
-#if PY_MAJOR_VERSION >= 3
     if (PySlice_GetIndicesEx(slice, length, &from, &to, &step, &slicelength) ==
         -1) {
-#else
-    if (PySlice_GetIndicesEx(reinterpret_cast<PySliceObject*>(slice), length,
-                             &from, &to, &step, &slicelength) == -1) {
-#endif
       return nullptr;
     }
     return_list = true;
@@ -345,37 +333,37 @@ PyObject* Append(RepeatedScalarContainer* self, PyObject* item) {
   const Reflection* reflection = message->GetReflection();
   switch (field_descriptor->cpp_type()) {
     case FieldDescriptor::CPPTYPE_INT32: {
-      GOOGLE_CHECK_GET_INT32(item, value, nullptr);
+      PROTOBUF_CHECK_GET_INT32(item, value, nullptr);
       reflection->AddInt32(message, field_descriptor, value);
       break;
     }
     case FieldDescriptor::CPPTYPE_INT64: {
-      GOOGLE_CHECK_GET_INT64(item, value, nullptr);
+      PROTOBUF_CHECK_GET_INT64(item, value, nullptr);
       reflection->AddInt64(message, field_descriptor, value);
       break;
     }
     case FieldDescriptor::CPPTYPE_UINT32: {
-      GOOGLE_CHECK_GET_UINT32(item, value, nullptr);
+      PROTOBUF_CHECK_GET_UINT32(item, value, nullptr);
       reflection->AddUInt32(message, field_descriptor, value);
       break;
     }
     case FieldDescriptor::CPPTYPE_UINT64: {
-      GOOGLE_CHECK_GET_UINT64(item, value, nullptr);
+      PROTOBUF_CHECK_GET_UINT64(item, value, nullptr);
       reflection->AddUInt64(message, field_descriptor, value);
       break;
     }
     case FieldDescriptor::CPPTYPE_FLOAT: {
-      GOOGLE_CHECK_GET_FLOAT(item, value, nullptr);
+      PROTOBUF_CHECK_GET_FLOAT(item, value, nullptr);
       reflection->AddFloat(message, field_descriptor, value);
       break;
     }
     case FieldDescriptor::CPPTYPE_DOUBLE: {
-      GOOGLE_CHECK_GET_DOUBLE(item, value, nullptr);
+      PROTOBUF_CHECK_GET_DOUBLE(item, value, nullptr);
       reflection->AddDouble(message, field_descriptor, value);
       break;
     }
     case FieldDescriptor::CPPTYPE_BOOL: {
-      GOOGLE_CHECK_GET_BOOL(item, value, nullptr);
+      PROTOBUF_CHECK_GET_BOOL(item, value, nullptr);
       reflection->AddBool(message, field_descriptor, value);
       break;
     }
@@ -387,7 +375,7 @@ PyObject* Append(RepeatedScalarContainer* self, PyObject* item) {
       break;
     }
     case FieldDescriptor::CPPTYPE_ENUM: {
-      GOOGLE_CHECK_GET_INT32(item, value, nullptr);
+      PROTOBUF_CHECK_GET_INT32(item, value, nullptr);
       if (reflection->SupportsUnknownEnumValues()) {
         reflection->AddEnumValue(message, field_descriptor, value);
       } else {
@@ -436,23 +424,13 @@ static int AssSubscript(PyObject* pself, PyObject* slice, PyObject* value) {
   Message* message = self->parent->message;
   const FieldDescriptor* field_descriptor = self->parent_field_descriptor;
 
-#if PY_MAJOR_VERSION < 3
-  if (PyInt_Check(slice)) {
-    from = to = PyInt_AsLong(slice);
-  } else  // NOLINT
-#endif
-      if (PyLong_Check(slice)) {
+  if (PyLong_Check(slice)) {
     from = to = PyLong_AsLong(slice);
   } else if (PySlice_Check(slice)) {
     const Reflection* reflection = message->GetReflection();
     length = reflection->FieldSize(*message, field_descriptor);
-#if PY_MAJOR_VERSION >= 3
     if (PySlice_GetIndicesEx(slice, length, &from, &to, &step, &slicelength) ==
         -1) {
-#else
-    if (PySlice_GetIndicesEx(reinterpret_cast<PySliceObject*>(slice), length,
-                             &from, &to, &step, &slicelength) == -1) {
-#endif
       return -1;
     }
     create_list = true;

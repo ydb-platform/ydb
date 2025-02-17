@@ -109,8 +109,13 @@ struct TMetadataInfoHolder {
         : TableMetadata(tableMetadata)
     {
         for (auto& [name, ptr] : TableMetadata) {
-            for (auto& secondary : ptr->SecondaryGlobalIndexMetadata) {
-                Indexes.emplace(secondary->Name, secondary);
+            for (auto implTable : ptr->ImplTables) {
+                YQL_ENSURE(implTable);
+                do {
+                    auto nextImplTable = implTable->Next;
+                    Indexes.emplace(implTable->Name, std::move(implTable));
+                    implTable = std::move(nextImplTable);
+                } while (implTable);
             }
         }
     }
@@ -254,9 +259,11 @@ public:
         }
 
         TKqpQuerySettings settings(queryType);
+        const auto& database = ReplayDetails["query_database"].GetStringSafe();
         Query = std::make_unique<NKikimr::NKqp::TKqpQueryId>(
             ReplayDetails["query_cluster"].GetStringSafe(),
-            ReplayDetails["query_database"].GetStringSafe(),
+            database,
+            database,
             queryText,
             settings,
             !queryParameterTypes.empty()
@@ -288,11 +295,11 @@ public:
         counters->Counters = new TKqpCounters(c);
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
 
-        Gateway = CreateKikimrIcGateway(Query->Cluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, Query->Database, std::move(loader),
-            TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
-        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr});
+        Gateway = CreateKikimrIcGateway(Query->Cluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, Query->Database, Query->DatabaseId, std::move(loader),
+            TActivationContext::ActorSystem(), SelfId().NodeId(), counters);
+        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, nullptr, {}});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
-            federatedQuerySetup, nullptr, GUCSettings, Nothing(), FunctionRegistry, false);
+            federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = false;
@@ -323,7 +330,7 @@ private:
 
 private:
     void Continue() {
-        TActorSystem* actorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
+        TActorSystem* actorSystem = TActivationContext::ActorSystem();
         TActorId selfId = SelfId();
         auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
             bool finished = future.GetValue();

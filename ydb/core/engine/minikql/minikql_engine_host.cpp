@@ -3,9 +3,9 @@
 #include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/core/tablet_flat/flat_table_stats.h>
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/minikql/computation/mkql_custom_list.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -23,12 +23,12 @@ void ConvertTableKeys(const TScheme& scheme, const TScheme::TTableInfo* tableInf
     for (size_t keyIdx = 0; keyIdx < row.size(); keyIdx++) {
         const TCell& cell = row[keyIdx];
         ui32 keyCol = tableInfo->KeyColumns[keyIdx];
-        NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, keyCol)->PType;
+        NScheme::TTypeId vtypeId = scheme.GetColumnInfo(tableInfo, keyCol)->PType.GetTypeId();
         if (cell.IsNull()) {
             key.emplace_back();
             bytes += 1;
         } else {
-            key.emplace_back(cell.Data(), cell.Size(), vtypeInfo);
+            key.emplace_back(cell.Data(), cell.Size(), vtypeId);
             bytes += cell.Size();
         }
     }
@@ -42,8 +42,8 @@ void ConvertTableValues(const TScheme& scheme, const TScheme::TTableInfo* tableI
     for (size_t i = 0; i < commands.size(); i++) {
         const IEngineFlatHost::TUpdateCommand& upd = commands[i];
         Y_ABORT_UNLESS(upd.Operation == TKeyDesc::EColumnOperation::Set);
-        auto vtypeinfo = scheme.GetColumnInfo(tableInfo, upd.Column)->PType;
-        ops.emplace_back(upd.Column, NTable::ECellOp::Set, upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtypeinfo));
+        NScheme::TTypeId vtypeId = scheme.GetColumnInfo(tableInfo, upd.Column)->PType.GetTypeId();
+        ops.emplace_back(upd.Column, NTable::ECellOp::Set, upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtypeId));
         bytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
     }
     if (valueBytes)
@@ -73,7 +73,7 @@ bool TEngineHost::IsValidKey(TKeyDesc& key) const {
     return NMiniKQL::IsValidKey(Scheme, localTableId, key);
 }
 ui64 TEngineHost::CalculateReadSize(const TVector<const TKeyDesc*>& keys) const {
-    NTable::TSizeEnv env;
+    auto env = Db.CreateSizeEnv();
 
     for (const TKeyDesc* ki : keys) {
         DoCalculateReadSize(*ki, env);
@@ -120,7 +120,7 @@ ui64 TEngineHost::CalculateResultSize(const TKeyDesc& key) const {
     if (key.Range.Point) {
         return Db.EstimateRowSize(localTid);
     } else {
-        NTable::TSizeEnv env;
+        auto env = Db.CreateSizeEnv();
         DoCalculateReadSize(key, env);
         ui64 size = env.GetSize();
 
@@ -498,7 +498,7 @@ public:
                     }
                     firstKey.AppendNoAlias((const char*)typeIds.data(), tuple.ColumnCount * sizeof(NScheme::TTypeId));
                     firstKey.AppendNoAlias(cells);
-                    // TODO: support pg types
+                    // no need to support pg types in the deprecated minikql engine
 
                     if (List.FirstKey) {
                         Y_DEBUG_ABORT_UNLESS(*List.FirstKey == firstKey);
@@ -1087,7 +1087,7 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
     }
 
     if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
-        return NYql::NCommon::PgValueFromNativeBinary(cell.AsBuf(), NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
+        return NYql::NCommon::PgValueFromNativeBinary(cell.AsBuf(), NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc()));
     }
 
     Y_DEBUG_ABORT("Unsupported type: %" PRIu16, type.GetTypeId());

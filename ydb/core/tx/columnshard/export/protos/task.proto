@@ -13,4 +13,17 @@ message TExportTask {
     optional TSelectorContainer Selector = 2;
     optional TStorageInitializerContainer StorageInitializer = 3;
     optional NKikimrSchemeOp.TOlapColumn.TSerializer Serializer = 4;
+    optional uint64 TxId = 5;
+}
+
+message TSessionControlContainer {
+    optional string ClassName = 1;
+}
+
+message TExportSessionLogic {
+    optional TExportTask Task = 1;
+}
+
+message TExportSessionState {
+    optional string Status = 1;
 }

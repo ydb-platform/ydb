@@ -1,15 +1,14 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/write_session_impl.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <util/generic/buffer.h>
 
 #include <atomic>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSession
@@ -37,9 +36,11 @@ public:
     void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize,
                TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
 
-    void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
+    void Write(TContinuationToken&& continuationToken, TWriteMessage&& message,
+               NTable::TTransaction* tx = nullptr) override;
 
-    void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
+    void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& message,
+                      NTable::TTransaction* tx = nullptr) override;
 
     NThreading::TFuture<void> WaitEvent() override;
 
@@ -68,7 +69,9 @@ public:
     bool Write(TStringBuf data, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing(),
                const TDuration& blockTimeout = TDuration::Max()) override;
 
-    bool Write(TWriteMessage&& message, const TDuration& blockTimeout = TDuration::Max()) override;
+    bool Write(TWriteMessage&& message,
+               NTable::TTransaction* tx = nullptr,
+               const TDuration& blockTimeout = TDuration::Max()) override;
 
     ui64 GetInitSeqNo() override;
 
@@ -82,9 +85,6 @@ protected:
 
 private:
     TMaybe<TContinuationToken> WaitForToken(const TDuration& timeout);
-    void HandleAck(TWriteSessionEvent::TAcksEvent&);
-    void HandleReady(TWriteSessionEvent::TReadyToAcceptEvent&);
-    void HandleClosed(const TSessionClosedEvent&);
 
     std::atomic_bool Closed = false;
 };

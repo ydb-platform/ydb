@@ -1,0 +1,998 @@
+diff --git a/include/__chrono/calendar.h b/include/__chrono/calendar.h
+index 9e5642f..0320d50 100644
+--- a/include/__chrono/calendar.h
++++ b/include/__chrono/calendar.h
+@@ -1247,6 +1247,11 @@ constexpr hours make24(const hours& __h, bool __is_pm) noexcept
+ 
+ } // namespace chrono
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4455)
++#endif
++
+ inline namespace literals
+ {
+   inline namespace chrono_literals
+@@ -1263,6 +1268,10 @@ inline namespace literals
+ } // namespace chrono_literals
+ } // namespace literals
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
++
+ namespace chrono { // hoist the literals into namespace std::chrono
+    using namespace literals::chrono_literals;
+ } // namespace chrono
+diff --git a/include/__chrono/duration.h b/include/__chrono/duration.h
+index f520759..452543b 100644
+--- a/include/__chrono/duration.h
++++ b/include/__chrono/duration.h
+@@ -528,6 +528,12 @@ operator%(const duration<_Rep1, _Period1>& __lhs, const duration<_Rep2, _Period2
+ } // namespace chrono
+ 
+ #if _LIBCPP_STD_VER > 11
++
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4455)
++#endif
++
+ // Suffixes for duration literals [time.duration.literals]
+ inline namespace literals
+ {
+@@ -602,6 +608,10 @@ inline namespace literals
+ } // namespace chrono_literals
+ } // namespace literals
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
++
+ namespace chrono { // hoist the literals into namespace std::chrono
+    using namespace literals::chrono_literals;
+ } // namespace chrono
+diff --git a/include/__config b/include/__config
+index fdb3b18..0a8af3c 100644
+--- a/include/__config
++++ b/include/__config
+@@ -150,7 +150,7 @@
+ #define _LIBCPP_TOSTRING2(x) #x
+ #define _LIBCPP_TOSTRING(x) _LIBCPP_TOSTRING2(x)
+ 
+-#if __cplusplus < 201103L
++#if __cplusplus < 201103L && !defined(_LIBCPP_COMPILER_MSVC)
+ #define _LIBCPP_CXX03_LANG
+ #endif
+ 
+@@ -762,8 +762,12 @@ typedef __char32_t char32_t;
+    // Try to approximate the effect of exclude_from_explicit_instantiation
+    // (which is that entities are not assumed to be provided by explicit
+    // template instantiations in the dylib) by always inlining those entities.
++#ifdef _LIBCPP_COMPILER_MSVC
++#  define _LIBCPP_EXCLUDE_FROM_EXPLICIT_INSTANTIATION
++#else
+ #  define _LIBCPP_EXCLUDE_FROM_EXPLICIT_INSTANTIATION _LIBCPP_ALWAYS_INLINE
+ #endif
++#endif
+ 
+ #ifndef _LIBCPP_HIDE_FROM_ABI_PER_TU
+ #  ifndef _LIBCPP_HIDE_FROM_ABI_PER_TU_BY_DEFAULT
+@@ -851,7 +855,8 @@ typedef unsigned int   char32_t;
+ #  define _LIBCPP_CONSTEVAL consteval
+ #endif
+ 
+-#if _LIBCPP_STD_VER <= 17 || !defined(__cpp_concepts) || __cpp_concepts < 201907L
++// Even modern versions of MSVC toolkit have issues compiling libc++'s concepts-related code
++#if _LIBCPP_STD_VER <= 17 || defined(_LIBCPP_COMPILER_MSVC) || !defined(__cpp_concepts) || __cpp_concepts < 201907L
+ #define _LIBCPP_HAS_NO_CONCEPTS
+ #endif
+ 
+@@ -1211,6 +1216,7 @@ extern "C" _LIBCPP_FUNC_VIS void __sanitizer_annotate_contiguous_container(
+ 
+ #if !defined(_LIBCPP_HAS_C_ATOMIC_IMP) && \
+     !defined(_LIBCPP_HAS_GCC_ATOMIC_IMP) && \
++    !defined(_LIBCPP_COMPILER_MSVC) && \
+     !defined(_LIBCPP_HAS_EXTERNAL_ATOMIC_IMP)
+ #  define _LIBCPP_HAS_NO_ATOMIC_HEADER
+ #else
+@@ -1378,6 +1384,12 @@ extern "C" _LIBCPP_FUNC_VIS void __sanitizer_annotate_contiguous_container(
+ #  define _LIBCPP_FOPEN_CLOEXEC_MODE
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#define _LIBCPP_BUILTIN_CONSTANT_P(x) false
++#else
++#define _LIBCPP_BUILTIN_CONSTANT_P(x) __builtin_constant_p(x)
++#endif
++
+ // Support for _FILE_OFFSET_BITS=64 landed gradually in Android, so the full set
+ // of functions used in cstdio may not be available for low API levels when
+ // using 64-bit file offsets on LP32.
+diff --git a/include/__functional/bind.h b/include/__functional/bind.h
+index c352406..a5b0c0e 100644
+--- a/include/__functional/bind.h
++++ b/include/__functional/bind.h
+@@ -191,6 +191,11 @@ struct __mu_return_impl<_Ti, false, false, false, _TupleUj>
+     typedef _Ti& type;
+ };
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4296 )
++#endif
++
+ template <class _Ti, class _TupleUj>
+ struct __mu_return
+     : public __mu_return_impl<_Ti,
+@@ -202,6 +207,10 @@ struct __mu_return
+ {
+ };
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
++
+ template <class _Fp, class _BoundArgs, class _TupleUj>
+ struct __is_valid_bind_return
+ {
+@@ -263,6 +272,11 @@ __apply_functor(_Fp& __f, _BoundArgs& __bound_args, __tuple_indices<_Indx...>,
+     return _VSTD::__invoke(__f, _VSTD::__mu(_VSTD::get<_Indx>(__bound_args), __args)...);
+ }
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4296 )
++#endif
++
+ template<class _Fp, class ..._BoundArgs>
+ class __bind
+ #if _LIBCPP_STD_VER <= 17 || !defined(_LIBCPP_ABI_NO_BINDER_BASES)
+@@ -309,6 +323,14 @@ public:
+         }
+ };
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
++
++#if defined(__CUDACC__) && defined(_MSC_VER)
++#   define Y_CUDAFE_MSVC_BUG
++#endif
++
+ template<class _Fp, class ..._BoundArgs>
+ struct is_bind_expression<__bind<_Fp, _BoundArgs...> > : public true_type {};
+ 
+@@ -318,7 +340,11 @@ class __bind_r
+ {
+     typedef __bind<_Fp, _BoundArgs...> base;
+     typedef typename base::_Fd _Fd;
++#if !defined(Y_CUDAFE_MSVC_BUG)
+     typedef typename base::_Td _Td;
++#else
++    typedef typename tuple<typename decay<_BoundArgs>::type...> _Td;
++#endif
+ public:
+     typedef _Rp result_type;
+ 
+diff --git a/include/__functional/function.h b/include/__functional/function.h
+index 4698c8c..895d1c3 100644
+--- a/include/__functional/function.h
++++ b/include/__functional/function.h
+@@ -965,11 +965,18 @@ class _LIBCPP_TEMPLATE_VIS function<_Rp(_ArgTypes...)>
+ 
+     __func __f_;
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4348 )
++#endif
+     template <class _Fp, bool = _And<
+         _IsNotSame<__uncvref_t<_Fp>, function>,
+         __invokable<_Fp, _ArgTypes...>
+     >::value>
+     struct __callable;
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
+     template <class _Fp>
+         struct __callable<_Fp, true>
+         {
+diff --git a/include/__functional/hash.h b/include/__functional/hash.h
+index 2b3b96e..89cb02a 100644
+--- a/include/__functional/hash.h
++++ b/include/__functional/hash.h
+@@ -411,12 +411,20 @@ struct _PairT {
+   size_t second;
+ };
+ 
++// Disable double inline warning.
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4141 )
++#endif
+ _LIBCPP_INLINE_VISIBILITY
+ inline size_t __hash_combine(size_t __lhs, size_t __rhs) _NOEXCEPT {
+     typedef __scalar_hash<_PairT> _HashT;
+     const _PairT __p = {__lhs, __rhs};
+     return _HashT()(__p);
+ }
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
+ 
+ _LIBCPP_SUPPRESS_DEPRECATED_PUSH
+ template<class _Tp>
+diff --git a/include/__hash_table b/include/__hash_table
+index 36f2ef7..e802dd2 100644
+--- a/include/__hash_table
++++ b/include/__hash_table
+@@ -91,6 +91,10 @@ struct __hash_node_base
+     _LIBCPP_INLINE_VISIBILITY __hash_node_base() _NOEXCEPT : __next_(nullptr) {}
+ };
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning( push )
++#pragma warning( disable: 4624 )
++#endif // _LIBCPP_COMPILER_MSVC
+ template <class _Tp, class _VoidPtr>
+ struct _LIBCPP_STANDALONE_DEBUG __hash_node
+     : public __hash_node_base
+@@ -103,6 +107,9 @@ struct _LIBCPP_STANDALONE_DEBUG __hash_node
+     size_t            __hash_;
+     __node_value_type __value_;
+ };
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning( pop )
++#endif // _LIBCPP_COMPILER_MSVC
+ 
+ inline _LIBCPP_INLINE_VISIBILITY
+ bool
+diff --git a/include/__locale b/include/__locale
+index 514cb4a..9675e4b 100644
+--- a/include/__locale
++++ b/include/__locale
+@@ -276,6 +276,11 @@ public:
+         return do_compare(__lo1, __hi1, __lo2, __hi2);
+     }
+ 
++// Disable double inline warning.
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4141 )
++#endif
+     // FIXME(EricWF): The _LIBCPP_ALWAYS_INLINE is needed on Windows to work
+     // around a dllimport bug that expects an external instantiation.
+     _LIBCPP_INLINE_VISIBILITY
+@@ -284,6 +289,9 @@ public:
+     {
+         return do_transform(__lo, __hi);
+     }
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
+ 
+     _LIBCPP_INLINE_VISIBILITY
+     long hash(const char_type* __lo, const char_type* __hi) const
+diff --git a/include/__memory/shared_ptr.h b/include/__memory/shared_ptr.h
+index 0f28bcd..ff8e601 100644
+--- a/include/__memory/shared_ptr.h
++++ b/include/__memory/shared_ptr.h
+@@ -98,6 +98,7 @@ _ValueType __libcpp_acquire_load(_ValueType const* __value) {
+ #endif
+ }
+ 
++#ifndef _LIBCPP_COMPILER_MSVC
+ template <class _Tp>
+ inline _LIBCPP_INLINE_VISIBILITY _Tp
+ __libcpp_atomic_refcount_increment(_Tp& __t) _NOEXCEPT
+@@ -119,6 +120,7 @@ __libcpp_atomic_refcount_decrement(_Tp& __t) _NOEXCEPT
+     return __t -= 1;
+ #endif
+ }
++#endif
+ 
+ class _LIBCPP_EXCEPTION_ABI bad_weak_ptr
+     : public std::exception
+diff --git a/include/__utility/declval.h b/include/__utility/declval.h
+index 97fd1eb..e2fcf48 100644
+--- a/include/__utility/declval.h
++++ b/include/__utility/declval.h
+@@ -26,8 +26,27 @@ template <class _Tp>
+ _Tp __declval(long);
+ _LIBCPP_SUPPRESS_DEPRECATED_POP
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
+ template <class _Tp>
+-decltype(__declval<_Tp>(0)) declval() _NOEXCEPT;
++using __declval_void = void;
++
++template <class _Tp, class = void>
++struct __declval_add_rvalue_reference {
++    using type = _Tp;
++};
++template <class _Tp>
++struct __declval_add_rvalue_reference<_Tp, __declval_void<_Tp&>> {
++    using type = _Tp&&;
++};
++#endif
++
++template <class _Tp>
++#ifdef _LIBCPP_COMPILER_MSVC
++typename __declval_add_rvalue_reference<_Tp>::type
++#else
++decltype(__declval<_Tp>(0))
++#endif
++declval() _NOEXCEPT;
+ 
+ _LIBCPP_END_NAMESPACE_STD
+ 
+diff --git a/include/__utility/integer_sequence.h b/include/__utility/integer_sequence.h
+index 633f133..6c56e74 100644
+--- a/include/__utility/integer_sequence.h
++++ b/include/__utility/integer_sequence.h
+@@ -52,9 +52,16 @@ struct __make_integer_sequence_checked
+     static_assert(is_integral<_Tp>::value,
+                   "std::make_integer_sequence can only be instantiated with an integral type" );
+     static_assert(0 <= _Ep, "std::make_integer_sequence must have a non-negative sequence length");
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4296 )
++#endif
+     // Workaround GCC bug by preventing bad installations when 0 <= _Ep
+     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68929
+     typedef _LIBCPP_NODEBUG __make_integer_sequence_unchecked<_Tp, 0 <= _Ep ? _Ep : 0> type;
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
+ };
+ 
+ template <class _Tp, _Tp _Ep>
+diff --git a/include/__utility/transaction.h b/include/__utility/transaction.h
+index 87e51c0..79e6c3f 100644
+--- a/include/__utility/transaction.h
++++ b/include/__utility/transaction.h
+@@ -76,7 +76,10 @@ struct __transaction {
+     }
+ 
+     _LIBCPP_HIDE_FROM_ABI
+-    _LIBCPP_CONSTEXPR_AFTER_CXX17 ~__transaction() {
++#if !defined(_LIBCPP_COMPILER_MSVC)
++    _LIBCPP_CONSTEXPR_AFTER_CXX17
++#endif
++    ~__transaction() {
+         if (!__completed_)
+             __rollback_();
+     }
+diff --git a/include/atomic b/include/atomic
+index 4a5c484..09e3dd3 100644
+--- a/include/atomic
++++ b/include/atomic
+@@ -889,7 +889,13 @@ _Tp __cxx_atomic_fetch_xor(__cxx_atomic_base_impl<_Tp>* __a, _Tp __pattern,
+ 
+ #define __cxx_atomic_is_lock_free(__s) __atomic_is_lock_free(__s, 0)
+ 
+-#elif defined(_LIBCPP_HAS_C_ATOMIC_IMP)
++#elif defined(_LIBCPP_HAS_C_ATOMIC_IMP) || defined(_LIBCPP_COMPILER_MSVC)
++
++#if defined(_LIBCPP_COMPILER_MSVC)
++_LIBCPP_END_NAMESPACE_STD
++#include <__support/win32/atomic_win32.h>
++_LIBCPP_BEGIN_NAMESPACE_STD
++#endif
+ 
+ template <typename _Tp>
+ struct __cxx_atomic_base_impl {
+@@ -907,6 +913,10 @@ struct __cxx_atomic_base_impl {
+ 
+ #define __cxx_atomic_is_lock_free(__s) __c11_atomic_is_lock_free(__s)
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4141 )
++#endif
+ _LIBCPP_INLINE_VISIBILITY inline
+ void __cxx_atomic_thread_fence(memory_order __order) _NOEXCEPT {
+     __c11_atomic_thread_fence(static_cast<__memory_order_underlying_t>(__order));
+@@ -916,6 +926,9 @@ _LIBCPP_INLINE_VISIBILITY inline
+ void __cxx_atomic_signal_fence(memory_order __order) _NOEXCEPT {
+     __c11_atomic_signal_fence(static_cast<__memory_order_underlying_t>(__order));
+ }
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
+ 
+ template<class _Tp>
+ _LIBCPP_INLINE_VISIBILITY
+@@ -963,12 +976,20 @@ _Tp __cxx_atomic_exchange(__cxx_atomic_base_impl<_Tp> * __a, _Tp __value, memory
+     return __c11_atomic_exchange(&__a->__a_value, __value, static_cast<__memory_order_underlying_t>(__order));
+ }
+ 
++// Disable double inline warning
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4141 )
++#endif
+ _LIBCPP_INLINE_VISIBILITY inline _LIBCPP_CONSTEXPR memory_order __to_failure_order(memory_order __order) {
+   // Avoid switch statement to make this a constexpr.
+   return __order == memory_order_release ? memory_order_relaxed:
+          (__order == memory_order_acq_rel ? memory_order_acquire:
+              __order);
+ }
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
+ 
+ template<class _Tp>
+ _LIBCPP_INLINE_VISIBILITY
+@@ -1651,7 +1672,14 @@ struct __atomic_base  // false
+     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR
+     __atomic_base(_Tp __d) _NOEXCEPT : __a_(__d) {}
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4522 )
++#endif
+     __atomic_base(const __atomic_base&) = delete;
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
+ };
+ 
+ #if defined(__cpp_lib_atomic_is_always_lock_free)
+@@ -2433,9 +2461,16 @@ typedef struct atomic_flag
+     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR
+     atomic_flag(bool __b) _NOEXCEPT : __a_(__b) {} // EXTENSION
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4522 )
++#endif
+     atomic_flag(const atomic_flag&) = delete;
+     atomic_flag& operator=(const atomic_flag&) = delete;
+     atomic_flag& operator=(const atomic_flag&) volatile = delete;
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
+ 
+ } atomic_flag;
+ 
+diff --git a/include/complex.h b/include/complex.h
+index a281466..58cbbaa 100644
+--- a/include/complex.h
++++ b/include/complex.h
+@@ -29,7 +29,11 @@
+ 
+ #else  // __cplusplus
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(complex.h)
++#else
+ #include_next <complex.h>
++#endif
+ 
+ #endif // __cplusplus
+ 
+diff --git a/include/ctype.h b/include/ctype.h
+index ba09250..b163750 100644
+--- a/include/ctype.h
++++ b/include/ctype.h
+@@ -35,7 +35,11 @@ int toupper(int c);
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(ctype.h)
++#else
+ #include_next <ctype.h>
++#endif
+ 
+ #ifdef __cplusplus
+ 
+diff --git a/include/errno.h b/include/errno.h
+index ea0559f..907a4f1 100644
+--- a/include/errno.h
++++ b/include/errno.h
+@@ -28,7 +28,20 @@ Macros:
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++// errno is defined in several files so we can't use #ifndef errno here
++#ifdef errno
++// undefine errno to avoid substitution in errno.h include file name.
++#pragma push_macro("errno")
++#undef errno
++#include Y_UCRT_INCLUDE_NEXT(errno.h)
++#pragma pop_macro("errno")
++#else
++#include Y_UCRT_INCLUDE_NEXT(errno.h)
++#endif
++#else
+ #include_next <errno.h>
++#endif
+ 
+ #ifdef __cplusplus
+ 
+diff --git a/include/fenv.h b/include/fenv.h
+index a9ba680..5a8cebf 100644
+--- a/include/fenv.h
++++ b/include/fenv.h
+@@ -56,7 +56,11 @@ int feupdateenv(const fenv_t* envp);
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(fenv.h)
++#else
+ #include_next <fenv.h>
++#endif
+ 
+ #ifdef __cplusplus
+ 
+diff --git a/include/float.h b/include/float.h
+index 6060812..6479a01 100644
+--- a/include/float.h
++++ b/include/float.h
+@@ -76,7 +76,11 @@ Macros:
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(float.h)
++#else
+ #include_next <float.h>
++#endif
+ 
+ #ifdef __cplusplus
+ 
+diff --git a/include/initializer_list b/include/initializer_list
+index e61318e..827f137 100644
+--- a/include/initializer_list
++++ b/include/initializer_list
+@@ -45,6 +45,13 @@ template<class E> const E* end(initializer_list<E> il) noexcept; // constexpr in
+ #include <__config>
+ #include <cstddef>
+ 
++#if defined(_LIBCPP_COMPILER_MSVC) && !defined(__clang__)
++
++#include Y_MSVC_INCLUDE_NEXT(yvals.h)
++#include Y_MSVC_INCLUDE_NEXT(initializer_list)
++
++#else
++
+ #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+ #  pragma GCC system_header
+ #endif
+@@ -79,6 +86,11 @@ public:
+     _LIBCPP_CONSTEXPR_AFTER_CXX11
+     initializer_list() _NOEXCEPT : __begin_(nullptr), __size_(0) {}
+ 
++    initializer_list(const initializer_list&) = default;
++    initializer_list(initializer_list&&) = default;
++    initializer_list& operator=(const initializer_list&) = delete;
++    initializer_list& operator=(initializer_list&&) = delete;
++
+     _LIBCPP_INLINE_VISIBILITY
+     _LIBCPP_CONSTEXPR_AFTER_CXX11
+     size_t    size()  const _NOEXCEPT {return __size_;}
+@@ -114,4 +126,6 @@ end(initializer_list<_Ep> __il) _NOEXCEPT
+ 
+ } // namespace std
+ 
++#endif // _LIBCPP_COMPILER_MSVC
++
+ #endif // _LIBCPP_INITIALIZER_LIST
+diff --git a/include/inttypes.h b/include/inttypes.h
+index e0fd71f..5873e3f 100644
+--- a/include/inttypes.h
++++ b/include/inttypes.h
+@@ -248,7 +248,11 @@ uintmax_t wcstoumax(const wchar_t* restrict nptr, wchar_t** restrict endptr, int
+ #   define __STDC_FORMAT_MACROS
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(inttypes.h)
++#else
+ #include_next <inttypes.h>
++#endif
+ 
+ #ifdef __cplusplus
+ 
+diff --git a/include/limits.h b/include/limits.h
+index 3e1e85a..51ff28e 100644
+--- a/include/limits.h
++++ b/include/limits.h
+@@ -44,7 +44,11 @@ Macros:
+ #endif
+ 
+ #ifndef __GNUC__
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_MSVC_INCLUDE_NEXT(limits.h)
++#else
+ #include_next <limits.h>
++#endif
+ #else
+ // GCC header limits.h recursively includes itself through another header called
+ // syslimits.h for some reason. This setup breaks down if we directly
+diff --git a/include/locale b/include/locale
+index fd605e3..7e00dfe 100644
+--- a/include/locale
++++ b/include/locale
+@@ -1684,6 +1684,13 @@ public:
+     enum dateorder {no_order, dmy, mdy, ymd, ydm};
+ };
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++// __time_get_c_storage should only be used for private inheritance to avoid
++// problems with non-virtual destructor
++#pragma warning ( push )
++#pragma warning ( disable : 4265 )
++#endif
++
+ template <class _CharT>
+ class _LIBCPP_TEMPLATE_VIS __time_get_c_storage
+ {
+@@ -1702,6 +1709,10 @@ protected:
+     ~__time_get_c_storage() {}
+ };
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
++#endif
++
+ template <> _LIBCPP_FUNC_VIS const string* __time_get_c_storage<char>::__weeks() const;
+ template <> _LIBCPP_FUNC_VIS const string* __time_get_c_storage<char>::__months() const;
+ template <> _LIBCPP_FUNC_VIS const string* __time_get_c_storage<char>::__am_pm() const;
+diff --git a/include/locale.h b/include/locale.h
+index 3a05c18..83b4bdf 100644
+--- a/include/locale.h
++++ b/include/locale.h
+@@ -43,6 +43,10 @@ Functions:
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(locale.h)
++#else
+ #include_next <locale.h>
++#endif
+ 
+ #endif // _LIBCPP_LOCALE_H
+diff --git a/include/math.h b/include/math.h
+index e2fd576..0a1d223 100644
+--- a/include/math.h
++++ b/include/math.h
+@@ -297,7 +297,11 @@ long double    truncl(long double x);
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(math.h)
++#else
+ #include_next <math.h>
++#endif
+ 
+ #ifdef __cplusplus
+ 
+@@ -1757,7 +1761,11 @@ trunc(_A1 __lcpp_x) _NOEXCEPT
+ // and receive the definitions of mathematical constants, even if <math.h>
+ // has previously been included.
+ #if defined(_LIBCPP_MSVCRT) && defined(_USE_MATH_DEFINES)
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(math.h)
++#else
+ #include_next <math.h>
+ #endif
++#endif
+ 
+ #endif // _LIBCPP_MATH_H
+diff --git a/include/setjmp.h b/include/setjmp.h
+index de4f9ed..fca41aa 100644
+--- a/include/setjmp.h
++++ b/include/setjmp.h
+@@ -31,7 +31,11 @@ void longjmp(jmp_buf env, int val);
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_MSVC_INCLUDE_NEXT(setjmp.h)
++#else
+ #include_next <setjmp.h>
++#endif
+ 
+ #ifdef __cplusplus
+ 
+diff --git a/include/stdbool.h b/include/stdbool.h
+index 369f8b3..c596f24 100644
+--- a/include/stdbool.h
++++ b/include/stdbool.h
+@@ -25,7 +25,11 @@ Macros:
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_MSVC_INCLUDE_NEXT(stdbool.h)
++#else
+ #include_next <stdbool.h>
++#endif
+ 
+ #ifdef __cplusplus
+ #undef bool
+diff --git a/include/stddef.h b/include/stddef.h
+index 19e344f..7b2c646 100644
+--- a/include/stddef.h
++++ b/include/stddef.h
+@@ -14,7 +14,11 @@
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(stddef.h)
++#else
+ #include_next <stddef.h>
++#endif
+ 
+ #elif !defined(_LIBCPP_STDDEF_H)
+ #define _LIBCPP_STDDEF_H
+@@ -42,7 +46,12 @@ Types:
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(stddef.h)
++typedef double max_align_t;
++#else
+ #include_next <stddef.h>
++#endif
+ 
+ #ifdef __cplusplus
+     typedef decltype(nullptr) nullptr_t;
+diff --git a/include/stdint.h b/include/stdint.h
+index ee71f62..c9342a3 100644
+--- a/include/stdint.h
++++ b/include/stdint.h
+@@ -120,6 +120,10 @@ Macros:
+ #   define __STDC_CONSTANT_MACROS
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_MSVC_INCLUDE_NEXT(stdint.h)
++#else
+ #include_next <stdint.h>
++#endif
+ 
+ #endif // _LIBCPP_STDINT_H
+diff --git a/include/stdio.h b/include/stdio.h
+index ad1b4c0..d0ffec5 100644
+--- a/include/stdio.h
++++ b/include/stdio.h
+@@ -13,7 +13,11 @@
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(stdio.h)
++#else
+ #include_next <stdio.h>
++#endif
+ 
+ #elif !defined(_LIBCPP_STDIO_H)
+ #define _LIBCPP_STDIO_H
+@@ -104,7 +108,11 @@ void perror(const char* s);
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(stdio.h)
++#else
+ #include_next <stdio.h>
++#endif
+ 
+ #ifdef __cplusplus
+ 
+diff --git a/include/stdlib.h b/include/stdlib.h
+index e4dce9c..a5c4986 100644
+--- a/include/stdlib.h
++++ b/include/stdlib.h
+@@ -13,7 +13,11 @@
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(stdlib.h)
++#else
+ #include_next <stdlib.h>
++#endif
+ 
+ #elif !defined(_LIBCPP_STDLIB_H)
+ #define _LIBCPP_STDLIB_H
+@@ -90,7 +94,20 @@ void *aligned_alloc(size_t alignment, size_t size);                       // C11
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(stdlib.h)
++#ifdef __cplusplus
++extern "C" {
++#endif
++float fabsf(float);
++double fabs(double);
++long double fabsl(long double);
++#ifdef __cplusplus
++}
++#endif
++#else
+ #include_next <stdlib.h>
++#endif
+ 
+ #ifdef __cplusplus
+ extern "C++" {
+@@ -118,16 +135,28 @@ inline _LIBCPP_INLINE_VISIBILITY long long abs(long long __x) _NOEXCEPT {
+ 
+ #if !defined(__sun__)
+ inline _LIBCPP_INLINE_VISIBILITY float abs(float __lcpp_x) _NOEXCEPT {
++#ifdef _LIBCPP_COMPILER_MSVC
++  return fabsf(__lcpp_x);
++#else
+   return __builtin_fabsf(__lcpp_x); // Use builtins to prevent needing math.h
++#endif
+ }
+ 
+ inline _LIBCPP_INLINE_VISIBILITY double abs(double __lcpp_x) _NOEXCEPT {
++#ifdef _LIBCPP_COMPILER_MSVC
++  return fabs(__lcpp_x);
++#else
+   return __builtin_fabs(__lcpp_x);
++#endif
+ }
+ 
+ inline _LIBCPP_INLINE_VISIBILITY long double
+ abs(long double __lcpp_x) _NOEXCEPT {
++#ifdef _LIBCPP_COMPILER_MSVC
++  return fabsl(__lcpp_x);
++#else
+   return __builtin_fabsl(__lcpp_x);
++#endif
+ }
+ #endif // !defined(__sun__)
+ 
+diff --git a/include/string b/include/string
+index d33f6ed..53cf9ab 100644
+--- a/include/string
++++ b/include/string
+@@ -566,6 +566,10 @@ basic_string<char32_t> operator "" s( const char32_t *str, size_t len ); // C++1
+ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4455 )
++#endif
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+diff --git a/include/string.h b/include/string.h
+index 082c632..099b661 100644
+--- a/include/string.h
++++ b/include/string.h
+@@ -57,7 +57,11 @@ size_t strlen(const char* s);
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(string.h)
++#else
+ #include_next <string.h>
++#endif
+ 
+ // MSVCRT, GNU libc and its derivates may already have the correct prototype in
+ // <string.h>. This macro can be defined by users if their C library provides
+diff --git a/include/tuple b/include/tuple
+index 08ded9c..e499aff 100644
+--- a/include/tuple
++++ b/include/tuple
+@@ -411,6 +411,23 @@ struct _LIBCPP_DECLSPEC_EMPTY_BASES __tuple_impl<__tuple_indices<_Indx...>, _Tp.
+             __tuple_leaf<_Ul, _Tl>()...
+             {}
+ 
++#if defined(__NVCC__) && defined(_LIBCPP_COMPILER_MSVC)
++    // Yandex-specific: specialize the preceding constructor for the
++    // case of empty _Ul and _Tl to work around nvcc+msvc bug
++    // compiling libcxx std::map<int, int> m; m[1] = 2.
++    template <size_t ..._Uf, class ..._Tf,
++              class ..._Up>
++        _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX11
++        explicit
++        __tuple_impl(__tuple_indices<_Uf...>, __tuple_types<_Tf...>,
++                     __tuple_indices<>, __tuple_types<>,
++                     _Up&&... __u)
++                     _NOEXCEPT_((__all<is_nothrow_constructible<_Tf, _Up>::value...>::value)) :
++            __tuple_leaf<_Uf, _Tf>(_VSTD::forward<_Up>(__u))...
++            {}
++    // End of Yandex-specific
++#endif
++
+     template <class _Alloc, size_t ..._Uf, class ..._Tf,
+               size_t ..._Ul, class ..._Tl, class ..._Up>
+         _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX11
+diff --git a/include/wchar.h b/include/wchar.h
+index ce63cf2..fd22a27 100644
+--- a/include/wchar.h
++++ b/include/wchar.h
+@@ -13,7 +13,11 @@
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(wchar.h)
++#else
+ #include_next <wchar.h>
++#endif
+ 
+ #elif !defined(_LIBCPP_WCHAR_H)
+ #define _LIBCPP_WCHAR_H
+@@ -120,7 +124,11 @@ size_t wcsrtombs(char* restrict dst, const wchar_t** restrict src, size_t len,
+ #define __CORRECT_ISO_CPP_WCHAR_H_PROTO
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#include Y_UCRT_INCLUDE_NEXT(wchar.h)
++#else
+ #include_next <wchar.h>
++#endif
+ 
+ // Determine whether we have const-correct overloads for wcschr and friends.
+ #if defined(_WCHAR_H_CPLUSPLUS_98_CONFORMANCE_)
+diff --git a/include/wctype.h b/include/wctype.h
+index e4dc61a..98d6473 100644
+--- a/include/wctype.h
++++ b/include/wctype.h
+@@ -54,6 +54,10 @@ wctrans_t wctrans(const char* property);
+ #  pragma GCC system_header
+ #endif
+ 
++#ifdef _LIBCPP_COMPILER_MSVC
++#   include Y_UCRT_INCLUDE_NEXT(wctype.h)
++#   define _LIBCPP_INCLUDED_C_LIBRARY_WCTYPE_H
++#else
+ // TODO:
+ // In the future, we should unconditionally include_next <wctype.h> here and instead
+ // have a mode under which the library does not need libc++'s <wctype.h> or <cwctype>
+@@ -67,6 +71,7 @@ wctrans_t wctrans(const char* property);
+ #   include_next <wctype.h>
+ #   define _LIBCPP_INCLUDED_C_LIBRARY_WCTYPE_H
+ #endif
++#endif
+ 
+ #ifdef __cplusplus
+ 
+diff --git a/src/support/runtime/exception_msvc.ipp b/src/support/runtime/exception_msvc.ipp
+index 7e36c70..409d675 100644
+--- a/src/support/runtime/exception_msvc.ipp
++++ b/src/support/runtime/exception_msvc.ipp
+@@ -14,6 +14,15 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ 
++#include <__config>
++
++#ifdef _LIBCPP_COMPILER_MSVC
++// We don't want to depend on MSVC headers but
++// we have conflicting definitions otherwise due to
++// some other dependency on eh.h.
++#include Y_MSVC_INCLUDE_NEXT(eh.h)
++
++#else
+ extern "C" {
+ typedef void (__cdecl* terminate_handler)();
+ _LIBCPP_CRT_FUNC terminate_handler __cdecl set_terminate(
+@@ -27,6 +36,7 @@ unexpected_handler __cdecl _get_unexpected();
+ 
+ int __cdecl __uncaught_exceptions();
+ }
++#endif
+ 
+ namespace std {
+ 

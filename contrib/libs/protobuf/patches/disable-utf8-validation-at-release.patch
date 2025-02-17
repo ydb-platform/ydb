@@ -1,0 +1,23 @@
+--- a/src/google/protobuf/wire_format_lite.cc
++++ b/src/google/protobuf/wire_format_lite.cc
+@@ -604,6 +604,7 @@
+ void PrintUTF8ErrorLog(absl::string_view message_name,
+                        absl::string_view field_name, const char* operation_str,
+                        bool emit_stacktrace) {
++  #ifdef GOOGLE_PROTOBUF_UTF8_VALIDATION_ENABLED
+   TProtoStringType stacktrace;
+   (void)emit_stacktrace;  // Parameter is used by Google-internal code.
+   std::string quoted_field_name = "";
+@@ -624,6 +625,12 @@
+                    "send raw bytes. ",
+                    stacktrace);
+   ABSL_LOG(ERROR) << error_message;
++  #else
++  (void)message_name;
++  (void)field_name;
++  (void)emit_stacktrace;
++  (void)operation_str;
++  #endif
+ }
+ 
+ bool WireFormatLite::VerifyUtf8String(const char* data, int size, Operation op,

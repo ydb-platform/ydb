@@ -90,6 +90,7 @@ static int test_pipe_io_fixed(struct io_uring *ring)
 		io_uring_cqe_seen(ring, cqe);
 	}
 	io_uring_unregister_buffers(ring);
+	free(vecs[0].iov_base);
 	return 0;
 err:
 	return 1;
@@ -144,6 +145,7 @@ static int test_stdout_io_fixed(struct io_uring *ring)
 	}
 	io_uring_cqe_seen(ring, cqe);
 	io_uring_unregister_buffers(ring);
+	free(vecs.iov_base);
 	return 0;
 err:
 	return 1;

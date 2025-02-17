@@ -3,55 +3,73 @@ import pkgutil
 import socket
 import sys
 import typing as t
-import warnings
 from datetime import datetime
-from datetime import timedelta
 from functools import lru_cache
 from functools import update_wrapper
 from threading import RLock
 
 import werkzeug.utils
-from werkzeug.exceptions import NotFound
-from werkzeug.routing import BuildError
-from werkzeug.urls import url_quote
+from werkzeug.exceptions import abort as _wz_abort
+from werkzeug.utils import redirect as _wz_redirect
 
-from .globals import _app_ctx_stack
-from .globals import _request_ctx_stack
+from .globals import _cv_request
 from .globals import current_app
 from .globals import request
+from .globals import request_ctx
 from .globals import session
 from .signals import message_flashed
 
-if t.TYPE_CHECKING:
+if t.TYPE_CHECKING:  # pragma: no cover
+    from werkzeug.wrappers import Response as BaseResponse
     from .wrappers import Response
+    import typing_extensions as te
 
 
 def get_env() -> str:
     """Get the environment the app is running in, indicated by the
     :envvar:`FLASK_ENV` environment variable. The default is
     ``'production'``.
+
+    .. deprecated:: 2.2
+        Will be removed in Flask 2.3.
     """
+    import warnings
+
+    warnings.warn(
+        "'FLASK_ENV' and 'get_env' are deprecated and will be removed"
+        " in Flask 2.3. Use 'FLASK_DEBUG' instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return os.environ.get("FLASK_ENV") or "production"
 
 
 def get_debug_flag() -> bool:
-    """Get whether debug mode should be enabled for the app, indicated
-    by the :envvar:`FLASK_DEBUG` environment variable. The default is
-    ``True`` if :func:`.get_env` returns ``'development'``, or ``False``
-    otherwise.
+    """Get whether debug mode should be enabled for the app, indicated by the
+    :envvar:`FLASK_DEBUG` environment variable. The default is ``False``.
     """
     val = os.environ.get("FLASK_DEBUG")
 
     if not val:
-        return get_env() == "development"
+        env = os.environ.get("FLASK_ENV")
 
-    return val.lower() not in ("0", "false", "no")
+        if env is not None:
+            print(
+                "'FLASK_ENV' is deprecated and will not be used in"
+                " Flask 2.3. Use 'FLASK_DEBUG' instead.",
+                file=sys.stderr,
+            )
+            return env == "development"
+
+        return False
+
+    return val.lower() not in {"0", "false", "no"}
 
 
 def get_load_dotenv(default: bool = True) -> bool:
-    """Get whether the user has disabled loading dotenv files by setting
-    :envvar:`FLASK_SKIP_DOTENV`. The default is ``True``, load the
-    files.
+    """Get whether the user has disabled loading default dotenv files by
+    setting :envvar:`FLASK_SKIP_DOTENV`. The default is ``True``, load
+    the files.
 
     :param default: What to return if the env var isn't set.
     """
@@ -112,11 +130,11 @@ def stream_with_context(
         return update_wrapper(decorator, generator_or_function)  # type: ignore
 
     def generator() -> t.Generator:
-        ctx = _request_ctx_stack.top
+        ctx = _cv_request.get(None)
         if ctx is None:
             raise RuntimeError(
-                "Attempted to stream with context but "
-                "there was no context in the first place to keep around."
+                "'stream_with_context' can only be used when a request"
+                " context is active, such as in a view function."
             )
         with ctx:
             # Dummy sentinel.  Has to be inside the context block or we're
@@ -131,7 +149,7 @@ def stream_with_context(
                 yield from gen
             finally:
                 if hasattr(gen, "close"):
-                    gen.close()  # type: ignore
+                    gen.close()
 
     # The trick is to start the generator.  Then the code execution runs until
     # the first dummy None is yielded at which point the context was already
@@ -188,158 +206,110 @@ def make_response(*args: t.Any) -> "Response":
         return current_app.response_class()
     if len(args) == 1:
         args = args[0]
-    return current_app.make_response(args)
+    return current_app.make_response(args)  # type: ignore
 
 
-def url_for(endpoint: str, **values: t.Any) -> str:
-    """Generates a URL to the given endpoint with the method provided.
+def url_for(
+    endpoint: str,
+    *,
+    _anchor: t.Optional[str] = None,
+    _method: t.Optional[str] = None,
+    _scheme: t.Optional[str] = None,
+    _external: t.Optional[bool] = None,
+    **values: t.Any,
+) -> str:
+    """Generate a URL to the given endpoint with the given values.
 
-    Variable arguments that are unknown to the target endpoint are appended
-    to the generated URL as query arguments.  If the value of a query argument
-    is ``None``, the whole pair is skipped.  In case blueprints are active
-    you can shortcut references to the same blueprint by prefixing the
-    local endpoint with a dot (``.``).
+    This requires an active request or application context, and calls
+    :meth:`current_app.url_for() <flask.Flask.url_for>`. See that method
+    for full documentation.
 
-    This will reference the index function local to the current blueprint::
+    :param endpoint: The endpoint name associated with the URL to
+        generate. If this starts with a ``.``, the current blueprint
+        name (if any) will be used.
+    :param _anchor: If given, append this as ``#anchor`` to the URL.
+    :param _method: If given, generate the URL associated with this
+        method for the endpoint.
+    :param _scheme: If given, the URL will have this scheme if it is
+        external.
+    :param _external: If given, prefer the URL to be internal (False) or
+        require it to be external (True). External URLs include the
+        scheme and domain. When not in an active request, URLs are
+        external by default.
+    :param values: Values to use for the variable parts of the URL rule.
+        Unknown keys are appended as query string arguments, like
+        ``?a=b&c=d``.
 
-        url_for('.index')
+    .. versionchanged:: 2.2
+        Calls ``current_app.url_for``, allowing an app to override the
+        behavior.
 
-    See :ref:`url-building`.
+    .. versionchanged:: 0.10
+       The ``_scheme`` parameter was added.
 
-    Configuration values ``APPLICATION_ROOT`` and ``SERVER_NAME`` are only used when
-    generating URLs outside of a request context.
+    .. versionchanged:: 0.9
+       The ``_anchor`` and ``_method`` parameters were added.
 
-    To integrate applications, :class:`Flask` has a hook to intercept URL build
-    errors through :attr:`Flask.url_build_error_handlers`.  The `url_for`
-    function results in a :exc:`~werkzeug.routing.BuildError` when the current
-    app does not have a URL for the given endpoint and values.  When it does, the
-    :data:`~flask.current_app` calls its :attr:`~Flask.url_build_error_handlers` if
-    it is not ``None``, which can return a string to use as the result of
-    `url_for` (instead of `url_for`'s default to raise the
-    :exc:`~werkzeug.routing.BuildError` exception) or re-raise the exception.
-    An example::
-
-        def external_url_handler(error, endpoint, values):
-            "Looks up an external URL when `url_for` cannot build a URL."
-            # This is an example of hooking the build_error_handler.
-            # Here, lookup_url is some utility function you've built
-            # which looks up the endpoint in some external URL registry.
-            url = lookup_url(endpoint, **values)
-            if url is None:
-                # External lookup did not have a URL.
-                # Re-raise the BuildError, in context of original traceback.
-                exc_type, exc_value, tb = sys.exc_info()
-                if exc_value is error:
-                    raise exc_type(exc_value).with_traceback(tb)
-                else:
-                    raise error
-            # url_for will use this result, instead of raising BuildError.
-            return url
-
-        app.url_build_error_handlers.append(external_url_handler)
-
-    Here, `error` is the instance of :exc:`~werkzeug.routing.BuildError`, and
-    `endpoint` and `values` are the arguments passed into `url_for`.  Note
-    that this is for building URLs outside the current application, and not for
-    handling 404 NotFound errors.
-
-    .. versionadded:: 0.10
-       The `_scheme` parameter was added.
-
-    .. versionadded:: 0.9
-       The `_anchor` and `_method` parameters were added.
-
-    .. versionadded:: 0.9
-       Calls :meth:`Flask.handle_build_error` on
-       :exc:`~werkzeug.routing.BuildError`.
-
-    :param endpoint: the endpoint of the URL (name of the function)
-    :param values: the variable arguments of the URL rule
-    :param _external: if set to ``True``, an absolute URL is generated. Server
-      address can be changed via ``SERVER_NAME`` configuration variable which
-      falls back to the `Host` header, then to the IP and port of the request.
-    :param _scheme: a string specifying the desired URL scheme. The `_external`
-      parameter must be set to ``True`` or a :exc:`ValueError` is raised. The default
-      behavior uses the same scheme as the current request, or
-      :data:`PREFERRED_URL_SCHEME` if no request context is available.
-      This also can be set to an empty string to build protocol-relative
-      URLs.
-    :param _anchor: if provided this is added as anchor to the URL.
-    :param _method: if provided this explicitly specifies an HTTP method.
+    .. versionchanged:: 0.9
+       Calls ``app.handle_url_build_error`` on build errors.
     """
-    appctx = _app_ctx_stack.top
-    reqctx = _request_ctx_stack.top
+    return current_app.url_for(
+        endpoint,
+        _anchor=_anchor,
+        _method=_method,
+        _scheme=_scheme,
+        _external=_external,
+        **values,
+    )
 
-    if appctx is None:
-        raise RuntimeError(
-            "Attempted to generate a URL without the application context being"
-            " pushed. This has to be executed when application context is"
-            " available."
-        )
 
-    # If request specific information is available we have some extra
-    # features that support "relative" URLs.
-    if reqctx is not None:
-        url_adapter = reqctx.url_adapter
-        blueprint_name = request.blueprint
+def redirect(
+    location: str, code: int = 302, Response: t.Optional[t.Type["BaseResponse"]] = None
+) -> "BaseResponse":
+    """Create a redirect response object.
 
-        if endpoint[:1] == ".":
-            if blueprint_name is not None:
-                endpoint = f"{blueprint_name}{endpoint}"
-            else:
-                endpoint = endpoint[1:]
+    If :data:`~flask.current_app` is available, it will use its
+    :meth:`~flask.Flask.redirect` method, otherwise it will use
+    :func:`werkzeug.utils.redirect`.
 
-        external = values.pop("_external", False)
+    :param location: The URL to redirect to.
+    :param code: The status code for the redirect.
+    :param Response: The response class to use. Not used when
+        ``current_app`` is active, which uses ``app.response_class``.
 
-    # Otherwise go with the url adapter from the appctx and make
-    # the URLs external by default.
-    else:
-        url_adapter = appctx.url_adapter
+    .. versionadded:: 2.2
+        Calls ``current_app.redirect`` if available instead of always
+        using Werkzeug's default ``redirect``.
+    """
+    if current_app:
+        return current_app.redirect(location, code=code)
 
-        if url_adapter is None:
-            raise RuntimeError(
-                "Application was not able to create a URL adapter for request"
-                " independent URL generation. You might be able to fix this by"
-                " setting the SERVER_NAME config variable."
-            )
+    return _wz_redirect(location, code=code, Response=Response)
 
-        external = values.pop("_external", True)
 
-    anchor = values.pop("_anchor", None)
-    method = values.pop("_method", None)
-    scheme = values.pop("_scheme", None)
-    appctx.app.inject_url_defaults(endpoint, values)
+def abort(
+    code: t.Union[int, "BaseResponse"], *args: t.Any, **kwargs: t.Any
+) -> "te.NoReturn":
+    """Raise an :exc:`~werkzeug.exceptions.HTTPException` for the given
+    status code.
 
-    # This is not the best way to deal with this but currently the
-    # underlying Werkzeug router does not support overriding the scheme on
-    # a per build call basis.
-    old_scheme = None
-    if scheme is not None:
-        if not external:
-            raise ValueError("When specifying _scheme, _external must be True")
-        old_scheme = url_adapter.url_scheme
-        url_adapter.url_scheme = scheme
+    If :data:`~flask.current_app` is available, it will call its
+    :attr:`~flask.Flask.aborter` object, otherwise it will use
+    :func:`werkzeug.exceptions.abort`.
 
-    try:
-        try:
-            rv = url_adapter.build(
-                endpoint, values, method=method, force_external=external
-            )
-        finally:
-            if old_scheme is not None:
-                url_adapter.url_scheme = old_scheme
-    except BuildError as error:
-        # We need to inject the values again so that the app callback can
-        # deal with that sort of stuff.
-        values["_external"] = external
-        values["_anchor"] = anchor
-        values["_method"] = method
-        values["_scheme"] = scheme
-        return appctx.app.handle_url_build_error(error, endpoint, values)
+    :param code: The status code for the exception, which must be
+        registered in ``app.aborter``.
+    :param args: Passed to the exception.
+    :param kwargs: Passed to the exception.
 
-    if anchor is not None:
-        rv += f"#{url_quote(anchor)}"
-    return rv
+    .. versionadded:: 2.2
+        Calls ``current_app.aborter`` if available instead of always
+        using Werkzeug's default ``abort``.
+    """
+    if current_app:
+        current_app.aborter(code, *args, **kwargs)
+
+    _wz_abort(code, *args, **kwargs)
 
 
 def get_template_attribute(template_name: str, attribute: str) -> t.Any:
@@ -427,11 +397,10 @@ def get_flashed_messages(
     :param category_filter: filter of categories to limit return values.  Only
                             categories in the list will be returned.
     """
-    flashes = _request_ctx_stack.top.flashes
+    flashes = request_ctx.flashes
     if flashes is None:
-        _request_ctx_stack.top.flashes = flashes = (
-            session.pop("_flashes") if "_flashes" in session else []
-        )
+        flashes = session.pop("_flashes") if "_flashes" in session else []
+        request_ctx.flashes = flashes
     if category_filter:
         flashes = list(filter(lambda f: f[0] in category_filter, flashes))
     if not with_categories:
@@ -439,54 +408,13 @@ def get_flashed_messages(
     return flashes
 
 
-def _prepare_send_file_kwargs(
-    download_name: t.Optional[str] = None,
-    attachment_filename: t.Optional[str] = None,
-    etag: t.Optional[t.Union[bool, str]] = None,
-    add_etags: t.Optional[t.Union[bool]] = None,
-    max_age: t.Optional[
-        t.Union[int, t.Callable[[t.Optional[str]], t.Optional[int]]]
-    ] = None,
-    cache_timeout: t.Optional[int] = None,
-    **kwargs: t.Any,
-) -> t.Dict[str, t.Any]:
-    if attachment_filename is not None:
-        warnings.warn(
-            "The 'attachment_filename' parameter has been renamed to"
-            " 'download_name'. The old name will be removed in Flask"
-            " 2.1.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        download_name = attachment_filename
-
-    if cache_timeout is not None:
-        warnings.warn(
-            "The 'cache_timeout' parameter has been renamed to"
-            " 'max_age'. The old name will be removed in Flask 2.1.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        max_age = cache_timeout
-
-    if add_etags is not None:
-        warnings.warn(
-            "The 'add_etags' parameter has been renamed to 'etag'. The"
-            " old name will be removed in Flask 2.1.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        etag = add_etags
-
-    if max_age is None:
-        max_age = current_app.get_send_file_max_age
+def _prepare_send_file_kwargs(**kwargs: t.Any) -> t.Dict[str, t.Any]:
+    if kwargs.get("max_age") is None:
+        kwargs["max_age"] = current_app.get_send_file_max_age
 
     kwargs.update(
         environ=request.environ,
-        download_name=download_name,
-        etag=etag,
-        max_age=max_age,
-        use_x_sendfile=current_app.use_x_sendfile,
+        use_x_sendfile=current_app.config["USE_X_SENDFILE"],
         response_class=current_app.response_class,
         _root_path=current_app.root_path,  # type: ignore
     )
@@ -498,16 +426,13 @@ def send_file(
     mimetype: t.Optional[str] = None,
     as_attachment: bool = False,
     download_name: t.Optional[str] = None,
-    attachment_filename: t.Optional[str] = None,
     conditional: bool = True,
     etag: t.Union[bool, str] = True,
-    add_etags: t.Optional[bool] = None,
     last_modified: t.Optional[t.Union[datetime, int, float]] = None,
     max_age: t.Optional[
         t.Union[int, t.Callable[[t.Optional[str]], t.Optional[int]]]
     ] = None,
-    cache_timeout: t.Optional[int] = None,
-):
+) -> "Response":
     """Send the contents of a file to the client.
 
     The first argument can be a file path or a file-like object. Paths
@@ -609,51 +534,24 @@ def send_file(
 
     .. versionadded:: 0.2
     """
-    return werkzeug.utils.send_file(
+    return werkzeug.utils.send_file(  # type: ignore[return-value]
         **_prepare_send_file_kwargs(
             path_or_file=path_or_file,
             environ=request.environ,
             mimetype=mimetype,
             as_attachment=as_attachment,
             download_name=download_name,
-            attachment_filename=attachment_filename,
             conditional=conditional,
             etag=etag,
-            add_etags=add_etags,
             last_modified=last_modified,
             max_age=max_age,
-            cache_timeout=cache_timeout,
         )
     )
-
-
-def safe_join(directory: str, *pathnames: str) -> str:
-    """Safely join zero or more untrusted path components to a base
-    directory to avoid escaping the base directory.
-
-    :param directory: The trusted base directory.
-    :param pathnames: The untrusted path components relative to the
-        base directory.
-    :return: A safe path, otherwise ``None``.
-    """
-    warnings.warn(
-        "'flask.helpers.safe_join' is deprecated and will be removed in"
-        " Flask 2.1. Use 'werkzeug.utils.safe_join' instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    path = werkzeug.utils.safe_join(directory, *pathnames)
-
-    if path is None:
-        raise NotFound()
-
-    return path
 
 
 def send_from_directory(
     directory: t.Union[os.PathLike, str],
     path: t.Union[os.PathLike, str],
-    filename: t.Optional[str] = None,
     **kwargs: t.Any,
 ) -> "Response":
     """Send a file from within a directory using :func:`send_file`.
@@ -674,7 +572,8 @@ def send_from_directory(
     If the final path does not point to an existing regular file,
     raises a 404 :exc:`~werkzeug.exceptions.NotFound` error.
 
-    :param directory: The directory that ``path`` must be located under.
+    :param directory: The directory that ``path`` must be located under,
+        relative to the current application's root path.
     :param path: The path to the file to send, relative to
         ``directory``.
     :param kwargs: Arguments to pass to :func:`send_file`.
@@ -688,16 +587,7 @@ def send_from_directory(
 
     .. versionadded:: 0.5
     """
-    if filename is not None:
-        warnings.warn(
-            "The 'filename' parameter has been renamed to 'path'. The"
-            " old name will be removed in Flask 2.1.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        path = filename
-
-    return werkzeug.utils.send_from_directory(  # type: ignore
+    return werkzeug.utils.send_from_directory(  # type: ignore[return-value]
         directory, path, **_prepare_send_file_kwargs(**kwargs)
     )
 
@@ -727,7 +617,7 @@ def get_root_path(import_name: str) -> str:
         return os.getcwd()
 
     if hasattr(loader, "get_filename"):
-        filepath = loader.get_filename(import_name)  # type: ignore
+        filepath = loader.get_filename(import_name)
     else:
         # Fall back to imports.
         __import__(import_name)
@@ -783,27 +673,6 @@ class locked_cached_property(werkzeug.utils.cached_property):
     def __delete__(self, obj: object) -> None:
         with self.lock:
             super().__delete__(obj)
-
-
-def total_seconds(td: timedelta) -> int:
-    """Returns the total seconds from a timedelta object.
-
-    :param timedelta td: the timedelta to be converted in seconds
-
-    :returns: number of seconds
-    :rtype: int
-
-    .. deprecated:: 2.0
-        Will be removed in Flask 2.1. Use
-        :meth:`timedelta.total_seconds` instead.
-    """
-    warnings.warn(
-        "'total_seconds' is deprecated and will be removed in Flask"
-        " 2.1. Use 'timedelta.total_seconds' instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return td.days * 60 * 60 * 24 + td.seconds
 
 
 def is_ip(value: str) -> bool:

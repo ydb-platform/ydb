@@ -1,7 +1,7 @@
 #include "plan_utils.h"
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -78,6 +78,6 @@ Y_UNIT_TEST_SUITE(PlanUtilsTest) {
                     .Build()
                 .Build()
             .Done();
-        UNIT_ASSERT_STRINGS_EQUAL(PrettifyForPlan(ctx, lambda), "Not Exist(row.x) And row.y == row.z");
+        UNIT_ASSERT_STRINGS_EQUAL(PrettifyForPlan(ctx, lambda), "NOT Exist(row.x) AND row.y == row.z");
     }
 }

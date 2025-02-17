@@ -10,7 +10,7 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
         auto common = MakeIntrusive<TInterconnectProxyCommon>();
         common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
-        ctr->SetPeerInfo("peer", "1");
+        ctr->SetPeerInfo(1, "peer", "1");
         auto callback = [](THolder<IEventBase>) {};
         TEventHolderPool pool(common, callback);
         TSessionParams p;

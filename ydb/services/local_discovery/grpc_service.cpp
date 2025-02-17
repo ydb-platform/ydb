@@ -63,23 +63,6 @@ void TGRpcLocalDiscoveryService::InitService(grpc::ServerCompletionQueue *cq, NY
     SetupIncomingRequests(std::move(logger));
 }
 
-void TGRpcLocalDiscoveryService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter *limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcLocalDiscoveryService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcLocalDiscoveryService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
-
-void TGRpcLocalDiscoveryService::SetDynamicNodeAuthParams(const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams) {
-    DynamicNodeAuthorizationParams = dynamicNodeAuthorizationParams;
-}
-
 void TGRpcLocalDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
     using namespace Ydb;
@@ -102,10 +85,7 @@ void TGRpcLocalDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logg
             #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 
     ADD_REQUEST(WhoAmI, &DoWhoAmIRequest, WHOAMI)
-    NodeRegistrationRequest = [authParams = this->DynamicNodeAuthorizationParams] (std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-        DoNodeRegistrationRequest(std::move(p), f, authParams);
-    };
-    ADD_REQUEST(NodeRegistration, NodeRegistrationRequest, NODEREGISTRATION)
+    ADD_REQUEST(NodeRegistration, &DoNodeRegistrationRequest, NODEREGISTRATION)
 #undef ADD_REQUEST
 
 using namespace std::placeholders;

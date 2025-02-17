@@ -1,0 +1,71 @@
+diff --git a/include/__iterator/segmented_iterator.h b/include/__iterator/segmented_iterator.h
+index f3cd1e5..c0a77ef 100644
+--- a/include/__iterator/segmented_iterator.h
++++ b/include/__iterator/segmented_iterator.h
+@@ -68,8 +68,10 @@ struct __segmented_iterator_traits;
+ template <class _Tp, size_t = 0>
+ struct __has_specialization : false_type {};
+ 
++#ifndef __CUDACC__
+ template <class _Tp>
+ struct __has_specialization<_Tp, sizeof(_Tp) * 0> : true_type {};
++#endif
+ 
+ template <class _Iterator>
+ using __is_segmented_iterator = __has_specialization<__segmented_iterator_traits<_Iterator> >;
+diff --git a/include/__math/traits.h b/include/__math/traits.h
+index da585af..bc68e78 100644
+--- a/include/__math/traits.h
++++ b/include/__math/traits.h
+@@ -67,7 +67,7 @@ _LIBCPP_NODISCARD_EXT _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool i
+   return false;
+ }
+ 
+-#ifdef _LIBCPP_PREFERRED_OVERLOAD
++#ifdef _LIBCPP_PREFERRED_OVERLOAD  && !defined(__CUDACC__)
+ _LIBCPP_NODISCARD_EXT inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isinf(float __x) _NOEXCEPT {
+   return __builtin_isinf(__x);
+ }
+@@ -94,7 +94,7 @@ _LIBCPP_NODISCARD_EXT _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool i
+   return false;
+ }
+ 
+-#ifdef _LIBCPP_PREFERRED_OVERLOAD
++#ifdef _LIBCPP_PREFERRED_OVERLOAD && !defined(__CUDACC__)
+ _LIBCPP_NODISCARD_EXT inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isnan(float __x) _NOEXCEPT {
+   return __builtin_isnan(__x);
+ }
+diff --git a/include/complex b/include/complex
+index c8ffde9..7f44242 100644
+--- a/include/complex
++++ b/include/complex
+@@ -1526,7 +1526,7 @@ inline namespace literals
+         return { 0.0, static_cast<double>(__im) };
+     }
+ 
+-
++#if !defined(__CUDACC__)
+     _LIBCPP_HIDE_FROM_ABI constexpr complex<float> operator""if(long double __im)
+     {
+         return { 0.0f, static_cast<float>(__im) };
+@@ -1536,6 +1536,7 @@ inline namespace literals
+     {
+         return { 0.0f, static_cast<float>(__im) };
+     }
++#endif
+   } // namespace complex_literals
+ } // namespace literals
+ #endif
+diff --git a/include/tuple b/include/tuple
+index e7fc1e2..eb1785c 100644
+--- a/include/tuple
++++ b/include/tuple
+@@ -308,7 +308,7 @@ class __tuple_leaf
+ 
+     template <class _Tp>
+     static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
+-#if __has_keyword(__reference_binds_to_temporary)
++#if __has_keyword(__reference_binds_to_temporary) && !defined(__CUDACC__)
+       return !__reference_binds_to_temporary(_Hp, _Tp);
+ #else
+       return true;

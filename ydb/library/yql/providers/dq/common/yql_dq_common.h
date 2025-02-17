@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/library/yql/dq/actors/dq.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <util/generic/string.h>
 #include <map>
@@ -10,7 +10,12 @@
 namespace NYql {
 namespace NCommon {
 
-TMaybe<TString> SqlToSExpr(const TString& query);
+struct TResultFormatSettings {
+    TString ResultType;
+    TVector<TString> Columns;
+    TMaybe<ui64> SizeLimit;
+    TMaybe<ui64> RowsLimit;
+};
 
 TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn);
 TString GetSerializedResultType(const TString& program);

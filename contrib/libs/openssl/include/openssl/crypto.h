@@ -1,3 +1,4 @@
+#include <contrib/libs/openssl/redef.h>
 /*
  * Copyright 1995-2019 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
@@ -160,6 +161,10 @@ const char *OpenSSL_version(int type);
 # define OPENSSL_PLATFORM         3
 # define OPENSSL_DIR              4
 # define OPENSSL_ENGINES_DIR      5
+
+# ifndef OPENSSL_NO_QUIC
+#  define OPENSSL_INFO_QUIC       2000
+# endif
 
 int OPENSSL_issetugid(void);
 

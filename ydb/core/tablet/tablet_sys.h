@@ -93,6 +93,8 @@ class TTablet : public TActor<TTablet> {
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
 
+        THashMap<ui32, float> ApproximateFreeSpaceShareByChannel;
+
         size_t ByteSize;
 
         TLogEntry(ui32 step, ui32 confirmedOnSend, ui64 sourceCookie)
@@ -214,6 +216,7 @@ class TTablet : public TActor<TTablet> {
     bool NeedCleanupOnLockedPath;
     ui32 GcCounter;
     THolder<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;
+    TString TabletVersionInfo;
     TInstant BoostrapTime;
     TInstant ActivateTime;
     bool Leader;
@@ -222,6 +225,7 @@ class TTablet : public TActor<TTablet> {
     ui32 GcInFly;
     ui32 GcInFlyStep;
     ui32 GcNextStep;
+    TEvTablet::TEvGcForStepAckRequest::TPtr GcForStepAckRequest;
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
     THolder<NTracing::ITrace> IntrospectionTrace;
@@ -311,6 +315,8 @@ class TTablet : public TActor<TTablet> {
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev);
     void Handle(TEvTablet::TEvPreCommit::TPtr &ev);
+
+    void Handle(TEvTablet::TEvGcForStepAckRequest::TPtr& ev);
 
     void Handle(TEvTablet::TEvCommit::TPtr &ev);
     bool HandleNext(TEvTablet::TEvCommit::TPtr &ev);
@@ -530,6 +536,7 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
             hFunc(TEvents::TEvUndelivered, HandleByLeader);
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
+            hFunc(TEvTablet::TEvGcForStepAckRequest, Handle);
         }
     }
 

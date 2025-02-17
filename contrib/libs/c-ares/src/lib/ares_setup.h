@@ -23,16 +23,16 @@
  *
  * SPDX-License-Identifier: MIT
  */
-#ifndef HEADER_CARES_SETUP_H
-#define HEADER_CARES_SETUP_H
+#ifndef __ARES_SETUP_H
+#define __ARES_SETUP_H
 
-/*
- * Define WIN32 when build target is Win32 API
+/* ============================================================================
+ * NOTE: This file is automatically included by ares_private.h and should not
+ *       typically be included directly.
+ *       All c-ares source files should include ares_private.h as the
+ *       first header.
+ * ============================================================================
  */
-
-#if (defined(_WIN32) || defined(__WIN32__)) && !defined(WIN32)
-#define WIN32
-#endif
 
 /*
  * Include configuration script results or hand-crafted
@@ -40,64 +40,19 @@
  */
 
 #if defined(HAVE_CONFIG_H) && !defined(_MSC_VER)
-#include "ares_config.h"
+#  include "ares_config.h"
 #else
-
-#ifdef WIN32
-#include "config-win32.h"
-#endif
-
+#  ifdef _WIN32
+#    include "config-win32.h"
+#  endif
 #endif /* HAVE_CONFIG_H */
-
-/* ================================================================ */
-/* Definition of preprocessor macros/symbols which modify compiler  */
-/* behaviour or generated code characteristics must be done here,   */
-/* as appropriate, before any system header file is included. It is */
-/* also possible to have them defined in the config file included   */
-/* before this point. As a result of all this we frown inclusion of */
-/* system header files in our config files, avoid this at any cost. */
-/* ================================================================ */
-
-/*
- * AIX 4.3 and newer needs _THREAD_SAFE defined to build
- * proper reentrant code. Others may also need it.
- */
-
-#ifdef NEED_THREAD_SAFE
-#  ifndef _THREAD_SAFE
-#    define _THREAD_SAFE
-#  endif
-#endif
-
-/*
- * Tru64 needs _REENTRANT set for a few function prototypes and
- * things to appear in the system header files. Unixware needs it
- * to build proper reentrant code. Others may also need it.
- */
-
-#ifdef NEED_REENTRANT
-#  ifndef _REENTRANT
-#    define _REENTRANT
-#  endif
-#endif
-
-/* ================================================================ */
-/*  If you need to include a system header file for your platform,  */
-/*  please, do it beyond the point further indicated in this file.  */
-/* ================================================================ */
 
 /*
  * c-ares external interface definitions are also used internally,
  * and might also include required system header files to define them.
  */
 
-#include <ares_build.h>
-
-/*
- * Compile time sanity checks must also be done when building the library.
- */
-
-#include <ares_rules.h>
+#include "ares_build.h"
 
 /* ================================================================= */
 /* No system header file shall be included in this file before this  */
@@ -115,6 +70,10 @@
  * neither HAVE_WS2TCPIP_H when __CYGWIN__ is defined.
  */
 
+#ifdef USE_WINSOCK
+#  undef USE_WINSOCK
+#endif
+
 #ifdef HAVE_WINDOWS_H
 #  ifndef WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN
@@ -122,51 +81,56 @@
 #  include <windows.h>
 #  ifdef HAVE_WINSOCK2_H
 #    include <winsock2.h>
+#    define USE_WINSOCK 2
 #    ifdef HAVE_WS2TCPIP_H
-#       include <ws2tcpip.h>
+#      include <ws2tcpip.h>
 #    endif
 #  else
 #    ifdef HAVE_WINSOCK_H
 #      include <winsock.h>
+#      define USE_WINSOCK 1
 #    endif
 #  endif
 #endif
 
-/*
- * Define USE_WINSOCK to 2 if we have and use WINSOCK2 API, else
- * define USE_WINSOCK to 1 if we have and use WINSOCK  API, else
- * undefine USE_WINSOCK.
- */
 
-#undef USE_WINSOCK
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
+#include <ctype.h>
 
-#ifdef HAVE_WINSOCK2_H
-#  define USE_WINSOCK 2
-#else
-#  ifdef HAVE_WINSOCK_H
-#    define USE_WINSOCK 1
-#  endif
+#ifdef HAVE_ERRNO_H
+#  include <errno.h>
 #endif
 
-/*
- * Work-arounds for systems without configure support
- */
-
-#ifndef HAVE_CONFIG_H
-
-#if !defined(HAVE_SYS_TIME_H) && !defined(_MSC_VER) && !defined(__WATCOMC__)
-#define HAVE_SYS_TIME_H
+#ifdef HAVE_SYS_TYPES_H
+#  include <sys/types.h>
 #endif
 
-#if !defined(HAVE_UNISTD_H) && !defined(_MSC_VER)
-#define HAVE_UNISTD_H 1
+#ifdef HAVE_MALLOC_H
+#  include <malloc.h>
 #endif
 
-#if !defined(HAVE_SYS_UIO_H) && !defined(WIN32) && !defined(MSDOS)
-#define HAVE_SYS_UIO_H
+#ifdef HAVE_SYS_STAT_H
+#  include <sys/stat.h>
 #endif
 
-#endif /* HAVE_CONFIG_H */
+#ifdef HAVE_SYS_TIME_H
+#  include <sys/time.h>
+#endif
+
+#ifdef HAVE_TIME_H
+#  include <time.h>
+#endif
+
+#ifdef HAVE_UNISTD_H
+#  include <unistd.h>
+#endif
+
+#ifdef HAVE_SYS_SOCKET_H
+#  include <sys/socket.h>
+#endif
 
 /*
  * Arg 2 type for gethostname in case it hasn't been defined in config file.
@@ -193,7 +157,7 @@
  * but it is not fully implemented and missing identifiers, so udefine here.
  */
 #if (defined(ANDROID) || defined(__ANDROID__) || defined(__MVS__)) && \
-    defined(HAVE_ARPA_NAMESER_H)
+  defined(HAVE_ARPA_NAMESER_H)
 #  undef HAVE_ARPA_NAMESER_H
 #endif
 
@@ -203,29 +167,58 @@
  *  --enable-debug) so we undef them again here.
  */
 
-#undef PACKAGE_STRING
-#undef PACKAGE_TARNAME
-#undef PACKAGE_VERSION
-#undef PACKAGE_BUGREPORT
-#undef PACKAGE_NAME
-#undef VERSION
-#undef PACKAGE
+#ifdef PACKAGE_STRING
+#  undef PACKAGE_STRING
+#endif
+#ifdef PACKAGE_TARNAME
+#  undef PACKAGE_TARNAME
+#endif
+#ifdef PACKAGE_VERSION
+#  undef PACKAGE_VERSION
+#endif
+#ifdef PACKAGE_BUGREPORT
+#  undef PACKAGE_BUGREPORT
+#endif
+#ifdef PACKAGE_NAME
+#  undef PACKAGE_NAME
+#endif
+#ifdef VERSION
+#  undef VERSION
+#endif
+#ifdef PACKAGE
+#  undef PACKAGE
+#endif
 
 /* IPv6 compatibility */
 #if !defined(HAVE_AF_INET6)
-#if defined(HAVE_PF_INET6)
-#define AF_INET6 PF_INET6
-#else
-#define AF_INET6 AF_MAX+1
+#  if defined(HAVE_PF_INET6)
+#    define AF_INET6 PF_INET6
+#  else
+#    define AF_INET6 AF_MAX + 1
+#  endif
 #endif
+
+
+/* Definition of timeval struct for platforms that don't have it. */
+
+#ifndef HAVE_STRUCT_TIMEVAL
+struct timeval {
+  ares_int64_t tv_sec;
+  long         tv_usec;
+};
 #endif
+
 
 /*
- * Include macros and defines that should only be processed once.
+ * Macro used to include code only in debug builds.
  */
 
-#ifndef __SETUP_ONCE_H
-#include "setup_once.h"
+#ifdef DEBUGBUILD
+#  define DEBUGF(x) x
+#else
+#  define DEBUGF(x) \
+    do {            \
+    } while (0)
 #endif
 
-#endif /* HEADER_CARES_SETUP_H */
+#endif /* __ARES_SETUP_H */

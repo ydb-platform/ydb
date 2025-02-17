@@ -6,8 +6,6 @@ SPLIT_FACTOR(20)
 
 SIZE(MEDIUM)
 
-TIMEOUT(600)
-
 SRCS(
     defaults.h
     gen_restarts.cpp
@@ -26,8 +24,8 @@ PEERDIR(
     ydb/core/blobstorage/ut_vdisk/lib
     ydb/core/erasure
     ydb/core/scheme
-    ydb/library/yql/public/udf/service/stub
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

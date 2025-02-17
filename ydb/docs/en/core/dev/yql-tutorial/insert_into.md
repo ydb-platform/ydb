@@ -4,7 +4,7 @@ Add data to the table using [INSERT INTO](../../yql/reference/syntax/insert_into
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 INSERT INTO episodes
 (
     series_id,

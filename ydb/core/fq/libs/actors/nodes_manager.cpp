@@ -7,14 +7,18 @@
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 #include <ydb/library/actors/core/log.h>
 #include <util/system/hostname.h>
 #include <ydb/library/services/services.pb.h>
+
+#include <library/cpp/scheme/scheme.h>
+
+#include <random>
 
 
 #define LOG_E(stream) \
@@ -86,93 +90,148 @@ public:
 private:
     void Handle(NDqs::TEvAllocateWorkersRequest::TPtr& ev) {
         ServiceCounters.Counters->GetCounter("EvAllocateWorkersRequest", true)->Inc();
-        const auto &rec = ev->Get()->Record;
-        const auto count = rec.GetCount();
+        const auto &request = ev->Get()->Record;
+        const auto count = request.GetCount();
+        auto scheduler = request.GetScheduler();
 
-        auto req = MakeHolder<NDqs::TEvAllocateWorkersResponse>();
-
+        auto response = MakeHolder<NDqs::TEvAllocateWorkersResponse>();
         if (count == 0) {
-            auto& error = *req->Record.MutableError();
+            auto& error = *response->Record.MutableError();
             error.SetStatusCode(NYql::NDqProto::StatusIds::BAD_REQUEST);
             error.SetMessage("Incorrect request - 0 nodes requested");
+        } else if (!scheduler) {
+            ScheduleUniformly(request, response);            
         } else {
-            auto resourceId = rec.GetResourceId();
-            if (!resourceId) {
-                resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
+            try {
+                auto schedulerSettings = NSc::TValue::FromJsonThrow(scheduler);
+                auto schedulerType = schedulerSettings["type"].GetString();
+                if (schedulerType == "single_node") {
+                    ScheduleOnSingleNode(request, response);
+                } else {
+                    auto& error = *response->Record.MutableError();
+                    error.SetStatusCode(NYql::NDqProto::StatusIds::BAD_REQUEST);
+                    error.SetMessage(TStringBuilder{} << "Unknown scheduler type: " << schedulerType << ", settings: " << scheduler);
+                }
+            } catch (...) {
+                auto& error = *response->Record.MutableError();
+                error.SetStatusCode(NYql::NDqProto::StatusIds::BAD_REQUEST);
+                error.SetMessage(TStringBuilder{} << "Error choosing scheduler. Invalid settings: " << scheduler << ", error: " << CurrentExceptionMessage());
             }
+        }
+        LOG_D("TEvAllocateWorkersResponse " << response->Record.DebugString());
 
-            bool placementFailure = false;
-            ui64 memoryLimit = AtomicGet(WorkerManagerCounters.MkqlMemoryLimit->GetAtomic());
-            ui64 memoryAllocated = AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic());
-            TVector<TPeer> nodes;
-            for (ui32 i = 0; i < count; ++i) {
-                ui64 totalMemoryLimit = 0;
-                if (rec.TaskSize() > i) {
-                    totalMemoryLimit = rec.GetTask(i).GetInitialTaskMemoryLimit();
-                }
-                if (totalMemoryLimit == 0) {
-                    totalMemoryLimit = MkqlInitialMemoryLimit;
-                }
-                TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
-                bool selfPlacement = true;
-                if (!Peers.empty()) {
-                    auto FirstPeer = NextPeer;
-                    while (true) {
-                        Y_ABORT_UNLESS(NextPeer < Peers.size());
-                        auto& nextNode = Peers[NextPeer];
+        Send(ev->Sender, response.Release());
+    }
 
-                        if (++NextPeer >= Peers.size()) {
-                            NextPeer = 0;
-                        }
+    void ScheduleUniformly(const NYql::NDqProto::TAllocateWorkersRequest& request, THolder<NDqs::TEvAllocateWorkersResponse>& response) {
+        const auto count = request.GetCount();
+        auto resourceId = request.GetResourceId();
+        if (!resourceId) {
+            resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
+        }
 
-                        if (    (!UseDataCenter || DataCenter.empty() || nextNode.DataCenter.empty() || DataCenter == nextNode.DataCenter) // non empty DC must match
-                             && (   nextNode.MemoryLimit == 0 // memory is NOT limited
-                                 || nextNode.MemoryLimit >= nextNode.MemoryAllocated + totalMemoryLimit) // or enough
-                        ) {
-                            // adjust allocated size to place next tasks correctly, will be reset after next health check
-                            nextNode.MemoryAllocated += totalMemoryLimit;
-                            if (nextNode.NodeId == SelfId().NodeId()) {
-                                // eventually synced self allocation info
-                                memoryAllocated += totalMemoryLimit;
-                            }
-                            node = nextNode;
-                            selfPlacement = false;
-                            break;
-                        }
+        bool placementFailure = false;
+        ui64 memoryLimit = AtomicGet(WorkerManagerCounters.MkqlMemoryLimit->GetAtomic());
+        ui64 memoryAllocated = AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic());
+        TVector<TPeer> nodes;
+        for (ui32 i = 0; i < count; ++i) {
+            ui64 totalMemoryLimit = 0;
+            if (request.TaskSize() > i) {
+                totalMemoryLimit = request.GetTask(i).GetInitialTaskMemoryLimit();
+            }
+            if (totalMemoryLimit == 0) {
+                totalMemoryLimit = MkqlInitialMemoryLimit;
+            }
+            TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
+            bool selfPlacement = true;
+            if (!Peers.empty()) {
+                auto firstPeer = NextPeer;
+                while (true) {
+                    Y_ABORT_UNLESS(NextPeer < Peers.size());
+                    auto& nextNode = Peers[NextPeer];
 
-                        if (NextPeer == FirstPeer) {  // we closed loop w/o success, fallback to self placement then
-                            break;
-                        }
+                    if (++NextPeer >= Peers.size()) {
+                        NextPeer = 0;
                     }
-                }
-                if (selfPlacement) {
-                    if (memoryLimit == 0 || memoryLimit >= memoryAllocated + totalMemoryLimit) {
-                        memoryAllocated += totalMemoryLimit;
-                    } else {
-                        placementFailure = true;
-                        auto& error = *req->Record.MutableError();
-                        error.SetStatusCode(NYql::NDqProto::StatusIds::CLUSTER_OVERLOADED);
-                        error.SetMessage("Not enough free memory in the cluster");
+
+                    if ((!UseDataCenter || DataCenter.empty() || nextNode.DataCenter.empty() || DataCenter == nextNode.DataCenter) // non empty DC must match
+                         && (nextNode.MemoryLimit == 0 // memory is NOT limited
+                             || nextNode.MemoryLimit >= nextNode.MemoryAllocated + totalMemoryLimit) // or enough
+                    ) {
+                        // adjust allocated size to place next tasks correctly, will be reset after next health check
+                        nextNode.MemoryAllocated += totalMemoryLimit;
+                        if (nextNode.NodeId == SelfId().NodeId()) {
+                            // eventually synced self allocation info
+                            memoryAllocated += totalMemoryLimit;
+                        }
+                        node = nextNode;
+                        selfPlacement = false;
+                        break;
+                    }
+
+                    if (NextPeer == firstPeer) {  // we closed loop w/o success, fallback to self placement then
                         break;
                     }
                 }
-                nodes.push_back(node);
             }
-
-            if (!placementFailure) {
-                req->Record.ClearError();
-                auto& group = *req->Record.MutableNodes();
-                group.SetResourceId(resourceId);
-                for (const auto& node : nodes) {
-                    auto* worker = group.AddWorker();
-                    *worker->MutableGuid() = node.InstanceId;
-                    worker->SetNodeId(node.NodeId);
+            if (selfPlacement) {
+                if (memoryLimit == 0 || memoryLimit >= memoryAllocated + totalMemoryLimit) {
+                    memoryAllocated += totalMemoryLimit;
+                } else {
+                    placementFailure = true;
+                    auto& error = *response->Record.MutableError();
+                    error.SetStatusCode(NYql::NDqProto::StatusIds::CLUSTER_OVERLOADED);
+                    error.SetMessage("Not enough free memory in the cluster");
+                    break;
                 }
             }
+            nodes.push_back(node);
         }
-        LOG_D("TEvAllocateWorkersResponse " << req->Record.DebugString());
 
-        Send(ev->Sender, req.Release());
+        if (!placementFailure) {
+            response->Record.ClearError();
+            auto& group = *response->Record.MutableNodes();
+            group.SetResourceId(resourceId);
+            for (const auto& node : nodes) {
+                auto* worker = group.AddWorker();
+                *worker->MutableGuid() = node.InstanceId;
+                worker->SetNodeId(node.NodeId);
+            }
+        }
+    }
+
+    void ScheduleOnSingleNode(const NYql::NDqProto::TAllocateWorkersRequest& request, THolder<NDqs::TEvAllocateWorkersResponse>& response) {
+        const auto count = request.GetCount();
+        auto resourceId = request.GetResourceId();
+        if (!resourceId) {
+            resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
+        }
+
+        if (Peers.size() != SingleNodeScheduler.NodeOrder.size()) {
+            SingleNodeScheduler.NodeOrder.clear();
+            for (ui32 i = 0; i < Peers.size(); i++) {
+                SingleNodeScheduler.NodeOrder.push_back(i);
+            }
+            std::shuffle(SingleNodeScheduler.NodeOrder.begin(), SingleNodeScheduler.NodeOrder.end(), std::default_random_engine(TInstant::Now().MicroSeconds()));
+        }
+
+        TVector<TPeer> nodes;
+        for (ui32 i = 0; i < count; ++i) {
+            Y_ABORT_UNLESS(NextPeer < Peers.size());
+            nodes.push_back(Peers[SingleNodeScheduler.NodeOrder[NextPeer]]);
+        }
+        if (++NextPeer >= Peers.size()) {
+            NextPeer = 0;
+        }
+
+        response->Record.ClearError();
+        auto& group = *response->Record.MutableNodes();
+        group.SetResourceId(resourceId);
+        for (const auto& node : nodes) {
+            auto* worker = group.AddWorker();
+            *worker->MutableGuid() = node.InstanceId;
+            worker->SetNodeId(node.NodeId);
+        }
     }
 
     void Handle(NDqs::TEvFreeWorkersNotify::TPtr&) {
@@ -259,14 +318,13 @@ private:
     void HandleResponse(NFq::TEvInternalService::TEvHealthCheckResponse::TPtr& ev) {
         try {
             const auto& status = ev->Get()->Status.GetStatus();
-            THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo());
             if (!ev->Get()->Status.IsSuccess()) {
                 ythrow yexception() <<  status << '\n' << ev->Get()->Status.GetIssues().ToString();
             }
             const auto& res = ev->Get()->Result;
 
-            auto& nodesInfo = nameServiceUpdateReq->Nodes;
-            nodesInfo.reserve(res.nodes().size());
+            auto nodesInfo = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+            nodesInfo->reserve(res.nodes().size());
 
             Peers.clear();
             std::set<ui32> nodeIds; // may be not unique
@@ -281,7 +339,7 @@ private:
                   node.active_workers(), node.memory_limit(), node.memory_allocated(), node.data_center()});
 
                 if (node.interconnect_port()) {
-                    nodesInfo.emplace_back(TEvInterconnect::TNodeInfo{
+                    nodesInfo->emplace_back(TEvInterconnect::TNodeInfo{
                         node.node_id(),
                         node.node_address(),
                         node.hostname(), // host
@@ -297,8 +355,9 @@ private:
             ServiceCounters.Counters->GetCounter("PeerCount", false)->Set(Peers.size());
             ServiceCounters.Counters->GetCounter("NodesHealthCheckOk", true)->Inc();
 
-            LOG_T("Send NodeInfo with size: " << nodesInfo.size() << " to DynamicNameserver");
-            if (!nodesInfo.empty()) {
+            LOG_T("Send NodeInfo with size: " << nodesInfo->size() << " to DynamicNameserver");
+            if (!nodesInfo->empty()) {
+                THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo(nodesInfo));
                 Send(GetNameserviceActorId(), nameServiceUpdateReq.Release());
             }
         } catch (yexception &e) {
@@ -338,6 +397,11 @@ private:
     TString Address;
     ::NMonitoring::TDynamicCounters::TCounterPtr AnonRssSize;
     ::NMonitoring::TDynamicCounters::TCounterPtr AnonRssLimit;
+
+    struct TSingleNodeScheduler {
+        TVector<int> NodeOrder;
+    };
+    TSingleNodeScheduler SingleNodeScheduler;
 };
 
 TActorId MakeNodesManagerId() {

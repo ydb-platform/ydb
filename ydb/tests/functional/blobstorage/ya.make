@@ -8,20 +8,14 @@ TEST_SRCS(
     test_tablet_channel_migration.py
 )
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:4)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread")
-    REQUIREMENTS(
-        cpu:4
-        ram:16
-    )
-    TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    REQUIREMENTS(
-        cpu:4
-        ram:32
-    )
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -33,6 +27,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/clients
     contrib/python/PyHamcrest
 )
 

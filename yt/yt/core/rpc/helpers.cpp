@@ -33,6 +33,15 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void SetTimeoutOptions(
+    NRpc::TClientRequest& request,
+    const TTimeoutOptions& options)
+{
+    request.SetTimeout(options.Timeout);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool IsRetriableError(const TError& error)
 {
     if (IsChannelFailureError(error)) {
@@ -74,7 +83,7 @@ bool IsChannelFailureErrorHandled(const TError& error)
 
 void LabelHandledChannelFailureError(TError* error)
 {
-    error->MutableAttributes()->Set("channel_failure_error_handled", true);
+    *error <<= TErrorAttribute("channel_failure_error_handled", true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -128,7 +137,7 @@ public:
         , Timeout_(timeout)
     { }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto underlyingChannel = UnderlyingFactory_->CreateChannel(address);
         return CreateDefaultTimeoutChannel(underlyingChannel, Timeout_);
@@ -201,7 +210,7 @@ public:
         , AuthenticationIdentity_(identity)
     { }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto underlyingChannel = UnderlyingFactory_->CreateChannel(address);
         return CreateAuthenticatedChannel(underlyingChannel, AuthenticationIdentity_);
@@ -272,7 +281,7 @@ public:
         , RealmId_(realmId)
     { }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto underlyingChannel = UnderlyingFactory_->CreateChannel(address);
         return CreateRealmChannel(underlyingChannel, RealmId_);
@@ -369,9 +378,9 @@ private:
             UnderlyingHandler_->HandleAcknowledgement();
         }
 
-        void HandleResponse(TSharedRefArray message, TString address) override
+        void HandleResponse(TSharedRefArray message, const std::string& address) override
         {
-            UnderlyingHandler_->HandleResponse(std::move(message), std::move(address));
+            UnderlyingHandler_->HandleResponse(std::move(message), address);
         }
 
         void HandleError(TError error) override
@@ -446,10 +455,7 @@ TTraceContextPtr CreateCallTraceContext(std::string service, std::string method)
         return oldTraceContext;
     }
 
-    auto traceContext = oldTraceContext->CreateChild(Format("RpcClient:%v.%v", service, method));
-    traceContext->SetAllocationTagsPtr(oldTraceContext->GetAllocationTagsPtr());
-
-    return traceContext;
+    return oldTraceContext->CreateChild(Format("RpcClient:%v.%v", service, method));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -517,12 +523,21 @@ void SetCurrentAuthenticationIdentity(const IClientRequestPtr& request)
     SetAuthenticationIdentity(request, GetCurrentAuthenticationIdentity());
 }
 
-std::vector<TString> AddressesFromEndpointSet(const NServiceDiscovery::TEndpointSet& endpointSet)
+std::vector<std::string> AddressesFromEndpointSet(
+    const NServiceDiscovery::TEndpointSet& endpointSet,
+    bool useIPv4,
+    bool useIPv6)
 {
-    std::vector<TString> addresses;
+    std::vector<std::string> addresses;
     addresses.reserve(endpointSet.Endpoints.size());
     for (const auto& endpoint : endpointSet.Endpoints) {
-        addresses.push_back(NNet::BuildServiceAddress(endpoint.Fqdn, endpoint.Port));
+        if (useIPv6 && !endpoint.IP6Address.empty()) {
+            addresses.push_back(NNet::FormatNetworkAddress(endpoint.IP6Address, endpoint.Port));
+        } else if (useIPv4 && !endpoint.IP4Address.empty()) {
+            addresses.push_back(NNet::FormatNetworkAddress(endpoint.IP4Address, endpoint.Port));
+        } else {
+            addresses.push_back(NNet::BuildServiceAddress(endpoint.Fqdn, endpoint.Port));
+        }
     }
     return addresses;
 }
@@ -593,8 +608,18 @@ std::vector<TSharedRef> CompressAttachments(
     if (codecId == NCompression::ECodec::None) {
         return attachments.ToVector();
     }
-    return NConcurrency::WaitFor(AsyncCompressAttachments(attachments, codecId))
-        .ValueOrThrow();
+
+    auto* codec = NCompression::GetCodec(codecId);
+    std::vector<TSharedRef> result;
+    result.reserve(std::ssize(attachments));
+    std::transform(
+        attachments.begin(),
+        attachments.end(),
+        std::back_inserter(result),
+        [=] (const TSharedRef& attachment) {
+            return codec->Compress(attachment);
+        });
+    return result;
 }
 
 std::vector<TSharedRef> DecompressAttachments(
@@ -604,8 +629,18 @@ std::vector<TSharedRef> DecompressAttachments(
     if (codecId == NCompression::ECodec::None) {
         return attachments.ToVector();
     }
-    return NConcurrency::WaitFor(AsyncDecompressAttachments(attachments, codecId))
-        .ValueOrThrow();
+
+    auto* codec = NCompression::GetCodec(codecId);
+    std::vector<TSharedRef> result;
+    result.reserve(std::ssize(attachments));
+    std::transform(
+        attachments.begin(),
+        attachments.end(),
+        std::back_inserter(result),
+        [=] (const TSharedRef& compressedAttachment) {
+            return codec->Decompress(compressedAttachment);
+        });
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -623,7 +658,7 @@ void EnrichClientRequestError(
     {
         auto featureId = error->Attributes().Get<int>(FeatureIdAttributeKey);
         if (auto featureName = (*featureIdFormatter)(featureId)) {
-            error->MutableAttributes()->Set(FeatureNameAttributeKey, featureName);
+            *error <<= TErrorAttribute(FeatureNameAttributeKey, featureName);
         }
     }
 

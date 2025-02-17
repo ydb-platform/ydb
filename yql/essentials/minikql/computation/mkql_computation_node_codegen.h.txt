@@ -1,0 +1,1262 @@
+#pragma once
+
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen_common.h>
+
+#ifdef MKQL_DISABLE_CODEGEN
+namespace NKikimr {
+namespace NMiniKQL {
+
+using NYql::GetMethodPtr;
+using NYql::GetMethodPtrIndex;
+using NYql::GetMethodIndex;
+
+using TUnboxedImmutableCodegeneratorNode = TUnboxedImmutableComputationNode;
+using TExternalCodegeneratorNode = TExternalComputationNode;
+using TWideFlowProxyCodegeneratorNode = TWideFlowProxyComputationNode;
+
+template <typename TDerived>
+using TDecoratorCodegeneratorNode = TDecoratorComputationNode<TDerived>;
+
+template <typename TDerived>
+using TBinaryCodegeneratorNode = TBinaryComputationNode<TDerived>;
+
+template <typename TDerived>
+using TMutableCodegeneratorNode = TMutableComputationNode<TDerived>;
+
+template <typename TDerived>
+using TMutableCodegeneratorPtrNode = TMutableComputationNode<TDerived>;
+
+template <typename TDerived>
+using TMutableCodegeneratorFallbackNode = TMutableComputationNode<TDerived>;
+
+template <typename TDerived>
+using TMutableCodegeneratorRootNode = TMutableComputationNode<TDerived>;
+
+template <typename TDerived>
+using TCustomValueCodegeneratorNode = TMutableComputationNode<TDerived>;
+
+template <typename TDerived>
+using TBothWaysCodegeneratorNode = TMutableComputationNode<TDerived>;
+
+template <typename TDerived>
+using TStatelessFlowCodegeneratorNode = TStatelessFlowComputationNode<TDerived>;
+
+template <typename TDerived>
+using TStatelessWideFlowCodegeneratorNode = TStatelessWideFlowComputationNode<TDerived>;
+
+template <typename TDerived, bool SerializableState = false>
+using TStatefulWideFlowCodegeneratorNode = TStatefulWideFlowComputationNode<TDerived, SerializableState>;
+
+template <typename TDerived>
+using TPairStateWideFlowCodegeneratorNode = TPairStateWideFlowComputationNode<TDerived>;
+
+template <typename TDerived>
+using TStatelessFlowCodegeneratorRootNode = TStatelessFlowComputationNode<TDerived>;
+
+template <typename TDerived, bool SerializableState = false>
+using TStatefulFlowCodegeneratorNode = TStatefulFlowComputationNode<TDerived, SerializableState>;
+
+template <typename TDerived>
+using TPairStateFlowCodegeneratorNode = TPairStateFlowComputationNode<TDerived>;
+
+template <typename TDerived>
+using TFlowSourceCodegeneratorNode = TFlowSourceComputationNode<TDerived>;
+
+template <typename TDerived>
+using TWideFlowSourceCodegeneratorNode = TWideFlowSourceComputationNode<TDerived>;
+}
+}
+#else
+#include <llvm/IR/Value.h>
+#include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/Instructions.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/DebugInfoMetadata.h>
+#include <llvm/IR/DIBuilder.h>
+
+#if !__clang__ || (__clang_major__ >= 16)
+#include <source_location>
+#endif
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+using NYql::GetMethodPtr;
+using NYql::GetMethodPtrIndex;
+using NYql::GetMethodIndex;
+
+using namespace llvm;
+
+Type* GetCompContextType(LLVMContext &context);
+Type* GetStringRefType(LLVMContext &context);
+Type* GetSourcePosType(LLVMContext &context);
+
+class DISubprogramAnnotator;
+
+struct TCodegenContext {
+    TCodegenContext(NYql::NCodegen::ICodegen& codegen) : Codegen(codegen) {}
+
+    NYql::NCodegen::ICodegen& Codegen;
+    Function* Func = nullptr;
+    Argument* Ctx = nullptr;
+    DISubprogramAnnotator* Annotator = nullptr;
+    bool AlwaysInline = false;
+
+    Value* GetFactory() const;
+    Value* GetStat() const;
+    Value* GetMutables() const;
+    Value* GetBuilder() const;
+
+private:
+    Value * Factory = nullptr;
+    Value * Stat = nullptr;
+    Value * Mutables = nullptr;
+    Value * Builder = nullptr;
+};
+
+using TGeneratorPtr = Value* (*)(Value *const * args, const TCodegenContext& ctx, BasicBlock*& block);
+
+class ICodegeneratorRootNode {
+public:
+    virtual ~ICodegeneratorRootNode() {}
+    virtual void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) = 0;
+    virtual void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) = 0;
+};
+
+class ICodegeneratorInlineNode {
+public:
+    virtual ~ICodegeneratorInlineNode() {}
+    virtual Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
+};
+
+class ICodegeneratorInlineWideNode {
+public:
+    virtual ~ICodegeneratorInlineWideNode() {}
+
+    using TGettersList = std::vector<std::function<Value*(const TCodegenContext& ctx, BasicBlock*&)>>;
+    using TGenerateResult = std::pair<Value*, TGettersList>;
+
+    virtual TGenerateResult GenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
+};
+
+class IWideFlowProxyCodegeneratorNode: public ICodegeneratorInlineWideNode
+{
+public:
+    using TGenerator = std::function<TGenerateResult(const TCodegenContext&, BasicBlock*&)>;
+
+    virtual void SetGenerator(TGenerator&& generator) = 0;
+
+    virtual void CreateInvalidate(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
+};
+
+class ICodegeneratorExternalNode : public ICodegeneratorInlineNode {
+public:
+    virtual Value* CreateRefValue(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
+    virtual void CreateSetValue(const TCodegenContext& ctx, BasicBlock*& block, Value* value) const = 0;
+    virtual Value* CreateSwapValue(const TCodegenContext& ctx, BasicBlock*& block, Value* value) const = 0;
+    virtual void CreateInvalidate(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
+
+    using TValueBuilder = std::function<std::pair<llvm::Value*,llvm::Type*> (const TCodegenContext &)>;
+    virtual void SetValueBuilder(TValueBuilder valueBuilder) = 0;
+
+    using TValueGetterBuilder = std::function<llvm::Function * (const TCodegenContext &)>;
+    virtual void SetValueGetterBuilder(TValueGetterBuilder valueGetterBuilder) = 0;
+};
+
+class ICodegeneratorRunNode {
+public:
+    virtual ~ICodegeneratorRunNode() {}
+    virtual void CreateRun(const TCodegenContext& ctx, BasicBlock*& block, Value* result, Value* args) const = 0;
+};
+
+Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
+
+template<NUdf::TBoxedValueAccessor::EMethod Method>
+Value* CallBoxedValueVirtualMethod(Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
+    return CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), returnType, value, codegen, block);
+}
+
+void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
+
+template<NUdf::TBoxedValueAccessor::EMethod Method>
+void CallBoxedValueVirtualMethod(Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
+    CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), output, value, codegen, block);
+}
+
+void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* argument);
+
+template<NUdf::TBoxedValueAccessor::EMethod Method>
+void CallBoxedValueVirtualMethod(Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* argument) {
+    CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), output, value, codegen, block, argument);
+}
+
+Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* argument);
+
+template<NUdf::TBoxedValueAccessor::EMethod Method>
+Value* CallBoxedValueVirtualMethod(Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* argument) {
+    return CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), returnType, value, codegen, block, argument);
+}
+
+void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* arg1, Value* arg2);
+
+template<NUdf::TBoxedValueAccessor::EMethod Method>
+void CallBoxedValueVirtualMethod(Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* arg1, Value* arg2) {
+    CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), output, value, codegen, block, arg1, arg2);
+}
+
+Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* arg1, Value* arg2);
+
+template<NUdf::TBoxedValueAccessor::EMethod Method>
+Value* CallBoxedValueVirtualMethod(Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* arg1, Value* arg2) {
+    return CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), returnType, value, codegen, block, arg1, arg2);
+}
+
+Value* CallUnaryUnboxedValueFunctionImpl(uintptr_t methodPtr, Type* result, Value* arg, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
+
+template<typename Method>
+Value* CallUnaryUnboxedValueFunction(Method method, Type* result, Value* arg, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
+    return CallUnaryUnboxedValueFunctionImpl(GetMethodPtr(method), result, arg, codegen, block);
+}
+
+Value* CallBinaryUnboxedValueFunctionImpl(uintptr_t methodPtr, Type* result, Value* left, Value* right, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
+
+template<typename Method>
+Value* CallBinaryUnboxedValueFunction(Method method, Type* result, Value* left, Value* right, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
+    return CallBinaryUnboxedValueFunctionImpl(GetMethodPtr(method), result, left, right, codegen, block);
+}
+
+void AddRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block);
+void UnRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block);
+void CleanupBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block);
+
+void SafeUnRefUnboxedOne(Value* pointer, const TCodegenContext& ctx, BasicBlock*& block);
+void SafeUnRefUnboxedArray(Value* pointer, ArrayType* arrayType, const TCodegenContext& ctx, BasicBlock*& block);
+
+void ValueAddRef(EValueRepresentation kind, Value* pointer, const TCodegenContext& ctx, BasicBlock*& block);
+void ValueUnRef(EValueRepresentation kind, Value* pointer, const TCodegenContext& ctx, BasicBlock*& block);
+void ValueCleanup(EValueRepresentation kind, Value* pointer, const TCodegenContext& ctx, BasicBlock*& block);
+void ValueRelease(EValueRepresentation kind, Value* pointer, const TCodegenContext& ctx, BasicBlock*& block);
+
+std::pair<Value*, Value*> GetVariantParts(Value* variant, const TCodegenContext& ctx, BasicBlock*& block);
+Value* MakeVariant(Value* item, Value* variant, const TCodegenContext& ctx, BasicBlock*& block);
+
+Value* GetNodeValue(IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block);
+void GetNodeValue(Value* value, IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block);
+
+struct TNoCodegen {};
+ICodegeneratorInlineWideNode::TGenerateResult GetNodeValues(IComputationWideFlowNode* node, const TCodegenContext& ctx, BasicBlock*& block);
+
+Function* GenerateCompareFunction(
+    NYql::NCodegen::ICodegen& codegen,
+    const TString& name,
+    IComputationExternalNode* left,
+    IComputationExternalNode* right,
+    IComputationNode* compare
+);
+
+Function* GenerateEqualsFunction(NYql::NCodegen::ICodegen& codegen, const TString& name, bool isTuple, const TKeyTypes& types);
+Function* GenerateHashFunction(NYql::NCodegen::ICodegen& codegen, const TString& name, bool isTuple, const TKeyTypes& types);
+
+Function* GenerateEqualsFunction(NYql::NCodegen::ICodegen& codegen, const TString& name, const TKeyTypes& types);
+Function* GenerateHashFunction(NYql::NCodegen::ICodegen& codegen, const TString& name, const TKeyTypes& types);
+Function* GenerateCompareFunction(NYql::NCodegen::ICodegen& codegen, const TString& name, const TKeyTypes& types);
+
+class TDecoratorCodegeneratorNodeBase {
+protected:
+    virtual ~TDecoratorCodegeneratorNodeBase() = default;
+    virtual Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const = 0;
+
+    Value* CreateGetValueImpl(IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block) const;
+};
+
+template <typename TDerived>
+class TDecoratorCodegeneratorNode: public TDecoratorComputationNode<TDerived>, public ICodegeneratorInlineNode,
+    protected TDecoratorCodegeneratorNodeBase
+{
+using TBase = TDecoratorComputationNode<TDerived>;
+protected:
+    TDecoratorCodegeneratorNode(IComputationNode* node, EValueRepresentation kind)
+        : TBase(node, kind)
+    {}
+
+    TDecoratorCodegeneratorNode(IComputationNode* node)
+        : TBase(node)
+    {}
+
+    Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        return CreateGetValueImpl(this->Node, ctx, block);
+    }
+};
+
+class TStatelessFlowCodegeneratorNodeBase {
+protected:
+    virtual ~TStatelessFlowCodegeneratorNodeBase() = default;
+
+    virtual Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
+    Value* CreateGetValueImpl(const IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block) const;
+};
+
+template <typename TDerived>
+class TStatelessFlowCodegeneratorNode: public TStatelessFlowComputationNode<TDerived>, public ICodegeneratorInlineNode,
+    protected TStatelessFlowCodegeneratorNodeBase
+{
+using TBase = TStatelessFlowComputationNode<TDerived>;
+protected:
+    TStatelessFlowCodegeneratorNode(const IComputationNode* source, EValueRepresentation kind)
+        : TBase(source, kind)
+    {}
+
+    TStatelessFlowCodegeneratorNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation kind)
+        : TBase(mutables, source, kind)
+    {}
+
+    Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        return CreateGetValueImpl(static_cast<const IComputationNode*>(this), ctx, block);
+    }
+};
+
+class TStatelessWideFlowCodegeneratorNodeBase {
+protected:
+    virtual ~TStatelessWideFlowCodegeneratorNodeBase() = default;
+    virtual ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
+    ICodegeneratorInlineWideNode::TGenerateResult GenGetValuesImpl(const TCodegenContext& ctx, BasicBlock*& block) const;
+};
+
+template <typename TDerived>
+class TStatelessWideFlowCodegeneratorNode: public TStatelessWideFlowComputationNode<TDerived>, public ICodegeneratorInlineWideNode,
+    protected TStatelessWideFlowCodegeneratorNodeBase
+{
+using TBase = TStatelessWideFlowCodegeneratorNode<TDerived>;
+protected:
+    TStatelessWideFlowCodegeneratorNode(const IComputationNode* source)
+        : TStatelessWideFlowComputationNode<TDerived>(source)
+    {}
+
+    ICodegeneratorInlineWideNode::TGenerateResult GenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        return GenGetValuesImpl(ctx, block);
+    }
+};
+
+class TFlowSourceCodegeneratorNodeBase {
+protected:
+    virtual ~TFlowSourceCodegeneratorNodeBase() = default;
+    virtual Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const = 0;
+    Value* CreateGetValueImpl(const IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block) const;
+};
+
+template <typename TDerived>
+class TFlowSourceCodegeneratorNode: public TFlowSourceComputationNode<TDerived>, public ICodegeneratorInlineNode,
+    protected TFlowSourceCodegeneratorNodeBase
+{
+using TBase = TFlowSourceComputationNode<TDerived>;
+protected:
+    TFlowSourceCodegeneratorNode(TComputationMutables& mutables, EValueRepresentation kind, EValueRepresentation stateKind)
+        : TBase(mutables, kind, stateKind)
+    {}
+
+    Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        return CreateGetValueImpl(static_cast<const IComputationNode*>(this), ctx, block);
+    }
+};
+
+class TWideFlowSourceCodegeneratorNodeBase {
+protected:
+    virtual ~TWideFlowSourceCodegeneratorNodeBase() = default;
+    virtual ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const = 0;
+    ICodegeneratorInlineWideNode::TGenerateResult GenGetValuesImpl(const IComputationNode* node,
+        const TCodegenContext& ctx, BasicBlock*& block) const;
+};
+
+template <typename TDerived>
+class TWideFlowSourceCodegeneratorNode: public TWideFlowSourceComputationNode<TDerived>, public ICodegeneratorInlineWideNode,
+    protected TWideFlowSourceCodegeneratorNodeBase
+{
+using TBase = TWideFlowSourceComputationNode<TDerived>;
+protected:
+    TWideFlowSourceCodegeneratorNode(TComputationMutables& mutables,EValueRepresentation stateKind)
+        : TBase(mutables, stateKind)
+    {}
+
+    TGenerateResult GenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        return GenGetValuesImpl(static_cast<const IComputationNode*>(this), ctx, block);
+    }
+};
+
+class TStatefulFlowCodegeneratorNodeBase {
+protected:
+    virtual ~TStatefulFlowCodegeneratorNodeBase() = default;
+    virtual Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const = 0;
+    Value* CreateGetValueImpl(const IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block) const;
+};
+
+template <typename TDerived, bool SerializableState = false>
+class TStatefulFlowCodegeneratorNode: public TStatefulFlowComputationNode<TDerived, SerializableState>, public ICodegeneratorInlineNode,
+    protected TStatefulFlowCodegeneratorNodeBase
+{
+using TBase = TStatefulFlowComputationNode<TDerived, SerializableState>;
+protected:
+    TStatefulFlowCodegeneratorNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation kind, EValueRepresentation stateKind = EValueRepresentation::Any)
+        : TBase(mutables, source, kind, stateKind)
+    {}
+
+    Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        return CreateGetValueImpl(static_cast<const IComputationNode*>(this), ctx, block);
+    }
+};
+
+class TStatefulWideFlowCodegeneratorNodeBase {
+protected:
+    virtual ~TStatefulWideFlowCodegeneratorNodeBase() = default;
+    virtual ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(
+        const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const = 0;
+    ICodegeneratorInlineWideNode::TGenerateResult GenGetValuesImpl(
+        const IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block) const;
+};
+
+template <typename TDerived, bool SerializableState = false>
+class TStatefulWideFlowCodegeneratorNode: public TStatefulWideFlowComputationNode<TDerived, SerializableState>, public ICodegeneratorInlineWideNode,
+    protected TStatefulWideFlowCodegeneratorNodeBase
+{
+using TBase = TStatefulWideFlowComputationNode<TDerived, SerializableState>;
+protected:
+    TStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation stateKind)
+        : TBase(mutables, source, stateKind)
+    {}
+
+    TStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation, EValueRepresentation stateKind)
+        : TBase(mutables, source, stateKind)
+    {}
+
+    TGenerateResult GenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        return GenGetValuesImpl(static_cast<const IComputationNode*>(this), ctx, block);
+    }
+};
+
+class TPairStateWideFlowCodegeneratorNodeBase {
+protected:
+    virtual ~TPairStateWideFlowCodegeneratorNodeBase() = default;
+    virtual ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, 
+        Value* firstPtr, Value* secondPtr, BasicBlock*& block) const = 0;
+    ICodegeneratorInlineWideNode::TGenerateResult GenGetValuesImpl(const IComputationNode* node,
+        const TCodegenContext& ctx, BasicBlock*& block) const;
+};
+
+template <typename TDerived>
+class TPairStateWideFlowCodegeneratorNode: public TPairStateWideFlowComputationNode<TDerived>, public ICodegeneratorInlineWideNode,
+    protected TPairStateWideFlowCodegeneratorNodeBase
+{
+using TBase = TPairStateWideFlowComputationNode<TDerived>;
+protected:
+    TPairStateWideFlowCodegeneratorNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation firstKind, EValueRepresentation secondKind)
+        : TBase(mutables, source, firstKind, secondKind)
+    {}
+
+    TGenerateResult GenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        return GenGetValuesImpl(static_cast<const IComputationNode*>(this), ctx, block);
+    }
+};
+
+class TPairStateFlowCodegeneratorNodeBase {
+protected:
+    virtual ~TPairStateFlowCodegeneratorNodeBase() = default;
+    virtual Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* firstPtr, Value* secondPtr, BasicBlock*& block) const = 0;
+    Value* CreateGetValueImpl(const IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block) const;
+};
+
+template <typename TDerived>
+class TPairStateFlowCodegeneratorNode: public TPairStateFlowComputationNode<TDerived>, public ICodegeneratorInlineNode,
+    protected TPairStateFlowCodegeneratorNodeBase
+{
+using TBase = TPairStateFlowComputationNode<TDerived>;
+protected:
+    TPairStateFlowCodegeneratorNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation kind, EValueRepresentation firstKind = EValueRepresentation::Any, EValueRepresentation secondKind = EValueRepresentation::Any)
+        : TBase(mutables, source, kind, firstKind, secondKind)
+    {}
+
+    Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        return CreateGetValueImpl(static_cast<const IComputationNode*>(this), ctx, block);
+    }
+};
+
+class TBinaryCodegeneratorNodeBase {
+protected:
+    virtual ~TBinaryCodegeneratorNodeBase() = default;
+    virtual Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
+    Value* CreateGetValueImpl(const IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block) const;
+};
+
+template <typename TDerived>
+class TBinaryCodegeneratorNode: public TBinaryComputationNode<TDerived>, public ICodegeneratorInlineNode,
+    protected TBinaryCodegeneratorNodeBase
+{
+using TBase = TBinaryComputationNode<TDerived>;
+protected:
+    TBinaryCodegeneratorNode(IComputationNode* left, IComputationNode* right, const EValueRepresentation kind)
+        : TBase(left, right, kind)
+    {}
+
+    TBinaryCodegeneratorNode(TComputationMutables&, EValueRepresentation kind, IComputationNode* left, IComputationNode* right)
+        : TBase(left, right, kind)
+    {}
+
+    Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        return CreateGetValueImpl(static_cast<const IComputationNode*>(this), ctx, block);
+    }
+};
+
+class TMutableCodegeneratorNodeBase {
+protected:
+    virtual ~TMutableCodegeneratorNodeBase() = default;
+    Value* CreateGetValueImpl(bool stateless, EValueRepresentation representation, ui32 valueIndex,
+        const TString& name, const TCodegenContext& ctx, BasicBlock*& block) const;
+    Function* GenerateInternalGetValue(const TString& name, EValueRepresentation representation, ui32 valueIndex,
+        NYql::NCodegen::ICodegen& codegen) const;
+    Value* MakeGetValueBody(EValueRepresentation representation, ui32 valueIndex, const TCodegenContext& ctx, BasicBlock*& block) const;
+
+    virtual Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
+};
+
+template <typename TDerived>
+class TMutableCodegeneratorNode: public TMutableComputationNode<TDerived>, public ICodegeneratorInlineNode,
+    protected TMutableCodegeneratorNodeBase
+{
+using TBase = TMutableComputationNode<TDerived>;
+protected:
+    TString MakeName() const {
+        TStringStream out;
+        out << this->DebugString() << "::internal_Get_(" << static_cast<const void*>(this) << ").";
+        return out.Str();
+    }
+
+    TMutableCodegeneratorNode(TComputationMutables& mutables, EValueRepresentation kind)
+        : TBase(mutables, kind)
+    {}
+
+    Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        return CreateGetValueImpl(*this->Stateless, this->GetRepresentation(), this->ValueIndex, MakeName(), ctx, block);
+    }
+};
+
+class TMutableCodegeneratorPtrNodeBase {
+protected:
+    virtual ~TMutableCodegeneratorPtrNodeBase() = default;
+    Value* CreateGetValueImpl(bool stateless, EValueRepresentation representation, ui32 valueIndex,
+        const TString& name, const TCodegenContext& ctx, BasicBlock*& block) const;
+    Value* MakeGetValueBody(ui32 valueIndex, const TCodegenContext& ctx, BasicBlock*& block) const;
+    Function* GenerateInternalGetValue(const TString& name, ui32 valueIndex, NYql::NCodegen::ICodegen& codegen) const;
+
+    virtual void DoGenerateGetValue(const TCodegenContext& ctx, Value* valuePtr, BasicBlock*& block) const = 0;
+};
+
+template <typename TDerived>
+class TMutableCodegeneratorPtrNode: public TMutableComputationNode<TDerived>, public ICodegeneratorInlineNode,
+    protected TMutableCodegeneratorPtrNodeBase
+{
+using TBase = TMutableComputationNode<TDerived>;
+    TString MakeName() const {
+        TStringStream out;
+        out << this->DebugString() << "::internal_Get_(" << static_cast<const void*>(this) << ").";
+        return out.Str();
+    }
+
+protected:
+    TMutableCodegeneratorPtrNode(TComputationMutables& mutables, EValueRepresentation kind)
+        : TBase(mutables, kind)
+    {}
+
+    Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        return CreateGetValueImpl(*this->Stateless, this->GetRepresentation(), this->ValueIndex, MakeName(), ctx, block);
+    }
+};
+
+class TMutableCodegeneratorFallbackNodeBase {
+protected:
+    Value* DoGenerateGetValueImpl(uintptr_t methodPtr, uintptr_t thisPtr, const TCodegenContext& ctx, BasicBlock*& block) const;
+};
+
+template <typename TDerived>
+class TMutableCodegeneratorFallbackNode: public TMutableCodegeneratorNode<TDerived>,
+    protected TMutableCodegeneratorFallbackNodeBase
+{
+using TBase = TMutableCodegeneratorNode<TDerived>;
+
+protected:
+    TMutableCodegeneratorFallbackNode(TComputationMutables& mutables, EValueRepresentation kind)
+        : TBase(mutables, kind)
+    {}
+
+public:
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+        static_assert(std::is_same<std::invoke_result_t<decltype(&TDerived::DoCalculate), TDerived, TComputationContext&>, NUdf::TUnboxedValuePod>(), "DoCalculate must return pod!");
+        return DoGenerateGetValueImpl(GetMethodPtr(&TDerived::DoCalculate), uintptr_t(this), ctx, block);
+    }
+};
+
+class TCodegeneratorRootNodeBase {
+protected:
+    Function* GenerateGetValueImpl(const TString& name, const ICodegeneratorInlineNode* gen,
+        NYql::NCodegen::ICodegen& codegen);
+};
+
+template <typename TDerived, bool PreventReGeneration = false>
+class TCodegeneratorRootNode: public TDerived, public ICodegeneratorRootNode,
+    protected TCodegeneratorRootNodeBase
+{
+using TBase = TDerived;
+public:
+    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final {
+        if (compCtx.ExecuteLLVM && GetFunction)
+            return GetFunction(&compCtx);
+
+        return TBase::GetValue(compCtx);
+    }
+
+protected:
+    TCodegeneratorRootNode(EValueRepresentation kind)
+        : TBase(kind)
+    {}
+
+    TCodegeneratorRootNode(const IComputationNode* source, EValueRepresentation kind)
+        : TBase(source, kind)
+    {}
+
+    TCodegeneratorRootNode(TComputationMutables& mutables, EValueRepresentation kind)
+        : TBase(mutables, kind)
+    {}
+
+private:
+    TString MakeName() const {
+        TStringStream out;
+        out << this->DebugString() << "::Get_(" << static_cast<const void*>(this) << ").";
+        return out.Str();
+    }
+
+    Function* GenerateGetValue(NYql::NCodegen::ICodegen& codegen) {
+        auto& module = codegen.GetModule();
+
+        if constexpr (PreventReGeneration) {
+            if (const auto& name = TDerived::MakeName(); module.getFunction(name.c_str()))
+                return nullptr;
+        }
+
+        const auto& name = MakeName();
+        return GenerateGetValueImpl(name, this, codegen);
+    }
+protected:
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) override {
+        if (GetFunc)
+            GetFunction = reinterpret_cast<TGetPtr>(codegen.GetPointerToFunction(GetFunc));
+    }
+
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) override {
+        if (GetFunc = GenerateGetValue(codegen))
+            codegen.ExportSymbol(GetFunc);
+    }
+private:
+    using TGetPtr = NUdf::TUnboxedValuePod (*)(TComputationContext* ctx);
+
+    Function* GetFunc = nullptr;
+    TGetPtr GetFunction = nullptr;
+};
+
+template <typename TDerived>
+using TMutableCodegeneratorRootNode = TCodegeneratorRootNode<TMutableCodegeneratorNode<TDerived>, true>;
+
+template <typename TDerived>
+using TStatelessFlowCodegeneratorRootNode = TCodegeneratorRootNode<TStatelessFlowCodegeneratorNode<TDerived>>;
+
+class TUnboxedImmutableCodegeneratorNode: public TUnboxedImmutableComputationNode, public ICodegeneratorInlineNode
+{
+public:
+    TUnboxedImmutableCodegeneratorNode(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value);
+
+private:
+    Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*&) const final;
+};
+
+class TExternalCodegeneratorNode: public TExternalComputationNode, public ICodegeneratorExternalNode
+{
+public:
+    TExternalCodegeneratorNode(TComputationMutables& mutables, EValueRepresentation kind);
+protected:
+    Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final;
+    Value* CreateRefValue(const TCodegenContext& ctx, BasicBlock*& block) const final;
+    void CreateSetValue(const TCodegenContext& ctx, BasicBlock*& block, Value* value) const final;
+    Value* CreateSwapValue(const TCodegenContext& ctx, BasicBlock*& block, Value* value) const final;
+    void CreateInvalidate(const TCodegenContext& ctx, BasicBlock*& block) const final;
+    void SetValueBuilder(TValueBuilder valueBuilder) final;
+    void SetValueGetterBuilder(TValueGetterBuilder valueGetterBuilder) final;
+private:
+    TValueBuilder ValueBuilder;
+    TValueGetterBuilder ValueGetterBuilder;
+};
+
+class TExternalCodegeneratorRootNode: public TExternalCodegeneratorNode, public ICodegeneratorRootNode
+{
+public:
+    TExternalCodegeneratorRootNode(TComputationMutables& mutables, EValueRepresentation kind);
+
+private:
+    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final;
+
+    void SetValue(TComputationContext& compCtx, NUdf::TUnboxedValue&& newValue) const final;
+
+    TString MakeName(const TString& method) const;
+
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final;
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final;
+
+    Function* GenerateGetValue(NYql::NCodegen::ICodegen& codegen);
+    Function* GenerateSetValue(NYql::NCodegen::ICodegen& codegen);
+
+    using TGetPtr = NUdf::TUnboxedValuePod (*)(TComputationContext* ctx);
+
+    Function* GetValueFunc = nullptr;
+    TGetPtr GetFunction = nullptr;
+
+    using TSetPtr = void (*)(TComputationContext* ctx, NUdf::TUnboxedValuePod);
+
+    Function* SetValueFunc = nullptr;
+    TSetPtr SetFunction = nullptr;
+};
+
+
+class TWideFlowProxyCodegeneratorNode: public TWideFlowProxyComputationNode, public IWideFlowProxyCodegeneratorNode
+{
+public:
+    TWideFlowProxyCodegeneratorNode() = default;
+private:
+    void SetGenerator(TGenerator&& generator) final;
+
+    void CreateInvalidate(const TCodegenContext& ctx, BasicBlock*& block) const final;
+
+    TGenerateResult GenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const final;
+
+    TGenerator Generator;
+};
+
+class TCodegenIterator : public TComputationValue<TCodegenIterator> {
+public:
+    using TNextPtr = bool (*)(TComputationContext*, NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod&);
+
+    TCodegenIterator(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator)
+        : TComputationValue<TCodegenIterator>(memInfo)
+        , Ctx(ctx)
+        , NextFunc(next)
+        , Iterator(std::move(iterator))
+    {}
+
+protected:
+    bool Next(NUdf::TUnboxedValue& value) override {
+        return NextFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), value);
+    }
+
+    TComputationContext* const Ctx;
+    const TNextPtr NextFunc;
+    const NUdf::TUnboxedValue Iterator;
+};
+
+template <typename TState = NUdf::TUnboxedValue>
+class TCodegenStatefulIterator : public TComputationValue<TCodegenStatefulIterator<TState>> {
+public:
+    using TStateType = TState;
+    using TNextPtr = bool (*)(TComputationContext*, NUdf::TUnboxedValuePod, TStateType&, NUdf::TUnboxedValuePod&);
+
+    TCodegenStatefulIterator(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator, const TStateType& init = TStateType())
+        : TComputationValue<TCodegenStatefulIterator>(memInfo)
+        , Ctx(ctx)
+        , NextFunc(next)
+        , Iterator(std::move(iterator))
+        , State(init)
+    {}
+
+protected:
+    bool Next(NUdf::TUnboxedValue& value) override {
+        return NextFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), State, value);
+    }
+
+    TComputationContext* const Ctx;
+    const TNextPtr NextFunc;
+    const NUdf::TUnboxedValue Iterator;
+    TStateType State;
+};
+
+class TCustomListCodegenValue : public TCustomListValue {
+public:
+    using TIterator = TCodegenIterator;
+    using TNextPtr = typename TIterator::TNextPtr;
+
+    TCustomListCodegenValue(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& list)
+        : TCustomListValue(memInfo)
+        , Ctx(ctx)
+        , NextFunc(next)
+        , List(std::move(list))
+    {}
+
+private:
+    NUdf::TUnboxedValue GetListIterator() const final {
+        return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), NextFunc, Ctx, List.GetListIterator()));
+    }
+
+    TComputationContext* const Ctx;
+    const TNextPtr NextFunc;
+    const NUdf::TUnboxedValue List;
+};
+
+template <class TIterator = TCodegenStatefulIterator<>>
+class TCustomListCodegenStatefulValueT : public TCustomListValue {
+public:
+    using TStateType = typename TIterator::TStateType;
+    using TNextPtr = typename TIterator::TNextPtr;
+
+    TCustomListCodegenStatefulValueT(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& list, TStateType&& init = TStateType())
+        : TCustomListValue(memInfo)
+        , Ctx(ctx)
+        , NextFunc(next)
+        , List(std::move(list))
+        , Init(std::move(init))
+    {}
+
+private:
+    NUdf::TUnboxedValue GetListIterator() const final {
+        return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), NextFunc, Ctx, List.GetListIterator(), Init));
+    }
+
+    TComputationContext* const Ctx;
+    const TNextPtr NextFunc;
+    const NUdf::TUnboxedValue List;
+    const TStateType Init;
+};
+
+using TCustomListCodegenStatefulValue = TCustomListCodegenStatefulValueT<>;
+
+class TListCodegenValue : public TComputationValue<TListCodegenValue> {
+public:
+    using TNextPtr = TCodegenIterator::TNextPtr;
+
+    TListCodegenValue(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& list)
+        : TComputationValue<TListCodegenValue>(memInfo)
+        , Ctx(ctx)
+        , NextFunc(next)
+        , List(std::move(list))
+    {}
+
+private:
+    NUdf::TUnboxedValue GetListIterator() const final {
+        return NUdf::TUnboxedValuePod(new TCodegenIterator(GetMemInfo(), NextFunc, Ctx, List.GetListIterator()));
+    }
+
+    ui64 GetListLength() const final {
+        return List.GetListLength();
+    }
+
+    bool HasListItems() const final {
+        return List.HasListItems();
+    }
+
+    bool HasFastListLength() const final {
+        return List.HasFastListLength();
+    }
+
+    TComputationContext* const Ctx;
+    const TNextPtr NextFunc;
+    const NUdf::TUnboxedValue List;
+};
+
+class TCodegenIteratorOne : public TComputationValue<TCodegenIteratorOne> {
+public:
+    using TNextPtr = bool (*)(TComputationContext*, NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod&);
+
+    TCodegenIteratorOne(TMemoryUsageInfo* memInfo, TNextPtr nextOne, TNextPtr nextTwo, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator)
+        : TComputationValue<TCodegenIteratorOne>(memInfo)
+        , NextFuncOne(nextOne)
+        , NextFuncTwo(nextTwo)
+        , Ctx(ctx)
+        , Iterator(std::move(iterator))
+    {}
+
+private:
+    bool Next(NUdf::TUnboxedValue& value) override {
+        if (FirstCall) {
+            FirstCall = false;
+            return NextFuncOne(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), value);
+        } else {
+            return NextFuncTwo(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), value);
+        }
+    }
+
+    const TNextPtr NextFuncOne;
+    const TNextPtr NextFuncTwo;
+    TComputationContext* const Ctx;
+    const NUdf::TUnboxedValue Iterator;
+    bool FirstCall = true;
+};
+
+class TListCodegenValueOne : public TComputationValue<TListCodegenValueOne> {
+public:
+    using TNextPtr = TCodegenIteratorOne::TNextPtr;
+
+    TListCodegenValueOne(TMemoryUsageInfo* memInfo, TNextPtr nextOne, TNextPtr nextTwo, TComputationContext* ctx, NUdf::TUnboxedValue&& list)
+        : TComputationValue<TListCodegenValueOne>(memInfo)
+        , NextFuncOne(nextOne)
+        , NextFuncTwo(nextTwo)
+        , Ctx(ctx)
+        , List(std::move(list))
+    {}
+
+private:
+    NUdf::TUnboxedValue GetListIterator() const final {
+        return NUdf::TUnboxedValuePod(new TCodegenIteratorOne(GetMemInfo(), NextFuncOne, NextFuncTwo, Ctx, List.GetListIterator()));
+    }
+
+    ui64 GetListLength() const final {
+        return List.GetListLength();
+    }
+
+    bool HasListItems() const final {
+        return List.HasListItems();
+    }
+
+    bool HasFastListLength() const final {
+        return List.HasFastListLength();
+    }
+
+    const TNextPtr NextFuncOne;
+    const TNextPtr NextFuncTwo;
+    TComputationContext* const Ctx;
+    const NUdf::TUnboxedValue List;
+};
+
+class TStreamCodegenValueStateless : public TComputationValue<TStreamCodegenValueStateless> {
+public:
+    using TBase = TComputationValue<TStreamCodegenValueStateless>;
+
+    using TFetchPtr = NUdf::EFetchStatus (*)(TComputationContext*, NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod&);
+
+    TStreamCodegenValueStateless(TMemoryUsageInfo* memInfo, TFetchPtr fetch, TComputationContext* ctx, NUdf::TUnboxedValue&& stream)
+        : TBase(memInfo)
+        , FetchFunc(fetch)
+        , Ctx(ctx)
+        , Stream(std::move(stream))
+    {}
+
+protected:
+    ui32 GetTraverseCount() const final {
+        return 1;
+    }
+
+    NUdf::TUnboxedValue GetTraverseItem(ui32) const final {
+        return Stream;
+    }
+
+    NUdf::TUnboxedValue Save() const override {
+        return NUdf::TUnboxedValue::Zero();
+    }
+
+    bool Load2(const NUdf::TUnboxedValue& state) override {
+        Y_UNUSED(state);
+        return false;
+    }
+
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+        return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result);
+    }
+
+    const TFetchPtr FetchFunc;
+    TComputationContext* const Ctx;
+    const NUdf::TUnboxedValue Stream;
+};
+
+class TStreamCodegenValueOne : public TComputationValue<TStreamCodegenValueOne> {
+public:
+    using TBase = TComputationValue<TStreamCodegenValueOne>;
+
+    using TFetchPtr = NUdf::EFetchStatus (*)(TComputationContext*, NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod&);
+
+    TStreamCodegenValueOne(TMemoryUsageInfo* memInfo, TFetchPtr fetchOne, TFetchPtr fetchTwo, TComputationContext* ctx, NUdf::TUnboxedValue&& stream)
+        : TBase(memInfo)
+        , FetchFuncOne(fetchOne)
+        , FetchFuncTwo(fetchTwo)
+        , Ctx(ctx)
+        , Stream(std::move(stream))
+    {}
+
+private:
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
+        if (FirstCall) {
+            FirstCall = false;
+            return FetchFuncOne(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result);
+        } else {
+            return FetchFuncTwo(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result);
+        }
+    }
+
+    const TFetchPtr FetchFuncOne;
+    const TFetchPtr FetchFuncTwo;
+    TComputationContext* const Ctx;
+    const NUdf::TUnboxedValue Stream;
+    bool FirstCall = true;
+};
+
+template <typename TState = NUdf::TUnboxedValue>
+class TStreamCodegenStatefulValueT : public TComputationValue<TStreamCodegenStatefulValueT<TState>> {
+public:
+    using TBase = TComputationValue<TStreamCodegenStatefulValueT<TState>>;
+
+    using TFetchPtr = NUdf::EFetchStatus (*)(TComputationContext*, NUdf::TUnboxedValuePod, TState&, NUdf::TUnboxedValuePod&);
+
+    TStreamCodegenStatefulValueT(TMemoryUsageInfo* memInfo, TFetchPtr fetch, TComputationContext* ctx, NUdf::TUnboxedValue&& stream, TState&& init = TState())
+        : TBase(memInfo)
+        , FetchFunc(fetch)
+        , Ctx(ctx)
+        , Stream(std::move(stream))
+        , State(std::move(init))
+    {}
+
+protected:
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+        return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), State, result);
+    }
+
+    const TFetchPtr FetchFunc;
+    TComputationContext* const Ctx;
+    const NUdf::TUnboxedValue Stream;
+    TState State;
+};
+
+using TStreamCodegenStatefulValue = TStreamCodegenStatefulValueT<>;
+
+template <class StateType>
+class TStreamCodegenSelfStateValue : public StateType {
+using TState = StateType;
+public:
+    using TFetchPtr = NUdf::EFetchStatus (*)(TComputationContext*, NUdf::TUnboxedValuePod, TState* state, NUdf::TUnboxedValuePod&);
+
+    template <typename...TArgs>
+    TStreamCodegenSelfStateValue(TMemoryUsageInfo* memInfo, TFetchPtr fetch, TComputationContext* ctx, NUdf::TUnboxedValue&& stream, TArgs&&...args)
+        : TState(memInfo, std::forward<TArgs>(args)...)
+        , FetchFunc(fetch)
+        , Ctx(ctx)
+        , Stream(std::move(stream))
+    {}
+
+private:
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+        return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), this, result);
+    }
+
+    const TFetchPtr FetchFunc;
+    TComputationContext* const Ctx;
+    const NUdf::TUnboxedValue Stream;
+};
+
+template <class StateType>
+class TStreamCodegenSelfStatePlusValue : public StateType {
+using TState = StateType;
+public:
+    using TFetchPtr = NUdf::EFetchStatus (*)(TComputationContext*, NUdf::TUnboxedValuePod, TState* state, NUdf::TUnboxedValuePod&, NUdf::TUnboxedValuePod&);
+
+    template <typename...TArgs>
+    TStreamCodegenSelfStatePlusValue(TMemoryUsageInfo* memInfo, TFetchPtr fetch, TComputationContext* ctx, NUdf::TUnboxedValue&& stream, TArgs&&...args)
+        : TState(memInfo, std::forward<TArgs>(args)...)
+        , FetchFunc(fetch)
+        , Ctx(ctx)
+        , Stream(std::move(stream))
+    {}
+
+private:
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+        return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), this, State, result);
+    }
+
+    const TFetchPtr FetchFunc;
+    TComputationContext* const Ctx;
+    const NUdf::TUnboxedValue Stream;
+    NUdf::TUnboxedValue State;
+};
+
+template <typename TDerived>
+class TCustomValueCodegeneratorNode: public TMutableCodegeneratorFallbackNode<TDerived>, public ICodegeneratorRootNode
+{
+using TBase = TMutableCodegeneratorFallbackNode<TDerived>;
+
+protected:
+    TCustomValueCodegeneratorNode(TComputationMutables& mutables)
+        : TBase(mutables, EValueRepresentation::Boxed)
+    {}
+
+    TString MakeName(const TString& method) const {
+        TStringStream out;
+        out << this->DebugString() << "::" << method << "_(" << static_cast<const void*>(this) << ").";
+        return out.Str();
+    }
+};
+
+template <typename TDerived>
+class TBothWaysCodegeneratorNode: public TMutableCodegeneratorRootNode<TDerived>
+{
+using TBase = TMutableCodegeneratorRootNode<TDerived>;
+
+protected:
+    TBothWaysCodegeneratorNode(TComputationMutables& mutables)
+        : TBase(mutables, EValueRepresentation::Boxed)
+    {}
+
+    TString MakeName(const TString& method) const {
+        TStringStream out;
+        out << this->DebugString() << "::" << method << "_(" << static_cast<const void*>(this) << ").";
+        return out.Str();
+    }
+};
+
+template<typename T> Type* GetTypeFor(LLVMContext &context);
+
+template<typename T> inline Value* GetterFor(Value* value, LLVMContext &context, BasicBlock* block) {
+    const auto trunc = CastInst::Create(Instruction::Trunc, value, std::is_same<T, bool>() ? Type::getInt1Ty(context) : IntegerType::get(context, sizeof(T) << 3U), "trunc", block);
+    if  (std::is_integral<T>::value)
+        return trunc;
+    return CastInst::Create(Instruction::BitCast, trunc, GetTypeFor<T>(context), "bitcast", block);
+}
+
+template<typename T> inline
+Value* SetterFor(Value* value, LLVMContext &context, BasicBlock* block) {
+    if  (value->getType()->isFloatingPointTy())
+        value = CastInst::Create(Instruction::BitCast, value, IntegerType::get(context, sizeof(T) << 3U), "bitcast", block);
+
+    const auto type = Type::getInt128Ty(context);
+    const auto zext = CastInst::Create(Instruction::ZExt, value, type, "zext", block);
+    const uint64_t init[] = {0ULL, 0x100000000000000ULL}; // Embedded
+    const auto meta = ConstantInt::get(context, APInt(128, 2, init));
+    const auto full = BinaryOperator::CreateOr(zext, meta, "or", block);
+    return full;
+}
+
+Value* SetterForInt128(Value* value, BasicBlock* block);
+Value* GetterForInt128(Value* value, BasicBlock* block);
+
+Value* GetterForTimezone(LLVMContext& context, Value* value, BasicBlock* block);
+
+template<typename TSrc, typename TDst> inline
+Value* StaticCast(Value* value, LLVMContext &context, BasicBlock* block) {
+    if (std::is_same<TSrc, TDst>())
+        return value;
+
+    if (std::is_integral<TSrc>() == std::is_integral<TDst>()) {
+        if (std::is_integral<TSrc>()) {
+            if (sizeof(TSrc) > sizeof(TDst)) {
+                if (std::is_same<TDst, bool>())
+                    return CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, value, ConstantInt::get(value->getType(), 0), "test", block);
+                else
+                    return CastInst::Create(Instruction::Trunc, value, GetTypeFor<TDst>(context), "trunc", block);
+            } else if ((sizeof(TSrc) < sizeof(TDst))) {
+                return CastInst::Create(std::is_signed<TSrc>() ? Instruction::SExt : Instruction::ZExt, value, GetTypeFor<TDst>(context), "ext", block);
+            } else {
+                return value;
+            }
+        } else {
+            if (sizeof(TSrc) > sizeof(TDst)) {
+                return CastInst::Create(Instruction::FPTrunc, value, GetTypeFor<TDst>(context), "fptrunc", block);
+            } else if ((sizeof(TSrc) < sizeof(TDst))) {
+                return CastInst::Create(Instruction::FPExt, value, GetTypeFor<TDst>(context), "fpext", block);
+            } else {
+                return value;
+            }
+        }
+    } else {
+        constexpr auto instruction = std::is_integral<TSrc>() ?
+            std::is_signed<TSrc>() ? Instruction::SIToFP : Instruction::UIToFP:
+            std::is_signed<TDst>() ? Instruction::FPToSI : Instruction::FPToUI;
+        return CastInst::Create(instruction, value, GetTypeFor<TDst>(context), std::is_integral<TSrc>() ? "int_to_float" : "float_to_int", block);
+    }
+}
+
+Value* GetOptionalValue(LLVMContext& context, Value* value, BasicBlock* block);
+Value* MakeOptional(LLVMContext& context, Value* value, BasicBlock* block);
+
+Value* MakeBoolean(Value* boolean, LLVMContext &context, BasicBlock* block);
+
+ConstantInt* GetEmpty(LLVMContext &context);
+
+ConstantInt* GetTrue(LLVMContext &context);
+ConstantInt* GetFalse(LLVMContext &context);
+
+ConstantInt* GetDecimalPlusInf(LLVMContext &context);
+ConstantInt* GetDecimalMinusInf(LLVMContext &context);
+
+ConstantInt* GetDecimalNan(LLVMContext &context);
+ConstantInt* GetDecimalMinusNan(LLVMContext &context);
+
+ConstantInt* GetInvalid(LLVMContext &context);
+ConstantInt* GetFinish(LLVMContext &context);
+ConstantInt* GetYield(LLVMContext &context);
+
+ConstantInt* GetConstant(ui64 value, LLVMContext &context);
+
+Value* IsExists(Value* value, BasicBlock* block, LLVMContext &context);
+Value* IsEmpty(Value* value, BasicBlock* block, LLVMContext &context);
+Value* IsInvalid(Value* value, BasicBlock* block, LLVMContext &context);
+Value* IsValid(Value* value, BasicBlock* block, LLVMContext &context);
+Value* IsFinish(Value* value, BasicBlock* block, LLVMContext &context);
+Value* IsYield(Value* value, BasicBlock* block, LLVMContext &context);
+Value* IsSpecial(Value* value, BasicBlock* block, LLVMContext &context);
+Value* HasValue(Value* value, BasicBlock* block, LLVMContext &context);
+
+Value* GenNewArray(const TCodegenContext& ctx, Value* size, Value* items, BasicBlock* block);
+
+Value* GetMemoryUsed(ui64 limit, const TCodegenContext& ctx, BasicBlock* block);
+
+template <bool TrackRss>
+Value* CheckAdjustedMemLimit(ui64 limit, Value* init, const TCodegenContext& ctx, BasicBlock*& block);
+
+#if __clang__ && (__clang_major__ < 16)
+class TSrcLocation {
+public:
+    const char* file_name() const;
+    size_t line() const;
+    size_t column() const;
+
+    static TSrcLocation current();
+};
+#else
+using TSrcLocation = std::source_location;
+#endif
+
+class DIScopeAnnotator;
+
+class DISubprogramAnnotator final {
+public:
+    explicit DISubprogramAnnotator(TCodegenContext& ctx, Function* subprogramFunc, const TSrcLocation& location = TSrcLocation::current());
+
+    DIFile* MakeDIFile(const TSrcLocation& location);
+
+    ~DISubprogramAnnotator();
+
+private:
+    DISubprogram* MakeDISubprogram(const StringRef& name, const TSrcLocation& location = TSrcLocation::current());
+
+    friend DIScopeAnnotator;
+
+    TCodegenContext& Ctx;
+    std::unique_ptr<DIBuilder> DebugBuilder;
+    DISubprogram* Subprogram;
+    Function* Func;
+};
+
+class DIScopeAnnotator final {
+public:
+    explicit DIScopeAnnotator(DISubprogramAnnotator* subprogramAnnotator, const TSrcLocation& location = TSrcLocation::current());
+
+    Instruction* operator()(Instruction* inst, const TSrcLocation& location = TSrcLocation::current()) const;
+
+private:
+    DISubprogramAnnotator* SubprogramAnnotator;
+    DIScope* Scope;
+};
+
+}
+}
+#endif

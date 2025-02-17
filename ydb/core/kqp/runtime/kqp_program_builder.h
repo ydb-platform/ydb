@@ -1,6 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
+
+#include <yql/essentials/minikql/mkql_program_builder.h>
 
 namespace NKikimr {
 
@@ -13,14 +15,14 @@ struct TKqpTableColumn {
     TString Name;
     NUdf::TDataTypeId Type;
     bool NotNull;
-    void* TypeDesc;
+    NScheme::TTypeInfo TypeInfo;
 
-    TKqpTableColumn(ui32 id, const TStringBuf& name, NUdf::TDataTypeId type, bool notNull, void* typeDesc)
+    TKqpTableColumn(ui32 id, const TStringBuf& name, NUdf::TDataTypeId type, bool notNull, const NScheme::TTypeInfo& typeInfo)
         : Id(id)
         , Name(name)
         , Type(type)
         , NotNull(notNull)
-        , TypeDesc(typeDesc) {}
+        , TypeInfo(typeInfo) {}
 };
 
 using TKqpKeyTuple = TVector<TRuntimeNode>;

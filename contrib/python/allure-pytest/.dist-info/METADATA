@@ -1,0 +1,58 @@
+Metadata-Version: 2.1
+Name: allure-pytest
+Version: 2.13.5
+Summary: Allure pytest integration
+Home-page: https://allurereport.org/
+Author: Qameta Software Inc., Stanislav Seliverstov
+Author-email: sseliverstov@qameta.io
+License: Apache-2.0
+Project-URL: Documentation, https://allurereport.org/docs/pytest/
+Project-URL: Source, https://github.com/allure-framework/allure-python
+Keywords: allure reporting pytest
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Framework :: Pytest
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Topic :: Software Development :: Quality Assurance
+Classifier: Topic :: Software Development :: Testing
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Description-Content-Type: text/markdown
+Requires-Dist: pytest >=4.5.0
+Requires-Dist: allure-python-commons ==2.13.5
+
+## Allure Pytest Plugin
+
+[![Release Status](https://img.shields.io/pypi/v/allure-pytest)](https://pypi.python.org/pypi/allure-pytest)
+[![Downloads](https://img.shields.io/pypi/dm/allure-pytest)](https://pypi.python.org/pypi/allure-pytest)
+
+> An Allure adapter for [pytest](https://docs.pytest.org/en/latest/).
+
+[<img src="https://allurereport.org/public/img/allure-report.svg" height="85px" alt="Allure Report logo" align="right" />](https://allurereport.org "Allure Report")
+
+- Learn more about Allure Report at [https://allurereport.org](https://allurereport.org)
+- 📚 [Documentation](https://allurereport.org/docs/) – discover official documentation for Allure Report
+- ❓ [Questions and Support](https://github.com/orgs/allure-framework/discussions/categories/questions-support) – get help from the team and community
+- 📢 [Official announcements](https://github.com/orgs/allure-framework/discussions/categories/announcements) –  stay updated with our latest news and updates
+- 💬 [General Discussion](https://github.com/orgs/allure-framework/discussions/categories/general-discussion) – engage in casual conversations, share insights and ideas with the community
+- 🖥️ [Live Demo](https://demo.allurereport.org/) — explore a live example of Allure Report in action
+
+---
+
+## Quick start
+
+```shell
+$ pip install allure-pytest
+$ pytest --alluredir=%allure_result_folder% ./tests
+$ allure serve %allure_result_folder%
+```
+
+## Further readings
+
+Learn more from [Allure pytest's official documentation](https://allurereport.org/docs/pytest/).

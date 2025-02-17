@@ -52,7 +52,7 @@
                                                                 "ExternalPlanNodeId": 4
                                                             }
                                                         ],
-                                                        "Limit": "SUM(10,10000)",
+                                                        "Limit": "Min(If,SUM(10,10000))",
                                                         "Name": "Limit"
                                                     }
                                                 ],
@@ -64,17 +64,26 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "TopSort",
+                                                                "Node Type": "TopSort-Aggregate",
                                                                 "Operators": [
+                                                                    {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Limit": "SUM(10,10000)",
+                                                                        "Name": "TopSort",
+                                                                        "TopSortBy": "argument.Count0"
+                                                                    },
                                                                     {
                                                                         "Inputs": [
                                                                             {
                                                                                 "ExternalPlanNodeId": 2
                                                                             }
                                                                         ],
-                                                                        "Limit": "SUM(10,10000)",
-                                                                        "Name": "TopSort",
-                                                                        "TopSortBy": "argument.Count0"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Final"
                                                                     }
                                                                 ],
                                                                 "PlanNodeId": 3,
@@ -89,17 +98,21 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Aggregate-Filter-TableFullScan",
+                                                                                "Node Type": "Aggregate-Filter-TableRangeScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
-                                                                                        "GroupBy": "",
+                                                                                        "Aggregation": "{SUM(1)}",
+                                                                                        "GroupBy": "[item.WindowClientHeight,item.WindowClientWidth]",
                                                                                         "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            },
                                                                                             {
                                                                                                 "InternalOperatorId": 1
                                                                                             }
                                                                                         ],
-                                                                                        "Name": "Aggregate"
+                                                                                        "Name": "Aggregate",
+                                                                                        "Phase": "Intermediate"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [
@@ -108,27 +121,27 @@
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "item.CounterID == 62 And item.EventDate >= \"15887\" And item.EventDate <= \"15917\" And item.IsRefresh == 0 And item.DontCountHits == 0 And item.URLHash == 2868770270353813622"
+                                                                                        "Predicate": "item.IsRefresh == 0 AND item.DontCountHits == 0 AND item.URLHash == 2868770270353813622"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],
-                                                                                        "Name": "TableFullScan",
+                                                                                        "Name": "TableRangeScan",
+                                                                                        "Path": "/local/clickbench/plans/row/hits",
                                                                                         "ReadColumns": [
-                                                                                            "CounterID",
                                                                                             "DontCountHits",
-                                                                                            "EventDate",
                                                                                             "IsRefresh",
                                                                                             "URLHash",
                                                                                             "WindowClientHeight",
                                                                                             "WindowClientWidth"
                                                                                         ],
-                                                                                        "ReadRanges": [
-                                                                                            "EventTime (-\u221e, +\u221e)",
-                                                                                            "CounterID (-\u221e, +\u221e)",
-                                                                                            "EventDate (-\u221e, +\u221e)",
+                                                                                        "ReadRange": [
+                                                                                            "CounterID (62)",
+                                                                                            "EventDate [15887, 15917]",
                                                                                             "UserID (-\u221e, +\u221e)",
+                                                                                            "EventTime (-\u221e, +\u221e)",
                                                                                             "WatchID (-\u221e, +\u221e)"
                                                                                         ],
+                                                                                        "Scan": "Parallel",
                                                                                         "Table": "clickbench/plans/row/hits"
                                                                                     }
                                                                                 ],
@@ -154,121 +167,10 @@
                             }
                         ]
                     }
-                ]
-            },
-            "SimplifiedPlan": {
-                "Node Type": "Query",
-                "PlanNodeId": 0,
-                "PlanNodeType": "Query",
-                "Plans": [
-                    {
-                        "Node Type": "ResultSet",
-                        "PlanNodeId": 1,
-                        "PlanNodeType": "ResultSet",
-                        "Plans": [
-                            {
-                                "Node Type": "Limit",
-                                "Operators": [
-                                    {
-                                        "Limit": "10",
-                                        "Name": "Limit"
-                                    }
-                                ],
-                                "PlanNodeId": 2,
-                                "Plans": [
-                                    {
-                                        "Node Type": "Offset",
-                                        "Operators": [
-                                            {
-                                                "Name": "Offset",
-                                                "Offset": "10000"
-                                            }
-                                        ],
-                                        "PlanNodeId": 3,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "Limit",
-                                                "Operators": [
-                                                    {
-                                                        "Limit": "SUM(10,10000)",
-                                                        "Name": "Limit"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 5,
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "TopSort",
-                                                        "Operators": [
-                                                            {
-                                                                "Limit": "SUM(10,10000)",
-                                                                "Name": "TopSort",
-                                                                "TopSortBy": "argument.Count0"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 7,
-                                                        "Plans": [
-                                                            {
-                                                                "Node Type": "Aggregate",
-                                                                "Operators": [
-                                                                    {
-                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
-                                                                        "GroupBy": "",
-                                                                        "Name": "Aggregate"
-                                                                    }
-                                                                ],
-                                                                "PlanNodeId": 9,
-                                                                "Plans": [
-                                                                    {
-                                                                        "Node Type": "Filter",
-                                                                        "Operators": [
-                                                                            {
-                                                                                "Name": "Filter",
-                                                                                "Predicate": "item.CounterID == 62 And item.EventDate >= \"15887\" And item.EventDate <= \"15917\" And item.IsRefresh == 0 And item.DontCountHits == 0 And item.URLHash == 2868770270353813622"
-                                                                            }
-                                                                        ],
-                                                                        "PlanNodeId": 10,
-                                                                        "Plans": [
-                                                                            {
-                                                                                "Node Type": "TableFullScan",
-                                                                                "Operators": [
-                                                                                    {
-                                                                                        "Name": "TableFullScan",
-                                                                                        "ReadColumns": [
-                                                                                            "CounterID",
-                                                                                            "DontCountHits",
-                                                                                            "EventDate",
-                                                                                            "IsRefresh",
-                                                                                            "URLHash",
-                                                                                            "WindowClientHeight",
-                                                                                            "WindowClientWidth"
-                                                                                        ],
-                                                                                        "ReadRanges": [
-                                                                                            "EventTime (-\u221e, +\u221e)",
-                                                                                            "CounterID (-\u221e, +\u221e)",
-                                                                                            "EventDate (-\u221e, +\u221e)",
-                                                                                            "UserID (-\u221e, +\u221e)",
-                                                                                            "WatchID (-\u221e, +\u221e)"
-                                                                                        ],
-                                                                                        "Table": "clickbench/plans/row/hits"
-                                                                                    }
-                                                                                ],
-                                                                                "PlanNodeId": 11
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                ]
-                                                            }
-                                                        ]
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {
@@ -276,22 +178,22 @@
                     "reads": [
                         {
                             "columns": [
-                                "CounterID",
                                 "DontCountHits",
-                                "EventDate",
                                 "IsRefresh",
                                 "URLHash",
                                 "WindowClientHeight",
                                 "WindowClientWidth"
                             ],
+                            "lookup_by": [
+                                "CounterID (62)"
+                            ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
-                                "CounterID (-\u221e, +\u221e)",
-                                "EventDate (-\u221e, +\u221e)",
+                                "EventDate [15887, 15917]",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
-                            "type": "FullScan"
+                            "type": "Scan"
                         }
                     ]
                 }

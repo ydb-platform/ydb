@@ -1,11 +1,33 @@
 #include <ydb/core/tablet_flat/util_fmt_cell.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/protos/counters_schemeshard.pb.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+
+namespace {
+
+void WaitForTableSplit(TTestActorRuntime& runtime, const TString& path, size_t requiredPartitionCount = 10) {
+    while (true) {
+        TVector<THolder<IEventHandle>> suppressed;
+        auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvGetTableStatsResult::EventType);
+
+        WaitForSuppressed(runtime, suppressed, 1, prevObserver);
+        for (auto &msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        const auto result = DescribePath(runtime, path, true);
+        if (result.GetPathDescription().TablePartitionsSize() >= requiredPartitionCount)
+            return;
+    }        
+} 
+}
 
 Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
     Y_UNIT_TEST(Test) {
@@ -130,31 +152,114 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                     )");
         env.TestWaitNotification(runtime, txId);
 
-        while (true) {
-            TVector<THolder<IEventHandle>> suppressed;
-            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvGetTableStatsResult::EventType);
+        WaitForTableSplit(runtime, "/MyRoot/Table");
+    }
 
-            WaitForSuppressed(runtime, suppressed, 1, prevObserver);
-            for (auto &msg : suppressed) {
-                runtime.Send(msg.Release());
-            }
-            suppressed.clear();
+    Y_UNIT_TEST(SplitShardsWithDecimalKey) {
+        TTestBasicRuntime runtime;
 
-            bool itIsEnough = false;
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        opts.EnableParameterizedDecimal(true);
 
-            NLs::TCheckFunc checkPartitionCount = [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                if (record.GetPathDescription().TablePartitionsSize() >= 10) {
-                    itIsEnough = true;
-                }
-            };
+        TTestEnv env(runtime, opts);
 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                               {checkPartitionCount});
+        ui64 txId = 100;
 
-            if (itIsEnough) {
-                return;
-            }
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
+        NDataShard::gDbStatsDataSizeResolution = 10;
+        NDataShard::gDbStatsRowCountResolution = 10;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_ERROR);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_ERROR);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
+                        Name: "Table"
+                        Columns { Name: "key"  Type: "Decimal(35, 10)"}
+                        Columns { Name: "decimal_value" Type: "Decimal(2, 1)"}
+                        Columns { Name: "string_value" Type: "Utf8"}
+                        KeyColumnNames: ["key"]
+                        )_");
+        env.TestWaitNotification(runtime, txId);
+
+        const std::pair<ui64, ui64> decimalValue = NYql::NDecimal::MakePair(
+            NYql::NDecimal::FromString("32.1", 2, 1));
+        TString stringValue(1000, 'A');
+
+        for (ui64 key = 0; key < 1000; ++key) {
+            const std::pair<ui64, ui64> decimalKey = NYql::NDecimal::MakePair(
+                NYql::NDecimal::FromString(Sprintf("%d.123456789", key * 1'000'000), 35, 10));
+            UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2, 3}, 
+                {TCell::Make<std::pair<ui64, ui64>>(decimalKey)}, 
+                {TCell::Make<std::pair<ui64, ui64>>(decimalValue), TCell(stringValue)});
         }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionCount(1)});
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "Table"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 100
+                                MaxPartitionsCount: 100
+                                SizeToSplit: 1
+                            }
+                        }
+                    )");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForTableSplit(runtime, "/MyRoot/Table");
+    }
+
+    Y_UNIT_TEST(SplitShardsWithPgKey) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        opts.EnableTablePgTypes(true);
+
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 100;
+
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
+        NDataShard::gDbStatsDataSizeResolution = 10;
+        NDataShard::gDbStatsRowCountResolution = 10;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_CRIT);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "Table"
+                        Columns { Name: "key"       Type: "pgint8"}
+                        Columns { Name: "value"      Type: "Utf8"}
+                        KeyColumnNames: ["key"]
+                        UniformPartitionsCount: 1
+                        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString valueString(1000, 'A');;
+        for (ui64 key = 0; key < 1000; ++key) {
+            auto pgKey = NPg::PgNativeBinaryFromNativeText(ToString(key * 1'000'000), NPg::TypeDescFromPgTypeName("pgint8")).Str;
+            UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell(pgKey)}, {TCell(valueString)});
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionCount(1)});
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "Table"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 100
+                                MaxPartitionsCount: 100
+                                SizeToSplit: 1
+                            }
+                        }
+                    )");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForTableSplit(runtime, "/MyRoot/Table");
     }
 
     Y_UNIT_TEST(Merge1KShards) {
@@ -275,6 +380,69 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+111));
         // test requires more txids than cached at start
+    }
+
+    Y_UNIT_TEST(MergeIndexTableShards) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 100;
+
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> statsBlocker(runtime);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+                TableDescription {
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                    Name: "ByValue"
+                    KeyColumnNames: ["value"]
+                    IndexImplTableDescriptions {
+                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } } } }
+                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "B" } } } }
+                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "C" } } } }
+                    }
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/ByValue/indexImplTable", true),
+            { NLs::PartitionCount(4) }
+        );
+
+        statsBlocker.Stop().Unblock();
+
+        TVector<ui64> indexShards;
+        auto shardCollector = [&indexShards](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+            const auto& partitions = record.GetPathDescription().GetTablePartitions();
+            indexShards.clear();
+            indexShards.reserve(partitions.size());
+            for (const auto& partition : partitions) {
+                indexShards.emplace_back(partition.GetDatashardId());
+            }
+        };
+
+        // wait until all index impl table shards are merged into one
+        while (true) {
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/ByValue/indexImplTable", true), {
+                shardCollector
+            });
+            if (indexShards.size() > 1) {
+                // If a merge happens, old shards are deleted and replaced with a new one.
+                // That is why we need to wait for * all * the shards to be deleted.
+                env.TestWaitTabletDeletion(runtime, indexShards);
+            } else {
+                break;
+            }
+        }
     }
 
     Y_UNIT_TEST(AutoMergeInOne) {

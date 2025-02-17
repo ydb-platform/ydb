@@ -27,13 +27,14 @@ struct TTestTableDescription {
             MODE_READ_ONLY = 1,
         };
 
-        enum EConsistency {
-            CONSISTENCY_STRONG = 1,
-            CONSISTENCY_WEAK = 2,
+        enum EConsistencyLevel {
+            CONSISTENCY_LEVEL_UNKNOWN = 0,
+            CONSISTENCY_LEVEL_GLOBAL = 1,
+            CONSISTENCY_LEVEL_ROW = 2,
         };
 
         EMode Mode;
-        EConsistency Consistency;
+        EConsistencyLevel ConsistencyLevel;
 
         void SerializeTo(NKikimrSchemeOp::TTableReplicationConfig& proto) const;
         static TReplicationConfig Default();
@@ -43,6 +44,7 @@ struct TTestTableDescription {
     TVector<TString> KeyColumns;
     TVector<TColumn> Columns;
     TMaybe<TReplicationConfig> ReplicationConfig = TReplicationConfig::Default();
+    TMaybe<ui32> UniformPartitions = Nothing();
 
     void SerializeTo(NKikimrSchemeOp::TTableDescription& proto) const;
 };

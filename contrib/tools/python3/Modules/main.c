@@ -326,6 +326,7 @@ pymain_run_file_obj(PyObject *program_name, PyObject *filename,
     if (fp == NULL) {
         // Ignore the OSError
         PyErr_Clear();
+        // TODO(picnixz): strerror() is locale dependent but not PySys_FormatStderr().
         PySys_FormatStderr("%S: can't open file %R: [Errno %d] %s\n",
                            program_name, filename, errno, strerror(errno));
         return 2;
@@ -538,6 +539,10 @@ pymain_repl(PyConfig *config, int *exitcode)
 
     pymain_set_inspect(config, 0);
     if (pymain_run_interactive_hook(exitcode)) {
+        return;
+    }
+
+    if (PySys_Audit("cpython.run_stdin", NULL) < 0) {
         return;
     }
 

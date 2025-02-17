@@ -16,17 +16,17 @@ links:
   - title: Концепции
     description: Как устроена YDB, возможности и доступные режимы использования
     href: concepts/
-  - title: For DevOps
-    description: How to run production YDB clusters
+  - title: Для DevOps инженеров
+    description: Как работать с production кластерами YDB
     href: devops/
-  - title: For DBA
-    description: How to run manage YDB databases
-    href: dba/
-  - title: For Developers
-    description: How to develop applications working with YDB
+  - title: Для разработчиков
+    description: Как разрабатывать приложения с использованием YDB
     href: dev/
-  - title: For Contributors
-    description: How to contribute to YDB core and satellite projects
+  - title: Для инженеров по безопасности
+    description: Как защищать базы данных YDB
+    href: security/
+  - title: Для контрибьюторов
+    description: Как участвовать в развитии YDB и сопутствующих проектов
     href: contributor/
   - title: Справочник YQL
     description: Описание синтаксиса и встроенных функций YQL
@@ -40,3 +40,6 @@ links:
   - title: Совместимость с PostgreSQL
     description: Интеграция с экосистемой PostgreSQL
     href: postgresql/intro/
+  - title: Диагностика проблем
+    description: Описание диагностики проблем с базами данных YDB и приложениями
+    href: troubleshooting/

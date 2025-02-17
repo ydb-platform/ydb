@@ -1,11 +1,12 @@
-#include "yql_http_gateway.h"
+#include "yql_aws_signature.h"
 #include "yql_dns_gateway.h"
+#include "yql_http_gateway.h"
 
 #include <util/generic/size_literals.h>
 #include <util/generic/yexception.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <thread>
 #include <mutex>
@@ -99,7 +100,8 @@ public:
         size_t sizeLimit = 0,
         size_t bodySize = 0,
         const TCurlInitConfig& config = TCurlInitConfig(),
-        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
+        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr,
+        TString data = {})
         : Headers(std::move(headers))
         , Method(method)
         , Offset(offset)
@@ -111,7 +113,8 @@ public:
         , Config(config)
         , ErrorBuffer(static_cast<size_t>(CURL_ERROR_SIZE), '\0')
         , DnsCache(dnsCache)
-        , Url(url) {
+        , Url(url)
+        , Data(std::move(data)) {
         InitHandles();
         Counter->Inc();
     }
@@ -164,12 +167,41 @@ public:
         curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_LIMIT, Config.LowSpeedLimit);
         curl_easy_setopt(Handle, CURLOPT_ERRORBUFFER, ErrorBuffer.data());
 
-        if (Headers.Options.AwsSigV4) {
-            curl_easy_setopt(Handle, CURLOPT_AWS_SIGV4, Headers.Options.AwsSigV4.c_str());
-        }
+        if (Headers.Options.CurlSignature) {
+            if (Headers.Options.AwsSigV4) {
+                curl_easy_setopt(Handle, CURLOPT_AWS_SIGV4, Headers.Options.AwsSigV4.c_str());
+            }
 
-        if (Headers.Options.UserPwd) {
-            curl_easy_setopt(Handle, CURLOPT_USERPWD, Headers.Options.UserPwd.c_str());
+            if (Headers.Options.UserPwd) {
+                curl_easy_setopt(Handle, CURLOPT_USERPWD, Headers.Options.UserPwd.c_str());
+            }
+        } else if (Headers.Options.AwsSigV4 || Headers.Options.UserPwd) {
+            TString method;
+            switch (Method) {
+                case EMethod::GET:
+                    method = "GET";
+                    break;
+                case EMethod::POST:
+                    method = "POST";
+                    break;
+                case EMethod::PUT:
+                    method = "PUT";
+                    break;
+                case EMethod::DELETE:
+                    method = "DELETE";
+                    break;
+            }
+
+            TString contentType;
+            for (const auto& field: Headers.Fields) {
+                if (field.StartsWith("Content-Type:")) {
+                    contentType = field.substr(strlen("Content-Type:"));
+                }
+            }
+            TAwsSignature signature(method, Url, contentType, Data, Headers.Options.AwsSigV4, Headers.Options.UserPwd);
+            Headers.Fields.push_back(TStringBuilder{} << "Authorization: " << signature.GetAuthorization());
+            Headers.Fields.push_back(TStringBuilder{} << "x-amz-content-sha256: " << signature.GetXAmzContentSha256());
+            Headers.Fields.push_back(TStringBuilder{} << "x-amz-date: " << signature.GetAmzDate());
         }
 
         if (DnsCache != nullptr) {
@@ -285,6 +317,7 @@ private:
     TDNSGateway<>::TDNSConstCurlListPtr DnsCache;
 public:
     TString Url;
+    const TString Data;
 };
 
 class TEasyCurlBuffer : public TEasyCurl {
@@ -317,8 +350,8 @@ public:
               sizeLimit,
               data.size(),
               std::move(config),
-              std::move(dnsCache))
-        , Data(std::move(data))
+              std::move(dnsCache),
+              std::move(data))
         , Input(Data)
         , Output(Buffer)
         , HeaderOutput(Header)
@@ -422,7 +455,6 @@ private:
         return Input.Read(buffer, size * nmemb);
     }
 
-    const TString Data;
     TString Buffer, Header;
     TStringInput Input;
     TStringOutput Output, HeaderOutput;
@@ -714,7 +746,7 @@ private:
     }
 
     size_t FillHandlers() {
-        const std::unique_lock lock(Sync);
+        const std::unique_lock lock(SyncRef());
         for (auto it = Streams.cbegin(); Streams.cend() != it;) {
             if (const auto& stream = it->lock()) {
                 const auto streamHandle = stream->GetHandle();
@@ -763,7 +795,7 @@ private:
         TEasyCurl::TPtr easy;
         long httpResponseCode = 0L;
         {
-            const std::unique_lock lock(Sync);
+            const std::unique_lock lock(SyncRef());
             if (const auto it = Allocated.find(handle); Allocated.cend() != it) {
                 easy = std::move(it->second);
                 TString codeLabel;
@@ -815,7 +847,7 @@ private:
     void Fail(CURLMcode result) {
         std::stack<TEasyCurl::TPtr> works;
         {
-            const std::unique_lock lock(Sync);
+            const std::unique_lock lock(SyncRef());
 
             for (auto& item : Allocated) {
                 works.emplace(std::move(item.second));
@@ -836,7 +868,7 @@ private:
     void Upload(TString url, THeaders headers, TString body, TOnResult callback, bool put, TRetryPolicy::TPtr retryPolicy) final {
         Rps->Inc();
 
-        const std::unique_lock lock(Sync);
+        const std::unique_lock lock(SyncRef());
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), put ? TEasyCurl::EMethod::PUT : TEasyCurl::EMethod::POST, std::move(body), std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         Await.emplace(std::move(easy));
         Wakeup(0U);
@@ -845,8 +877,8 @@ private:
     void Delete(TString url, THeaders headers, TOnResult callback, TRetryPolicy::TPtr retryPolicy) final {
         Rps->Inc();
 
-        const std::unique_lock lock(Sync);
-        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::DELETE, 0, std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        const std::unique_lock lock(SyncRef());
+        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::DELETE, "", std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         Await.emplace(std::move(easy));
         Wakeup(0U);
     }
@@ -866,7 +898,7 @@ private:
             callback(TResult(CURLE_OK, TIssues{error}));
             return;
         }
-        const std::unique_lock lock(Sync);
+        const std::unique_lock lock(SyncRef());
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         Await.emplace(std::move(easy));
         Wakeup(sizeLimit);
@@ -883,13 +915,14 @@ private:
         const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) final
     {
         auto stream = TEasyCurlStream::Make(InFlightStreams, DownloadedBytes, UploadedBytes, std::move(url), std::move(headers), offset, sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, InitConfig, DnsGateway.GetDNSCurlList());
-        const std::unique_lock lock(Sync);
+        const std::unique_lock lock(SyncRef());
         const auto handle = stream->GetHandle();
         TEasyCurlStream::TWeakPtr weak = stream;
         Streams.emplace_back(stream);
         Allocated.emplace(handle, std::move(stream));
         Wakeup(0ULL);
-        return [weak](TIssue issue) {
+        return [weak, sync=Sync](TIssue issue) {
+            const std::unique_lock lock(*sync);
             if (const auto& stream = weak.lock())
                 stream->Cancel(issue);
         };
@@ -900,7 +933,7 @@ private:
     }
 
     void OnRetry(TEasyCurlBuffer::TPtr easy) {
-        const std::unique_lock lock(Sync);
+        const std::unique_lock lock(SyncRef());
         const size_t sizeLimit = easy->GetSizeLimit();
         Await.emplace(std::move(easy));
         Wakeup(sizeLimit);
@@ -918,6 +951,10 @@ private:
     }
 
 private:
+    std::mutex& SyncRef() {
+        return *Sync;
+    }
+
     CURLM* Handle = nullptr;
 
     std::queue<TEasyCurlBuffer::TPtr> Await;
@@ -927,7 +964,7 @@ private:
     std::unordered_map<CURL*, TEasyCurl::TPtr> Allocated;
     std::priority_queue<std::pair<TInstant, TEasyCurlBuffer::TPtr>> Delayed;
 
-    std::mutex Sync;
+    std::shared_ptr<std::mutex> Sync = std::make_shared<std::mutex>();
     std::thread Thread;
     std::atomic<bool> IsStopped = false;
 

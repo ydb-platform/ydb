@@ -127,6 +127,8 @@ public:
         Tenant->IsExternalHive = Self->FeatureFlags.GetEnableExternalHive();
         Tenant->IsExternalSysViewProcessor = Self->FeatureFlags.GetEnableSystemViews();
         Tenant->IsExternalStatisticsAggregator = Self->FeatureFlags.GetEnableStatistics();
+        Tenant->IsExternalBackupController = Self->FeatureFlags.GetEnableBackupService();
+        Tenant->IsGraphShardEnabled = Self->FeatureFlags.GetEnableGraphShard();
 
         if (rec.options().disable_external_subdomain()) {
             Tenant->IsExternalSubdomain = false;
@@ -145,11 +147,13 @@ public:
             Tenant->IsExternalHive = false;
             Tenant->IsExternalSysViewProcessor = false;
             Tenant->IsExternalStatisticsAggregator = false;
+            Tenant->IsExternalBackupController = false;
         }
 
         Tenant->IsExternalHive &= Tenant->IsExternalSubdomain; // external hive without external sub domain is pointless
         Tenant->IsExternalSysViewProcessor &= Tenant->IsExternalSubdomain;
         Tenant->IsExternalStatisticsAggregator &= Tenant->IsExternalSubdomain;
+        Tenant->IsExternalBackupController &= Tenant->IsExternalSubdomain;
 
         Tenant->StorageUnitsQuota = Self->Config.DefaultStorageUnitsQuota;
         Tenant->ComputationalUnitsQuota = Self->Config.DefaultComputationalUnitsQuota;
@@ -246,6 +250,7 @@ public:
                     tenant->HostedTenants.emplace(Tenant);
 
                     Tenant->IsExternalHive = false;
+                    Tenant->IsGraphShardEnabled = false;
                     Tenant->Coordinators = 1;
                     Tenant->SlotsAllocationConfirmed = true;
                 } else {
@@ -273,25 +278,69 @@ public:
                 return Error(Ydb::StatusIds::BAD_REQUEST,
                     TStringBuilder() << "Overall data size soft quota (" << softQuota << ")"
                                      << " of the database " << path
-                                     << " must be smaller than the hard quota (" << hardQuota << ")",
+                                     << " must be less than or equal to the hard quota (" << hardQuota << ")",
                     ctx
                 );
             }
-            for (const auto& storageQuota : quotas.storage_quotas()) {
-                const auto unitHardQuota = storageQuota.data_size_hard_quota();
-                const auto unitSoftQuota = storageQuota.data_size_soft_quota();
+            for (const auto& storageUnitQuota : quotas.storage_quotas()) {
+                const auto unitHardQuota = storageUnitQuota.data_size_hard_quota();
+                const auto unitSoftQuota = storageUnitQuota.data_size_soft_quota();
                 if (unitHardQuota && unitSoftQuota && unitHardQuota < unitSoftQuota) {
                     return Error(Ydb::StatusIds::BAD_REQUEST,
                         TStringBuilder() << "Data size soft quota (" << unitSoftQuota << ")"
-                                         << " for a " << storageQuota.unit_kind() << " storage unit "
+                                         << " for a " << storageUnitQuota.unit_kind() << " storage unit "
                                          << " of the database " << path
-                                         << " must be smaller than the corresponding hard quota (" << unitHardQuota << ")",
+                                         << " must be less than or equal to"
+                                         << " the corresponding hard quota (" << unitHardQuota << ")",
                         ctx
                     );
                 }
 
             }
             Tenant->DatabaseQuotas.ConstructInPlace(quotas);
+        }
+
+        if (rec.has_scale_recommender_policies()) {
+            if (!Self->FeatureFlags.GetEnableScaleRecommender()) {
+                return Error(Ydb::StatusIds::UNSUPPORTED, "Feature flag EnableScaleRecommender is off", ctx);
+            }
+
+            const auto& policies = rec.scale_recommender_policies();
+            if (policies.policies().size() > 1) {
+                return Error(Ydb::StatusIds::BAD_REQUEST, "Currently, no more than one policy is supported at a time", ctx);
+            }
+
+            if (!policies.policies().empty()) {
+                using enum Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy::TargetCase;
+                using enum Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy::PolicyCase;
+
+                const auto& policy = policies.policies()[0];
+                switch (policy.GetPolicyCase()) {
+                    case kTargetTrackingPolicy: {
+                        const auto& targetTracking = policy.target_tracking_policy();
+                        switch (targetTracking.GetTargetCase()) {
+                            case kAverageCpuUtilizationPercent: {
+                                auto cpuUtilization = targetTracking.average_cpu_utilization_percent();
+                                if (cpuUtilization < 10 || cpuUtilization > 90) {
+                                    return Error(Ydb::StatusIds::BAD_REQUEST, "Average CPU utilization target must be from 10% to 90%", ctx);
+                                }
+                                break;
+                            }
+                            case TARGET_NOT_SET:
+                                return Error(Ydb::StatusIds::BAD_REQUEST, "Target type for target tracking policy is not set", ctx);
+                            default:
+                                return Error(Ydb::StatusIds::BAD_REQUEST, "Unsupported target type for target tracking policy", ctx);
+                            }
+                        break;
+                    }
+                    case POLICY_NOT_SET:
+                        return Error(Ydb::StatusIds::BAD_REQUEST, "Policy type is not set", ctx);
+                    default:
+                        return Error(Ydb::StatusIds::BAD_REQUEST, "Unsupported policy type", ctx);
+                }
+            }
+            Tenant->ScaleRecommenderPolicies.ConstructInPlace(policies);
+            Tenant->ScaleRecommenderPoliciesConfirmed = false;
         }
 
         if (rec.idempotency_key()) {

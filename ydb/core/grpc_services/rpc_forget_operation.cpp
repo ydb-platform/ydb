@@ -9,7 +9,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -44,18 +44,18 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     IEventBase* MakeRequest() override {
         switch (OperationId.GetKind()) {
         case TOperationId::EXPORT:
-            return new TEvExport::TEvForgetExportRequest(TxId, DatabaseName, RawOperationId);
+            return new TEvExport::TEvForgetExportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::IMPORT:
-            return new TEvImport::TEvForgetImportRequest(TxId, DatabaseName, RawOperationId);
+            return new TEvImport::TEvForgetImportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::BUILD_INDEX:
-            return new TEvIndexBuilder::TEvForgetRequest(TxId, DatabaseName, RawOperationId);
+            return new TEvIndexBuilder::TEvForgetRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
     }
 
     bool NeedAllocateTxId() const {
-        const Ydb::TOperationId::EKind kind = OperationId.GetKind();
+        const NOperationId::TOperationId::EKind kind = OperationId.GetKind();
         return kind == TOperationId::EXPORT
             || kind == TOperationId::IMPORT
             || kind == TOperationId::BUILD_INDEX;
@@ -97,7 +97,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     }
 
     void SendForgetScriptExecutionOperation() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvForgetScriptExecutionOperation(DatabaseName, OperationId, Request->GetDeadline()));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvForgetScriptExecutionOperation(GetDatabaseName(), OperationId));
     }
 
 public:
@@ -153,6 +153,11 @@ private:
 
 void DoForgetOperationRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TForgetOperationRPC(p.release()));
+}
+
+template<>
+IActor* TEvForgetOperationRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return new TForgetOperationRPC(msg);
 }
 
 } // namespace NGRpcService

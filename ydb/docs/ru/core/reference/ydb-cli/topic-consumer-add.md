@@ -24,7 +24,7 @@
 ---|---
 `--consumer VAL` | Имя читателя, которого нужно добавить.
 `--starting-message-timestamp VAL` | Время в формате [UNIX timestamp](https://ru.wikipedia.org/wiki/Unix-время). Чтение начнется с первого [сообщения](../../concepts/topic.md#message), полученного после указанного времени. Если время не задано, то чтение начнется с самого старого сообщения в топике.
-`--supported-codecs` | Поддерживаемые методы сжатия данных.<br>Значение по умолчанию — `raw`.<br>Возможные значения:<ul><li>`RAW` — без сжатия;</li><li>`ZSTD` — сжатие [zstd](https://ru.wikipedia.org/wiki/Zstandard);</li><li>`GZIP` — сжатие [gzip](https://ru.wikipedia.org/wiki/Gzip);</li><li>`LZOP` — сжатие [lzop](https://ru.wikipedia.org/wiki/Lzop).</li></ul>
+`--supported-codecs` | Поддерживаемые методы сжатия данных.<br/>Значение по умолчанию — `raw`.<br/>Возможные значения:<ul><li>`RAW` — без сжатия;</li><li>`ZSTD` — сжатие [zstd](https://ru.wikipedia.org/wiki/Zstandard);</li><li>`GZIP` — сжатие [gzip](https://ru.wikipedia.org/wiki/Gzip);</li><li>`LZOP` — сжатие [lzop](https://ru.wikipedia.org/wiki/Lzop).</li></ul>
 
 ## Примеры {#examples}
 
@@ -36,7 +36,7 @@
 {{ ydb-cli }} -p quickstart topic consumer add \
   --consumer my-consumer \
   --starting-message-timestamp 1660568400 \
-  my-topic 
+  my-topic
 ```
 
 Убедитесь, что читатель создан:
@@ -52,7 +52,7 @@ RetentionPeriod: 2 hours
 PartitionsCount: 2
 SupportedCodecs: RAW, GZIP
 
-Consumers: 
+Consumers:
 ┌──────────────┬─────────────────┬───────────────────────────────┬───────────┐
 | ConsumerName | SupportedCodecs | ReadFrom                      | Important |
 ├──────────────┼─────────────────┼───────────────────────────────┼───────────┤

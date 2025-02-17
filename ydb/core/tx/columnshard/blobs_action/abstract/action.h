@@ -57,7 +57,7 @@ public:
 
     void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
         if (Removing) {
-            Removing->OnExecuteTxAfterRemoving(self, dbBlobs, blobsWroteSuccessfully);
+            Removing->OnExecuteTxAfterRemoving(dbBlobs, blobsWroteSuccessfully);
         }
         if (Writing) {
             Writing->OnExecuteTxAfterWrite(self, dbBlobs, blobsWroteSuccessfully);
@@ -66,7 +66,7 @@ public:
 
     void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
         if (Removing) {
-            Removing->OnCompleteTxAfterRemoving(self, blobsWroteSuccessfully);
+            Removing->OnCompleteTxAfterRemoving(blobsWroteSuccessfully);
         }
         if (Writing) {
             Writing->OnCompleteTxAfterWrite(self, blobsWroteSuccessfully);

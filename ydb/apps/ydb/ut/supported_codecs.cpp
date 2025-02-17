@@ -5,7 +5,7 @@ Y_UNIT_TEST_SUITE(YdbTopic) {
 
 Y_UNIT_TEST_F(SupportedCodecs_TopicCreate_DefaultValue, TSupportedCodecsFixture)
 {
-    TestTopicCreate(GetTopicName(), {}, {"RAW"});
+    TestTopicCreate(GetTopicName(), {}, {});
 }
 
 Y_UNIT_TEST_F(SupportedCodecs_TopicCreate_UserValue, TSupportedCodecsFixture)
@@ -19,7 +19,7 @@ Y_UNIT_TEST_F(SupportedCodecs_TopicAlter, TSupportedCodecsFixture)
 
     YdbTopicCreate(topicName);
 
-    TestTopicAlter(topicName, {}, {"RAW"});
+    TestTopicAlter(topicName, {}, {});
     TestTopicAlter(topicName, {"GZIP", "ZSTD"}, {"GZIP", "ZSTD"});
     TestTopicAlter(topicName, {}, {"GZIP", "ZSTD"});
 }
@@ -31,7 +31,7 @@ Y_UNIT_TEST_F(SupportedCodecs_TopicConsumerAdd_DefaultValue, TSupportedCodecsFix
 
     YdbTopicCreate(topicName);
 
-    TestTopicConsumerAdd(topicName, consumerName, {}, {"RAW"});
+    TestTopicConsumerAdd(topicName, consumerName, {}, {});
 }
 
 Y_UNIT_TEST_F(SupportedCodecs_TopicConsumerAdd_UserValue, TSupportedCodecsFixture)

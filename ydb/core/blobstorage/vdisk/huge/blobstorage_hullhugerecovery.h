@@ -43,8 +43,6 @@ namespace NKikimr {
                 return THullHugeRecoveryLogPos(0, 0, 0, 0, 0, 0, 0);
             }
 
-            ui64 FirstLsnToKeep() const;
-            TString FirstLsnToKeepDecomposed() const;
             TString ToString() const;
             TString Serialize() const;
             void ParseFromString(const TString &serialized);
@@ -68,73 +66,32 @@ namespace NKikimr {
         };
 
         ////////////////////////////////////////////////////////////////////////////
-        // TLogTracker
-        // This class tracks two entry points: current and previous
-        // It alse correctly implements recovery procedure.
-        // The idea behind: we MUST keep all log records between Prev and Cur
-        // entry points
-        ////////////////////////////////////////////////////////////////////////////
-        class TLogTracker {
-        public:
-            struct TPosition {
-                ui64 EntryPointLsn = 0;
-                ui64 HugeBlobLoggedLsn = 0;
-                TPosition(const THullHugeRecoveryLogPos &logPos);
-                TPosition() = default;
-                void Output(IOutputStream &str) const;
-                TString ToString() const;
-            };
-
-            // RecoveryMode: call on every entry point seen
-            void EntryPointFromRecoveryLog(TPosition pos);
-            // RecoveryMode: call when recovery is finished
-            void FinishRecovery(ui64 entryPointLsn);
-
-            // Prepare to commit
-            void InitiateNewEntryPointCommit(TPosition pos);
-            // Committed
-            void EntryPointCommitted(ui64 lsn);
-            // Calculate FirstLsnToKeep
-            ui64 FirstLsnToKeep() const;
-            TString FirstLsnToKeepDecomposed() const;
-            bool WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, bool inFlightWrites) const;
-        private:
-            TMaybe<TPosition> Prev = {};
-            TMaybe<TPosition> Cur = {};
-            TMaybe<TPosition> InProgress = {};
-
-            void PrivateNewLsn(TPosition pos);
-        };
-
-        ////////////////////////////////////////////////////////////////////////////
         // THullHugeKeeperPersState
         ////////////////////////////////////////////////////////////////////////////
         class THeap;
 
         struct THullHugeKeeperPersState {
-            typedef THashSet<NHuge::THugeSlot> TAllocatedSlots;
             static const ui32 Signature;
 
             TIntrusivePtr<TVDiskContext> VCtx;
             // current pos
             THullHugeRecoveryLogPos LogPos;
-            // last committed log pos
-            THullHugeRecoveryLogPos CommittedLogPos;
             std::unique_ptr<NHuge::THeap> Heap;
             // slots that are already allocated, but not written to log
-            TAllocatedSlots AllocatedSlots;
+            THashSet<THugeSlot> SlotsInFlight;
+            THashMap<ui32, std::tuple<ui32, ui32>> ChunkToSlotSize;
             // guard to avoid using structure before recovery has been completed
             bool Recovered = false;
-            // manage last two entry points
-            TLogTracker LogTracker;
             // guid for this instance of pers state
             const ui64 Guid;
+            // last reported FirstLsnToKeep; can't decrease
+            mutable ui64 FirstLsnToKeepReported = 0;
+            ui64 PersistentLsn = 0;
 
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                      const ui32 chunkSize,
                                      const ui32 appendBlockSize,
                                      const ui32 minHugeBlobInBytes,
-                                     const ui32 oldMinHugeBlobInBytes,
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
@@ -144,7 +101,6 @@ namespace NKikimr {
                                      const ui32 chunkSize,
                                      const ui32 appendBlockSize,
                                      const ui32 minHugeBlobInBytes,
-                                     const ui32 oldMinHugeBlobInBytes,
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
@@ -156,7 +112,6 @@ namespace NKikimr {
                                      const ui32 chunkSize,
                                      const ui32 appendBlockSize,
                                      const ui32 minHugeBlobInBytes,
-                                     const ui32 oldMinHugeBlobInBytes,
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
@@ -175,15 +130,22 @@ namespace NKikimr {
             static bool CheckEntryPoint(TContiguousSpan data);
             TString ToString() const;
             void RenderHtml(IOutputStream &str) const;
-            ui32 GetMinREALHugeBlobInBytes() const;
-            ui64 FirstLsnToKeep() const;
+            ui32 GetMinHugeBlobInBytes() const;
+            ui64 FirstLsnToKeep(ui64 minInFlightLsn = Max<ui64>()) const;
             TString FirstLsnToKeepDecomposed() const;
-            bool WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, bool inFlightWrites) const;
+            bool WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, ui64 minInFlightLsn, ui32 itemsAfterCommit) const;
 
             // initiate commit
-            void InitiateNewEntryPointCommit(ui64 lsn, bool inFlightWrites);
+            void InitiateNewEntryPointCommit(ui64 lsn, ui64 minInFlightLsn);
             // finish commit
             void EntryPointCommitted(ui64 lsn);
+
+            void AddSlotInFlight(THugeSlot hugeSlot);
+            bool DeleteSlotInFlight(THugeSlot hugeSlot);
+
+            void AddChunkSize(THugeSlot hugeSlot);
+            void DeleteChunkSize(THugeSlot hugeSlot);
+            void RegisterBlob(TDiskPart diskPart);
 
             enum ESlotDelDbType {
                 LogoBlobsDb,
@@ -210,6 +172,7 @@ namespace NKikimr {
             TRlas ApplySlotsDeletion(const TActorContext &ctx,
                         ui64 lsn,
                         const TDiskPartVec &rec,
+                        const TDiskPartVec& allocated,
                         ESlotDelDbType type);
             TRlas Apply(const TActorContext &ctx,
                         ui64 lsn,

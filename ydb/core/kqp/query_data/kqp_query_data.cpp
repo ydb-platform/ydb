@@ -4,13 +4,13 @@
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <ydb-cpp-sdk/client/params/params.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr::NKqp {
 
@@ -66,7 +66,7 @@ void TKqpExecuterTxResult::FillMkql(NKikimrMiniKQL::TResult* mkqlResult) {
         });
     } else {
         YQL_ENSURE(Rows.RowCount() == 1, "Actual buffer size: " << Rows.RowCount());
-        ExportTypeToProto(MkqlItemType, *mkqlResult->MutableType());
+        ExportTypeToProto(MkqlItemType, *mkqlResult->MutableType(), ColumnOrder);
         ExportValueToProto(MkqlItemType, *Rows.Head(), *mkqlResult->MutableValue());
     }
 }
@@ -77,14 +77,8 @@ Ydb::ResultSet* TKqpExecuterTxResult::GetYdb(google::protobuf::Arena* arena, TMa
     return ydbResult;
 }
 
-Ydb::ResultSet* TKqpExecuterTxResult::ExtractTrailingYdb(google::protobuf::Arena* arena) {
-    if (!HasTrailingResult)
-        return nullptr;
-
-    Ydb::ResultSet* ydbResult = google::protobuf::Arena::CreateMessage<Ydb::ResultSet>(arena);
-    ydbResult->Swap(&TrailingResult);
-
-    return ydbResult;
+bool TKqpExecuterTxResult::HasTrailingResults() {
+    return HasTrailingResult;
 }
 
 
@@ -97,7 +91,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsL
     for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
         auto* column = ydbResult->add_columns();
         ui32 memberIndex = (!ColumnOrder || ColumnOrder->empty()) ? idx : (*ColumnOrder)[idx];
-        column->set_name(TString(mkqlSrcRowStructType->GetMemberName(memberIndex)));
+        column->set_name(ColumnHints && ColumnHints->size() ? ColumnHints->at(idx) : TString(mkqlSrcRowStructType->GetMemberName(memberIndex)));
         ExportTypeToProto(mkqlSrcRowStructType->GetMemberType(memberIndex), *column->mutable_type());
     }
 
@@ -117,19 +111,19 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsL
 
 TTxAllocatorState::TTxAllocatorState(const IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
-    : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators())
-    , TypeEnv(Alloc)
+    : Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators()))
+    , TypeEnv(*Alloc)
     , MemInfo("TQueryData")
-    , HolderFactory(Alloc.Ref(), MemInfo, functionRegistry)
+    , HolderFactory(Alloc->Ref(), MemInfo, functionRegistry)
 {
-    Alloc.Release();
+    Alloc->Release();
     TimeProvider = timeProvider;
     RandomProvider = randomProvider;
 }
 
 TTxAllocatorState::~TTxAllocatorState()
 {
-    Alloc.Acquire();
+    Alloc->Acquire();
 }
 
 std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> TTxAllocatorState::GetInternalBindingValue(
@@ -235,10 +229,10 @@ NKikimrMiniKQL::TResult* TQueryData::GetMkqlTxResult(const NKqpProto::TKqpPhyRes
     return TxResults[txIndex][resultIndex].GetMkql(arena);
 }
 
-Ydb::ResultSet* TQueryData::ExtractTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena) {
+bool TQueryData::HasTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb) {
     auto txIndex = rb.GetTxResultBinding().GetTxIndex();
     auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
-    return TxResults[txIndex][resultIndex].ExtractTrailingYdb(arena);
+    return TxResults[txIndex][resultIndex].HasTrailingResults();
 }
 
 
@@ -366,7 +360,7 @@ const NKikimrMiniKQL::TParams* TQueryData::GetParameterMiniKqlValue(const TStrin
 
     auto it = Params.find(name);
     if (it == Params.end()) {
-        with_lock(AllocState->Alloc) {
+        with_lock(*AllocState->Alloc) {
             const auto& [type, uv] = GetParameterUnboxedValue(name);
             NKikimrMiniKQL::TParams param;
             ExportTypeToProto(type, *param.MutableType());
@@ -388,7 +382,7 @@ const Ydb::TypedValue* TQueryData::GetParameterTypedValue(const TString& name) {
 
     auto it = ParamsProtobuf.find(name);
     if (it == ParamsProtobuf.end()) {
-        with_lock(AllocState->Alloc) {
+        with_lock(*AllocState->Alloc) {
             const auto& [type, uv] = GetParameterUnboxedValue(name);
 
             auto& tv = ParamsProtobuf[name];

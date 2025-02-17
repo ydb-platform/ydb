@@ -1,9 +1,7 @@
 RECURSE(
     actor
     base
-    client
     http
-    proto
     queues
 )
 

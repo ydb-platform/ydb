@@ -24,11 +24,15 @@ message TQueryMapping {
 
 // 1. StatusCode(s) are handled with defined policies, non-unique StatusCode(s) across all policies is UB
 // 2. RetryCount and RetryPeriodMs are used to calculate actual RetryRate, if it exceeds RetryCount, query is aborted
+//    - Number of retries during RetryPeriod time less than 2 * RetryCount due to RetryRate
 // 3. BackoffPeriodMs is factor of RetryRate to delay query execution before next retry
-// 4. There are no default retry policy, all unhandled statuses are fatal
+// 4. RetryLimit is hard limit for amount query retry count, after that query is aborted
+//    - If RetryLimit = 0, query can be abborted only by RetryRate
+// 5. There are no default retry policy, all unhandled statuses are fatal
 
 message TRetryPolicy {
     uint64 RetryCount = 1;
+    uint64 RetryLimit = 4;
     string RetryPeriod = 2;
     string BackoffPeriod = 3;
 }

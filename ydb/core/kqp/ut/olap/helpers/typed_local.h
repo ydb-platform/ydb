@@ -1,10 +1,15 @@
 #pragma once
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
-#include <ydb/core/formats/arrow/simple_builder/array.h>
-#include <ydb/core/formats/arrow/simple_builder/batch.h>
-#include <ydb/core/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/formats/arrow/simple_builder/array.h>
+#include <ydb/library/formats/arrow/simple_builder/batch.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
+
+#include <ydb-cpp-sdk/client/types/status_codes.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
+
+#include <library/cpp/json/writer/json_value.h>
 
 namespace NKikimr::NKqp {
 
@@ -12,6 +17,7 @@ class TTypedLocalHelper: public Tests::NCS::THelper {
 private:
     using TBase = Tests::NCS::THelper;
     const TString TypeName;
+    const TString TypeName1;
     TKikimrRunner& KikimrRunner;
     const TString TablePath;
     const TString TableName;
@@ -19,17 +25,64 @@ private:
 protected:
     virtual TString GetTestTableSchema() const override;
     virtual std::vector<TString> GetShardingColumns() const override {
-        return {"pk_int"};
+        return { "pk_int" };
     }
 public:
     TTypedLocalHelper(const TString& typeName, TKikimrRunner& kikimrRunner, const TString& tableName = "olapTable", const TString& storeName = "olapStore")
         : TBase(kikimrRunner.GetTestServer())
         , TypeName(typeName)
         , KikimrRunner(kikimrRunner)
-        , TablePath("/Root/" + storeName + "/" + tableName)
+        , TablePath(storeName.empty() ? "/Root/" + tableName : "/Root/" + storeName + "/" + tableName)
         , TableName(tableName)
         , StoreName(storeName) {
         SetShardingMethod("HASH_FUNCTION_CONSISTENCY_64");
+    }
+
+    TTypedLocalHelper(const TString& typeName, const TString& typeName1, TKikimrRunner& kikimrRunner, const TString& tableName = "olapTable",
+        const TString& storeName = "olapStore")
+        : TBase(kikimrRunner.GetTestServer())
+        , TypeName(typeName)
+        , TypeName1(typeName1)
+        , KikimrRunner(kikimrRunner)
+        , TablePath(storeName.empty() ? "/Root/" + tableName : "/Root/" + storeName + "/" + tableName)
+        , TableName(tableName)
+        , StoreName(storeName) {
+        SetShardingMethod("HASH_FUNCTION_CONSISTENCY_64");
+    }
+
+    class TSimultaneousWritingSession {
+    private:
+        bool Finished = false;
+        TKikimrRunner& KikimrRunner;
+        const TString TablePath;
+        mutable std::atomic<size_t> Responses = 0;
+        void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch,
+            const Ydb::StatusIds_StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) const;
+
+    public:
+        TSimultaneousWritingSession(TKikimrRunner& kikimrRunner, const TString& tablePath)
+            : KikimrRunner(kikimrRunner)
+            , TablePath(tablePath)
+        {
+        }
+
+        template <class TFiller>
+        void FillTable(const TString& fieldName, const TFiller& fillPolicy, const double pkKff = 0, const ui32 numRows = 800000) const {
+            std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
+            builders.emplace_back(
+                NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable(
+                    "pk_int", numRows * pkKff));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<TFiller>>(fieldName, fillPolicy));
+            NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
+            std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
+            SendDataViaActorSystem(TablePath, batch, Ydb::StatusIds::SUCCESS);
+        }
+
+        void Finalize();
+    };
+
+    TSimultaneousWritingSession StartWriting(const TString& tablePath) {
+        return TSimultaneousWritingSession(KikimrRunner, tablePath);
     }
 
     void ExecuteSchemeQuery(const TString& alterQuery, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS) const;
@@ -66,12 +119,12 @@ public:
 
     void GetVolumes(ui64& rawBytes, ui64& bytes, const bool verbose = false, const std::vector<TString> columnNames = {});
 
-    void GetStats(std::vector<NKikimrColumnShardStatisticsProto::TPortionStorage>& stats, const bool verbose = false);
+    void GetStats(std::vector<NJson::TJsonValue>& stats, const bool verbose = false);
 
     void GetCount(ui64& count);
 
     template <class TFiller>
-    void FillTable(const TFiller& fillPolicy, const ui32 pkKff = 0, const ui32 numRows = 800000) const {
+    void FillTable(const TFiller& fillPolicy, const double pkKff = 0, const ui32 numRows = 800000) const {
         std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
         builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
         builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<TFiller>>("field", fillPolicy));
@@ -80,11 +133,38 @@ public:
         TBase::SendDataViaActorSystem(TablePath, batch);
     }
 
+    void FillMultiColumnTable(ui32 repCount, const double pkKff = 0, const ui32 numRows = 800000) const {
+        const double frq = 0.9;
+        NArrow::NConstruction::TPoolFiller<arrow::Int64Type> int64Pool(1000, 0, frq);
+        NArrow::NConstruction::TPoolFiller<arrow::UInt8Type> uint8Pool(1000, 0, frq);
+        NArrow::NConstruction::TPoolFiller<arrow::FloatType> floatPool(1000, 0, frq);
+        NArrow::NConstruction::TPoolFiller<arrow::DoubleType> doublePool(1000, 0, frq);
+        NArrow::NConstruction::TPoolFiller<NKikimr::NArrow::NConstruction::TStringType> utfPool(1000, 52, "abcde", frq);
+
+        std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
+        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
+        for (ui32 i = 0; i < repCount; i++) {
+            TString repStr = ToString(i);
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<NKikimr::NArrow::NConstruction::TStringType>>>("field_utf" + repStr, utfPool, i));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<arrow::Int64Type>>>("field_int" + repStr, int64Pool, i));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<arrow::UInt8Type>>>("field_uint" + repStr, uint8Pool, i));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<arrow::FloatType>>>("field_float" + repStr, floatPool, i));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<arrow::DoubleType>>>("field_double" + repStr, doublePool, i));
+        }
+        NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
+        std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
+        TBase::SendDataViaActorSystem(TablePath, batch);
+    }
+
+
     void FillPKOnly(const double pkKff = 0, const ui32 numRows = 800000) const;
 
     void CreateTestOlapTable(ui32 storeShardsCount = 4, ui32 tableShardsCount = 3) {
-        CreateOlapTableWithStore(TableName, StoreName, storeShardsCount, tableShardsCount);
+        CreateOlapTablesWithStore({TableName}, StoreName, storeShardsCount, tableShardsCount);
     }
+
+    TString GetMultiColumnTestTableSchema(ui32 reps) const;
+    void CreateMultiColumnOlapTableWithStore(ui32 reps, ui32 storeShardsCount = 4, ui32 tableShardsCount = 3);
 };
 
 }

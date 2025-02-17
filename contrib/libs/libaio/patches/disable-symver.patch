@@ -1,0 +1,21 @@
+--- contrib/libs/libaio/src/io_getevents.c	(index)
++++ contrib/libs/libaio/src/io_getevents.c	(working tree)
+@@ -39,1 +39,1 @@ struct aio_ring {
+-int io_getevents_0_4(io_context_t ctx, long min_nr, long nr, struct io_event * events, struct timespec * timeout)
++int io_getevents(io_context_t ctx, long min_nr, long nr, struct io_event * events, struct timespec * timeout)
+@@ -53,1 +53,1 @@ int io_getevents_0_4(io_context_t ctx, long min_nr, long nr, struct io_event * e
+-DEFSYMVER(io_getevents_0_4, io_getevents, 0.4)
++// DEFSYMVER(io_getevents_0_4, io_getevents, 0.4)
+--- contrib/libs/libaio/src/io_cancel.c	(index)
++++ contrib/libs/libaio/src/io_cancel.c	(working tree)
+@@ -19,2 +19,1 @@
+-io_syscall3(int, io_cancel_0_4, io_cancel, io_context_t, ctx, struct iocb *, iocb, struct io_event *, event)
+-DEFSYMVER(io_cancel_0_4, io_cancel, 0.4)
++io_syscall3(int, io_cancel, io_cancel, io_context_t, ctx, struct iocb *, iocb, struct io_event *, event)
+--- contrib/libs/libaio/src/io_queue_wait.c	(index)
++++ contrib/libs/libaio/src/io_queue_wait.c	(working tree)
+@@ -24,1 +24,1 @@
+-int io_queue_wait_0_4(io_context_t ctx, struct timespec *timeout)
++int io_queue_wait(io_context_t ctx, struct timespec *timeout)
+@@ -24,1 +24,0 @@
+-DEFSYMVER(io_queue_wait_0_4, io_queue_wait, 0.4)

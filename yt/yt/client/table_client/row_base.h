@@ -117,6 +117,17 @@ inline bool IsIntegralType(ESimpleLogicalValueType type)
     }
 }
 
+inline bool IsFloatingPointType(ESimpleLogicalValueType type)
+{
+    switch (type) {
+        case ESimpleLogicalValueType::Double:
+        case ESimpleLogicalValueType::Float:
+            return true;
+        default:
+            return false;
+    }
+}
+
 inline bool IsStringLikeType(ESimpleLogicalValueType type)
 {
     switch (type) {
@@ -336,7 +347,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TColumnFilter& columnFilter);
+void FormatValue(TStringBuilderBase* builder, const TColumnFilter& columnFilter, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -350,7 +361,7 @@ struct TTypeErasedRow
     }
 };
 
-static_assert(std::is_pod<TTypeErasedRow>::value, "TTypeErasedRow must be POD.");
+static_assert((std::is_standard_layout_v<TTypeErasedRow> && std::is_trivial_v<TTypeErasedRow>), "TTypeErasedRow must be POD.");
 
 ////////////////////////////////////////////////////////////////////////////////
 

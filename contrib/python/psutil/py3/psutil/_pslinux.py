@@ -60,7 +60,6 @@ else:
 
 # fmt: off
 __extra__all__ = [
-    #
     'PROCFS_PATH',
     # io prio constants
     "IOPRIO_CLASS_NONE", "IOPRIO_CLASS_RT", "IOPRIO_CLASS_BE",
@@ -421,7 +420,7 @@ def calculate_avail_vmem(mems):
 
 def virtual_memory():
     """Report virtual memory stats.
-    This implementation mimicks procps-ng-3.3.12, aka "free" CLI tool:
+    This implementation mimics procps-ng-3.3.12, aka "free" CLI tool:
     https://gitlab.com/procps-ng/procps/blob/
         24fd2605c51fccc375ab0287cec33aa767f06718/proc/sysinfo.c#L778-791
     The returned values are supposed to match both "free" and "vmstat -s"
@@ -710,11 +709,10 @@ def cpu_count_cores():
                 except KeyError:
                     pass
                 current_info = {}
-            else:
+            elif line.startswith((b'physical id', b'cpu cores')):
                 # ongoing section
-                if line.startswith((b'physical id', b'cpu cores')):
-                    key, value = line.split(b'\t:', 1)
-                    current_info[key] = int(value)
+                key, value = line.split(b'\t:', 1)
+                current_info[key] = int(value)
 
     result = sum(mapping.values())
     return result or None  # mimic os.cpu_count()
@@ -783,6 +781,13 @@ if os.path.exists("/sys/devices/system/cpu/cpufreq/policy0") or os.path.exists(
                 # https://github.com/giampaolo/psutil/issues/1071
                 curr = bcat(pjoin(path, "cpuinfo_cur_freq"), fallback=None)
                 if curr is None:
+                    online_path = (
+                        "/sys/devices/system/cpu/cpu{}/online".format(i)
+                    )
+                    # if cpu core is offline, set to all zeroes
+                    if cat(online_path, fallback=None) == "0\n":
+                        ret.append(_common.scpufreq(0.0, 0.0, 0.0))
+                        continue
                     msg = "can't find current frequency file"
                     raise NotImplementedError(msg)
             curr = int(curr) / 1000
@@ -812,7 +817,7 @@ class _Ipv6UnsupportedError(Exception):
     pass
 
 
-class Connections:
+class NetConnections:
     """A wrapper on top of /proc/net/* files, retrieving per-process
     and system-wide open connections (TCP, UDP, UNIX) similarly to
     "netstat -an".
@@ -978,8 +983,8 @@ class Connections:
                     else:
                         status = _common.CONN_NONE
                     try:
-                        laddr = Connections.decode_address(laddr, family)
-                        raddr = Connections.decode_address(raddr, family)
+                        laddr = NetConnections.decode_address(laddr, family)
+                        raddr = NetConnections.decode_address(raddr, family)
                     except _Ipv6UnsupportedError:
                         continue
                     yield (fd, family, type_, laddr, raddr, status, pid)
@@ -1037,7 +1042,7 @@ class Connections:
         ret = set()
         for proto_name, family, type_ in self.tmap[kind]:
             path = "%s/net/%s" % (self._procfs_path, proto_name)
-            if family in (socket.AF_INET, socket.AF_INET6):
+            if family in {socket.AF_INET, socket.AF_INET6}:
                 ls = self.process_inet(
                     path, family, type_, inodes, filter_pid=pid
                 )
@@ -1056,12 +1061,12 @@ class Connections:
         return list(ret)
 
 
-_connections = Connections()
+_net_connections = NetConnections()
 
 
 def net_connections(kind='inet'):
     """Return system-wide open connections."""
-    return _connections.retrieve(kind)
+    return _net_connections.retrieve(kind)
 
 
 def net_io_counters():
@@ -1077,25 +1082,25 @@ def net_io_counters():
         name = line[:colon].strip()
         fields = line[colon + 1 :].strip().split()
 
-        # in
         (
+            # in
             bytes_recv,
             packets_recv,
             errin,
             dropin,
-            fifoin,  # unused
-            framein,  # unused
-            compressedin,  # unused
-            multicastin,  # unused
+            _fifoin,  # unused
+            _framein,  # unused
+            _compressedin,  # unused
+            _multicastin,  # unused
             # out
             bytes_sent,
             packets_sent,
             errout,
             dropout,
-            fifoout,  # unused
-            collisionsout,  # unused
-            carrierout,  # unused
-            compressedout,
+            _fifoout,  # unused
+            _collisionsout,  # unused
+            _carrierout,  # unused
+            _compressedout,  # unused
         ) = map(int, fields)
 
         retdict[name] = (
@@ -1355,15 +1360,12 @@ def disk_partitions(all=False):
         device, mountpoint, fstype, opts = partition
         if device == 'none':
             device = ''
-        if device in ("/dev/root", "rootfs"):
+        if device in {"/dev/root", "rootfs"}:
             device = RootFsDeviceFinder().find() or device
         if not all:
-            if device == '' or fstype not in fstypes:
+            if not device or fstype not in fstypes:
                 continue
-        maxfile = maxpath = None  # set later
-        ntuple = _common.sdiskpart(
-            device, mountpoint, fstype, opts, maxfile, maxpath
-        )
+        ntuple = _common.sdiskpart(device, mountpoint, fstype, opts)
         retlist.append(ntuple)
 
     return retlist
@@ -1589,7 +1591,7 @@ def sensors_battery():
         status = cat(root + "/status", fallback="").strip().lower()
         if status == "discharging":
             power_plugged = False
-        elif status in ("charging", "full"):
+        elif status in {"charging", "full"}:
             power_plugged = True
 
     # Seconds left.
@@ -1722,7 +1724,12 @@ def wrap_exceptions(fun):
             raise NoSuchProcess(self.pid, self._name)
         except FileNotFoundError:
             self._raise_if_zombie()
-            if not os.path.exists("%s/%s" % (self._procfs_path, self.pid)):
+            # /proc/PID directory may still exist, but the files within
+            # it may not, indicating the process is gone, see:
+            # https://github.com/giampaolo/psutil/issues/2418
+            if not os.path.exists(
+                "%s/%s/stat" % (self._procfs_path, self.pid)
+            ):
                 raise NoSuchProcess(self.pid, self._name)
             raise
 
@@ -1732,7 +1739,7 @@ def wrap_exceptions(fun):
 class Process:
     """Linux process implementation."""
 
-    __slots__ = ["pid", "_name", "_ppid", "_procfs_path", "_cache"]
+    __slots__ = ["_cache", "_name", "_ppid", "_procfs_path", "pid"]
 
     def __init__(self, pid):
         self.pid = pid
@@ -1796,7 +1803,12 @@ class Process:
         ret['children_stime'] = fields[14]
         ret['create_time'] = fields[19]
         ret['cpu_num'] = fields[36]
-        ret['blkio_ticks'] = fields[39]  # aka 'delayacct_blkio_ticks'
+        try:
+            ret['blkio_ticks'] = fields[39]  # aka 'delayacct_blkio_ticks'
+        except IndexError:
+            # https://github.com/giampaolo/psutil/issues/2455
+            debug("can't get blkio_ticks, set iowait to 0")
+            ret['blkio_ticks'] = 0
 
         return ret
 
@@ -2091,9 +2103,9 @@ class Process:
             for header, data in get_blocks(lines, current_block):
                 hfields = header.split(None, 5)
                 try:
-                    addr, perms, offset, dev, inode, path = hfields
+                    addr, perms, _offset, _dev, _inode, path = hfields
                 except ValueError:
-                    addr, perms, offset, dev, inode, path = hfields + ['']
+                    addr, perms, _offset, _dev, _inode, path = hfields + ['']
                 if not path:
                     path = '[anon]'
                 else:
@@ -2104,7 +2116,7 @@ class Process:
                         path
                     ):
                         path = path[:-10]
-                ls.append((
+                item = (
                     decode(addr),
                     decode(perms),
                     path,
@@ -2118,7 +2130,8 @@ class Process:
                     data.get(b'Referenced:', 0),
                     data.get(b'Anonymous:', 0),
                     data.get(b'Swap:', 0),
-                ))
+                )
+                ls.append(item)
             return ls
 
     @wrap_exceptions
@@ -2245,7 +2258,7 @@ class Process:
         def ionice_set(self, ioclass, value):
             if value is None:
                 value = 0
-            if value and ioclass in (IOPRIO_CLASS_IDLE, IOPRIO_CLASS_NONE):
+            if value and ioclass in {IOPRIO_CLASS_IDLE, IOPRIO_CLASS_NONE}:
                 raise ValueError("%r ioclass accepts no value" % ioclass)
             if value < 0 or value > 7:
                 msg = "value not in 0-7 range"
@@ -2343,8 +2356,8 @@ class Process:
         return retlist
 
     @wrap_exceptions
-    def connections(self, kind='inet'):
-        ret = _connections.retrieve(kind, self.pid)
+    def net_connections(self, kind='inet'):
+        ret = _net_connections.retrieve(kind, self.pid)
         self._raise_if_not_alive()
         return ret
 

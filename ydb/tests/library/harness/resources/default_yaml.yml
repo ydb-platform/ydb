@@ -134,6 +134,7 @@ grpc_config:
   host: "{ydb_grpc_host}"
   services:
   - "legacy"
+  - "tablet_service"
   - "yql"
   - "discovery"
   - "cms"
@@ -167,8 +168,6 @@ kqpconfig:
     value: "{ydb_yql_syntax_version}"
   - name: "_KqpAllowNewEngine"
     value: "true"
-  - name: "_KqpForceNewEngine"
-    value: "{ydb_force_new_engine}"
 interconnect_config:
   start_tcp: true
 sqs_config:
@@ -194,6 +193,11 @@ pqconfig:
     enable_quoting: false
 pqcluster_discovery_config:
   enabled: false
+table_service_config:
+  resource_manager:
+    mkql_light_program_memory_limit: 65536
+    mkql_heavy_program_memory_limit: 1048576
+    channel_buffer_size: 262144
 net_classifier_config:
   updater_config:
     retry_interval_seconds: 30

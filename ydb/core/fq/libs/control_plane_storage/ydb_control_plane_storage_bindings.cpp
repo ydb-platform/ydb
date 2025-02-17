@@ -250,7 +250,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         FederatedQuery::ListBindingsResult result;
@@ -259,7 +259,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
             FederatedQuery::Binding binding;
             if (!binding.ParseFromString(*parser.ColumnParser(BINDING_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for binding. Please contact internal support";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for binding. Please contact internal support";
             }
             FederatedQuery::BriefBinding& briefBinding = *result.add_binding();
             briefBinding.set_name(binding.content().name());
@@ -355,23 +355,23 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeBin
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [=, resultSets=resultSets, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Binding does not exist or permission denied. Please check the id binding or your access rights";
+            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Binding does not exist or permission denied. Please check the id binding or your access rights";
         }
 
         FederatedQuery::DescribeBindingResult result;
         if (!result.mutable_binding()->ParseFromString(*parser.ColumnParser(BINDING_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for binding. Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for binding. Please contact internal support";
         }
 
         bool hasViewAccess = HasViewAccess(permissions, result.binding().content().acl().visibility(), result.binding().meta().created_by(), user);
         if (!hasViewAccess) {
-            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Binding does not exist or permission denied. Please check the id binding or your access rights";
+            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Binding does not exist or permission denied. Please check the id binding or your access rights";
         }
         return result;
     };
@@ -446,21 +446,21 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     );
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>> response = std::make_shared<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>>();
-    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         FederatedQuery::Binding binding;
         {
             TResultSetParser parser(resultSets.front());
             if (!parser.TryNextRow()) {
-                ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Binding does not exist or permission denied. Please check the binding id or your access rights";
+                ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Binding does not exist or permission denied. Please check the binding id or your access rights";
             }
 
             if (!binding.ParseFromString(*parser.ColumnParser(BINDING_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for binding. Please contact internal support";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for binding. Please contact internal support";
             }
         }
 
@@ -468,20 +468,20 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         {
             TResultSetParser parser(resultSets.back());
             if (!parser.TryNextRow()) {
-                ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the connectin id or your access rights";
+                ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the connectin id or your access rights";
             }
 
-            connectionVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
+            connectionVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().value_or(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
         }
 
         const FederatedQuery::Acl::Visibility requestBindingVisibility = request.content().acl().visibility();
         if (requestBindingVisibility == FederatedQuery::Acl::SCOPE && connectionVisibility == FederatedQuery::Acl::PRIVATE) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility";
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility";
         }
 
         bool hasManageAccess = HasManageAccess(permissions, binding.content().acl().visibility(), binding.meta().created_by(), user);
         if (!hasManageAccess) {
-            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Binding does not exist or permission denied. Please check the id binding or your access rights";
+            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Binding does not exist or permission denied. Please check the id binding or your access rights";
         }
 
         auto& meta = *binding.mutable_meta();
@@ -494,15 +494,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         bool validateType = content.setting().binding_case() == request.content().setting().binding_case();
 
         if (!validateType) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding type cannot be changed. Please specify the same binding type";
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding type cannot be changed. Please specify the same binding type";
         }
 
         if (binding.content().acl().visibility() == FederatedQuery::Acl::SCOPE && requestBindingVisibility == FederatedQuery::Acl::PRIVATE) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new binding with visibility PRIVATE";
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new binding with visibility PRIVATE";
         }
 
         if (content.connection_id() != request.content().connection_id()) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Connection id cannot be changed. Please specify the same connection id";
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Connection id cannot be changed. Please specify the same connection id";
         }
 
         content = request.content();

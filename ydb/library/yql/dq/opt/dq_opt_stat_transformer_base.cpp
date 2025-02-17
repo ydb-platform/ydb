@@ -1,14 +1,17 @@
 #include "dq_opt_stat_transformer_base.h"
 
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+
+#include <yql/essentials/utils/log/log.h>
+
 
 namespace NYql::NDq {
 
 using namespace NNodes;
 
-TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(TTypeAnnotationContext* typeCtx, const IProviderContext& ctx)
-    : TypeCtx(typeCtx), Pctx(ctx)
+TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints)
+    : TypeCtx(typeCtx), Pctx(ctx), CardinalityHints(hints)
 { }
 
 IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -43,9 +46,6 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if(TCoSkipNullMembers::Match(input.Get())){
         InferStatisticsForSkipNullMembers(input, TypeCtx);
     }
-    else if(TCoExtractMembers::Match(input.Get())){
-        InferStatisticsForExtractMembers(input, TypeCtx);
-    }
     else if(TCoAggregateCombine::Match(input.Get())){
         InferStatisticsForAggregateCombine(input, TypeCtx);
     }
@@ -55,13 +55,21 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if (TCoAsList::Match(input.Get())){
         InferStatisticsForAsList(input, TypeCtx);
     }
+    else if (TCoParameter::Match(input.Get()) && InferStatisticsForListParam(input, TypeCtx)) {
+    }
 
     // Join matchers
     else if(TCoMapJoinCore::Match(input.Get())) {
-        InferStatisticsForMapJoin(input, TypeCtx, Pctx);
+        InferStatisticsForMapJoin(input, TypeCtx, Pctx, CardinalityHints);
     }
     else if(TCoGraceJoinCore::Match(input.Get())) {
-        InferStatisticsForGraceJoin(input, TypeCtx, Pctx);
+        InferStatisticsForGraceJoin(input, TypeCtx, Pctx, CardinalityHints);
+    }
+    else if (TDqJoin::Match(input.Get())) {
+        InferStatisticsForDqJoin(input, TypeCtx, Pctx, CardinalityHints);
+    }
+    else if(TDqPhyCrossJoin::Match(input.Get())) {
+        InferStatisticsForDqPhyCrossJoin(input, TypeCtx);
     }
 
     // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
@@ -71,6 +79,11 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     // In case of DqSource, propagate the statistics from the correct argument
     else if (TDqSource::Match(input.Get())) {
         InferStatisticsForDqSource(input, TypeCtx);
+    }
+
+    // In case of DqCnMerge, update the sorted info with correct sorting
+    else if (TDqCnMerge::Match(input.Get())) {
+        InferStatisticsForDqMerge(input, TypeCtx);
     }
     else {
         matched = false;
@@ -85,7 +98,7 @@ bool TDqStatisticsTransformerBase::BeforeLambdasUnmatched(const TExprNode::TPtr&
     if (input->ChildrenSize() >= 1) {
         auto stats = TypeCtx->GetStats(input->ChildRef(0).Get());
         if (stats) {
-            TypeCtx->SetStats(input.Get(), stats);
+            TypeCtx->SetStats(input.Get(), RemoveOrdering(stats, input));
         }
     }
     return true;
@@ -107,4 +120,3 @@ bool TDqStatisticsTransformerBase::AfterLambdas(const TExprNode::TPtr& input, TE
 void TDqStatisticsTransformerBase::Rewind() { }
 
 } // namespace NYql::NDq
-

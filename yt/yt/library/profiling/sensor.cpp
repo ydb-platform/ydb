@@ -232,9 +232,10 @@ TRateHistogram::operator bool() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TSensorOptions& options)
+void FormatValue(TStringBuilderBase* builder, const TSensorOptions& options, TStringBuf /*spec*/)
 {
-    return Format(
+    Format(
+        builder,
         "{sparse=%v;global=%v;hot=%v;histogram_min=%v;histogram_max=%v;time_histogram_bounds=%v;histogram_bounds=%v;summary_policy=%v}",
         options.Sparse,
         options.Global,
@@ -258,40 +259,77 @@ bool TSensorOptions::IsCompatibleWith(const TSensorOptions& other) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TProfiler::TProfiler(
-    const IRegistryImplPtr& impl,
-    const TString& prefix,
-    const TString& _namespace)
-    : Enabled_(true)
-    , Prefix_(prefix)
-    , Namespace_(_namespace)
-    , Impl_(impl)
+namespace NDetail {
+
+template <bool UseWeakPtr>
+TRegistryHolderBase<UseWeakPtr>::TRegistryHolderBase(const IRegistryPtr& impl)
+    : Impl_(impl)
 { }
 
-TProfiler::TProfiler(
-    const TString& prefix,
-    const TString& _namespace,
+template <bool UseWeakPtr>
+const IRegistryPtr& TRegistryHolderBase<UseWeakPtr>::GetRegistry() const
+{
+    return Impl_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TRegistryHolderBase<true>::TRegistryHolderBase(const IRegistryPtr& impl)
+    : Impl_(impl)
+{ }
+
+IRegistryPtr TRegistryHolderBase<true>::GetRegistry() const
+{
+    return Impl_.Lock();
+}
+
+// NB(arkady-e1ppa): Explicit template instantiation somehow does not require
+// base classes to be instantiated therefore we must do that by hand separately.
+// template class TRegistryHolderBase<true>;
+// ^However, full specialization is
+// treated differently and is pointless and not required == banned by clang :).
+template class TRegistryHolderBase<false>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr>::TProfiler(
+    const IRegistryPtr& impl,
+    const std::string& prefix,
+    const std::string& _namespace)
+    : TBase(impl)
+    , Enabled_(true)
+    , Prefix_(prefix)
+    , Namespace_(_namespace)
+{ }
+
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr>::TProfiler(
+    const std::string& prefix,
+    const std::string& _namespace,
     const TTagSet& tags,
-    const IRegistryImplPtr& impl,
+    const IRegistryPtr& impl,
     TSensorOptions options)
-    : Enabled_(true)
+    : TBase(impl ? impl : GetGlobalRegistry())
+    , Enabled_(true)
     , Prefix_(prefix)
     , Namespace_(_namespace)
     , Tags_(tags)
     , Options_(options)
-    , Impl_(impl ? impl : GetGlobalRegistry())
 { }
 
-TProfiler TProfiler::WithPrefix(const TString& prefix) const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithPrefix(const std::string& prefix) const
 {
     if (!Enabled_) {
         return {};
     }
 
-    return TProfiler(Prefix_ + prefix, Namespace_, Tags_, Impl_, Options_);
+    return TProfiler<UseWeakPtr>(Prefix_ + prefix, Namespace_, Tags_, GetRegistry(), Options_);
 }
 
-TProfiler TProfiler::WithTag(const TString& name, const TString& value, int parent) const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithTag(const std::string& name, const std::string& value, int parent) const
 {
     if (!Enabled_) {
         return {};
@@ -299,19 +337,19 @@ TProfiler TProfiler::WithTag(const TString& name, const TString& value, int pare
 
     auto allTags = Tags_;
     allTags.AddTag(std::pair(name, value), parent);
-    return TProfiler(Prefix_, Namespace_, allTags, Impl_, Options_);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, allTags, GetRegistry(), Options_);
 }
 
-void TProfiler::RenameDynamicTag(const TDynamicTagPtr& tag, const TString& name, const TString& value) const
+template <bool UseWeakPtr>
+void TProfiler<UseWeakPtr>::RenameDynamicTag(const TDynamicTagPtr& tag, const std::string& name, const std::string& value) const
 {
-    if (!Impl_) {
-        return;
+    if (const auto& impl = GetRegistry()) {
+        impl->RenameDynamicTag(tag, name, value);
     }
-
-    Impl_->RenameDynamicTag(tag, name, value);
 }
 
-TProfiler TProfiler::WithRequiredTag(const TString& name, const TString& value, int parent) const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithRequiredTag(const std::string& name, const std::string& value, int parent) const
 {
     if (!Enabled_) {
         return {};
@@ -319,10 +357,11 @@ TProfiler TProfiler::WithRequiredTag(const TString& name, const TString& value, 
 
     auto allTags = Tags_;
     allTags.AddRequiredTag(std::pair(name, value), parent);
-    return TProfiler(Prefix_, Namespace_, allTags, Impl_, Options_);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, allTags, GetRegistry(), Options_);
 }
 
-TProfiler TProfiler::WithExcludedTag(const TString& name, const TString& value, int parent) const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithExcludedTag(const std::string& name, const std::string& value, int parent) const
 {
     if (!Enabled_) {
         return {};
@@ -330,10 +369,11 @@ TProfiler TProfiler::WithExcludedTag(const TString& name, const TString& value, 
 
     auto allTags = Tags_;
     allTags.AddExcludedTag(std::pair(name, value), parent);
-    return TProfiler(Prefix_, Namespace_, allTags, Impl_, Options_);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, allTags, GetRegistry(), Options_);
 }
 
-TProfiler TProfiler::WithAlternativeTag(const TString& name, const TString& value, int alternativeTo, int parent) const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithAlternativeTag(const std::string& name, const std::string& value, int alternativeTo, int parent) const
 {
     if (!Enabled_) {
         return {};
@@ -342,10 +382,11 @@ TProfiler TProfiler::WithAlternativeTag(const TString& name, const TString& valu
     auto allTags = Tags_;
 
     allTags.AddAlternativeTag(std::pair(name, value), alternativeTo, parent);
-    return TProfiler(Prefix_, Namespace_, allTags, Impl_, Options_);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, allTags, GetRegistry(), Options_);
 }
 
-TProfiler TProfiler::WithExtensionTag(const TString& name, const TString& value, int extensionOf) const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithExtensionTag(const std::string& name, const std::string& value, int extensionOf) const
 {
     if (!Enabled_) {
         return {};
@@ -354,10 +395,11 @@ TProfiler TProfiler::WithExtensionTag(const TString& name, const TString& value,
     auto allTags = Tags_;
 
     allTags.AddExtensionTag(std::pair(name, value), extensionOf);
-    return TProfiler(Prefix_, Namespace_, allTags, Impl_, Options_);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, allTags, GetRegistry(), Options_);
 }
 
-TProfiler TProfiler::WithTags(const TTagSet& tags) const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithTags(const TTagSet& tags) const
 {
     if (!Enabled_) {
         return {};
@@ -365,10 +407,11 @@ TProfiler TProfiler::WithTags(const TTagSet& tags) const
 
     auto allTags = Tags_;
     allTags.Append(tags);
-    return TProfiler(Prefix_, Namespace_, allTags, Impl_, Options_);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, allTags, GetRegistry(), Options_);
 }
 
-TProfiler TProfiler::WithSparse() const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithSparse() const
 {
     if (!Enabled_) {
         return {};
@@ -376,10 +419,11 @@ TProfiler TProfiler::WithSparse() const
 
     auto opts = Options_;
     opts.Sparse = true;
-    return TProfiler(Prefix_, Namespace_, Tags_, Impl_, opts);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, Tags_, GetRegistry(), opts);
 }
 
-TProfiler TProfiler::WithDense() const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithDense() const
 {
     if (!Enabled_) {
         return {};
@@ -387,10 +431,11 @@ TProfiler TProfiler::WithDense() const
 
     auto opts = Options_;
     opts.Sparse = false;
-    return TProfiler(Prefix_, Namespace_, Tags_, Impl_, opts);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, Tags_, GetRegistry(), opts);
 }
 
-TProfiler TProfiler::WithGlobal() const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithGlobal() const
 {
     if (!Enabled_) {
         return {};
@@ -398,10 +443,11 @@ TProfiler TProfiler::WithGlobal() const
 
     auto opts = Options_;
     opts.Global = true;
-    return TProfiler(Prefix_, Namespace_, Tags_, Impl_, opts);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, Tags_, GetRegistry(), opts);
 }
 
-TProfiler TProfiler::WithDefaultDisabled() const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithDefaultDisabled() const
 {
     if (!Enabled_) {
         return {};
@@ -409,10 +455,11 @@ TProfiler TProfiler::WithDefaultDisabled() const
 
     auto opts = Options_;
     opts.DisableDefault = true;
-    return TProfiler(Prefix_, Namespace_, Tags_, Impl_, opts);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, Tags_, GetRegistry(), opts);
 }
 
-TProfiler TProfiler::WithProjectionsDisabled() const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithProjectionsDisabled() const
 {
     if (!Enabled_) {
         return {};
@@ -424,10 +471,11 @@ TProfiler TProfiler::WithProjectionsDisabled() const
     auto opts = Options_;
     opts.DisableProjections = true;
 
-    return TProfiler(Prefix_, Namespace_, allTags, Impl_, opts);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, allTags, GetRegistry(), opts);
 }
 
-TProfiler TProfiler::WithRenameDisabled() const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithRenameDisabled() const
 {
     if (!Enabled_) {
         return {};
@@ -435,10 +483,11 @@ TProfiler TProfiler::WithRenameDisabled() const
 
     auto opts = Options_;
     opts.DisableSensorsRename = true;
-    return TProfiler(Prefix_, Namespace_, Tags_, Impl_, opts);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, Tags_, GetRegistry(), opts);
 }
 
-TProfiler TProfiler::WithProducerRemoveSupport() const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithProducerRemoveSupport() const
 {
     if (!Enabled_) {
         return {};
@@ -446,10 +495,11 @@ TProfiler TProfiler::WithProducerRemoveSupport() const
 
     auto opts = Options_;
     opts.ProducerRemoveSupport = true;
-    return TProfiler(Prefix_, Namespace_, Tags_, Impl_, opts);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, Tags_, GetRegistry(), opts);
 }
 
-TProfiler TProfiler::WithHot(bool value) const
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithHot(bool value) const
 {
     if (!Enabled_) {
         return {};
@@ -457,56 +507,66 @@ TProfiler TProfiler::WithHot(bool value) const
 
     auto opts = Options_;
     opts.Hot = value;
-    return TProfiler(Prefix_, Namespace_, Tags_, Impl_, opts);
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, Tags_, GetRegistry(), opts);
 }
 
-TCounter TProfiler::Counter(const TString& name) const
+template <bool UseWeakPtr>
+TCounter TProfiler<UseWeakPtr>::Counter(const std::string& name) const
 {
-    if (!Impl_) {
+    const auto& impl = GetRegistry();
+    if (!impl) {
         return {};
     }
 
     TCounter counter;
-    counter.Counter_ = Impl_->RegisterCounter(Namespace_ + Prefix_ + name, Tags_, Options_);
+    counter.Counter_ = impl->RegisterCounter(Namespace_ + Prefix_ + name, Tags_, Options_);
     return counter;
 }
 
-TTimeCounter TProfiler::TimeCounter(const TString& name) const
+template <bool UseWeakPtr>
+TTimeCounter TProfiler<UseWeakPtr>::TimeCounter(const std::string& name) const
 {
-    if (!Impl_) {
+    const auto& impl = GetRegistry();
+    if (!impl) {
         return {};
     }
 
     TTimeCounter counter;
-    counter.Counter_ = Impl_->RegisterTimeCounter(Namespace_ + Prefix_ + name, Tags_, Options_);
+    counter.Counter_ = impl->RegisterTimeCounter(Namespace_ + Prefix_ + name, Tags_, Options_);
     return counter;
 }
 
-TGauge TProfiler::Gauge(const TString& name) const
+template <bool UseWeakPtr>
+TGauge TProfiler<UseWeakPtr>::Gauge(const std::string& name) const
 {
-    if (!Impl_) {
-        return TGauge();
+    const auto& impl = GetRegistry();
+    if (!impl) {
+        return {};
     }
 
     TGauge gauge;
-    gauge.Gauge_ = Impl_->RegisterGauge(Namespace_ + Prefix_ + name, Tags_, Options_);
+    gauge.Gauge_ = impl->RegisterGauge(Namespace_ + Prefix_ + name, Tags_, Options_);
     return gauge;
 }
 
-TTimeGauge TProfiler::TimeGauge(const TString& name) const
+template <bool UseWeakPtr>
+TTimeGauge TProfiler<UseWeakPtr>::TimeGauge(const std::string& name) const
 {
-    if (!Impl_) {
-        return TTimeGauge();
+    const auto& impl = GetRegistry();
+    if (!impl) {
+        return {};
     }
 
     TTimeGauge gauge;
-    gauge.Gauge_ = Impl_->RegisterTimeGauge(Namespace_ + Prefix_ + name, Tags_, Options_);
+    gauge.Gauge_ = impl->RegisterTimeGauge(Namespace_ + Prefix_ + name, Tags_, Options_);
     return gauge;
 }
 
-TSummary TProfiler::Summary(const TString& name, ESummaryPolicy summaryPolicy) const
+template <bool UseWeakPtr>
+TSummary TProfiler<UseWeakPtr>::Summary(const std::string& name, ESummaryPolicy summaryPolicy) const
 {
-    if (!Impl_) {
+    const auto& impl = GetRegistry();
+    if (!impl) {
         return {};
     }
 
@@ -514,13 +574,15 @@ TSummary TProfiler::Summary(const TString& name, ESummaryPolicy summaryPolicy) c
     options.SummaryPolicy = summaryPolicy;
 
     TSummary summary;
-    summary.Summary_ = Impl_->RegisterSummary(Namespace_ + Prefix_ + name, Tags_, std::move(options));
+    summary.Summary_ = impl->RegisterSummary(Namespace_ + Prefix_ + name, Tags_, std::move(options));
     return summary;
 }
 
-TGauge TProfiler::GaugeSummary(const TString& name, ESummaryPolicy summaryPolicy) const
+template <bool UseWeakPtr>
+TGauge TProfiler<UseWeakPtr>::GaugeSummary(const std::string& name, ESummaryPolicy summaryPolicy) const
 {
-    if (!Impl_) {
+    const auto& impl = GetRegistry();
+    if (!impl) {
         return {};
     }
 
@@ -528,13 +590,15 @@ TGauge TProfiler::GaugeSummary(const TString& name, ESummaryPolicy summaryPolicy
     options.SummaryPolicy = summaryPolicy;
 
     TGauge gauge;
-    gauge.Gauge_ = Impl_->RegisterGaugeSummary(Namespace_ + Prefix_ + name, Tags_, std::move(options));
+    gauge.Gauge_ = impl->RegisterGaugeSummary(Namespace_ + Prefix_ + name, Tags_, std::move(options));
     return gauge;
 }
 
-TTimeGauge TProfiler::TimeGaugeSummary(const TString& name, ESummaryPolicy summaryPolicy) const
+template <bool UseWeakPtr>
+TTimeGauge TProfiler<UseWeakPtr>::TimeGaugeSummary(const std::string& name, ESummaryPolicy summaryPolicy) const
 {
-    if (!Impl_) {
+    const auto& impl = GetRegistry();
+    if (!impl) {
         return {};
     }
 
@@ -542,24 +606,28 @@ TTimeGauge TProfiler::TimeGaugeSummary(const TString& name, ESummaryPolicy summa
     options.SummaryPolicy = summaryPolicy;
 
     TTimeGauge gauge;
-    gauge.Gauge_ = Impl_->RegisterTimeGaugeSummary(Namespace_ + Prefix_ + name, Tags_, std::move(options));
+    gauge.Gauge_ = impl->RegisterTimeGaugeSummary(Namespace_ + Prefix_ + name, Tags_, std::move(options));
     return gauge;
 }
 
-TEventTimer TProfiler::Timer(const TString& name) const
+template <bool UseWeakPtr>
+TEventTimer TProfiler<UseWeakPtr>::Timer(const std::string& name) const
 {
-    if (!Impl_) {
+    const auto& impl = GetRegistry();
+    if (!impl) {
         return {};
     }
 
     TEventTimer timer;
-    timer.Timer_ = Impl_->RegisterTimerSummary(Namespace_ + Prefix_ + name, Tags_, Options_);
+    timer.Timer_ = impl->RegisterTimerSummary(Namespace_ + Prefix_ + name, Tags_, Options_);
     return timer;
 }
 
-TEventTimer TProfiler::TimeHistogram(const TString& name, TDuration min, TDuration max) const
+template <bool UseWeakPtr>
+TEventTimer TProfiler<UseWeakPtr>::TimeHistogram(const std::string& name, TDuration min, TDuration max) const
 {
-    if (!Impl_) {
+    const auto& impl = GetRegistry();
+    if (!impl) {
         return {};
     }
 
@@ -568,88 +636,93 @@ TEventTimer TProfiler::TimeHistogram(const TString& name, TDuration min, TDurati
     options.HistogramMax = max;
 
     TEventTimer timer;
-    timer.Timer_ = Impl_->RegisterTimeHistogram(Namespace_ + Prefix_ + name, Tags_, options);
+    timer.Timer_ = impl->RegisterTimeHistogram(Namespace_ + Prefix_ + name, Tags_, options);
     return timer;
 }
 
-TEventTimer TProfiler::TimeHistogram(const TString& name, std::vector<TDuration> bounds) const
+template <bool UseWeakPtr>
+TEventTimer TProfiler<UseWeakPtr>::TimeHistogram(const std::string& name, std::vector<TDuration> bounds) const
 {
-    if (!Impl_) {
+    const auto& impl = GetRegistry();
+    if (!impl) {
         return {};
     }
 
     TEventTimer timer;
     auto options = Options_;
     options.TimeHistogramBounds = std::move(bounds);
-    timer.Timer_ = Impl_->RegisterTimeHistogram(Namespace_ + Prefix_ + name, Tags_, options);
+    timer.Timer_ = impl->RegisterTimeHistogram(Namespace_ + Prefix_ + name, Tags_, options);
     return timer;
 }
 
-TGaugeHistogram TProfiler::GaugeHistogram(const TString& name, std::vector<double> buckets) const
+template <bool UseWeakPtr>
+TGaugeHistogram TProfiler<UseWeakPtr>::GaugeHistogram(const std::string& name, std::vector<double> buckets) const
 {
-    if (!Impl_) {
+    const auto& impl = GetRegistry();
+    if (!impl) {
         return {};
     }
 
     TGaugeHistogram histogram;
     auto options = Options_;
     options.HistogramBounds = std::move(buckets);
-    histogram.Histogram_ = Impl_->RegisterGaugeHistogram(Namespace_ + Prefix_ + name, Tags_, options);
+    histogram.Histogram_ = impl->RegisterGaugeHistogram(Namespace_ + Prefix_ + name, Tags_, options);
     return histogram;
 }
 
-TRateHistogram TProfiler::RateHistogram(const TString& name, std::vector<double> buckets) const
+template <bool UseWeakPtr>
+TRateHistogram TProfiler<UseWeakPtr>::RateHistogram(const std::string& name, std::vector<double> buckets) const
 {
-    if (!Impl_) {
+    const auto& impl = GetRegistry();
+    if (!impl) {
         return {};
     }
 
     TRateHistogram histogram;
     auto options = Options_;
     options.HistogramBounds = std::move(buckets);
-    histogram.Histogram_ = Impl_->RegisterRateHistogram(Namespace_ + Prefix_ + name, Tags_, options);
+    histogram.Histogram_ = impl->RegisterRateHistogram(Namespace_ + Prefix_ + name, Tags_, options);
     return histogram;
 }
 
-void TProfiler::AddFuncCounter(
-    const TString& name,
+template <bool UseWeakPtr>
+void TProfiler<UseWeakPtr>::AddFuncCounter(
+    const std::string& name,
     const TRefCountedPtr& owner,
     std::function<i64()> reader) const
 {
-    if (!Impl_) {
-        return;
+    if (const auto& impl = GetRegistry()) {
+        impl->RegisterFuncCounter(Namespace_ + Prefix_ + name, Tags_, Options_, owner, reader);
     }
-
-    Impl_->RegisterFuncCounter(Namespace_ + Prefix_ + name, Tags_, Options_, owner, reader);
 }
 
-void TProfiler::AddFuncGauge(
-    const TString& name,
+template <bool UseWeakPtr>
+void TProfiler<UseWeakPtr>::AddFuncGauge(
+    const std::string& name,
     const TRefCountedPtr& owner,
     std::function<double()> reader) const
 {
-    if (!Impl_) {
-        return;
+    if (const auto& impl = GetRegistry()) {
+        impl->RegisterFuncGauge(Namespace_ + Prefix_ + name, Tags_, Options_, owner, reader);
     }
-
-    Impl_->RegisterFuncGauge(Namespace_ + Prefix_ + name, Tags_, Options_, owner, reader);
 }
 
-void TProfiler::AddProducer(
-    const TString& prefix,
+template <bool UseWeakPtr>
+void TProfiler<UseWeakPtr>::AddProducer(
+    const std::string& prefix,
     const ISensorProducerPtr& producer) const
 {
-    if (!Impl_) {
-        return;
+    if (const auto& impl = GetRegistry()) {
+        impl->RegisterProducer(Namespace_ + Prefix_ + prefix, Tags_, Options_, producer);
     }
-
-    Impl_->RegisterProducer(Namespace_ + Prefix_ + prefix, Tags_, Options_, producer);
 }
 
-const IRegistryImplPtr& TProfiler::GetRegistry() const
-{
-    return Impl_;
-}
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+template class NDetail::TProfiler<true>;
+template class NDetail::TProfiler<false>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

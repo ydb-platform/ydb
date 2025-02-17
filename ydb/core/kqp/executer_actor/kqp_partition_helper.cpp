@@ -9,7 +9,7 @@
 
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp {
 
@@ -441,6 +441,7 @@ TSerializedTableRange MakeKeyRange(const TVector<NScheme::TTypeInfo>& keyColumnT
 {
     YQL_ENSURE(range.HasFrom());
     YQL_ENSURE(range.HasTo());
+    auto guard = typeEnv.BindAllocator();
 
     auto fromValues = FillKeyValues(keyColumnTypes, range.GetFrom(), stageInfo, holderFactory, typeEnv);
     if (range.GetFrom().GetIsInclusive()) {

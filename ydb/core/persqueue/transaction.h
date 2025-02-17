@@ -29,7 +29,7 @@ struct TDistributedTransaction {
                               ui64 extractTabletId);
     void OnPlanStep(ui64 step);
     void OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event);
-    void OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event);
+    void OnProposePartitionConfigResult(TEvPQ::TEvProposePartitionConfigResult& event);
     void OnReadSet(const NKikimrTx::TEvReadSet& event,
                    const TActorId& sender,
                    std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack);
@@ -46,10 +46,10 @@ struct TDistributedTransaction {
     EState State = NKikimrPQ::TTransaction::UNKNOWN;
     ui64 MinStep = Max<ui64>();
     ui64 MaxStep = Max<ui64>();
-    THashSet<ui64> Senders;        // список отправителей TEvReadSet
-    THashSet<ui64> Receivers;      // список получателей TEvReadSet
+    THashMap<ui64, NKikimrPQ::TTransaction::TPredicateReceived> PredicatesReceived;
+    THashMap<ui64, bool> PredicateRecipients;
     TVector<NKikimrPQ::TPartitionOperation> Operations;
-    TMaybe<ui64> WriteId;
+    TMaybe<TWriteId> WriteId;
 
     EDecision SelfDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
     EDecision ParticipantsDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
@@ -66,6 +66,7 @@ struct TDistributedTransaction {
     NKikimrPQ::TPQTabletConfig TabletConfig;
     NKikimrPQ::TBootstrapConfig BootstrapConfig;
     NPersQueue::TTopicConverterPtr TopicConverter;
+    NKikimrPQ::TPartitions PartitionsData;
 
     bool WriteInProgress = false;
 
@@ -75,7 +76,8 @@ struct TDistributedTransaction {
     bool HaveAllRecipientsReceive() const;
 
     void AddCmdWrite(NKikimrClient::TKeyValueRequest& request, EState state);
-    void AddCmdDelete(NKikimrClient::TKeyValueRequest& request);
+    NKikimrPQ::TTransaction Serialize();
+    NKikimrPQ::TTransaction Serialize(EState state);
 
     static void SetDecision(NKikimrTx::TReadSetData::EDecision& var, NKikimrTx::TReadSetData::EDecision value);
 
@@ -91,7 +93,9 @@ struct TDistributedTransaction {
     void InitPartitions();
 
     template<class E>
-    void OnPartitionResult(const E& event, EDecision decision);
+    void OnPartitionResult(const E& event, TMaybe<EDecision> decision);
+
+    TString LogPrefix() const;
 
     struct TSerializedMessage {
         ui32 Type;
@@ -109,6 +113,11 @@ struct TDistributedTransaction {
     void BindMsgToPipe(ui64 tabletId, const IEventBase& event);
     void UnbindMsgsFromPipe(ui64 tabletId);
     const TVector<TSerializedMessage>& GetBindedMsgs(ui64 tabletId);
+
+    bool HasWriteOperations = false;
+    size_t PredicateAcksCount = 0;
+
+    bool Pending = false;
 };
 
 }

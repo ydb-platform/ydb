@@ -14,6 +14,7 @@ protected:
 public:
     bool Read(const i32 columnIdx, TString& result, const Ydb::Value& r) const;
     bool Read(const i32 columnIdx, ui64& result, const Ydb::Value& r) const;
+    bool Read(const i32 columnIdx, i64& result, const Ydb::Value& r) const;
     bool Read(const i32 columnIdx, ui32& result, const Ydb::Value& r) const;
     bool ReadDebugProto(const i32 columnIdx, ::google::protobuf::Message& result, const Ydb::Value& r) const;
     bool ReadJson(const i32 columnIdx, NJson::TJsonValue& result, const Ydb::Value& r) const;

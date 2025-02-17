@@ -4,7 +4,6 @@ TEST_SRCS(
     tablet_scheme_tests.py
 )
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 DEPENDS(

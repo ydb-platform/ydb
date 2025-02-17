@@ -1,15 +1,14 @@
 LIBRARY()
 
 SRCS(
-    saver.cpp
     index_info.cpp
-    loader.cpp
+    column_ids.cpp
+    schema_version.cpp
 )
 
 PEERDIR(
     ydb/library/actors/core
-    ydb/core/formats/arrow/transformer
-    ydb/core/formats/arrow/serializer
+    ydb/core/formats/arrow/save_load
 )
 
 YQL_LAST_ABI_VERSION()

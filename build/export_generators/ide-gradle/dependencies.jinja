@@ -1,0 +1,79 @@
+{%- macro AnnotationProcessors(funcName, annotation_processors) -%}
+{%-     if annotation_processors|length -%}
+{%-         set lomboks = annotation_processors|select('startsWith', 'contrib/java/org/projectlombok/lombok') -%}
+{%-         for lombok in lomboks %}
+    {{ funcName }}(files("$project_root/{{ lombok }}"))
+{%-         endfor -%}
+{%-         set annotation_processors = annotation_processors|reject('in', lomboks) -%}
+{%-         for annotation_processor in annotation_processors %}
+    {{ funcName }}(files("$project_root/{{ annotation_processor }}"))
+{%-         endfor -%}
+{%-     endif -%}
+{%- endmacro -%}
+{#- empty string #}
+dependencies {
+{%- for library in target.consumer if library.classpath -%}
+{%-     if has_errorprone -%}
+{%-         if library.prebuilt and (library.type != "contrib" or build_contribs) and ("contrib/java/com/google/errorprone/error_prone_annotations" in library.jar) -%}
+{%-             set errorprone_version = library.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
+{%-             set errorprone_parts = split(errorprone_version, '/', 2) %}
+    errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
+{%-         endif -%}
+{%-     endif -%}
+
+{%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
+    implementation(files("$project_root/{{ library.jar }}"))
+{%-     else -%}
+{%-         set classpath = library.classpath -%}
+{%-         if classpath|replace('"','') == classpath -%}
+{%-             set classpath = '"' + classpath + '"' -%}
+{%-         endif -%}
+{%-         if library.type != "contrib" %}
+{%-             if library.testdep %}
+    implementation(project(path = ":{{ library.testdep | replace("/", ":") }}", configuration = "testArtifacts"))
+{%-             else %}
+    implementation({{ classpath }})
+{%-             endif -%}
+{%-         else %}
+    api({{ classpath }})
+{%-         endif -%}
+{%-         if library.excludes.consumer is defined %} {
+{%              for exclude in library.excludes.consumer if exclude.classpath -%}
+{%-                 set classpath = exclude.classpath|replace('"','') -%}
+{%-                 set classpath_parts = split(classpath, ':') -%}
+        exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
+{%              endfor -%}
+    }
+{%-         endif -%}
+{%-     endif -%}
+{%- endfor -%}
+
+{{ AnnotationProcessors("annotationProcessor", target.use_annotation_processor) }}
+
+{%- for extra_target in extra_targets -%}
+{%-     for library in extra_target.consumer if library.classpath -%}
+{%-         if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
+    testImplementation(files("$project_root/{{ library.jar }}"))
+{%-         else -%}
+{%-             set classpath = library.classpath -%}
+{%-             if classpath|replace('"','') == classpath -%}
+{%-                 set classpath = '"' + classpath + '"' -%}
+{%-             endif %}
+{%-             if library.type != "contrib" and library.testdep %}
+    testImplementation(project(path = ":{{ library.testdep | replace("/", ":") }}", configuration = "testArtifacts"))
+{%-             else %}
+    testImplementation({{ classpath }})
+{%-             endif -%}
+{%-             if library.excludes.consumer is defined %} {
+{%                  for exclude in library.excludes.consumer if exclude.classpath -%}
+{%-                     set classpath = exclude.classpath|replace('"','') -%}
+{%-                     set classpath_parts = split(classpath, ':') -%}
+        exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
+{%                  endfor -%}
+    }
+{%-             endif -%}
+{%-         endif -%}
+{%-     endfor -%}
+{{ AnnotationProcessors("testAnnotationProcessor", extra_target.use_annotation_processor) }}
+{%- endfor %}
+}

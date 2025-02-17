@@ -1,7 +1,6 @@
 #pragma once
-#include "defs.h"
+#include "flat_page_iface.h"
 #include "flat_sausage_gut.h"
-#include "flat_sausage_fetch.h"
 #include "shared_handle.h"
 #include "shared_cache_events.h"
 #include <ydb/core/util/cache_cache.h>
@@ -9,6 +8,8 @@
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
+
+using namespace NSharedCache;
 
 struct TPrivatePageCachePinPad : public TAtomicRefCount<TPrivatePageCachePinPad> {
     // no internal state
@@ -19,7 +20,9 @@ struct TPrivatePageCacheWaitPad : public TExplicitSimpleCounter {
 };
 
 class TPrivatePageCache {
-    using TPinned = THashMap<TLogoBlobID, THashMap<ui32, TIntrusivePtr<TPrivatePageCachePinPad>>>;
+    using TPageId = NTable::NPage::TPageId;
+    using TPinned = THashMap<TLogoBlobID, THashMap<TPageId, TIntrusivePtr<TPrivatePageCachePinPad>>>;
+    using EPage = NTable::NPage::EPage;
 
 public:
     struct TInfo;
@@ -29,11 +32,10 @@ public:
         ui64 TotalSharedBody = 0; // total number of bytes currently referenced from shared cache
         ui64 TotalPinnedBody = 0; // total number of bytes currently pinned in memory
         ui64 TotalExclusive = 0; // total number of bytes exclusive to this cache (not from shared cache)
-        ui64 TotalSharedPending = 0; // total number of bytes waiting for transfer to shared cache
-        ui64 TotalSticky = 0; // total number of bytes marked as sticky (never unloaded from memory)
         ui64 PinnedSetSize = 0; // number of bytes pinned by transactions (even those not currently loaded)
         ui64 PinnedLoadSize = 0; // number of bytes pinned by transactions (which are currently being loaded)
         size_t CurrentCacheHits = 0; // = Touches.Size()
+        ui64 CurrentCacheHitSize = 0; // = Touches.Where(t => !t.Sticky).Sum(t => t.Size)
         size_t CurrentCacheMisses = 0; // = ToLoad.Size()
     };
 
@@ -49,10 +51,8 @@ public:
         };
 
         ui32 LoadState : 2;
-        ui32 Sticky : 1;
-        ui32 SharedPending : 1;
         
-        const ui32 Id;
+        const TPageId Id;
         const size_t Size;
 
         TInfo* const Info;
@@ -61,7 +61,7 @@ public:
         TSharedPageRef SharedBody;
         TSharedData PinnedBody;
 
-        TPage(size_t size, ui32 pageId, TInfo* info);
+        TPage(size_t size, TPageId pageId, TInfo* info);
 
         TPage(const TPage&) = delete;
         TPage(TPage&&) = delete;
@@ -69,23 +69,19 @@ public:
         bool IsUnnecessary() const noexcept {
             return (
                 LoadState == LoadStateNo &&
-                !Sticky &&
-                !SharedPending &&
                 !PinPad &&
                 !WaitQueue &&
                 !SharedBody);
         }
 
-        void Fill(TSharedData data, bool sticky = false) {
-            Y_DEBUG_ABORT_UNLESS(!SharedBody && !SharedPending, "Populating cache with shared data already present");
-            Sticky = sticky;
-            LoadState = LoadStateLoaded;
-            PinnedBody = std::move(data);
+        bool IsSticky() const noexcept {
+            // Note: because this method doesn't use TPage flags
+            // it may be called from multiple threads later
+            // also it doesn't affect offloading, only touched memory counting
+            return Info->IsSticky(Id);
         }
 
-        void Fill(TSharedPageRef shared, bool sticky = false) {
-            Sticky = sticky;
-            SharedPending = false;
+        void Fill(TSharedPageRef shared) {
             SharedBody = std::move(shared);
             LoadState = LoadStateLoaded;
             PinnedBody = TPinnedPageRef(SharedBody).GetData();
@@ -101,16 +97,19 @@ public:
             return PageMap.size();
         }
 
-        const TSharedData* Lookup(ui32 pageId) const noexcept {
-            auto* page = GetPage(pageId);
-            return page ? page->GetPinnedBody() : nullptr;
-        }
-
-        TPage* GetPage(ui32 pageId) const noexcept {
+        TPage* GetPage(TPageId pageId) const noexcept {
             return PageMap[pageId].Get();
         }
 
-        TPage* EnsurePage(ui32 pageId) noexcept {
+        EPage GetPageType(TPageId pageId) const noexcept {
+            return EPage(PageCollection->Page(pageId).Type);
+        }
+
+        ui64 GetPageSize(TPageId pageId) const noexcept {
+            return PageCollection->Page(pageId).Size;
+        }
+
+        TPage* EnsurePage(TPageId pageId) noexcept {
             auto* page = GetPage(pageId);
             if (!page) {
                 PageMap.emplace(pageId, THolder<TPage>(page = new TPage(PageCollection->Page(pageId).Size, pageId, this)));
@@ -118,12 +117,27 @@ public:
             return page;
         }
 
-        void Fill(const NPageCollection::TLoadedPage &paged, bool sticky = false) noexcept {
-            EnsurePage(paged.PageId)->Fill(paged.Data, sticky);
+        // Note: this method is only called during a page collection creation
+        void Fill(TPageId pageId, TSharedPageRef page, bool sticky) noexcept {
+            if (sticky) {
+                AddSticky(pageId, page);
+            }
+            EnsurePage(pageId)->Fill(std::move(page));
         }
 
-        void Fill(NSharedCache::TEvResult::TLoaded&& loaded, bool sticky = false) noexcept {
-            EnsurePage(loaded.PageId)->Fill(std::move(loaded.Page), sticky);
+        void AddSticky(TPageId pageId, TSharedPageRef page) noexcept {
+            Y_ABORT_UNLESS(page.IsUsed());
+            if (StickyPages.emplace(pageId, page).second) {
+                StickyPagesSize += TPinnedPageRef(page)->size();
+            }
+        }
+
+        bool IsSticky(TPageId pageId) const noexcept {
+            return StickyPages.contains(pageId);
+        }
+
+        ui64 GetStickySize() const noexcept {
+            return StickyPagesSize;
         }
 
         const TLogoBlobID Id;
@@ -133,11 +147,17 @@ public:
 
         explicit TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pack);
         TInfo(const TInfo &info);
+
+    private:
+        // storing sticky pages used refs guarantees that they won't be offload from Shared Cache
+        THashMap<TPageId, TSharedPageRef> StickyPages;
+        ui64 StickyPagesSize = 0;
     };
 
 public:
+    TIntrusivePtr<TInfo> GetPageCollection(TLogoBlobID id) const;
     void RegisterPageCollection(TIntrusivePtr<TInfo> info);
-    TPage::TWaitQueuePtr ForgetPageCollection(TLogoBlobID id);
+    TPage::TWaitQueuePtr ForgetPageCollection(TIntrusivePtr<TInfo> info);
 
     void LockPageCollection(TLogoBlobID id);
     // Return true for page collections removed after unlock.
@@ -145,32 +165,28 @@ public:
 
     TInfo* Info(TLogoBlobID id);
 
-    void MarkSticky(ui32 pageId, TInfo *collectionInfo);
-
     const TStats& GetStats() const { return Stats; }
 
     std::pair<ui32, ui64> Request(TVector<ui32> &pages, TPrivatePageCacheWaitPad *waitPad, TInfo *info); // blocks to load, bytes to load
 
-    const TSharedData* Lookup(ui32 page, TInfo *collection);
-    TSharedPageRef LookupShared(ui32 page, TInfo *collection);
+    const TSharedData* Lookup(TPageId pageId, TInfo *collection);
 
+    void CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory);
     void PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pinnedPages, ui64 &pinnedMemory);
     void PinToLoad(TPinned &pinned, ui32 &pinnedPages, ui64 &pinnedMemory);
-    void RepinPages(TPinned &newPinned, TPinned &oldPinned, size_t &pinnedPages);
     void UnpinPages(TPinned &pinned, size_t &unpinnedPages);
-    THashMap<TPrivatePageCache::TInfo*, TVector<ui32>> GetToLoad() const;
+    THashMap<TPrivatePageCache::TInfo*, TVector<TPageId>> GetToLoad() const;
     void ResetTouchesAndToLoad(bool verifyEmpty);
 
-    void UpdateSharedBody(TInfo *collectionInfo, ui32 pageId, TSharedPageRef shared);
-    void DropSharedBody(TInfo *collectionInfo, ui32 pageId);
+    void DropSharedBody(TInfo *collectionInfo, TPageId pageId);
 
     TPage::TWaitQueuePtr ProvideBlock(NSharedCache::TEvResult::TLoaded&& loaded, TInfo *collectionInfo);
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
-    THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> GetPrepareSharedTouched();
+    THashMap<TLogoBlobID, THashSet<TPageId>> GetPrepareSharedTouched();
 
 private:
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> PageCollections;
-    THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> ToTouchShared;
+    THashMap<TLogoBlobID, THashSet<TPageId>> ToTouchShared;
 
     TStats Stats;
 
@@ -183,7 +199,6 @@ private:
     void TryLoad(TPage *page);
     void TryUnload(TPage *page);
     void TryEraseIfUnnecessary(TPage *page);
-    void TryShareBody(TPage *page);
 };
 
 }}

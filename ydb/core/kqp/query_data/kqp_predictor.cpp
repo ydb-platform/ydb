@@ -2,10 +2,10 @@
 #include "kqp_request_predictor.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <util/system/info.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/library/services/services.pb.h>
@@ -131,7 +131,7 @@ ui32 TStagePredictor::GetUsableThreads() {
         userPoolSize = TlsActivationContext->ActorSystem()->GetPoolThreadsCount(AppData()->UserPoolId);
     }
     if (!userPoolSize) {
-        ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";
+        ALS_INFO(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";
         userPoolSize = NSystemInfo::NumberOfCpus();
     }
     return Max<ui32>(1, *userPoolSize);

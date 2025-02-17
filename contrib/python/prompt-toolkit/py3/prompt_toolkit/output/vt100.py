@@ -6,6 +6,7 @@ A lot of thanks, regarding outputting of colors, goes to the Pygments project:
 everything has been highly optimized.)
 http://pygments.org/
 """
+
 from __future__ import annotations
 
 import io
@@ -435,6 +436,11 @@ class Vt100_Output(Output):
         # default, we don't change them.)
         self._cursor_shape_changed = False
 
+        # Don't hide/show the cursor when this was already done.
+        # (`None` means that we don't know whether the cursor is visible or
+        # not.)
+        self._cursor_visible: bool | None = None
+
     @classmethod
     def from_pty(
         cls,
@@ -521,7 +527,7 @@ class Vt100_Output(Output):
             "eterm-color",
         ):  # Not supported by the Linux console.
             self.write_raw(
-                "\x1b]2;%s\x07" % title.replace("\x1b", "").replace("\x07", "")
+                "\x1b]2;{}\x07".format(title.replace("\x1b", "").replace("\x07", ""))
             )
 
     def clear_title(self) -> None:
@@ -650,10 +656,14 @@ class Vt100_Output(Output):
             self.write_raw("\x1b[%iD" % amount)
 
     def hide_cursor(self) -> None:
-        self.write_raw("\x1b[?25l")
+        if self._cursor_visible in (True, None):
+            self._cursor_visible = False
+            self.write_raw("\x1b[?25l")
 
     def show_cursor(self) -> None:
-        self.write_raw("\x1b[?12l\x1b[?25h")  # Stop blinking cursor and show.
+        if self._cursor_visible in (False, None):
+            self._cursor_visible = True
+            self.write_raw("\x1b[?12l\x1b[?25h")  # Stop blinking cursor and show.
 
     def set_cursor_shape(self, cursor_shape: CursorShape) -> None:
         if cursor_shape == CursorShape._NEVER_CHANGE:

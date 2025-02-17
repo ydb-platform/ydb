@@ -1,6 +1,6 @@
 #include "yql_http_mock_gateway.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql {
 namespace {

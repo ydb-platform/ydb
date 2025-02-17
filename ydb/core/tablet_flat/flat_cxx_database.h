@@ -2,11 +2,12 @@
 
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/tuples.h>
-#include <ydb/core/util/templates.h>
+#include <ydb/core/base/blobstorage_common.h>
 
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <type_traits>
 #include <utility>
 
 // https://wiki.yandex-team.ru/kikimr/techdoc/db/cxxapi/nicedb/
@@ -24,64 +25,64 @@ public:
     {}
 
     TTypeValue(const ui64& value, NScheme::TTypeId type = NScheme::NTypeIds::Uint64)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const i64& value, NScheme::TTypeId type = NScheme::NTypeIds::Int64)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const ui32& value, NScheme::TTypeId type = NScheme::NTypeIds::Uint32)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const i32& value, NScheme::TTypeId type = NScheme::NTypeIds::Int32)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const ui16& value, NScheme::TTypeId type = NScheme::NTypeIds::Date)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const ui8& value, NScheme::TTypeId type = NScheme::NTypeIds::Byte)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const bool& value, NScheme::TTypeId type = NScheme::NTypeIds::Bool)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const double& value, NScheme::TTypeId type = NScheme::NTypeIds::Double)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     template <typename ElementType>
     TTypeValue(const TVector<ElementType> &value, NScheme::TTypeId type = NScheme::NTypeIds::String)
-        : TRawTypeValue(value.empty() ? (const ElementType*)0xDEADBEEFDEADBEEF : value.data(), value.size() * sizeof(ElementType), NScheme::TTypeInfo(type))
+        : TRawTypeValue(value.empty() ? (const ElementType*)0xDEADBEEFDEADBEEF : value.data(), value.size() * sizeof(ElementType), type)
     {}
 
     TTypeValue(const TActorId& value, NScheme::TTypeId type = NScheme::NTypeIds::ActorId)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const std::pair<ui64, ui64>& value, NScheme::TTypeId type = NScheme::NTypeIds::PairUi64Ui64)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const std::pair<ui64, i64>& value, NScheme::TTypeId type = NScheme::NTypeIds::Decimal)
-        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
+        : TRawTypeValue(&value, sizeof(value), type)
     {}
 
     TTypeValue(const TString& value, NScheme::TTypeId type = NScheme::NTypeIds::Utf8)
-        : TRawTypeValue(value.data(), value.size(), NScheme::TTypeInfo(type))
+        : TRawTypeValue(value.data(), value.size(), type)
     {}
 
     TTypeValue(const TBuffer& value, NScheme::TTypeId type = NScheme::NTypeIds::String)
-        : TRawTypeValue(value.Empty() ? (const char*)0xDEADBEEFDEADBEEF : value.Data(), value.Size(), NScheme::TTypeInfo(type))
+        : TRawTypeValue(value.Empty() ? (const char*)0xDEADBEEFDEADBEEF : value.Data(), value.Size(), type)
     {}
 
     TTypeValue(const TStringBuf& value, NScheme::TTypeId type = NScheme::NTypeIds::String)
-        : TRawTypeValue(value.empty() ? (const char*)0xDEADBEEFDEADBEEF : value.data(), value.size(), NScheme::TTypeInfo(type))
+        : TRawTypeValue(value.empty() ? (const char*)0xDEADBEEFDEADBEEF : value.data(), value.size(), type)
     {}
 
     explicit TTypeValue(const TRawTypeValue& rawTypeValue)
@@ -109,7 +110,10 @@ public:
 
     operator i64() const {
         Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int64
-                  || Type() == NScheme::NTypeIds::Interval)
+                  || Type() == NScheme::NTypeIds::Interval
+                  || Type() == NScheme::NTypeIds::Datetime64
+                  || Type() == NScheme::NTypeIds::Timestamp64
+                  || Type() == NScheme::NTypeIds::Interval64)
                  && Size() == sizeof(i64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
         return ReadUnaligned<i64>(reinterpret_cast<const i64*>(Data()));
     }
@@ -123,7 +127,9 @@ public:
     }
 
     operator i32() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Int32 && Size() == sizeof(i32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int32 
+                  || Type() == NScheme::NTypeIds::Date32)
+                 && Size() == sizeof(i32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
         i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data()));
         return value;
     }
@@ -224,18 +230,22 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Utf8> { typedef TString 
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::ActorId> { typedef TActorId Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::PairUi64Ui64> { typedef std::pair<ui64, ui64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Double> { typedef double Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Decimal> { typedef std::pair<ui64, i64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date> { typedef ui16 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime> { typedef ui32 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp> { typedef ui64 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Interval> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date32> { typedef i32 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime64> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp64> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Interval64> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::JsonDocument> { typedef TString Type; };
 
 /// only for compatibility with old code
 template <NScheme::TTypeId ValType>
 class TConvertTypeValue : public TRawTypeValue {
 public:
     TConvertTypeValue(const TRawTypeValue& value)
-        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo(0) : NScheme::TTypeInfo(ValType))
+        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? 0 : ValType)
     {}
 
     template <typename ValueType> static typename NSchemeTypeMapper<ValType>::Type ConvertFrom(ValueType value) {
@@ -248,7 +258,7 @@ template <>
 class TConvertTypeValue<NScheme::NTypeIds::String> : public TRawTypeValue {
 public:
     TConvertTypeValue(const TRawTypeValue& value)
-        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo(0) : NScheme::TTypeInfo(NScheme::NTypeIds::String))
+        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? 0 : NScheme::NTypeIds::String)
     {}
 
     static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TString& value) {
@@ -361,6 +371,22 @@ struct TConvertValue<TColumnType, TDuration, TRawTypeValue> {
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TIdWrapper conversion
+
+template <typename TColumnType, typename T, typename Tag>
+struct TConvertValue<TColumnType, TRawTypeValue, TIdWrapper<T, Tag>> {
+    typename NSchemeTypeMapper<TColumnType::ColumnType>::Type Storage;
+    TTypeValue Value;
+    TConvertValue(const TIdWrapper<T, Tag> & value) : Storage(value.GetRawId()), Value(Storage, TColumnType::ColumnType) {}
+    operator const TRawTypeValue&() const { return Value; }
+};
+
+template <typename TColumnType, typename T, typename Tag>
+struct TConvertValue<TColumnType, TIdWrapper<T, Tag>, TRawTypeValue> {
+    TTypeValue Value;
+    TConvertValue(const TRawTypeValue & value) : Value(value) {}
+    operator TIdWrapper<T, Tag>() const { return TIdWrapper<T, Tag>::FromValue(static_cast<T>(Value)); }
+};
 
 template <typename TColumnType, typename SourceType>
 struct TConvertValue<TColumnType, TRawTypeValue, SourceType> {
@@ -505,7 +531,7 @@ struct TConvertValue<TColumnType, TRawTypeValue, TStringBuf> {
     TRawTypeValue Value;
 
     TConvertValue(TStringBuf value)
-        : Value(value.data(), value.size(), NScheme::TTypeInfo(TColumnType::ColumnType))
+        : Value(value.data(), value.size(), TColumnType::ColumnType)
     {
         static_assert(TColumnType::ColumnType == NScheme::NTypeIds::String
                       || TColumnType::ColumnType == NScheme::NTypeIds::Utf8,
@@ -757,13 +783,10 @@ struct Schema {
                 return *this;
             }
 
-            auto Key(typename KeyColumns::Type... keyValues) {
-                return KeyOperations<TableType, KeyValuesType>(*Database, keyValues...);
-            }
-
-            auto Key(const KeyValuesType& keyValues) {
-                return KeyOperations<TableType, KeyValuesType>(*Database, keyValues);
-            }
+            template<typename... Keys>
+            auto Key(Keys&&... keyValues) {
+                return KeyOperations<TableType, KeyValuesType>(*Database, std::forward<Keys>(keyValues)...);
+             }
 
             template <typename... Keys>
             auto Range(Keys... keyValues) {
@@ -1414,7 +1437,7 @@ struct Schema {
                 }
 
                 template <typename ColumnType>
-                auto GetValueOrDefault(typename ColumnType::Type defaultValue = GetDefaultValue<ColumnType>(SFINAE::special())) const {
+                auto GetValueOrDefault(typename ColumnType::Type defaultValue = GetDefaultValue<ColumnType>()) const {
                     Y_DEBUG_ABORT_UNLESS(IsReady(), "Rowset is not ready");
                     Y_DEBUG_ABORT_UNLESS(IsValid(), "Rowset is not valid");
                     typename ColumnType::Type value(HaveValue<ColumnType>() ? GetColumnValue<ColumnType>() : defaultValue);
@@ -1439,24 +1462,19 @@ struct Schema {
                     return DbgPrintTuple(Iterator.GetKey(), typeRegistry) + " -> " + DbgPrintTuple(Iterator.GetValues(), typeRegistry);
                 }
 
-                template <typename ColumnType, typename SFINAE::type_check<decltype(ColumnType::Default)>::type = 0>
-                static decltype(ColumnType::Default) GetNullValue(SFINAE::special) {
-                    return ColumnType::Default;
+                template <typename ColumnType>
+                static typename ColumnType::Type GetNullValue() {
+                    return GetDefaultValue<ColumnType>();
                 }
 
                 template <typename ColumnType>
-                static typename ColumnType::Type GetNullValue(SFINAE::general) {
-                    return typename ColumnType::Type();
-                }
-
-                template <typename ColumnType, typename SFINAE::type_check<decltype(ColumnType::Default)>::type = 0>
-                static decltype(ColumnType::Default) GetDefaultValue(SFINAE::special) {
-                    return ColumnType::Default;
-                }
-
-                template <typename ColumnType>
-                static typename ColumnType::Type GetDefaultValue(SFINAE::general) {
-                    return typename ColumnType::Type();
+                static typename ColumnType::Type GetDefaultValue() {
+                    constexpr bool hasDefault = requires {ColumnType::Default;};
+                    if constexpr (hasDefault) {
+                        return ColumnType::Default;
+                    } else {
+                        return typename ColumnType::Type();
+                    }
                 }
 
                 NTable::TIteratorStats* Stats() const {
@@ -1476,8 +1494,8 @@ struct Schema {
                     auto& cell = tuple.Columns[index];
                     auto type = tuple.Types[index];
                     if (cell.IsNull())
-                        return GetNullValue<ColumnType>(SFINAE::special());
-                    return TConvert<ColumnType, typename ColumnType::Type>::Convert(TRawTypeValue(cell.Data(), cell.Size(), type));
+                        return GetNullValue<ColumnType>();
+                    return TConvert<ColumnType, typename ColumnType::Type>::Convert(TRawTypeValue(cell.Data(), cell.Size(), type.GetTypeId()));
                 }
 
                 KeyIterator Iterator;

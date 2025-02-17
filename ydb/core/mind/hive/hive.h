@@ -98,7 +98,7 @@ constexpr std::size_t EBalancerTypeSize = static_cast<std::size_t>(EBalancerType
 TString EBalancerTypeName(EBalancerType value);
 
 enum class EResourceToBalance {
-    Dominant,
+    ComputeResources,
     Counter,
     CPU,
     Memory,
@@ -145,12 +145,12 @@ struct TCompleteNotifications {
         return Notifications.size();
     }
 
-    void Send(const TActorContext& ctx) {
+    void Send(const TActorContext&) {
         for (auto& [notification, duration] : Notifications) {
             if (duration) {
-                ctx.ExecutorThread.Schedule(duration, notification.Release());
+                TActivationContext::Schedule(duration, std::move(notification));
             } else {
-                ctx.ExecutorThread.Send(notification.Release());
+                TActivationContext::Send(std::move(notification));
             }
         }
         Notifications.clear();
@@ -202,6 +202,10 @@ TResourceNormalizedValues NormalizeRawValues(const TResourceRawValues& values, c
 NMetrics::EResource GetDominantResourceType(const TResourceRawValues& values, const TResourceRawValues& maximum);
 NMetrics::EResource GetDominantResourceType(const TResourceNormalizedValues& normValues);
 
+// We calculate resource standard deviation to eliminate pointless tablet moves
+// Because counter is by default normalized by 1 000 000, a single tablet move
+// might have a very small effect on overall deviation. We must not let numerical
+// error be larger than the effect, so we use a more stable algorithm for computing the sum:
 // https://en.wikipedia.org/wiki/Kahan_summation_algorithm
 template<std::ranges::range TRange>
 std::ranges::range_value_t<TRange> StableSum(const TRange& values) {
@@ -292,7 +296,7 @@ struct TBalancerSettings {
     bool RecheckOnFinish = false;
     ui64 MaxInFlight = 1;
     const std::vector<TNodeId> FilterNodeIds = {};
-    EResourceToBalance ResourceToBalance = EResourceToBalance::Dominant;
+    EResourceToBalance ResourceToBalance = EResourceToBalance::ComputeResources;
     std::optional<TFullObjectId> FilterObjectId;
 };
 
@@ -319,12 +323,54 @@ struct TNodeFilter {
     TSubDomainKey ObjectDomain;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
 
-    const THive& Hive;
+    const THive* Hive;
 
     explicit TNodeFilter(const THive& hive);
 
     TArrayRef<const TSubDomainKey> GetEffectiveAllowedDomains() const;
+
+    bool IsAllowedDataCenter(TDataCenterId dc) const;
 };
+
+struct TFollowerUpdates {
+    enum class EAction {
+        Create,
+        Update,
+        Delete,
+    };
+
+    struct TUpdate {
+        EAction Action;
+        TFullTabletId TabletId;
+        TFollowerGroupId GroupId;
+        TDataCenterId DataCenter;
+    };
+
+    std::deque<TUpdate> Updates;
+
+    bool Empty() const {
+        return Updates.empty();
+    }
+
+    void Create(TFullTabletId leaderTablet, TFollowerGroupId group, TDataCenterId dc) {
+        Updates.emplace_back(EAction::Create, leaderTablet, group, dc);
+    }
+
+    void Update(TFullTabletId tablet, TDataCenterId dc) {
+        Updates.emplace_back(EAction::Update, tablet, 0, dc);
+    }
+
+    void Delete(TFullTabletId tablet, TFollowerGroupId group, TDataCenterId dc) {
+        Updates.emplace_back(EAction::Delete, tablet, group, dc);
+    }
+
+    TUpdate Pop() {
+        TUpdate update = Updates.front();
+        Updates.pop_front();
+        return update;
+    }
+};
+
 
 } // NHive
 } // NKikimr

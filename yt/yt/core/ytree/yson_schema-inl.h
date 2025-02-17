@@ -40,6 +40,14 @@ concept CIsMapping = requires(T) {
 template <class T>
 concept CIsAssociativeArray = CIsArray<T> && CIsMapping<T>;
 
+template <class T>
+concept CHasWriteSchema = requires (
+    const T& parameter,
+    NYson::IYsonConsumer* consumer)
+{
+    parameter.WriteSchema(consumer);
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #define DEFINE_SCHEMA_FOR_SIMPLE_TYPE(type, name) \
@@ -89,19 +97,38 @@ void WriteSchema(const T&, NYson::IYsonConsumer* consumer)
         .EndMap();
 }
 
-template <CYsonStructDerived T>
+template <CHasWriteSchema T>
+void WriteSchemaForNull(NYson::IYsonConsumer* consumer)
+{
+    if constexpr (std::is_same_v<T, TYsonStruct>) {
+       // It is not allowed to instantiate object of type `TYsonStruct`.
+       BuildYsonFluently(consumer)
+            .BeginMap()
+                .Item("type_name").Value("struct")
+                .Item("members").BeginList().EndList()
+            .EndMap();
+    } else {
+         New<T>()->WriteSchema(consumer);
+    }
+}
+
+template <CHasWriteSchema T>
 void WriteSchema(const NYT::TIntrusivePtr<T>& value, NYson::IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("type_name").Value("optional")
             .Item("item").Do([&] (auto fluent) {
-                (value ? value : New<T>())->WriteSchema(fluent.GetConsumer());
+                if (value) {
+                    value->WriteSchema(fluent.GetConsumer());
+                } else {
+                    WriteSchemaForNull<T>(fluent.GetConsumer());
+                }
             })
         .EndMap();
 }
 
-template <CYsonStructDerived T>
+template <CHasWriteSchema T>
 void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
 {
     return value.WriteSchema(consumer);

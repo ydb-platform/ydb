@@ -17,9 +17,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 #endif
 #define PQ_LOG_PREFIX "session cookie " << Cookie << " consumer " << ClientPath << " session " << Session
 
-static constexpr char KafkaPlainAuthPermission[] = "ydb.api.kafkaPlainAuth";
-static constexpr char KafkaPlainAuthSid[] = "ydb.api.kafkaPlainAuth@as";
-
 // moved to ydb/core/client/server/msgbus_server_persqueue.h?
 // const TString& TopicPrefix(const TActorContext& ctx);
 
@@ -76,7 +73,7 @@ static inline bool InternalErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode errorC
 void FillIssue(Ydb::Issue::IssueMessage* issue, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const TString& errorReason);
 
 
-static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketParserEntries(const TString& dbId, const TString& folderId, bool useKafkaApi = false) {
+static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketParserEntries(const TString& dbId, const TString& folderId) {
     TVector<TString> permissions = {
         "ydb.databases.list",
         "ydb.databases.create",
@@ -85,9 +82,6 @@ static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketPar
         "ydb.schemas.getMetadata",
         "ydb.streams.write"
     };
-    if (useKafkaApi) {
-        permissions.push_back(KafkaPlainAuthPermission);
-    }
     TVector<std::pair<TString, TString>> attributes;
     if (!dbId.empty()) attributes.push_back({"database_id", dbId});
     if (!folderId.empty()) attributes.push_back({"folder_id", folderId});
@@ -96,5 +90,7 @@ static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketPar
     }
     return {};
 }
+
+Ydb::PersQueue::ErrorCode::ErrorCode ConvertNavigateStatus(NSchemeCache::TSchemeCacheNavigate::EStatus status);
 
 } //namespace NKikimr::NGRpcProxy::V1

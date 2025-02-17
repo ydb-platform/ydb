@@ -1,0 +1,32 @@
+commit 2f67b87b07c235c9673305da4d5530e220bc740e
+merge: 2e2af14ef0720fef44002ed5f6941f229bdd7440 a53ffec0a5bd88ef05a9a011375afa2ccaa8cd8c
+author: orivej
+date: 2019-07-06T08:14:28+03:00
+revision: 5216645
+
+    Cut importlib._bootstrap and __res.ResourceImporter.exec_module from py3 backtraces. DEVTOOLS-5630
+    
+    This is controlled by _call_with_frames_removed in __res.ResourceImporter.exec_module.
+    
+    REVIEW: 869507
+
+--- contrib/tools/python3/Python/import.c	(2e2af14ef0720fef44002ed5f6941f229bdd7440)
++++ contrib/tools/python3/Python/import.c	(2f67b87b07c235c9673305da4d5530e220bc740e)
+@@ -1478,6 +1478,7 @@ remove_importlib_frames(PyThreadState *tstate)
+ {
+     const char *importlib_filename = "<frozen importlib._bootstrap>";
+     const char *external_filename = "<frozen importlib._bootstrap_external>";
++    const char *importer_filename = "library/python/runtime_py3/importer.pxi";
+     const char *remove_frames = "_call_with_frames_removed";
+     int always_trim = 0;
+     int in_importlib = 0;
+@@ -1508,7 +1509,8 @@ remove_importlib_frames(PyThreadState *tstate)
+         int now_in_importlib;
+ 
+         now_in_importlib = _PyUnicode_EqualToASCIIString(code->co_filename, importlib_filename) ||
+-                           _PyUnicode_EqualToASCIIString(code->co_filename, external_filename);
++                           _PyUnicode_EqualToASCIIString(code->co_filename, external_filename) ||
++                           _PyUnicode_EqualToASCIIString(code->co_filename, importer_filename);
+         if (now_in_importlib && !in_importlib) {
+             /* This is the link to this chunk of importlib tracebacks */
+             outer_link = prev_link;

@@ -1,16 +1,17 @@
 #pragma once
-#include "data.h"
-#include "rt_insertion.h"
+#include "committed.h"
+#include "inserted.h"
 #include "path_info.h"
+#include "rt_insertion.h"
+
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
 namespace NKikimr::NOlap {
-
+class TPKRangesFilter;
 class IDbWrapper;
-
-/// Use one table for inserted and committed blobs:
-/// !Commited => {PlanStep, WriteTxId} are {0, WriteId}
-///  Commited => {PlanStep, WriteTxId} are {PlanStep, TxId}
 
 class TInsertTableAccessor {
 protected:
@@ -23,7 +24,18 @@ protected:
 
     bool RemoveBlobLinkOnExecute(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
+
 public:
+    TPathInfo& RegisterPathInfo(const ui64 pathId) {
+        return Summary.RegisterPathInfo(pathId);
+    }
+
+    void ErasePath(const ui64 pathId) {
+        Summary.ErasePath(pathId);
+    }
+    bool HasDataInPathId(const ui64 pathId) const {
+        return Summary.HasPathIdData(pathId);
+    }
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Summary.GetPathPriorities();
     }
@@ -46,20 +58,28 @@ public:
         return Summary.AddInserted(std::move(data), load);
     }
     bool AddAborted(TInsertedData&& data, const bool load) {
+        AFL_VERIFY_DEBUG(!Summary.ExtractInserted(data.GetInsertWriteId()));
         if (load) {
             AddBlobLink(data.GetBlobRange().BlobId);
         }
         return Summary.AddAborted(std::move(data), load);
     }
-    bool AddCommitted(TInsertedData&& data, const bool load) {
+    bool AddCommitted(TCommittedData&& data, const bool load) {
         if (load) {
             AddBlobLink(data.GetBlobRange().BlobId);
         }
-        const ui64 pathId = data.PathId;
-        return Summary.GetPathInfo(pathId).AddCommitted(std::move(data), load);
+        const ui64 pathId = data.GetPathId();
+        return Summary.GetPathInfoVerified(pathId).AddCommitted(std::move(data), load);
     }
-    const THashMap<TWriteId, TInsertedData>& GetAborted() const { return Summary.GetAborted(); }
-    const THashMap<TWriteId, TInsertedData>& GetInserted() const { return Summary.GetInserted(); }
+    bool HasPathIdData(const ui64 pathId) const {
+        return Summary.HasPathIdData(pathId);
+    }
+    const THashMap<TInsertWriteId, TInsertedData>& GetAborted() const {
+        return Summary.GetAborted();
+    }
+    const TInsertedContainer& GetInserted() const {
+        return Summary.GetInserted();
+    }
     const TInsertionSummary::TCounters& GetCountersPrepared() const {
         return Summary.GetCountersPrepared();
     }
@@ -74,25 +94,35 @@ public:
 class TInsertTable: public TInsertTableAccessor {
 private:
     bool Loaded = false;
+    TInsertWriteId LastWriteId = TInsertWriteId{ 0 };
+
 public:
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
 
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
-    TInsertionSummary::TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
-                     const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists);
-    void Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds);
-    THashSet<TWriteId> OldWritesToAbort(const TInstant& now) const;
-    THashSet<TWriteId> DropPath(IDbWrapper& dbTable, ui64 pathId);
+    TInsertionSummary::TCounters Commit(
+        IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists);
+    TInsertionSummary::TCounters CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data);
+    void Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds);
+    void MarkAsNotAbortable(const TInsertWriteId writeId) {
+        Summary.MarkAsNotAbortable(writeId);
+    }
+    THashSet<TInsertWriteId> OldWritesToAbort(const TInstant& now) const;
 
-    void EraseCommittedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
-    void EraseCommittedOnComplete(const TInsertedData& key);
+    void EraseCommittedOnExecute(
+        IDbWrapper& dbTable, const TCommittedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
+    void EraseCommittedOnComplete(const TCommittedData& key);
 
     void EraseAbortedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     void EraseAbortedOnComplete(const TInsertedData& key);
 
-    std::vector<TCommittedBlob> Read(ui64 pathId, const TSnapshot& snapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const;
-    bool Load(IDbWrapper& dbTable, const TInstant loadTime);
+    std::vector<TCommittedBlob> Read(ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,
+        const std::shared_ptr<arrow::Schema>& pkSchema, const TPKRangesFilter* pkRangesFilter) const;
+    bool Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant loadTime);
+
+    TInsertWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);
+    TInsertWriteId BuildNextWriteId(NIceDb::TNiceDb& db);
 };
 
-}
+}   // namespace NKikimr::NOlap

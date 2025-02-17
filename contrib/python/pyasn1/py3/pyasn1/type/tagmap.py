@@ -46,7 +46,7 @@ class TagMap(object):
             return self.__presentTypes[tagSet]
         except KeyError:
             if self.__defaultType is None:
-                raise KeyError()
+                raise
             elif tagSet in self.__skipTypes:
                 raise error.PyAsn1Error('Key in negative map')
             else:

@@ -105,7 +105,7 @@ public:
     }
 
     bool Empty() const {
-        return Buffer.Empty();
+        return Buffer.empty();
     }
 
 protected:

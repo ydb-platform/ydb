@@ -3,15 +3,17 @@
 LIBRARY()
 
 LICENSE(
-    MIT AND
+    0BSD AND
+    BSD-2-Clause AND
+    BSD-3-Clause AND
     Public-Domain
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(5.4.6)
+VERSION(5.6.4)
 
-ORIGINAL_SOURCE(https://github.com/tukaani-project/xz/archive/v5.4.6.tar.gz)
+ORIGINAL_SOURCE(https://github.com/tukaani-project/xz/archive/v5.6.4.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/lzma/liblzma/api
@@ -112,6 +114,7 @@ SRCS(
     liblzma/simple/armthumb.c
     liblzma/simple/ia64.c
     liblzma/simple/powerpc.c
+    liblzma/simple/riscv.c
     liblzma/simple/simple_coder.c
     liblzma/simple/simple_decoder.c
     liblzma/simple/simple_encoder.c

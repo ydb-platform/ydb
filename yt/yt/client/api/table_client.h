@@ -90,6 +90,11 @@ struct TUnfreezeTableOptions
     , public TTabletRangeOptions
 { };
 
+struct TCancelTabletTransitionOptions
+    : public TTimeoutOptions
+    , public TMutatingOptions
+{ };
+
 struct TReshardTableOptions
     : public TTimeoutOptions
     , public TMutatingOptions
@@ -135,6 +140,7 @@ struct TAlterTableReplicaOptions
     std::optional<bool> PreserveTimestamps;
     std::optional<NTransactionClient::EAtomicity> Atomicity;
     std::optional<bool> EnableReplicatedTableTracker;
+    std::optional<NYPath::TYPath> ReplicaPath;
 };
 
 struct TGetTablePivotKeysOptions
@@ -278,6 +284,7 @@ struct TAlterReplicationCardOptions
     NTabletClient::TReplicatedTableOptionsPtr ReplicatedTableOptions;
     std::optional<bool> EnableReplicatedTableTracker;
     std::optional<NChaosClient::TReplicationCardCollocationId> ReplicationCardCollocationId;
+    NTabletClient::TReplicationCollocationOptionsPtr CollocationOptions;
 };
 
 struct TGetReplicationCardOptions
@@ -374,6 +381,10 @@ struct ITableClient
     virtual TFuture<void> UnfreezeTable(
         const NYPath::TYPath& path,
         const TUnfreezeTableOptions& options = {}) = 0;
+
+    virtual TFuture<void> CancelTabletTransition(
+        NTabletClient::TTabletId tabletId,
+        const TCancelTabletTransitionOptions& options = {}) = 0;
 
     virtual TFuture<void> ReshardTable(
         const NYPath::TYPath& path,

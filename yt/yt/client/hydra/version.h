@@ -21,7 +21,6 @@ struct TReachableState
 };
 
 void FormatValue(TStringBuilderBase* builder, TReachableState state, TStringBuf /*spec*/);
-TString ToString(TReachableState state);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -48,7 +47,6 @@ struct TElectionPriority
 };
 
 void FormatValue(TStringBuilderBase* builder, TElectionPriority state, TStringBuf /*spec*/);
-TString ToString(TElectionPriority state);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -60,7 +58,7 @@ struct TVersion
     TVersion() = default;
     TVersion(int segmentId, int recordId) noexcept;
 
-    std::strong_ordering operator <=> (const TVersion& other) const;
+    std::strong_ordering operator <=> (const TVersion& other) const = default;
     bool operator == (const TVersion& other) const = default;
 
     TRevision ToRevision() const;
@@ -71,7 +69,6 @@ struct TVersion
 };
 
 void FormatValue(TStringBuilderBase* builder, TVersion version, TStringBuf spec);
-TString ToString(TVersion version);
 
 ////////////////////////////////////////////////////////////////////////////////
 

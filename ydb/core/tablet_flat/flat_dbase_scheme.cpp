@@ -1,6 +1,9 @@
 #include "flat_dbase_scheme.h"
 
 #include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
+
+#include <util/generic/set.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -16,7 +19,11 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
         for(const auto& it : itTable.second.Rooms) {
             auto &room = it.second;
 
-            delta.SetRoom(table, it.first, room.Main, room.Blobs, room.Outer);
+            TSet<ui32> blobs;
+            for (auto blob : room.Blobs) {
+                blobs.insert(blob);
+            }
+            delta.SetRoom(table, it.first, room.Main, blobs, room.Outer);
         }
 
         for(const auto& it : itTable.second.Families) {
@@ -28,11 +35,26 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
         }
 
         for(const auto& it : itTable.second.Columns) {
-            const auto &col = it.second;
+            const auto& col = it.second;
+            switch (col.PType.GetTypeId()) {
+            case NScheme::NTypeIds::Pg: {
+                NKikimrProto::TTypeInfo typeInfo;
+                NScheme::ProtoFromTypeInfo(col.PType, col.PTypeMod, typeInfo);
+                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.Null);
+                break;
+            }
+            case NScheme::NTypeIds::Decimal: {
+                NKikimrProto::TTypeInfo typeInfo;
+                NScheme::ProtoFromTypeInfo(col.PType, {}, typeInfo);
+                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.Null);
+                break;
+            }
+            default: {
+                delta.AddColumn(table, col.Name, it.first, col.PType.GetTypeId(), col.NotNull, col.Null);
+                break;
+            }            
+            }
 
-            delta.AddPgColumn(table, col.Name, it.first, col.PType.GetTypeId(),
-                NPg::PgTypeIdFromTypeDesc(col.PType.GetTypeDesc()),
-                col.PTypeMod, col.NotNull, col.Null);
             delta.AddColumnToFamily(table, it.first, col.Family);
         }
 
@@ -100,11 +122,11 @@ TAlter& TAlter::DropTable(ui32 id)
 
 TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null)
 {
-    Y_ABORT_UNLESS(type != (ui32)NScheme::NTypeIds::Pg, "No pg type data");
-    return AddPgColumn(table, name, id, type, 0, "", notNull, null);
+    Y_ABORT_UNLESS(!NScheme::NTypeIds::IsParametrizedType(type));
+    return AddColumnWithTypeInfo(table, name, id, type, {}, notNull, null);
 }
 
-TAlter& TAlter::AddPgColumn(ui32 table, const TString& name, ui32 id, ui32 type, ui32 pgType, const TString& pgTypeMod, bool notNull, TCell null)
+TAlter& TAlter::AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type, const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, TCell null)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::AddColumn);
@@ -112,16 +134,15 @@ TAlter& TAlter::AddPgColumn(ui32 table, const TString& name, ui32 id, ui32 type,
     delta.SetTableId(table);
     delta.SetColumnId(id);
     delta.SetColumnType(type);
-    if (pgType != 0) {
-        delta.MutableColumnTypeInfo()->SetPgTypeId(pgType);
-        if (!pgTypeMod.empty()) {
-            delta.MutableColumnTypeInfo()->SetPgTypeMod(pgTypeMod);
-        }
-    }
     delta.SetNotNull(notNull);
 
     if (!null.IsNull())
         delta.SetDefault(null.Data(), null.Size());
+
+    Y_ABORT_UNLESS((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));
+    if (typeInfoProto) {
+        *delta.MutableColumnTypeInfo() = *typeInfoProto;
+    }
 
     return ApplyLastRecord();
 }
@@ -193,15 +214,20 @@ TAlter& TAlter::SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large)
     return ApplyLastRecord();
 }
 
-TAlter& TAlter::SetRoom(ui32 table, ui32 room, ui32 main, ui32 blobs, ui32 outer)
+TAlter& TAlter::SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer)
 {
+    Y_ABORT_UNLESS(!blobs.empty(), "Room must have at least one external blob channel");
+
     auto *delta = Log.AddDelta();
 
     delta->SetDeltaType(TAlterRecord::SetRoom);
     delta->SetTableId(table);
     delta->SetRoomId(room);
     delta->SetMain(main);
-    delta->SetBlobs(blobs);
+    delta->SetBlobs(*blobs.begin());
+    for (auto blob : blobs) {
+        delta->AddExternalBlobs(blob);
+    }
     delta->SetOuter(outer);
 
     return ApplyLastRecord();

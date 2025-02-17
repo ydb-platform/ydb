@@ -83,6 +83,11 @@ void TRemoteReaderConfigBase::Register(TRegistrar registrar)
     registrar.Parameter("net_queue_size_factor", &TThis::NetQueueSizeFactor)
         .Default(0.5);
 
+    registrar.Parameter("cached_block_count_factor", &TThis::CachedBlockCountFactor)
+        .Default(0.0);
+    registrar.Parameter("cached_block_size_factor", &TThis::CachedBlockSizeFactor)
+        .Default(0.0);
+
     registrar.Parameter("suspicious_node_grace_period", &TThis::SuspiciousNodeGracePeriod)
         .Default();
 
@@ -168,6 +173,10 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("chunk_meta_cache_failure_probability", &TThis::ChunkMetaCacheFailureProbability)
         .Default();
+    registrar.Parameter("use_chunk_prober", &TThis::UseChunkProber)
+        .Default(false);
+    registrar.Parameter("use_read_blocks_batcher", &TThis::UseReadBlocksBatcher)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         // Seems unreasonable to make backoff greater than half of total session timeout.
@@ -199,6 +208,8 @@ void TBlockFetcherConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("use_uncompressed_block_cache", &TThis::UseUncompressedBlockCache)
         .Default(true);
+    registrar.Parameter("group_out_of_order_blocks", &TThis::GroupOutOfOrderBlocks)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->GroupSize > config->WindowSize) {
@@ -269,7 +280,7 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("prefer_local_host", &TThis::PreferLocalHost)
         .Default(true);
-    registrar.Parameter("node_ping_interval", &TThis::NodePingPeriod)
+    registrar.Parameter("node_ping_period", &TThis::NodePingPeriod)
         .Default(TDuration::Seconds(10));
     registrar.Parameter("populate_cache", &TThis::PopulateCache)
         .Default(false);
@@ -286,6 +297,9 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("testing_delay", &TThis::TestingDelay)
         .Default();
+
+    registrar.Parameter("enable_local_throttling", &TThis::EnableLocalThrottling)
+        .Default(false);
 
     registrar.Preprocessor([] (TThis* config) {
         config->NodeChannel->RetryBackoffTime = TDuration::Seconds(10);

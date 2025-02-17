@@ -70,9 +70,11 @@ class CORS(object):
         The origin(s) may be regular expressions, case-sensitive strings,
         or else an asterisk.
 
-        :note: origins must include the schema and the port (if not port 80),
-        e.g.,
-        `CORS(app, origins=["http://localhost:8000", "https://example.com"])`.
+        ..  note::
+
+            origins must include the schema and the port (if not port 80),
+            e.g.,
+            `CORS(app, origins=["http://localhost:8000", "https://example.com"])`.
 
         Default : '*'
     :type origins: list, string or regex
@@ -136,6 +138,22 @@ class CORS(object):
 
         Default : True
     :type vary_header: bool
+
+    :param allow_private_network:
+        If True, the response header `Access-Control-Allow-Private-Network`
+        will be set with the value 'true' whenever the request header
+        `Access-Control-Request-Private-Network` has a value 'true'.
+
+        If False, the reponse header `Access-Control-Allow-Private-Network`
+        will be set with the value 'false' whenever the request header
+        `Access-Control-Request-Private-Network` has a value of 'true'.
+
+        If the request header `Access-Control-Request-Private-Network` is
+        not present or has a value other than 'true', the response header
+        `Access-Control-Allow-Private-Network` will not be set.
+
+        Default : True
+    :type allow_private_network: bool
     """
 
     def __init__(self, app=None, **kwargs):
@@ -191,7 +209,7 @@ def make_after_request_function(resources):
         normalized_path = unquote_plus(request.path)
         for res_regex, res_options in resources:
             if try_match(normalized_path, res_regex):
-                LOG.debug("Request to '%s' matches CORS resource '%s'. Using options: %s",
+                LOG.debug("Request to '%r' matches CORS resource '%s'. Using options: %s",
                       request.path, get_regexp_pattern(res_regex), res_options)
                 set_cors_headers(resp, res_options)
                 break

@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     data.cpp
     column.cpp
-    null_column.cpp
 )
 
 PEERDIR(

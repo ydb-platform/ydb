@@ -6,6 +6,7 @@
 #include "schemeshard_types.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/metering/metering.h>
 
 #include <util/generic/utility.h>
@@ -245,7 +246,7 @@ public:
             return false;
         }
 
-        TKind::FinishStats(OperationId, txState, context);
+        TKind::Finish(OperationId, txState, context);
         return true;
     }
 
@@ -285,7 +286,7 @@ public:
         if (txState->ShardsInProgress.empty()) {
             NTableState::AckAllSchemaChanges(OperationId, *txState, context);
             context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-            TKind::FinishStats(OperationId, *txState, context);
+            TKind::Finish(OperationId, *txState, context);
             return true;
         }
 
@@ -361,7 +362,7 @@ public:
         if (txState->ShardsInProgress.empty()) {
             NTableState::AckAllSchemaChanges(OperationId, *txState, context);
             context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-            TKind::FinishStats(OperationId, *txState, context);
+            TKind::Finish(OperationId, *txState, context);
             return true;
         }
 

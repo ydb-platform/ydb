@@ -44,8 +44,8 @@ namespace NKikimr {
                 if (item.Status == NKikimrProto::UNKNOWN) {
                     item.Status = NKikimrProto::DEADLINE;
                 }
-                it->second->SendResult(SelfId());
             }
+            it->second->SendResult(SelfId());
         }
         InFlight.erase(InFlight.begin(), it);
 

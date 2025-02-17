@@ -3,9 +3,10 @@
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events/events.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/digest/md5/md5.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/yson/node/node_io.h>
 
@@ -253,7 +254,7 @@ namespace NYql {
 
         template<typename T>
         TWeakPtr<T> NewRequest(ui64 id, TActorId sender, const TActorContext& ctx) {
-            auto req = New<T>(SelfId(), sender, ctx.ExecutorThread.ActorSystem, id);
+            auto req = New<T>(SelfId(), sender, ctx.ActorSystem(), id);
             Requests.emplace(req);
             return NYT::MakeWeak(req);
         }
@@ -625,12 +626,12 @@ namespace NYql {
                             YQL_CLOG(DEBUG, ProviderDq) << "Printing stderr (" << ToString(operationId) << "," << ToString(job.Id) << ")";
 
                             YT_UNUSED_FUTURE(cli->GetJobStderr(operationId, job.Id)
-                                .Apply(BIND([jobId = job.Id, operationId](const TSharedRef& data) {
+                                .Apply(BIND([jobId = job.Id, operationId](const TGetJobStderrResponse& response) {
                                     YQL_CLOG(DEBUG, ProviderDq)
                                         << "Stderr ("
                                         << ToString(operationId) << ","
                                         << ToString(jobId) << ")"
-                                        << TString(data.Begin(), data.Size());
+                                        << TString(response.Data.Begin(), response.Data.Size());
                                 })));
                         }
                     }

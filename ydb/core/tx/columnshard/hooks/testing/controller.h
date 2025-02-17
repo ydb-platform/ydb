@@ -1,45 +1,40 @@
 #pragma once
-#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+#include "ro_controller.h"
+
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/wrappers/unavailable_storage.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
-class TController: public ICSController {
+class TController: public TReadOnlyController {
 private:
-    YDB_READONLY(TAtomicCounter, TTLFinishedCounter, 0);
-    YDB_READONLY(TAtomicCounter, TTLStartedCounter, 0);
-    YDB_READONLY(TAtomicCounter, InsertFinishedCounter, 0);
-    YDB_READONLY(TAtomicCounter, InsertStartedCounter, 0);
-    YDB_READONLY(TAtomicCounter, CompactionFinishedCounter, 0);
-    YDB_READONLY(TAtomicCounter, CompactionStartedCounter, 0);
+    using TBase = TReadOnlyController;
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideUsedSnapshotLivetime);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideStalenessLivetimePing);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideLagForCompactionBeforeTierings);
+    YDB_ACCESSOR(std::optional<TDuration>, OverrideGuaranteeIndexationInterval, TDuration::Zero());
+    YDB_ACCESSOR(std::optional<TDuration>, OverridePeriodicWakeupActivationPeriod, std::nullopt);
+    YDB_ACCESSOR(std::optional<TDuration>, OverrideStatsReportInterval, std::nullopt);
+    YDB_ACCESSOR(std::optional<ui64>, OverrideGuaranteeIndexationStartBytesLimit, 0);
+    YDB_ACCESSOR(std::optional<TDuration>, OverrideOptimizerFreshnessCheckDuration, TDuration::Zero());
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideCompactionActualizationLag);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideTasksActualizationLag);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideMaxReadStaleness);
+    YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
+    YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
+    YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
+    YDB_FLAG_ACCESSOR(ExternalStorageUnavailable, false);
 
-    YDB_READONLY(TAtomicCounter, FilteredRecordsCount, 0);
-    YDB_READONLY(TAtomicCounter, IndexesSkippingOnSelect, 0);
-    YDB_READONLY(TAtomicCounter, IndexesApprovedOnSelect, 0);
-    YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
-    YDB_READONLY(TAtomicCounter, TieringUpdates, 0);
-    YDB_READONLY(TAtomicCounter, NeedActualizationCount, 0);
-    
-    YDB_READONLY(TAtomicCounter, ActualizationsCount, 0);
-    YDB_READONLY(TAtomicCounter, ActualizationRefreshSchemeCount, 0);
-    YDB_READONLY(TAtomicCounter, ActualizationRefreshTieringCount, 0);
-    
-    YDB_ACCESSOR_DEF(std::optional<TDuration>, LagForCompactionBeforeTierings);
-    YDB_ACCESSOR(std::optional<TDuration>, GuaranteeIndexationInterval, TDuration::Zero());
-    YDB_ACCESSOR(std::optional<TDuration>, PeriodicWakeupActivationPeriod, std::nullopt);
-    YDB_ACCESSOR(std::optional<TDuration>, StatsReportInterval, std::nullopt);
-    YDB_ACCESSOR(std::optional<ui64>, GuaranteeIndexationStartBytesLimit, 0);
-    YDB_ACCESSOR(std::optional<TDuration>, OptimizerFreshnessCheckDuration, TDuration::Zero());
+    YDB_ACCESSOR_DEF(std::optional<NKikimrProto::EReplyStatus>, OverrideBlobPutResultOnWriteValue);
+
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
 
-    YDB_ACCESSOR(std::optional<ui64>, OverrideReduceMemoryIntervalLimit, 1024);
-    YDB_ACCESSOR_DEF(std::optional<ui64>, OverrideRejectMemoryIntervalLimit);
-
-    std::optional<TDuration> ReadTimeoutClean;
     std::optional<ui32> ExpectedShardsCount;
 
     THashMap<ui64, const ::NKikimr::NColumnShard::TColumnShard*> ShardActuals;
@@ -49,6 +44,11 @@ private:
     YDB_ACCESSOR(bool, IndexWriteControllerEnabled, true);
     mutable TAtomicCounter IndexWriteControllerBrokeCount;
     std::set<EBackground> DisabledBackgrounds;
+
+    TMutex ActiveTabletsMutex;
+    std::set<ui64> ActiveTablets;
+
+    THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> ExternalLocks;
 
     class TBlobInfo {
     private:
@@ -138,85 +138,117 @@ private:
     void CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const;
 
     THashSet<TString> SharingIds;
+
+    std::optional<TString> RestartOnLocalDbTxCommitted;
 protected:
-    virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
-    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration def) const override {
-        return LagForCompactionBeforeTierings.value_or(def);
+    virtual const NOlap::NSplitter::TSplitSettings& DoGetBlobSplitSettings(const NOlap::NSplitter::TSplitSettings& defaultValue) const override {
+        if (OverrideBlobSplitSettings) {
+            return *OverrideBlobSplitSettings;
+        } else {
+            return defaultValue;
+        }
     }
+    virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(
+        const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
+
+    virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const override {
+        return OverrideLimitForPortionsMetadataAsk.value_or(defaultValue);
+    }
+
+
+    virtual ui64 DoGetMemoryLimitScanPortion(const ui64 defaultValue) const override {
+        return OverrideMemoryLimitForPortionReading.value_or(defaultValue);
+    }
+
+    virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration def) const override {
+        return OverrideLagForCompactionBeforeTierings.value_or(def);
+    }
+
+    virtual TDuration DoGetUsedSnapshotLivetime(const TDuration def) const override {
+        return OverrideUsedSnapshotLivetime.value_or(def);
+    }
+    virtual std::optional<TDuration> DoGetStalenessLivetimePing() const override {
+        return OverrideStalenessLivetimePing;
+    }
+    virtual TDuration DoGetCompactionActualizationLag(const TDuration def) const override {
+        return OverrideCompactionActualizationLag.value_or(def);
+    }
+
 
     virtual bool IsBackgroundEnabled(const EBackground id) const override {
         TGuard<TMutex> g(Mutex);
         return !DisabledBackgrounds.contains(id);
     }
 
-    virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) override {
-        ActualizationsCount.Inc();
+    virtual TDuration DoGetActualizationTasksLag(const TDuration d) const override {
+        return OverrideTasksActualizationLag.value_or(d);
     }
-    virtual void OnActualizationRefreshScheme() override {
-        ActualizationRefreshSchemeCount.Inc();
-    }
-    virtual void OnActualizationRefreshTiering() override {
-        ActualizationRefreshTieringCount.Inc();
-    }
+
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual void DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual void DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) override;
 
-    virtual bool DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) override;
-    virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) override;
     virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const ::NKikimr::NColumnShard::TColumnShard& shard) override;
-    virtual TDuration GetGuaranteeIndexationInterval(const TDuration defaultValue) const override {
-        return GuaranteeIndexationInterval.value_or(defaultValue);
+    virtual TDuration DoGetGuaranteeIndexationInterval(const TDuration defaultValue) const override {
+        return OverrideGuaranteeIndexationInterval.value_or(defaultValue);
     }
-    TDuration GetPeriodicWakeupActivationPeriod(const TDuration defaultValue) const override {
-        return PeriodicWakeupActivationPeriod.value_or(defaultValue);
+    virtual TDuration DoGetPeriodicWakeupActivationPeriod(const TDuration defaultValue) const override {
+        return OverridePeriodicWakeupActivationPeriod.value_or(defaultValue);
     }
-    TDuration GetStatsReportInterval(const TDuration defaultValue) const override {
-        return StatsReportInterval.value_or(defaultValue);
+    virtual TDuration DoGetStatsReportInterval(const TDuration defaultValue) const override {
+        return OverrideStatsReportInterval.value_or(defaultValue);
     }
-    virtual ui64 GetGuaranteeIndexationStartBytesLimit(const ui64 defaultValue) const override {
-        return GuaranteeIndexationStartBytesLimit.value_or(defaultValue);
+    virtual ui64 DoGetGuaranteeIndexationStartBytesLimit(const ui64 defaultValue) const override {
+        return OverrideGuaranteeIndexationStartBytesLimit.value_or(defaultValue);
     }
-    virtual TDuration GetOptimizerFreshnessCheckDuration(const TDuration defaultValue) const override {
-        return OptimizerFreshnessCheckDuration.value_or(defaultValue);
+    virtual TDuration DoGetOptimizerFreshnessCheckDuration(const TDuration defaultValue) const override {
+        return OverrideOptimizerFreshnessCheckDuration.value_or(defaultValue);
     }
-    virtual TDuration GetReadTimeoutClean(const TDuration def) override {
-        return ReadTimeoutClean.value_or(def);
+    virtual TDuration DoGetMaxReadStaleness(const TDuration def) const override {
+        return OverrideMaxReadStaleness.value_or(def);
+    }
+    virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 /* def */) const override {
+        return 0;
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
         return CompactionControl;
-    }
-    void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override {
-        TieringUpdates.Inc();
     }
 
     virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& sessionId) override {
         TGuard<TMutex> g(Mutex);
         AFL_VERIFY(SharingIds.erase(sessionId));
-        if (SharingIds.empty()) {
-            CheckInvariants();
-        }
     }
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& sessionId) override {
+        // dont check here. on finish only
         TGuard<TMutex> g(Mutex);
-        if (SharingIds.empty()) {
-            CheckInvariants();
-        }
         SharingIds.emplace(sessionId);
     }
 
-public:
-    virtual TDuration GetRemovedPortionLivetime(const TDuration /*def*/) const override {
-        return TDuration::Zero();
+    virtual THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> GetExternalDataLocks() const override {
+        TGuard<TMutex> g(Mutex);
+        return ExternalLocks;
     }
+
+    virtual NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetStorageOperatorOverride(
+        const ::NKikimr::NColumnShard::NTiers::TExternalStorageId& /*storageId*/) const override {
+        if (ExternalStorageUnavailableFlag) {
+            return std::make_shared<NWrappers::NExternalStorage::TUnavailableExternalStorageOperator>(
+                "unavailable", "disabled by test controller");
+        }
+        return nullptr;
+    }
+
+public:
+    virtual bool CheckPortionsToMergeOnCompaction(const ui64 /*memoryAfterAdd*/, const ui32 currentSubsetsCount) override {
+        return currentSubsetsCount > 1;
+    }
+
+    virtual NKikimrProto::EReplyStatus OverrideBlobPutResultOnWrite(const NKikimrProto::EReplyStatus originalStatus) const override {
+        return OverrideBlobPutResultOnWriteValue.value_or(originalStatus);
+    }
+
     const TAtomicCounter& GetIndexWriteControllerBrokeCount() const {
         return IndexWriteControllerBrokeCount;
-    }
-    virtual ui64 GetReduceMemoryIntervalLimit(const ui64 def) const override {
-        return OverrideReduceMemoryIntervalLimit.value_or(def);
-    }
-    virtual ui64 GetRejectMemoryIntervalLimit(const ui64 def) const override {
-        return OverrideRejectMemoryIntervalLimit.value_or(def);
     }
     bool IsTrivialLinks() const;
     TCheckContext CheckInvariants() const;
@@ -226,27 +258,19 @@ public:
         return ShardActuals.size();
     }
 
-    virtual void AddPortionForActualizer(const i32 portionsCount) override {
-        NeedActualizationCount.Add(portionsCount);
-    }
-
     void DisableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);
         DisabledBackgrounds.emplace(id);
     }
 
+    bool IsBackgroundEnable(const EBackground id) {
+        TGuard<TMutex> g(Mutex);
+        return !DisabledBackgrounds.contains(id);
+    }
+
     void EnableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);
         DisabledBackgrounds.erase(id);
-    }
-
-    void WaitActualization(const TDuration d) const {
-        const TInstant start = TInstant::Now();
-        while (TInstant::Now() - start < d && NeedActualizationCount.Val()) {
-            Cerr << "waiting actualization: " << NeedActualizationCount.Val() << "/" << TInstant::Now() - start << Endl;
-            Sleep(TDuration::Seconds(1));
-        }
-        AFL_VERIFY(!NeedActualizationCount.Val());
     }
 
     std::vector<ui64> GetShardActualIds() const {
@@ -260,26 +284,51 @@ public:
 
     std::vector<ui64> GetPathIds(const ui64 tabletId) const;
 
-    virtual void OnIndexSelectProcessed(const std::optional<bool> result) override {
-        if (!result) {
-            IndexesSkippedNoData.Inc();
-        } else if (*result) {
-            IndexesApprovedOnSelect.Inc();
-        } else {
-            IndexesSkippingOnSelect.Inc();
-        }
-    }
     void SetExpectedShardsCount(const ui32 value) {
         ExpectedShardsCount = value;
     }
     void SetCompactionControl(const EOptimizerCompactionWeightControl value) {
         CompactionControl = value;
     }
-    void SetReadTimeoutClean(const TDuration d) {
-        ReadTimeoutClean = d;
+
+    void RegisterLock(const TString& name, const std::shared_ptr<NOlap::NDataLocks::ILock>& lock) {
+        TGuard<TMutex> g(Mutex);
+        AFL_VERIFY(ExternalLocks.emplace(name, lock).second)("name", name);
+    }
+
+    void UnregisterLock(const TString& name) {
+        TGuard<TMutex> g(Mutex);
+        AFL_VERIFY(ExternalLocks.erase(name))("name", name);
     }
 
     bool HasPKSortingOnly() const;
+
+    void OnSwitchToWork(const ui64 tabletId) override {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        ActiveTablets.emplace(tabletId);
+    }
+
+    void OnCleanupActors(const ui64 tabletId) override {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        ActiveTablets.erase(tabletId);
+    }
+
+    ui64 GetActiveTabletsCount() const {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        return ActiveTablets.size();
+    }
+
+    bool IsActiveTablet(const ui64 tabletId) const {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        return ActiveTablets.contains(tabletId);
+    }
+
+    void SetRestartOnLocalTxCommitted(std::optional<TString> txInfo) {
+        RestartOnLocalDbTxCommitted = std::move(txInfo);
+    }
+
+    virtual void OnAfterLocalTxCommitted(
+        const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override;
 };
 
 }

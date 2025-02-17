@@ -31,7 +31,7 @@
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/mock_access_service.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <ydb/library/security/util.h>
@@ -402,6 +402,7 @@ class TCreateComputeDatabaseActor : public NActors::TActorBootstrapped<TCreateCo
     std::function<void(const TDuration&, bool, bool)> Probe;
     TEventRequest Event;
     ui32 Cookie;
+    FederatedQuery::QueryContent::QueryType QueryType;
     TInstant StartTime;
 
 public:
@@ -413,7 +414,8 @@ public:
                                 const TString& scope,
                                 const std::function<void(const TDuration&, bool, bool)>& probe,
                                 TEventRequest event,
-                                ui32 cookie)
+                                ui32 cookie,
+                                FederatedQuery::QueryContent::QueryType queryType = FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED)
         : Config(config)
         , ComputeConfig(computeConfig)
         , Sender(sender)
@@ -423,13 +425,14 @@ public:
         , Probe(probe)
         , Event(event)
         , Cookie(cookie)
+        , QueryType(queryType)
         , StartTime(TInstant::Now()) { }
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_CREATE_DATABASE";
 
     void Bootstrap() {
         CPP_LOG_T("Create database bootstrap. CloudId: " << CloudId << " Scope: " << Scope << " Actor id: " << SelfId());
-        if (!ComputeConfig.YdbComputeControlPlaneEnabled(Scope)) {
+        if (!ComputeConfig.YdbComputeControlPlaneEnabled(Scope, QueryType)) {
             Event->Get()->ComputeDatabase = FederatedQuery::Internal::ComputeDatabaseInternal{};
             TActivationContext::Send(Event->Forward(ControlPlaneProxyActorId()));
             PassAway();
@@ -450,6 +453,7 @@ public:
     )
 
     void HandleTimeout() {
+        Counters->InFly->Dec();
         CPP_LOG_W("Create database timeout. CloudId: " << CloudId << " Scope: " << Scope << " Actor id: " << SelfId());
         NYql::TIssues issues;
         NYql::TIssue issue = MakeErrorIssue(TIssuesIds::TIMEOUT, "Create database: request timeout. Try repeating the request later");
@@ -525,7 +529,7 @@ public:
         if (mon) {
             ::NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "yq_control_plane_proxy", "YQ Control Plane Proxy", false,
-                TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                TlsActivationContext->ActorSystem(), SelfId());
         }
 
         const auto& accessServiceProto = Config.Proto.GetAccessService();
@@ -648,6 +652,7 @@ private:
         const int byteSize = request.ByteSize();
         TActorId sender = ev->Sender;
         ui64 cookie = ev->Cookie;
+        FederatedQuery::QueryContent::QueryType queryType = request.content().type();
 
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(CreateQueryRequest, scope, user, delta, byteSize, isSuccess, isTimeout);
@@ -688,7 +693,7 @@ private:
                                                 TEvControlPlaneProxy::TEvCreateQueryResponse>
                                                 (Counters.GetCommonCounters(RTC_CREATE_COMPUTE_DATABASE),
                                                  sender, Config, Config.ComputeConfig, cloudId,
-                                                 scope, probe, ev, cookie));
+                                                 scope, probe, ev, cookie, queryType));
             return;
         }
 
@@ -701,6 +706,7 @@ private:
                                               Config,
                                               ControlPlaneStorageServiceActorId(),
                                               requestCounters,
+                                              Counters.GetCommonCounters(RTC_RATE_LIMITER),
                                               probe,
                                               availablePermissions));
     }
@@ -917,6 +923,7 @@ private:
         const int byteSize = request.ByteSize();
         TActorId sender = ev->Sender;
         ui64 cookie = ev->Cookie;
+        FederatedQuery::QueryContent::QueryType queryType = request.content().type();
 
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(ModifyQueryRequest, scope, user, queryId, delta, byteSize, isSuccess, isTimeout);
@@ -957,7 +964,7 @@ private:
                                                 TEvControlPlaneProxy::TEvModifyQueryResponse>
                                                 (Counters.GetCommonCounters(RTC_CREATE_COMPUTE_DATABASE),
                                                  sender, Config, Config.ComputeConfig, cloudId,
-                                                 scope, probe, ev, cookie));
+                                                 scope, probe, ev, cookie, queryType));
             return;
         }
 
@@ -1865,6 +1872,7 @@ private:
                                                    Config.RequestTimeout,
                                                    Counters,
                                                    Config.CommonConfig,
+                                                   Config.ComputeConfig,
                                                    Signer));
                 return;
             }

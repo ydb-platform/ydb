@@ -146,6 +146,15 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         }
 
         if (guardLocks.LockTxId) {
+            auto abortLock = [&]() {
+                LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
+                    << " aborting because it cannot acquire locks");
+
+                op->SetAbortedFlag();
+                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+                return EExecutionStatus::Executed;
+            };
+
             switch (DataShard.SysLocksTable().EnsureCurrentLock()) {
                 case EEnsureCurrentLock::Success:
                     // Lock is valid, we may continue with reads and side-effects
@@ -153,27 +162,26 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
                 case EEnsureCurrentLock::Broken:
                     // Lock is valid, but broken, we could abort early in some
-                    // cases, but it doesn't affect correctness.
+                    // cases, but it doesn't affect correctness. For write
+                    // transactions we need to abort, since we may otherwise
+                    // perform writes that are not attached to any lock.
+                    if (!op->IsReadOnly()) {
+                        return abortLock();
+                    }
                     break;
 
                 case EEnsureCurrentLock::TooMany:
                     // Lock cannot be created, it's not necessarily a problem
                     // for read-only transactions, for non-readonly we need to
                     // abort;
-                    if (op->IsReadOnly()) {
-                        break;
+                    if (!op->IsReadOnly()) {
+                        return abortLock();
                     }
-
-                    [[fallthrough]];
+                    break;
 
                 case EEnsureCurrentLock::Abort:
                     // Lock cannot be created and we must abort
-                    LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
-                        << " aborting because it cannot acquire locks");
-
-                    op->SetAbortedFlag();
-                    BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-                    return EExecutionStatus::Executed;
+                    return abortLock();
             }
         }
 
@@ -189,7 +197,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         };
 
         auto [validated, brokenLocks] = op->HasVolatilePrepareFlag()
-            ? KqpValidateVolatileTx(tabletId, sysLocks, kqpLocks, useGenericReadSets, 
+            ? KqpValidateVolatileTx(tabletId, sysLocks, kqpLocks, useGenericReadSets,
                 txId, tx->DelayedInReadSets(), awaitingDecisions, outReadSets)
             : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
 
@@ -217,14 +225,9 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         auto allocGuard = tasksRunner.BindAllocator(txc.GetMemoryLimit() - dataTx->GetTxSize());
 
-        NKqp::NRm::TKqpResourcesRequest req;
-        req.MemoryPool = NKqp::NRm::EKqpMemoryPool::DataQuery;
-        req.Memory = txc.GetMemoryLimit();
-        ui64 taskId = dataTx->GetFirstKqpTaskId();
-        NKqp::GetKqpResourceManager()->NotifyExternalResourcesAllocated(txId, taskId, req);
-
+        NKqp::GetKqpResourceManager()->GetCounters()->RmExternalMemory->Add(txc.GetMemoryLimit());
         Y_DEFER {
-            NKqp::GetKqpResourceManager()->NotifyExternalResourcesFreed(txId, taskId);
+            NKqp::GetKqpResourceManager()->GetCounters()->RmExternalMemory->Sub(txc.GetMemoryLimit());
         };
 
         LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
@@ -242,6 +245,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         }
 
         LWTRACK(ProposeTransactionKqpDataExecute, op->Orbit);
+
+        const bool isArbiter = op->HasVolatilePrepareFlag() && KqpLocksIsArbiter(tabletId, kqpLocks);
 
         KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, tx->GetDataTx()->GetUserDb());
 
@@ -353,6 +358,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 participants,
                 dataTx->GetVolatileChangeGroup(),
                 dataTx->GetVolatileCommitOrdered(),
+                isArbiter,
                 txc);
         }
 

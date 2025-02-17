@@ -139,12 +139,6 @@ void TSuspendableSingleQueueSchedulerThread<TQueueImpl>::OnStart()
     Queue_->SetThreadId(GetThreadId());
 }
 
-template <class TQueueImpl>
-void TSuspendableSingleQueueSchedulerThread<TQueueImpl>::OnStop()
-{
-    Queue_->DrainConsumer();
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 template class TSuspendableSingleQueueSchedulerThread<TMpscQueueImpl>;

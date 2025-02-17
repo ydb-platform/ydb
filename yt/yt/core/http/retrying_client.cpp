@@ -1,6 +1,7 @@
 #include "config.h"
 
 #include "retrying_client.h"
+#include "http.h"
 #include "private.h"
 
 #include <yt/yt/core/http/client.h>
@@ -14,7 +15,7 @@ using namespace NNet;
 using namespace NYTree;
 using namespace NConcurrency;
 
-static const auto& Logger = HttpLogger;
+static constexpr auto& Logger = HttpLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -26,13 +27,13 @@ public:
         : RetryChecker_(retryChecker ? std::move(retryChecker) : BIND(&DefaultRetryChecker))
     { }
 
-    virtual bool IsRetriableError(const TError& error) override
+    bool IsRetriableError(const TError& error) override
     {
         return RetryChecker_(error);
     }
 
-    virtual TError CheckError(const IResponsePtr& response) override = 0;
-    virtual NYTree::INodePtr GetFormattedResponse() const override = 0;
+    TError CheckError(const IResponsePtr& response) override = 0;
+    NYTree::INodePtr GetFormattedResponse() const override = 0;
 
 protected:
     static bool DefaultRetryChecker(const TError& /*error*/)
@@ -179,7 +180,7 @@ private:
         const TString& url,
         Args&&... args)
     {
-        return BIND([=, this, this_ = MakeStrong(this), func = std::move(func), ...args = std::move(args)] () {
+        return BIND([=, this, this_ = MakeStrong(this), func = std::move(func), ...args = std::move(args)] {
             return DoMakeRequest(std::move(func), responseChecker, url, std::forward<Args>(args)...);
         }).AsyncVia(Invoker_).Run();
     }

@@ -154,7 +154,7 @@ public:
             options.PollingPeriod))
         , Invoker_(Queue_)
     {
-        Configure(threadCount);
+        SetThreadCount(threadCount);
     }
 
     ~TThreadPool()
@@ -168,9 +168,14 @@ public:
         return Invoker_;
     }
 
-    void Configure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        TThreadPoolBase::Configure(threadCount);
+        TThreadPoolBase::SetThreadCount(threadCount);
+    }
+
+    void SetPollingPeriod(TDuration pollingPeriod) override
+    {
+        Queue_->SetPollingPeriod(pollingPeriod);
     }
 
     int GetThreadCount() override
@@ -191,16 +196,9 @@ private:
 
     void DoShutdown() override
     {
-        Queue_->Shutdown();
+        Queue_->Shutdown(/*graceful*/ false);
         TThreadPoolBase::DoShutdown();
-    }
-
-    TClosure MakeFinalizerCallback() override
-    {
-        return BIND_NO_PROPAGATE([queue = Queue_, callback = TThreadPoolBase::MakeFinalizerCallback()] {
-            callback();
-            queue->DrainConsumer();
-        });
+        Queue_->OnConsumerFinished();
     }
 
     TSchedulerThreadPtr SpawnThread(int index) override

@@ -1,10 +1,5 @@
 UNITTEST_FOR(ydb/mvp/core)
 
-OWNER(
-    xenoxeno
-    g:kikimr
-)
-
 SIZE(SMALL)
 
 SRCS(

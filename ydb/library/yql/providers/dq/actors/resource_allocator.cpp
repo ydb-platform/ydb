@@ -2,8 +2,8 @@
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include "execution_helpers.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -92,7 +92,7 @@ private:
     static TDuration GetAllocationTimeout(int workerCount, const TDqConfiguration::TPtr settings) {
         ui64 timeout = workerCount == 1
             ? settings->_LiteralTimeout.Get().GetOrElse(TDqSettings::TDefault::LiteralTimeout)
-            : settings->_TableTimeout.Get().GetOrElse(TDqSettings::TDefault::TableTimeout);
+            : settings->GetQueryTimeout();
         if (timeout & (1ULL<<63)) {
             return TDuration(); // no timeout
         }

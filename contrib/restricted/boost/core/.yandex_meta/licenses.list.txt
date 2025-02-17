@@ -1,0 +1,418 @@
+====================BSL-1.0====================
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+ *          http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+ *          https://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+ * Distributed under the Boost Software License, Version 1.0. (See
+ * accompanying file LICENSE_1_0.txt or copy at
+ * http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+(http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+* Submit your patches as pull requests against **develop** branch. Note that by submitting patches you agree to license your modifications under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
+
+
+====================BSL-1.0====================
+//  (C) Copyright Beman Dawes 1999-2003. Distributed under the Boost
+//  Software License, Version 1.0. (See accompanying file
+//  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  (C) Copyright Beman Dawes 2000. Distributed under the Boost
+//  Software License, Version 1.0. (See accompanying file
+//  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  https://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Copyright Douglas Gregor 2001-2003. Use, modification and
+// distribution is subject to the Boost Software License, Version
+// 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+//
+// See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE_1_0.txt or copy at
+//          http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Use, modification and distribution is subject to the Boost Software
+// License, Version 1.0. (See accompanying file LICENSE_1_0.txt
+// or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Use, modification and distribution is subject to the Boost Software License,
+// Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Use, modification, and distribution is subject to the Boost Software
+// License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+Distributed under the Boost Software License, Version 1.0.
+
+
+====================BSL-1.0====================
+Distributed under the Boost Software License, Version 1.0.
+(See accompanying file LICENSE_1_0.txt or copy at
+http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+Distributed under the Boost Software License, Version 1.0.
+(http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+Distributed under the [Boost Software License, Version 1.0](https://boost.org/LICENSE_1_0.txt).
+
+====================BSL-1.0 AND BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+ *             Copyright Andrey Semashev 2022.
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+ *             Copyright Andrey Semashev 2024.
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+ *          Copyright Andrey Semashev 2007 - 2013.
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+ *          Copyright Andrey Semashev 2007 - 2014.
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+ *          Copyright Andrey Semashev 2018 - 2020.
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2014 Glen Fernandes
+
+
+====================COPYRIGHT====================
+//           (C) Copyright Gennaro Prota 2003.
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Beman Dawes 1999-2003. Distributed under the Boost
+//  Software License, Version 1.0. (See accompanying file
+//  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Beman Dawes 2000. Distributed under the Boost
+//  Software License, Version 1.0. (See accompanying file
+//  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+//  Copyright (C) 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+//  Copyright (C) 2001, 2002 Peter Dimov
+//  Copyright (C) 2002 David Abrahams
+
+
+====================COPYRIGHT====================
+//  Copyright (C) 2014 Agustin Berge
+
+
+====================COPYRIGHT====================
+//  Copyright (C) 2014 Glen Joseph Fernandes
+//  (glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2002, 2003 Peter Dimov
+//  Copyright (c) 2003 Daniel Frey
+//  Copyright (c) 2003 Howard Hinnant
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2002, 2009, 2014 Peter Dimov
+//  Copyright (2) Beman Dawes 2010, 2011
+//  Copyright (3) Ion Gaztanaga 2013
+
+
+====================COPYRIGHT====================
+//  Copyright 2007 Peter Dimov
+
+
+====================COPYRIGHT====================
+//  Copyright 2007, 2014 Peter Dimov
+
+
+====================COPYRIGHT====================
+//  Copyright 2018 Peter Dimov
+
+
+====================COPYRIGHT====================
+//  Copyright 2022 Peter Dimov
+//  Distributed under the Boost Software License, Version 1.0.
+//  https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+//  Copyright 2023 Peter Dimov
+//  Distributed under the Boost Software License, Version 1.0.
+//  https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes, 2009
+//  Copyright (C) 2011-2012 Vicente J. Botet Escriba
+//  Copyright (C) 2012 Anthony Williams
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes, 2009
+//  Copyright (C) 2011-2012 Vicente J. Botet Escriba
+//  Copyright (C) 2012 Anthony Williams
+//  Copyright (C) 2014 Andrey Semashev
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2004 Pavel Vozenilek.
+// Use, modification and distribution is subject to the Boost Software
+// License, Version 1.0. (See accompanying file LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// (C) Copyright David Abrahams 2001.
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// (C) Copyright David Abrahams 2002.
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2007, 2008 Steven Watanabe, Joseph Gauterin, Niels Dekker
+// Copyright (C) 2023 Andrey Semashev
+
+
+====================COPYRIGHT====================
+// Copyright (c) 2014 Adam Wulkiewicz, Lodz, Poland.
+
+
+====================COPYRIGHT====================
+// Copyright 2003 (c) The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright 2008, 2020 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2008, 2020, 2023 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2014 Peter Dimov
+// Copyright 2014 Andrey Semashev
+
+
+====================COPYRIGHT====================
+// Copyright 2014, 2021 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright 2014, 2022 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2017 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright 2020 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2020, 2021 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2021 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright Douglas Gregor 2001-2003. Use, modification and
+// distribution is subject to the Boost Software License, Version
+// 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright Peter Dimov and David Abrahams 2002.
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+Copyright (C) 2002 Brad King (brad.king@kitware.com)
+                   Douglas Gregor (gregod@cs.rpi.edu)
+
+
+====================COPYRIGHT====================
+Copyright (C) 2002, 2008, 2013 Peter Dimov
+
+
+====================COPYRIGHT====================
+Copyright (C) 2017 Glen Joseph Fernandes (glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2017-2021 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2018 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2019 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2019-2023 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2020-2022 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2021 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2021-2023 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2023 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2024 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================Public-Domain====================
+// derived from Sebastiano Vigna's public domain implementation

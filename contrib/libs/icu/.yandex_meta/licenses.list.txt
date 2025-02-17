@@ -1,0 +1,1571 @@
+====================BSD-2-Clause====================
+ #  Redistribution and use in source and binary forms, with or without
+ #  modification, are permitted provided that the following conditions are met:
+ #
+ #  Redistributions of source code must retain the above copyright notice, this
+ #  list of conditions and the following disclaimer. Redistributions in binary
+ #  form must reproduce the above copyright notice, this list of conditions and
+ #  the following disclaimer in the documentation and/or other materials
+ #  provided with the distribution.
+ #
+ # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ # "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ # LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ # FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ # COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ # INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ # (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ # SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ # HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ # STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+ # OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+ #     The Google Chrome software developed by Google is licensed under
+ # the BSD license. Other software included in this distribution is
+ # provided under other licenses, as set forth below.
+ #
+ #  The BSD License
+ #  http://opensource.org/licenses/bsd-license.php
+
+
+====================BSD-3-Clause====================
+ #   * Redistribution and use in source and binary forms, with or without
+ #   * modification, are permitted provided that the following conditions
+ #   * are met:
+ #   *
+ #   * . Redistributions of source code must retain the above copyright
+ #   *   notice, this list of conditions and the following disclaimer.
+ #   * . Redistributions in binary form must reproduce the above copyright
+ #   *   notice, this list of conditions and the following disclaimer in
+ #   *   the documentation and/or other materials provided with the
+ #   *   distribution.
+ #   * . Neither the name of the Computer Systems and Communication Lab
+ #   *   nor the names of its contributors may be used to endorse or
+ #   *   promote products derived from this software without specific
+ #   *   prior written permission.
+ #   *
+ #   * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ #   * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ #   * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ #   * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ #   * REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ #   * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ #   * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ #   * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ #   * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ #   * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ #   * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+ #   * OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+ #   * Redistribution and use in source and binary forms, with or without
+ #   * modification, are permitted provided that the following conditions
+ #   * are met:
+ #   *
+ #   * . Redistributions of source code must retain the above copyright
+ #   *   notice, this list of conditions and the following disclaimer.
+ #   * . Redistributions in binary form must reproduce the above copyright
+ #   *   notice, this list of conditions and the following disclaimer in
+ #   *   the documentation and/or other materials provided with the
+ #   *   distribution.
+ #   * . Neither the name of the TaBE Project nor the names of its
+ #   *   contributors may be used to endorse or promote products derived
+ #   *   from this software without specific prior written permission.
+ #   *
+ #   * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ #   * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ #   * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ #   * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ #   * REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ #   * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ #   * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ #   * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ #   * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ #   * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ #   * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+ #   * OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+ #  * Libtabe (Chinese)
+ #    - https://sourceforge.net/project/?group_id=1519
+ #    - Its license terms and conditions are shown below.
+
+
+====================BSD-3-Clause====================
+ #  EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+ #  TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ #  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ #  ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+ #  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+ #  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ #  SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+ #  Redistribution and use in source and binary forms, with or without
+ # modification, are permitted provided that the following conditions are met:
+ #
+ #  Redistributions of source code must retain the above copyright notice,
+ # this list of conditions and the following disclaimer.
+ #  Redistributions in binary form must reproduce the above
+ # copyright notice, this list of conditions and the following
+ # disclaimer in the documentation and/or other materials provided with
+ # the distribution.
+ #  Neither the name of  Google Inc. nor the names of its
+ # contributors may be used to endorse or promote products derived from
+ # this software without specific prior written permission.
+ #
+ #
+ #  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ # CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ # INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ # MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ # DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ # LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ # CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ # SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ # BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ # LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above
+//       copyright notice, this list of conditions and the following
+//       disclaimer in the documentation and/or other materials provided
+//       with the distribution.
+//     * Neither the name of Google Inc. nor the names of its
+//       contributors may be used to endorse or promote products derived
+//       from this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above
+      copyright notice, this list of conditions and the following
+      disclaimer in the documentation and/or other materials provided
+      with the distribution.
+    * Neither the name of Google Inc. nor the names of its
+      contributors may be used to endorse or promote products derived
+      from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================COPYRIGHT====================
+            // 2i(c). Assert that `key` is a literal.
+            // (Not needed)
+            // 2i(d). Let `ks` be the resolved value of `key`.
+
+
+====================COPYRIGHT====================
+            U_ASSERT(i < tuple.keys.len); // Given by earlier semantic checking
+            const Key& key = tupleVariantKeys[i];
+            // 5iii(c) If `key` is not the catch-all key '*':
+            if (!key.isWildcard()) {
+                // 5iii(c)(a). Assert that `key` is a literal.
+                // (Not needed)
+                // 5iii(c)(b). Let `ks` be the resolved value of `key`.
+                UnicodeString ks = key.asLiteral().unquoted();
+                // 5iii(c)(c) Let matchpref be the integer position of ks in `matches`.
+                matchpref = vectorFind(matches, ks);
+                U_ASSERT(matchpref >= 0);
+
+
+====================COPYRIGHT====================
+        _this->toUBytes[_this->toULength++] = static_cast<uint8_t>(c);
+        value = getKey_2022(c, reinterpret_cast<int32_t*>(&key), &offset);
+
+
+====================COPYRIGHT====================
+     Copyright © 2016 and later: Unicode, Inc. and others.
+     License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================COPYRIGHT====================
+    // For fast UnicodeSet::contains(c).
+    inline UBool contains(UChar32 c) const;
+
+
+====================COPYRIGHT====================
+    <meta name="COPYRIGHT" content=
+    "Copyright (C) 2016 and later: Unicode, Inc. and others. License &amp; terms of use: http://www.unicode.org/copyright.html"/>
+    <!-- meta name="COPYRIGHT" content=
+    "Copyright (c) 1997-2016 IBM Corporation and others. All Rights Reserved." / -->
+
+
+====================COPYRIGHT====================
+    <p> Copyright &copy; 2016 and later: Unicode, Inc. and others. License &amp; terms of use:
+    <a href="http://www.unicode.org/copyright.html">http://www.unicode.org/copyright.html</a><br/>
+    Copyright &copy; 1997-2016 International Business Machines Corporation and  others.
+    All Rights Reserved.</p>
+
+
+====================COPYRIGHT====================
+    UnicodeString src(c);
+    UnicodeString dest;
+
+
+====================COPYRIGHT====================
+  <i>© 2016 and later: Unicode, Inc. and others. License &amp; terms of use: http://www.unicode.org/copyright.html</i> 
+  <i>© 1995-2016 International Business Machines Corporation and others</i>
+
+
+====================COPYRIGHT====================
+ #   * Copyright (c) 1999 Computer Systems and Communication Lab,
+ #   *                    Institute of Information Science, Academia
+ #       *                    Sinica. All rights reserved.
+
+
+====================COPYRIGHT====================
+ #   * Copyright (c) 1999 TaBE Project.
+ #   * Copyright (c) 1999 Pai-Hsiang Hsiao.
+ #   * All rights reserved.
+
+
+====================COPYRIGHT====================
+ #  Copyright (C) 2006-2008, Google Inc.
+
+
+====================COPYRIGHT====================
+ #  Copyright (C) 2013 Brian Eugene Wilson, Robert Martin Campbell.
+ #  All rights reserved.
+
+
+====================COPYRIGHT====================
+ #  Copyright (c) 2013, LeRoy Benjamin Sharon
+ #  All rights reserved.
+
+
+====================COPYRIGHT====================
+ #  Copyright (c) 2014 International Business Machines Corporation
+ #  and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ #  Copyright 1996 Chih-Hao Tsai @ Beckman Institute,
+ #      University of Illinois
+ #  c-tsai4@uiuc.edu  http://casper.beckman.uiuc.edu/~c-tsai4
+
+
+====================COPYRIGHT====================
+ #  Copyright 2000, 2001, 2002, 2003 Nara Institute of Science
+ #  and Technology.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ # Copyright (C) 2016 and later: Unicode, Inc. and others.
+ # License & terms of use: http://www.unicode.org/copyright.html
+ # Copyright (c) 2015 International Business Machines Corporation
+ # and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ *   Copyright (C) 1996-2016, International Business Machines
+ *   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ *   Copyright (C) 1997-2009,2014 International Business Machines
+ *   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ *   Copyright (C) 1999-2006, International Business Machines
+ *   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ *   Copyright (C) 2003-2006, International Business Machines
+ *   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ *   Copyright (C) 2005-2006, International Business Machines
+ *   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ *   Copyright (C) 2005-2008, International Business Machines
+ *   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ *   Copyright (C) 2005-2012, International Business Machines
+ *   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ *   Copyright (C) 2005-2013, International Business Machines
+ *   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * COPYRIGHT:
+ * Copyright (c) 2001-2016, International Business Machines Corporation and
+ * others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * COPYRIGHT:
+ * Copyright (c) 2008-2010, International Business Machines Corporation and
+ * others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * COPYRIGHT:
+ * Copyright (c) 2008-2011, International Business Machines Corporation and
+ * others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * COPYRIGHT: 
+ * Copyright (c) 1996-2012, International Business Machines Corporation and
+ * others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1996-2008, International Business Machines Corporation *
+ * and others. All Rights Reserved.                                     *
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1996-2015, International Business Machines Corporation and
+ * others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2001-2011, International Business Machines Corporation and    *
+ * others. All Rights Reserved.                                                *
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2001-2011, International Business Machines Corporation.       *
+ * All Rights Reserved.                                                        *
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2001-2012, International Business Machines Corporation and    *
+ * others. All Rights Reserved.                                                *
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2001-2014, International Business Machines Corporation and    *
+ * others. All Rights Reserved.                                                *
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2002-2005, International Business Machines Corporation and    *
+ * others. All Rights Reserved.                                                *
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2002-2014, International Business Machines Corporation and
+ * others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2006-2012, International Business Machines Corporation and others. *
+ * All Rights Reserved.                                                             *
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2006-2014, International Business Machines Corporation   *
+ * and others. All Rights Reserved.                                            *
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2006-2016, International Business Machines Corporation
+ * and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2007-2014, International Business Machines Corporation
+ * and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2008, Google, International Business Machines Corporation and *
+ * others. All Rights Reserved.                                                *
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2008-2014, Google, International Business Machines Corporation and
+ * others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2008-2015, Google, International Business Machines Corporation
+ * and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2009-2010, Google, International Business Machines Corporation and *
+ * others. All Rights Reserved.                                                *
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2009-2016, International Business Machines Corporation,       *
+ * Google, and others. All Rights Reserved.                                    *
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2009-2017, International Business Machines Corporation,       *
+ * Google, and others. All Rights Reserved.                                    *
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2010 , Yahoo! Inc.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2013, International Business Machines Corporation
+ * and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2015, International Business Machines Corporation and
+ * others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2016 and later: Unicode, Inc. and others.
+ * License & terms of use: http://www.unicode.org/copyright.html
+ * Copyright (C) 2005-2014, International Business Machines
+ * Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2003-2008, International Business Machines
+ * Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+#define FROM_BASE64_IMAP(c) ((c)==COMMA ? 63 : (c)==SLASH ? -1 : fromBase64[c])
+
+
+====================COPYRIGHT====================
+#define is_d(c) ((c)=='d' || (c)=='D')
+#define is_e(c) ((c)=='e' || (c)=='E')
+#define is_i(c) ((c)=='i' || (c)=='I')
+#define is_l(c) ((c)=='l' || (c)=='L')
+#define is_r(c) ((c)=='r' || (c)=='R')
+#define is_t(c) ((c)=='t' || (c)=='T')
+#define is_u(c) ((c)=='u' || (c)=='U')
+#define is_y(c) ((c)=='y' || (c)=='Y')
+#define is_z(c) ((c)=='z' || (c)=='Z')
+
+
+====================COPYRIGHT====================
+(c) 2016 and later Unicode, Inc. and others
+
+====================COPYRIGHT====================
+*   Copyright (C) 1996-2013, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1997-2006, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1997-2011, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1997-2011,2014-2015 International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1997-2012, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1997-2013, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1997-2014, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1997-2016, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1998-2004, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1998-2005, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1998-2006, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1998-2011, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1998-2014, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1998-2015, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1998-2016, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2004, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2005, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2006,2013 IBM Corp. All rights reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2007, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2009, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2010, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2011, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2012, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2013, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2014 International Business Machines Corporation   *
+*   and others. All rights reserved.                                      *
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2014, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2015 International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2015, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 1999-2016 International Business Machines Corporation
+*   and others. All rights reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2000-2004, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2000-2006, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2000-2011, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2000-2012, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2000-2013, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2000-2014, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2000-2015, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2000-2016, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2001, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2001-2006, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2001-2008, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2001-2008,2010 IBM and others. All rights reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2001-2010, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2001-2011 IBM and others. All rights reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2001-2011,2014 IBM and others. All rights reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2001-2014 IBM and others. All rights reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2001-2014 International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2001-2015 IBM and others. All rights reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2002-2003, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2002-2006, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2002-2008 International Business Machines Corporation   *
+*   and others. All rights reserved.                                      *
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2002-2010, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2002-2011 International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2002-2012, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2002-2013, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2002-2014 International Business Machines Corporation
+*   and others. All rights reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2002-2015, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2002-2016 International Business Machines Corporation   *
+*   and others. All rights reserved.                                      *
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2003-2003, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2003-2007, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2003-2009, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2003-2013, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2003-2014, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2003-2015, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2003-2016, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2004-2007, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2004-2012, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2004-2016, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2005-2011, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2005-2015, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2005-2016, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2006 International Business Machines Corporation        *
+*   and others. All rights reserved.                                      *
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2006, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2007, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2007-2012, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2007-2015, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2008-2011, International Business Machines
+*   Corporation, Google and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2008-2015, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2009-2012, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2009-2014 International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2009-2014, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2009-2015, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2009-2016, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2010-2011, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2010-2012, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2010-2012,2014, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2010-2015, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2011, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2011-2012, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2011-2013, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2011-2014 International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2011-2015, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2012,2014 International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2012-2016, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2013-2016, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2015-2016, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (C) 2016, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (c) 2000-2005, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (c) 2000-2007, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (c) 2001-2005, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (c) 2001-2007, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+*   Copyright (c) 2001-2015, International Business Machines
+*   Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 1997-2005, International Business Machines Corporation and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 1997-2010, International Business Machines Corporation and    *
+* others. All Rights Reserved.                                                *
+
+
+====================COPYRIGHT====================
+* Copyright (C) 1997-2015, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 1998-2012, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2001-2013, International Business Machines
+*                Corporation and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2001-2014, International Business Machines Corporation.
+* All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2003 - 2008, International Business Machines Corporation and  *
+* others. All Rights Reserved.                                                *
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2003 - 2009, International Business Machines Corporation and  *
+* others. All Rights Reserved.                                                *
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2003 - 2013, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2003-2009,2012,2016 International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2004 - 2008, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2007-2008, International Business Machines Corporation and
+* others. All Rights Reserved.                                                *
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2007-2013, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2007-2016, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2008, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2008-2009, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2008-2013, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2008-2016, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2009-2010, International Business Machines Corporation and         *
+* others. All Rights Reserved.                                                *
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2010-2012,2015 International Business Machines
+* Corporation and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2010-2013, International Business Machines
+* Corporation and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2010-2014, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2010-2016, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2011-2016, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2012-2014, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2012-2015, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2013-2014, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2013-2015, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2014, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2014-2015, International Business Machines Corporation and
+* others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) 2014-2016, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (C) {1999-2001}, International Business Machines Corporation and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (c) 1996-2014, International Business Machines
+* Corporation and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (c) 2002-2004, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (c) 2002-2007, International Business Machines Corporation
+* and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (c) 2002-2011, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (c) 2003, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (c) 2003-2004, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (c) 2003-2011, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (c) 2004, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (c) 2004-2006, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (c) 2004-2014 International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+* Copyright (c) 2004-2014, International Business Machines
+* Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+/* Copyright (c) IBM Corporation, 2000-2010.   All rights reserved.   */
+
+
+====================COPYRIGHT====================
+/* Copyright (c) IBM Corporation, 2000-2011.   All rights reserved.   */
+
+
+====================COPYRIGHT====================
+/* Copyright (c) IBM Corporation, 2000-2012.  All rights reserved.    */
+
+
+====================COPYRIGHT====================
+/* Copyright (c) IBM Corporation, 2000-2014.  All rights reserved.    */
+
+
+====================COPYRIGHT====================
+/* Copyright (c) IBM Corporation, 2000-2016.   All rights reserved.   */
+
+
+====================COPYRIGHT====================
+//   Copyright (C) 2002-2015 International Business Machines Corporation
+//   and others. All rights reserved.
+
+
+====================COPYRIGHT====================
+//   Copyright (C) 2012 International Business Machines Corporation
+//   and others. All rights reserved.
+
+
+====================COPYRIGHT====================
+//  Copyright (C) 2002-2008, International Business Machines Corporation and others.
+//  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+//  Copyright (C) 2002-2016, International Business Machines Corporation and others.
+//  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+//  Copyright (C) 2003-2010, International Business Machines Corporation and others.
+//  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+//  Copyright (C) 2004-2015, International Business Machines Corporation and others.
+//  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2016 and later: Unicode, Inc. and others.
+// License & terms of use: http://www.unicode.org/copyright.html
+// Copyright (C) 1999-2016, International Business Machines
+// Corporation and others.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+// Copyright 2001 and onwards Google Inc.
+// Author: Sanjay Ghemawat
+
+
+====================COPYRIGHT====================
+// Copyright 2004 and onwards Google Inc.
+
+
+====================COPYRIGHT====================
+// Copyright 2006-2008 the V8 project authors. All rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright 2007 Google Inc. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+// Copyright 2010 the V8 project authors. All rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright 2012 the V8 project authors. All rights reserved.
+
+
+====================COPYRIGHT====================
+// © 2016 and later: Unicode, Inc. and others.
+// License & terms of use: http://www.unicode.org/copyright.html
+// Copyright (C) 2009-2011, International Business Machines
+// Corporation and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+// © 2016 and later: Unicode, Inc. and others.
+// License & terms of use: http://www.unicode.org/copyright.html
+// Copyright (C) 2009-2013, International Business Machines
+// Corporation and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+// © 2016 and later: Unicode, Inc. and others.
+// License & terms of use: http://www.unicode.org/copyright.html
+//{{NO_DEPENDENCIES}}
+// Copyright (c) 2003-2010 International Business Machines
+// Corporation and others. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+// © 2017 and later: Unicode, Inc. and others.
+// License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================COPYRIGHT====================
+// © 2018 and later: Unicode, Inc. and others.
+// License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================COPYRIGHT====================
+// © 2019 and later: Unicode, Inc. and others.
+// License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================COPYRIGHT====================
+// © 2020 and later: Unicode, Inc. and others.
+// License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================COPYRIGHT====================
+// © 2021 and later: Unicode, Inc. and others.
+// License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================COPYRIGHT====================
+// © 2022 and later: Unicode, Inc. and others.
+// License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================COPYRIGHT====================
+// © 2023 and later: Unicode, Inc. and others.
+// License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================COPYRIGHT====================
+// © 2024 and later: Unicode, Inc. and others.
+// License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================COPYRIGHT====================
+<i><font size="-1">Contents generated by StableAPI tool on Mon Sep 30 11:33:51 PDT 2024<br>
+        Copyright &copy; 2017 and later: Unicode, Inc. and others.<br>
+        License &amp; terms of use: http://www.unicode.org/copyright.html
+
+
+====================COPYRIGHT====================
+Copyright (c) 1995-2016 International Business Machines Corporation and others
+All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright (c) 2013-2022 Niels Lohmann
+
+
+====================COPYRIGHT====================
+Copyright 1991 by the Massachusetts Institute of Technology
+
+
+====================COPYRIGHT====================
+Copyright 2006-2011, the V8 project authors. All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2004 Scott James Remnant <scott@netsplit.com>.
+Copyright © 2012-2015 Dan Nicholson <dbn.lists@gmail.com>
+
+
+====================COPYRIGHT====================
+Copyright © 2016-2024 Unicode, Inc.
+
+
+====================Custom-punycode====================
+Disclaimer and license
+
+    Regarding this entire document or any portion of it (including
+    the pseudocode and C code), the author makes no guarantees and
+    is not responsible for any damage resulting from its use.  The
+    author grants irrevocable permission to anyone to use, modify,
+    and distribute it in any way that does not diminish the rights
+    of anyone else to use, modify, and distribute it, provided that
+    redistributed derivative works do not contain misleading author or
+    version information.  Derivative works need not be licensed under
+    similar terms.
+
+
+====================ICU====================
+    The ICU license is now in plain text format, see <a href="./LICENSE">LICENSE</a>.
+
+
+====================ICU====================
+/* This software is made available under the terms of the             */
+/* ICU License -- ICU 1.8.1 and later.                                */
+
+
+====================ICU====================
+<title>ICU License - moved to LICENSE</title>
+
+
+====================ICU====================
+ICU License - ICU 1.8.1 to ICU 57.1
+
+COPYRIGHT AND PERMISSION NOTICE
+
+
+====================ICU====================
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, and/or sell copies of the Software, and to permit persons
+to whom the Software is furnished to do so, provided that the above
+copyright notice(s) and this permission notice appear in all copies of
+the Software and that both the above copyright notice(s) and this
+permission notice appear in supporting documentation.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF THIRD PARTY RIGHTS. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+HOLDERS INCLUDED IN THIS NOTICE BE LIABLE FOR ANY CLAIM, OR ANY
+SPECIAL INDIRECT OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER
+RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF
+CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+Except as contained in this notice, the name of a copyright holder
+shall not be used in advertising or otherwise to promote the sale, use
+or other dealings in this Software without prior written authorization
+of the copyright holder.
+
+All trademarks and registered trademarks mentioned herein are the
+property of their respective owners.
+
+
+====================MIT====================
+MIT License
+
+
+====================MIT====================
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+====================Public-Domain====================
+  ICU uses the public domain data and code derived from Time Zone
+Database for its time zone support. The ownership of the TZ database
+
+
+====================Public-Domain====================
+ # 7.  Database Ownership
+ #
+ #    The TZ database itself is not an IETF Contribution or an IETF
+ #    document.  Rather it is a pre-existing and regularly updated work
+ #    that is in the public domain, and is intended to remain in the
+ #    public domain.  Therefore, BCPs 78 [RFC5378] and 79 [RFC3979] do
+ #    not apply to the TZ Database or contributions that individuals make
+ #    to it.  Should any claims be made and substantiated against the TZ
+ #    Database, the organization that is providing the IANA
+ #    Considerations defined in this RFC, under the memorandum of
+ #    understanding with the IETF, currently ICANN, may act in accordance
+ #    with all competent court orders.  No ownership claims will be made
+ #    by ICANN or the IETF Trust on the database or the code.  Any person
+ #    making a contribution to the database or code waives all rights to
+ #    future claims in that contribution or in the TZ Database.
+
+
+====================Unicode====================
+        License &amp; terms of use: http://www.unicode.org/copyright.html
+
+
+====================Unicode====================
+     License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================Unicode====================
+    "Copyright (C) 2016 and later: Unicode, Inc. and others. License &amp; terms of use: http://www.unicode.org/copyright.html"/>
+
+
+====================Unicode====================
+    <a href="http://www.unicode.org/copyright.html">http://www.unicode.org/copyright.html</a><br/>
+
+
+====================Unicode====================
+    <p> Copyright &copy; 2016 and later: Unicode, Inc. and others. License &amp; terms of use:
+    <a href="http://www.unicode.org/copyright.html">http://www.unicode.org/copyright.html</a><br/>
+
+
+====================Unicode====================
+  " Copyright (C) 2016 and later: Unicode, Inc. and others. License & terms of use: http://www.unicode.org/copyright.html "
+
+
+====================Unicode====================
+  <i>© 2016 and later: Unicode, Inc. and others. License &amp; terms of use: http://www.unicode.org/copyright.html</i> 
+
+
+====================Unicode====================
+ # License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================Unicode====================
+ * License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================Unicode====================
+* License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================Unicode====================
+// License & terms of use: http://www.unicode.org/copyright.html
+
+
+====================Unicode====================
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of data files and any associated documentation (the "Data Files") or
+software and any associated documentation (the "Software") to deal in the
+Data Files or Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, and/or sell
+copies of the Data Files or Software, and to permit persons to whom the
+Data Files or Software are furnished to do so, provided that either (a)
+this copyright and permission notice appear with all copies of the Data
+Files or Software, or (b) this copyright and permission notice appear in
+associated Documentation.
+
+THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF
+THIRD PARTY RIGHTS.
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS NOTICE
+BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL DAMAGES,
+OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THE DATA
+FILES OR SOFTWARE.
+
+Except as contained in this notice, the name of a copyright holder shall
+not be used in advertising or otherwise to promote the sale, use or other
+dealings in these Data Files or Software without prior written
+authorization of the copyright holder.

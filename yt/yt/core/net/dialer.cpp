@@ -1,6 +1,7 @@
 #include "dialer.h"
 #include "connection.h"
 #include "config.h"
+#include "private.h"
 
 #include <yt/yt/core/concurrency/pollable_detail.h>
 
@@ -15,6 +16,10 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static constexpr auto& Logger = NetLogger;
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TDialSession
     : public TRefCounted
 {
@@ -23,48 +28,55 @@ public:
         const TNetworkAddress& remoteAddress,
         const IAsyncDialerPtr& asyncDialer,
         IPollerPtr poller)
-        : Name_(Format("dialer[%v]", remoteAddress))
-        , RemoteAddress_(remoteAddress)
+        : RemoteAddress_(remoteAddress)
         , Poller_(std::move(poller))
         , Session_(asyncDialer->CreateSession(
             remoteAddress,
             BIND(&TDialSession::OnDialerFinished, MakeWeak(this))))
+    { }
+
+    TFuture<IConnectionPtr> Run()
     {
+        YT_LOG_DEBUG("Dial started (Address: %v)",
+            RemoteAddress_);
+
         Session_->Dial();
 
         Promise_.OnCanceled(BIND([this, this_ = MakeStrong(this)] (const TError& error) {
             Promise_.TrySet(TError(NYT::EErrorCode::Canceled, "Dial canceled")
-                << TErrorAttribute("dialer", Name_)
+                << TErrorAttribute("remote_address", ToString(RemoteAddress_))
                 << error);
         }));
-    }
 
-    TFuture<IConnectionPtr> GetFuture() const
-    {
         return Promise_.ToFuture();
     }
 
 private:
-    const TString Name_;
     const TNetworkAddress RemoteAddress_;
     const IPollerPtr Poller_;
     const IAsyncDialerSessionPtr Session_;
 
     const TPromise<IConnectionPtr> Promise_ = NewPromise<IConnectionPtr>();
 
-    void OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
+    void OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError)
     {
-        if (socketOrError.IsOK()) {
-            auto socket = socketOrError.Value();
-            Promise_.TrySet(CreateConnectionFromFD(
-                socket,
-                GetSocketName(socket),
-                RemoteAddress_,
-                Poller_));
-        } else {
-            Promise_.TrySet(socketOrError
-                << TErrorAttribute("dialer", Name_));
+        if (!fdOrError.IsOK()) {
+            Promise_.TrySet(TError("Dial failed")
+                << TErrorAttribute("remote_address", ToString(RemoteAddress_))
+                << fdOrError);
+            return;
         }
+
+        auto socket = fdOrError.Value();
+        YT_LOG_DEBUG("Dial completed (Address: %v, FD: %v)",
+            RemoteAddress_,
+            socket);
+
+        Promise_.TrySet(CreateConnectionFromFD(
+            socket,
+            GetSocketName(socket),
+            RemoteAddress_,
+            Poller_));
     }
 };
 
@@ -86,14 +98,14 @@ public:
     { }
 
     TFuture<IConnectionPtr> Dial(
-        const TNetworkAddress& remote,
+        const TNetworkAddress& remoteAddress,
         TDialerContextPtr /*context*/) override
     {
         auto session = New<TDialSession>(
-            remote,
+            remoteAddress,
             AsyncDialer_,
             Poller_);
-        return session->GetFuture();
+        return session->Run();
     }
 
 private:
@@ -134,7 +146,7 @@ public:
         , OnFinished_(std::move(onFinished))
         , Id_(TGuid::Create())
         , Logger(logger.WithTag("AsyncDialerSession: %v", Id_))
-        , Timeout_(Config_->MinRto * GetRandomVariation())
+        , ReconnectTimeout_(Config_->MinRto * GetRandomVariation())
     { }
 
     ~TAsyncDialerSession()
@@ -151,6 +163,7 @@ public:
 
         YT_VERIFY(!Dialed_);
         Dialed_ = true;
+        Deadline_ = Config_->ConnectTimeout.ToDeadLine();
 
         Connect(guard);
     }
@@ -165,7 +178,7 @@ private:
             , LoggingTag_(Format("AsyncDialerSession{%v:%v}", id, socket))
         { }
 
-        const TString& GetLoggingTag() const override
+        const std::string& GetLoggingTag() const override
         {
             return LoggingTag_;
         }
@@ -187,7 +200,7 @@ private:
     private:
         const NLogging::TLogger Logger;
         const TWeakPtr<TAsyncDialerSession> Owner_;
-        const TString LoggingTag_;
+        const std::string LoggingTag_;
     };
 
     using TPollablePtr = TIntrusivePtr<TPollable>;
@@ -203,13 +216,14 @@ private:
     SOCKET Socket_ = INVALID_SOCKET;
     bool Dialed_ = false;
     bool Finished_ = false;
-    TDuration Timeout_;
+    TDuration ReconnectTimeout_;
+    TInstant Deadline_;
     TDelayedExecutorCookie TimeoutCookie_;
     TPollablePtr Pollable_;
 
     void CloseSocket()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         if (Socket_ != INVALID_SOCKET) {
             YT_VERIFY(TryClose(Socket_));
@@ -219,7 +233,7 @@ private:
 
     bool TryRegisterPollable()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         auto pollable = New<TPollable>(this, Id_, Socket_);
         if (!Poller_->TryRegister(pollable)) {
@@ -234,7 +248,7 @@ private:
 
     void UnregisterPollable()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         YT_VERIFY(Socket_ != INVALID_SOCKET);
         Poller_->Unarm(Socket_, Pollable_);
@@ -248,7 +262,7 @@ private:
 
     void Connect(TGuard<NThreading::TSpinLock>& guard)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         try {
             auto family = Address_.GetSockAddr()->sa_family;
@@ -287,11 +301,13 @@ private:
             return;
         }
 
-        if (Config_->EnableAggressiveReconnect) {
-            TimeoutCookie_ = TDelayedExecutor::Submit(
-                BIND(&TAsyncDialerSession::OnTimeout, MakeWeak(this)),
-                Timeout_);
-        }
+        auto deadline = Min(
+            Deadline_,
+            Config_->EnableAggressiveReconnect ? ReconnectTimeout_.ToDeadLine() : TInstant::Max());
+
+        TimeoutCookie_ = TDelayedExecutor::Submit(
+            BIND(&TAsyncDialerSession::OnTimeout, MakeWeak(this)),
+            deadline);
     }
 
     void OnConnected(TPollable* pollable)
@@ -355,12 +371,22 @@ private:
 
         CloseSocket();
 
-        if (Timeout_ < Config_->MaxRto) {
-            Timeout_ *= Config_->RtoScale * GetRandomVariation();
+        if (ReconnectTimeout_ < Config_->MaxRto) {
+            ReconnectTimeout_ *= Config_->RtoScale * GetRandomVariation();
         }
 
-        YT_LOG_DEBUG("Connect timeout; trying to reconnect (Timeout: %v)",
-            Timeout_);
+        if (TInstant::Now() >= Deadline_) {
+            auto error = TError(NRpc::EErrorCode::TransportError, "Connect timeout")
+                << TErrorAttribute("timeout", Config_->ConnectTimeout);
+            YT_LOG_ERROR(error);
+            Finished_ = true;
+            guard.Release();
+            OnFinished_(error);
+            return;
+        }
+
+        YT_LOG_DEBUG("Connect timeout; trying to reconnect (ReconnectTimeout: %v)",
+            ReconnectTimeout_);
 
         Connect(guard);
     }

@@ -8,12 +8,23 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <yt/yt/core/phoenix/type_def.h>
+
 #include <yt/yt_proto/yt/client/chunk_client/proto/confirm_chunk_replica_info.pb.h>
 
 namespace NYT::NChunkClient {
 
 using namespace NNodeTrackerClient;
 using namespace NObjectClient;
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TChunkReplica::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, Value_);
+}
+
+PHOENIX_DEFINE_TYPE(TChunkReplica);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -82,11 +93,6 @@ void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithLocation replica,
     builder->AppendFormat("@%v", replica.GetChunkLocationUuid());
 }
 
-TString ToString(TChunkReplicaWithLocation replica)
-{
-    return ToStringViaBuilder(replica);
-}
-
 void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithMedium replica, TStringBuf /*spec*/)
 {
     builder->AppendFormat("%v", replica.GetNodeId());
@@ -100,11 +106,6 @@ void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithMedium replica, T
     }
 }
 
-TString ToString(TChunkReplicaWithMedium replica)
-{
-    return ToStringViaBuilder(replica);
-}
-
 void FormatValue(TStringBuilderBase* builder, TChunkReplica replica, TStringBuf /*spec*/)
 {
     builder->AppendFormat("%v", replica.GetNodeId());
@@ -113,22 +114,12 @@ void FormatValue(TStringBuilderBase* builder, TChunkReplica replica, TStringBuf 
     }
 }
 
-TString ToString(TChunkReplica replica)
-{
-    return ToStringViaBuilder(replica);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndex& id, TStringBuf /*spec*/)
 {
     builder->AppendFormat("%v", id.Id);
     if (id.ReplicaIndex != GenericChunkReplicaIndex) {
         builder->AppendFormat("/%v", id.ReplicaIndex);
     }
-}
-
-TString ToString(const TChunkIdWithIndex& id)
-{
-    return ToStringViaBuilder(id);
 }
 
 void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndexes& id, TStringBuf /*spec*/)
@@ -142,11 +133,6 @@ void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndexes& id, TSt
     } else if (id.MediumIndex != GenericMediumIndex) {
         builder->AppendFormat("@%v", id.MediumIndex);
     }
-}
-
-TString ToString(const TChunkIdWithIndexes& id)
-{
-    return ToStringViaBuilder(id);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -187,7 +173,7 @@ void TChunkReplicaAddressFormatter::operator()(TStringBuilderBase* builder, TChu
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TChunkReplicaList TChunkReplicaWithMedium::ToChunkReplicas(const TChunkReplicaWithMediumList& replicasWithMedia)
+TChunkReplicaList TChunkReplicaWithMedium::ToChunkReplicas(TRange<TChunkReplicaWithMedium> replicasWithMedia)
 {
     TChunkReplicaList replicas;
     replicas.reserve(replicasWithMedia.size());

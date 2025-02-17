@@ -1,0 +1,52 @@
+diff --git a/include/__config b/include/__config
+index 1bb99ee..465d784 100644
+--- a/include/__config
++++ b/include/__config
+@@ -1081,10 +1081,12 @@ typedef __char32_t char32_t;
+ #  ifndef _LIBCPP_HAS_NO_ASAN
+ extern "C" _LIBCPP_EXPORTED_FROM_ABI void
+ __sanitizer_annotate_contiguous_container(const void*, const void*, const void*, const void*);
++#    if !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
+ extern "C" _LIBCPP_EXPORTED_FROM_ABI void __sanitizer_annotate_double_ended_contiguous_container(
+     const void*, const void*, const void*, const void*, const void*, const void*);
+ extern "C" _LIBCPP_EXPORTED_FROM_ABI int
+ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, const void*, const void*);
++#    endif
+ #  endif
+ 
+ // Try to find out if RTTI is disabled.
+diff --git a/include/deque b/include/deque
+index 154926d..9559235 100644
+--- a/include/deque
++++ b/include/deque
+@@ -886,7 +886,7 @@ private:
+     (void)__old_con_end;
+     (void)__new_con_beg;
+     (void)__new_con_end;
+-#ifndef _LIBCPP_HAS_NO_ASAN
++#if !defined(_LIBCPP_HAS_NO_ASAN) && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
+     if (__beg != nullptr && __asan_annotate_container_with_allocator<_Allocator>::value)
+       __sanitizer_annotate_double_ended_contiguous_container(
+           __beg, __end, __old_con_beg, __old_con_end, __new_con_beg, __new_con_end);
+@@ -1077,7 +1077,7 @@ private:
+     }
+ #endif
+   }
+-#if !defined(_LIBCPP_HAS_NO_ASAN)
++#if !defined(_LIBCPP_HAS_NO_ASAN) && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
+ 
+ public:
+   _LIBCPP_HIDE_FROM_ABI bool __verify_asan_annotations() const _NOEXCEPT {
+diff --git a/include/vector b/include/vector
+index b989a3c..61e3263 100644
+--- a/include/vector
++++ b/include/vector
+@@ -848,7 +848,7 @@ private:
+   __annotate_contiguous_container(const void* __old_mid, const void* __new_mid) const {
+     (void)__old_mid;
+     (void)__new_mid;
+-#ifndef _LIBCPP_HAS_NO_ASAN
++#if !defined(_LIBCPP_HAS_NO_ASAN) && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
+     const void* __beg = data();
+     const void* __end = data() + capacity();
+     if (!__libcpp_is_constant_evaluated() && __beg != nullptr &&

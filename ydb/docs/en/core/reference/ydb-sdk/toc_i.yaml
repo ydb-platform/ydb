@@ -9,8 +9,15 @@ items:
     href: parameterized_queries.md
   - name: Working with topics
     href: topic.md
+  - name: Working with coordination nodes
+    href: coordination.md
   - name: Handling errors in the API
     href: error_handling.md
+    items:
+    - name: YDB server status codes
+      href: ydb-status-codes.md
+    - name: gRPC status codes
+      href: grpc-status-codes.md
   - name: gRPC API
     items:
     - name: Overview
@@ -19,7 +26,5 @@ items:
       href: grpc-headers.md
     - name: Health Check API
       href: health-check-api.md
-  - name: Code recipes
-    include: { mode: link, path: recipes/toc_p.yaml }
   - name: Comparison of SDK features
     href: feature-parity.md

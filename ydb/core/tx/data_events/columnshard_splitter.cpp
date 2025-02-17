@@ -1,8 +1,12 @@
 #include "columnshard_splitter.h"
 
+#include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/base/appdata.h>
+
 namespace NKikimr::NEvWrite {
 
-NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplitter::DoSplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) {
+NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplitter::DoSplitData(
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) {
     if (schemeEntry.Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an column table");
     }
@@ -25,9 +29,6 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
     if (sharding.ColumnShardsSize() == 0) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "No shards to write to");
     }
-    if (!scheme.HasEngine() || scheme.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_NONE) {
-        return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "Wrong column table configuration");
-    }
 
     std::shared_ptr<arrow::RecordBatch> batch;
     if (data.HasDeserializedBatch()) {
@@ -36,7 +37,8 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
         std::shared_ptr<arrow::Schema> arrowScheme = ExtractArrowSchema(scheme);
         batch = NArrow::DeserializeBatch(data.GetSerializedData(), arrowScheme);
         if (!batch) {
-            return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, TString("cannot deserialize batch with schema ") + arrowScheme->ToString());
+            return TYdbConclusionStatus::Fail(
+                Ydb::StatusIds::SCHEME_ERROR, TString("cannot deserialize batch with schema ") + arrowScheme->ToString());
         }
 
         auto res = batch->ValidateFull();
@@ -47,7 +49,7 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
 
     NSchemeShard::TOlapSchema olapSchema;
     olapSchema.ParseFromLocalDB(scheme);
-    auto shardingConclusion = NSharding::TShardingBase::BuildFromProto(olapSchema, sharding);
+    auto shardingConclusion = NSharding::IShardingBase::BuildFromProto(olapSchema, sharding);
     if (shardingConclusion.IsFail()) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, shardingConclusion.GetErrorMessage());
     }
@@ -55,20 +57,23 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
     return SplitImpl(batch, shardingConclusion.DetachResult());
 }
 
-NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplitter::SplitImpl(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::shared_ptr<NSharding::TShardingBase>& sharding)
-{
+NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplitter::SplitImpl(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<NSharding::IShardingBase>& sharding) {
     Y_ABORT_UNLESS(batch);
 
-    auto split = sharding->SplitByShards(batch, NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
+    auto split = sharding->SplitByShards(batch, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()
+                                                    ? NOlap::NSplitter::TSplitSettings().GetExpectedPortionSize()
+                                                    : NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
     if (split.IsFail()) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, split.GetErrorMessage());
     }
 
     TFullSplitData result(sharding->GetShardsCount());
+    const TString schemaString = NArrow::SerializeSchema(*batch->schema());
     for (auto&& [shardId, chunks] : split.GetResult()) {
         for (auto&& c : chunks) {
-            result.AddShardInfo(shardId, std::make_shared<TShardInfo>(c.GetSchemaData(), c.GetData(), c.GetRowsCount()));
+            result.AddShardInfo(shardId, std::make_shared<TShardInfo>(schemaString, c.GetData(), c.GetRowsCount(),
+                                             sharding->GetShardInfoVerified(shardId).GetShardingVersion()));
         }
     }
 
@@ -87,4 +92,4 @@ std::shared_ptr<arrow::Schema> TColumnShardShardsSplitter::ExtractArrowSchema(co
     return NArrow::TStatusValidator::GetValid(NArrow::MakeArrowSchema(columns));
 }
 
-}
+}   // namespace NKikimr::NEvWrite

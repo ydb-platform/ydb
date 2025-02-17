@@ -1,4 +1,7 @@
 #include "kicli.h"
+
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 
 namespace NKikimr {
@@ -119,6 +122,9 @@ void TSchemaObject::Drop() {
     case EPathType::Replication:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication);
         break;
+    case EPathType::Transfer:
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer);
+        break;
     case EPathType::BlobDepot:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBlobDepot);
         break;
@@ -131,6 +137,13 @@ void TSchemaObject::Drop() {
     case EPathType::View:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropView);
         break;
+    case EPathType::ResourcePool:
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool);
+        break;
+    case EPathType::BackupCollection:
+        // FIXME(+active)
+        // drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection);
+        // break;
     case EPathType::Unknown:
     case EPathType::SubDomain:
     case EPathType::RtmrVolume:
@@ -214,6 +227,8 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
         return TSchemaObject::EPathType::Sequence;
     case NKikimrSchemeOp::EPathTypeReplication:
         return TSchemaObject::EPathType::Replication;
+    case NKikimrSchemeOp::EPathTypeTransfer:
+        return TSchemaObject::EPathType::Transfer;
     case NKikimrSchemeOp::EPathTypeBlobDepot:
         return TSchemaObject::EPathType::BlobDepot;
     case NKikimrSchemeOp::EPathTypeExternalTable:
@@ -222,6 +237,10 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
         return TSchemaObject::EPathType::ExternalDataSource;
     case NKikimrSchemeOp::EPathTypeView:
         return TSchemaObject::EPathType::View;
+    case NKikimrSchemeOp::EPathTypeResourcePool:
+        return TSchemaObject::EPathType::ResourcePool;
+    case NKikimrSchemeOp::EPathTypeBackupCollection:
+        return TSchemaObject::EPathType::BackupCollection;
     case NKikimrSchemeOp::EPathTypeTableIndex:
     case NKikimrSchemeOp::EPathTypeExtSubDomain:
     case NKikimrSchemeOp::EPathTypeCdcStream:

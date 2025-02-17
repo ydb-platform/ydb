@@ -23,7 +23,7 @@ public:
         TNodeId nodeId = Local.NodeId();
         TNodeInfo& node = Self->GetNode(nodeId);
         if (node.Local != Local) {
-            TInstant now = TInstant::Now();
+            TInstant now = TActivationContext::Now();
             node.Statistics.AddRestartTimestamp(now.MilliSeconds());
             node.ActualizeNodeStatistics(now);
             for (const auto& t : node.Tablets) {
@@ -57,6 +57,7 @@ public:
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::Freeze>(false, false);
             }
             if (node.BecomeUpOnRestart) {
+                BLOG_TRACE("THive::TTxRegisterNode(" << Local.NodeId() << ")::Execute - node became up on restart");
                 node.SetDown(false);
                 node.BecomeUpOnRestart = false;
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(false, false);
@@ -87,7 +88,9 @@ public:
         BLOG_D("THive::TTxRegisterNode(" << Local.NodeId() << ")::Complete");
         TNodeInfo* node = Self->FindNode(Local.NodeId());
         if (node != nullptr && node->Local) { // we send ping on every RegisterNode because we want to re-sync tablets upon every reconnection
+            Self->NodePingsInProgress.erase(node->Id);
             node->Ping();
+            Self->ProcessNodePingQueue();
         }
     }
 };

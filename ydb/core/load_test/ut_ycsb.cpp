@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD), Q_
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/load_test/events.h>
 #include <ydb/core/load_test/ycsb/common.h>
 #include <ydb/core/load_test/ycsb/test_load_actor.h>
@@ -7,7 +8,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
-#include <ydb/library/yql/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
 
 namespace NKikimr {
 
@@ -343,7 +344,7 @@ struct TTestHelper {
             runtime.GrabEdgeEventRethrow<TEvLoad::TEvLoadTestFinished>(handle);
             UNIT_ASSERT(handle);
             auto response = IEventHandle::Release<TEvLoad::TEvLoadTestFinished>(handle);
-            UNIT_ASSERT(response->ErrorReason.Empty());
+            UNIT_ASSERT(response->ErrorReason.empty());
 
             return std::unique_ptr<TEvLoad::TEvLoadTestFinished>(response.Release());
         }

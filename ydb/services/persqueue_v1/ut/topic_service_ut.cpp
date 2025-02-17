@@ -1,9 +1,9 @@
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <ydb/library/services/services.pb.h>
 
@@ -147,11 +147,13 @@ protected:
                            , NKikimrServices::KQP_EXECUTER
                            , NKikimrServices::KQP_SESSION}, NActors::NLog::PRI_DEBUG);
 
+        server->AnnoyingClient->GrantConnect(AUTH_TOKEN);   
+
         auto partsCount = 5u;
         server->AnnoyingClient->CreateTopicNoLegacy(VALID_TOPIC_PATH, partsCount,
                                                     true,
                                                     true,
-                                                    Nothing(),
+                                                    std::nullopt,
                                                     {"c0nsumer", "consumer-1", "consumer-2"});
 
         NACLib::TDiffACL acl;
@@ -182,7 +184,7 @@ protected:
         Ydb::Topic::UpdateOffsetsInTransactionResponse response;
 
         grpc::Status status = stub->UpdateOffsetsInTransaction(&rcontext,
-                                                               CreateRequest(session->GetId(), tx->GetId(),
+                                                               CreateRequest(TString{session->GetId()}, TString{tx->GetId()},
                                                                              consumer, topics),
                                                                &response);
         UNIT_ASSERT(status.ok());

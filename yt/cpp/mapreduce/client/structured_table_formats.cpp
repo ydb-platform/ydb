@@ -4,19 +4,19 @@
 #include "skiff.h"
 
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
+
+#include <yt/cpp/mapreduce/interface/common.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/io/yamr_table_reader.h>
 
 #include <yt/cpp/mapreduce/library/table_schema/protobuf.h>
 
-#include <yt/cpp/mapreduce/interface/common.h>
-
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <library/cpp/type_info/type_info.h>
 #include <library/cpp/yson/writer.h>
-
-#include <memory>
 
 namespace NYT {
 
@@ -66,15 +66,26 @@ TMaybe<TNode> GetCommonTableFormat(
 
 TMaybe<TNode> GetTableFormat(
     const IClientRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
+    const IRawClientPtr& rawClient,
     const TTransactionId& transactionId,
     const TRichYPath& path)
 {
     auto formatPath = path.Path_ + "/@_format";
-    if (!NDetail::NRawClient::Exists(retryPolicy->CreatePolicyForGenericRequest(), context, transactionId, formatPath)) {
+
+    auto exists = NDetail::RequestWithRetry<bool>(
+        retryPolicy->CreatePolicyForGenericRequest(),
+        [&rawClient, &transactionId, &formatPath] (TMutationId /*mutationId*/) {
+            return rawClient->Exists(transactionId, formatPath);
+        });
+    if (!exists) {
         return TMaybe<TNode>();
     }
-    TMaybe<TNode> format = NDetail::NRawClient::Get(retryPolicy->CreatePolicyForGenericRequest(), context, transactionId, formatPath);
+
+    auto format = NDetail::RequestWithRetry<TMaybe<TNode>>(
+        retryPolicy->CreatePolicyForGenericRequest(),
+        [&rawClient, &transactionId, &formatPath] (TMutationId /*mutationId*/) {
+            return rawClient->Get(transactionId, formatPath);
+        });
     if (format.Get()->AsString() != "yamred_dsv") {
         return TMaybe<TNode>();
     }
@@ -90,13 +101,13 @@ TMaybe<TNode> GetTableFormat(
 
 TMaybe<TNode> GetTableFormats(
     const IClientRetryPolicyPtr& clientRetryPolicy,
-    const TClientContext& context,
+    const IRawClientPtr& rawClient,
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& inputs)
 {
     TVector<TMaybe<TNode>> formats;
     for (auto& table : inputs) {
-        formats.push_back(GetTableFormat(clientRetryPolicy, context, transactionId, table));
+        formats.push_back(GetTableFormat(clientRetryPolicy, rawClient, transactionId, table));
     }
 
     return GetCommonTableFormat(formats);
@@ -109,8 +120,7 @@ namespace NDetail {
 ////////////////////////////////////////////////////////////////////////////////
 
 NSkiff::TSkiffSchemaPtr TryCreateSkiffSchema(
-    const TClientContext& context,
-    const IClientRetryPolicyPtr& clientRetryPolicy,
+    const IRawClientPtr& rawClient,
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& tables,
     const TOperationOptions& options,
@@ -123,8 +133,7 @@ NSkiff::TSkiffSchemaPtr TryCreateSkiffSchema(
         return nullptr;
     }
     return CreateSkiffSchemaIfNecessary(
-        context,
-        clientRetryPolicy,
+        rawClient,
         transactionId,
         nodeReaderFormat,
         tables,
@@ -200,14 +209,14 @@ TStructuredJobTableList ToStructuredJobTableList(const TVector<TStructuredTableP
     return result;
 }
 
-TStructuredJobTableList CanonizeStructuredTableList(const TClientContext& context, const TVector<TStructuredTablePath>& tableList)
+TStructuredJobTableList CanonizeStructuredTableList(const IRawClientPtr& rawClient, const TVector<TStructuredTablePath>& tableList)
 {
     TVector<TRichYPath> toCanonize;
     toCanonize.reserve(tableList.size());
     for (const auto& table : tableList) {
         toCanonize.emplace_back(table.RichYPath);
     }
-    const auto canonized = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, context, toCanonize);
+    const auto canonized = NRawClient::CanonizeYPaths(rawClient, toCanonize);
     Y_ABORT_UNLESS(canonized.size() == tableList.size());
 
     TStructuredJobTableList result;
@@ -310,11 +319,13 @@ struct TFormatBuilder::TFormatSwitcher
 };
 
 TFormatBuilder::TFormatBuilder(
+    IRawClientPtr rawClient,
     IClientRetryPolicyPtr clientRetryPolicy,
     TClientContext context,
     TTransactionId transactionId,
     TOperationOptions operationOptions)
-    : ClientRetryPolicy_(std::move(clientRetryPolicy))
+    : RawClient_(std::move(rawClient))
+    , ClientRetryPolicy_(std::move(clientRetryPolicy))
     , Context_(std::move(context))
     , TransactionId_(transactionId)
     , OperationOptions_(std::move(operationOptions))
@@ -376,7 +387,7 @@ std::pair<TFormat, TMaybe<TSmallJobFile>> TFormatBuilder::CreateYamrFormat(
             Y_ABORT_UNLESS(table.RichYPath, "Cannot use format from table for intermediate table");
             tableList.push_back(*table.RichYPath);
         }
-        formatFromTableAttributes = GetTableFormats(ClientRetryPolicy_, Context_, TransactionId_, tableList);
+        formatFromTableAttributes = GetTableFormats(ClientRetryPolicy_, RawClient_, TransactionId_, tableList);
     }
     if (formatFromTableAttributes) {
         return {
@@ -420,8 +431,7 @@ std::pair<TFormat, TMaybe<TSmallJobFile>> TFormatBuilder::CreateNodeFormat(
             tableList.emplace_back(*table.RichYPath);
         }
         skiffSchema = TryCreateSkiffSchema(
-            Context_,
-            ClientRetryPolicy_,
+            RawClient_,
             TransactionId_,
             tableList,
             OperationOptions_,

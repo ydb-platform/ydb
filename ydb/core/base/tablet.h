@@ -99,6 +99,8 @@ struct TEvTablet {
         // utilitary
         EvCheckBlobstorageStatusResult = EvBoot + 3072,
         EvResetTabletResult,
+        EvGcForStepAckRequest, // from executer to sys tablet
+        EvGcForStepAckResponse, // from sys tablet to executer
 
         EvEnd
     };
@@ -338,7 +340,16 @@ struct TEvTablet {
         {}
     };
 
-    struct TEvTabletActive : public TEventLocal<TEvTabletActive, EvTabletActive> {};
+    struct TEvTabletActive : public TEventLocal<TEvTabletActive, EvTabletActive> {
+        TString VersionInfo;
+
+        // Compatibility with legacy external projects
+        TEvTabletActive() = default;
+
+        explicit TEvTabletActive(TString&& versionInfo)
+            : VersionInfo(std::move(versionInfo))
+        {}
+    };
 
     struct TEvDemoted : public TEventLocal<TEvDemoted, EvDemoted> {
         const bool ByIsolation;
@@ -366,6 +377,7 @@ struct TEvTablet {
         const ui32 ConfirmedOnSend;
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
+        THashMap<ui32, float> ApproximateFreeSpaceShareByChannel;
         NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
         NMetrics::TTabletIopsRawValue GroupWrittenOps;
 
@@ -377,6 +389,7 @@ struct TEvTablet {
                 ui32 confirmedOnSend,
                 TVector<ui32>&& yellowMoveChannels,
                 TVector<ui32>&& yellowStopChannels,
+                THashMap<ui32, float>&& approximateFreeSpaceShareByChannel,
                 NMetrics::TTabletThroughputRawValue&& written,
                 NMetrics::TTabletIopsRawValue&& writtenOps)
             : Status(status)
@@ -386,6 +399,7 @@ struct TEvTablet {
             , ConfirmedOnSend(confirmedOnSend)
             , YellowMoveChannels(std::move(yellowMoveChannels))
             , YellowStopChannels(std::move(yellowStopChannels))
+            , ApproximateFreeSpaceShareByChannel(std::move(approximateFreeSpaceShareByChannel))
             , GroupWrittenBytes(std::move(written))
             , GroupWrittenOps(std::move(writtenOps))
         {}
@@ -775,6 +789,28 @@ struct TEvTablet {
         TEvResetTabletResult(NKikimrProto::EReplyStatus status, ui64 tabletId)
             : Status(status)
             , TabletId(tabletId)
+        {}
+    };
+
+    // will send TEvGcForStepAckResponse when the requested Generation and Step are less
+    // than the actual garbage collected Generation and Step
+    struct TEvGcForStepAckRequest : public TEventLocal<TEvGcForStepAckRequest, EvGcForStepAckRequest> {
+        const ui32 Generation;
+        const ui32 Step;
+
+        TEvGcForStepAckRequest(ui32 generation, ui32 step)
+            : Generation(generation)
+            , Step(step)
+        {}
+    };
+
+    struct TEvGcForStepAckResponse : public TEventLocal<TEvGcForStepAckResponse, EvGcForStepAckResponse> {
+        const ui32 Generation;
+        const ui32 Step;
+
+        TEvGcForStepAckResponse(ui32 generation, ui32 step)
+            : Generation(generation)
+            , Step(step)
         {}
     };
 

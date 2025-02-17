@@ -20,7 +20,6 @@
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 
-
 namespace NKikimr {
 
 constexpr ui32 TEST_TIMEOUT = NSan::PlainOrUnderSanitizer(300000, 1200000);
@@ -276,7 +275,7 @@ struct THttpRequest : NMonitoring::IHttpRequest {
     }
 
     TStringBuf GetPostContent() const override {
-        return TString();
+        return TStringBuf();
     }
 
     HTTP_METHOD GetMethod() const override {

@@ -2,7 +2,12 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/auth.h>
+
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/hive.h>
 
 namespace {
 
@@ -28,20 +33,20 @@ bool CheckFreezeStateAlreadySet(const TTableInfo::TPtr table, const NKikimrSchem
     return false;
 }
 
-bool IsSuperUser(const NACLib::TUserToken* userToken) {
-    if (!userToken)
-        return false;
-
-    const auto& adminSids = AppData()->AdministrationAllowedSIDs;
-    auto hasSid = [userToken](const TString& sid) -> bool {
-        return userToken->IsExist(sid);
-    };
-    auto it = std::find_if(adminSids.begin(), adminSids.end(), hasSid);
-    return (it != adminSids.end());
+template <typename TMessage>
+bool CheckAllowedFields(const TMessage& message, THashSet<TString>&& allowedFields) {
+    std::vector<const google::protobuf::FieldDescriptor*> fields;
+    message.GetReflection()->ListFields(message, &fields);
+    for (const auto* field : fields) {
+        if (!allowedFields.contains(field->name())) {
+            return false;
+        }
+    }
+    return true;
 }
 
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
-                                      const bool shadowDataAllowed,
+                                      const bool shadowDataAllowed, const THashSet<TString>& localSequences,
                                       TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context) {
     const TAppData* appData = AppData(context.Ctx);
 
@@ -65,13 +70,24 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             copyAlter.ColumnsSize() != 0 ||
             copyAlter.DropColumnsSize() != 0);
 
-    if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() !=  table->IsBackup) {
+    if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() != table->IsBackup) {
         errStr = Sprintf("Cannot add/remove 'IsBackup' property");
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
     }
 
-    if (!hasSchemaChanges && !copyAlter.HasPartitionConfig() && !copyAlter.HasTTLSettings()) {
+    if (copyAlter.HasIsRestore() && copyAlter.GetIsRestore() != table->IsRestore) {
+        errStr = Sprintf("Cannot add/remove 'IsRestore' property");
+        status = NKikimrScheme::StatusInvalidParameter;
+        return nullptr;
+    }
+
+    if (!hasSchemaChanges
+        && !copyAlter.HasPartitionConfig()
+        && !copyAlter.HasTTLSettings()
+        && !copyAlter.HasReplicationConfig()
+        && !copyAlter.HasIncrementalBackupConfig())
+    {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -128,7 +144,16 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     const TSubDomainInfo& subDomain = *path.DomainInfo();
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
-    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(table, copyAlter, *appData->TypeRegistry, limits, subDomain, context.SS->EnableTablePgTypes, errStr);
+    const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
+        .EnableTablePgTypes = context.SS->EnableTablePgTypes,
+        .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
+        .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
+    };
+
+
+    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
+        table, copyAlter, *appData->TypeRegistry, limits, subDomain,
+        featureFlags, errStr, localSequences);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -240,7 +265,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterTable TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -299,7 +324,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -344,6 +369,10 @@ public:
 
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         table->FinishAlter();
+
+        if (!table->IsAsyncReplica()) {
+            path->SetAsyncReplica(false);
+        }
 
         auto ttlIt = context.SS->TTLEnabledTables.find(pathId);
         if (table->IsTTLEnabled() && ttlIt == context.SS->TTLEnabledTables.end()) {
@@ -467,7 +496,7 @@ public:
         TPathId pathId;
         if (alter.HasId_Deprecated() || alter.HasPathId()) {
             pathId = alter.HasPathId()
-                ? PathIdFromPathId(alter.GetPathId())
+                ? TPathId::FromProto(alter.GetPathId())
                 : context.SS->MakeLocalId(alter.GetId_Deprecated());
         }
 
@@ -497,8 +526,13 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
-                .NotAsyncReplicaTable()
                 .NotUnderOperation();
+
+            if (checks && !Transaction.GetInternal()) {
+                checks
+                    .NotAsyncReplicaTable()
+                    .NotBackupTable();
+            }
 
             if (!context.IsAllowedPrivateTables) {
                 checks.IsCommonSensePath(); //forbid alter impl index tables outside consistent operation
@@ -507,6 +541,35 @@ public:
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
+            }
+        }
+
+        THashSet<TString> localSequences;
+
+        for (const auto& column: alter.GetColumns()) {
+            if (column.HasDefaultFromSequence()) {
+                TString defaultFromSequence = column.GetDefaultFromSequence();
+
+                const auto sequencePath = TPath::Resolve(defaultFromSequence, context.SS);
+                {
+                    const auto checks = sequencePath.Check();
+                    checks
+                        .NotEmpty()
+                        .NotUnderDomainUpgrade()
+                        .IsAtLocalSchemeShard()
+                        .IsResolved()
+                        .NotDeleted()
+                        .IsSequence()
+                        .NotUnderDeleting()
+                        .NotUnderOperation();
+
+                    if (!checks) {
+                        result->SetError(checks.GetStatus(), checks.GetError());
+                        return result;
+                    }
+                }
+
+                localSequences.insert(sequencePath.PathString());
             }
         }
 
@@ -553,7 +616,8 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        TTableInfo::TAlterDataPtr alterData = ParseParams(path, table, alter, IsShadowDataAllowed(), errStr, status, context);
+        TTableInfo::TAlterDataPtr alterData = ParseParams(
+            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context);
         if (!alterData) {
             result->SetError(status, errStr);
             return result;
@@ -639,12 +703,12 @@ ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState:
 TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
 
-    auto alter = tx.GetAlterTable();
+    const auto& alter = tx.GetAlterTable();
 
     const TString& parentPathStr = tx.GetWorkingDir();
     const TString& name = alter.GetName();
 
-    TPathId pathId = alter.HasPathId() ? PathIdFromPathId(alter.GetPathId()) : InvalidPathId;
+    TPathId pathId = alter.HasPathId() ? TPathId::FromProto(alter.GetPathId()) : InvalidPathId;
 
     if (!alter.HasName() && !pathId) {
         return {CreateAlterTable(id, tx)};
@@ -669,22 +733,36 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
+    if (path.IsBackupTable()) {
+        return {CreateAlterTable(id, tx)};
+    }
+
     TPath parent = path.Parent();
 
     if (!parent.IsTableIndex()) {
         return {CreateAlterTable(id, tx)};
     }
 
-    TVector<ISubOperation::TPtr> result;
-
-    // only for super user use
-    // until correct and safe altering index api is released
-    if (!IsSuperUser(context.UserToken.Get())) {
+    // Index table (indexImplTable) altering:
+    // - regular users can only alter a list of allowed fields
+    // - as a special case, admins can alter index table unconditionally:
+    //   - but only cluster admins
+    //   - and only the real ones, no "all users are admins by default" trick can be used here
+    if (!(IsAdministrator(AppData(), context.UserToken.Get()) && !AppData()->AdministrationAllowedSIDs.empty())
+        && (!CheckAllowedFields(alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig", "IncrementalBackupConfig"})
+            || (alter.HasPartitionConfig()
+                && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy"})
+            )
+        )
+    ) {
         return {CreateAlterTable(id, tx)};
     }
 
+    TVector<ISubOperation::TPtr> result;
+
     {
         auto tableIndexAltering = TransactionTemplate(parent.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        tableIndexAltering.SetInternal(tx.GetInternal());
         auto alterIndex = tableIndexAltering.MutableAlterTableIndex();
         alterIndex->SetName(parent.LeafName());
         alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);

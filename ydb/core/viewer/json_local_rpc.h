@@ -1,25 +1,15 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/mon.h>
-#include <library/cpp/protobuf/json/json2proto.h>
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include "viewer.h"
 #include "json_pipe_req.h"
-
-#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
-#include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <library/cpp/protobuf/json/json2proto.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 struct TEvLocalRpcPrivate {
     enum EEv {
         EvGrpcRequestResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE) + 100,
+        EvError,
         EvEnd
     };
 
@@ -27,35 +17,24 @@ struct TEvLocalRpcPrivate {
 
     template<class TProtoResult>
     struct TEvGrpcRequestResult : NActors::TEventLocal<TEvGrpcRequestResult<TProtoResult>, EvGrpcRequestResult> {
-        THolder<TProtoResult> Message;
-        THolder<NYdb::TStatus> Status;
+        TProtoResult Message;
+        std::optional<NYdb::TStatus> Status;
 
         TEvGrpcRequestResult()
         {}
     };
 };
 
-using namespace NActors;
-using NSchemeShard::TEvSchemeShard;
-
 template <class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoService, class TRpcEv>
-class TJsonLocalRpc : public TActorBootstrapped<TJsonLocalRpc<TProtoRequest, TProtoResponse, TProtoResult, TProtoService, TRpcEv>> {
+class TJsonLocalRpc : public TViewerPipeClient {
     using TThis = TJsonLocalRpc<TProtoRequest, TProtoResponse, TProtoResult, TProtoService, TRpcEv>;
-    using TBase = TActorBootstrapped<TJsonLocalRpc<TProtoRequest, TProtoResponse, TProtoResult, TProtoService, TRpcEv>>;
+    using TBase = TViewerPipeClient;
 
-    using TBase::Send;
-    using TBase::PassAway;
-    using TBase::Become;
-
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
-    TAutoPtr<TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>> DescribeResult;
-
-    TJsonSettings JsonSettings;
-    ui32 Timeout = 0;
-
-    TString Database;
-
+protected:
+    using TBase::ReplyAndPassAway;
+    using TRequestProtoType = TProtoRequest;
+    std::vector<HTTP_METHOD> AllowedMethods = {};
+    TAutoPtr<TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>> Result;
     NThreading::TFuture<TProtoResponse> RpcFuture;
 
 public:
@@ -63,13 +42,11 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonLocalRpc(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
-        : Viewer(viewer)
-        , Event(ev)
+    TJsonLocalRpc(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : TBase(viewer, ev, TRequestProtoType::descriptor()->name())
     {}
 
-    TProtoRequest Params2Proto(const TCgiParameters& params) {
-        TProtoRequest request;
+    void Params2Proto(const TCgiParameters& params, TRequestProtoType& request) {
         using google::protobuf::Descriptor;
         using google::protobuf::Reflection;
         using google::protobuf::FieldDescriptor;
@@ -100,7 +77,7 @@ public:
                 CASE(FLOAT, float, Float);
                 CASE(DOUBLE, double, Double);
                 CASE(BOOL, bool, Bool);
-                CASE(STRING, string, String);
+                CASE(STRING, TString, String);
 #undef CASE
                 case FieldDescriptor::CPPTYPE_ENUM: {
                     const EnumDescriptor* enumDescriptor = field->enum_type();
@@ -119,71 +96,103 @@ public:
                 }
             }
         }
-        return request;
     }
 
-    TProtoRequest Params2Proto() {
-        TProtoRequest request;
-        NProtobufJson::TJson2ProtoConfig json2ProtoConfig;
+    virtual bool ValidateRequest(TRequestProtoType& request) {
+        using google::protobuf::Descriptor;
+        using google::protobuf::Reflection;
+        using google::protobuf::FieldDescriptor;
+        const Descriptor& descriptor = *TRequestProtoType::GetDescriptor();
+        const Reflection& reflection = *TRequestProtoType::GetReflection();
+        for (int idx = 0; idx < descriptor.field_count(); ++idx) {
+            const FieldDescriptor* field = descriptor.field(idx);
+            const auto& options(field->options());
+            if (options.HasExtension(Ydb::required)) {
+                if (options.GetExtension(Ydb::required)) {
+                    if (!reflection.HasField(request, field)) {
+                        ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", TStringBuilder() << "field '" << field->name() << "' is required"));
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    bool Params2Proto(TRequestProtoType& request) {
         auto postData = Event->Get()->Request.GetPostContent();
         if (!postData.empty()) {
             try {
-                NProtobufJson::Json2Proto(postData, request, json2ProtoConfig);
+                NProtobufJson::Json2Proto(postData, request);
             }
             catch (const yexception& e) {
-                Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                PassAway();
+                ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", e.what()));
+                return false;
             }
-        } else {
-            const auto& params(Event->Get()->Request.GetParams());
-            return Params2Proto(params);
         }
-        return request;
+        const auto& params(Event->Get()->Request.GetParams());
+        Params2Proto(params, request);
+        if (!ValidateRequest(request)) {
+            return false;
+        }
+        return true;
     }
 
-    void SendGrpcRequest() {
-        TProtoRequest request = Params2Proto();
-
-        RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), Database,
-                                        Event->Get()->UserToken, TlsActivationContext->ActorSystem());
+    void SendGrpcRequest(TRequestProtoType&& request) {
+        // TODO(xenoxeno): pass trace id
+        RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), Database, Event->Get()->UserToken, TlsActivationContext->ActorSystem());
         RpcFuture.Subscribe([actorId = TBase::SelfId(), actorSystem = TlsActivationContext->ActorSystem()]
                             (const NThreading::TFuture<TProtoResponse>& future) {
             auto& response = future.GetValueSync();
             auto result = MakeHolder<TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>>();
-            Y_ABORT_UNLESS(response.operation().ready());
-            if (response.operation().status() == Ydb::StatusIds::SUCCESS) {
-                TProtoResult rs;
-                response.operation().result().UnpackTo(&rs);
-                result->Message = MakeHolder<TProtoResult>(rs);
+            if constexpr (TRpcEv::IsOp) {
+                if (response.operation().ready() && response.operation().status() == Ydb::StatusIds::SUCCESS) {
+                    if (response.operation().has_result()) {
+                        TProtoResult rs;
+                        response.operation().result().UnpackTo(&rs);
+                        result->Message = std::move(rs);
+                    } else if constexpr (std::is_same_v<TProtoResult, Ydb::Operations::Operation>) {
+                        result->Message = std::move(response.operation());
+                    }
+                }
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(response.operation().issues(), issues);
+                result->Status = NYdb::TStatus(NYdb::EStatus(response.operation().status()), NYdb::NAdapters::ToSdkIssues(std::move(issues)));
+            } else {
+                result->Message = response;
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(response.issues(), issues);
+                result->Status = NYdb::TStatus(NYdb::EStatus(response.status()), NYdb::NAdapters::ToSdkIssues(std::move(issues)));
             }
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(response.operation().issues(), issues);
-            result->Status = MakeHolder<NYdb::TStatus>(NYdb::EStatus(response.operation().status()),
-                                                           std::move(issues));
 
             actorSystem->Send(actorId, result.Release());
         });
     }
 
-
-    void Bootstrap() {
-        const auto& params(Event->Get()->Request.GetParams());
-        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
-        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        Database = params.Get("database_path");
-
-        SendGrpcRequest();
-
-        Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+    virtual void Bootstrap() {
+        if (!AllowedMethods.empty() && std::find(AllowedMethods.begin(), AllowedMethods.end(), Event->Get()->Request.GetMethod()) == AllowedMethods.end()) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Method is not allowed"));
+        }
+        if (Database.empty()) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'database' is required"));
+        }
+        if (TBase::NeedToRedirect()) {
+            return;
+        }
+        TRequestProtoType request;
+        if (!Params2Proto(request)) {
+            return;
+        }
+        SendGrpcRequest(std::move(request));
+        Become(&TThis::StateRequested, Timeout, new TEvents::TEvWakeup());
     }
 
     void Handle(typename TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>::TPtr& ev) {
-        DescribeResult = ev->Release();
+        Result = ev->Release();
         ReplyAndPassAway();
     }
 
-    STATEFN(StateRequestedDescribe) {
+    STATEFN(StateRequested) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
@@ -191,98 +200,25 @@ public:
     }
 
     void ReplyAndPassAway() {
-        TStringStream json;
-        TString headers = Viewer->GetHTTPOKJSON(Event->Get());
-        if (DescribeResult) {
-            if (!DescribeResult->Status->IsSuccess()) {
-                headers = Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request");
-                if (DescribeResult->Status->GetStatus() == NYdb::EStatus::UNAUTHORIZED) {
-                    headers = Viewer->GetHTTPFORBIDDEN(Event->Get());
-                }
+        if (Result && Result->Status) {
+            if (Result->Status->IsSuccess()) {
+                return ReplyAndPassAway(GetHTTPOKJSON(Result->Message));
             } else {
-                TProtoToJson::ProtoToJson(json, *(DescribeResult->Message), JsonSettings);
+                NJson::TJsonValue json;
+                TString message;
+                MakeJsonErrorReply(json, message, Result->Status.value());
+                TStringStream stream;
+                NJson::WriteJson(&stream, &json);
+                if (Result->Status->GetStatus() == NYdb::EStatus::UNAUTHORIZED) {
+                    return ReplyAndPassAway(GetHTTPFORBIDDEN("application/json", stream.Str()), message);
+                } else {
+                    return ReplyAndPassAway(GetHTTPBADREQUEST("application/json", stream.Str()), message);
+                }
             }
         } else {
-            json << "null";
+            return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "no Result or Status"), "internal error");
         }
-
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(headers + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
-    }
-
-    void HandleTimeout() {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
     }
 };
 
-
-using TJsonDescribeTopic = TJsonLocalRpc<Ydb::Topic::DescribeTopicRequest,
-                                         Ydb::Topic::DescribeTopicResponse,
-                                         Ydb::Topic::DescribeTopicResult,
-                                         Ydb::Topic::V1::TopicService,
-                                         NKikimr::NGRpcService::TEvDescribeTopicRequest>;
-
-using TJsonDescribeConsumer = TJsonLocalRpc<Ydb::Topic::DescribeConsumerRequest,
-                                         Ydb::Topic::DescribeConsumerResponse,
-                                         Ydb::Topic::DescribeConsumerResult,
-                                         Ydb::Topic::V1::TopicService,
-                                         NKikimr::NGRpcService::TEvDescribeConsumerRequest>;
-
-template <>
-struct TJsonRequestParameters<TJsonDescribeTopic> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
-                      {"name":"database_path","in":"query","description":"database path","required":false,"type":"string"},
-                      {"name":"include_stats","in":"query","description":"include stat flag","required":false,"type":"bool"}])___";
-    }
-};
-
-template <>
-struct TJsonRequestSummary<TJsonDescribeTopic> {
-    static TString GetSummary() {
-        return "\"Topic schema detailed information\"";
-    }
-};
-
-template <>
-struct TJsonRequestDescription<TJsonDescribeTopic> {
-    static TString GetDescription() {
-        return "\"Returns detailed information about topic\"";
-    }
-};
-
-
-template <>
-struct TJsonRequestParameters<TJsonDescribeConsumer> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
-                      {"name":"database_path","in":"query","description":"database path","required":false,"type":"string"},
-                      {"name":"consumer","in":"query","description":"consumer name","required":false,"type":"string"},
-                      {"name":"include_stats","in":"query","description":"include stat flag","required":false,"type":"bool"}])___";
-    }
-};
-
-template <>
-struct TJsonRequestSummary<TJsonDescribeConsumer> {
-    static TString GetSummary() {
-        return "\"Topic's consumer detailed information\"";
-    }
-};
-
-template <>
-struct TJsonRequestDescription<TJsonDescribeConsumer> {
-    static TString GetDescription() {
-        return "\"Returns detailed information about topic's consumer\"";
-    }
-};
-
-
-}
-}
+}  // namespace NKikimr::NViewer

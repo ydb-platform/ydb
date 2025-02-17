@@ -1,6 +1,7 @@
 items:
 - name: YQL
-  include: 
+  href: ../yql/reference/index.md
+  include:
     mode: link
     path: ../yql/toc_p.yaml
 - name: Совместимость с PostgreSQL
@@ -12,26 +13,52 @@ items:
     mode: link
     path: embedded-ui/toc_p.yaml
 - name: Интеграции
-  include: 
+  href: ../integrations/index.md
+  include:
     mode: link
     path: ../integrations/toc_p.yaml
 - name: YDB CLI
+  href: ydb-cli/index.md
   include:
     mode: link
     path: ydb-cli/toc_p.yaml
-- name: YDB SDK
+- name: YDB Native SDK
+  href: ydb-sdk/index.md
   include:
     mode: link
     path: ydb-sdk/toc_p.yaml
+- name: Языки и API
+  href: languages-and-apis/index.md
+  include:
+    mode: link
+    path: languages-and-apis/toc_p.yaml
 - name: Kafka API
+  href: kafka-api/index.md
   include:
     mode: link
     path: kafka-api/toc_p.yaml
-- name: YDB DStool
+- name: Конфигурация
+  href: configuration/index.md
   include:
     mode: link
-    path: ydb-dstool/toc_p.yaml
+    path: configuration/toc_p.yaml
 - name: Observability
+  href: observability/index.md
   include:
     mode: link
     path: observability/toc_p.yaml
+- name: YDB DStool
+  href: ydb-dstool/index.md
+  include:
+    mode: link
+    path: ydb-dstool/toc_p.yaml
+- name: ydbops
+  href: ydbops/index.md
+  include:
+    mode: link
+    path: ydbops/toc_p.yaml
+- name: Docker
+  href: docker/index.md
+  include:
+    mode: link
+    path: docker/toc_p.yaml

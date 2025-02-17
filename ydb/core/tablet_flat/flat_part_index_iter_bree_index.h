@@ -118,7 +118,7 @@ public:
         , State(Reserve(Meta.LevelCount + 1))
     {
         const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
-        State.emplace_back(Meta.PageId, 0, GetEndRowId(), EmptyKey, EmptyKey);
+        State.emplace_back(Meta.GetPageId(), 0, GetEndRowId(), EmptyKey, EmptyKey);
     }
     
     EReady Seek(TRowId rowId) override {
@@ -246,7 +246,7 @@ public:
     }
 
     TRowId GetEndRowId() const override {
-        return Meta.RowCount;
+        return Meta.GetRowCount();
     }
 
     TPageId GetPageId() const override {
@@ -272,6 +272,18 @@ public:
     TCell GetKeyCell(TPos index) const override {
         Y_ABORT_UNLESS(IsLeaf());
         return State.back().BeginKey.Iter().At(index);
+    }
+
+    void GetKeyCells(TSmallVec<TCell>& keyCells) const override {
+        keyCells.clear();
+
+        Y_ABORT_UNLESS(IsLeaf());
+
+        auto iter = State.back().BeginKey.Iter();
+        for (TPos pos : xrange(iter.Count())) {
+            Y_UNUSED(pos);
+            keyCells.push_back(iter.Next());
+        }
     }
 
 private:
@@ -334,13 +346,13 @@ private:
 
         auto& child = current.Node->GetShortChild(pos);
 
-        TRowId beginRowId = pos ? current.Node->GetShortChild(pos - 1).RowCount : current.BeginRowId;
-        TRowId endRowId = child.RowCount;
-        
+        TPageId pageId = child.GetPageId();
+        TRowId beginRowId = pos ? current.Node->GetShortChild(pos - 1).GetRowCount() : current.BeginRowId;
+        TRowId endRowId = child.GetRowCount();
         TCellsIterable beginKey = pos ? current.Node->GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : current.BeginKey;
         TCellsIterable endKey = pos < current.Node->GetKeysCount() ? current.Node->GetKeyCellsIterable(pos, GroupInfo.ColsKeyIdx) : current.EndKey;
         
-        State.emplace_back(child.PageId, beginRowId, endRowId, beginKey, endKey);
+        State.emplace_back(pageId, beginRowId, endRowId, beginKey, endKey);
     }
 
     bool TryLoad(TNodeState& state) {
@@ -348,7 +360,7 @@ private:
             return true;
         }
 
-        auto page = Env->TryGetPage(Part, state.PageId);
+        auto page = Env->TryGetPage(Part, state.PageId, {});
         if (page) {
             state.Node.emplace(*page);
             return true;

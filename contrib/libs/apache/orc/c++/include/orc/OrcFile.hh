@@ -19,6 +19,7 @@
 #ifndef ORC_FILE_HH
 #define ORC_FILE_HH
 
+#include <future>
 #include <string>
 
 #include "orc/Reader.hh"
@@ -57,6 +58,18 @@ namespace orc {
      * @param offset the position in the stream to read from.
      */
     virtual void read(void* buf, uint64_t length, uint64_t offset) = 0;
+
+    /**
+     * Read data asynchronously into the buffer. The buffer is allocated by the caller.
+     * @param buf the buffer to read into
+     * @param length the number of bytes to read.
+     * @param offset the position in the stream to read from.
+     * @return a future that will be set when the read is complete.
+     */
+    virtual std::future<void> readAsync(void* buf, uint64_t length, uint64_t offset) {
+      return std::async(std::launch::async,
+                        [this, buf, length, offset] { this->read(buf, length, offset); });
+    }
 
     /**
      * Get the name of the stream for error messages.
@@ -127,8 +140,8 @@ namespace orc {
    * @param path the uri of the file in HDFS
    * @param metrics the metrics of the reader
    */
-  std::unique_ptr<InputStream> readHdfsFile(const std::string& path,
-                                            ReaderMetrics* metrics = nullptr);
+  [[deprecated("readHdfsFile is deprecated in 2.0.1")]] std::unique_ptr<InputStream> readHdfsFile(
+      const std::string& path, ReaderMetrics* metrics = nullptr);
 
   /**
    * Create a reader to read the ORC file.

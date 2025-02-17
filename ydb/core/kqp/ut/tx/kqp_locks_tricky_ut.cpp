@@ -7,11 +7,11 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -29,9 +29,13 @@ using NYql::TExprNode;
 
 Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
-    Y_UNIT_TEST(TestNoLocksIssue) {
+    Y_UNIT_TEST_TWIN(TestNoLocksIssue, withSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
+
         auto setting = NKikimrKqp::TKqpSetting();
         TKikimrSettings settings;
+        settings.SetAppConfig(appConfig);
         settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -123,9 +127,13 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
         }
     }
 
-    Y_UNIT_TEST(TestNoLocksIssueInteractiveTx) {
+    Y_UNIT_TEST_TWIN(TestNoLocksIssueInteractiveTx, withSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
+
         auto setting = NKikimrKqp::TKqpSetting();
         TKikimrSettings settings;
+        settings.SetAppConfig(appConfig);
         settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -183,7 +191,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
             UNIT_ASSERT(txSnaphsot.IsValid());
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetTransaction().Defined());
+            UNIT_ASSERT(result.GetTransaction().has_value());
             tx.emplace(*result.GetTransaction());
 
             // running the query that touches the main table and the index.

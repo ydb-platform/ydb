@@ -1,8 +1,13 @@
 #pragma once
+#include "initialization.h"
+#include "tx_progress.h"
+
 #include "common/owner.h"
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <ydb/core/tx/columnshard/counters/tablet_counters.h>
+#include <ydb/core/tx/data_events/common/signals_flow.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NColumnShard {
@@ -13,7 +18,50 @@ enum class EWriteFailReason {
     LongTxDuplication /* "long_tx_duplication" */,
     NoTable /* "no_table" */,
     IncorrectSchema /* "incorrect_schema" */,
-    Overload /* "overload" */
+    Overload /* "overload" */,
+    CompactionCriteria /* "compaction_criteria" */
+};
+
+class TWriteCounters: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+    NMonitoring::TDynamicCounters::TCounterPtr VolumeWriteData;
+    NMonitoring::THistogramPtr HistogramBytesWriteDataCount;
+    NMonitoring::THistogramPtr HistogramBytesWriteDataBytes;
+    NMonitoring::THistogramPtr HistogramDurationQueueWait;
+    NMonitoring::THistogramPtr HistogramBatchDataCount;
+    NMonitoring::THistogramPtr HistogramBatchDataSize;
+    YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteFlowCounters>, WriteFlowCounters);
+
+public:
+    const NMonitoring::TDynamicCounters::TCounterPtr QueueWaitSize;
+
+    void OnWritingTaskDequeue(const TDuration d) {
+        HistogramDurationQueueWait->Collect(d.MilliSeconds());
+    }
+
+    TWriteCounters(TCommonCountersOwner& owner)
+        : TBase(owner, "activity", "writing")
+        , WriteFlowCounters(std::make_shared<NEvWrite::TWriteFlowCounters>())
+        , QueueWaitSize(TBase::GetValue("Write/Queue/Size")) {
+        VolumeWriteData = TBase::GetDeriviative("Write/Incoming/Bytes");
+        HistogramBytesWriteDataCount = TBase::GetHistogram("Write/Incoming/ByBytes/Count", NMonitoring::ExponentialHistogram(18, 2, 100));
+        HistogramBytesWriteDataBytes = TBase::GetHistogram("Write/Incoming/ByBytes/Bytes", NMonitoring::ExponentialHistogram(18, 2, 100));
+        HistogramDurationQueueWait = TBase::GetHistogram("Write/Queue/Waiting/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 100));
+        HistogramBatchDataCount = TBase::GetHistogram("Write/Batch/Size/Count", NMonitoring::ExponentialHistogram(18, 2, 1));
+        HistogramBatchDataSize = TBase::GetHistogram("Write/Batch/Size/Bytes", NMonitoring::ExponentialHistogram(18, 2, 128));
+    }
+
+    void OnIncomingData(const ui64 dataSize) const {
+        VolumeWriteData->Add(dataSize);
+        HistogramBytesWriteDataCount->Collect((i64)dataSize, 1);
+        HistogramBytesWriteDataBytes->Collect((i64)dataSize, dataSize);
+    }
+
+    void OnAggregationWrite(const ui64 count, const ui64 dataSize) const {
+        HistogramBatchDataCount->Collect((i64)count, 1);
+        HistogramBatchDataSize->Collect((i64)dataSize, 1);
+    }
 };
 
 class TCSCounters: public TCommonCountersOwner {
@@ -62,11 +110,17 @@ private:
     NMonitoring::THistogramPtr HistogramSuccessWriteMiddle6PutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramFailedWritePutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramWriteTxCompleteDurationMs;
+
     NMonitoring::TDynamicCounters::TCounterPtr WritePutBlobsCount;
     NMonitoring::TDynamicCounters::TCounterPtr WriteRequests;
     THashMap<EWriteFailReason, NMonitoring::TDynamicCounters::TCounterPtr> FailedWriteRequests;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessWriteRequests;
+
 public:
+    const std::shared_ptr<TWriteCounters> WritingCounters;
+    const TCSInitialization Initialization;
+    TTxProgressCounters TxProgress;
+
     void OnStartWriteRequest() const {
         WriteRequests->Add(1);
     }
@@ -80,7 +134,6 @@ public:
 
     void OnWritePutBlobsSuccess(const TDuration d) const {
         HistogramSuccessWritePutBlobsDurationMs->Collect(d.MilliSeconds());
-        WritePutBlobsCount->Sub(1);
     }
 
     void OnWriteMiddle1PutBlobsSuccess(const TDuration d) const {
@@ -109,11 +162,6 @@ public:
 
     void OnWritePutBlobsFail(const TDuration d) const {
         HistogramFailedWritePutBlobsDurationMs->Collect(d.MilliSeconds());
-        WritePutBlobsCount->Sub(1);
-    }
-
-    void OnWritePutBlobsStart() const {
-        WritePutBlobsCount->Add(1);
     }
 
     void OnWriteTxComplete(const TDuration d) const {
@@ -130,27 +178,27 @@ public:
         SplitCompactionGranulePortionsCount->SetValue(portionsCount);
     }
 
-    void OnOverloadInsertTable(const ui64 size) const {
+    void OnWriteOverloadInsertTable(const ui64 size) const {
         OverloadInsertTableBytes->Add(size);
         OverloadInsertTableCount->Add(1);
     }
 
-    void OnOverloadMetadata(const ui64 size) const {
+    void OnWriteOverloadMetadata(const ui64 size) const {
         OverloadMetadataBytes->Add(size);
         OverloadMetadataCount->Add(1);
     }
 
-    void OnOverloadShardTx(const ui64 size) const {
+    void OnWriteOverloadShardTx(const ui64 size) const {
         OverloadShardTxBytes->Add(size);
         OverloadShardTxCount->Add(1);
     }
 
-    void OnOverloadShardWrites(const ui64 size) const {
+    void OnWriteOverloadShardWrites(const ui64 size) const {
         OverloadShardWritesBytes->Add(size);
         OverloadShardWritesCount->Add(1);
     }
 
-    void OnOverloadShardWritesSize(const ui64 size) const {
+    void OnWriteOverloadShardWritesSize(const ui64 size) const {
         OverloadShardWritesSizeBytes->Add(size);
         OverloadShardWritesSizeCount->Add(1);
     }
@@ -204,4 +252,4 @@ public:
     TCSCounters();
 };
 
-}
+}   // namespace NKikimr::NColumnShard

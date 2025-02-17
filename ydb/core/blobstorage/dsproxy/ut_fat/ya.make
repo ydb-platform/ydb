@@ -7,10 +7,8 @@ SPLIT_FACTOR(30)
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
-    TIMEOUT(1800)
 ELSE()
     SIZE(MEDIUM)
-    TIMEOUT(600)
 ENDIF()
 
 PEERDIR(
@@ -31,7 +29,5 @@ PEERDIR(
 SRCS(
     dsproxy_ut.cpp
 )
-
-REQUIREMENTS(ram:10)
 
 END()

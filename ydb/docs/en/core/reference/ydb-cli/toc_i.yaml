@@ -21,6 +21,8 @@ items:
       href: commands/scheme-ls.md
     - name: Information about the object
       href: commands/scheme-describe.md
+    - name: Permissions
+      href: commands/scheme-permissions.md
     - name: Directories
       href: commands/dir.md
     - name: Secondary indexes
@@ -125,3 +127,7 @@ items:
       href: workload-transfer.md
     - name: TPC-H load
       href: workload-tpch.md
+    - name: TPC-DS load
+      href: workload-tpcds.md
+  - name: Configuration
+    href: configs.md

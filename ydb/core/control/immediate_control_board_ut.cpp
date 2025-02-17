@@ -111,15 +111,17 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
 
     Y_UNIT_TEST(TestParallelRegisterSharedControl) {
         void* (*parallelJob)(void*) = [](void *controlBoard) -> void *{
-            TControlBoard *Icb = reinterpret_cast<TControlBoard *>(controlBoard);
-            TControlWrapper control1(1, 1, 1);
-            Icb->RegisterSharedControl(control1, "sharedControl");
-            // Useless because running this test with --sanitize=thread cannot reveal
-            // race condition in Icb->RegisterLocalControl(...) without mutex
-            TControlWrapper control2(2, 2, 2);
-            TControlWrapper control2_origin(control2);
-            Icb->RegisterLocalControl(control2, "localControl");
-            UNIT_ASSERT_EQUAL(control2, control2_origin);
+            for (ui64 i = 0; i < 10000; ++i) {
+                TControlBoard *Icb = reinterpret_cast<TControlBoard *>(controlBoard);
+                TControlWrapper control1(1, 1, 1);
+                Icb->RegisterSharedControl(control1, "sharedControl");
+                // Useless because running this test with --sanitize=thread cannot reveal
+                // race condition in Icb->RegisterLocalControl(...) without mutex
+                TControlWrapper control2(2, 2, 2);
+                TControlWrapper control2_origin(control2);
+                Icb->RegisterLocalControl(control2, "localControl");
+                UNIT_ASSERT_EQUAL(control2, control2_origin);
+            }
             return nullptr;
         };
         TIntrusivePtr<TControlBoard> Icb(new TControlBoard);

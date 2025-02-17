@@ -14,7 +14,6 @@
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
-#include <util/system/type_name.h>
 #include <util/generic/vector.h>
 
 #include <google/protobuf/message.h>
@@ -412,6 +411,9 @@ enum EValueType : int
     VT_TIMESTAMP64,
     // Interval64, difference between two timestamps64 (signed)
     VT_INTERVAL64,
+
+    // Universally unique identifier according to RFC-4122.
+    VT_UUID,
 };
 
 ///
@@ -646,11 +648,6 @@ public:
     NTi::TTypePtr TypeV3() const;
     /// @}
 
-    ///
-    /// @brief Raw yson representation of column type
-    /// @deprecated Prefer to use `TypeV3` methods.
-    FLUENT_FIELD_OPTION_ENCAPSULATED(TNode, RawTypeV3);
-
     /// Column sort order
     FLUENT_FIELD_OPTION_ENCAPSULATED(ESortOrder, SortOrder);
 
@@ -693,10 +690,21 @@ public:
     TColumnSchema Type(EValueType type, bool required) &&;
     /// @}
 
+    ///
+    /// @{
+    ///
+    /// @brief Raw yson representation of column type
+    /// @deprecated Prefer to use `TypeV3` methods.
+    const TMaybe<TNode>& RawTypeV3() const;
+    TColumnSchema& RawTypeV3(TNode rawTypeV3)&;
+    TColumnSchema RawTypeV3(TNode rawTypeV3)&&;
+    /// @}
+
+
 private:
     friend void Deserialize(TColumnSchema& columnSchema, const TNode& node);
     NTi::TTypePtr TypeV3_;
-    bool Required_ = false;
+    TMaybe<TNode> RawTypeV3_;
 };
 
 /// Equality check checks all fields of column schema.
@@ -1016,7 +1024,7 @@ struct TRichYPath
     ///
     /// @{
     ///
-    /// Get range view, that is convenient way to iterate through all ranges.
+    /// Get range view, that is a convenient way to iterate through all ranges.
     TArrayRef<TReadRange> MutableRangesView()
     {
         if (Ranges_.Defined()) {
@@ -1115,10 +1123,21 @@ struct TRichYPath
     /// Allows to start cross-transactional operations.
     FLUENT_FIELD_OPTION(TTransactionId, TransactionId);
 
+    ///
+    /// @brief Wether to create operation output path.
+    ///
+    /// If set to `true` output path is created by YT server.
+    /// If set to `false` output path is not created explicitly (and operation will fail if it doesn't exist)
+    /// If attribute is not set output path is created by this library using explicit master call.
+    FLUENT_FIELD_OPTION(bool, Create);
+
     using TRenameColumnsDescriptor = THashMap<TString, TString>;
 
     /// Specifies columnar mapping which will be applied to columns before transfer to job.
     FLUENT_FIELD_OPTION(TRenameColumnsDescriptor, RenameColumns);
+
+    /// Specifies cluster for the YPath
+    FLUENT_FIELD_OPTION(TString, Cluster);
 
     /// Create empty path with no attributes
     TRichYPath()
@@ -1192,6 +1211,9 @@ struct TTableColumnarStatistics
 {
     /// Total data weight for all chunks for each of requested columns.
     THashMap<TString, i64> ColumnDataWeight;
+
+    /// Estimated number of unique elements for each column.
+    THashMap<TString, ui64> ColumnEstimatedUniqueCounts;
 
     /// Total weight of all old chunks that don't keep columnar statistics.
     i64 LegacyChunksDataWeight = 0;

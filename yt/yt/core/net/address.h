@@ -3,11 +3,12 @@
 #include "public.h"
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/core/dns/public.h>
 
 #include <yt/yt/core/actions/future.h>
+
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 #include <util/generic/hash.h>
 
@@ -42,6 +43,9 @@ int GetServicePort(TStringBuf address);
 TStringBuf GetServiceHostName(TStringBuf address);
 
 ////////////////////////////////////////////////////////////////////////////////
+
+//! Constructs an address of the form |[address]:port|.
+TString FormatNetworkAddress(TStringBuf address, int port);
 
 class TIP6Address;
 
@@ -93,6 +97,7 @@ struct TNetworkAddressFormatOptions
     bool IncludeTcpProtocol = true;
 };
 
+void FormatValue(TStringBuilderBase* builder, const TNetworkAddress& address, TStringBuf spec);
 TString ToString(const TNetworkAddress& address, const TNetworkAddressFormatOptions& options = {});
 
 bool operator == (const TNetworkAddress& lhs, const TNetworkAddress& rhs);
@@ -122,12 +127,13 @@ public:
     const ui32* GetRawDWords() const;
     ui32* GetRawDWords();
 
+    bool IsMtn() const;
+
 private:
     std::array<ui8, ByteSize> Raw_ = {};
 };
 
 void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStringBuf spec);
-TString ToString(const TIP6Address& address);
 
 bool operator == (const TIP6Address& lhs, const TIP6Address& rhs);
 
@@ -157,13 +163,16 @@ public:
     const TIP6Address& GetMask() const;
     int GetMaskSize() const;
 
+    //! Get project id as extracted by FromString().
+    std::optional<ui32> GetProjectId() const;
+
 private:
     TIP6Address Network_;
     TIP6Address Mask_;
+    std::optional<ui32> ProjectId_;
 };
 
 void FormatValue(TStringBuilderBase* builder, const TIP6Network& network, TStringBuf spec);
-TString ToString(const TIP6Network& network);
 
 void Deserialize(TIP6Network& value, NYTree::INodePtr node);
 void Deserialize(TIP6Network& value, NYson::TYsonPullParserCursor* cursor);
@@ -183,7 +192,7 @@ public:
      *  Calls |getaddrinfo| and returns the first entry belonging to |AF_INET| or |AF_INET6| family.
      *  Caches successful resolutions.
      */
-    TFuture<TNetworkAddress> Resolve(const TString& address);
+    TFuture<TNetworkAddress> Resolve(const std::string& address);
 
     //! Returns the currently installed global DNS resolver.
     NDns::IDnsResolverPtr GetDnsResolver();
@@ -223,7 +232,6 @@ class TMtnAddress
 {
 public:
     TMtnAddress() = default;
-
     TMtnAddress(TIP6Address address);
 
     ui64 GetPrefix() const;
@@ -238,11 +246,10 @@ public:
     ui64 GetHost() const;
     TMtnAddress& SetHost(ui64 host);
 
-    const TIP6Address& ToIP6Address() const;
+    TIP6Address ToIP6Address() const;
 
 private:
     ui64 GetBytesRangeValue(int leftIndex, int rightIndex) const;
-
     void SetBytesRangeValue(int leftIndex, int rightIndex, ui64 value);
 
     static constexpr int HostOffsetInBytes = 0;
@@ -259,12 +266,12 @@ private:
 // Expected format: sas1-5535-9d7.sas-test.yp.gencfg-c.yandex.net, or noqpmfiudzbb4hvs.man.yp-c.yandex.net.
 // YP pod id must not contain a '.' in its name.
 std::optional<TStringBuf> InferYPClusterFromHostNameRaw(TStringBuf hostName);
-std::optional<TString> InferYPClusterFromHostName(TStringBuf hostName);
+std::optional<std::string> InferYPClusterFromHostName(TStringBuf hostName);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 std::optional<TStringBuf> InferYTClusterFromClusterUrlRaw(TStringBuf clusterUrl);
-std::optional<TString> InferYTClusterFromClusterUrl(TStringBuf clusterUrl);
+std::optional<std::string> InferYTClusterFromClusterUrl(TStringBuf clusterUrl);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,12 +1,15 @@
 #pragma once
 #include "counters.h"
+
+#include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
-#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
-#include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
+#include <ydb/core/tx/tiering/manager.h>
 
 namespace NKikimr::NOlap {
 class TTiering;
+class TCSMetadataRequest;
 }
 
 namespace NKikimr::NOlap::NActualizer {
@@ -38,11 +41,11 @@ private:
 
         }
 
-        TDuration GetWaitDuration() const {
+        TInstant GetWaitInstant(const TInstant now) const {
             if (WaitDurationValue >= 0) {
-                return TDuration::FromValue(WaitDurationValue);
+                return now + TDuration::FromValue(WaitDurationValue);
             } else {
-                return TDuration::Zero();
+                return now;
             }
         }
 
@@ -58,52 +61,52 @@ private:
     class TFindActualizationInfo {
     private:
         TRWAddress RWAddress;
-        YDB_READONLY_DEF(TDuration, WaitDuration);
+        YDB_READONLY_DEF(TInstant, WaitInstant);
     public:
         const TRWAddress& GetRWAddress() const {
             return RWAddress;
         }
 
-        TFindActualizationInfo(TRWAddress&& rwAddress, const TDuration waitDuration)
+        TFindActualizationInfo(TRWAddress&& rwAddress, const TInstant waitInstant)
             : RWAddress(std::move(rwAddress))
-            , WaitDuration(waitDuration) {
+            , WaitInstant(waitInstant) {
 
         }
     };
 
     class TRWAddressPortionsInfo {
     private:
-        std::map<TDuration, THashSet<ui64>> Portions;
+        std::map<TInstant, THashSet<ui64>> Portions;
     public:
-        const std::map<TDuration, THashSet<ui64>>& GetPortions() const {
+        const std::map<TInstant, THashSet<ui64>>& GetPortions() const {
             return Portions;
         }
 
-        void CorrectSignals(ui64& queueSize, ui64& waitSeconds, const TDuration dCorrect) const {
+        void CorrectSignals(ui64& queueSize, ui64& waitSeconds, const TInstant now) const {
             if (Portions.empty()) {
                 return;
             }
             for (auto&& i : Portions) {
-                if (i.first > dCorrect) {
+                if (i.first > now) {
                     break;
                 }
                 queueSize += i.second.size();
             }
-            if (Portions.begin()->first < dCorrect) {
-                waitSeconds = std::max(waitSeconds, (dCorrect - Portions.begin()->first).Seconds());
+            if (Portions.begin()->first < now) {
+                waitSeconds = std::max(waitSeconds, (now - Portions.begin()->first).Seconds());
             }
         }
 
-        [[nodiscard]] bool AddPortion(const TFullActualizationInfo& info, const ui64 portionId, const TDuration dCorrection) {
-            return Portions[info.GetWaitDuration() + dCorrection].emplace(portionId).second;
+        [[nodiscard]] bool AddPortion(const TFullActualizationInfo& info, const ui64 portionId, const TInstant now) {
+            return Portions[info.GetWaitInstant(now)].emplace(portionId).second;
         }
 
         bool RemovePortion(const TFindActualizationInfo& info, const ui64 portionId) {
-            auto itDuration = Portions.find(info.GetWaitDuration());
-            AFL_VERIFY(itDuration != Portions.end());
-            AFL_VERIFY(itDuration->second.erase(portionId));
-            if (itDuration->second.empty()) {
-                Portions.erase(itDuration);
+            auto itInstant = Portions.find(info.GetWaitInstant());
+            AFL_VERIFY(itInstant != Portions.end());
+            AFL_VERIFY(itInstant->second.erase(portionId));
+            if (itInstant->second.empty()) {
+                Portions.erase(itInstant);
             }
             return Portions.empty();
         }
@@ -115,27 +118,36 @@ private:
     std::shared_ptr<ISnapshotSchema> TargetCriticalSchema;
     const ui64 PathId;
     const TVersionedIndex& VersionedIndex;
+    const std::shared_ptr<IStoragesManager>& StoragesManager;
 
-    TInstant StartInstant = TInstant::Zero();
     THashMap<TRWAddress, TRWAddressPortionsInfo> PortionIdByWaitDuration;
     THashMap<ui64, TFindActualizationInfo> PortionsInfo;
+    THashSet<ui64> NewPortionIds;
+    THashMap<ui64, std::shared_ptr<arrow::Scalar>> MaxByPortionId;
 
     std::shared_ptr<ISnapshotSchema> GetTargetSchema(const std::shared_ptr<ISnapshotSchema>& portionSchema) const;
 
     std::optional<TFullActualizationInfo> BuildActualizationInfo(const TPortionInfo& portion, const TInstant now) const;
 
+    void AddPortionImpl(const TPortionInfo& portion, const TInstant now);
+
     virtual void DoAddPortion(const TPortionInfo& portion, const TAddExternalContext& addContext) override;
     virtual void DoRemovePortion(const ui64 portionId) override;
     virtual void DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
-
 public:
+    void ActualizePortionInfo(const TPortionDataAccessor& accessor, const TActualizationContext& context);
+    std::vector<TCSMetadataRequest> BuildMetadataRequests(
+        const ui64 pathId, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index);
+
     void Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext);
 
-    TTieringActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex)
+    TTieringActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
         : PathId(pathId)
         , VersionedIndex(versionedIndex)
+        , StoragesManager(storagesManager)
     {
         Y_UNUSED(PathId);
+        AFL_VERIFY(StoragesManager);
     }
 };
 

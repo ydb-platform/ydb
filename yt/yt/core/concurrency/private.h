@@ -31,16 +31,7 @@ template <class TQueueImpl>
 class TSingleQueueSchedulerThread;
 
 template <class TQueueImpl>
-using TSingleQueueSchedulerThreadPtr = TIntrusivePtr<TSingleQueueSchedulerThread<TQueueImpl>>;
-
-template <class TQueueImpl>
 class TSuspendableSingleQueueSchedulerThread;
-
-template <class TQueueImpl>
-using TSuspendableSingleQueueSchedulerThreadPtr = TIntrusivePtr<TSuspendableSingleQueueSchedulerThread<TQueueImpl>>;
-
-using TMpmcSingleQueueSchedulerThread = TSingleQueueSchedulerThread<TMpmcQueueImpl>;
-using TMpmcSingleQueueSchedulerThreadPtr = TIntrusivePtr<TMpmcSingleQueueSchedulerThread>;
 
 using TMpscSingleQueueSchedulerThread = TSingleQueueSchedulerThread<TMpscQueueImpl>;
 using TMpscSingleQueueSchedulerThreadPtr = TIntrusivePtr<TMpscSingleQueueSchedulerThread>;
@@ -51,6 +42,7 @@ using TMpscSuspendableSingleQueueSchedulerThreadPtr = TIntrusivePtr<TMpscSuspend
 ////////////////////////////////////////////////////////////////////////////////
 
 class TFiber;
+class TFls;
 
 DECLARE_REFCOUNTED_CLASS(TSchedulerThread)
 
@@ -60,8 +52,8 @@ DECLARE_REFCOUNTED_STRUCT(IFairShareCallbackQueue)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline const NLogging::TLogger ConcurrencyLogger("Concurrency");
-inline const NProfiling::TProfiler ConcurrencyProfiler("/concurrency");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, ConcurrencyLogger, "Concurrency");
+YT_DEFINE_GLOBAL(const NProfiling::TProfiler, ConcurrencyProfiler, "/concurrency");
 
 ////////////////////////////////////////////////////////////////////////////////
 

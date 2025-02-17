@@ -67,10 +67,13 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "DqPqTopicSource"},
             "Children": [
-                {"Index": 0, "Name": "Topic", "Type": "TPqTopic"},
-                {"Index": 1, "Name": "Columns", "Type": "TExprBase"},
-                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-                {"Index": 3, "Name": "Token", "Type": "TCoSecureParam"}
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Topic", "Type": "TPqTopic"},
+                {"Index": 2, "Name": "Columns", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 4, "Name": "Token", "Type": "TCoSecureParam"},
+                {"Index": 5, "Name": "FilterPredicate", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "RowType", "Type": "TExprBase"}
             ]
         },
         {

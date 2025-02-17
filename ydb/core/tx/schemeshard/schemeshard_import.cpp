@@ -21,6 +21,13 @@ namespace {
         }
     }
 
+    NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
+        NProtoBuf::Timestamp timestamp;
+        timestamp.set_seconds((i64)(sec));
+        timestamp.set_nanos(0);
+        return timestamp;
+    }
+
     TImportInfo::EState GetMinState(TImportInfo::TPtr importInfo) {
         TImportInfo::EState state = TImportInfo::EState::Invalid;
 
@@ -41,11 +48,22 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
     import.SetId(importInfo->Id);
     import.SetStatus(Ydb::StatusIds::SUCCESS);
 
+    if (importInfo->StartTime != TInstant::Zero()) {
+        *import.MutableStartTime() = SecondsToProtoTimeStamp(importInfo->StartTime.Seconds());
+    }
+    if (importInfo->EndTime != TInstant::Zero()) {
+        *import.MutableEndTime() = SecondsToProtoTimeStamp(importInfo->EndTime.Seconds());
+    }
+
+    if (importInfo->UserSID) {
+        import.SetUserSID(*importInfo->UserSID);
+    }
+
     switch (importInfo->State) {
     case TImportInfo::EState::Waiting:
         switch (GetMinState(importInfo)) {
         case TImportInfo::EState::GetScheme:
-        case TImportInfo::EState::CreateTable:
+        case TImportInfo::EState::CreateSchemeObject:
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_PREPARING);
             break;
         case TImportInfo::EState::Transferring:
@@ -131,7 +149,9 @@ void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo::T
 void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo) {
     db.Table<Schema::Imports>().Key(importInfo->Id).Update(
         NIceDb::TUpdate<Schema::Imports::State>(static_cast<ui8>(importInfo->State)),
-        NIceDb::TUpdate<Schema::Imports::Issue>(importInfo->Issue)
+        NIceDb::TUpdate<Schema::Imports::Issue>(importInfo->Issue),
+        NIceDb::TUpdate<Schema::Imports::StartTime>(importInfo->StartTime.Seconds()),
+        NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo->EndTime.Seconds())
     );
 }
 
@@ -151,9 +171,35 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
-    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+    auto record = db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx);
+    record.Update(
         NIceDb::TUpdate<Schema::ImportItems::Scheme>(item.Scheme.SerializeAsString())
     );
+
+    if (!item.CreationQuery.empty()) {
+        record.Update(
+            NIceDb::TUpdate<Schema::ImportItems::CreationQuery>(item.CreationQuery)
+        );
+    }
+    if (item.Permissions.Defined()) {
+        record.Update(
+            NIceDb::TUpdate<Schema::ImportItems::Permissions>(item.Permissions->SerializeAsString())
+        );
+    }
+    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+        NIceDb::TUpdate<Schema::ImportItems::Metadata>(item.Metadata.Serialize())
+    );
+}
+
+void TSchemeShard::PersistImportItemPreparedCreationQuery(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+    const auto& item = importInfo->Items[itemIdx];
+
+    if (item.PreparedCreationQuery) {
+        db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+            NIceDb::TUpdate<Schema::ImportItems::PreparedCreationQuery>(item.PreparedCreationQuery->SerializeAsString())
+        );
+    }
 }
 
 void TSchemeShard::PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
@@ -187,6 +233,10 @@ void TSchemeShard::Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TAct
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressImport(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxProgressImport(ev), ctx);
 }
 

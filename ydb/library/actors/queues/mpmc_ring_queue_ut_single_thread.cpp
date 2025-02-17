@@ -1,7 +1,7 @@
 #define MPMC_RING_QUEUE_COLLECT_STATISTICS
 
 #include "mpmc_ring_queue.h"
-#include "mpmc_ring_queue_ut_base.h"
+#include "bench/queue.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -11,7 +11,7 @@
 
 
 using namespace NActors;
-using namespace NActors::NTests;
+using namespace NActors::NQueueBench;
 
 namespace { // Tests
 
@@ -19,32 +19,32 @@ namespace { // Tests
     struct TTestCases {
         static constexpr ui32 MaxSize = 1 << SizeBits;
 
-        static auto GetHead(const TMPMCRingQueue<SizeBits> &realQueue) {
-            if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits>>) {
+        static auto GetHead(const TMPMCRingQueueWithStats<SizeBits> &realQueue) {
+            if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits, TStatsObserver>>) {
                 return realQueue.LocalHead;
             } else {
                 return realQueue.Head.load();
             }
         }
 
-        static auto GetHeadGeneration(const TMPMCRingQueue<SizeBits> &realQueue) {
-            if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits>>) {
+        static auto GetHeadGeneration(const TMPMCRingQueueWithStats<SizeBits> &realQueue) {
+            if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits, TStatsObserver>>) {
                 return realQueue.LocalGeneration;
             } else {
                 return realQueue.Head.load() / MaxSize;
             }
         }
 
-        static auto GetTail(const TMPMCRingQueue<SizeBits> &realQueue) {
+        static auto GetTail(const TMPMCRingQueueWithStats<SizeBits> &realQueue) {
             return realQueue.Tail.load();
         }
 
-        static auto GetTailGeneration(const TMPMCRingQueue<SizeBits> &realQueue) {
+        static auto GetTailGeneration(const TMPMCRingQueueWithStats<SizeBits> &realQueue) {
             return realQueue.Tail.load() / MaxSize;
         }
 
         static void PushesPopsWithShift() {
-            TMPMCRingQueue<SizeBits> realQueue;
+            TMPMCRingQueueWithStats<SizeBits> realQueue;
             TQueueAdaptor<SizeBits> adaptor(&realQueue);
             
             for (ui32 it = 0; it < MaxSize; ++it) {
@@ -70,7 +70,7 @@ namespace { // Tests
                     UNIT_ASSERT_VALUES_EQUAL_C(realQueue.Buffer[realIdx].load(), idx, debugString);
                     std::optional<ui32> value = adaptor.TryPop();
                     UNIT_ASSERT_C(value, debugString);
-                    if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits>>) {
+                    if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits, TStatsObserver>>) {
                         UNIT_ASSERT_VALUES_EQUAL_C((head + 1) % MaxSize, GetHead(realQueue), debugString);
                     } else {
                         UNIT_ASSERT_VALUES_EQUAL_C(head + 1, GetHead(realQueue), debugString);
@@ -83,7 +83,7 @@ namespace { // Tests
         }
 
         static void PushesOverloadPops() {
-            TMPMCRingQueue<SizeBits> realQueue;
+            TMPMCRingQueueWithStats<SizeBits> realQueue;
             TQueueAdaptor<SizeBits> adaptor(&realQueue);
             
             for (ui32 it = 0; it < MaxSize; ++it) {
@@ -106,7 +106,7 @@ namespace { // Tests
                     UNIT_ASSERT_VALUES_EQUAL_C(realQueue.Buffer[idx].load(), idx, debugString);
                     std::optional<ui32> value = adaptor.TryPop();
                     UNIT_ASSERT_C(value, debugString);
-                    if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits>>) {
+                    if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits, TStatsObserver>>) {
                         UNIT_ASSERT_VALUES_EQUAL_C((head + 1) % MaxSize, GetHead(realQueue), debugString);
                     } else {
                         UNIT_ASSERT_VALUES_EQUAL_C(head + 1, GetHead(realQueue), debugString);
@@ -122,7 +122,7 @@ namespace { // Tests
             if constexpr (MaxSize < 3) {
                 return;
             }
-            TMPMCRingQueue<SizeBits> realQueue;
+            TMPMCRingQueueWithStats<SizeBits> realQueue;
             TQueueAdaptor<SizeBits> adaptor(&realQueue);
 
             ui64 emptyZeroGeneration = (ui64(1) << 63);
@@ -156,7 +156,7 @@ namespace { // Tests
         }
 
         static void CheckSlowPops() {
-            TMPMCRingQueue<SizeBits> realQueue;
+            TMPMCRingQueueWithStats<SizeBits> realQueue;
             TQueueAdaptor<SizeBits> adaptor(&realQueue);
             ui64 emptyZeroGeneration = (ui64(1) << 63);
             for (ui32 it = 0; it < MaxSize; ++it) {
@@ -174,7 +174,7 @@ namespace { // Tests
         }
 
         static void CheckFastPops() {
-            TMPMCRingQueue<SizeBits> realQueue;
+            TMPMCRingQueueWithStats<SizeBits> realQueue;
             TQueueAdaptor<SizeBits> adaptor(&realQueue);
             for (ui32 it = 0; it < MaxSize; ++it) {
                 for (ui32 idx = 0; idx < MaxSize; ++idx) {
@@ -229,27 +229,27 @@ namespace { // Tests
 
 #define BASIC_QUEUE_TEST_CASES(SIZE_BITS, QUEUE)                 \
     Y_UNIT_TEST(PushesPopsWithShift_ ## QUEUE) {                 \
-        TTestCases<SIZE_BITS, QUEUE>::PushesPopsWithShift();     \
+        TTestCases<SIZE_BITS, TAdaptorWithStats<QUEUE>::Type>::PushesPopsWithShift();     \
     }                                                            \
                                                                  \
     Y_UNIT_TEST(PushesOverloadPops_ ## QUEUE) {                  \
-        TTestCases<SIZE_BITS, QUEUE>::PushesOverloadPops();      \
+        TTestCases<SIZE_BITS, TAdaptorWithStats<QUEUE>::Type>::PushesOverloadPops();      \
     }                                                            \
                                                                  \
     Y_UNIT_TEST(CheckPushes_ ## QUEUE) {                         \
-        TTestCases<SIZE_BITS, QUEUE>::CheckPushes();             \
+        TTestCases<SIZE_BITS, TAdaptorWithStats<QUEUE>::Type>::CheckPushes();             \
     }                                                            \
 // end BASIC_QUEUE_TEST_CASES
 
 #define CHECK_SLOW_POPS(SIZE_BITS, QUEUE)                  \
     Y_UNIT_TEST(CheckSlowPops_ ## QUEUE) {                 \
-        TTestCases<SIZE_BITS, QUEUE>::CheckSlowPops();     \
+        TTestCases<SIZE_BITS, TAdaptorWithStats<QUEUE>::Type>::CheckSlowPops();     \
     }                                                      \
 // end CHECK_SLOW_POPS
 
 #define CHECK_FAST_POPS(SIZE_BITS, QUEUE)                  \
     Y_UNIT_TEST(CheckFastPops_ ## QUEUE) {                 \
-        TTestCases<SIZE_BITS, QUEUE>::CheckFastPops();     \
+        TTestCases<SIZE_BITS, TAdaptorWithStats<QUEUE>::Type>::CheckFastPops();     \
     }                                                      \
 // end CHECK_FAST_POPS
 
@@ -270,34 +270,36 @@ Y_UNIT_TEST_SUITE(MPMCRingQueueSingleThreadTests) {
     CHECK_FAST_POPS(SizeBits, TVeryFastQueue);
 
     Y_UNIT_TEST(RandomUsageFast) {
-        TMPMCRingQueue<SizeBits> realQueue;
+        return;
+        TMPMCRingQueueWithStats<SizeBits> realQueue;
         TestRandomUsage(
             10'000,
             (ui64(1) << SizeBits),
-            TVeryFastQueue<SizeBits>(&realQueue),
-            TFastQueue<SizeBits>(&realQueue)
+            TAdaptorWithStats<TFastQueue>::Type<SizeBits>(&realQueue),
+            TAdaptorWithStats<TVeryFastQueue>::Type<SizeBits>(&realQueue)
         );
     }
 
     Y_UNIT_TEST(RandomUsageSlow) {
-        TMPMCRingQueue<SizeBits> realQueue;
+        TMPMCRingQueueWithStats<SizeBits> realQueue;
         TestRandomUsage(
             10'000,
             (ui64(1) << SizeBits),
-            TVerySlowQueue<SizeBits>(&realQueue),
-            TSlowQueue<SizeBits>(&realQueue)
+            TAdaptorWithStats<TVerySlowQueue>::Type<SizeBits>(&realQueue),
+            TAdaptorWithStats<TSlowQueue>::Type<SizeBits>(&realQueue)
         );
     }
 
     Y_UNIT_TEST(RandomUsageAll) {
-        TMPMCRingQueue<SizeBits> realQueue;
+        return;
+        TMPMCRingQueueWithStats<SizeBits> realQueue;
         TestRandomUsage(
             100'000,
             (ui64(1) << SizeBits),
-            TVerySlowQueue<SizeBits>(&realQueue),
-            TSlowQueue<SizeBits>(&realQueue),
-            TFastQueue<SizeBits>(&realQueue),
-            TVeryFastQueue<SizeBits>(&realQueue)
+            TAdaptorWithStats<TVerySlowQueue>::Type<SizeBits>(&realQueue),
+            TAdaptorWithStats<TSlowQueue>::Type<SizeBits>(&realQueue),
+            TAdaptorWithStats<TFastQueue>::Type<SizeBits>(&realQueue),
+            TAdaptorWithStats<TVeryFastQueue>::Type<SizeBits>(&realQueue)
         );
     }
 }

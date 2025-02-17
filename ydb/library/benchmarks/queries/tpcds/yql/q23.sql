@@ -2,7 +2,7 @@
 
 -- NB: Subquerys
 $blabla = (
-    select substring(cast(item.i_item_desc as string),1,30) itemdesc,item.i_item_sk item_sk,date_dim.d_date solddate
+    select substring(cast(item.i_item_desc as string),0,30) itemdesc,item.i_item_sk item_sk,date_dim.d_date solddate
   from {{store_sales}} as store_sales
       cross join {{date_dim}} as date_dim
       cross join {{item}} as item
@@ -33,7 +33,7 @@ $best_ss_customer =
       cross join {{customer}} as customer
   where ss_customer_sk = c_customer_sk
   group by customer.c_customer_sk
-  having sum(ss_quantity*ss_sales_price) > (95/100.0) * $max_store_sales);
+  having sum(ss_quantity*ss_sales_price) > $z0_5_35 * $max_store_sales);
 
 -- start query 1 in stream 0 using template query23.tpl and seed 2031708268
 select  sum(sales)
@@ -41,7 +41,7 @@ select  sum(sales)
        from {{catalog_sales}} as catalog_sales
            cross join {{date_dim}} as date_dim
        where d_year = 2000
-         and d_moy = 3
+         and d_moy = 2
          and cs_sold_date_sk = d_date_sk
          and cs_item_sk in (select item_sk from $frequent_ss_items)
          and cs_bill_customer_sk in (select c_customer_sk from $best_ss_customer)
@@ -50,7 +50,7 @@ select  sum(sales)
        from {{web_sales}} as web_sales
            cross join {{date_dim}} as date_dim
        where d_year = 2000
-         and d_moy = 3
+         and d_moy = 2
          and ws_sold_date_sk = d_date_sk
          and ws_item_sk in (select item_sk from $frequent_ss_items)
          and ws_bill_customer_sk in (select c_customer_sk from $best_ss_customer)) y
@@ -62,7 +62,7 @@ select  c_last_name,c_first_name,sales
             cross join {{customer}} as customer
             cross join {{date_dim}} as date_dim
         where d_year = 2000
-         and d_moy = 3
+         and d_moy = 2
          and cs_sold_date_sk = d_date_sk
          and cs_item_sk in (select item_sk from $frequent_ss_items)
          and cs_bill_customer_sk in (select c_customer_sk from $best_ss_customer)
@@ -74,7 +74,7 @@ select  c_last_name,c_first_name,sales
            cross join {{customer}} as customer
            cross join {{date_dim}} as date_dim
        where d_year = 2000
-         and d_moy = 3
+         and d_moy = 2
          and ws_sold_date_sk = d_date_sk
          and ws_item_sk in (select item_sk from $frequent_ss_items)
          and ws_bill_customer_sk in (select c_customer_sk from $best_ss_customer)

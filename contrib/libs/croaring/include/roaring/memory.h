@@ -1,11 +1,11 @@
 #ifndef INCLUDE_ROARING_MEMORY_H_
 #define INCLUDE_ROARING_MEMORY_H_
 
+#include <stddef.h>  // for size_t
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>  // for size_t
 
 typedef void* (*roaring_malloc_p)(size_t);
 typedef void* (*roaring_realloc_p)(void*, size_t);

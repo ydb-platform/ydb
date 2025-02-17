@@ -1,4 +1,5 @@
 #include "yql_dq_settings.h"
+#include <util/string/split.h>
 
 namespace NYql {
 
@@ -30,6 +31,8 @@ TDqConfiguration::TDqConfiguration() {
 
     REGISTER_SETTING(*this, _LiteralTimeout);
     REGISTER_SETTING(*this, _TableTimeout);
+    REGISTER_SETTING(*this, QueryTimeout);
+
     REGISTER_SETTING(*this, _LongWorkersAllocationWarnTimeout);
     REGISTER_SETTING(*this, _LongWorkersAllocationFailTimeout);
 
@@ -79,10 +82,12 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, SpillingEngine)
         .Parser([](const TString& v) {
             return FromString<TDqSettings::ESpillingEngine>(v);
-        })
-        .ValueSetter([this](const TString&, TDqSettings::ESpillingEngine value) {
-            SpillingEngine = value;
-            if (value != TDqSettings::ESpillingEngine::Disable) {
+        });
+
+    REGISTER_SETTING(*this, EnableSpillingInChannels)
+        .ValueSetter([this](const TString&, bool value) {
+            EnableSpillingInChannels = value;
+            if (value) {
                 SplitStageOnDqReplicate = false;
                 EnableDqReplicate = true;
             }
@@ -97,6 +102,23 @@ TDqConfiguration::TDqConfiguration() {
         });
 
     REGISTER_SETTING(*this, _MaxAttachmentsSize);
+    REGISTER_SETTING(*this, DisableCheckpoints);
+    REGISTER_SETTING(*this, EnableSpillingNodes)
+        .Parser([](const TString& v) {
+            ui64 res = 0;
+            TVector<TString> vec;
+            StringSplitter(v).SplitBySet(",;| ").AddTo(&vec);
+            for (auto& s: vec) {
+                if (s.empty()) {
+                    throw yexception() << "Empty value item";
+                }
+                auto value = FromString<NDq::EEnabledSpillingNodes>(s);
+                res |= ui64(value);
+            }
+            return res;
+        });
+    REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
+    REGISTER_SETTING(*this, Scheduler);
 }
 
 } // namespace NYql

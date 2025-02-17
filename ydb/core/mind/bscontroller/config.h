@@ -82,7 +82,7 @@ namespace NKikimr {
             // volatile reconfiguration state
             THashMap<TVSlotId, TPDiskId> ExplicitReconfigureMap;
             std::set<TVSlotId> SuppressDonorMode;
-            std::unordered_set<ui32> SanitizingRequests;
+            std::unordered_set<TGroupId> SanitizingRequests;
 
             // just-created vslots, which are not yet committed to the storage
             TSet<TVSlotId> UncommittedVSlots;
@@ -101,6 +101,7 @@ namespace NKikimr {
 
             // when the config cmd received
             const TInstant Timestamp;
+            const TMonotonic Mono;
 
             // various settings from controller
             const bool DonorMode;
@@ -121,8 +122,11 @@ namespace NKikimr {
             THashSet<TGroupId> GroupContentChanged;
             THashSet<TGroupId> GroupFailureModelChanged;
 
+            bool PushStaticGroupsToSelfHeal = false;
+
         public:
-            TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp)
+            TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp,
+                    TMonotonic mono)
                 : Self(controller)
                 , HostConfigs(&controller.HostConfigs)
                 , Boxes(&controller.Boxes)
@@ -140,6 +144,7 @@ namespace NKikimr {
                 , NextStoragePoolId(&controller.NextStoragePoolId)
                 , HostRecords(hostRecords)
                 , Timestamp(timestamp)
+                , Mono(mono)
                 , DonorMode(controller.DonorMode)
                 , DefaultMaxSlots(controller.DefaultMaxSlots)
                 , StaticVSlots(controller.StaticVSlots)
@@ -310,6 +315,9 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TCancelVirtualGroup& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TSetVDiskReadOnly& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TRestartPDisk& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TSetPDiskReadOnly& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TStopPDisk& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& cmd, TStatus& status);
         };
 
     } // NBsController

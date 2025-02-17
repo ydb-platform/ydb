@@ -38,7 +38,6 @@ namespace NCompGen {
         void ReflectSchema() override;
         void ReflectRemovedRowVersions() override;
         void UpdateCompactions() override;
-        float GetOverloadFactor() override;
         ui64 GetBackingSize() override;
         ui64 GetBackingSize(ui64 ownerTabletId) override;
         ui64 BeginMemCompaction(TTaskId taskId, TSnapEdge edge, ui64 forcedCompactionId) override;
@@ -268,7 +267,6 @@ namespace NCompGen {
         EForcedState ForcedState = EForcedState::None;
         ui64 ForcedMemCompactionId = 0;
         ui32 ForcedGeneration = 0;
-        float MaxOverloadFactor = 0.0;
 
         ui64 CurrentForcedGenCompactionId = 0;
         ui64 NextForcedGenCompactionId = 0;

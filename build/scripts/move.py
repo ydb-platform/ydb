@@ -1,6 +1,9 @@
 import os
 import sys
 
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 
 # /script/move.py <src-1> <tgt-1> <src-2> <tgt-2> ... <src-n> <tgt-n>

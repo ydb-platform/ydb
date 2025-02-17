@@ -18,63 +18,54 @@ functions among several configuration file formats.
 **PRIVATE MODULE**: API reserved for setuptools internal usage only.
 """
 
+from __future__ import annotations
+
 import ast
 import importlib
 import os
 import pathlib
 import sys
-from glob import iglob
+from collections.abc import Iterable, Iterator, Mapping
 from configparser import ConfigParser
-from importlib.machinery import ModuleSpec
+from glob import iglob
+from importlib.machinery import ModuleSpec, all_suffixes
 from itertools import chain
-from typing import (
-    TYPE_CHECKING,
-    Callable,
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Mapping,
-    Optional,
-    Tuple,
-    TypeVar,
-    Union,
-    cast,
-)
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, TracebackType
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
+
+from .. import _static
+from .._path import StrPath, same_path as _same_path
+from ..discovery import find_package_path
+from ..warnings import SetuptoolsWarning
 
 from distutils.errors import DistutilsOptionError
 
-from .._path import same_path as _same_path, StrPath
-from ..warnings import SetuptoolsWarning
-
 if TYPE_CHECKING:
-    from setuptools.dist import Distribution  # noqa
-    from setuptools.discovery import ConfigDiscovery  # noqa
-    from distutils.dist import DistributionMetadata  # noqa
+    from typing_extensions import Self
 
-chain_iter = chain.from_iterable
+    from setuptools.dist import Distribution
+
 _K = TypeVar("_K")
-_V = TypeVar("_V", covariant=True)
+_V_co = TypeVar("_V_co", covariant=True)
 
 
 class StaticModule:
     """Proxy to a module object that avoids executing arbitrary code."""
 
-    def __init__(self, name: str, spec: ModuleSpec):
+    def __init__(self, name: str, spec: ModuleSpec) -> None:
         module = ast.parse(pathlib.Path(spec.origin).read_bytes())  # type: ignore[arg-type] # Let it raise an error on None
         vars(self).update(locals())
         del self.self
 
-    def _find_assignments(self) -> Iterator[Tuple[ast.AST, ast.AST]]:
+    def _find_assignments(self) -> Iterator[tuple[ast.AST, ast.AST]]:
         for statement in self.module.body:
             if isinstance(statement, ast.Assign):
                 yield from ((target, statement.value) for target in statement.targets)
             elif isinstance(statement, ast.AnnAssign) and statement.value:
                 yield (statement.target, statement.value)
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str):
         """Attempt to load an attribute "statically", via :func:`ast.literal_eval`."""
         try:
             return next(
@@ -87,8 +78,8 @@ class StaticModule:
 
 
 def glob_relative(
-    patterns: Iterable[str], root_dir: Optional[StrPath] = None
-) -> List[str]:
+    patterns: Iterable[str], root_dir: StrPath | None = None
+) -> list[str]:
     """Expand the list of glob patterns, but preserving relative paths.
 
     :param list[str] patterns: List of glob patterns
@@ -119,14 +110,16 @@ def glob_relative(
     return expanded_values
 
 
-def read_files(filepaths: Union[str, bytes, Iterable[StrPath]], root_dir=None) -> str:
+def read_files(
+    filepaths: StrPath | Iterable[StrPath], root_dir: StrPath | None = None
+) -> str:
     """Return the content of the files concatenated using ``\n`` as str
 
     This function is sandboxed and won't reach anything outside ``root_dir``
 
     (By default ``root_dir`` is the current directory).
     """
-    from setuptools.extern.more_itertools import always_iterable
+    from more_itertools import always_iterable
 
     root_dir = os.path.abspath(root_dir or os.getcwd())
     _filepaths = (os.path.join(root_dir, path) for path in always_iterable(filepaths))
@@ -145,7 +138,7 @@ def _filter_existing_files(filepaths: Iterable[StrPath]) -> Iterator[StrPath]:
             SetuptoolsWarning.emit(f"File {path!r} cannot be found")
 
 
-def _read_file(filepath: Union[bytes, StrPath]) -> str:
+def _read_file(filepath: bytes | StrPath) -> str:
     with open(filepath, encoding='utf-8') as f:
         return f.read()
 
@@ -160,9 +153,9 @@ def _assert_local(filepath: StrPath, root_dir: str):
 
 def read_attr(
     attr_desc: str,
-    package_dir: Optional[Mapping[str, str]] = None,
-    root_dir: Optional[StrPath] = None,
-):
+    package_dir: Mapping[str, str] | None = None,
+    root_dir: StrPath | None = None,
+) -> Any:
     """Reads the value of an attribute from a module.
 
     This function will try to read the attributed statically first
@@ -185,18 +178,20 @@ def read_attr(
     attr_name = attrs_path.pop()
     module_name = '.'.join(attrs_path)
     module_name = module_name or '__init__'
-    _parent_path, path, module_name = _find_module(module_name, package_dir, root_dir)
+    path = _find_module(module_name, package_dir, root_dir)
     spec = _find_spec(module_name, path)
 
     try:
-        return getattr(StaticModule(module_name, spec), attr_name)
+        value = getattr(StaticModule(module_name, spec), attr_name)
+        # XXX: Is marking as static contents coming from modules too optimistic?
+        return _static.attempt_conversion(value)
     except Exception:
         # fallback to evaluate module
         module = _load_spec(spec, module_name)
         return getattr(module, attr_name)
 
 
-def _find_spec(module_name: str, module_path: Optional[StrPath]) -> ModuleSpec:
+def _find_spec(module_name: str, module_path: StrPath | None) -> ModuleSpec:
     spec = importlib.util.spec_from_file_location(module_name, module_path)
     spec = spec or importlib.util.find_spec(module_name)
 
@@ -212,48 +207,38 @@ def _load_spec(spec: ModuleSpec, module_name: str) -> ModuleType:
         return sys.modules[name]
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module  # cache (it also ensures `==` works on loaded items)
-    spec.loader.exec_module(module)  # type: ignore
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
     return module
 
 
 def _find_module(
-    module_name: str, package_dir: Optional[Mapping[str, str]], root_dir: StrPath
-) -> Tuple[StrPath, Optional[str], str]:
-    """Given a module (that could normally be imported by ``module_name``
-    after the build is complete), find the path to the parent directory where
-    it is contained and the canonical name that could be used to import it
-    considering the ``package_dir`` in the build configuration and ``root_dir``
-    """
-    parent_path = root_dir
-    module_parts = module_name.split('.')
-    if package_dir:
-        if module_parts[0] in package_dir:
-            # A custom path was specified for the module we want to import
-            custom_path = package_dir[module_parts[0]]
-            parts = custom_path.rsplit('/', 1)
-            if len(parts) > 1:
-                parent_path = os.path.join(root_dir, parts[0])
-                parent_module = parts[1]
-            else:
-                parent_module = custom_path
-            module_name = ".".join([parent_module, *module_parts[1:]])
-        elif '' in package_dir:
-            # A custom parent directory was specified for all root modules
-            parent_path = os.path.join(root_dir, package_dir[''])
+    module_name: str, package_dir: Mapping[str, str] | None, root_dir: StrPath
+) -> str | None:
+    """Find the path to the module named ``module_name``,
+    considering the ``package_dir`` in the build configuration and ``root_dir``.
 
-    path_start = os.path.join(parent_path, *module_name.split("."))
-    candidates = chain(
-        (f"{path_start}.py", os.path.join(path_start, "__init__.py")),
-        iglob(f"{path_start}.*"),
+    >>> tmp = getfixture('tmpdir')
+    >>> _ = tmp.ensure("a/b/c.py")
+    >>> _ = tmp.ensure("a/b/d/__init__.py")
+    >>> r = lambda x: x.replace(str(tmp), "tmp").replace(os.sep, "/")
+    >>> r(_find_module("a.b.c", None, tmp))
+    'tmp/a/b/c.py'
+    >>> r(_find_module("f.g.h", {"": "1", "f": "2", "f.g": "3", "f.g.h": "a/b/d"}, tmp))
+    'tmp/a/b/d/__init__.py'
+    """
+    path_start = find_package_path(module_name, package_dir or {}, root_dir)
+    candidates = chain.from_iterable(
+        (f"{path_start}{ext}", os.path.join(path_start, f"__init__{ext}"))
+        for ext in all_suffixes()
     )
-    module_path = next((x for x in candidates if os.path.isfile(x)), None)
-    return parent_path, module_path, module_name
+    return next((x for x in candidates if os.path.isfile(x)), None)
 
 
 def resolve_class(
     qualified_class_name: str,
-    package_dir: Optional[Mapping[str, str]] = None,
-    root_dir: Optional[StrPath] = None,
+    package_dir: Mapping[str, str] | None = None,
+    root_dir: StrPath | None = None,
 ) -> Callable:
     """Given a qualified class name, return the associated class object"""
     root_dir = root_dir or os.getcwd()
@@ -261,16 +246,16 @@ def resolve_class(
     class_name = qualified_class_name[idx + 1 :]
     pkg_name = qualified_class_name[:idx]
 
-    _parent_path, path, module_name = _find_module(pkg_name, package_dir, root_dir)
-    module = _load_spec(_find_spec(module_name, path), module_name)
+    path = _find_module(pkg_name, package_dir, root_dir)
+    module = _load_spec(_find_spec(pkg_name, path), pkg_name)
     return getattr(module, class_name)
 
 
 def cmdclass(
-    values: Dict[str, str],
-    package_dir: Optional[Mapping[str, str]] = None,
-    root_dir: Optional[StrPath] = None,
-) -> Dict[str, Callable]:
+    values: dict[str, str],
+    package_dir: Mapping[str, str] | None = None,
+    root_dir: StrPath | None = None,
+) -> dict[str, Callable]:
     """Given a dictionary mapping command names to strings for qualified class
     names, apply :func:`resolve_class` to the dict values.
     """
@@ -280,10 +265,10 @@ def cmdclass(
 def find_packages(
     *,
     namespaces=True,
-    fill_package_dir: Optional[Dict[str, str]] = None,
-    root_dir: Optional[StrPath] = None,
+    fill_package_dir: dict[str, str] | None = None,
+    root_dir: StrPath | None = None,
     **kwargs,
-) -> List[str]:
+) -> list[str]:
     """Works similarly to :func:`setuptools.find_packages`, but with all
     arguments given as keyword arguments. Moreover, ``where`` can be given
     as a list (the results will be simply concatenated).
@@ -301,17 +286,19 @@ def find_packages(
 
     :rtype: list
     """
-    from setuptools.discovery import construct_package_dir
-    from setuptools.extern.more_itertools import unique_everseen, always_iterable
+    from more_itertools import always_iterable, unique_everseen
 
-    if namespaces:
-        from setuptools.discovery import PEP420PackageFinder as PackageFinder
+    from setuptools.discovery import construct_package_dir
+
+    # check "not namespaces" first due to python/mypy#6232
+    if not namespaces:
+        from setuptools.discovery import PackageFinder
     else:
-        from setuptools.discovery import PackageFinder  # type: ignore
+        from setuptools.discovery import PEP420PackageFinder as PackageFinder
 
     root_dir = root_dir or os.curdir
     where = kwargs.pop('where', ['.'])
-    packages: List[str] = []
+    packages: list[str] = []
     fill_package_dir = {} if fill_package_dir is None else fill_package_dir
     search = list(unique_everseen(always_iterable(where)))
 
@@ -335,22 +322,17 @@ def _nest_path(parent: StrPath, path: StrPath) -> str:
     return os.path.normpath(path)
 
 
-def version(value: Union[Callable, Iterable[Union[str, int]], str]) -> str:
+def version(value: Callable | Iterable[str | int] | str) -> str:
     """When getting the version directly from an attribute,
     it should be normalised to string.
     """
-    if callable(value):
-        value = value()
+    _value = value() if callable(value) else value
 
-    value = cast(Iterable[Union[str, int]], value)
-
-    if not isinstance(value, str):
-        if hasattr(value, '__iter__'):
-            value = '.'.join(map(str, value))
-        else:
-            value = '%s' % value
-
-    return value
+    if isinstance(_value, str):
+        return _value
+    if hasattr(_value, '__iter__'):
+        return '.'.join(map(str, _value))
+    return f'{_value}'
 
 
 def canonic_package_data(package_data: dict) -> dict:
@@ -360,8 +342,8 @@ def canonic_package_data(package_data: dict) -> dict:
 
 
 def canonic_data_files(
-    data_files: Union[list, dict], root_dir: Optional[StrPath] = None
-) -> List[Tuple[str, List[str]]]:
+    data_files: list | dict, root_dir: StrPath | None = None
+) -> list[tuple[str, list[str]]]:
     """For compatibility with ``setup.py``, ``data_files`` should be a list
     of pairs instead of a dict.
 
@@ -376,14 +358,17 @@ def canonic_data_files(
     ]
 
 
-def entry_points(text: str, text_source="entry-points") -> Dict[str, dict]:
+def entry_points(
+    text: str, text_source: str = "entry-points"
+) -> dict[str, dict[str, str]]:
     """Given the contents of entry-points file,
     process it into a 2-level dictionary (``dict[str, dict[str, str]]``).
     The first level keys are entry-point groups, the second level keys are
     entry-point names, and the second level values are references to objects
     (that correspond to the entry-point value).
     """
-    parser = ConfigParser(default_section=None, delimiters=("=",))  # type: ignore
+    # Using undocumented behaviour, see python/typeshed#12700
+    parser = ConfigParser(default_section=None, delimiters=("=",))  # type: ignore[call-overload]
     parser.optionxform = str  # case sensitive
     parser.read_string(text, text_source)
     groups = {k: dict(v.items()) for k, v in parser.items()}
@@ -401,7 +386,7 @@ class EnsurePackagesDiscovered:
     and those might not have been processed yet.
     """
 
-    def __init__(self, distribution: "Distribution"):
+    def __init__(self, distribution: Distribution) -> None:
         self._dist = distribution
         self._called = False
 
@@ -411,10 +396,15 @@ class EnsurePackagesDiscovered:
             self._called = True
             self._dist.set_defaults(name=False)  # Skip name, we can still be parsing
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, _exc_type, _exc_value, _traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ):
         if self._called:
             self._dist.set_defaults.analyse_name()  # Now we can set a default name
 
@@ -429,7 +419,7 @@ class EnsurePackagesDiscovered:
         return LazyMappingProxy(self._get_package_dir)
 
 
-class LazyMappingProxy(Mapping[_K, _V]):
+class LazyMappingProxy(Mapping[_K, _V_co]):
     """Mapping proxy that delays resolving the target object, until really needed.
 
     >>> def obtain_mapping():
@@ -443,16 +433,16 @@ class LazyMappingProxy(Mapping[_K, _V]):
     'other value'
     """
 
-    def __init__(self, obtain_mapping_value: Callable[[], Mapping[_K, _V]]):
+    def __init__(self, obtain_mapping_value: Callable[[], Mapping[_K, _V_co]]) -> None:
         self._obtain = obtain_mapping_value
-        self._value: Optional[Mapping[_K, _V]] = None
+        self._value: Mapping[_K, _V_co] | None = None
 
-    def _target(self) -> Mapping[_K, _V]:
+    def _target(self) -> Mapping[_K, _V_co]:
         if self._value is None:
             self._value = self._obtain()
         return self._value
 
-    def __getitem__(self, key: _K) -> _V:
+    def __getitem__(self, key: _K) -> _V_co:
         return self._target()[key]
 
     def __len__(self) -> int:

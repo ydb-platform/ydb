@@ -19,19 +19,6 @@ void TGRpcFqPrivateTaskService::InitService(grpc::ServerCompletionQueue* cq, NYd
     SetupIncomingRequests(std::move(logger));
 }
 
-void TGRpcFqPrivateTaskService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcFqPrivateTaskService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcFqPrivateTaskService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
-
 void TGRpcFqPrivateTaskService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 

@@ -4,14 +4,18 @@
 
 #include <yt/yt/client/cypress_client/public.h>
 
+#include <yt/yt/client/signature/public.h>
+
 #include <yt/yt/client/tablet_client/public.h>
 
 #include <yt/yt/client/transaction_client/public.h>
 
-#include <yt/yt/core/misc/range.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <util/generic/size_literals.h>
 
@@ -45,6 +49,8 @@ class THunkChunkRef;
 class TColumnMetaExt;
 class TVersionedRowDigestExt;
 class TCompressionDictionaryExt;
+class TVersionedReadOptions;
+class TVersionedWriteOptions;
 
 } // namespace NProto
 
@@ -74,7 +80,7 @@ using NTransactionClient::AsyncLastCommittedTimestamp;
 using NTransactionClient::AllCommittedTimestamp;
 using NTransactionClient::NotPreparedTimestamp;
 
-using TKeyColumns = std::vector<TString>;
+using TKeyColumns = std::vector<std::string>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -94,7 +100,7 @@ constexpr i64 MaxAnyValueLength = 16_MB;
 constexpr i64 MaxCompositeValueLength = 16_MB;
 constexpr i64 MaxServerVersionedRowDataWeight = 512_MB;
 constexpr i64 MaxClientVersionedRowDataWeight = 128_MB;
-constexpr int MaxKeyColumnCountInDynamicTable = 64;
+constexpr int MaxKeyColumnCountInDynamicTable = 128;
 constexpr int MaxTimestampCountPerRow = std::numeric_limits<ui16>::max();
 
 static_assert(
@@ -116,16 +122,20 @@ constexpr int MaxColumnId = 32 * 1024;
 constexpr int MaxSchemaTotalTypeComplexity = MaxColumnId;
 constexpr int MaxSchemaDepth = 32;
 
-extern const TString SystemColumnNamePrefix;
-extern const TString TableIndexColumnName;
-extern const TString RowIndexColumnName;
-extern const TString RangeIndexColumnName;
-extern const TString TabletIndexColumnName;
-extern const TString TimestampColumnName;
-extern const TString TtlColumnName;
-extern const TString CumulativeDataWeightColumnName;
-extern const TString EmptyValueColumnName;
-extern const TString PrimaryLockName;
+extern const std::string PrimaryLockName;
+
+extern const std::string SystemColumnNamePrefix;
+extern const std::string NonexistentColumnName;
+extern const std::string TableIndexColumnName;
+extern const std::string RowIndexColumnName;
+extern const std::string RangeIndexColumnName;
+extern const std::string TabletIndexColumnName;
+extern const std::string TimestampColumnName;
+extern const std::string TtlColumnName;
+extern const std::string TimestampColumnPrefix;
+extern const std::string CumulativeDataWeightColumnName;
+extern const std::string EmptyValueColumnName;
+extern const std::string SequenceNumberColumnName;
 
 constexpr int TypicalHunkColumnCount = 8;
 
@@ -144,9 +154,20 @@ DEFINE_ENUM(ETableSchemaMode,
     ((Strong)    (1))
 );
 
-DEFINE_ENUM(EOptimizeFor,
+// TODO(cherepashka): remove after corresponding compat in 25.1 will be removed.
+DEFINE_ENUM(ECompatOptimizeFor,
     ((Lookup)  (0))
     ((Scan)    (1))
+);
+
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, int,
+    ((Lookup)  (0))
+    ((Scan)    (1))
+);
+
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(ETabletTransactionSerializationType, i8,
+    ((Coarse)  (0))
+    ((PerRow)  (1))
 );
 
 YT_DEFINE_ERROR_ENUM(
@@ -175,7 +196,7 @@ YT_DEFINE_ERROR_ENUM(
     ((DuplicateColumnInSchema)           (322))
     ((MissingRequiredColumnInSchema)     (323))
     ((IncomparableComplexValues)         (324))
-    ((KeyCannotBeNan)                    (325))
+    ((KeyCannotBeNaN)                    (325))
     ((StringLikeValueLengthLimitExceeded)(326))
     ((NameTableUpdateFailed)             (327))
     ((InvalidTableChunkFormat)           (328))
@@ -301,7 +322,7 @@ class TKeyComparer;
 struct TColumnRenameDescriptor;
 using TColumnRenameDescriptors = std::vector<TColumnRenameDescriptor>;
 
-YT_DEFINE_STRONG_TYPEDEF(TColumnStableName, TString);
+YT_DEFINE_STRONG_TYPEDEF(TColumnStableName, std::string);
 
 class TColumnSchema;
 
@@ -330,6 +351,7 @@ DECLARE_REFCOUNTED_CLASS(TRowBuffer)
 DECLARE_REFCOUNTED_STRUCT(ISchemalessUnversionedReader)
 DECLARE_REFCOUNTED_STRUCT(ISchemafulUnversionedReader)
 DECLARE_REFCOUNTED_STRUCT(IUnversionedWriter)
+DECLARE_REFCOUNTED_STRUCT(IUnversionedTableFragmentWriter)
 DECLARE_REFCOUNTED_STRUCT(IUnversionedRowsetWriter)
 
 using TSchemalessWriterFactory = std::function<IUnversionedRowsetWriterPtr(
@@ -369,6 +391,10 @@ DECLARE_REFCOUNTED_CLASS(TChunkReaderOptions)
 DECLARE_REFCOUNTED_CLASS(TChunkWriterOptions)
 
 DECLARE_REFCOUNTED_CLASS(TVersionedRowDigestConfig)
+
+DECLARE_REFCOUNTED_CLASS(TSchemalessBufferedDynamicTableWriterConfig)
+
+DECLARE_REFCOUNTED_CLASS(TSchemafulPipe)
 
 class TSaveContext;
 class TLoadContext;
@@ -425,12 +451,21 @@ DEFINE_ENUM(ESchemaCompatibility,
 
 static constexpr TMasterTableSchemaId NullTableSchemaId = TMasterTableSchemaId();
 
-using TDynamicTableKeyMask = ui64;
+using TDynamicTableKeyMask = __uint128_t;
 
 static_assert(sizeof(TDynamicTableKeyMask) * 8 == MaxKeyColumnCountInDynamicTable);
 
 // Function that compares two TUnversionedValue values.
 using TUUComparerSignature = int(const TUnversionedValue*, const TUnversionedValue*, int);
+
+struct TVersionedReadOptions;
+struct TVersionedWriteOptions;
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DEFINE_STRONG_TYPEDEF(TSignedDistributedWriteSessionPtr, NSignature::TSignaturePtr);
+YT_DEFINE_STRONG_TYPEDEF(TSignedWriteFragmentCookiePtr, NSignature::TSignaturePtr);
+YT_DEFINE_STRONG_TYPEDEF(TSignedWriteFragmentResultPtr, NSignature::TSignaturePtr);
 
 ////////////////////////////////////////////////////////////////////////////////
 

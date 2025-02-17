@@ -1,5 +1,6 @@
 #include "grpc_request_proxy.h"
 #include "service_auth.h"
+#include "audit_logins.h"
 
 #include "rpc_request_base.h"
 
@@ -8,8 +9,11 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <ydb/core/security/ldap_auth_provider.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/login_shared_func.h>
+
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/library/login/login.h>
 
 #include <ydb/public/api/protos/ydb_auth.pb.h>
 
@@ -28,8 +32,6 @@ private:
 public:
     using TRpcRequestActor::TRpcRequestActor;
 
-    THolder<TEvSchemeShard::TEvLoginResult> Result;
-    Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
     TDuration Timeout = TDuration::MilliSeconds(60000);
     TActorId PipeClient;
 
@@ -43,15 +45,14 @@ public:
         const Ydb::Auth::LoginRequest* protoRequest = GetProtoRequest();
         Credentials = PrepareCredentials(protoRequest->user(), protoRequest->password(), AppData()->AuthConfig);
         TString domainName = "/" + AppData()->DomainsInfo->GetDomain()->Name;
-        PathToDatabase = AppData()->AuthConfig.GetDomainLoginOnly() ? domainName : DatabaseName;
+        PathToDatabase = AppData()->AuthConfig.GetDomainLoginOnly() ? domainName : GetDatabaseName();
         auto sendParameters = GetSendParameters(Credentials, PathToDatabase);
         Send(sendParameters.Recipient, sendParameters.Event.Release());
         Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
     void HandleTimeout() {
-        Status = Ydb::StatusIds::TIMEOUT;
-        ReplyAndPassAway();
+        ReplyErrorAndPassAway(Ydb::StatusIds::TIMEOUT, "Login timeout");
     }
 
     void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -63,46 +64,44 @@ public:
                 PipeClient = RegisterWithSameMailbox(pipe);
                 THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
                 request.Get()->Record = CreateLoginRequest(Credentials, AppData()->AuthConfig);
+                request.Get()->Record.SetPeerName(Request->GetPeerName());
                 NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
                 return;
             }
         }
-        Status = Ydb::StatusIds::SCHEME_ERROR;
-        ReplyAndPassAway();
+        ReplyErrorAndPassAway(Ydb::StatusIds::SCHEME_ERROR, "No database found");
     }
 
     void Handle(TEvLdapAuthProvider::TEvAuthenticateResponse::TPtr& ev) {
-        TEvLdapAuthProvider::TEvAuthenticateResponse* response = ev->Get();
-        if (response->Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
+        const TEvLdapAuthProvider::TEvAuthenticateResponse& response = *ev->Get();
+        if (response.Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(CreateNavigateKeySetRequest(PathToDatabase).Release()));
         } else {
-            TResponse loginResponse;
-            Ydb::Operations::Operation& operation = *loginResponse.mutable_operation();
-            Ydb::Issue::IssueMessage* issue = operation.add_issues();
-            issue->set_message(response->Error.Message);
-            Status = ConvertLdapStatus(response->Status);
-            issue->set_issue_code(Status);
-            operation.set_ready(true);
-            operation.set_status(Status);
-            Reply(loginResponse);
+            ReplyErrorAndPassAway(ConvertLdapStatus(response.Status), response.Error.Message, response.Error.LogMessage);
         }
     }
 
     void HandleResult(TEvSchemeShard::TEvLoginResult::TPtr& ev) {
-        Status = Ydb::StatusIds::SUCCESS;
-        Result = ev->Release();
-        ReplyAndPassAway();
+        const NKikimrScheme::TEvLoginResult& loginResult = ev->Get()->Record;
+        if (loginResult.error()) {
+            // explicit error takes precedence
+            ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, loginResult.error(), /*loginResult.details()*/ TString());
+        } else if (loginResult.token().empty()) {
+            // empty token is still an error
+            ReplyErrorAndPassAway(Ydb::StatusIds::INTERNAL_ERROR, "Failed to produce a token");
+        } else {
+            // success = token + no errors
+            ReplyAndPassAway(loginResult);
+        }
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
-        Status = Ydb::StatusIds::UNAVAILABLE;
-        ReplyAndPassAway();
+        ReplyErrorAndPassAway(Ydb::StatusIds::UNAVAILABLE, "SchemeShard is unreachable");
     }
 
     void HandleConnect(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            Status = Ydb::StatusIds::UNAVAILABLE;
-            ReplyAndPassAway();
+            ReplyErrorAndPassAway(Ydb::StatusIds::UNAVAILABLE, "SchemeShard is unavailable");
         }
     }
 
@@ -117,28 +116,49 @@ public:
         }
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway(const NKikimrScheme::TEvLoginResult& loginResult) {
+        const auto& resultToken = loginResult.GetToken();
+        const auto& sanitizedToken = loginResult.GetSanitizedToken();
+        const auto& isAdmin = loginResult.GetIsAdmin();
+
+        TResponse response;
+        Ydb::Operations::Operation& operation = *response.mutable_operation();
+        operation.set_ready(true);
+        operation.set_status(Ydb::StatusIds::SUCCESS);
+        // Pack result to google::protobuf::Any
+        {
+            Ydb::Auth::LoginResult result;
+            result.set_token(resultToken);
+            operation.mutable_result()->PackFrom(result);
+        }
+
+        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, /* errorDetails */ TString(), sanitizedToken, isAdmin);
+
+        return CleanupAndReply(response);
+    }
+
+    void ReplyErrorAndPassAway(const Ydb::StatusIds_StatusCode status, const TString& error, const TString& reason = "") {
+        TResponse response;
+
+        Ydb::Operations::Operation& operation = *response.mutable_operation();
+        operation.set_ready(true);
+        operation.set_status(status);
+        if (error) {
+            Ydb::Issue::IssueMessage* issue = operation.add_issues();
+            issue->set_issue_code(status);
+            issue->set_message(error);
+        }
+
+        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, reason, {});
+
+        return CleanupAndReply(response);
+    }
+
+    void CleanupAndReply(const TResponse& response) {
         if (PipeClient) {
             NTabletPipe::CloseClient(SelfId(), PipeClient);
         }
-        TResponse response;
-        Ydb::Operations::Operation& operation = *response.mutable_operation();
-        if (Result) {
-            const NKikimrScheme::TEvLoginResult& record = Result->Record;
-            if (record.error()) {
-                Ydb::Issue::IssueMessage* issue = operation.add_issues();
-                issue->set_message(record.error());
-                issue->set_issue_code(Ydb::StatusIds::UNAUTHORIZED);
-                Status = Ydb::StatusIds::UNAUTHORIZED;
-            }
-            if (record.token()) {
-                Ydb::Auth::LoginResult result;
-                result.set_token(record.token());
-                operation.mutable_result()->PackFrom(result);
-            }
-        }
-        operation.set_ready(true);
-        operation.set_status(Status);
+
         return Reply(response);
     }
 

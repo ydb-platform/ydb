@@ -1,10 +1,5 @@
 LIBRARY()
 
-OWNER(
-    monster
-    g:kikimr
-)
-
 SRCS(
     aggregator.h
     aggregator.cpp
@@ -12,16 +7,23 @@ SRCS(
     aggregator_impl.cpp
     schema.h
     schema.cpp
+    tx_ack_timeout.cpp
+    tx_aggr_stat_response.cpp
+    tx_analyze.cpp
+    tx_analyze_deadline.cpp
+    tx_analyze_table_delivery_problem.cpp
+    tx_analyze_table_request.cpp
+    tx_analyze_table_response.cpp
     tx_configure.cpp
+    tx_datashard_scan_response.cpp
+    tx_finish_trasersal.cpp
     tx_init.cpp
     tx_init_schema.cpp
     tx_navigate.cpp
     tx_resolve.cpp
-    tx_save_query_response.cpp
-    tx_scan_table.cpp
-    tx_schedule_scan.cpp
+    tx_response_tablet_distribution.cpp
+    tx_schedule_traversal.cpp
     tx_schemeshard_stats.cpp
-    tx_statistics_scan_response.cpp
 )
 
 PEERDIR(
@@ -30,8 +32,14 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/statistics/database
+    yql/essentials/core/minsketch
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

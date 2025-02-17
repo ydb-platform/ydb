@@ -1,0 +1,2 @@
+exclude:
+  - tests/IdnaTestV2.txt

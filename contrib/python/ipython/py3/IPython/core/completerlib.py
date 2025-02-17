@@ -199,9 +199,14 @@ def get_root_modules():
     return rootmodules
 
 
-def is_importable(module, attr, only_modules):
+def is_importable(module, attr: str, only_modules) -> bool:
     if only_modules:
-        return inspect.ismodule(getattr(module, attr))
+        try:
+            mod = getattr(module, attr)
+        except ModuleNotFoundError:
+            # See gh-14434
+            return False
+        return inspect.ismodule(mod)
     else:
         return not(attr[:2] == '__' and attr[-2:] == '__')
 
@@ -209,7 +214,7 @@ def is_possible_submodule(module, attr):
     try:
         obj = getattr(module, attr)
     except AttributeError:
-        # Is possilby an unimported submodule
+        # Is possibly an unimported submodule
         return True
     except TypeError:
         # https://github.com/ipython/ipython/issues/9678

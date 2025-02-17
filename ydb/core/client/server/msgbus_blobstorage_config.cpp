@@ -27,6 +27,7 @@ public:
     {
         SetSecurityToken(token);
         SetRequireAdminAccess(true);
+        SetPeerName(msg.GetPeerName());
     }
 
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr &ev, const TActorContext &ctx) {
@@ -40,6 +41,7 @@ public:
     TEvBlobStorage::TEvControllerConfigRequest *MakeReq(const TActorContext&) {
         auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
         auto &record = ev->Record;
+        Request.SetUserSID(GetUserSID());
         Request.Swap(record.MutableRequest());
         return ev.Release();
     }

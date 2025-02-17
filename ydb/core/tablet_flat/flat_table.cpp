@@ -12,11 +12,16 @@
 #include "util_fmt_abort.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
 namespace NTable {
 
-TTable::TTable(TEpoch epoch) : Epoch(epoch) { }
+TTable::TTable(TEpoch epoch, const TIntrusivePtr<TKeyRangeCacheNeedGCList>& gcList)
+    : Epoch(epoch)
+    , EraseCacheGCList(gcList)
+{ }
 
 TTable::~TTable() { }
 
@@ -30,12 +35,15 @@ void TTable::PrepareRollback()
     state.EraseCacheConfig = EraseCacheConfig;
     state.MutableExisted = bool(Mutable);
     state.MutableUpdated = false;
+    state.DisableEraseCache = false;
 }
 
 void TTable::RollbackChanges()
 {
     Y_ABORT_UNLESS(RollbackState, "PrepareRollback needed to rollback changes");
     auto& state = *RollbackState;
+
+    CommitOps.clear();
 
     while (!RollbackOps.empty()) {
         struct TApplyRollbackOp {
@@ -80,20 +88,12 @@ void TTable::RollbackChanges()
 
     if (Epoch != state.Epoch) {
         // We performed a snapshot, roll it back
-        if (Mutable) {
-            ErasedKeysCache.Reset();
-            Mutable = nullptr;
-        }
         Y_ABORT_UNLESS(MutableBackup, "Previous mem table missing");
         Mutable = std::move(MutableBackup);
     } else if (!state.MutableExisted) {
         // New memtable doesn't need rollback
-        if (Mutable) {
-            ErasedKeysCache.Reset();
-            Mutable = nullptr;
-        }
+        Mutable = nullptr;
     } else if (state.MutableUpdated) {
-        ErasedKeysCache.Reset();
         Y_ABORT_UNLESS(Mutable, "Mutable was updated, but it is missing");
         Mutable->RollbackChanges();
     }
@@ -103,7 +103,6 @@ void TTable::RollbackChanges()
     Annexed = state.Annexed;
     if (state.Scheme) {
         Levels.Reset();
-        ErasedKeysCache.Reset();
         Scheme = std::move(state.Scheme);
         EraseCacheEnabled = state.EraseCacheEnabled;
         EraseCacheConfig = state.EraseCacheConfig;
@@ -116,6 +115,19 @@ void TTable::CommitChanges(TArrayRef<const TMemGlob> blobs)
     Y_ABORT_UNLESS(RollbackState, "PrepareRollback needed to rollback changes");
     auto& state = *RollbackState;
 
+    for (auto& op : CommitOps) {
+        struct TApplyCommitOp {
+            TTable* Self;
+
+            void operator()(const TCommitAddDecidedTx& op) const {
+                Self->DecidedTransactions.Add(op.TxId);
+            }
+        };
+
+        std::visit(TApplyCommitOp{ this }, op);
+    }
+
+    CommitOps.clear();
     RollbackOps.clear();
 
     if (Epoch != state.Epoch) {
@@ -162,6 +174,11 @@ void TTable::SetScheme(const TScheme::TTableInfo &table)
 
     Y_ABORT_UNLESS(!Mutable && table.Columns);
 
+    if (RollbackState) {
+        // Make sure we don't populate erase cache with keys based on a schema
+        // which may end up rolling back.
+        RollbackState->DisableEraseCache = true;
+    }
     if (RollbackState && !RollbackState->Scheme) {
         RollbackState->Scheme = Scheme;
         RollbackState->EraseCacheEnabled = EraseCacheEnabled;
@@ -171,7 +188,7 @@ void TTable::SetScheme(const TScheme::TTableInfo &table)
     auto to = TRowScheme::Make(table.Columns, NUtil::TSecond());
 
     if (auto was = std::exchange(Scheme, to))
-        was->CheckCompatability(*Scheme);
+        was->CheckCompatibility(table.Name, *Scheme);
 
     /* This restriction is required for external blobs inverted index, for
         details read NPage::TFrames and NFwd blobs cache implementation. */
@@ -362,7 +379,8 @@ void TTable::ReplaceSlices(TBundleSlicesMap slices) noexcept
     }
     if (slices) {
         Levels.Reset();
-        ErasedKeysCache.Reset();
+        // Note: ReplaceSlices does not introduce any new rows, so we don't
+        // have to invalidate current erase cache.
     }
 }
 
@@ -383,9 +401,12 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
         Levels.Reset();
     }
 
+    bool removingOld = false;
+    bool addingNew = false;
     THashSet<ui64> checkNewTransactions;
 
     for (auto &memTable : subset.Frozen) {
+        removingOld = true;
         const auto found = Frozen.erase(memTable.MemTable);
 
         Y_ABORT_UNLESS(found == 1, "Got an unknown TMemTable table in TSubset");
@@ -406,6 +427,7 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
     }
 
     for (auto &part : subset.Flatten) {
+        removingOld = true;
         Y_ABORT_UNLESS(part.Slices && *part.Slices,
             "Got an empty TPart subset in TSubset");
 
@@ -454,12 +476,14 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
     }
 
     for (auto &part : subset.ColdParts) {
+        removingOld = true;
         auto it = ColdParts.find(part->Label);
         Y_ABORT_UNLESS(it != ColdParts.end(), "Got an unknown TColdPart in TSubset");
         ColdParts.erase(it);
     }
 
     for (const auto &partView : partViews) {
+        addingNew = true;
         if (Mutable && partView->Epoch >= Mutable->Epoch) {
             Y_Fail("Replace with " << NFmt::Do(*partView) << " after mutable epoch " << Mutable->Epoch);
         }
@@ -481,6 +505,7 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
             if (!ColdParts) {
                 CommittedTransactions.Remove(txId);
                 RemovedTransactions.Remove(txId);
+                DecidedTransactions.Remove(txId);
             } else {
                 CheckTransactions.insert(txId);
             }
@@ -491,7 +516,14 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
 
     ProcessCheckTransactions();
 
-    ErasedKeysCache.Reset();
+    if (!removingOld && addingNew) {
+        // Note: we invalidate erase cache when nothing old is removed,
+        // because followers always call Replace, even when leader called
+        // Merge. When something is removed we can assume it's a compaction
+        // and compactions don't add new rows to the table, keeping erase
+        // cache valid.
+        ErasedKeysCache.Reset();
+    }
 }
 
 void TTable::ReplaceTxStatus(TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus, const TSubset &subset) noexcept
@@ -551,6 +583,8 @@ void TTable::Merge(TPartView partView) noexcept
         it->second.Slices = TSlices::Merge(it->second.Slices, partView.Slices);
     }
 
+    // Note: Merge is called when borrowing data, which may introduce new rows
+    // and invalidate current erase cache.
     ErasedKeysCache.Reset();
 }
 
@@ -579,8 +613,11 @@ void TTable::Merge(TIntrusiveConstPtr<TColdPart> part) noexcept
     Epoch = Max(Epoch, part->Epoch + 1);
     ColdParts.emplace(label, std::move(part));
 
-    ErasedKeysCache.Reset();
     Levels.Reset();
+
+    // Note: Merge is called when borrowing data, which may introduce new rows
+    // and invalidate current erase cache.
+    ErasedKeysCache.Reset();
 }
 
 void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
@@ -595,22 +632,32 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
         if (const auto* prev = CommittedTransactions.Find(txId); Y_LIKELY(!prev) || *prev > rowVersion) {
             CommittedTransactions.Add(txId, rowVersion);
             if (!prev) {
-                RemovedTransactions.Remove(txId);
+                if (RemovedTransactions.Remove(txId)) {
+                    // Transaction was in a removed set and now it's committed
+                    // This is not an error in some cases, but may be suspicious
+                    RemovedCommittedTxs++;
+                }
             }
         }
         if (!TxRefs.contains(txId)) {
             CheckTransactions.insert(txId);
         }
+        DecidedTransactions.Add(txId);
         OpenTxs.erase(txId);
     }
     for (auto& item : txStatus->TxStatusPage->GetRemovedItems()) {
         const ui64 txId = item.GetTxId();
         if (const auto* prev = CommittedTransactions.Find(txId); Y_LIKELY(!prev)) {
             RemovedTransactions.Add(txId);
+        } else {
+            // Transaction is in a committed set but also removed
+            // This is not an error in some cases, but may be suspicious
+            RemovedCommittedTxs++;
         }
         if (!TxRefs.contains(txId)) {
             CheckTransactions.insert(txId);
         }
+        DecidedTransactions.Add(txId);
         OpenTxs.erase(txId);
     }
 
@@ -627,7 +674,9 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
     auto res = TxStatus.emplace(txStatus->Label, txStatus);
     Y_ABORT_UNLESS(res.second, "Unexpected failure to add a new TTxStatusPart");
 
-    ErasedKeysCache.Reset();
+    // Note: Merge is called when borrowing data, but new tx status may commit
+    // or rollback some transactions, and erase cache already accounts for that
+    // eventuality, so doesn't need to be invalidated.
 }
 
 void TTable::ProcessCheckTransactions() noexcept
@@ -638,6 +687,7 @@ void TTable::ProcessCheckTransactions() noexcept
             if (it == TxRefs.end()) {
                 CommittedTransactions.Remove(txId);
                 RemovedTransactions.Remove(txId);
+                DecidedTransactions.Remove(txId);
             }
         }
         CheckTransactions.clear();
@@ -825,7 +875,7 @@ void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemG
         const TCelled cells(key, *Scheme->Keys, true);
         auto res = ErasedKeysCache->FindKey(cells);
         if (res.second) {
-            ErasedKeysCache->Invalidate(res.first);
+            ErasedKeysCache->InvalidateKey(res.first, cells);
         }
     }
 
@@ -842,6 +892,8 @@ void TTable::AddTxRef(ui64 txId)
     if (addOpenTx) {
         auto res = OpenTxs.insert(txId);
         Y_ABORT_UNLESS(res.second);
+        Y_DEBUG_ABORT_UNLESS(!DecidedTransactions.Contains(txId),
+            "Decided transaction %" PRIu64 " is both open and decided", txId);
     }
     if (RollbackState) {
         RollbackOps.emplace_back(TRollbackRemoveTxRef{ txId });
@@ -855,6 +907,14 @@ void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMe
 {
     auto& memTable = MemTable();
     bool hadTxRef = memTable.GetTxIdStats().contains(txId);
+
+    if (ErasedKeysCache) {
+        const TCelled cells(key, *Scheme->Keys, true);
+        auto res = ErasedKeysCache->FindKey(cells);
+        if (res.second) {
+            ErasedKeysCache->InvalidateKey(res.first, cells);
+        }
+    }
 
     // Use a special row version that marks this update as uncommitted
     TRowVersion rowVersion(Max<ui64>(), txId);
@@ -892,18 +952,24 @@ void TTable::CommitTx(ui64 txId, TRowVersion rowVersion)
             if (RollbackState && RemovedTransactions.Contains(txId)) {
                 RollbackOps.emplace_back(TRollbackAddRemovedTx{ txId });
             }
-            RemovedTransactions.Remove(txId);
+            if (RemovedTransactions.Remove(txId)) {
+                // Transaction was in a removed set and now it's committed
+                // This is not an error in some cases, but may be suspicious
+                RemovedCommittedTxs++;
+            }
         }
         if (auto it = OpenTxs.find(txId); it != OpenTxs.end()) {
             if (RollbackState) {
                 RollbackOps.emplace_back(TRollbackAddOpenTx{ txId });
+                CommitOps.emplace_back(TCommitAddDecidedTx{ txId });
+            } else {
+                DecidedTransactions.Add(txId);
             }
             OpenTxs.erase(it);
         }
     }
 
-    // We don't know which keys have been commited, invalidate everything
-    ErasedKeysCache.Reset();
+    // Note: erase cache accounts for changes that may commit, no need to invalidate
 }
 
 void TTable::RemoveTx(ui64 txId)
@@ -922,9 +988,16 @@ void TTable::RemoveTx(ui64 txId)
         if (auto it = OpenTxs.find(txId); it != OpenTxs.end()) {
             if (RollbackState) {
                 RollbackOps.emplace_back(TRollbackAddOpenTx{ txId });
+                CommitOps.emplace_back(TCommitAddDecidedTx{ txId });
+            } else {
+                DecidedTransactions.Add(txId);
             }
             OpenTxs.erase(it);
         }
+    } else {
+        // Transaction is in a committed set but also removed
+        // This is not an error in some cases, but may be suspicious
+        RemovedCommittedTxs++;
     }
 }
 
@@ -958,10 +1031,41 @@ size_t TTable::GetOpenTxCount() const
     return OpenTxs.size();
 }
 
+size_t TTable::GetTxsWithDataCount() const
+{
+    return TxRefs.size();
+}
+
+size_t TTable::GetCommittedTxCount() const
+{
+    return CommittedTransactions.Size();
+}
+
+size_t TTable::GetRemovedTxCount() const
+{
+    return RemovedTransactions.Size();
+}
+
+TTableRuntimeStats TTable::RuntimeStats() const noexcept
+{
+    return TTableRuntimeStats{
+        .OpenTxCount = OpenTxs.size(),
+        .TxsWithDataCount = TxRefs.size(),
+        .CommittedTxCount = CommittedTransactions.Size(),
+        .RemovedTxCount = RemovedTransactions.Size(),
+        .RemovedCommittedTxs = RemovedCommittedTxs,
+    };
+}
+
 TMemTable& TTable::MemTable()
 {
     if (!Mutable) {
         Mutable = new TMemTable(Scheme, Epoch, Annexed);
+    }
+    if (RollbackState) {
+        // MemTable() is only called when we want to apply updates
+        // Make sure we don't taint erase cache with changes that may rollback
+        RollbackState->DisableEraseCache = true;
     }
     if (RollbackState && Epoch == RollbackState->Epoch && RollbackState->MutableExisted) {
         if (!RollbackState->MutableUpdated) {
@@ -1009,11 +1113,16 @@ TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, 
         }
     }
 
-    if (EraseCacheEnabled && !visible) {
-        if (!ErasedKeysCache) {
-            ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig);
+    if (EraseCacheEnabled && (!RollbackState || !RollbackState->DisableEraseCache)) {
+        if (HasAppData() && AppData()->FeatureFlags.GetDisableLocalDBEraseCache()) {
+            // Note: it's not very clean adding dependency to appdata here, but
+            // we want to allow disabling erase cache at runtime without alters.
+            ErasedKeysCache.Reset();
+        } else if (!ErasedKeysCache) {
+            ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig, EraseCacheGCList);
         }
         dbIter->ErasedKeysCache = ErasedKeysCache;
+        dbIter->DecidedTransactions = DecidedTransactions;
     }
 
     return dbIter;
@@ -1056,11 +1165,16 @@ TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags,
         }
     }
 
-    if (EraseCacheEnabled && !visible) {
-        if (!ErasedKeysCache) {
-            ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig);
+    if (EraseCacheEnabled && (!RollbackState || !RollbackState->DisableEraseCache)) {
+        if (HasAppData() && AppData()->FeatureFlags.GetDisableLocalDBEraseCache()) {
+            // Note: it's not very clean adding dependency to appdata here, but
+            // we want to allow disabling erase cache at runtime without alters.
+            ErasedKeysCache.Reset();
+        } else if (!ErasedKeysCache) {
+            ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig, EraseCacheGCList);
         }
         dbIter->ErasedKeysCache = ErasedKeysCache;
+        dbIter->DecidedTransactions = DecidedTransactions;
     }
 
     return dbIter;
@@ -1098,7 +1212,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
     if (Mutable) {
         lastEpoch = Mutable->Epoch;
         if (auto it = TMemIter::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
-            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
+            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
                 it->Apply(row, committed, observer);
@@ -1110,7 +1224,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
     if (MutableBackup && !row.IsFinalized()) {
         lastEpoch = MutableBackup->Epoch;
         if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
-            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
+            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
                 it->Apply(row, committed, observer);
@@ -1124,7 +1238,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
         Y_ABORT_UNLESS(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
         lastEpoch = memTable->Epoch;
         if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
-            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
+            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
                 it->Apply(row, committed, observer);
@@ -1150,7 +1264,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                         Y_ABORT_UNLESS(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
                         lastEpoch = part->Epoch;
                         if (!snapshotFound) {
-                            res = it.SkipToRowVersion(snapshot, stats, committed, observer);
+                            res = it.SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions);
                             if (res == EReady::Data) {
                                 // N.B. stop looking for snapshot after the first hit
                                 snapshotFound = true;
@@ -1336,13 +1450,12 @@ bool TTable::RemoveRowVersions(const TRowVersion& lower, const TRowVersion& uppe
 
 TCompactionStats TTable::GetCompactionStats() const
 {
-    TCompactionStats stats;
-    stats.MemRowCount = GetMemRowCount();
-    stats.MemDataSize = GetMemSize();
-    stats.MemDataWaste = GetMemWaste();
-    stats.PartCount = Flatten.size() + ColdParts.size();
-
-    return stats;
+    return {
+        .PartCount = Flatten.size() + ColdParts.size(),
+        .MemRowCount = GetMemRowCount(),
+        .MemDataSize = GetMemSize(),
+        .MemDataWaste = GetMemWaste(),
+    };
 }
 
 void TTable::SetTableObserver(TIntrusivePtr<ITableObserver> ptr) noexcept
@@ -1353,7 +1466,11 @@ void TTable::SetTableObserver(TIntrusivePtr<ITableObserver> ptr) noexcept
 void TPartStats::Add(const TPartView& partView)
 {
     PartsCount += 1;
-    IndexBytes += partView->IndexesRawSize;
+    if (partView->IndexPages.HasBTree()) {
+        BTreeIndexBytes += partView->IndexesRawSize;
+    } else {
+        FlatIndexBytes += partView->IndexesRawSize;
+    }
     ByKeyBytes += partView->ByKey ? partView->ByKey->Raw.size() : 0;
     PlainBytes += partView->Stat.Bytes;
     CodedBytes += partView->Stat.Coded;
@@ -1372,7 +1489,11 @@ void TPartStats::Add(const TPartView& partView)
 bool TPartStats::Remove(const TPartView& partView)
 {
     NUtil::SubSafe(PartsCount, ui64(1));
-    NUtil::SubSafe(IndexBytes, partView->IndexesRawSize);
+    if (partView->IndexPages.HasBTree()) {
+        NUtil::SubSafe(BTreeIndexBytes, partView->IndexesRawSize);
+    } else {
+        NUtil::SubSafe(FlatIndexBytes, partView->IndexesRawSize);
+    }
     NUtil::SubSafe(ByKeyBytes, partView->ByKey ? partView->ByKey->Raw.size() : 0);
     NUtil::SubSafe(PlainBytes, partView->Stat.Bytes);
     NUtil::SubSafe(CodedBytes, partView->Stat.Coded);
@@ -1401,7 +1522,8 @@ bool TPartStats::Remove(const TPartView& partView)
 TPartStats& TPartStats::operator+=(const TPartStats& rhs)
 {
     PartsCount += rhs.PartsCount;
-    IndexBytes += rhs.IndexBytes;
+    FlatIndexBytes += rhs.FlatIndexBytes;
+    BTreeIndexBytes += rhs.BTreeIndexBytes;
     OtherBytes += rhs.OtherBytes;
     ByKeyBytes += rhs.ByKeyBytes;
     PlainBytes += rhs.PlainBytes;
@@ -1418,7 +1540,8 @@ TPartStats& TPartStats::operator+=(const TPartStats& rhs)
 TPartStats& TPartStats::operator-=(const TPartStats& rhs)
 {
     NUtil::SubSafe(PartsCount, rhs.PartsCount);
-    NUtil::SubSafe(IndexBytes, rhs.IndexBytes);
+    NUtil::SubSafe(FlatIndexBytes, rhs.FlatIndexBytes);
+    NUtil::SubSafe(BTreeIndexBytes, rhs.BTreeIndexBytes);
     NUtil::SubSafe(OtherBytes, rhs.OtherBytes);
     NUtil::SubSafe(ByKeyBytes, rhs.ByKeyBytes);
     NUtil::SubSafe(PlainBytes, rhs.PlainBytes);

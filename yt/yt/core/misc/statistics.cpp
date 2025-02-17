@@ -1,5 +1,7 @@
 #include "statistics.h"
 
+#include "statistic_path.h"
+
 #include <yt/yt/core/ypath/token.h>
 #include <yt/yt/core/ypath/tokenizer.h>
 
@@ -11,7 +13,7 @@ namespace NYT {
 
 using namespace NYTree;
 using namespace NYson;
-using namespace NYPath;
+using namespace NStatisticPath;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -91,57 +93,32 @@ bool TSummary::operator ==(const TSummary& other) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSummary& TStatistics::GetSummary(const NYPath::TYPath& path)
+TSummary& TStatistics::GetSummary(const TStatisticPath& path)
 {
-    auto result = Data_.emplace(path, TSummary());
-    auto it = result.first;
-    if (result.second) {
-        // This is a new statistic, check validity.
-        if (it != Data_.begin()) {
-            auto prev = std::prev(it);
-            if (HasPrefix(it->first, prev->first)) {
-                Data_.erase(it);
-                THROW_ERROR_EXCEPTION(
-                    "Incompatible statistic paths: old %v, new %v",
-                    prev->first,
-                    path);
-            }
-        }
-        auto next = std::next(it);
-        if (next != Data_.end()) {
-            if (HasPrefix(next->first, it->first)) {
-                Data_.erase(it);
-                THROW_ERROR_EXCEPTION(
-                    "Incompatible statistic paths: old %v, new %v",
-                    next->first,
-                    path);
-            }
-        }
-    }
-
+    auto [it, _] = CheckedEmplaceStatistic(Data_, path, TSummary());
     return it->second;
 }
 
-void TStatistics::AddSample(const NYPath::TYPath& path, i64 sample)
+void TStatistics::AddSample(const TStatisticPath& path, i64 sample)
 {
     GetSummary(path).AddSample(sample);
 }
 
-void TStatistics::AddSample(const NYPath::TYPath& path, const INodePtr& sample)
+void TStatistics::AddSample(const TStatisticPath& path, const INodePtr& sample)
 {
     ProcessNodeWithCallback(path, sample, [this] (const auto&... args) {
         AddSample(args...);
     });
 }
 
-void TStatistics::ReplacePathWithSample(const NYPath::TYPath& path, const i64 sample)
+void TStatistics::ReplacePathWithSample(const TStatisticPath& path, const i64 sample)
 {
     auto& summary = GetSummary(path);
     summary.Reset();
     summary.AddSample(sample);
 }
 
-void TStatistics::ReplacePathWithSample(const NYPath::TYPath& path, const INodePtr& sample)
+void TStatistics::ReplacePathWithSample(const TStatisticPath& path, const INodePtr& sample)
 {
     ProcessNodeWithCallback(path, sample, [this] (const auto&... args) {
         ReplacePathWithSample(args...);
@@ -149,7 +126,7 @@ void TStatistics::ReplacePathWithSample(const NYPath::TYPath& path, const INodeP
 }
 
 template <class TCallback>
-void TStatistics::ProcessNodeWithCallback(const NYPath::TYPath& path, const NYTree::INodePtr& sample, TCallback callback)
+void TStatistics::ProcessNodeWithCallback(const TStatisticPath& path, const NYTree::INodePtr& sample, TCallback callback)
 {
     switch (sample->GetType()) {
         case ENodeType::Int64:
@@ -162,11 +139,7 @@ void TStatistics::ProcessNodeWithCallback(const NYPath::TYPath& path, const NYTr
 
         case ENodeType::Map:
             for (const auto& [key, child] : sample->AsMap()->GetChildren()) {
-                if (key.empty()) {
-                    THROW_ERROR_EXCEPTION("Statistic cannot have an empty name")
-                        << TErrorAttribute("path_prefix", path);
-                }
-                callback(path + "/" + ToYPathLiteral(key), child);
+                callback(path / TStatisticPathLiteral(TString(key)), child);
             }
             break;
 
@@ -191,20 +164,20 @@ void TStatistics::MergeWithOverride(const TStatistics& statistics)
     Data_.insert(otherData.begin(), otherData.end());
 }
 
-TStatistics::TSummaryRange TStatistics::GetRangeByPrefix(const TString& prefix) const
+// TODO(pavook) quite funky implementation details. Should we move this into statistic_path.h?
+TStatistics::TSummaryRange TStatistics::GetRangeByPrefix(const TStatisticPath& prefix) const
 {
-    auto begin = Data().lower_bound(prefix + '/');
+    // lower_bound is equivalent to upper_bound in this case, but upper_bound is semantically better.
+    auto begin = Data().upper_bound(prefix);
     // This will effectively return an iterator to the first path not starting with "`prefix`/".
-    auto end = Data().lower_bound(prefix + ('/' + 1));
+    auto end = Data().lower_bound(ParseStatisticPath(prefix.Path() + TString(TChar(Delimiter + 1))).ValueOrThrow());
     return TSummaryRange(begin, end);
 }
 
-void TStatistics::RemoveRangeByPrefix(const TString& prefixPath)
+void TStatistics::RemoveRangeByPrefix(const TStatisticPath& prefixPath)
 {
-    auto begin = Data().lower_bound(prefixPath + '/');
-    // This will effectively return an iterator to the first path not starting with "`prefix`/".
-    auto end = Data().lower_bound(prefixPath + ('/' + 1));
-    Data_.erase(begin, end);
+    auto range = GetRangeByPrefix(prefixPath);
+    Data_.erase(range.begin(), range.end());
 }
 
 void TStatistics::Persist(const TStreamPersistenceContext& context)
@@ -225,7 +198,7 @@ void Serialize(const TStatistics& statistics, IYsonConsumer* consumer)
         consumer->OnEndAttributes();
     }
 
-    SerializeYsonPathsMap<TSummary>(
+    SerializeStatisticPathsMap<TSummary>(
         statistics.Data(),
         consumer,
         [] (const TSummary& summary, IYsonConsumer* consumer) {
@@ -239,30 +212,32 @@ i64 GetSum(const TSummary& summary)
     return summary.GetSum();
 }
 
-i64 GetNumericValue(const TStatistics& statistics, const TString& path)
+i64 GetNumericValue(const TStatistics& statistics, const TStatisticPath& path)
 {
     auto value = FindNumericValue(statistics, path);
     if (!value) {
-        THROW_ERROR_EXCEPTION("Statistics %v is not present",
-            path);
+        THROW_ERROR_EXCEPTION("Statistics is not present")
+            << TErrorAttribute("requested_path", path);
     } else {
         return *value;
     }
 }
 
-std::optional<i64> FindNumericValue(const TStatistics& statistics, const TString& path)
+std::optional<i64> FindNumericValue(const TStatistics& statistics, const TStatisticPath& path)
 {
     auto summary = FindSummary(statistics, path);
     return summary ? std::make_optional(summary->GetSum()) : std::nullopt;
 }
 
-std::optional<TSummary> FindSummary(const TStatistics& statistics, const TString& path)
+std::optional<TSummary> FindSummary(const TStatistics& statistics, const TStatisticPath& path)
 {
     const auto& data = statistics.Data();
     auto iterator = data.lower_bound(path);
-    if (iterator != data.end() && iterator->first != path && HasPrefix(iterator->first, path)) {
-        THROW_ERROR_EXCEPTION("Invalid statistics type: cannot get summary of %v since it is a map",
-            path);
+    if (iterator != data.end() && iterator->first != path &&
+        iterator->first.StartsWith(path))
+    {
+        THROW_ERROR_EXCEPTION("Invalid statistics type: cannot get summary since it is a map") <<
+            TErrorAttribute("requested_path", path);
     } else if (iterator == data.end() || iterator->first != path) {
         return std::nullopt;
     } else {
@@ -270,9 +245,9 @@ std::optional<TSummary> FindSummary(const TStatistics& statistics, const TString
     }
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
 
+// TODO(pavook) anonymous namespace?
 class TStatisticsBuildingConsumer
     : public TYsonConsumerBase
     , public IBuildingYsonConsumer<TStatistics>
@@ -353,15 +328,17 @@ public:
         // If we are here, we are either:
         // * at the root (then do nothing)
         // * at some directory (then the last key was the directory name)
-        if (!LastKey_.empty()) {
-            DirectoryNameLengths_.push_back(LastKey_.size());
-            CurrentPath_.append('/');
-            CurrentPath_.append(LastKey_);
-            LastKey_.clear();
+        if (!FirstMapOpen_) {
+            FirstMapOpen_ = true;
         } else {
-            if (!CurrentPath_.empty()) {
-                THROW_ERROR_EXCEPTION("Empty keys are not allowed for statistics");
+            // TODO(pavook) is it okay to throw here?
+            auto literal = TStatisticPathLiteral(LastKey_);
+            if (CurrentPath_.Empty()) {
+                CurrentPath_ = std::move(literal);
+            } else {
+                CurrentPath_.Append(literal);
             }
+            LastKey_.clear();
         }
     }
 
@@ -372,7 +349,7 @@ public:
                 THROW_ERROR_EXCEPTION("Attributes other than \"timestamp\" are not allowed");
             }
         } else {
-            LastKey_ = ToYPathLiteral(key);
+            LastKey_ = key;
         }
     }
 
@@ -393,16 +370,17 @@ public:
             AtSummaryMap_ = false;
         }
 
-        if (!CurrentPath_.empty()) {
+        if (!CurrentPath_.Empty()) {
             // We need to go to the parent.
-            CurrentPath_.resize(CurrentPath_.size() - DirectoryNameLengths_.back() - 1);
-            DirectoryNameLengths_.pop_back();
+            CurrentPath_.PopBack();
+        } else {
+            FirstMapOpen_ = false;
         }
     }
 
     void OnBeginAttributes() override
     {
-        if (!CurrentPath_.empty()) {
+        if (!CurrentPath_.Empty()) {
             THROW_ERROR_EXCEPTION("Attributes are not allowed for statistics");
         }
         AtAttributes_ = true;
@@ -421,8 +399,7 @@ public:
 private:
     TStatistics Statistics_;
 
-    TString CurrentPath_;
-    std::vector<int> DirectoryNameLengths_;
+    TStatisticPath CurrentPath_;
 
     TSummary CurrentSummary_;
     i64 FilledSummaryFields_ = 0;
@@ -430,6 +407,7 @@ private:
 
     TString LastKey_;
 
+    bool FirstMapOpen_ = false;
     bool AtSummaryMap_ = false;
     bool AtAttributes_ = false;
 };

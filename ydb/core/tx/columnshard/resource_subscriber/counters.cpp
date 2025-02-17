@@ -1,9 +1,12 @@
 #include "counters.h"
 
+#include <util/system/guard.h>
+
 namespace NKikimr::NOlap::NResourceBroker::NSubscribe {
 
 
 std::shared_ptr<TSubscriberTypeCounters> TSubscriberCounters::GetTypeCounters(const TString& resourceType) {
+    TGuard lock(Mutex);
     auto it = ResourceTypeCounters.find(resourceType);
     if (it == ResourceTypeCounters.end()) {
         it = ResourceTypeCounters.emplace(resourceType, std::make_shared<TSubscriberTypeCounters>(*this, resourceType)).first;

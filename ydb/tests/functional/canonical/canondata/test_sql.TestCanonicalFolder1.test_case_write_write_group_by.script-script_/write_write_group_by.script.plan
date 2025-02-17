@@ -49,6 +49,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/base_write_write_group_by_script_script/Temp",
                                                         "ReadColumns": [
                                                             "Group",
                                                             "MinAmount",
@@ -57,6 +58,7 @@
                                                         "ReadRanges": [
                                                             "Group (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "Table": "base_write_write_group_by_script_script/Temp"
                                                     }
                                                 ],
@@ -74,7 +76,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {
@@ -102,7 +107,7 @@
                 "Plans": [
                     {
                         "Node Type": "Effect",
-                        "PlanNodeId": 9,
+                        "PlanNodeId": 10,
                         "Plans": [
                             {
                                 "CTE Name": "precompute_0_0",
@@ -115,6 +120,7 @@
                                             }
                                         ],
                                         "Name": "Upsert",
+                                        "Path": "/local/base_write_write_group_by_script_script/Temp",
                                         "Table": "base_write_write_group_by_script_script/Temp"
                                     },
                                     {
@@ -123,7 +129,7 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "PlanNodeId": 8,
+                                "PlanNodeId": 9,
                                 "Tables": [
                                     "base_write_write_group_by_script_script/Temp"
                                 ]
@@ -133,60 +139,83 @@
                     {
                         "Node Type": "Precompute_0",
                         "Parent Relationship": "InitPlan",
-                        "PlanNodeId": 6,
+                        "PlanNodeId": 7,
                         "PlanNodeType": "Materialize",
                         "Plans": [
                             {
                                 "Node Type": "Collect",
-                                "PlanNodeId": 5,
+                                "PlanNodeId": 6,
                                 "Plans": [
                                     {
                                         "Node Type": "UnionAll",
-                                        "PlanNodeId": 4,
+                                        "PlanNodeId": 5,
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Stage",
-                                                "PlanNodeId": 3,
+                                                "Node Type": "Aggregate",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 3
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Final"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 4,
                                                 "Plans": [
                                                     {
                                                         "KeyColumns": [
                                                             "Group"
                                                         ],
                                                         "Node Type": "HashShuffle",
-                                                        "PlanNodeId": 2,
+                                                        "PlanNodeId": 3,
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                "Node Type": "Aggregate",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_0: MIN(item.Amount,state._yql_agg_0)}",
+                                                                        "Aggregation": "{MIN(item.Amount)}",
                                                                         "GroupBy": "item.Group",
                                                                         "Inputs": [
                                                                             {
-                                                                                "InternalOperatorId": 1
+                                                                                "ExternalPlanNodeId": 1
                                                                             }
                                                                         ],
-                                                                        "Name": "Aggregate"
-                                                                    },
-                                                                    {
-                                                                        "Inputs": [],
-                                                                        "Name": "TableFullScan",
-                                                                        "ReadColumns": [
-                                                                            "Amount",
-                                                                            "Group"
-                                                                        ],
-                                                                        "ReadRanges": [
-                                                                            "Group (-\u221e, +\u221e)",
-                                                                            "Name (-\u221e, +\u221e)"
-                                                                        ],
-                                                                        "Table": "base_write_write_group_by_script_script/Input1"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
                                                                     }
                                                                 ],
-                                                                "PlanNodeId": 1,
-                                                                "Tables": [
-                                                                    "base_write_write_group_by_script_script/Input1"
+                                                                "PlanNodeId": 2,
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "TableFullScan",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Inputs": [],
+                                                                                "Name": "TableFullScan",
+                                                                                "Path": "/local/base_write_write_group_by_script_script/Input1",
+                                                                                "ReadColumns": [
+                                                                                    "Amount",
+                                                                                    "Group"
+                                                                                ],
+                                                                                "ReadRanges": [
+                                                                                    "Group (-\u221e, +\u221e)",
+                                                                                    "Name (-\u221e, +\u221e)"
+                                                                                ],
+                                                                                "ReadRangesPointPrefixLen": "0",
+                                                                                "Scan": "Parallel",
+                                                                                "Table": "base_write_write_group_by_script_script/Input1"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 1,
+                                                                        "Tables": [
+                                                                            "base_write_write_group_by_script_script/Input1"
+                                                                        ]
+                                                                    }
                                                                 ]
                                                             }
                                                         ]
@@ -200,7 +229,10 @@
                         ],
                         "Subplan Name": "CTE precompute_0_0"
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

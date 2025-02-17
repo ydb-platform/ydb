@@ -49,7 +49,8 @@ extern const char* const MatchQueueAttributesQuery = R"__(
         (let retention       (Parameter 'RETENTION         (DataType 'Uint64)))
         (let dlqName         (Parameter 'DLQ_TARGET_NAME   (DataType 'Utf8String)))
         (let maxReceiveCount (Parameter 'MAX_RECEIVE_COUNT (DataType 'Uint64)))
-        (let userName   (Parameter 'USER_NAME  (DataType 'Utf8String)))
+        (let userName        (Parameter 'USER_NAME         (DataType 'Utf8String)))
+        (let tags            (Parameter 'TAGS              (DataType 'Utf8String)))
 
         (let attrsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Attributes)
         (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
@@ -70,7 +71,8 @@ extern const char* const MatchQueueAttributesQuery = R"__(
             'Shards
             'Partitions
             'DlqName
-            'Version))
+            'Version
+            'Tags))
         (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let queueExists
@@ -92,7 +94,9 @@ extern const char* const MatchQueueAttributesQuery = R"__(
             (Coalesce
                 (And
                     (And
-                        (And (Equal (Member queuesRead 'Shards) shards)
+                        (And
+                            (And (Equal (Member queuesRead 'Shards) shards)
+                                 (Equal (Member queuesRead 'Tags) tags))
                             (Equal (Member queuesRead 'Partitions) partitions))
                         (Equal (Member queuesRead 'FifoQueue) fifo))
                     (Equal  (Coalesce (Member queuesRead 'DlqName) (Utf8String '"")) dlqName))

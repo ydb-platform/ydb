@@ -8,7 +8,7 @@
 #include <ydb/core/metering/metering.h>
 
 #include <ydb/library/protobuf_printer/size_printer.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
 #include <google/protobuf/util/time_util.h>
 
@@ -48,13 +48,14 @@ THashMap<TString, i64> DeserializeFlatStats(const google::protobuf::RepeatedPtrF
 struct TPingTaskParams {
     TString Query;
     TParams Params;
-    const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)> Prepare;
+    const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)> Prepare;
     std::shared_ptr<std::vector<TString>> MeteringRecords;
 };
 
 struct TFinalStatus {
     FederatedQuery::QueryMeta::ComputeStatus Status = FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED;
     NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::UNSPECIFIED;
+    FederatedQuery::QueryContent::QueryType QueryType = FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED;
     NYql::TIssues Issues;
     NYql::TIssues TransientIssues;
     StatsValuesList FinalStatistics;
@@ -90,7 +91,7 @@ TPingTaskParams ConstructHardPingTask(
 
     auto meteringRecords = std::make_shared<std::vector<TString>>();
 
-    auto prepareParams = [=, counters=counters, actorSystem = NActors::TActivationContext::ActorSystem(), request=request](const TVector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [=, counters=counters, actorSystem = NActors::TActivationContext::ActorSystem(), request=request](const std::vector<TResultSet>& resultSets) mutable {
         TString jobId;
         FederatedQuery::Query query;
         FederatedQuery::Internal::QueryInternal internal;
@@ -98,32 +99,32 @@ TPingTaskParams ConstructHardPingTask(
         TString owner;
 
         if (resultSets.size() != 3) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "RESULT SET SIZE of " << resultSets.size() << " != 3";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "RESULT SET SIZE of " << resultSets.size() << " != 3";
         }
 
         {
             TResultSetParser parser(resultSets[0]);
             if (!parser.TryNextRow()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " QUERIES_TABLE_NAME " where " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\"";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " QUERIES_TABLE_NAME " where " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\"";
             }
             if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "ERROR PARSING " QUERIES_TABLE_NAME "." QUERY_COLUMN_NAME " where " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\" and " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\"";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "ERROR PARSING " QUERIES_TABLE_NAME "." QUERY_COLUMN_NAME " where " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\" and " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\"";
             }
             if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "ERROR PARSING " QUERIES_TABLE_NAME "." INTERNAL_COLUMN_NAME " where " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\" and " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\"";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "ERROR PARSING " QUERIES_TABLE_NAME "." INTERNAL_COLUMN_NAME " where " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\" and " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\"";
             }
         }
 
         {
             TResultSetParser parser(resultSets[1]);
             if (!parser.TryNextRow()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " JOBS_TABLE_NAME " where " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\"";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " JOBS_TABLE_NAME " where " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\"";
             }
             if (!job.ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "ERROR PARSING " JOBS_TABLE_NAME "." JOB_COLUMN_NAME " where " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\"";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "ERROR PARSING " JOBS_TABLE_NAME "." JOB_COLUMN_NAME " where " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\"";
             }
             jobId = *parser.ColumnParser(JOB_ID_COLUMN_NAME).GetOptionalString();
         }
@@ -132,16 +133,16 @@ TPingTaskParams ConstructHardPingTask(
         {
             TResultSetParser parser(resultSets[2]);
             if (!parser.TryNextRow()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " PENDING_SMALL_TABLE_NAME " where " TENANT_COLUMN_NAME " = \"" << request.tenant() << "\" and " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\"" ;
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " PENDING_SMALL_TABLE_NAME " where " TENANT_COLUMN_NAME " = \"" << request.tenant() << "\" and " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\"" ;
             }
             owner = *parser.ColumnParser(OWNER_COLUMN_NAME).GetOptionalString();
             if (owner != request.owner_id()) {
-                ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request.query_id().value() << "\" MISMATCHED: \"" << request.owner_id() << "\" (received) != \"" << owner << "\" (selected)";
+                ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request.query_id().value() << "\" MISMATCHED: \"" << request.owner_id() << "\" (received) != \"" << owner << "\" (selected)";
             }
             retryLimiter.Assign(
-                parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().GetOrElse(0),
-                parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero()),
-                parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().GetOrElse(0.0)
+                parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().value_or(0),
+                parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Zero()),
+                parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().value_or(0.0)
             );
         }
 
@@ -172,14 +173,23 @@ TPingTaskParams ConstructHardPingTask(
                 internal.clear_operation_id();
             }
 
-            TRetryPolicyItem policy(0, TDuration::Seconds(1), TDuration::Zero());
+            TRetryPolicyItem policy(0, 0, TDuration::Seconds(1), TDuration::Zero());
             auto it = retryPolicies.find(request.status_code());
             auto policyFound = it != retryPolicies.end();
             if (policyFound) {
                 policy = it->second;
             }
 
-            if (retryLimiter.UpdateOnRetry(Now(), policy)) {
+            auto now = TInstant::Now();
+            auto executionDeadline = TInstant::Max();
+
+            auto submittedAt = NProtoInterop::CastFromProto(query.meta().submitted_at());
+            auto executionTtl = NProtoInterop::CastFromProto(internal.execution_ttl());
+            if (submittedAt && executionTtl) {
+                executionDeadline = submittedAt + executionTtl;
+            }
+
+            if (retryLimiter.UpdateOnRetry(now, policy) && now < executionDeadline) {
                 queryStatus.Clear();
                 // failing query is throttled for backoff period
                 backoff = policy.BackoffPeriod * (retryLimiter.RetryRate + 1);
@@ -190,7 +200,7 @@ TPingTaskParams ConstructHardPingTask(
                 TStringBuilder builder;
                 builder << "Query failed with code " << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code())
                     << " and will be restarted (RetryCount: " << retryLimiter.RetryCount << ")"
-                    << " at " << Now();
+                    << " at " << now;
                 transientIssues->AddIssue(NYql::TIssue(builder));
             } else {
                 // failure query should be processed instantly
@@ -199,9 +209,9 @@ TPingTaskParams ConstructHardPingTask(
                 TStringBuilder builder;
                 builder << "Query failed with code " << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code());
                 if (policy.RetryCount) {
-                    builder << " (failure rate " << retryLimiter.RetryRate << " exceeds limit of "  << policy.RetryCount << ")";
+                    builder << " (" << retryLimiter.LastError << ")";
                 }
-                builder << " at " << Now();
+                builder << " at " << now;
 
                 // in case of problems with finalization, do not change the issues
                 if (query.meta().status() == FederatedQuery::QueryMeta::FAILING || query.meta().status() == FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM || query.meta().status() == FederatedQuery::QueryMeta::ABORTING_BY_USER) {
@@ -252,15 +262,7 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         if (transientIssues) {
-            NYql::TIssues issues = *transientIssues;
-            for (const auto& issue: *query.mutable_transient_issue()) {
-                issues.AddIssue(NYql::IssueFromMessage(issue));
-            }
-
-            NYql::TIssues newIssues;
-            std::for_each_n(issues.begin(), std::min(static_cast<unsigned long long>(issues.Size()), 20ULL), [&](auto& issue){ newIssues.AddIssue(issue); });
-
-            NYql::IssuesToMessage(newIssues, query.mutable_transient_issue());
+            AddTransientIssues(query.mutable_transient_issue(), std::move(*transientIssues));
         }
 
         if (request.internal_issues().size()) {
@@ -286,6 +288,14 @@ TPingTaskParams ConstructHardPingTask(
             }
             *query.mutable_statistics()->mutable_json() = statistics;
             *job.mutable_statistics()->mutable_json() = statistics;
+        }
+
+        if (request.current_load()) {
+            internal.set_current_load(request.current_load());
+        }
+
+        if (request.timeline()) {
+            internal.set_timeline(request.timeline());
         }
 
         if (request.flat_stats_size() != 0) {
@@ -407,18 +417,19 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         if (job.ByteSizeLong() > maxRequestSize) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Job proto exceeded the size limit: " << job.ByteSizeLong() << " of " << maxRequestSize << " " << TSizeFormatPrinter(job).ToString();
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Job proto exceeded the size limit: " << job.ByteSizeLong() << " of " << maxRequestSize << " " << TSizeFormatPrinter(job).ToString();
         }
 
         if (query.ByteSizeLong() > maxRequestSize) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Query proto exceeded the size limit: " << query.ByteSizeLong() << " of " << maxRequestSize << " " << TSizeFormatPrinter(query).ToString();
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Query proto exceeded the size limit: " << query.ByteSizeLong() << " of " << maxRequestSize << " " << TSizeFormatPrinter(query).ToString();
         }
 
         if (internal.ByteSizeLong() > maxRequestSize) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "QueryInternal proto exceeded the size limit: " << internal.ByteSizeLong() << " of " << maxRequestSize << " " << TSizeFormatPrinter(internal).ToString();
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "QueryInternal proto exceeded the size limit: " << internal.ByteSizeLong() << " of " << maxRequestSize << " " << TSizeFormatPrinter(internal).ToString();
         }
 
         finalStatus->Status = query.meta().status();
+        finalStatus->QueryType = query.content().type();
         finalStatus->StatusCode = internal.status_code();
         finalStatus->CloudId = internal.cloud_id();
         finalStatus->JobId = jobId;
@@ -490,9 +501,14 @@ TPingTaskParams ConstructHardPingTask(
             updateQueryTtl = "`" EXPIRE_AT_COLUMN_NAME "` = NULL";
         }
 
+        TString updateResultId;
+        if (request.has_result_id()) {
+            updateResultId = "`" RESULT_ID_COLUMN_NAME "` = $result_id, ";
+        }
+
         writeQueryBuilder.AddText(
             "UPSERT INTO `" JOBS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" JOB_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "`) VALUES($scope, $query_id, $job_id, $job);\n"
-            "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" RESULT_ID_COLUMN_NAME "` = $result_id, " + updateResultSetsExpire + ", " + updateQueryTtl + ", `" META_REVISION_COLUMN_NAME  "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
+            "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, " + updateResultId + updateResultSetsExpire + ", " + updateQueryTtl + ", `" META_REVISION_COLUMN_NAME  "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         );
 
@@ -516,6 +532,18 @@ TPingTaskParams ConstructHardPingTask(
                     statistics = query.statistics().json();
                 }
                 finalStatus->FinalStatistics = ExtractStatisticsFromProtobuf(internal.statistics());
+                finalStatus->FinalStatistics.push_back(std::make_pair("IsAutomatic", query.content().automatic()));
+                if (query.content().name().Contains("DataLens YQ query")) {
+                    finalStatus->FinalStatistics.push_back(std::make_pair("IsDataLens", 1));
+                } else if (query.content().name().Contains("Audit-trails")) {
+                    finalStatus->FinalStatistics.push_back(std::make_pair("IsAuditTrails", 1));
+                } else if (query.content().name().Contains("Query from YDB SDK")) {
+                    finalStatus->FinalStatistics.push_back(std::make_pair("IsSDK", 1));
+                }
+                finalStatus->FinalStatistics.push_back(std::make_pair("RetryCount", retryLimiter.RetryCount));
+                finalStatus->FinalStatistics.push_back(std::make_pair("RetryRate", retryLimiter.RetryRate * 100));
+                finalStatus->FinalStatistics.push_back(std::make_pair("Load", internal.current_load()));
+
                 auto records = GetMeteringRecords(statistics, isBillable, jobId, request.scope(), HostName());
                 meteringRecords->swap(records);
             } catch (const std::exception&) {
@@ -544,22 +572,22 @@ TPingTaskParams ConstructSoftPingTask(
         "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
-    auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=](const std::vector<TResultSet>& resultSets) {
         TString owner;
         FederatedQuery::Internal::QueryInternal internal;
 
         if (resultSets.size() != 2) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "RESULT SET SIZE of " << resultSets.size() << " != 2";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "RESULT SET SIZE of " << resultSets.size() << " != 2";
         }
 
         {
             TResultSetParser parser(resultSets[0]);
             if (!parser.TryNextRow()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " QUERIES_TABLE_NAME " where " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\"" ;
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " QUERIES_TABLE_NAME " where " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\"" ;
             }
             if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "ERROR PARSING " QUERIES_TABLE_NAME "." INTERNAL_COLUMN_NAME " where " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\" and " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\"";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "ERROR PARSING " QUERIES_TABLE_NAME "." INTERNAL_COLUMN_NAME " where " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\" and " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\"";
             }
         }
 
@@ -567,11 +595,11 @@ TPingTaskParams ConstructSoftPingTask(
             TResultSetParser parser(resultSets[1]);
             if (!parser.TryNextRow()) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " PENDING_SMALL_TABLE_NAME " where " TENANT_COLUMN_NAME " = \"" << request.tenant() << "\" and " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\"" ;
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " PENDING_SMALL_TABLE_NAME " where " TENANT_COLUMN_NAME " = \"" << request.tenant() << "\" and " SCOPE_COLUMN_NAME " = \"" << request.scope() << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request.query_id().value() << "\"" ;
             }
             owner = *parser.ColumnParser(OWNER_COLUMN_NAME).GetOptionalString();
             if (owner != request.owner_id()) {
-                ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request.query_id().value() << "\" MISMATCHED: \"" << request.owner_id() << "\" (received) != \"" << owner << "\" (selected)";
+                ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request.query_id().value() << "\" MISMATCHED: \"" << request.owner_id() << "\" (received) != \"" << owner << "\" (selected)";
             }
         }
 
@@ -663,7 +691,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
             if (success) {
                 actorSystem->Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvFinalStatusReport(
                     request.query_id().value(), finalStatus->JobId, finalStatus->CloudId, scope, std::move(finalStatus->FinalStatistics),
-                    finalStatus->Status, finalStatus->StatusCode, finalStatus->Issues, finalStatus->TransientIssues));
+                    finalStatus->Status, finalStatus->StatusCode, finalStatus->QueryType, finalStatus->Issues, finalStatus->TransientIssues));
             }
         });
 }
@@ -677,7 +705,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
     if (IsFailedStatus(event.Status)) {
         FailedStatusCodeCounters->IncByScopeAndStatusCode(event.Scope, event.StatusCode, event.Issues);
         LOG_YQ_AUDIT_SERVICE_INFO("FinalFailedStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
-                                event.QueryId << "], job id: [" << event.JobId << "], "
+                                event.QueryId << "], job id: [" << event.JobId << "], query type: [" << FederatedQuery::QueryContent::QueryType_Name(event.QueryType) << "], "
                                 "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status) <<
                                 ", label: " << LabelNameFromStatusCodeAndIssues(event.StatusCode, event.Issues) <<
                                 ", status code: " << NYql::NDqProto::StatusIds::StatusCode_Name(event.StatusCode) <<
@@ -693,7 +721,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
 
     Statistics statistics{event.Statistics};
     LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
-                              event.QueryId << "], job id: [" << event.JobId << "], " << statistics << ", " <<
+                              event.QueryId << "], job id: [" << event.JobId << "], query type: [" << FederatedQuery::QueryContent::QueryType_Name(event.QueryType) << "], " << statistics << ", " <<
                               "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status));
 }
 

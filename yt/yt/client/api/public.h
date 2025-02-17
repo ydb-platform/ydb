@@ -15,7 +15,7 @@
 #include <yt/yt/core/rpc/public.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
-#include <library/cpp/yt/small_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 namespace NYT::NApi {
 
@@ -121,7 +121,7 @@ using TClientOptions = NAuth::TAuthenticationOptions;
 
 struct TTransactionParticipantOptions;
 
-struct TTimeoutOptions;
+using TTimeoutOptions = NRpc::TTimeoutOptions;
 struct TTransactionalOptions;
 struct TPrerequisiteOptions;
 struct TMasterReadOptions;
@@ -140,8 +140,13 @@ DECLARE_REFCOUNTED_STRUCT(IInternalClient)
 DECLARE_REFCOUNTED_STRUCT(ITransaction)
 DECLARE_REFCOUNTED_STRUCT(IStickyTransactionPool)
 
+DECLARE_REFCOUNTED_STRUCT(IRowBatchReader)
+DECLARE_REFCOUNTED_STRUCT(IRowBatchWriter)
+
 DECLARE_REFCOUNTED_STRUCT(ITableReader)
 DECLARE_REFCOUNTED_STRUCT(ITableWriter)
+
+DECLARE_REFCOUNTED_STRUCT(ITableFragmentWriter);
 
 DECLARE_REFCOUNTED_STRUCT(IFileReader)
 DECLARE_REFCOUNTED_STRUCT(IFileWriter)
@@ -184,6 +189,8 @@ DECLARE_REFCOUNTED_STRUCT(TBackupManifest)
 
 DECLARE_REFCOUNTED_STRUCT(TListOperationsAccessFilter)
 
+DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
+
 ////////////////////////////////////////////////////////////////////////////////
 
 inline const TString ClusterNamePath("//sys/@cluster_name");
@@ -195,8 +202,8 @@ inline const TString BannedAttributeName("banned");
 inline const TString RoleAttributeName("role");
 inline const TString AddressesAttributeName("addresses");
 inline const TString BalancersAttributeName("balancers");
-inline const TString DefaultRpcProxyRole("default");
-inline const TString DefaultHttpProxyRole("data");
+inline const std::string DefaultRpcProxyRole("default");
+inline const std::string DefaultHttpProxyRole("data");
 inline const TString JournalPayloadKey("payload");
 inline const TString HunkPayloadKey("payload");
 
@@ -226,10 +233,16 @@ using TMaintenanceCounts = TEnumIndexedArray<EMaintenanceType, int>;
 // "host" target which represents all nodes on a given host.
 constexpr int TypicalMaintenanceTargetCount = 1;
 
-using TMaintenanceIdPerTarget = TCompactFlatMap<TString, TMaintenanceId, TypicalMaintenanceTargetCount>;
-using TMaintenanceCountsPerTarget = TCompactFlatMap<TString, TMaintenanceCounts, TypicalMaintenanceTargetCount>;
+using TMaintenanceIdPerTarget = TCompactFlatMap<std::string, TMaintenanceId, TypicalMaintenanceTargetCount>;
+using TMaintenanceCountsPerTarget = TCompactFlatMap<std::string, TMaintenanceCounts, TypicalMaintenanceTargetCount>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+using NTableClient::TSignedDistributedWriteSessionPtr;
+using NTableClient::TSignedWriteFragmentCookiePtr;
+using NTableClient::TSignedWriteFragmentResultPtr;
+struct TWriteFragmentCookie;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

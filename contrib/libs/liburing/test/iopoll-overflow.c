@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
 
 	fd = open(fname, O_RDONLY | O_DIRECT);
 	if (fd < 0) {
-		if (errno == EINVAL) {
+		if (errno == EINVAL || errno == EACCES || errno == EPERM) {
 			if (fname != argv[1])
 				unlink(fname);
 			return T_EXIT_SKIP;

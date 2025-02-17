@@ -44,11 +44,14 @@ message TPartitionStats {
     optional uint64 TxRejectedBySpace = 19;
 
     optional TTtlStats TtlStats = 20;
+
+    optional uint64 ByKeyFilterSize = 21;
+    optional uint32 FollowerId = 22;
 }
 
 message TPartitionStatsResult {
     optional TPartitionStatsKey Key = 1;
-    optional TPartitionStats Stats = 2;
+    repeated TPartitionStats Stats = 2;
     optional string Path = 3;
 }
 
@@ -170,6 +173,7 @@ message TPDiskInfo {
     optional uint32 NumActiveSlots = 16;
     optional uint64 Category = 17;
     optional string DecommitStatus = 18;
+    optional string State = 19;
     // metrics ?
     // physical location ?
     // config ?
@@ -212,7 +216,11 @@ message TVSlotInfo {
     optional string StatusV2 = 12;
     optional string Kind = 13;
     optional bool IsBeingDeleted = 14;
-    // metrics ?
+    optional string DiskSpace = 15;
+    optional bool Replicated = 16;
+    optional string State = 17;
+    optional bool IsThrottling = 18;
+    optional uint32 ThrottlingRate = 19;
 }
 
 message TVSlotEntry {
@@ -592,6 +600,7 @@ message TTopPartitionsInfo {
     optional uint64 RowCount = 7;
     optional uint64 IndexSize = 8;
     optional uint32 InFlightTxCount = 9;
+    optional uint32 FollowerId = 10;
 }
 
 message TTopPartitionsEntry {
@@ -621,5 +630,3 @@ message TEvSendTopPartitions {
     repeated TTopPartitionsInfo Partitions = 1;
     optional uint64 TimeUs = 2;
 }
-
-

@@ -10,6 +10,8 @@
 
 #include <contrib/libs/grpc/include/grpc/grpc.h>
 
+#include <contrib/libs/grpc/src/core/lib/event_engine/thread_pool.h>
+
 #include <contrib/libs/grpc/src/core/lib/iomgr/executor.h>
 
 #include <atomic>
@@ -20,7 +22,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = GrpcLogger;
+static constexpr auto& Logger = GrpcLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -50,25 +52,25 @@ TGrpcLibraryLock::~TGrpcLibraryLock()
 class TDispatcher::TImpl
 {
 public:
-    [[nodiscard]] bool IsConfigured() const noexcept
+    [[nodiscard]] bool IsInitialized() const noexcept
     {
-        return Configured_.load();
+        return Initialized_.load();
     }
 
     void Configure(const TDispatcherConfigPtr& config)
     {
-        auto guard = Guard(ConfigureLock_);
+        auto guard = Guard(ConfigLock_);
 
-        if (IsConfigured()) {
-            THROW_ERROR_EXCEPTION("GRPC dispatcher is already configured");
+        if (IsInitialized()) {
+            THROW_ERROR_EXCEPTION("GRPC dispatcher is already initialized and cannot be reconfigured");
         }
 
-        DoConfigure(config);
+        Config_ = config;
     }
 
     TGrpcLibraryLockPtr GetLibraryLock()
     {
-        EnsureConfigured();
+        EnsureInitialized();
         auto grpcLock = LibraryLock_.Lock();
         YT_VERIFY(grpcLock);
         return grpcLock;
@@ -76,7 +78,7 @@ public:
 
     TGuardedGrpcCompletionQueue* PickRandomGuardedCompletionQueue()
     {
-        EnsureConfigured();
+        EnsureInitialized();
         return Threads_[RandomNumber<size_t>() % Threads_.size()]->GetGuardedCompletionQueue();
     }
 
@@ -91,9 +93,7 @@ private:
                 {.ShutdownPriority = GrpcDispatcherThreadShutdownPriority})
             , LibraryLock_(std::move(libraryLock))
             , GuardedCompletionQueue_(TGrpcCompletionQueuePtr(grpc_completion_queue_create_for_next(nullptr)))
-        {
-            Start();
-        }
+        { }
 
         TGuardedGrpcCompletionQueue* GetGuardedCompletionQueue()
         {
@@ -153,40 +153,46 @@ private:
 
     using TDispatcherThreadPtr = TIntrusivePtr<TDispatcherThread>;
 
-    void EnsureConfigured()
+    void EnsureInitialized()
     {
-        if (IsConfigured()) {
+        if (IsInitialized()) {
             return;
         }
 
-        auto guard = Guard(ConfigureLock_);
+        auto guard = Guard(ConfigLock_);
 
-        if (IsConfigured()) {
+        if (IsInitialized()) {
             return;
         }
 
-        DoConfigure(New<TDispatcherConfig>());
+        DoInitialize();
     }
 
-    void DoConfigure(const TDispatcherConfigPtr& config)
+    void DoInitialize()
     {
-        VERIFY_SPINLOCK_AFFINITY(ConfigureLock_);
-        YT_VERIFY(!IsConfigured());
+        YT_ASSERT_SPINLOCK_AFFINITY(ConfigLock_);
+        YT_VERIFY(!IsInitialized());
 
-        grpc_core::Executor::SetThreadsLimit(config->GrpcThreadCount);
+        grpc_core::Executor::SetThreadsLimit(Config_->GrpcThreadCount);
+        grpc_event_engine::experimental::ThreadPool::SetThreadsLimit(Config_->GrpcEventEngineThreadCount);
 
         // Initialize grpc only after configuration is done.
         auto grpcLock = New<TGrpcLibraryLock>();
-        for (int index = 0; index < config->DispatcherThreadCount; ++index) {
-            Threads_.push_back(New<TDispatcherThread>(grpcLock, index));
+        for (int index = 0; index < Config_->DispatcherThreadCount; ++index) {
+            auto dispatcherThread = New<TDispatcherThread>(grpcLock, index);
+            dispatcherThread->Start();
+            Threads_.push_back(std::move(dispatcherThread));
         }
         LibraryLock_ = grpcLock;
-        Configured_.store(true);
+        Initialized_.store(true);
     }
 
 
-    std::atomic<bool> Configured_ = false;
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConfigureLock_);
+    std::atomic<bool> Initialized_ = false;
+
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConfigLock_);
+    TDispatcherConfigPtr Config_ = New<TDispatcherConfig>();
+
     TWeakPtr<TGrpcLibraryLock> LibraryLock_;
     std::vector<TDispatcherThreadPtr> Threads_;
 };
@@ -209,9 +215,9 @@ void TDispatcher::Configure(const TDispatcherConfigPtr& config)
     Impl_->Configure(config);
 }
 
-bool TDispatcher::IsConfigured() const noexcept
+bool TDispatcher::IsInitialized() const noexcept
 {
-    return Impl_->IsConfigured();
+    return Impl_->IsInitialized();
 }
 
 TGrpcLibraryLockPtr TDispatcher::GetLibraryLock()

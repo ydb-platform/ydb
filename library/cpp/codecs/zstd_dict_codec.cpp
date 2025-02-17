@@ -131,11 +131,13 @@ namespace NCodecs {
             rawSz -= szSz;
 
             if (!datSz) {
+                outbuf.ReserveExactNeverCallMeInSaneCode(rawSz);
                 outbuf.Resize(rawSz);
                 memcpy(outbuf.data(), rawBeg, rawSz);
             } else {
                 //                size_t zSz = ZSTD_getDecompressedSize(rawBeg, rawSz);
                 //                Y_ENSURE_EX(datSz == zSz, TCodecException() << datSz << " != " << zSz);
+                outbuf.ReserveExactNeverCallMeInSaneCode(datSz);
                 outbuf.Resize(datSz);
                 TDCtx ctx{CheckPtr(ZSTD_createDCtx(), __LOCATION__)};
                 CheckSize(ZSTD_decompress_usingDDict(

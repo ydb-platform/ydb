@@ -4,7 +4,7 @@
 import os
 import time
 
-import ydb.tests.library.common.yatest_common as yatest_common
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
@@ -19,10 +19,11 @@ class TestCleanup(TestYdsBase):
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         assert kikimr.compute_plane.get_task_count(1, query_id) == 0
-        deadline = time.time() + yatest_common.plain_or_under_sanitizer(120, 500)
+        deadline = time.time() + plain_or_under_sanitizer(120, 500)
         while True:
             value = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-                {"query_id": query_id, "subsystem": "task_controller", "Stage": "Total", "sensor": "Tasks"})
+                {"query_id": query_id, "subsystem": "task_controller", "Stage": "Total", "sensor": "Tasks"}
+            )
             if value is None:
                 break
             assert time.time() < deadline, "TaskCount was not cleaned"
@@ -38,8 +39,7 @@ class TestCleanup(TestYdsBase):
 
         sql = R'''
             SELECT * FROM myyds.`{input_topic}`;
-            ''' \
-            .format(
+            '''.format(
             input_topic=self.input_topic,
         )
         client.modify_query(query_id, "simple", sql, type=fq.QueryContent.QueryType.STREAMING)
@@ -47,7 +47,8 @@ class TestCleanup(TestYdsBase):
         deadline = time.time() + 90  # x1.5 of 60 sec
         while True:
             value = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-                {"query_id": query_id, "subsystem": "task_controller", "Stage": "Total", "sensor": "Tasks"})
+                {"query_id": query_id, "subsystem": "task_controller", "Stage": "Total", "sensor": "Tasks"}
+            )
             assert value is not None, "Tasks was cleaned"
             if time.time() > deadline:
                 break

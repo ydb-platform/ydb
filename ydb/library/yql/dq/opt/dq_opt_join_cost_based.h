@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
-#include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h> 
+#include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NYql::NDq {
 
@@ -23,7 +23,21 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     TTypeAnnotationContext& typesCtx,
     ui32 optLevel,
     IOptimizerNew& opt,
-    const TProviderCollectFunction& providerCollect
+    const TProviderCollectFunction& providerCollect,
+    const TOptimizerHints& hints = {}
 );
+
+NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
+    const NYql::NNodes::TExprBase& node,
+    TExprContext& ctx,
+    TTypeAnnotationContext& typesCtx,
+    ui32 optLevel,
+    IOptimizerNew& opt,
+    const TProviderCollectFunction& providerCollect,
+    int& equiJoinCounter,
+    const TOptimizerHints& hints = {}
+);
+
+IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPHypDPTableSize, TExprContext& ectx);
 
 } // namespace NYql::NDq

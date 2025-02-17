@@ -29,3 +29,7 @@ Y_DECLARE_OUT_SPEC(, NKikimrCms::TLogRecordData::EType, stream, value) {
 Y_DECLARE_OUT_SPEC(, NKikimrCms::TAction::EType, stream, value) {
     stream << NKikimrCms::TAction::EType_Name(value);
 }
+
+Y_DECLARE_OUT_SPEC(, NKikimrCms::TAction::TIssue::EType, stream, value) {
+    stream << NKikimrCms::TAction::TIssue::EType_Name(value);
+}

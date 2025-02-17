@@ -44,13 +44,14 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOper
 void IStoragesManager::OnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
     AFL_VERIFY(tiers);
     for (auto&& i : tiers->GetManagers()) {
-        GetOperatorGuarantee(i.first)->OnTieringModified(tiers);
+        GetOperatorGuarantee(i.first.ToString())->OnTieringModified(tiers);
     }
 }
 
 void IStoragesManager::DoInitialize() {
     GetOperator(DefaultStorageId);
     GetOperator(MemoryStorageId);
+    GetOperator(LocalMetadataStorageId);
 }
 
 bool IStoragesManager::LoadIdempotency(NTable::TDatabase& database) {

@@ -1,21 +1,23 @@
 #include "mkql_proto.h"
 
-#include <ydb/library/yql/minikql/defs.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 
 namespace NKikimr::NMiniKQL {
 
 // NOTE: TCell's can reference memomry from tupleValue
+// TODO: Place notNull flag in to the NScheme::TTypeInfo?
 bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                     const NKikimrMiniKQL::TValue& tupleValue,
                     const TConstArrayRef<NScheme::TTypeInfo>& types,
+                    TVector<bool> notNullTypes,
                     bool allowCastFromString,
                     TVector<TCell>& key,
                     TString& errStr,
@@ -28,6 +30,18 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
         return false; \
     }
 
+    // Please note we modify notNullTypes during tuplyType verification to allow cast nullable to non nullable value 
+    if (notNullTypes) {
+        CHECK_OR_RETURN_ERROR(notNullTypes.size() == types.size(),
+            "The size of type array and given not null markers must be equial");
+        if (tupleType) {
+            CHECK_OR_RETURN_ERROR(notNullTypes.size() >= tupleType->GetTuple().ElementSize(),
+                "The size of tuple type and given not null markers must be equal");
+        }
+    } else {
+        notNullTypes.resize(types.size());
+    }
+
     if (tupleType) {
         CHECK_OR_RETURN_ERROR(tupleType->GetKind() == NKikimrMiniKQL::Tuple ||
                               (tupleType->GetKind() == NKikimrMiniKQL::Unknown && tupleType->GetTuple().ElementSize() == 0), "Must be a tuple");
@@ -36,8 +50,14 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
 
         for (size_t i = 0; i < tupleType->GetTuple().ElementSize(); ++i) {
             const auto& ti = tupleType->GetTuple().GetElement(i);
-            CHECK_OR_RETURN_ERROR(ti.GetKind() == NKikimrMiniKQL::Optional, "Element at index " + ToString(i) + " in not an Optional");
-            const auto& item = ti.GetOptional().GetItem();
+            if (notNullTypes[i]) {
+                // For not null column type we allow to build cell from nullable mkql type for compatibility reason. 
+                notNullTypes[i] = ti.GetKind() != NKikimrMiniKQL::Optional;
+            } else {
+                // But we do not allow to build cell for nullable column from not nullable type
+                CHECK_OR_RETURN_ERROR(ti.GetKind() == NKikimrMiniKQL::Optional, "Element at index " + ToString(i) + " in not an Optional");
+            }
+            const auto& item = notNullTypes[i] ? ti : ti.GetOptional().GetItem();
             CHECK_OR_RETURN_ERROR(item.GetKind() == NKikimrMiniKQL::Data, "Element at index " + ToString(i) + " Item kind is not Data");
             const auto& typeId = item.GetData().GetScheme();
             CHECK_OR_RETURN_ERROR(typeId == types[i].GetTypeId() ||
@@ -53,26 +73,36 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
     }
 
     for (ui32 i = 0; i < tupleValue.TupleSize(); ++i) {
+
         auto& o = tupleValue.GetTuple(i);
 
-        auto element_case = o.value_value_case();
+        if (notNullTypes[i]) {
+            CHECK_OR_RETURN_ERROR(o.ListSize() == 0 &&
+                                  o.StructSize() == 0 &&
+                                  o.TupleSize() == 0 &&
+                                  o.DictSize() == 0 &&
+                                  !o.HasOptional(),
+                                  Sprintf("Primitive type is expected in tuple at position %" PRIu32, i));
+        } else {
+            auto element_case = o.value_value_case();
 
-        CHECK_OR_RETURN_ERROR(element_case == NKikimrMiniKQL::TValue::kOptional ||
-                              element_case == NKikimrMiniKQL::TValue::VALUE_VALUE_NOT_SET,
-                              Sprintf("Optional type is expected in tuple at position %" PRIu32, i));
+            CHECK_OR_RETURN_ERROR(element_case == NKikimrMiniKQL::TValue::kOptional ||
+                                  element_case == NKikimrMiniKQL::TValue::VALUE_VALUE_NOT_SET,
+                                  Sprintf("Optional type is expected in tuple at position %" PRIu32, i));
 
-        CHECK_OR_RETURN_ERROR(o.ListSize() == 0 &&
-                              o.StructSize() == 0 &&
-                              o.TupleSize() == 0 &&
-                              o.DictSize() == 0,
-                              Sprintf("Optional type is expected in tuple at position %" PRIu32, i));
+            CHECK_OR_RETURN_ERROR(o.ListSize() == 0 &&
+                                  o.StructSize() == 0 &&
+                                  o.TupleSize() == 0 &&
+                                  o.DictSize() == 0,
+                                  Sprintf("Optional type is expected in tuple at position %" PRIu32, i));
 
-        if (!o.HasOptional()) {
-            key.push_back(TCell());
-            continue;
+            if (!o.HasOptional()) {
+                key.push_back(TCell());
+                continue;
+            }
         }
 
-        auto& v = o.GetOptional();
+        auto& v = notNullTypes[i] ? o : o.GetOptional();
 
         auto value_case = v.value_value_case();
 
@@ -162,7 +192,7 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             if (v.HasBytes()) {
                 c = TCell(v.GetBytes().data(), v.GetBytes().size());
             } else if (v.HasText()) {
-                auto typeDesc = types[i].GetTypeDesc();
+                auto typeDesc = types[i].GetPgTypeDesc();
                 auto convert = NPg::PgNativeBinaryFromNativeText(v.GetText(), NPg::PgTypeIdFromTypeDesc(typeDesc));
                 if (convert.Error) {
                     CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Pg: %s in tuple at position %" PRIu32, convert.Error->data(), i));
@@ -193,6 +223,19 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             }
             break;
         }
+        case NScheme::NTypeIds::Decimal:
+        {
+            if (v.HasLow128() && v.HasHi128()) {
+                NYql::NDecimal::TInt128 int128 = NYql::NDecimal::FromProto(v);
+                auto &data = memoryOwner.emplace_back();
+                data.resize(sizeof(NYql::NDecimal::TInt128));
+                std::memcpy(data.Detach(), &int128, sizeof(NYql::NDecimal::TInt128));
+                c = TCell(data);                
+            } else {
+                CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Decimal in tuple at position %" PRIu32, i));
+            }
+            break;
+        }        
         default:
             CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported typeId %" PRIu16 " at index %" PRIu32, typeId, i));
             break;
@@ -298,8 +341,15 @@ bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue
         val.MutableOptional()->SetText(c.Data(), c.Size());
         break;
 
+    case NScheme::NTypeIds::Decimal: {
+        const auto loHi = c.AsValue<std::pair<ui64, i64>>();
+        val.MutableOptional()->SetLow128(loHi.first);
+        val.MutableOptional()->SetHi128(loHi.second);
+        break;
+    }
+
     case NScheme::NTypeIds::Pg: {
-        auto convert = NPg::PgNativeTextFromNativeBinary(c.AsBuf(), type.GetTypeDesc());
+        auto convert = NPg::PgNativeTextFromNativeBinary(c.AsBuf(), type.GetPgTypeDesc());
         if (convert.Error) {
             errStr = *convert.Error;
             return false;

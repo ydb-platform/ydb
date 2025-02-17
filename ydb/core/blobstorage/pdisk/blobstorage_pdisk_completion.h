@@ -12,11 +12,18 @@ namespace NKikimr::NPDisk {
 struct TCompletionAction {
     ui64 OperationIdx;
     NHPTimer::STime SubmitTime;
+    NHPTimer::STime GetTime;
     TCompletionAction *FlushAction = nullptr;
     ui64 CostNs = 0;
     NWilson::TTraceId TraceId;
     EIoResult Result = EIoResult::Unknown;
     TString ErrorReason;
+    // Only reads should be executed in a separate thread since their completions consist of
+    // time-consuming deciphering of read data. But currently some completion actions can write
+    // to BlockDevice from Exec() and it's more safe to use WhiteList to allow only
+    // LogWrite and ChunkWrite to be executed from GetThread
+    bool ShouldBeExecutedInCompletionThread = true;
+    bool CanBeExecutedInAdditionalCompletionThread = false;
 
     mutable NLWTrace::TOrbit Orbit;
 protected:

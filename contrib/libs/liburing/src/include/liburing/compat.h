@@ -8,4 +8,11 @@
 
 #include <linux/openat2.h>
 
+
+#include <linux/ioctl.h>
+
+#ifndef BLOCK_URING_CMD_DISCARD
+#define BLOCK_URING_CMD_DISCARD                        _IO(0x12, 0)
+#endif
+
 #endif

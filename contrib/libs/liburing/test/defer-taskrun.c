@@ -197,12 +197,12 @@ static int test_exec(const char *filename)
 
 	if (filename) {
 		fd = open(filename, O_RDONLY | O_DIRECT);
-		if (fd < 0 && errno == EINVAL)
+		if (fd < 0 && (errno == EINVAL || errno == EPERM || errno == EACCES))
 			return T_EXIT_SKIP;
 	} else {
 		t_create_file(EXEC_FILENAME, EXEC_FILESIZE);
 		fd = open(EXEC_FILENAME, O_RDONLY | O_DIRECT);
-		if (fd < 0 && errno == EINVAL) {
+		if (fd < 0 && (errno == EINVAL || errno == EPERM || errno == EACCES)) {
 			unlink(EXEC_FILENAME);
 			return T_EXIT_SKIP;
 		}

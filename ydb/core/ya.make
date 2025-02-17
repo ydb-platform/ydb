@@ -1,5 +1,6 @@
 RECURSE(
     actorlib_impl
+    backup
     base
     blob_depot
     blobstorage
@@ -39,13 +40,14 @@ RECURSE(
     mind
     mon
     mon_alloc
+    memory_controller
     node_whiteboard
     persqueue
     pgproxy
-    protos
     public_http
     quoter
     raw_socket
+    resource_pools
     scheme
     scheme_types
     security
@@ -62,6 +64,7 @@ RECURSE(
     ydb_convert
     ymq
     yql_testlib
+    yt
 )
 
 RECURSE_FOR_TESTS(

@@ -24,6 +24,7 @@ namespace NKikimr::NTable {
 
         virtual TPos GetKeyCellsCount() const = 0;
         virtual TCell GetKeyCell(TPos index) const = 0;
+        virtual void GetKeyCells(TSmallVec<TCell>& keyCells) const = 0;
 
         virtual ~IPartGroupIndexIter() = default;
     };

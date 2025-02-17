@@ -49,19 +49,16 @@ ui32 TTableRecord::CountIntersectColumns(const std::vector<TString>& columnIds) 
     return result;
 }
 
-bool TTableRecord::TakeValuesFrom(const TTableRecord& item) {
-    for (auto&& i : item.Values) {
-        Values[i.first] = i.second;
-    }
-    return true;
-}
-
 const Ydb::Value* TTableRecord::GetValuePtr(const TString& columnId) const {
     auto it = Values.find(columnId);
     if (it == Values.end()) {
         return nullptr;
     }
     return &it->second;
+}
+
+Ydb::Value* TTableRecord::GetMutableValuePtr(const TString& columnId) {
+    return &Values[columnId];
 }
 
 TTableRecord& TTableRecord::SetColumn(const TString& columnId, const Ydb::Value& v) {
@@ -286,6 +283,18 @@ TTableRecords TTableRecords::SelectColumns(const std::vector<TString>& columnIds
         result.Records.emplace_back(Ydb::Value());
         for (auto&& idx : idxs) {
             *result.Records.back().add_items() = i.items()[idx];
+        }
+    }
+    return result;
+}
+
+std::vector<TTableRecord> TTableRecords::GetTableRecords() const {
+    std::vector<TTableRecord> result;
+    result.reserve(Records.size());
+    for (const Ydb::Value& record : Records) {
+        result.emplace_back();
+        for (size_t i = 0; i < std::min(Columns.size(), static_cast<size_t>(record.items_size())); ++i) {
+            result.back().SetColumn(Columns[i].name(), record.items(i));
         }
     }
     return result;

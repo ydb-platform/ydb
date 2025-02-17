@@ -4,6 +4,10 @@
 
 #include <library/cpp/yt/misc/guid.h>
 
+#include <library/cpp/yt/compact_containers/compact_vector.h>
+
+#include <library/cpp/yt/memory/allocation_tags.h>
+
 namespace NYT::NTracing {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -14,17 +18,22 @@ class TTracingExt;
 
 } // namespace NProto
 
+////////////////////////////////////////////////////////////////////////////////
+
 DECLARE_REFCOUNTED_CLASS(TTraceContext)
 
-DECLARE_REFCOUNTED_CLASS(TTracingTransportConfig)
+constexpr int TypicalAllocationTagCount = 8;
+using TAllocationTags = TCompactVector<TAllocationTag, TypicalAllocationTagCount>;
 
-DECLARE_REFCOUNTED_CLASS(TAllocationTags)
+DECLARE_REFCOUNTED_CLASS(TAllocationTagList)
 
 using TTraceId = TGuid;
 constexpr TTraceId InvalidTraceId = {};
 
 using TSpanId = ui64;
 constexpr TSpanId InvalidSpanId = 0;
+
+struct TTracingAttributes;
 
 // Request ids come from RPC infrastructure but
 // we should avoid include-dependencies here.

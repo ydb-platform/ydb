@@ -28,7 +28,7 @@ using namespace NNet;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -42,7 +42,7 @@ public:
     TBalancingChannelSubprovider(
         TBalancingChannelConfigPtr config,
         IChannelFactoryPtr channelFactory,
-        TString endpointDescription,
+        const std::string& endpointDescription,
         IAttributeDictionaryPtr endpointAttributes,
         std::string serviceName,
         IPeerDiscoveryPtr peerDiscovery)
@@ -96,7 +96,7 @@ public:
 
 private:
     const TBalancingChannelConfigPtr Config_;
-    const TString EndpointDescription_;
+    const std::string EndpointDescription_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const TString ServiceName_;
 
@@ -142,7 +142,7 @@ private:
     {
         const auto& endpointSets = endpointSetsOrError.ValueOrThrow();
 
-        std::vector<TString> allAddresses;
+        std::vector<std::string> allAddresses;
         std::vector<TError> errors;
         for (const auto& endpointSetOrError : endpointSets) {
             if (!endpointSetOrError.IsOK()) {
@@ -151,7 +151,10 @@ private:
                 continue;
             }
 
-            auto addresses = AddressesFromEndpointSet(endpointSetOrError.Value());
+            auto addresses = AddressesFromEndpointSet(
+                endpointSetOrError.Value(),
+                Config_->Endpoints->UseIPv4,
+                Config_->Endpoints->UseIPv6);
             allAddresses.insert(allAddresses.end(), addresses.begin(), addresses.end());
         }
 
@@ -176,7 +179,7 @@ public:
     TBalancingChannelProvider(
         TBalancingChannelConfigPtr config,
         IChannelFactoryPtr channelFactory,
-        TString endpointDescription,
+        const std::string& endpointDescription,
         IAttributeDictionaryPtr endpointAttributes,
         IPeerDiscoveryPtr peerDiscovery)
         : Config_(std::move(config))
@@ -192,7 +195,7 @@ public:
         , PeerDiscovery_(std::move(peerDiscovery))
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointDescription_;
     }
@@ -243,7 +246,7 @@ private:
     const TBalancingChannelConfigPtr Config_;
     const IChannelFactoryPtr ChannelFactory_;
 
-    const TString EndpointDescription_;
+    const std::string EndpointDescription_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const IPeerDiscoveryPtr PeerDiscovery_;
 
@@ -288,14 +291,14 @@ DEFINE_REFCOUNTED_TYPE(TBalancingChannelProvider)
 IChannelPtr CreateBalancingChannel(
     TBalancingChannelConfigPtr config,
     IChannelFactoryPtr channelFactory,
-    TString endpointDescription,
+    const std::string& endpointDescription,
     IAttributeDictionaryPtr endpointAttributes,
     IPeerDiscoveryPtr peerDiscovery)
 {
     auto channelProvider = CreateBalancingChannelProvider(
         std::move(config),
         std::move(channelFactory),
-        std::move(endpointDescription),
+        endpointDescription,
         std::move(endpointAttributes),
         std::move(peerDiscovery));
 
@@ -305,7 +308,7 @@ IChannelPtr CreateBalancingChannel(
 IRoamingChannelProviderPtr CreateBalancingChannelProvider(
     TBalancingChannelConfigPtr config,
     IChannelFactoryPtr channelFactory,
-    TString endpointDescription,
+    const std::string& endpointDescription,
     IAttributeDictionaryPtr endpointAttributes,
     IPeerDiscoveryPtr peerDiscovery)
 {
@@ -316,7 +319,7 @@ IRoamingChannelProviderPtr CreateBalancingChannelProvider(
     return New<TBalancingChannelProvider>(
         std::move(config),
         std::move(channelFactory),
-        std::move(endpointDescription),
+        endpointDescription,
         std::move(endpointAttributes),
         std::move(peerDiscovery));
 }

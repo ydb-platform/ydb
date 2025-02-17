@@ -4,6 +4,7 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 
 namespace NKikimr {
 namespace NNodeBroker {
@@ -66,13 +67,18 @@ void TDynamicNodeResolverBase::Handle(TEvNodeBroker::TEvResolvedNode::TPtr &ev, 
 
     if (rec.GetStatus().GetCode() != NKikimrNodeBroker::TStatus::OK) {
         // Reset proxy if node expired.
-        if (exists)
+        if (exists) {
             ResetInterconnectProxyConfig(NodeId, ctx);
+            ListNodesCache->Invalidate(); // node was erased
+        }
         ReplyWithErrorAndDie(ctx);
         return;
     }
 
     TDynamicConfig::TDynamicNodeInfo node(rec.GetNode());
+    if (!exists || !oldNode.EqualExceptExpire(node)) {
+        ListNodesCache->Invalidate();
+    }
 
     // If ID is re-used by another node then proxy has to be reset.
     if (exists && !oldNode.EqualExceptExpire(node))
@@ -124,7 +130,7 @@ void TDynamicNameserver::Bootstrap(const TActorContext &ctx)
     if (mon) {
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
         mon->RegisterActorPage(actorsMonPage, "dnameserver", "Dynamic nameserver",
-                               false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+                               false, ctx.ActorSystem(), ctx.SelfID);
     }
 
     auto dinfo = AppData(ctx)->DomainsInfo;
@@ -132,12 +138,44 @@ void TDynamicNameserver::Bootstrap(const TActorContext &ctx)
         RequestEpochUpdate(domain->DomainUid, 1, ctx);
     }
 
-    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
-        NKikimrConsole::TConfigItem::NameserviceConfigItem,
-        SelfId()
-    ));
+    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
 
     Become(&TDynamicNameserver::StateFunc);
+}
+
+void TDynamicNameserver::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+    Y_ABORT_UNLESS(ev->Get()->Config);
+    const auto& config = *ev->Get()->Config;
+    std::unique_ptr<IEventBase> consoleQuery;
+
+    if (ev->Get()->SelfManagementEnabled) {
+        // self-management through distconf is enabled and we are operating based on their tables, so apply them now
+        ReplaceNameserverSetup(BuildNameserverTable(config));
+
+        // unsubscribe from console if we were operating without self-management before
+        if (std::exchange(SubscribedToConsole, false)) {
+            consoleQuery = std::make_unique<NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest>(SelfId());
+        }
+    } else if (!std::exchange(SubscribedToConsole, true)) {
+        consoleQuery = std::make_unique<NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest>(
+            NKikimrConsole::TConfigItem::NameserviceConfigItem,
+            SelfId()
+        );
+    }
+
+    if (consoleQuery) {
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), consoleQuery.release());
+    }
+}
+
+void TDynamicNameserver::ReplaceNameserverSetup(TIntrusivePtr<TTableNameserverSetup> newStaticConfig) {
+    if (StaticConfig->StaticNodeTable != newStaticConfig->StaticNodeTable) {
+        StaticConfig = std::move(newStaticConfig);
+        ListNodesCache->Invalidate();
+        for (const auto& subscriber : StaticNodeChangeSubscribers) {
+            TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
+        }
+    }
 }
 
 void TDynamicNameserver::Die(const TActorContext &ctx)
@@ -202,31 +240,40 @@ void TDynamicNameserver::ResolveDynamicNode(ui32 nodeId,
         reply->NodeId = nodeId;
         ctx.Send(ev->Sender, reply);
     } else {
-        ctx.RegisterWithSameMailbox(new TDynamicNodeResolver(SelfId(), nodeId, DynamicConfigs[domain], ev, deadline));
+        ctx.RegisterWithSameMailbox(new TDynamicNodeResolver(SelfId(), nodeId, DynamicConfigs[domain],
+            ListNodesCache, ev, deadline));
     }
 }
 
 void TDynamicNameserver::SendNodesList(const TActorContext &ctx)
-{
+{   
     auto now = ctx.Now();
-    for (auto &sender : ListNodesQueue) {
-        THolder<TEvInterconnect::TEvNodesInfo> reply(new TEvInterconnect::TEvNodesInfo);
+    if (ListNodesCache->NeedUpdate(now)) {
+        auto newNodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+        auto newExpire = TInstant::Max();
+
         for (const auto &pr : StaticConfig->StaticNodeTable) {
-            reply->Nodes.emplace_back(pr.first,
-                                      pr.second.Address, pr.second.Host, pr.second.ResolveHost,
-                                      pr.second.Port, pr.second.Location, true);
+            newNodes->emplace_back(pr.first,
+                                   pr.second.Address, pr.second.Host, pr.second.ResolveHost,
+                                   pr.second.Port, pr.second.Location, true);
         }
 
         for (auto &config : DynamicConfigs) {
             for (auto &pr : config->DynamicNodes) {
-                if (pr.second.Expire > now)
-                    reply->Nodes.emplace_back(pr.first, pr.second.Address,
-                                              pr.second.Host, pr.second.ResolveHost,
-                                              pr.second.Port, pr.second.Location, false);
+                if (pr.second.Expire > now) {
+                    newNodes->emplace_back(pr.first, pr.second.Address,
+                                           pr.second.Host, pr.second.ResolveHost,
+                                           pr.second.Port, pr.second.Location, false);
+                    newExpire = std::min(newExpire, pr.second.Expire);
+                }
             }
         }
 
-        ctx.Send(sender, reply.Release());
+        ListNodesCache->Update(newNodes, newExpire);
+    }
+
+    for (auto &sender : ListNodesQueue) {
+        ctx.Send(sender, new TEvInterconnect::TEvNodesInfo(ListNodesCache->GetNodes()));
     }
     ListNodesQueue.clear();
 }
@@ -282,14 +329,18 @@ void TDynamicNameserver::UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
             config->ExpiredNodes.emplace(node.GetNodeId(), info);
         }
 
+        ListNodesCache->Invalidate();
         config->Epoch = rec.GetEpoch();
         ctx.Schedule(config->Epoch.End - ctx.Now(),
                      new TEvPrivate::TEvUpdateEpoch(domain, config->Epoch.Id + 1));
     } else {
+        // Note: this update may be optimized to only include new nodes
         for (auto &node : rec.GetNodes()) {
             auto nodeId = node.GetNodeId();
-            if (!config->DynamicNodes.contains(nodeId))
+            if (!config->DynamicNodes.contains(nodeId)) {
                 config->DynamicNodes.emplace(nodeId, node);
+                ListNodesCache->Invalidate();
+            }                
         }
         config->Epoch = rec.GetEpoch();
     }
@@ -376,8 +427,8 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
             ctx.Send(ev->Sender, reply.Release());
         } else {
             const TInstant deadline = ev->Get()->Deadline;
-            ctx.RegisterWithSameMailbox(new TDynamicNodeSearcher(SelfId(), nodeId, DynamicConfigs[domain], ev.Release(),
-                deadline));
+            ctx.RegisterWithSameMailbox(new TDynamicNodeSearcher(SelfId(), nodeId, DynamicConfigs[domain],
+                ListNodesCache, ev.Release(), deadline));
         }
     }
 }
@@ -429,18 +480,13 @@ void TDynamicNameserver::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev, const TAct
 void TDynamicNameserver::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr /*ev*/)
 {}
 
+void TDynamicNameserver::Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse::TPtr /*ev*/)
+{}
+
 void TDynamicNameserver::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev) {
     auto& record = ev->Get()->Record;
-    if (record.HasConfig()) {
-        if (const auto& config = record.GetConfig(); config.HasNameserviceConfig()) {
-            auto newStaticConfig = BuildNameserverTable(config.GetNameserviceConfig());
-            if (StaticConfig->StaticNodeTable != newStaticConfig->StaticNodeTable) {
-                StaticConfig = std::move(newStaticConfig);
-                for (const auto& subscriber : StaticNodeChangeSubscribers) {
-                    TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
-                }
-            }
-        }
+    if (SubscribedToConsole && record.HasConfig() && record.GetConfig().HasNameserviceConfig()) {
+        ReplaceNameserverSetup(BuildNameserverTable(record.GetConfig().GetNameserviceConfig()));
     }
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }
@@ -475,6 +521,40 @@ TIntrusivePtr<TTableNameserverSetup> BuildNameserverTable(const NKikimrConfig::T
         table->StaticNodeTable[nodeId] = TTableNameserverSetup::TNodeInfo(addr, host, resolveHost, port, location);
     }
     return table;
+}
+
+TIntrusivePtr<TTableNameserverSetup> BuildNameserverTable(const NKikimrBlobStorage::TStorageConfig& config) {
+    auto table = MakeIntrusive<TTableNameserverSetup>();
+    for (const auto &node : config.GetAllNodes()) {
+        table->StaticNodeTable[node.GetNodeId()] = TTableNameserverSetup::TNodeInfo(
+            TString(), node.GetHost(), node.GetHost(), node.GetPort(), TNodeLocation(node.GetLocation())
+        );
+    }
+    return table;
+}
+
+TListNodesCache::TListNodesCache()
+    : Nodes(nullptr)
+    , Expire(TInstant::Zero())
+{}
+
+
+void TListNodesCache::Update(TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr newNodes, TInstant newExpire) {
+    Nodes = newNodes;
+    Expire = newExpire;
+}
+
+void TListNodesCache::Invalidate() {
+    Nodes = nullptr;
+    Expire = TInstant::Zero();
+}
+
+bool TListNodesCache::NeedUpdate(TInstant now) const {
+    return Nodes == nullptr || now > Expire;
+}
+
+TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr TListNodesCache::GetNodes() const {
+    return Nodes;
 }
 
 } // NNodeBroker

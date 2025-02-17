@@ -17,6 +17,8 @@ using namespace NTableClient;
 using namespace NTabletClient;
 using namespace NTransactionClient;
 
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NDetail {
 
 void FormatProgressWithProjection(
@@ -61,6 +63,36 @@ void FormatProgressWithProjection(
     builder->AppendChar(']');
 }
 
+DEFINE_BIT_ENUM_WITH_UNDERLYING_TYPE(EReplicationCardOptionsBits, ui8,
+    ((None)(0))
+    ((IncludeCoordinators)(1 << 0))
+    ((IncludeProgress)(1 << 1))
+    ((IncludeHistory)(1 << 2))
+    ((IncludeReplicatedTableOptions)(1 << 3))
+);
+
+EReplicationCardOptionsBits ToBitMask(const TReplicationCardFetchOptions& options)
+{
+    auto mask = EReplicationCardOptionsBits::None;
+    if (options.IncludeCoordinators) {
+        mask |= EReplicationCardOptionsBits::IncludeCoordinators;
+    }
+
+    if (options.IncludeProgress) {
+        mask |= EReplicationCardOptionsBits::IncludeProgress;
+    }
+
+    if (options.IncludeHistory) {
+        mask |= EReplicationCardOptionsBits::IncludeHistory;
+    }
+
+    if (options.IncludeReplicatedTableOptions) {
+        mask |= EReplicationCardOptionsBits::IncludeReplicatedTableOptions;
+    }
+
+    return mask;
+}
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,9 +113,10 @@ void FormatValue(TStringBuilderBase* builder, const TReplicationCardFetchOptions
         options.IncludeHistory);
 }
 
-TString ToString(const TReplicationCardFetchOptions& options)
+bool TReplicationCardFetchOptions::Contains(const TReplicationCardFetchOptions& other) const
 {
-    return ToStringViaBuilder(options);
+    auto selfMask = NDetail::ToBitMask(*this);
+    return (selfMask | NDetail::ToBitMask(other)) == selfMask;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -108,11 +141,6 @@ void FormatValue(
 
 }
 
-TString ToString(const TReplicationProgress& replicationProgress)
-{
-    return ToStringViaBuilder(replicationProgress);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TReplicaHistoryItem& replicaHistoryItem, TStringBuf /*spec*/)
 {
     builder->AppendFormat("{Era: %v, Timestamp: %v, Mode: %v, State: %v}",
@@ -120,11 +148,6 @@ void FormatValue(TStringBuilderBase* builder, const TReplicaHistoryItem& replica
         replicaHistoryItem.Timestamp,
         replicaHistoryItem.Mode,
         replicaHistoryItem.State);
-}
-
-TString ToString(const TReplicaHistoryItem& replicaHistoryItem)
-{
-    return ToStringViaBuilder(replicaHistoryItem);
 }
 
 void FormatValue(
@@ -143,11 +166,6 @@ void FormatValue(
     FormatValue(builder, replicaInfo.ReplicationProgress, TStringBuf(), replicationProgressProjection);
 
     builder->AppendFormat(", History: %v}", replicaInfo.History);
-}
-
-TString ToString(const TReplicaInfo& replicaInfo)
-{
-    return ToStringViaBuilder(replicaInfo);
 }
 
 void FormatValue(
@@ -250,11 +268,20 @@ TReplicaInfo* TReplicationCard::GetReplicaOrThrow(TReplicaId replicaId, TReplica
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool IsReplicaSync(ETableReplicaMode mode, const TReplicaHistoryItem& lastReplicaHistoryItem)
+bool IsReplicaSync(ETableReplicaMode mode, const std::vector<TReplicaHistoryItem>& replicaHistory)
 {
     // Check actual replica state to avoid merging transition states (e.g. AsyncToSync -> SyncToAsync)
-    return mode == ETableReplicaMode::Sync ||
-        (mode == ETableReplicaMode::SyncToAsync && lastReplicaHistoryItem.IsSync());
+    if (mode == ETableReplicaMode::Sync) {
+        return true;
+    }
+
+    if (mode != ETableReplicaMode::SyncToAsync) {
+        return false;
+    }
+
+    // Replica in transient state MUST have previous non-transient state
+    YT_VERIFY(!replicaHistory.empty());
+    return replicaHistory.back().IsSync();
 }
 
 bool IsReplicaAsync(ETableReplicaMode mode)
@@ -275,9 +302,9 @@ bool IsReplicaDisabled(ETableReplicaState state)
 bool IsReplicaReallySync(
     ETableReplicaMode mode,
     ETableReplicaState state,
-    const TReplicaHistoryItem& lastReplicaHistoryItem)
+    const std::vector<TReplicaHistoryItem>& replicaHistory)
 {
-    return IsReplicaSync(mode, lastReplicaHistoryItem) && IsReplicaEnabled(state);
+    return IsReplicaSync(mode, replicaHistory) && IsReplicaEnabled(state);
 }
 
 ETableReplicaMode GetTargetReplicaMode(ETableReplicaMode mode)
@@ -677,7 +704,7 @@ std::vector<TReplicationProgress> ScatterReplicationProgress(
 bool IsReplicaLocationValid(
     const TReplicaInfo* replica,
     const NYPath::TYPath& tablePath,
-    const TString& clusterName)
+    const std::string& clusterName)
 {
     return replica->ReplicaPath == tablePath && replica->ClusterName == clusterName;
 }
@@ -837,21 +864,32 @@ TDuration ComputeReplicationProgressLag(
 THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TReplicaInfo>& replicas)
 {
     TReplicationProgress syncProgress;
+
     for (const auto& [replicaId, replicaInfo] : replicas) {
-        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History.back())) {
+        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History)) {
             if (syncProgress.Segments.empty()) {
                 syncProgress = replicaInfo.ReplicationProgress;
             } else {
                 syncProgress = BuildMaxProgress(syncProgress, replicaInfo.ReplicationProgress);
+            }
+
+            // Advance progress to current era start timestamp if replica not in current era
+            auto lastHistoryItemTimestamp = replicaInfo.History.back().Timestamp;
+            if (GetReplicationProgressMinTimestamp(replicaInfo.ReplicationProgress) < lastHistoryItemTimestamp) {
+                syncProgress = AdvanceReplicationProgress(syncProgress, lastHistoryItemTimestamp);
             }
         }
     }
 
     THashMap<TReplicaId, TDuration> result;
     for (const auto& [replicaId, replicaInfo] : replicas) {
-        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History.back())) {
+        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History) &&
+            GetReplicationProgressMinTimestamp(replicaInfo.ReplicationProgress) >=
+                replicaInfo.History.back().Timestamp)
+        {
             result.emplace(replicaId, TDuration::Zero());
         } else {
+            // Replica is async or sync, but still in previous era
             result.emplace(
                 replicaId,
                 ComputeReplicationProgressLag(syncProgress, replicaInfo.ReplicationProgress));

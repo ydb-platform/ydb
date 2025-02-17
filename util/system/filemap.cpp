@@ -37,7 +37,7 @@
 #undef GRANULARITY
 
 #ifdef _win_
-    #define MAP_FAILED ((void*)(LONG_PTR)-1)
+    #define MAP_FAILED ((void*)(LONG_PTR) - 1)
 #endif
 
 namespace {
@@ -65,7 +65,7 @@ namespace {
         const size_t GRANULARITY_;
         const size_t PAGE_SIZE_;
     };
-}
+} // namespace
 
 #define GRANULARITY (TSysInfo::Instance().GRANULARITY_)
 #define PAGE_SIZE (TSysInfo::Instance().PAGE_SIZE_)
@@ -300,7 +300,7 @@ public:
 
     void Evict() {
 #if defined(_unix_)
-//        Evict(PtrStart_, Length_);
+// Evict(PtrStart_, Length_);
 #endif
     }
 

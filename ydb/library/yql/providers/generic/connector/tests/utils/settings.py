@@ -4,7 +4,7 @@ import pathlib
 
 import yatest.common
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.library.yql.providers.generic.connector.tests.utils.docker_compose import DockerComposeHelper
 
@@ -36,6 +36,46 @@ class Settings:
     clickhouse: ClickHouse
 
     @dataclass
+    class MsSQLServer:
+        dbname: str
+        cluster_name: str
+        username: str
+        password: str
+        host_external: str
+        host_internal: str
+        port_external: int
+        port_internal: int
+
+    ms_sql_server: MsSQLServer
+
+    @dataclass
+    class MySQL:
+        dbname: str
+        cluster_name: str
+        username: str
+        password: Optional[str]  # TODO: why optional?
+        host_external: str
+        host_internal: str
+        port_external: int
+        port_internal: int
+
+    mysql: MySQL
+
+    @dataclass
+    class Oracle:
+        dbname: str
+        cluster_name: str
+        service_name: str
+        username: str
+        password: Optional[str]  # TODO: why optional?
+        host_external: str
+        host_internal: str
+        port_external: int
+        port_internal: int
+
+    oracle: Oracle
+
+    @dataclass
     class PostgreSQL:
         dbname: str
         cluster_name: str
@@ -60,7 +100,9 @@ class Settings:
     ydb: Ydb
 
     @classmethod
-    def from_env(cls, docker_compose_dir: pathlib.Path, data_source_kinds: Sequence[EDataSourceKind]) -> 'Settings':
+    def from_env(
+        cls, docker_compose_dir: pathlib.Path, data_source_kinds: Sequence[EGenericDataSourceKind]
+    ) -> 'Settings':
         docker_compose_file_relative_path = str(docker_compose_dir / 'docker-compose.yml')
         docker_compose_file_abs_path = yatest.common.source_path(docker_compose_file_relative_path)
         endpoint_determiner = DockerComposeHelper(docker_compose_file_abs_path)
@@ -69,11 +111,11 @@ class Settings:
 
         for data_source_kind in data_source_kinds:
             match data_source_kind:
-                case EDataSourceKind.CLICKHOUSE:
+                case EGenericDataSourceKind.CLICKHOUSE:
                     data_sources[data_source_kind] = cls.ClickHouse(
                         cluster_name='clickhouse_integration_test',
                         host_external='0.0.0.0',
-                        # This hack is due to https://st.yandex-team.ru/YQ-3003.
+                        # This hack is due to YQ-3003.
                         # Previously we used container names instead of container ips:
                         # host_internal=docker_compose_file['services']['clickhouse']['container_name'],
                         host_internal=endpoint_determiner.get_internal_ip('clickhouse'),
@@ -85,11 +127,54 @@ class Settings:
                         password='password',
                         protocol='native',
                     )
-                case EDataSourceKind.POSTGRESQL:
+                case EGenericDataSourceKind.MS_SQL_SERVER:
+                    data_sources[data_source_kind] = cls.MsSQLServer(
+                        cluster_name='ms_sql_server_integration_test',
+                        host_external='0.0.0.0',
+                        # This hack is due to YQ-3003.
+                        # Previously we used container names instead of container ips:
+                        # host_internal=docker_compose_file['services']['mysql']['container_name'],
+                        host_internal=endpoint_determiner.get_internal_ip('ms_sql_server'),
+                        port_external=endpoint_determiner.get_external_port('ms_sql_server', 1433),
+                        port_internal=1433,
+                        dbname='master',
+                        username='sa',
+                        password='Qwerty12345!',
+                    )
+                case EGenericDataSourceKind.MYSQL:
+                    data_sources[data_source_kind] = cls.MySQL(
+                        cluster_name='mysql_integration_test',
+                        host_external='0.0.0.0',
+                        # This hack is due to YQ-3003.
+                        # Previously we used container names instead of container ips:
+                        # host_internal=docker_compose_file['services']['mysql']['container_name'],
+                        host_internal=endpoint_determiner.get_internal_ip('mysql'),
+                        port_external=endpoint_determiner.get_external_port('mysql', 3306),
+                        port_internal=3306,
+                        dbname='db',
+                        username='root',
+                        password='password',
+                    )
+                case EGenericDataSourceKind.ORACLE:
+                    data_sources[data_source_kind] = cls.Oracle(
+                        cluster_name='oracle_integration_test',
+                        host_external='0.0.0.0',
+                        # This hack is due to YQ-3003.
+                        # Previously we used container names instead of container ips:
+                        # host_internal=docker_compose_file['services']['mysql']['container_name'],
+                        host_internal=endpoint_determiner.get_internal_ip('oracle'),
+                        port_external=endpoint_determiner.get_external_port('oracle', 1521),
+                        port_internal=1521,
+                        dbname='db',
+                        username='C##ADMIN',  # user that is created in oracle init. Maybe change to SYSTEM
+                        password='password',
+                        service_name="FREE",
+                    )
+                case EGenericDataSourceKind.POSTGRESQL:
                     data_sources[data_source_kind] = cls.PostgreSQL(
                         cluster_name='postgresql_integration_test',
                         host_external='0.0.0.0',
-                        # This hack is due to https://st.yandex-team.ru/YQ-3003.
+                        # This hack is due to YQ-3003.
                         # Previously we used container names instead of container ips:
                         # host_internal=docker_compose_file['services']['postgresql']['container_name'],
                         host_internal=endpoint_determiner.get_internal_ip('postgresql'),
@@ -99,7 +184,7 @@ class Settings:
                         username='user',
                         password='password',
                     )
-                case EDataSourceKind.YDB:
+                case EGenericDataSourceKind.YDB:
                     data_sources[data_source_kind] = cls.Ydb(
                         cluster_name='ydb_integration_test',
                         host_internal=endpoint_determiner.get_container_name('ydb'),
@@ -112,25 +197,36 @@ class Settings:
                     raise Exception(f'invalid data source: {data_source_kind}')
 
         return cls(
+            clickhouse=data_sources.get(EGenericDataSourceKind.CLICKHOUSE),
             connector=cls.Connector(
                 grpc_host='localhost',
                 grpc_port=endpoint_determiner.get_external_port('fq-connector-go', 2130),
                 paging_bytes_per_page=4 * 1024 * 1024,
                 paging_prefetch_queue_capacity=2,
             ),
-            clickhouse=data_sources.get(EDataSourceKind.CLICKHOUSE),
-            postgresql=data_sources.get(EDataSourceKind.POSTGRESQL),
-            ydb=data_sources.get(EDataSourceKind.YDB),
+            ms_sql_server=data_sources.get(EGenericDataSourceKind.MS_SQL_SERVER),
+            mysql=data_sources.get(EGenericDataSourceKind.MYSQL),
+            oracle=data_sources.get(EGenericDataSourceKind.ORACLE),
+            postgresql=data_sources.get(EGenericDataSourceKind.POSTGRESQL),
+            ydb=data_sources.get(EGenericDataSourceKind.YDB),
         )
 
-    def get_cluster_name(self, data_source_kind: EDataSourceKind) -> str:
+    def get_cluster_name(self, data_source_kind: EGenericDataSourceKind) -> str:
         match data_source_kind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 return self.clickhouse.cluster_name
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.MYSQL:
+                return self.mysql.cluster_name
+            case EGenericDataSourceKind.ORACLE:
+                return self.oracle.cluster_name
+            case EGenericDataSourceKind.MS_SQL_SERVER:
+                return self.ms_sql_server.cluster_name
+            case EGenericDataSourceKind.POSTGRESQL:
                 return self.postgresql.cluster_name
+            case EGenericDataSourceKind.YDB:
+                return self.ydb.cluster_name
             case _:
-                raise Exception(f'invalid data source: {EDataSourceKind.Name(data_source_kind)}')
+                raise Exception(f'invalid data source: {EGenericDataSourceKind.Name(data_source_kind)}')
 
 
 @dataclass
@@ -143,9 +239,37 @@ class GenericSettings:
             return hash(self.database) + hash(self.protocol)
 
         database: str
-        protocol: EProtocol
+        protocol: EGenericProtocol
 
     clickhouse_clusters: Sequence[ClickHouseCluster] = field(default_factory=list)
+
+    @dataclass
+    class MsSQLServerCluster:
+        def __hash__(self) -> int:
+            return hash(self.database)
+
+        database: str
+
+    ms_sql_server_clusters: Sequence[MsSQLServerCluster] = field(default_factory=list)
+
+    @dataclass
+    class MySQLCluster:
+        def __hash__(self) -> int:
+            return hash(self.database)
+
+        database: str
+
+    mysql_clusters: Sequence[MySQLCluster] = field(default_factory=list)
+
+    @dataclass
+    class OracleCluster:
+        def __hash__(self) -> int:
+            return hash(self.database) + hash(self.service_name)
+
+        database: str
+        service_name: str
+
+    oracle_clusters: Sequence[OracleCluster] = field(default_factory=list)
 
     @dataclass
     class PostgreSQLCluster:

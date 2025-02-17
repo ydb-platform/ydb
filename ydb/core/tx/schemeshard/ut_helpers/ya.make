@@ -20,11 +20,14 @@ PEERDIR(
     ydb/core/tx/tx_allocator
     ydb/core/tx/tx_proxy
     ydb/public/lib/scheme_types
-    ydb/library/yql/public/issue
-    ydb/public/sdk/cpp/client/ydb_driver
+    yql/essentials/public/issue
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/table
 )
 
 SRCS(
+    auditlog_helpers.cpp
+    auditlog_helpers.h
     export_reboots_common.cpp
     failing_mtpq.cpp
     helpers.cpp

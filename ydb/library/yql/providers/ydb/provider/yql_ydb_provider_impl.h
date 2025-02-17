@@ -2,11 +2,11 @@
 
 #include "yql_ydb_provider.h"
 
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/providers/common/transform/yql_exec.h>
-#include <ydb/library/yql/providers/common/transform/yql_visit.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/providers/common/transform/yql_exec.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <util/generic/ptr.h>
 

@@ -23,8 +23,8 @@
 
 #include <boost/container/detail/config_begin.hpp>
 #include <boost/container/container_fwd.hpp>
+#include <boost/container/detail/workaround.hpp>
 #include <boost/intrusive/pack_options.hpp>
-#include <boost/static_assert.hpp>
 
 namespace boost {
 namespace container {
@@ -52,8 +52,8 @@ enum tree_type_enum
 template<tree_type_enum TreeType, bool OptimizeSize>
 struct tree_opt
 {
-   static const boost::container::tree_type_enum tree_type = TreeType;
-   static const bool optimize_size = OptimizeSize;
+   BOOST_STATIC_CONSTEXPR boost::container::tree_type_enum tree_type = TreeType;
+   BOOST_STATIC_CONSTEXPR bool optimize_size = OptimizeSize;
 };
 
 typedef tree_opt<red_black_tree, true> tree_assoc_defaults;
@@ -116,10 +116,10 @@ using tree_assoc_options_t = typename boost::container::tree_assoc_options<Optio
 template<bool StoreHash, bool CacheBegin, bool LinearBuckets, bool FastmodBuckets>
 struct hash_opt
 {
-   static const bool store_hash  = StoreHash;
-   static const bool cache_begin = CacheBegin;
-   static const bool linear_buckets = LinearBuckets;
-   static const bool fastmod_buckets = FastmodBuckets;
+   BOOST_STATIC_CONSTEXPR bool store_hash  = StoreHash;
+   BOOST_STATIC_CONSTEXPR bool cache_begin = CacheBegin;
+   BOOST_STATIC_CONSTEXPR bool linear_buckets = LinearBuckets;
+   BOOST_STATIC_CONSTEXPR bool fastmod_buckets = FastmodBuckets;
 };
 
 typedef hash_opt<false, false, false, false> hash_assoc_defaults;
@@ -203,13 +203,13 @@ struct default_if_void<void, Default>
 template<std::size_t N, std::size_t DefaultN>
 struct default_if_zero
 {
-   static const std::size_t value = N;
+   BOOST_STATIC_CONSTEXPR std::size_t value = N;
 };
 
 template<std::size_t DefaultN>
 struct default_if_zero<0u, DefaultN>
 {
-   static const std::size_t value = DefaultN;
+   BOOST_STATIC_CONSTEXPR std::size_t value = DefaultN;
 };
 
 
@@ -289,8 +289,8 @@ BOOST_INTRUSIVE_OPTION_TYPE(growth_factor, GrowthFactor, GrowthFactor, growth_fa
 //!
 //!If the maximum capacity() to be used is limited, a user can try to use 8-bit, 16-bit 
 //!(e.g. in 32-bit machines), or 32-bit size types (e.g. in a 64 bit machine) to see if some
-//!memory can be saved for empty vectors. This could potentially performance benefits due to better
-//!cache usage.
+//!memory can be saved, specially for empty containers. This could potentially improve performance
+//!due to better cache usage.
 //!
 //!Note that alignment requirements can disallow theoretical space savings. Example:
 //!\c vector holds a pointer and two size types (for size and capacity), in a 32 bit machine
@@ -301,7 +301,7 @@ BOOST_INTRUSIVE_OPTION_TYPE(growth_factor, GrowthFactor, GrowthFactor, growth_fa
 //!Measure the size of the resulting container and do not assume a smaller \c stored_size
 //!will always lead to a smaller sizeof(container).
 //!
-//!If a user tries to insert more elements than representable by \c stored_size, vector
+//!If a user tries to insert more elements than representable by \c stored_size, the container
 //!will throw a length_error.
 //!
 //!If this option is not specified, `allocator_traits<A>::size_type` (usually std::size_t) will
@@ -337,7 +337,6 @@ struct vector_options
 
 //! Helper alias metafunction to combine options into a single type to be used
 //! by \c boost::container::vector.
-//! Supported options are: \c boost::container::growth_factor and \c boost::container::stored_size
 template<class ...Options>
 using vector_options_t = typename boost::container::vector_options<Options...>::type;
 
@@ -360,20 +359,23 @@ BOOST_INTRUSIVE_OPTION_CONSTANT(inplace_alignment, std::size_t, Alignment, inpla
 
 #if !defined(BOOST_CONTAINER_DOXYGEN_INVOKED)
 
-template<class GrowthType, std::size_t InplaceAlignment>
+template<class GrowthType, std::size_t InplaceAlignment, class StoredSizeType>
 struct small_vector_opt
 {
-   typedef GrowthType      growth_factor_type;
-   static const std::size_t inplace_alignment = InplaceAlignment;
+   typedef GrowthType     growth_factor_type;
+   BOOST_STATIC_CONSTEXPR std::size_t inplace_alignment = InplaceAlignment;
+   typedef StoredSizeType stored_size_type;
 };
 
-typedef small_vector_opt<void, 0u> small_vector_null_opt;
+typedef small_vector_opt<void, 0u, void> small_vector_null_opt;
 
 #endif    //!defined(BOOST_CONTAINER_DOXYGEN_INVOKED)
 
 //! Helper metafunction to combine options into a single type to be used
 //! by \c boost::container::small_vector.
-//! Supported options are: \c boost::container::growth_factor and \c boost::container::inplace_alignment
+//! Supported options are: \c boost::container::growth_factor,
+//! \c boost::container::inplace_alignment and
+//! \c boost::container::stored_size.
 #if defined(BOOST_CONTAINER_DOXYGEN_INVOKED) || defined(BOOST_CONTAINER_VARIADIC_TEMPLATES)
 template<class ...Options>
 #else
@@ -391,7 +393,9 @@ struct small_vector_options
       #endif
       >::type packed_options;
    typedef small_vector_opt< typename packed_options::growth_factor_type
-                           , packed_options::inplace_alignment> implementation_defined;
+                           , packed_options::inplace_alignment
+                           , typename packed_options::stored_size_type
+                           > implementation_defined;
    /// @endcond
    typedef implementation_defined type;
 };
@@ -400,7 +404,6 @@ struct small_vector_options
 
 //! Helper alias metafunction to combine options into a single type to be used
 //! by \c boost::container::small_vector.
-//! Supported options are: \c boost::container::growth_factor and \c boost::container::stored_size
 template<class ...Options>
 using small_vector_options_t = typename boost::container::small_vector_options<Options...>::type;
 
@@ -427,20 +430,22 @@ BOOST_INTRUSIVE_OPTION_CONSTANT(throw_on_overflow, bool, ThrowOnOverflow, throw_
 
 #if !defined(BOOST_CONTAINER_DOXYGEN_INVOKED)
 
-template<bool ThrowOnOverflow, std::size_t InplaceAlignment>
+template<bool ThrowOnOverflow, std::size_t InplaceAlignment, class StoredSizeType>
 struct static_vector_opt
 {
-   static const bool throw_on_overflow = ThrowOnOverflow;
-   static const std::size_t inplace_alignment = InplaceAlignment;
+   BOOST_STATIC_CONSTEXPR bool throw_on_overflow = ThrowOnOverflow;
+   BOOST_STATIC_CONSTEXPR std::size_t inplace_alignment = InplaceAlignment;
+   typedef StoredSizeType stored_size_type;
 };
 
-typedef static_vector_opt<true, 0u> static_vector_null_opt;
+typedef static_vector_opt<true, 0u, void> static_vector_null_opt;
 
 #endif    //!defined(BOOST_CONTAINER_DOXYGEN_INVOKED)
 
 //! Helper metafunction to combine options into a single type to be used
 //! by \c boost::container::static_vector.
-//! Supported options are: \c boost::container::throw_on_overflow and \c boost::container::inplace_alignment
+//! Supported options are: \c boost::container::throw_on_overflow, \c boost::container::inplace_alignment
+//! and \c boost::container::stored_size.
 #if defined(BOOST_CONTAINER_DOXYGEN_INVOKED) || defined(BOOST_CONTAINER_VARIADIC_TEMPLATES)
 template<class ...Options>
 #else
@@ -458,7 +463,9 @@ struct static_vector_options
       #endif
       >::type packed_options;
    typedef static_vector_opt< packed_options::throw_on_overflow
-                            , packed_options::inplace_alignment> implementation_defined;
+                            , packed_options::inplace_alignment
+                            , typename packed_options::stored_size_type
+                            > implementation_defined;
    /// @endcond
    typedef implementation_defined type;
 };
@@ -467,7 +474,6 @@ struct static_vector_options
 
 //! Helper alias metafunction to combine options into a single type to be used
 //! by \c boost::container::static_vector.
-//! Supported options are: \c boost::container::growth_factor and \c boost::container::stored_size
 template<class ...Options>
 using static_vector_options_t = typename boost::container::static_vector_options<Options...>::type;
 
@@ -515,7 +521,7 @@ template<class GrowthType, class StoredSizeType, std::size_t FreeFraction>
 struct devector_opt
    : vector_opt<GrowthType, StoredSizeType>
 {
-   static const std::size_t free_fraction = FreeFraction;
+   BOOST_STATIC_CONSTEXPR std::size_t free_fraction = FreeFraction;
 };
 
 typedef devector_opt<void, void, 0u> devector_null_opt;
@@ -587,7 +593,6 @@ struct devector_options
 
 //! Helper alias metafunction to combine options into a single type to be used
 //! by \c boost::container::devector.
-//! Supported options are: \c boost::container::growth_factor and \c boost::container::stored_size
 template<class ...Options>
 using devector_options_t = typename boost::container::devector_options<Options...>::type;
 
@@ -606,9 +611,9 @@ using devector_options_t = typename boost::container::devector_options<Options..
 template<std::size_t BlockBytes, std::size_t BlockSize>
 struct deque_opt
 {
-   static const std::size_t block_bytes = BlockBytes;
-   static const std::size_t block_size  = BlockSize;
-   BOOST_STATIC_ASSERT_MSG(!(block_bytes && block_size), "block_bytes and block_size can't be specified at the same time");
+   BOOST_STATIC_CONSTEXPR std::size_t block_bytes = BlockBytes;
+   BOOST_STATIC_CONSTEXPR std::size_t block_size  = BlockSize;
+   BOOST_CONTAINER_STATIC_ASSERT_MSG(!(block_bytes && block_size), "block_bytes and block_size can't be specified at the same time");
 };
 
 typedef deque_opt<0u, 0u> deque_null_opt;
@@ -617,7 +622,7 @@ typedef deque_opt<0u, 0u> deque_null_opt;
 
 //! Helper metafunction to combine options into a single type to be used
 //! by \c boost::container::deque.
-//! Supported options are: \c boost::container::block_bytes
+//! Supported options are: \c boost::container::block_bytes and \c boost::container::block_size
 #if defined(BOOST_CONTAINER_DOXYGEN_INVOKED) || defined(BOOST_CONTAINER_VARIADIC_TEMPLATES)
 template<class ...Options>
 #else
@@ -643,7 +648,6 @@ struct deque_options
 
 //! Helper alias metafunction to combine options into a single type to be used
 //! by \c boost::container::deque.
-//! Supported options are: \c boost::container::block_bytes
 template<class ...Options>
 using deque_options_t = typename boost::container::deque_options<Options...>::type;
 

@@ -1,10 +1,9 @@
 #include "s3_recipe_ut_helpers.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <yql/essentials/utils/log/log.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <fmt/format.h>
 
@@ -26,7 +25,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
 
         CreateBucketWithObject("CreateExternalDataSourceBucket", "obj", TEST_CONTENT);
 
-        auto kikimr = MakeKikimrRunner(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner();
 
         auto queryClient = kikimr->GetQueryClient();
 
@@ -144,6 +143,99 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         checkDrop(true, EEx::IfExists, 1); // real drop
         checkTableExists(false, 1);
         checkDrop(true, EEx::IfExists, 1);
+    }
+
+    void TestInvalidDropForExternalTableWithAuth(std::function<std::pair<bool, TString>(const TString&)> queryExecuter, TString tableSuffix) {
+        const TString externalDataSourceName = "test_data_source_" + tableSuffix;
+        const TString externalTableName = "test_table_" + tableSuffix;
+
+        // Create external table
+        {
+            const TString sql = TStringBuilder() << R"(
+                UPSERT OBJECT mysasignature (TYPE SECRET) WITH (value = "mysasignaturevalue");
+                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="SERVICE_ACCOUNT",
+                    SERVICE_ACCOUNT_ID="mysa",
+                    SERVICE_ACCOUNT_SECRET_NAME="mysasignature"
+                );
+                CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
+                    Key Uint64
+                ) WITH (
+                    DATA_SOURCE=")" << externalDataSourceName << R"(",
+                    LOCATION="/",
+                    FORMAT="json_each_row"
+                );)";
+            const auto& [success, issues] = queryExecuter(sql);
+            UNIT_ASSERT_C(success, issues);
+        }
+
+        // Drop secret object
+        {
+            const TString sql = "DROP OBJECT mysasignature (TYPE SECRET)";
+            const auto& [success, issues] = queryExecuter(sql);
+            UNIT_ASSERT_C(success, issues);
+        }
+
+        // Drop external table
+        {
+            const TString sql = TStringBuilder() << "DROP TABLE `" << externalTableName << "`";
+            const auto& [success, issues] = queryExecuter(sql);
+            UNIT_ASSERT(!success);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Cannot drop external entity by using DROP TABLE. Please use DROP EXTERNAL TABLE");
+        }
+
+        // Drop external data source
+        {
+            const TString sql = TStringBuilder() << "DROP TABLE `" << externalDataSourceName << "`";
+            const auto& [success, issues] = queryExecuter(sql);
+            UNIT_ASSERT(!success);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Cannot drop external entity by using DROP TABLE. Please use DROP EXTERNAL DATA SOURCE");
+        }
+    }
+
+    Y_UNIT_TEST(InvalidDropForExternalTableWithAuth) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto driver = kikimr->GetDriver();
+        NScripting::TScriptingClient yqlScriptClient(driver);
+        auto yqlScriptClientExecutor = [&](const TString& sql) {
+            Cerr << "Execute sql by yql script client:\n" << sql << Endl;
+            auto result = yqlScriptClient.ExecuteYqlScript(sql).GetValueSync();
+            return std::make_pair(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        TestInvalidDropForExternalTableWithAuth(yqlScriptClientExecutor, "yql_script");
+
+        auto queryClient = kikimr->GetQueryClient();
+        auto queryClientExecutor = [&](const TString& sql) {
+            Cerr << "Execute sql by query client:\n" << sql << Endl;
+            auto result = queryClient.ExecuteQuery(sql, TTxControl::NoTx()).GetValueSync();
+            return std::make_pair(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        TestInvalidDropForExternalTableWithAuth(queryClientExecutor, "generic_query");
+    }
+
+    Y_UNIT_TEST(ExternalTableDdlLocationValidation) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/ExternalDataSource` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `/Root/ExternalTable` (
+                Key Uint64,
+                Value String
+            ) WITH (
+                DATA_SOURCE="/Root/ExternalDataSource",
+                LOCATION="{"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Location '{' contains invalid wildcard:");
     }
 }
 

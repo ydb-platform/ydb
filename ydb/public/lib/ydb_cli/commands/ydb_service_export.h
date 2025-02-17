@@ -3,7 +3,7 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_export/export.h>
+#include <ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/lib/ydb_cli/common/aws.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
@@ -22,11 +22,12 @@ public:
 class TCommandExportToYt : public TYdbOperationCommand,
                            public TCommandWithYtProxy,
                            public TCommandWithYtToken,
-                           public TCommandWithFormat {
+                           public TCommandWithOutput {
 public:
     TCommandExportToYt();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -46,13 +47,14 @@ private:
 
 class TCommandExportToS3 : public TYdbOperationCommand,
                            public TCommandWithAwsCredentials,
-                           public TCommandWithFormat {
+                           public TCommandWithOutput {
     using EStorageClass = NExport::TExportToS3Settings::EStorageClass;
 
 public:
     TCommandExportToS3();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:

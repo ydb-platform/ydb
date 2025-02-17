@@ -1,0 +1,26 @@
+diff --git a/src/filesystem/operations.cpp b/src/filesystem/operations.cpp
+index 0e2ebdf..9e0abc8 100644
+--- a/src/filesystem/operations.cpp
++++ b/src/filesystem/operations.cpp
+@@ -375,15 +375,19 @@ private:
+       return consumeNSeparators(consumeName(P, End), End, 2);
+   }
+ 
+-  PosPtr consumeRootName(PosPtr P, PosPtr End) const noexcept {
+ #if defined(_LIBCPP_WIN32API)
++  PosPtr consumeRootName(PosPtr P, PosPtr End) const noexcept {
+     if (PosPtr Ret = consumeDriveLetter(P, End))
+       return Ret;
+     if (PosPtr Ret = consumeNetworkRoot(P, End))
+       return Ret;
+-#endif
+     return nullptr;
+   }
++#else
++  PosPtr consumeRootName(PosPtr /*P*/, PosPtr /*End*/) const noexcept {
++    return nullptr;
++  }
++#endif
+ };
+ 
+ string_view_pair separate_filename(string_view_t const& s) {

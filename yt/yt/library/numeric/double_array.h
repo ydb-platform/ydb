@@ -141,13 +141,13 @@ private:
 
 public:
     template <class TPredicate>
-    constexpr static bool All(const TDerived& vec, TPredicate&& predicate)
+    static constexpr bool All(const TDerived& vec, TPredicate&& predicate)
     {
         return std::all_of(std::begin(vec), std::end(vec), std::forward<TPredicate>(predicate));
     }
 
     template <class TPredicate>
-    constexpr static bool All(const TDerived& vec1, const TDerived& vec2, TPredicate&& predicate)
+    static constexpr bool All(const TDerived& vec1, const TDerived& vec2, TPredicate&& predicate)
     {
         for (size_t i = 0; i < Size; i++) {
             if (!predicate(vec1[i], vec2[i])) {
@@ -158,7 +158,7 @@ public:
     }
 
     template <class TPredicate>
-    constexpr static bool All(const TDerived& vec1, const TDerived& vec2, const TDerived& vec3, TPredicate&& predicate)
+    static constexpr bool All(const TDerived& vec1, const TDerived& vec2, const TDerived& vec3, TPredicate&& predicate)
     {
         for (size_t i = 0; i < Size; i++) {
             if (!predicate(vec1[i], vec2[i], vec3[i])) {
@@ -169,13 +169,13 @@ public:
     }
 
     template <class TPredicate>
-    constexpr static bool Any(const TDerived& vec, TPredicate&& predicate)
+    static constexpr bool Any(const TDerived& vec, TPredicate&& predicate)
     {
         return std::any_of(std::begin(vec), std::end(vec), std::forward<TPredicate>(predicate));
     }
 
     template <class TPredicate>
-    constexpr static bool Any(const TDerived& vec1, const TDerived& vec2, TPredicate&& predicate)
+    static constexpr bool Any(const TDerived& vec1, const TDerived& vec2, TPredicate&& predicate)
     {
         for (size_t i = 0; i < Size; i++) {
             if (predicate(vec1[i], vec2[i])) {
@@ -186,7 +186,7 @@ public:
     }
 
     template <class TPredicate>
-    constexpr static bool Any(const TDerived& vec1, const TDerived& vec2, const TDerived& vec3, TPredicate&& predicate)
+    static constexpr bool Any(const TDerived& vec1, const TDerived& vec2, const TDerived& vec3, TPredicate&& predicate)
     {
         for (size_t i = 0; i < Size; i++) {
             if (predicate(vec1[i], vec2[i], vec3[i])) {
@@ -197,7 +197,7 @@ public:
     }
 
     template <class TOperation>
-    constexpr static TDerived Apply(const TDerived& vec, TOperation&& op)
+    static constexpr TDerived Apply(const TDerived& vec, TOperation&& op)
     {
         TDerived res = {};
         std::transform(std::begin(vec), std::end(vec), std::begin(res), std::forward<TOperation>(op));
@@ -205,7 +205,7 @@ public:
     }
 
     template <class TOperation>
-    constexpr static TDerived Apply(const TDerived& vec1, const TDerived& vec2, TOperation&& op)
+    static constexpr TDerived Apply(const TDerived& vec1, const TDerived& vec2, TOperation&& op)
     {
         TDerived res = {};
         for (size_t i = 0; i < Size; i++) {
@@ -215,7 +215,7 @@ public:
     }
 
     template <class TOperation>
-    constexpr static TDerived Apply(const TDerived& vec1, const TDerived& vec2, const TDerived& vec3, TOperation&& op)
+    static constexpr TDerived Apply(const TDerived& vec1, const TDerived& vec2, const TDerived& vec3, TOperation&& op)
     {
         TDerived res = {};
         for (size_t i = 0; i < Size; i++) {
@@ -225,13 +225,13 @@ public:
     }
 
     template <class TFunction>
-    constexpr static void ForEach(const TDerived& vec, TFunction&& fn)
+    static constexpr void ForEach(const TDerived& vec, TFunction&& fn)
     {
         std::for_each(std::begin(vec), std::end(vec), std::forward<TFunction>(fn));
     }
 
     template <class TFunction>
-    constexpr static void ForEach(const TDerived& vec1, const TDerived& vec2, TFunction&& fn)
+    static constexpr void ForEach(const TDerived& vec1, const TDerived& vec2, TFunction&& fn)
     {
         for (size_t i = 0; i < Size; i++) {
             fn(vec1[i], vec2[i]);
@@ -239,24 +239,24 @@ public:
     }
 
     template <class TFunction>
-    constexpr static void ForEach(const TDerived& vec1, const TDerived& vec2, const TDerived& vec3, TFunction&& fn)
+    static constexpr void ForEach(const TDerived& vec1, const TDerived& vec2, const TDerived& vec3, TFunction&& fn)
     {
         for (size_t i = 0; i < Size; i++) {
             fn(vec1[i], vec2[i], vec3[i]);
         }
     }
 
-    constexpr static bool Near(const TDerived& lhs, const TDerived& rhs, double precision)
+    static constexpr bool Near(const TDerived& lhs, const TDerived& rhs, double precision)
     {
         return All(lhs, rhs, [&](auto x, auto y) { return std::abs(x - y) <= precision; });
     }
 
-    constexpr static TDerived Max(const TDerived& lhs, const TDerived& rhs)
+    static constexpr TDerived Max(const TDerived& lhs, const TDerived& rhs)
     {
         return TDerived::Apply(lhs, rhs, [](auto x, auto y) { return std::max(x, y); });
     }
 
-    constexpr static TDerived Min(const TDerived& lhs, const TDerived& rhs)
+    static constexpr TDerived Min(const TDerived& lhs, const TDerived& rhs)
     {
         return TDerived::Apply(lhs, rhs, [](auto x, auto y) { return std::min(x, y); });
     }

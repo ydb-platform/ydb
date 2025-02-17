@@ -14,6 +14,7 @@
 
 #include <algorithm>
 
+#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr::NPQ::NClusterDiscovery {
 
@@ -187,7 +188,7 @@ private:
         NActors::TMon* mon = AppData(Ctx())->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage * page = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(page, "pqcd", "PersQueue Cluster Discovery", false, Ctx().ExecutorThread.ActorSystem, Ctx().SelfID);
+            mon->RegisterActorPage(page, "pqcd", "PersQueue Cluster Discovery", false, Ctx().ActorSystem(), Ctx().SelfID);
         }
     }
 

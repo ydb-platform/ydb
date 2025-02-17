@@ -5,8 +5,8 @@
 #include <ydb/core/driver_lib/run/run.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -22,6 +22,9 @@ const std::vector<NKikimrServices::EServiceKikimr> TLoggerInit::KqpServices = {
 
 const std::vector<NKikimrServices::EServiceKikimr> TLoggerInit::CSServices = {
     NKikimrServices::TX_COLUMNSHARD,
+    NKikimrServices::TX_COLUMNSHARD_BLOBS,
+    NKikimrServices::TX_COLUMNSHARD_BLOBS_BS,
+    NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER,
     NKikimrServices::TX_COLUMNSHARD_SCAN,
     NKikimrServices::TX_CONVEYOR
 };
@@ -50,7 +53,7 @@ void THelper::WaitForSchemeOperation(TActorId sender, ui64 txId) {
 
 void THelper::StartScanRequest(const TString& request, const bool expectSuccess, TVector<THashMap<TString, NYdb::TValue>>* result) const {
     NYdb::NTable::TTableClient tClient(Server.GetDriver(),
-        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));
+        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(AuthToken));
     auto expectation = expectSuccess;
     bool resultReady = false;
     TVector<THashMap<TString, NYdb::TValue>> rows;
@@ -60,7 +63,9 @@ void THelper::StartScanRequest(const TString& request, const bool expectSuccess,
     });
     const TInstant start = TInstant::Now();
     while (!resultReady && start + TDuration::Seconds(60) > TInstant::Now()) {
+        Cerr << "START_SLEEP" << Endl;
         Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
+        Cerr << "FINISHED_SLEEP" << Endl;
         if (scanIterator && !resultReady) {
             scanIterator->ReadNext().Subscribe([&](NThreading::TFuture<NYdb::NTable::TScanQueryPart> streamPartFuture) {
                 NYdb::NTable::TScanQueryPart streamPart = streamPartFuture.GetValueSync();
@@ -104,7 +109,7 @@ void THelper::StartScanRequest(const TString& request, const bool expectSuccess,
 
 void THelper::StartDataRequest(const TString& request, const bool expectSuccess, TString* result) const {
     NYdb::NTable::TTableClient tClient(Server.GetDriver(),
-        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));
+        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(AuthToken));
     auto expectation = expectSuccess;
     bool resultReady = false;
     bool* rrPtr = &resultReady;
@@ -139,7 +144,7 @@ void THelper::StartDataRequest(const TString& request, const bool expectSuccess,
 
 void THelper::StartSchemaRequestTableServiceImpl(const TString& request, const bool expectation, const bool waiting) const {
     NYdb::NTable::TTableClient tClient(Server.GetDriver(),
-        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));
+        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(AuthToken));
 
     std::shared_ptr<bool> rrPtr = std::make_shared<bool>(false);
     tClient.CreateSession().Subscribe([rrPtr, request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
@@ -166,7 +171,7 @@ void THelper::StartSchemaRequestTableServiceImpl(const TString& request, const b
 
 void THelper::StartSchemaRequestQueryServiceImpl(const TString& request, const bool expectation, const bool waiting) const {
     NYdb::NQuery::TQueryClient qClient(Server.GetDriver(),
-        NYdb::NQuery::TClientSettings().AuthToken("root@builtin"));
+        NYdb::NQuery::TClientSettings().AuthToken(AuthToken));
 
     std::shared_ptr<bool> rrPtr = std::make_shared<bool>(false);
     auto future = qClient.ExecuteQuery(request, NYdb::NQuery::TTxControl::NoTx());

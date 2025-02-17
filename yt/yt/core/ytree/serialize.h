@@ -6,10 +6,12 @@
 
 #include <yt/yt/core/misc/guid.h>
 #include <yt/yt/core/misc/mpl.h>
+#include <yt/yt/core/misc/statistic_path.h>
 
 #include <yt/yt/core/yson/writer.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 
@@ -74,6 +76,9 @@ void Serialize(unsigned long long value, NYson::IYsonConsumer* consumer);
 // double
 void Serialize(double value, NYson::IYsonConsumer* consumer);
 
+// std::string
+void Serialize(const std::string& value, NYson::IYsonConsumer* consumer);
+
 // TString
 void Serialize(const TString& value, NYson::IYsonConsumer* consumer);
 
@@ -105,6 +110,9 @@ void Serialize(IInputStream& input, NYson::IYsonConsumer* consumer);
 template <class T>
     requires TEnumTraits<T>::IsEnum
 void Serialize(T value, NYson::IYsonConsumer* consumer);
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void Serialize(T value, NYson::IYsonConsumer* consumer);
 
 // std::optional
 template <class T>
@@ -122,6 +130,14 @@ void Serialize(const std::deque<T, A>& value, NYson::IYsonConsumer* consumer);
 template <class T, size_t N>
 void Serialize(const TCompactVector<T, N>& value, NYson::IYsonConsumer* consumer);
 
+// RepeatedPtrField
+template <class T>
+void Serialize(const google::protobuf::RepeatedPtrField<T>& items, NYson::IYsonConsumer* consumer);
+
+// RepeatedField
+template <class T>
+void Serialize(const google::protobuf::RepeatedField<T>& items, NYson::IYsonConsumer* consumer);
+
 // TErrorOr
 template <class T>
 void Serialize(const TErrorOr<T>& error, NYson::IYsonConsumer* consumer);
@@ -135,9 +151,13 @@ void Serialize(const std::array<T, N>& value, NYson::IYsonConsumer* consumer);
 template <class... T>
 void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer);
 
-// For any associative container.
+// Any associative container (except TCompactFlatMap).
 template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
 void Serialize(const C<T...>& value, NYson::IYsonConsumer* consumer);
+
+// TCompactFlatMap.
+template <class K, class V, size_t N>
+void Serialize(const TCompactFlatMap<K, V, N>& value, NYson::IYsonConsumer* consumer);
 
 // TEnumIndexedArray
 template <class E, class T, E Min, E Max>
@@ -152,6 +172,8 @@ void Serialize(
 
 template <class T, class TTag>
 void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer);
+
+void Serialize(const NStatisticPath::TStatisticPath& path, NYson::IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -179,6 +201,9 @@ void Deserialize(unsigned long long& value, INodePtr node);
 // double
 void Deserialize(double& value, INodePtr node);
 
+// std::string
+void Deserialize(std::string& value, INodePtr node);
+
 // TString
 void Deserialize(TString& value, INodePtr node);
 
@@ -200,6 +225,9 @@ void Deserialize(TGuid& value, INodePtr node);
 // Enums
 template <class T>
     requires TEnumTraits<T>::IsEnum
+void Deserialize(T& value, INodePtr node);
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
 void Deserialize(T& value, INodePtr node);
 
 // std::optional
@@ -244,19 +272,23 @@ void Deserialize(TEnumIndexedArray<E, T, Min, Max>& vector, INodePtr node);
 
 // Subtypes of google::protobuf::Message
 template <class T>
+    requires std::derived_from<T, google::protobuf::Message>
 void Deserialize(
     T& message,
-    const INodePtr& node,
-    typename std::enable_if<std::is_convertible<T*, google::protobuf::Message*>::value, void>::type* = nullptr);
-
-template <class T>
-void Deserialize(
-    T& message,
-    NYson::TYsonPullParserCursor* cursor,
-    typename std::enable_if<std::is_convertible<T*, google::protobuf::Message*>::value, void>::type* = nullptr);
+    const INodePtr& node);
 
 template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node);
+
+void Deserialize(NStatisticPath::TStatisticPath& path, INodePtr node);
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T, class... TExtraArgs>
+concept CYsonSerializable = requires (const T& value, NYson::IYsonConsumer* consumer, TExtraArgs&&... args)
+{
+    { Serialize(value, consumer, std::forward<TExtraArgs>(args)...) } -> std::same_as<void>;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

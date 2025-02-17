@@ -1,7 +1,7 @@
 #include "ydb_service_monitoring.h"
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -20,7 +20,7 @@ void TCommandSelfCheck::Config(TConfig& config) {
     TYdbSimpleCommand::Config(config);
     config.SetFreeArgsNum(0);
 
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::Json });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::Json });
 
     config.Opts->AddLongOption('v', "verbose", "Return detailed info about components checked with their statuses.")
         .StoreTrue(&Verbose);
@@ -28,7 +28,7 @@ void TCommandSelfCheck::Config(TConfig& config) {
 
 void TCommandSelfCheck::Parse(TConfig& config) {
     TYdbSimpleCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 }
 
 int TCommandSelfCheck::Run(TConfig& config) {
@@ -42,15 +42,15 @@ int TCommandSelfCheck::Run(TConfig& config) {
     NMonitoring::TSelfCheckResult result = client.SelfCheck(
         FillSettings(settings)
     ).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return PrintResponse(result);
 }
 
 int TCommandSelfCheck::PrintResponse(NMonitoring::TSelfCheckResult& result) {
     const auto& proto = NYdb::TProtoAccessor::GetProto(result);
     switch (OutputFormat) {
-        case EOutputFormat::Default:
-        case EOutputFormat::Pretty:
+        case EDataFormat::Default:
+        case EDataFormat::Pretty:
         {
             NColorizer::TColors colors = NColorizer::AutoColors(Cout);
             TStringBuf statusColor;
@@ -83,7 +83,7 @@ int TCommandSelfCheck::PrintResponse(NMonitoring::TSelfCheckResult& result) {
             }
             break;
         }
-        case EOutputFormat::Json:
+        case EDataFormat::Json:
         {
             TString json;
             google::protobuf::util::JsonPrintOptions jsonOpts;

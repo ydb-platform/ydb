@@ -49,12 +49,16 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     std::vector<ui64> txIds;
     for (const auto& tx : record.GetTransactions()) {
         Y_ABORT_UNLESS(tx.HasTxId());
-        Y_ABORT_UNLESS(tx.HasAckTo());
 
         txIds.push_back(tx.GetTxId());
 
-        TActorId txOwner = ActorIdFromProto(tx.GetAckTo());
-        TxAcks[txOwner].push_back(tx.GetTxId());
+        // Note: we plan to remove AckTo in the future
+        if (tx.HasAckTo()) {
+            TActorId txOwner = ActorIdFromProto(tx.GetAckTo());
+            // Note: when mediators ack transactions on their own they also
+            // specify an empty AckTo. Sends to empty actors are a no-op anyway.
+            TxAcks[txOwner].push_back(tx.GetTxId());
+        }
     }
 
     size_t plannedCount = 0;
@@ -102,10 +106,10 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     Result = std::make_unique<TEvTxProcessing::TEvPlanStepAccepted>(Self->TabletID(), step);
 
-    Self->IncCounter(COUNTER_PLAN_STEP_ACCEPTED);
+    Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLAN_STEP_ACCEPTED);
 
     if (plannedCount > 0 || Self->ProgressTxController->HaveOutdatedTxs()) {
-        Self->EnqueueProgressTx(ctx);
+        Self->EnqueueProgressTx(ctx, std::nullopt);
     }
     return true;
 }

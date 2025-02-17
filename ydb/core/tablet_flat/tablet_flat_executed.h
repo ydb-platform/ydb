@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "flat_executor_counters.h"
 #include "tablet_flat_executor.h"
 
 namespace NKikimr {
@@ -42,8 +43,8 @@ protected:
     /**
      * Signal tablet as active and ready to process requests (from pipes).
      */
-    void SignalTabletActive(const TActorIdentity &id);
-    void SignalTabletActive(const TActorContext &ctx);
+    void SignalTabletActive(const TActorIdentity &id, TString &&versionInfo = {});
+    void SignalTabletActive(const TActorContext &ctx, TString &&versionInfo = {});
 
     /**
      * Must be overriden as an empty method. Previously default implementation
@@ -52,6 +53,8 @@ protected:
      * is never called, and will be removed in the future.
      */
     virtual void DefaultSignalTabletActive(const TActorContext &ctx) = 0;
+
+    void ReportStartTime();
 
     /**
      * Called by StateInitImpl for unhandled non-system events. Used to delay

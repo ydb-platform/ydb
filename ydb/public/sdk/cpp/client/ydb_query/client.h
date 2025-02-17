@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fwd.h"
+
 #include "query.h"
 #include "tx.h"
 
@@ -11,16 +13,20 @@
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
     class TProtoAccessor;
 
     namespace NRetry::Async {
         template <typename TClient, typename TAsyncStatusType>
         class TRetryContext;
-    }
+    } // namespace NRetry::Async
+    namespace NRetry::Sync {
+        template <typename TClient, typename TStatusType>
+        class TRetryContext;
+    } // namespace NRetry::Sync
 }
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 struct TCreateSessionSettings : public TSimpleRequestSettings<TCreateSessionSettings> {
     TCreateSessionSettings();
@@ -34,20 +40,20 @@ struct TSessionPoolSettings {
     using TSelf = TSessionPoolSettings;
 
     // Max number of sessions client can get from session pool
-    FLUENT_SETTING_DEFAULT(ui32, MaxActiveSessions, 50);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, MaxActiveSessions, 50);
 
     // Max time session to be in idle state before closing
-    FLUENT_SETTING_DEFAULT(TDuration, CloseIdleThreshold, TDuration::Minutes(1));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, CloseIdleThreshold, TDuration::Minutes(1));
 
     // Min number of session in session pool.
     // Sessions will not be closed by CloseIdleThreshold if the number of sessions less then this limit.
-    FLUENT_SETTING_DEFAULT(ui32, MinPoolSize, 10);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, MinPoolSize, 10);
 };
 
 struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     using TSessionPoolSettings = TSessionPoolSettings;
     using TSelf = TClientSettings;
-    FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
+    FLUENT_SETTING_DEPRECATED(TSessionPoolSettings, SessionPoolSettings);
 };
 
 // ! WARNING: Experimental API
@@ -58,10 +64,15 @@ class TSession;
 class TQueryClient {
     friend class TSession;
     friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
+    friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
+    friend class NRetry::Sync::TRetryContext<TQueryClient, TStatus>;
 
 public:
-    using TQueryFunc = std::function<TAsyncExecuteQueryResult(TSession session)>;
-    using TQueryWithoutSessionFunc = std::function<TAsyncExecuteQueryResult(TQueryClient& client)>;
+    using TQueryResultFunc = std::function<TAsyncExecuteQueryResult(TSession session)>;
+    using TQueryFunc = std::function<TAsyncStatus(TSession session)>;
+    using TQuerySyncFunc = std::function<TStatus(TSession session)>;
+    using TQueryWithoutSessionFunc = std::function<TAsyncStatus(TQueryClient& client)>;
+    using TQueryWithoutSessionSyncFunc = std::function<TStatus(TQueryClient& client)>;
     using TSettings = TClientSettings;
     using TSession = TSession;
     using TCreateSessionSettings = TCreateSessionSettings;
@@ -82,7 +93,15 @@ public:
     TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query, const TTxControl& txControl,
         const TParams& params, const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
-    TAsyncExecuteQueryResult RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+    TAsyncExecuteQueryResult RetryQuery(TQueryResultFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+
+    TAsyncStatus RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+
+    TAsyncStatus RetryQuery(TQueryWithoutSessionFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+
+    TStatus RetryQuerySync(const TQuerySyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+
+    TStatus RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
     TAsyncExecuteQueryResult RetryQuery(const TString& query, const TTxControl& txControl,
         TDuration timeout, bool isIndempotent);
@@ -116,6 +135,7 @@ class TTransaction;
 class TSession {
     friend class TQueryClient;
     friend class TTransaction;
+    friend class TExecuteQueryIterator;
 public:
     const TString& GetId() const;
 
@@ -137,6 +157,7 @@ public:
     class TImpl;
 private:
     TSession();
+    TSession(std::shared_ptr<TQueryClient::TImpl> client); // Create broken session
     TSession(std::shared_ptr<TQueryClient::TImpl> client, TSession::TImpl* sessionImpl);
 
     std::shared_ptr<TQueryClient::TImpl> Client_;

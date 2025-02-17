@@ -4,7 +4,7 @@
 #include "ydb_common.h"
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.h>
+#include <ydb-cpp-sdk/client/monitoring/monitoring.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -14,7 +14,7 @@ public:
     TCommandMonitoring();
 };
 
-class TCommandSelfCheck : public TYdbSimpleCommand, public TCommandWithFormat {
+class TCommandSelfCheck : public TYdbSimpleCommand, public TCommandWithOutput {
 public:
     TCommandSelfCheck();
     void Config(TConfig& config) override;

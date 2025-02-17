@@ -10,7 +10,6 @@ import unittest
 
 from pyasn1.codec.der.decoder import decode as der_decoder
 from pyasn1.codec.der.encoder import encode as der_encoder
-from pyasn1.compat.octets import str2octs
 
 from pyasn1_modules import pem
 from pyasn1_modules import rfc5280
@@ -67,7 +66,7 @@ DAlVlhox680Jxy5J8Pkx
                 self.assertEqual(extn['extnValue'], der_encoder(extnValue))
 
                 if extn['extnID'] == rfc4334.id_pe_wlanSSID:
-                    self.assertIn( str2octs('Example'), extnValue)
+                    self.assertIn(b'Example', extnValue)
             
                 if extn['extnID'] == rfc5280.id_ce_extKeyUsage:
                     self.assertIn(rfc4334.id_kp_eapOverLAN, extnValue)

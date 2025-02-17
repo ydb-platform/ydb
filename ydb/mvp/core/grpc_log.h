@@ -1,11 +1,16 @@
 #pragma once
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <util/system/hp_timer.h>
 #include "mvp_log.h"
 #include "appdata.h"
 
 namespace NMVP {
+
+template<typename TProto>
+TString SecureShortDebugString(const TProto& request) {
+    return request.ShortDebugString();
+}
 
 template <typename TGRpcService>
 class TLoggedGrpcServiceConnection {
@@ -41,13 +46,13 @@ public:
                    NYdbGrpc::IQueueClientContextProvider* provider = nullptr)
     {
         const TString& requestName = request.GetDescriptor()->name();
-        BLOG_GRPC_D(Prefix() << "Request " << requestName << " " << Trim(request.ShortDebugString()));
+        BLOG_GRPC_D(Prefix() << "Request " << requestName << " " << Trim(SecureShortDebugString(request)));
         NActors::TActorSystem* actorSystem = NActors::TlsActivationContext->ActorSystem();
         THPTimer timer;
         NYdbGrpc::TResponseCallback<TResponse> cb =
                 [actorSystem, requestName, host = host, timer = std::move(timer), prefix = Prefix(), callback = std::move(callback)](NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
             if (status.Ok()) {
-                BLOG_GRPC_DC(*actorSystem, prefix << "Response " << response.GetDescriptor()->name() << " " << Trim(response.ShortDebugString()));
+                BLOG_GRPC_DC(*actorSystem, prefix << "Response " << response.GetDescriptor()->name() << " " << Trim(SecureShortDebugString(response)));
             } else {
                 BLOG_GRPC_DC(*actorSystem, prefix << "Status " << status.GRpcStatusCode << " " << status.Msg);
             }
@@ -73,13 +78,13 @@ public:
                            NYdbGrpc::IQueueClientContextProvider* provider = nullptr)
     {
         const TString& requestName = request.GetDescriptor()->name();
-        BLOG_GRPC_D(Prefix() << "Request " << requestName << " " << Trim(request.ShortDebugString()));
+        BLOG_GRPC_D(Prefix() << "Request " << requestName << " " << Trim(SecureShortDebugString(request)));
         NActors::TActorSystem* actorSystem = NActors::TlsActivationContext->ActorSystem();
         THPTimer timer;
         NYdbGrpc::TAdvancedResponseCallback<TResponse> cb =
             [actorSystem, requestName, host = host, timer = std::move(timer), prefix = Prefix(), callback = std::move(callback)](const grpc::ClientContext& context, NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
             if (status.Ok()) {
-                BLOG_GRPC_DC(*actorSystem, prefix << "Response " << response.GetDescriptor()->name() << " " << Trim(response.ShortDebugString()));
+                BLOG_GRPC_DC(*actorSystem, prefix << "Response " << response.GetDescriptor()->name() << " " << Trim(SecureShortDebugString(response)));
             } else {
                 BLOG_GRPC_DC(*actorSystem, prefix << "Status " << status.GRpcStatusCode << " " << status.Msg);
             }

@@ -7,6 +7,7 @@
 
 #include <roaring/memory.h>
 #include <roaring/portability.h>
+#include <roaring/roaring.h>
 #include <roaring/roaring_types.h>
 
 #ifdef __cplusplus
@@ -91,6 +92,14 @@ roaring64_bitmap_t *roaring64_bitmap_of_ptr(size_t n_args,
         (sizeof((const uint64_t[]){0, __VA_ARGS__}) / sizeof(uint64_t)) - 1, \
         &((const uint64_t[]){0, __VA_ARGS__})[1])
 #endif
+
+/**
+ * Create a new bitmap by moving containers from a 32 bit roaring bitmap.
+ *
+ * After calling this function, the original bitmap will be empty, and the
+ * returned bitmap will contain all the values from the original bitmap.
+ */
+roaring64_bitmap_t *roaring64_bitmap_move_from_roaring32(roaring_bitmap_t *r);
 
 /**
  * Create a new bitmap containing all the values in [min, max) that are at a
@@ -203,6 +212,11 @@ void roaring64_bitmap_remove_range_closed(roaring64_bitmap_t *r, uint64_t min,
                                           uint64_t max);
 
 /**
+ * Empties the bitmap.
+ */
+void roaring64_bitmap_clear(roaring64_bitmap_t *r);
+
+/**
  * Returns true if the provided value is present.
  */
 bool roaring64_bitmap_contains(const roaring64_bitmap_t *r, uint64_t val);
@@ -273,6 +287,12 @@ uint64_t roaring64_bitmap_range_cardinality(const roaring64_bitmap_t *r,
                                             uint64_t min, uint64_t max);
 
 /**
+ * Returns the number of elements in the range [min, max]
+ */
+uint64_t roaring64_bitmap_range_closed_cardinality(const roaring64_bitmap_t *r,
+                                                   uint64_t min, uint64_t max);
+
+/**
  * Returns true if the bitmap is empty (cardinality is zero).
  */
 bool roaring64_bitmap_is_empty(const roaring64_bitmap_t *r);
@@ -291,6 +311,13 @@ uint64_t roaring64_bitmap_maximum(const roaring64_bitmap_t *r);
  * Returns true if the result has at least one run container.
  */
 bool roaring64_bitmap_run_optimize(roaring64_bitmap_t *r);
+
+/**
+ *  (For advanced users.)
+ * Collect statistics about the bitmap
+ */
+void roaring64_bitmap_statistics(const roaring64_bitmap_t *r,
+                                 roaring64_statistics_t *stat);
 
 /**
  * Perform internal consistency checks.
@@ -484,6 +511,10 @@ size_t roaring64_bitmap_portable_size_in_bytes(const roaring64_bitmap_t *r);
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
  * compatible with little-endian systems.
+ *
+ * When serializing data to a file, we recommend that you also use
+ * checksums so that, at deserialization, you can be confident
+ * that you are recovering the correct data.
  */
 size_t roaring64_bitmap_portable_serialize(const roaring64_bitmap_t *r,
                                            char *buf);
@@ -498,14 +529,17 @@ size_t roaring64_bitmap_portable_deserialize_size(const char *buf,
                                                   size_t maxbytes);
 
 /**
- * Read a bitmap from a serialized buffer safely (reading up to maxbytes).
+ * Read a bitmap from a serialized buffer (reading up to maxbytes).
  * In case of failure, NULL is returned.
  *
  * This is meant to be compatible with other languages
  * https://github.com/RoaringBitmap/RoaringFormatSpec#extension-for-64-bit-implementations
  *
  * The function itself is safe in the sense that it will not cause buffer
- * overflows. However, for correct operations, it is assumed that the bitmap
+ * overflows: it will not read beyond the scope of the provided buffer
+ * (buf,maxbytes).
+ *
+ * However, for correct operations, it is assumed that the bitmap
  * read was once serialized from a valid bitmap (i.e., it follows the format
  * specification). If you provided an incorrect input (garbage), then the bitmap
  * read may not be in a valid state and following operations may not lead to
@@ -513,6 +547,12 @@ size_t roaring64_bitmap_portable_deserialize_size(const char *buf,
  * in sorted order, and the run containers should be in sorted non-overlapping
  * order. This is is guaranteed to happen when serializing an existing bitmap,
  * but not for random inputs.
+ *
+ * You may use roaring64_bitmap_internal_validate to check the validity of the
+ * bitmap prior to using it.
+ *
+ * We recommend that you use checksums to check that serialized data corresponds
+ * to a serialized bitmap.
  *
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not

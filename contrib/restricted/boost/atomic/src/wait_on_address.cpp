@@ -65,11 +65,11 @@ BOOST_ATOMIC_DECL void initialize_wait_functions() BOOST_NOEXCEPT
             boost::winapi::HMODULE_ kernel_base = boost::winapi::get_module_handle(L"api-ms-win-core-synch-l1-2-0.dll");
             if (BOOST_LIKELY(kernel_base != NULL))
             {
-                wait_on_address_t* woa = (wait_on_address_t*)boost::winapi::get_proc_address(kernel_base, "WaitOnAddress");
+                wait_on_address_t* woa = boost::winapi::get_proc_address<wait_on_address_t*>(kernel_base, "WaitOnAddress");
                 if (BOOST_LIKELY(woa != NULL))
                 {
-                    wake_by_address_t* wbas = (wake_by_address_t*)boost::winapi::get_proc_address(kernel_base, "WakeByAddressSingle");
-                    wake_by_address_t* wbaa = (wake_by_address_t*)boost::winapi::get_proc_address(kernel_base, "WakeByAddressAll");
+                    wake_by_address_t* wbas = boost::winapi::get_proc_address<wake_by_address_t*>(kernel_base, "WakeByAddressSingle");
+                    wake_by_address_t* wbaa = boost::winapi::get_proc_address<wake_by_address_t*>(kernel_base, "WakeByAddressAll");
 
                     if (BOOST_LIKELY(wbas != NULL && wbaa != NULL))
                     {

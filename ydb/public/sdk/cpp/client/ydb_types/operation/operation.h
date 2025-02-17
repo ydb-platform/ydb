@@ -1,10 +1,13 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/client/ydb_types/fwd.h>
+
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <library/cpp/threading/future/future.h>
 
 #include <google/protobuf/stubs/status.h>
+#include <google/protobuf/timestamp.pb.h>
 #include <google/protobuf/util/json_util.h>
 
 namespace Ydb {
@@ -15,7 +18,7 @@ class Operation;
 } // namespace Operations
 } // namespace Ydb
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TStatus;
 
@@ -31,6 +34,9 @@ public:
     const TOperationId& Id() const;
     bool Ready() const;
     const TStatus& Status() const;
+    TInstant CreateTime() const;
+    TInstant EndTime() const;
+    const TString& CreatedBy() const;
 
     TString ToString() const;
     TString ToJsonString() const;
@@ -45,5 +51,7 @@ private:
 };
 
 using TAsyncOperation = NThreading::TFuture<TOperation>;
+
+TInstant ProtoTimestampToInstant(const NProtoBuf::Timestamp& timestamp);
 
 } // namespace NYdb

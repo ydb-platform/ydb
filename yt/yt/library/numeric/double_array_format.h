@@ -1,9 +1,8 @@
 #pragma once
 
-#include "vector_format.h"
 #include "double_array.h"
 
-#include <util/string/builder.h>
+#include <library/cpp/yt/string/format.h>
 
 namespace NYT::NDetail {
 
@@ -13,7 +12,7 @@ namespace NYT::NDetail {
 template <class TDerived, class = std::enable_if_t<IsDoubleArray<TDerived>>>
 std::ostream& operator<<(std::ostream& os, const TDerived& vec)
 {
-    os << ToString(vec);
+    os << NYT::ToString(vec);
     return os;
 }
 

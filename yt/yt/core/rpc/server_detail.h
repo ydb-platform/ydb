@@ -18,7 +18,7 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Magic constant! This is the lower limit of the memory allocated for the request.
+// Magic constant! This is lower limit of memory allocated for request.
 constexpr i64 TypicalRequestSize = 4_KB;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -34,7 +34,7 @@ public:
     TRequestId GetRequestId() const override;
     NYT::NBus::TBusNetworkStatistics GetBusNetworkStatistics() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
 
     i64 GetTotalSize() const override;
 
@@ -45,6 +45,7 @@ public:
     std::optional<TInstant> GetFinishInstant() const override;
     std::optional<TDuration> GetWaitDuration() const override;
     std::optional<TDuration> GetExecutionDuration() const override;
+    void RecordThrottling(TDuration throttleDuration) override;
 
     NTracing::TTraceContextPtr GetTraceContext() const override;
     std::optional<TDuration> GetTraceContextTime() const override;
@@ -52,8 +53,8 @@ public:
     bool IsRetry() const override;
     TMutationId GetMutationId() const override;
 
-    std::string GetService() const override;
-    std::string GetMethod() const override;
+    const std::string& GetService() const override;
+    const std::string& GetMethod() const override;
     TRealmId GetRealmId() const override;
     const TAuthenticationIdentity& GetAuthenticationIdentity() const override;
 
@@ -68,7 +69,6 @@ public:
 
     //! \note Thread affinity: any
     TFuture<TSharedRefArray> GetAsyncResponseMessage() const override;
-
     const TSharedRefArray& GetResponseMessage() const override;
 
     using TCanceledCallback = TCallback<void(const TError&)>;
@@ -130,6 +130,9 @@ protected:
     bool LoggingEnabled_;
     TRequestId RequestId_;
     TRealmId RealmId_;
+    TMutationId MutationId_;
+    std::string ServiceName_;
+    std::string MethodName_;
 
     TAuthenticationIdentity AuthenticationIdentity_;
 
@@ -199,7 +202,7 @@ public:
     NRpc::TRequestId GetRequestId() const override;
     NYT::NBus::TBusNetworkStatistics GetBusNetworkStatistics() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
 
     std::optional<TInstant> GetStartTime() const override;
     std::optional<TDuration> GetTimeout() const override;
@@ -208,6 +211,7 @@ public:
     std::optional<TInstant> GetFinishInstant() const override;
     std::optional<TDuration> GetWaitDuration() const override;
     std::optional<TDuration> GetExecutionDuration() const override;
+    void RecordThrottling(TDuration throttleDuration) override;
 
     NTracing::TTraceContextPtr GetTraceContext() const override;
     std::optional<TDuration> GetTraceContextTime() const override;
@@ -215,8 +219,8 @@ public:
     bool IsRetry() const override;
     TMutationId GetMutationId() const override;
 
-    std::string GetService() const override;
-    std::string GetMethod() const override;
+    const std::string& GetService() const override;
+    const std::string& GetMethod() const override;
     TRealmId GetRealmId() const override;
     const TAuthenticationIdentity& GetAuthenticationIdentity() const override;
 

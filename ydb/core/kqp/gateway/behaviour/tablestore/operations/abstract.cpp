@@ -1,6 +1,8 @@
 #include "abstract.h"
+
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 namespace NKikimr::NKqp {
 
@@ -30,8 +32,7 @@ TConclusionStatus ITableStoreOperation::Deserialize(const NYql::TObjectSettingsI
     return TConclusionStatus::Success();
 }
 
-void ITableStoreOperation::SerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme, const bool isStandalone) const {
-    scheme.SetWorkingDir(WorkingDir);
+void ITableStoreOperation::DoSerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme, const bool isStandalone) const {
     if (isStandalone) {
         scheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
         NKikimrSchemeOp::TAlterColumnTable* alter = scheme.MutableAlterColumnTable();
@@ -46,6 +47,11 @@ void ITableStoreOperation::SerializeScheme(NKikimrSchemeOp::TModifyScheme& schem
         schemaPresetObject->SetName(PresetName);
         return DoSerializeScheme(*(schemaPresetObject->MutableAlterSchema()));
     }
+}
+
+void ITableStoreOperation::SerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme, const bool isStandalone) const {
+    scheme.SetWorkingDir(WorkingDir);
+    DoSerializeScheme(scheme, isStandalone);
 }
 
 }

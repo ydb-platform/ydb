@@ -14,11 +14,11 @@ PEERDIR(
     ydb/core/driver_lib/cli_config_base
     ydb/core/protos
     ydb/library/yaml_config
-    ydb/library/yql/minikql
-    ydb/library/yql/public/udf
+    yql/essentials/minikql
+    yql/essentials/public/udf
     ydb/public/lib/deprecated/kicli
-    ydb/public/sdk/cpp/client/ydb_discovery
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/src/client/discovery
+    ydb/public/sdk/cpp/src/client/driver
 )
 
 GENERATE_ENUM_SERIALIZATION(init.h)

@@ -12,7 +12,7 @@ from
     {{lineitem}}
 group by
     l_orderkey having
-        sum(l_quantity) > 315
+        sum(l_quantity) > 300
 );
 
 $join1 = (

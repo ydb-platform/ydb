@@ -5,9 +5,9 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -46,20 +46,21 @@ TKqpProtoBuilder::~TKqpProtoBuilder() {
     }
 }
 
-Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
+void TKqpProtoBuilder::BuildYdbResultSet(
+    Ydb::ResultSet& resultSet,
     TVector<NYql::NDq::TDqSerializedBatch>&& data,
     NKikimr::NMiniKQL::TType* mkqlSrcRowType,
-    const TVector<ui32>* columnOrder)
+    const TVector<ui32>* columnOrder,
+    const TVector<TString>* columnHints)
 {
     YQL_ENSURE(mkqlSrcRowType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
     const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(mkqlSrcRowType);
 
-    Ydb::ResultSet resultSet;
-
+    TColumnOrder order = columnHints ? TColumnOrder(*columnHints) : TColumnOrder{};
     for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
         auto* column = resultSet.add_columns();
         ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? idx : (*columnOrder)[idx];
-        column->set_name(TString(mkqlSrcRowStructType->GetMemberName(memberIndex)));
+        column->set_name(TString(columnHints && columnHints->size() ? order.at(idx).LogicalName : mkqlSrcRowStructType->GetMemberName(memberIndex)));
         ExportTypeToProto(mkqlSrcRowStructType->GetMemberType(memberIndex), *column->mutable_type());
     }
 
@@ -82,8 +83,6 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
             });
         }
     }
-
-    return resultSet;
 }
 
 } // namespace NKqp

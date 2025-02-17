@@ -10,7 +10,10 @@ struct IThreadPoolPoller
     : public IPoller
 {
     //! Reconfigures number of polling threads.
-    virtual void Reconfigure(int threadCount) = 0;
+    virtual void SetThreadCount(int threadCount) = 0;
+
+    //! Reconfigures polling period of thread pool.
+    virtual void SetPollingPeriod(TDuration pollingPeriod) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IThreadPoolPoller)

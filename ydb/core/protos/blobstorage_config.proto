@@ -35,6 +35,11 @@ message TDefineHostConfig {
     // host-wide default configuration for every PDisk
     NKikimrBlobStorage.TPDiskConfig DefaultHostPDiskConfig = 4;
 
+    // some syntactic sugar -- one drive type per path
+    repeated string Rot = 5;
+    repeated string Ssd = 6;
+    repeated string Nvme = 7;
+
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;
 }
@@ -395,8 +400,31 @@ message TWipeVDisk {
     NKikimrBlobStorage.TVDiskID VDiskId = 2;
 }
 
+message TPDiskLocation {
+    string Fqdn = 1; // fully qualified domain name of the host
+    string Path = 2; // absolute path to the device as enlisted in PDisk configuration
+}
+
 message TRestartPDisk {
-    NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+    oneof PDisk {
+        NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+        TPDiskLocation TargetPDiskLocation = 2;   
+    }
+}
+
+message TSetPDiskReadOnly {
+    oneof PDisk {
+        NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+        TPDiskLocation TargetPDiskLocation = 2;
+    }
+    bool Value = 3;
+}
+
+message TStopPDisk {
+    oneof PDisk {
+        NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+        TPDiskLocation TargetPDiskLocation = 2;
+    }
 }
 
 message TSetScrubPeriodicity {
@@ -488,6 +516,9 @@ message TSetVDiskReadOnly {
     bool Value = 3;
 }
 
+message TGetInterfaceVersion
+{}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -532,6 +563,9 @@ message TConfigRequest {
             TCancelVirtualGroup CancelVirtualGroup = 44;
             TSetVDiskReadOnly SetVDiskReadOnly = 47;
             TRestartPDisk RestartPDisk = 48;
+            TSetPDiskReadOnly SetPDiskReadOnly = 49;
+            TStopPDisk StopPDisk = 50;
+            TGetInterfaceVersion GetInterfaceVersion = 51;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -575,6 +609,9 @@ message TConfigRequest {
 
     // is this command originated by self-heal decommission?
     bool IsSelfHealReasonDecommit = 12;
+
+    // requesting user identifier
+    string UserSID = 13;
 }
 
 enum ETriStateBool {
@@ -609,6 +646,7 @@ message TBaseConfig {
         EDecommitStatus DecommitStatus = 16;
         string ExpectedSerial = 17;
         string LastSeenSerial = 18;
+        bool ReadOnly = 19;
     }
     message TVSlot {
         message TDonorDisk {
@@ -676,6 +714,7 @@ message TBaseConfig {
     repeated TGroup Group = 3;
     repeated TNode Node = 4;
     repeated TDevice Device = 5;
+    TUpdateSettings Settings = 6;
 }
 
 message TMoveCommand {
@@ -761,10 +800,14 @@ message TConfigResponse {
         TDeclareIntent Intent = 15;
         bool Already = 16;
         TUpdateSettings Settings = 18;
+        uint32 InterfaceVersion = 19;
     }
 
     repeated TStatus Status = 1;
     bool Success = 2;
     string ErrorDescription = 3;
     uint64 ConfigTxSeqNo = 4;
+    repeated uint32 GroupsGetDegraded = 5;
+    repeated uint32 GroupsGetDisintegrated = 6;
+    repeated uint32 GroupsGetDisintegratedByExpectedStatus = 7;
 }

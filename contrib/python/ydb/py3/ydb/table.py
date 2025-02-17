@@ -3,9 +3,16 @@ import abc
 import ydb
 from abc import abstractmethod
 import logging
-import time
-import random
 import enum
+import typing
+
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+)
 
 from . import (
     issues,
@@ -20,7 +27,15 @@ from . import (
     _tx_ctx_impl,
     tracing,
 )
-from ._errors import check_retriable_error
+
+from .retries import (
+    YdbRetryOperationFinalResult,  # noqa
+    YdbRetryOperationSleepOpt,  # noqa
+    BackoffSettings,  # noqa
+    retry_operation_impl,  # noqa
+    RetrySettings,
+    retry_operation_sync,
+)
 
 try:
     from . import interceptor
@@ -284,6 +299,7 @@ class TableIndex(object):
         self._pb.name = name
         self.name = name
         self.index_columns = []
+        self.data_columns = []
         # output only.
         self.status = None
 
@@ -291,10 +307,20 @@ class TableIndex(object):
         self._pb.global_index.SetInParent()
         return self
 
+    def with_global_async_index(self):
+        self._pb.global_async_index.SetInParent()
+        return self
+
     def with_index_columns(self, *columns):
         for column in columns:
             self._pb.index_columns.append(column)
             self.index_columns.append(column)
+        return self
+
+    def with_data_columns(self, *columns):
+        for column in columns:
+            self._pb.data_columns.append(column)
+            self.data_columns.append(column)
         return self
 
     def to_pb(self):
@@ -840,137 +866,6 @@ class StaleReadOnly(AbstractTransactionModeBuilder):
         return self._name
 
 
-class BackoffSettings(object):
-    def __init__(self, ceiling=6, slot_duration=0.001, uncertain_ratio=0.5):
-        self.ceiling = ceiling
-        self.slot_duration = slot_duration
-        self.uncertain_ratio = uncertain_ratio
-
-    def calc_timeout(self, retry_number):
-        slots_count = 1 << min(retry_number, self.ceiling)
-        max_duration_ms = slots_count * self.slot_duration * 1000.0
-        # duration_ms = random.random() * max_duration_ms * uncertain_ratio) + max_duration_ms * (1 - uncertain_ratio)
-        duration_ms = max_duration_ms * (random.random() * self.uncertain_ratio + 1.0 - self.uncertain_ratio)
-        return duration_ms / 1000.0
-
-
-class RetrySettings(object):
-    def __init__(
-        self,
-        max_retries=10,
-        max_session_acquire_timeout=None,
-        on_ydb_error_callback=None,
-        backoff_ceiling=6,
-        backoff_slot_duration=1,
-        get_session_client_timeout=5,
-        fast_backoff_settings=None,
-        slow_backoff_settings=None,
-        idempotent=False,
-    ):
-        self.max_retries = max_retries
-        self.max_session_acquire_timeout = max_session_acquire_timeout
-        self.on_ydb_error_callback = (lambda e: None) if on_ydb_error_callback is None else on_ydb_error_callback
-        self.fast_backoff = BackoffSettings(10, 0.005) if fast_backoff_settings is None else fast_backoff_settings
-        self.slow_backoff = (
-            BackoffSettings(backoff_ceiling, backoff_slot_duration)
-            if slow_backoff_settings is None
-            else slow_backoff_settings
-        )
-        self.retry_not_found = True
-        self.idempotent = idempotent
-        self.retry_internal_error = True
-        self.unknown_error_handler = lambda e: None
-        self.get_session_client_timeout = get_session_client_timeout
-        if max_session_acquire_timeout is not None:
-            self.get_session_client_timeout = min(self.max_session_acquire_timeout, self.get_session_client_timeout)
-
-    def with_fast_backoff(self, backoff_settings):
-        self.fast_backoff = backoff_settings
-        return self
-
-    def with_slow_backoff(self, backoff_settings):
-        self.slow_backoff = backoff_settings
-        return self
-
-
-class YdbRetryOperationSleepOpt(object):
-    def __init__(self, timeout):
-        self.timeout = timeout
-
-    def __eq__(self, other):
-        return type(self) == type(other) and self.timeout == other.timeout
-
-    def __repr__(self):
-        return "YdbRetryOperationSleepOpt(%s)" % self.timeout
-
-
-class YdbRetryOperationFinalResult(object):
-    def __init__(self, result):
-        self.result = result
-        self.exc = None
-
-    def __eq__(self, other):
-        return type(self) == type(other) and self.result == other.result and self.exc == other.exc
-
-    def __repr__(self):
-        return "YdbRetryOperationFinalResult(%s, exc=%s)" % (self.result, self.exc)
-
-    def set_exception(self, exc):
-        self.exc = exc
-
-
-def retry_operation_impl(callee, retry_settings=None, *args, **kwargs):
-    retry_settings = RetrySettings() if retry_settings is None else retry_settings
-    status = None
-
-    for attempt in range(retry_settings.max_retries + 1):
-        try:
-            result = YdbRetryOperationFinalResult(callee(*args, **kwargs))
-            yield result
-
-            if result.exc is not None:
-                raise result.exc
-
-        except issues.Error as e:
-            status = e
-            retry_settings.on_ydb_error_callback(e)
-
-            retriable_info = check_retriable_error(e, retry_settings, attempt)
-            if not retriable_info.is_retriable:
-                raise
-
-            skip_yield_error_types = [
-                issues.Aborted,
-                issues.BadSession,
-                issues.NotFound,
-                issues.InternalError,
-            ]
-
-            yield_sleep = True
-            for t in skip_yield_error_types:
-                if isinstance(e, t):
-                    yield_sleep = False
-
-            if yield_sleep:
-                yield YdbRetryOperationSleepOpt(retriable_info.sleep_timeout_seconds)
-
-        except Exception as e:
-            # you should provide your own handler you want
-            retry_settings.unknown_error_handler(e)
-            raise
-
-    raise status
-
-
-def retry_operation_sync(callee, retry_settings=None, *args, **kwargs):
-    opt_generator = retry_operation_impl(callee, retry_settings, *args, **kwargs)
-    for next_opt in opt_generator:
-        if isinstance(next_opt, YdbRetryOperationSleepOpt):
-            time.sleep(next_opt.timeout)
-        else:
-            return next_opt.result
-
-
 class TableClientSettings(object):
     def __init__(self):
         self._client_query_cache_enabled = False
@@ -1307,6 +1202,14 @@ class BaseTableClient(ITableClient):
 
 
 class TableClient(BaseTableClient):
+    def __init__(self, driver, table_client_settings=None):
+        # type:(ydb.Driver, ydb.TableClientSettings) -> None
+        super().__init__(driver=driver, table_client_settings=table_client_settings)
+        self._pool: Optional[SessionPool] = None
+
+    def __del__(self):
+        self._stop_pool_if_needed()
+
     def async_scan_query(self, query, parameters=None, settings=None):
         # type: (ydb.ScanQuery, tuple, ydb.BaseRequestSettings) -> ydb.AsyncResponseIterator
         request = _scan_query_request_factory(query, parameters, settings)
@@ -1332,6 +1235,213 @@ class TableClient(BaseTableClient):
             settings,
             (),
         )
+
+    def _init_pool_if_needed(self):
+        if self._pool is None:
+            self._pool = SessionPool(self._driver, 10)
+
+    def _stop_pool_if_needed(self, timeout=10):
+        if self._pool is not None:
+            self._pool.stop(timeout=timeout)
+
+    def create_table(
+        self,
+        path: str,
+        table_description: "TableDescription",
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Create a YDB table.
+
+        :param path: A table path
+        :param table_description: TableDescription instanse.
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.create_table(path=path, table_description=table_description, settings=settings)
+
+        return self._pool.retry_operation_sync(callee)
+
+    def drop_table(
+        self,
+        path: str,
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Drop a YDB table.
+
+        :param path: A table path
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.drop_table(path=path, settings=settings)
+
+        return self._pool.retry_operation_sync(callee)
+
+    def alter_table(
+        self,
+        path: str,
+        add_columns: Optional[List["ydb.Column"]] = None,
+        drop_columns: Optional[List[str]] = None,
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+        alter_attributes: Optional[Optional[Dict[str, str]]] = None,
+        add_indexes: Optional[List["ydb.TableIndex"]] = None,
+        drop_indexes: Optional[List[str]] = None,
+        set_ttl_settings: Optional["ydb.TtlSettings"] = None,
+        drop_ttl_settings: Optional[Any] = None,
+        add_column_families: Optional[List["ydb.ColumnFamily"]] = None,
+        alter_column_families: Optional[List["ydb.ColumnFamily"]] = None,
+        alter_storage_settings: Optional["ydb.StorageSettings"] = None,
+        set_compaction_policy: Optional[str] = None,
+        alter_partitioning_settings: Optional["ydb.PartitioningSettings"] = None,
+        set_key_bloom_filter: Optional["ydb.FeatureFlag"] = None,
+        set_read_replicas_settings: Optional["ydb.ReadReplicasSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Alter a YDB table.
+
+        :param path: A table path
+        :param add_columns: List of ydb.Column to add
+        :param drop_columns: List of column names to drop
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+        :param alter_attributes: Dict of attributes to alter
+        :param add_indexes: List of ydb.TableIndex to add
+        :param drop_indexes: List of index names to drop
+        :param set_ttl_settings: ydb.TtlSettings to set
+        :param drop_ttl_settings: Any to drop
+        :param add_column_families: List of ydb.ColumnFamily to add
+        :param alter_column_families: List of ydb.ColumnFamily to alter
+        :param alter_storage_settings: ydb.StorageSettings to alter
+        :param set_compaction_policy: Compaction policy
+        :param alter_partitioning_settings: ydb.PartitioningSettings to alter
+        :param set_key_bloom_filter: ydb.FeatureFlag to set key bloom filter
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.alter_table(
+                path=path,
+                add_columns=add_columns,
+                drop_columns=drop_columns,
+                settings=settings,
+                alter_attributes=alter_attributes,
+                add_indexes=add_indexes,
+                drop_indexes=drop_indexes,
+                set_ttl_settings=set_ttl_settings,
+                drop_ttl_settings=drop_ttl_settings,
+                add_column_families=add_column_families,
+                alter_column_families=alter_column_families,
+                alter_storage_settings=alter_storage_settings,
+                set_compaction_policy=set_compaction_policy,
+                alter_partitioning_settings=alter_partitioning_settings,
+                set_key_bloom_filter=set_key_bloom_filter,
+                set_read_replicas_settings=set_read_replicas_settings,
+            )
+
+        return self._pool.retry_operation_sync(callee)
+
+    def describe_table(
+        self,
+        path: str,
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.TableSchemeEntry":
+        """
+        Describe a YDB table.
+
+        :param path: A table path
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: TableSchemeEntry or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.describe_table(path=path, settings=settings)
+
+        return self._pool.retry_operation_sync(callee)
+
+    def copy_table(
+        self,
+        source_path: str,
+        destination_path: str,
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Copy a YDB table.
+
+        :param source_path: A table path
+        :param destination_path: Destination table path
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.copy_table(
+                source_path=source_path,
+                destination_path=destination_path,
+                settings=settings,
+            )
+
+        return self._pool.retry_operation_sync(callee)
+
+    def copy_tables(
+        self,
+        source_destination_pairs: List[Tuple[str, str]],
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Copy a YDB tables.
+
+        :param source_destination_pairs: List of tuples (source_path, destination_path)
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.copy_tables(source_destination_pairs=source_destination_pairs, settings=settings)
+
+        return self._pool.retry_operation_sync(callee)
+
+    def rename_tables(
+        self,
+        rename_items: List[Tuple[str, str]],
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Rename a YDB tables.
+
+        :param rename_items: List of tuples (current_name, desired_name)
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.rename_tables(rename_items=rename_items, settings=settings)
+
+        return self._pool.retry_operation_sync(callee)
 
 
 def _make_index_description(index):

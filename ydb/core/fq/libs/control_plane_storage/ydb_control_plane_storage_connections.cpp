@@ -266,7 +266,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit, extractSensitiveFields, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         FederatedQuery::ListConnectionsResult result;
@@ -275,7 +275,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
             auto& connection = *result.add_connection();
             if (!connection.ParseFromString(*parser.ColumnParser(CONNECTION_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
             }
             PrepareSensitiveFields(connection, extractSensitiveFields);
         }
@@ -358,23 +358,23 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [=, resultSets=resultSets, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         FederatedQuery::DescribeConnectionResult result;
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
+            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
         }
 
         if (!result.mutable_connection()->ParseFromString(*parser.ColumnParser(CONNECTION_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
         }
 
         bool hasViewAccess = HasViewAccess(permissions, result.connection().content().acl().visibility(), result.connection().meta().created_by(), user);
         if (!hasViewAccess) {
-            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
+            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
         }
 
         PrepareSensitiveFields(*result.mutable_connection(), extractSensitiveFields);
@@ -447,20 +447,20 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     );
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
-    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (!parser.TryNextRow()) {
-            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
+            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
         }
 
         FederatedQuery::Connection connection;
         if (!connection.ParseFromString(*parser.ColumnParser(CONNECTION_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
         }
 
         auto& meta = *connection.mutable_meta();
@@ -473,11 +473,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         bool validateType = content.setting().connection_case() == request.content().setting().connection_case();
 
         if (!validateType) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Connection type cannot be changed. Please specify the same connection type";
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Connection type cannot be changed. Please specify the same connection type";
         }
 
         if (content.acl().visibility() == FederatedQuery::Acl::SCOPE && request.content().acl().visibility() == FederatedQuery::Acl::PRIVATE) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new connection with visibility PRIVATE";
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new connection with visibility PRIVATE";
         }
 
         // FIXME: this code needs better generalization

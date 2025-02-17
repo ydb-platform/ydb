@@ -1,0 +1,6 @@
+--- contrib/python/multidict/tests/test_pickle.py	(index)
++++ contrib/python/multidict/tests/test_pickle.py	(working tree)
+@@ -6 +6,2 @@ import pytest
+-here = Path(__file__).resolve().parent
++import yatest.common as yc
++here = Path(yc.source_path(__file__)).resolve().parent

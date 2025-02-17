@@ -23,7 +23,7 @@ public:
     std::optional<i64> DataWeightPerRowHint;
 
     bool UseNativeTabletNodeApi;
-    bool UsePullConsumer;
+    bool UsePullQueueConsumer;
 
     REGISTER_YSON_STRUCT(TPartitionReaderConfig);
 
@@ -64,7 +64,7 @@ bool operator==(const TQueueAutoTrimConfig& lhs, const TQueueAutoTrimConfig& rhs
 ////////////////////////////////////////////////////////////////////////////////
 
 class TQueueStaticExportConfig
-    : public NYTree::TYsonStructLite
+    : public NYTree::TYsonStruct
 {
 public:
     //! Export will be performed at times that are multiple of this period.
@@ -95,10 +95,12 @@ public:
     //! commit_ordering=%false queues, since commit timestamp monotonicty within a tablet is not guaranteed for them.
     bool UseUpperBoundForTableNames;
 
-    REGISTER_YSON_STRUCT_LITE(TQueueStaticExportConfig);
+    REGISTER_YSON_STRUCT(TQueueStaticExportConfig);
 
     static void Register(TRegistrar registrar);
 };
+
+DEFINE_REFCOUNTED_TYPE(TQueueStaticExportConfig)
 
 bool operator==(const TQueueStaticExportConfig& lhs, const TQueueStaticExportConfig& rhs);
 

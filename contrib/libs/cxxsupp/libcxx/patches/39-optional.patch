@@ -1,0 +1,13 @@
+diff --git a/include/optional b/include/optional
+index a16e485..e6ff853 100644
+--- a/include/optional
++++ b/include/optional
+@@ -288,7 +288,7 @@ struct __optional_destruct_base<_Tp, false> {
+   };
+   bool __engaged_;
+ 
+-  _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 ~__optional_destruct_base() {
++  _LIBCPP_HIDE_FROM_ABI ~__optional_destruct_base() {
+     if (__engaged_)
+       __val_.~value_type();
+   }

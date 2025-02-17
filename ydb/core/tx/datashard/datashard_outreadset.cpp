@@ -6,6 +6,8 @@
 namespace NKikimr {
 namespace NDataShard {
 
+static constexpr size_t SmallReadSetCacheLimit = 8;
+
 void TOutReadSets::UpdateMonCounter() const {
     Self->SetCounter(COUNTER_OUT_READSETS_IN_FLIGHT, CurrentReadSets.size());
 }
@@ -14,31 +16,42 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
     using Schema = TDataShard::Schema;
 
     CurrentReadSets.clear(); // For idempotency
-    CurrentReadSetInfos.clear();
+    CurrentReadSetKeys.clear();
 
     // TODO[serxa]: this should be Range but it is not working right now
     auto rowset = db.Table<Schema::OutReadSets>().GreaterOrEqual(0).Select<
                                     Schema::OutReadSets::Seqno,
+                                    Schema::OutReadSets::Step,
                                     Schema::OutReadSets::TxId,
                                     Schema::OutReadSets::Origin,
                                     Schema::OutReadSets::From,
-                                    Schema::OutReadSets::To>();
+                                    Schema::OutReadSets::To,
+                                    Schema::OutReadSets::Body>();
     if (!rowset.IsReady())
         return false;
     while (!rowset.EndOfSet()) {
         ui64 seqNo = rowset.GetValue<Schema::OutReadSets::Seqno>();
+        ui64 step = rowset.GetValue<Schema::OutReadSets::Step>();
         ui64 txId = rowset.GetValue<Schema::OutReadSets::TxId>();
         ui64 origin = rowset.GetValue<Schema::OutReadSets::Origin>();
         ui64 source = rowset.GetValue<Schema::OutReadSets::From>();
         ui64 target = rowset.GetValue<Schema::OutReadSets::To>();
+        TString body = rowset.GetValue<Schema::OutReadSets::Body>();
 
-        TReadSetKey rsInfo(txId, origin, source, target);
+        TReadSetInfo rsInfo;
+        rsInfo.TxId = txId;
+        rsInfo.Step = step;
+        rsInfo.Origin = origin;
+        rsInfo.From = source;
+        rsInfo.To = target;
+        // Cache it regardless of size, since we're going to send it soon
+        rsInfo.Body = std::move(body);
 
         Y_ABORT_UNLESS(!CurrentReadSets.contains(seqNo));
-        Y_ABORT_UNLESS(!CurrentReadSetInfos.contains(rsInfo));
+        Y_ABORT_UNLESS(!CurrentReadSetKeys.contains(rsInfo));
 
-        CurrentReadSets[seqNo] = rsInfo;
-        CurrentReadSetInfos[rsInfo] = seqNo;
+        CurrentReadSetKeys[rsInfo] = seqNo;
+        CurrentReadSets[seqNo] = std::move(rsInfo);
 
         if (!rowset.Next())
             return false;
@@ -48,28 +61,64 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
     return true;
 }
 
-void TOutReadSets::SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const TReadSetKey& rsInfo, TString body) {
+void TOutReadSets::SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const TReadSetKey& rsKey, const TString& body) {
     using Schema = TDataShard::Schema;
 
     Y_ABORT_UNLESS(!CurrentReadSets.contains(seqNo));
-    Y_ABORT_UNLESS(!CurrentReadSetInfos.contains(rsInfo));
+    Y_ABORT_UNLESS(!CurrentReadSetKeys.contains(rsKey));
 
-    CurrentReadSetInfos[rsInfo] = seqNo;
-    CurrentReadSets[seqNo] = rsInfo;
-
-    UpdateMonCounter();
+    TReadSetInfo rsInfo(rsKey);
+    rsInfo.Step = step;
+    if (body.size() <= SmallReadSetCacheLimit) {
+        rsInfo.Body = body;
+    }
 
     db.Table<Schema::OutReadSets>().Key(seqNo).Update(
-        NIceDb::TUpdate<Schema::OutReadSets::Step>(step),
+        NIceDb::TUpdate<Schema::OutReadSets::Step>(rsInfo.Step),
         NIceDb::TUpdate<Schema::OutReadSets::TxId>(rsInfo.TxId),
         NIceDb::TUpdate<Schema::OutReadSets::Origin>(rsInfo.Origin),
         NIceDb::TUpdate<Schema::OutReadSets::From>(rsInfo.From),
         NIceDb::TUpdate<Schema::OutReadSets::To>(rsInfo.To),
         NIceDb::TUpdate<Schema::OutReadSets::Body>(body));
+
+    CurrentReadSetKeys[rsKey] = seqNo;
+    CurrentReadSets[seqNo] = std::move(rsInfo);
+
+    UpdateMonCounter();
+}
+
+void TOutReadSets::RemoveReadSet(NIceDb::TNiceDb& db, ui64 seqNo) {
+    using Schema = TDataShard::Schema;
+
+    db.Table<Schema::OutReadSets>().Key(seqNo).Delete();
+
+    auto it = CurrentReadSets.find(seqNo);
+    if (it != CurrentReadSets.end()) {
+        CurrentReadSetKeys.erase(it->second);
+        CurrentReadSets.erase(it);
+    }
+}
+
+TReadSetInfo TOutReadSets::ReplaceReadSet(NIceDb::TNiceDb& db, ui64 seqNo, const TString& body) {
+    using Schema = TDataShard::Schema;
+
+    auto it = CurrentReadSets.find(seqNo);
+    if (it != CurrentReadSets.end()) {
+        db.Table<Schema::OutReadSets>().Key(seqNo).Update(
+            NIceDb::TUpdate<Schema::OutReadSets::Body>(body));
+        if (body.size() <= SmallReadSetCacheLimit) {
+            it->second.Body = body;
+        } else {
+            it->second.Body.reset();
+        }
+        return it->second;
+    } else {
+        return TReadSetInfo();
+    }
 }
 
 void TOutReadSets::AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TActorContext &ctx) {
-    const TReadSetKey* rsInfo  = CurrentReadSets.FindPtr(seqNo);
+    const TReadSetKey* rsInfo = CurrentReadSets.FindPtr(seqNo);
 
     if (!rsInfo) {
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
@@ -101,20 +150,22 @@ void TOutReadSets::SaveAck(const TActorContext &ctx, TAutoPtr<TEvTxProcessing::T
         Self->TabletID(), sender, dest, consumer, txId);
 
     ReadSetAcks.emplace_back(ev.Release());
-    AckedSeqno.insert(seqno);
 
     if (CurrentReadSets.contains(seqno)) {
-        TReadSetKey rsInfo(txId, Self->TabletID(), sender, dest);
-        Y_ABORT_UNLESS(CurrentReadSetInfos[rsInfo] == seqno);
+        TReadSetKey rsKey(txId, Self->TabletID(), sender, dest);
+        Y_ABORT_UNLESS(CurrentReadSetKeys[rsKey] == seqno);
 
+        CurrentReadSetKeys.erase(rsKey);
         CurrentReadSets.erase(seqno);
-        CurrentReadSetInfos.erase(rsInfo);
+    }
+
+    // We don't need to resend this readset anymore
+    if (auto it = Self->PersistentTablets.find(dest); it != Self->PersistentTablets.end()) {
+        it->second.OutReadSets.erase(seqno);
     }
 }
 
 void TOutReadSets::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
-    using Schema = TDataShard::Schema;
-
     // Note that this code should be called only after no-more-reads to ensure we wont lost updates
     for (TIntrusivePtr<TEvTxProcessing::TEvReadSetAck>& event : ReadSetAcks) {
         TEvTxProcessing::TEvReadSetAck& ev = *event;
@@ -128,50 +179,86 @@ void TOutReadSets::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
             "Deleted RS at %" PRIu64 " source %" PRIu64 " dest %" PRIu64 " consumer %" PRIu64 " seqno %" PRIu64" txId %" PRIu64,
             Self->TabletID(), sender, dest, consumer, seqno, txId);
 
-        db.Table<Schema::OutReadSets>().Key(seqno).Delete();
-        Self->ResendReadSetPipeTracker.DetachTablet(seqno, ev.Record.GetTabletDest(), 0, ctx);
+        RemoveReadSet(db, seqno);
     }
     ReadSetAcks.clear();
-    AckedSeqno.clear();
 
     UpdateMonCounter();
 }
 
 void TOutReadSets::ResendAll(const TActorContext& ctx) {
-    TPendingPipeTrackerCommands pendingPipeTrackerCommands;
     for (const auto& rs : CurrentReadSets) {
+        if (rs.second.OnHold) {
+            continue;
+        }
         ui64 seqNo = rs.first;
-        ui64 target = rs.second.To;
-        Self->ResendReadSetQueue.Progress(rs.first, ctx);
-        pendingPipeTrackerCommands.AttachTablet(seqNo, target);
+        Self->ResendReadSetQueue.Progress(seqNo, ctx);
     }
-    pendingPipeTrackerCommands.Apply(Self->ResendReadSetPipeTracker, ctx);
+}
+
+void TOutReadSets::HoldArbiterReadSets() {
+    for (auto& rs : CurrentReadSets) {
+        ui64 seqNo = rs.first;
+        ui64 txId = rs.second.TxId;
+        auto* info = Self->VolatileTxManager.FindByTxId(txId);
+        if (info && info->IsArbiter && info->State != EVolatileTxState::Committed) {
+            info->ArbiterReadSets.push_back(seqNo);
+            info->IsArbiterOnHold = true;
+            rs.second.OnHold = true;
+        }
+    }
+}
+
+void TOutReadSets::ReleaseOnHoldReadSets(const std::vector<ui64>& seqNos, const TActorContext& ctx) {
+    for (ui64 seqNo : seqNos) {
+        auto it = CurrentReadSets.find(seqNo);
+        if (it != CurrentReadSets.end() && it->second.OnHold) {
+            it->second.OnHold = false;
+            Self->ResendReadSetQueue.Progress(seqNo, ctx);
+        }
+    }
 }
 
 bool TOutReadSets::ResendRS(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx, ui64 seqNo) {
     using Schema = TDataShard::Schema;
-
     NIceDb::TNiceDb db(txc.DB);
-    if (AckedSeqno.contains(seqNo)) {
+
+    auto* info = CurrentReadSets.FindPtr(seqNo);
+    if (!info) {
         // Do not resend if we've already got ACK back, but not applied it to DB
         // Also, it is a good place to actually apply ACK(s)
-
         txc.DB.NoMoreReadsForTx();
         Cleanup(db, ctx);
         return true;
     }
 
-    auto rowset = db.Table<Schema::OutReadSets>().Key(seqNo).Select();
-    if (!rowset.IsReady())
-        return false;
-    if (!rowset.IsValid())
-        return true;
+    ui64 step = info->Step;
+    ui64 txId = info->TxId;
+    ui64 from = info->From;
+    ui64 to = info->To;
+    TString body;
 
-    ui64 step = rowset.GetValue<Schema::OutReadSets::Step>();
-    ui64 txId = rowset.GetValue<Schema::OutReadSets::TxId>();
-    ui64 from = rowset.GetValue<Schema::OutReadSets::From>();
-    ui64 to = rowset.GetValue<Schema::OutReadSets::To>();
-    TString body = rowset.GetValue<Schema::OutReadSets::Body>();
+    if (info->Body) {
+        // We have readset body cached
+        if (info->Body->size() <= SmallReadSetCacheLimit) {
+            body = *info->Body;
+        } else {
+            // Don't keep it in memory while in transit
+            body = std::move(*info->Body);
+            info->Body.reset();
+        }
+    } else {
+        auto rowset = db.Table<Schema::OutReadSets>().Key(seqNo).Select();
+        if (!rowset.IsReady())
+            return false;
+        if (!rowset.IsValid())
+            return true;
+        body = rowset.GetValue<Schema::OutReadSets::Body>();
+        if (body.size() <= SmallReadSetCacheLimit) {
+            // Cache small readset body
+            info->Body = body;
+        }
+    }
 
     txc.DB.NoMoreReadsForTx();
 

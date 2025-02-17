@@ -1,0 +1,41 @@
+--- a/src/google/protobuf/compiler/php/php_generator.cc
++++ b/src/google/protobuf/compiler/php/php_generator.cc
+@@ -143,7 +143,7 @@ TProtoStringType ConstantNamePrefix(absl::string_view classname) {
+   bool is_reserved = false;
+ 
+   TProtoStringType lower(classname);
+-  std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
++  lower.to_lower();
+ 
+   is_reserved = IsReservedName(lower);
+ 
+@@ -1414,7 +1414,7 @@ void GenerateEnumFile(const FileDescriptor* file, const EnumDescriptor* en,
+ 
+   // Write legacy file for backwards compatibility with "readonly" keywword
+   TProtoStringType lower = en->name();
+-  std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
++  lower.to_lower();
+   if (lower == "readonly") {
+     printer.Print(
+         "// Adding a class alias for backwards compatibility with the \"readonly\" keyword.\n");
+@@ -1541,7 +1541,7 @@ void GenerateMessageFile(const FileDescriptor* file, const Descriptor* message,
+ 
+   // Write legacy file for backwards compatibility with "readonly" keywword
+   TProtoStringType lower = message->name();
+-  std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
++  lower.to_lower();
+   if (lower == "readonly") {
+     printer.Print(
+         "// Adding a class alias for backwards compatibility with the \"readonly\" keyword.\n");
+
+--- a/src/google/protobuf/compiler/php/names.cc
++++ b/src/google/protobuf/compiler/php/names.cc
+@@ -63,7 +63,7 @@ namespace php {
+ 
+ bool IsReservedName(absl::string_view name) {
+   TProtoStringType lower(name);
+-  std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
++  lower.to_lower();
+   for (int i = 0; i < kReservedNamesSize; i++) {
+     if (lower == kReservedNames[i]) {
+       return true;

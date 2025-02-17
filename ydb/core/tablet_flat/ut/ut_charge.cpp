@@ -53,15 +53,15 @@ namespace {
             , Sticky(std::move(sticky))
             { }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
         {
-            Touched[groupId].insert(id);
+            Touched[groupId].insert(pageId);
             
-            if (!Fail || Sticky.contains({groupId, id})) {
-                return NTest::TTestEnv::TryGetPage(part, id, groupId);
+            if (!Fail || Sticky.contains({groupId, pageId})) {
+                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
             }
 
-            ToLoad[groupId].insert(id);
+            ToLoad[groupId].insert(pageId);
             return nullptr;
         }
 
@@ -333,10 +333,10 @@ namespace {
             }
 
             for (auto &x : pages.BTreeGroups) {
-                result.insert({mainGroupId, x.PageId});
+                result.insert({mainGroupId, x.GetPageId()});
             }
             for (auto &x : pages.BTreeHistoric) {
-                result.insert({mainGroupId, x.PageId});
+                result.insert({mainGroupId, x.GetPageId()});
             }
 
             return result;

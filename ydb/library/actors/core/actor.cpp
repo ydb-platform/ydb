@@ -1,8 +1,20 @@
 #include "actor.h"
+#include "debug.h"
 #include "actor_virtual.h"
 #include "actorsystem.h"
 #include "executor_thread.h"
 #include <ydb/library/actors/util/datetime.h>
+
+#define POOL_ID() \
+    (!TlsThreadContext ? "OUTSIDE" : \
+    (TlsThreadContext->IsShared() ? "Shared[" + ToString(TlsThreadContext->OwnerPoolId()) + "]_" + ToString(TlsThreadContext->PoolId()) : \
+    ("Pool_" + ToString(TlsThreadContext->PoolId()))))
+
+#define WORKER_ID() ("Worker_" + ToString(TlsThreadContext ? TlsThreadContext->WorkerId() : Max<TWorkerId>()))
+
+#define ACTOR_DEBUG(level, ...) \
+    ACTORLIB_DEBUG(level, POOL_ID(), " ", WORKER_ID(), " ", __func__, ": ", __VA_ARGS__)
+
 
 namespace NActors {
     Y_POD_THREAD(TThreadContext*) TlsThreadContext(nullptr);
@@ -115,6 +127,10 @@ namespace NActors {
         TlsActivationContext->ExecutorThread.Schedule(delta, ev, cookie);
     }
 
+    bool TActivationContext::Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, ui32 flags, ui64 cookie) {
+        return ActorSystem()->Send(recipient, ev.release(), flags, cookie);
+    }
+
     void TActorIdentity::Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie) const {
         return TActivationContext::Schedule(deadline, new IEventHandle(*this, {}, ev), cookie);
     }
@@ -130,15 +146,23 @@ namespace NActors {
     TActorId TActivationContext::RegisterWithSameMailbox(IActor* actor, TActorId parentId) {
         Y_DEBUG_ABORT_UNLESS(parentId);
         auto& ctx = *TlsActivationContext;
-        return ctx.ExecutorThread.RegisterActor(actor, &ctx.Mailbox, parentId.Hint(), parentId);
+        return ctx.ExecutorThread.RegisterActor(actor, &ctx.Mailbox, parentId);
     }
 
     TActorId TActorContext::RegisterWithSameMailbox(IActor* actor) const {
-        return ExecutorThread.RegisterActor(actor, &Mailbox, SelfID.Hint(), SelfID);
+        return ExecutorThread.RegisterActor(actor, &Mailbox, SelfID);
     }
 
     TActorId IActor::RegisterWithSameMailbox(IActor* actor) const noexcept {
-        return TlsActivationContext->ExecutorThread.RegisterActor(actor, &TlsActivationContext->Mailbox, SelfActorId.Hint(), SelfActorId);
+        return TlsActivationContext->ExecutorThread.RegisterActor(actor, &TlsActivationContext->Mailbox, SelfActorId);
+    }
+
+    TActorId IActor::RegisterAlias() noexcept {
+        return TlsActivationContext->ExecutorThread.RegisterAlias(&TlsActivationContext->Mailbox, this);
+    }
+
+    void IActor::UnregisterAlias(const TActorId& actorId) noexcept {
+        return TlsActivationContext->ExecutorThread.UnregisterAlias(&TlsActivationContext->Mailbox, actorId);
     }
 
     TActorId TActivationContext::InterconnectProxy(ui32 destinationNodeId) {
@@ -157,6 +181,10 @@ namespace NActors {
         return NHPTimer::GetSeconds(GetCurrentEventTicks());
     }
 
+    void TActivationContext::EnableMailboxStats() {
+        TlsActivationContext->Mailbox.EnableStats();
+    }
+
     TActorId IActor::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept {
         return TlsActivationContext->ExecutorThread.RegisterActor(actor, mailboxType, poolId, SelfActorId);
     }
@@ -171,6 +199,18 @@ namespace NActors {
 
     void TActorContext::Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie) const {
         ExecutorThread.Schedule(delta, new IEventHandle(SelfID, TActorId(), ev), cookie);
+    }
+
+    void TActorContext::Schedule(TInstant deadline, std::unique_ptr<IEventHandle> ev, ISchedulerCookie* cookie) const {
+        ExecutorThread.Schedule(deadline, ev.release(), cookie);
+    }
+
+    void TActorContext::Schedule(TMonotonic deadline, std::unique_ptr<IEventHandle> ev, ISchedulerCookie* cookie) const {
+        ExecutorThread.Schedule(deadline, ev.release(), cookie);
+    }
+
+    void TActorContext::Schedule(TDuration delta, std::unique_ptr<IEventHandle> ev, ISchedulerCookie* cookie) const {
+        ExecutorThread.Schedule(delta, ev.release(), cookie);
     }
 
     void IActor::Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie) const noexcept {
@@ -240,11 +280,265 @@ namespace NActors {
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
         // fallback to legacy method, do not use it anymore
         if (auto eh = AfterRegister(SelfId(), owner)) {
-            if (!TlsThreadContext || TlsThreadContext->SendingType == ESendingType::Common) {
+            if (!TlsThreadContext || TlsThreadContext->CheckSendingType(ESendingType::Common)) {
                 sys->Send(eh);
             } else {
                 sys->SpecificSend(eh);
             }
         }
+    }
+
+    void IActor::SetEnoughCpu(bool isEnough) {
+        if (TlsThreadContext) {
+            TlsThreadContext->IsEnoughCpu = isEnough;
+        }
+    }
+
+    template bool TExecutorThread::Send<ESendingType::Common>(TAutoPtr<IEventHandle> ev);
+    template bool TExecutorThread::Send<ESendingType::Lazy>(TAutoPtr<IEventHandle> ev);
+    template bool TExecutorThread::Send<ESendingType::Tail>(TAutoPtr<IEventHandle> ev);
+
+    template <ESendingType SendingType>
+    bool TExecutorThread::Send(TAutoPtr<IEventHandle> ev) {
+#ifdef USE_ACTOR_CALLSTACK
+        do {
+            (ev)->Callstack = TCallstack::GetTlsCallstack();
+            (ev)->Callstack.Trace();
+        } while (false)
+#endif
+        ExecutionStats.IncrementSentEvents();
+        return ActorSystem->Send<SendingType>(ev);
+    }
+
+    template TActorId TExecutorThread::RegisterActor<ESendingType::Common>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
+            TActorId parentId);
+    template TActorId TExecutorThread::RegisterActor<ESendingType::Lazy>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
+            TActorId parentId);
+    template TActorId TExecutorThread::RegisterActor<ESendingType::Tail>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
+            TActorId parentId);
+
+    template <ESendingType SendingType>
+    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
+            TActorId parentId)
+    {
+        if (!parentId) {
+            parentId = CurrentRecipient;
+        }
+        if (poolId == Max<ui32>()) {
+            TActorId id;
+            if constexpr (SendingType == ESendingType::Common) {
+                id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+            } else if (!TlsThreadContext) {
+                id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+            } else {
+                ESendingType previousType = TlsThreadContext->ExchangeSendingType(SendingType);
+                id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+                TlsThreadContext->SetSendingType(previousType);
+            }
+            return id;
+        } else {
+            return ActorSystem->Register<SendingType>(actor, mailboxType, poolId, ++RevolvingWriteCounter, parentId);
+        }
+    }
+
+    template TActorId TExecutorThread::RegisterActor<ESendingType::Common>(IActor* actor, TMailbox* mailbox, TActorId parentId);
+    template TActorId TExecutorThread::RegisterActor<ESendingType::Lazy>(IActor* actor, TMailbox* mailbox, TActorId parentId);
+    template TActorId TExecutorThread::RegisterActor<ESendingType::Tail>(IActor* actor, TMailbox* mailbox, TActorId parentId);
+
+    template <ESendingType SendingType>
+    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailbox* mailbox, TActorId parentId) {
+        if (!parentId) {
+            parentId = CurrentRecipient;
+        }
+        if constexpr (SendingType == ESendingType::Common) {
+            return ThreadCtx.Pool()->Register(actor, mailbox, parentId);
+        } else if (!TlsActivationContext) {
+            return ThreadCtx.Pool()->Register(actor, mailbox, parentId);
+        } else {
+            ESendingType previousType = TlsThreadContext->ExchangeSendingType(SendingType);
+            TActorId id = ThreadCtx.Pool()->Register(actor, mailbox, parentId);
+            TlsThreadContext->SetSendingType(previousType);
+            return id;
+        }
+    }
+
+    TActorId TExecutorThread::RegisterAlias(TMailbox* mailbox, IActor* actor) {
+        return ThreadCtx.Pool()->RegisterAlias(mailbox, actor);
+    }
+
+    void TExecutorThread::UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) {
+        ThreadCtx.Pool()->UnregisterAlias(mailbox, actorId);
+    }
+
+    template bool TActivationContext::Send<ESendingType::Common>(TAutoPtr<IEventHandle> ev);
+    template bool TActivationContext::Send<ESendingType::Lazy>(TAutoPtr<IEventHandle> ev);
+    template bool TActivationContext::Send<ESendingType::Tail>(TAutoPtr<IEventHandle> ev);
+
+    template <ESendingType SendingType>
+    bool TActivationContext::Send(TAutoPtr<IEventHandle> ev) {
+        return TlsActivationContext->ExecutorThread.Send<SendingType>(ev);
+    }
+
+    template bool TActivationContext::Send<ESendingType::Common>(std::unique_ptr<IEventHandle> &&ev);
+    template bool TActivationContext::Send<ESendingType::Lazy>(std::unique_ptr<IEventHandle> &&ev);
+    template bool TActivationContext::Send<ESendingType::Tail>(std::unique_ptr<IEventHandle> &&ev);
+
+    template <ESendingType SendingType>
+    bool TActivationContext::Send(std::unique_ptr<IEventHandle> &&ev) {
+        return TlsActivationContext->ExecutorThread.Send<SendingType>(ev.release());
+    }
+
+    template bool TActivationContext::Forward<ESendingType::Common>(TAutoPtr<IEventHandle>& ev, const TActorId& recipient);
+    template bool TActivationContext::Forward<ESendingType::Lazy>(TAutoPtr<IEventHandle>& ev, const TActorId& recipient);
+    template bool TActivationContext::Forward<ESendingType::Tail>(TAutoPtr<IEventHandle>& ev, const TActorId& recipient);
+
+    template <ESendingType SendingType>
+    bool TActivationContext::Forward(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) {
+        return Send(IEventHandle::Forward(ev, recipient));
+    }
+
+    template bool TActivationContext::Forward<ESendingType::Common>(THolder<IEventHandle>& ev, const TActorId& recipient);
+    template bool TActivationContext::Forward<ESendingType::Lazy>(THolder<IEventHandle>& ev, const TActorId& recipient);
+    template bool TActivationContext::Forward<ESendingType::Tail>(THolder<IEventHandle>& ev, const TActorId& recipient);
+
+    template <ESendingType SendingType>
+    bool TActivationContext::Forward(THolder<IEventHandle>& ev, const TActorId& recipient) {
+        return Send(IEventHandle::Forward(ev, recipient));
+    }
+
+    template bool TActorContext::Send<ESendingType::Common>(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const;
+    template bool TActorContext::Send<ESendingType::Lazy>(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const;
+    template bool TActorContext::Send<ESendingType::Tail>(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const;
+
+    template <ESendingType SendingType>
+    bool TActorContext::Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const {
+        return Send<SendingType>(new IEventHandle(recipient, SelfID, ev, flags, cookie, nullptr, std::move(traceId)));
+    }
+
+    template bool TActorContext::Send<ESendingType::Common>(TAutoPtr<IEventHandle> ev) const;
+    template bool TActorContext::Send<ESendingType::Lazy>(TAutoPtr<IEventHandle> ev) const;
+    template bool TActorContext::Send<ESendingType::Tail>(TAutoPtr<IEventHandle> ev) const;
+
+    template <ESendingType SendingType>
+    bool TActorContext::Send(TAutoPtr<IEventHandle> ev) const {
+        return ExecutorThread.Send<SendingType>(ev);
+    }
+
+    template bool TActorContext::Forward<ESendingType::Common>(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) const;
+    template bool TActorContext::Forward<ESendingType::Lazy>(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) const;
+    template bool TActorContext::Forward<ESendingType::Tail>(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) const;
+
+    template <ESendingType SendingType>
+    bool TActorContext::Forward(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) const {
+        return ExecutorThread.Send<SendingType>(IEventHandle::Forward(ev, recipient));
+    }
+
+    template bool TActorContext::Forward<ESendingType::Common>(THolder<IEventHandle>& ev, const TActorId& recipient) const;
+    template bool TActorContext::Forward<ESendingType::Lazy>(THolder<IEventHandle>& ev, const TActorId& recipient) const;
+    template bool TActorContext::Forward<ESendingType::Tail>(THolder<IEventHandle>& ev, const TActorId& recipient) const;
+
+    template <ESendingType SendingType>
+    bool TActorContext::Forward(THolder<IEventHandle>& ev, const TActorId& recipient) const {
+        return ExecutorThread.Send<SendingType>(IEventHandle::Forward(ev, recipient));
+    }
+
+    template TActorId TActivationContext::Register<ESendingType::Common>(IActor* actor, TActorId parentId, TMailboxType::EType mailboxType, ui32 poolId);
+    template TActorId TActivationContext::Register<ESendingType::Lazy>(IActor* actor, TActorId parentId, TMailboxType::EType mailboxType, ui32 poolId);
+    template TActorId TActivationContext::Register<ESendingType::Tail>(IActor* actor, TActorId parentId, TMailboxType::EType mailboxType, ui32 poolId);
+
+    template <ESendingType SendingType>
+    TActorId TActivationContext::Register(IActor* actor, TActorId parentId, TMailboxType::EType mailboxType, ui32 poolId) {
+        return TlsActivationContext->ExecutorThread.RegisterActor<SendingType>(actor, mailboxType, poolId, parentId);
+    }
+
+    template TActorId TActorContext::Register<ESendingType::Common>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const;
+    template TActorId TActorContext::Register<ESendingType::Lazy>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const;
+    template TActorId TActorContext::Register<ESendingType::Tail>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const;
+
+    template <ESendingType SendingType>
+    TActorId TActorContext::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const {
+        return ExecutorThread.RegisterActor<SendingType>(actor, mailboxType, poolId, SelfID);
+    }
+
+    template bool TActorIdentity::Send<ESendingType::Common>(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const;
+    template bool TActorIdentity::Send<ESendingType::Lazy>(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const;
+    template bool TActorIdentity::Send<ESendingType::Tail>(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const;
+
+    template <ESendingType SendingType>
+    bool TActorIdentity::Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const {
+        return TActivationContext::Send<SendingType>(new IEventHandle(recipient, *this, ev, flags, cookie, nullptr, std::move(traceId)));
+    }
+
+    template bool IActor::Send<ESendingType::Common>(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const;
+    template bool IActor::Send<ESendingType::Lazy>(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const;
+    template bool IActor::Send<ESendingType::Tail>(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const;
+
+    template <ESendingType SendingType>
+    bool IActor::Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const {
+        return SelfActorId.Send<SendingType>(recipient, ev, flags, cookie, std::move(traceId));
+    }
+
+    template TActorId IActor::Register<ESendingType::Common>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept;
+    template TActorId IActor::Register<ESendingType::Lazy>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept;
+    template TActorId IActor::Register<ESendingType::Tail>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept;
+
+    template <ESendingType SendingType>
+    TActorId IActor::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept {
+        Y_ABORT_UNLESS(actor);
+        return TlsActivationContext->ExecutorThread.RegisterActor<SendingType>(actor, mailboxType, poolId, SelfActorId);
+    }
+
+    template TActorId TActorSystem::Register<ESendingType::Common>(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
+                        ui64 revolvingCounter, const TActorId& parentId);
+    template TActorId TActorSystem::Register<ESendingType::Lazy>(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
+                        ui64 revolvingCounter, const TActorId& parentId);
+    template TActorId TActorSystem::Register<ESendingType::Tail>(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
+                        ui64 revolvingCounter, const TActorId& parentId);
+
+    template <ESendingType SendingType>
+    TActorId TActorSystem::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
+                        ui64 revolvingCounter, const TActorId& parentId) {
+        Y_ABORT_UNLESS(actor);
+        Y_ABORT_UNLESS(executorPool < ExecutorPoolCount, "executorPool# %" PRIu32 ", ExecutorPoolCount# %" PRIu32,
+                (ui32)executorPool, (ui32)ExecutorPoolCount);
+        if constexpr (SendingType == ESendingType::Common) {
+            return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
+        } else if (!TlsThreadContext) {
+            return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
+        } else {
+            ESendingType previousType = TlsThreadContext->ExchangeSendingType(SendingType);
+            TActorId id = CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
+            TlsThreadContext->SetSendingType(previousType);
+            return id;
+        }
+    }
+
+    template bool TActorSystem::Send<ESendingType::Common>(TAutoPtr<IEventHandle> ev) const;
+    template bool TActorSystem::Send<ESendingType::Lazy>(TAutoPtr<IEventHandle> ev) const;
+    template bool TActorSystem::Send<ESendingType::Tail>(TAutoPtr<IEventHandle> ev) const;
+
+    template <ESendingType SendingType>
+    bool TActorSystem::Send(TAutoPtr<IEventHandle> ev) const {
+        if constexpr (SendingType == ESendingType::Common) {
+            return this->GenericSend< &IExecutorPool::Send>(ev);
+        } else {
+            return this->SpecificSend(ev, SendingType);
+        }
+    }
+
+    ui32 TActivationContext::GetOverwrittenEventsPerMailbox() {
+        return TlsActivationContext->ExecutorThread.GetOverwrittenEventsPerMailbox();
+    }
+
+    void TActivationContext::SetOverwrittenEventsPerMailbox(ui32 value) {
+        TlsActivationContext->ExecutorThread.SetOverwrittenEventsPerMailbox(value);
+    }
+
+    ui64 TActivationContext::GetOverwrittenTimePerMailboxTs() {
+        return TlsActivationContext->ExecutorThread.GetOverwrittenTimePerMailboxTs();
+    }
+
+    void TActivationContext::SetOverwrittenTimePerMailboxTs(ui64 value) {
+        TlsActivationContext->ExecutorThread.SetOverwrittenTimePerMailboxTs(value);
     }
 }

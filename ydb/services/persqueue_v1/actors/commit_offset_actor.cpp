@@ -44,7 +44,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
 
     TIntrusivePtr<NACLib::TUserToken> token;
     if (Request_->GetSerializedToken().empty()) {
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             AnswerError("Unauthenticated access is forbidden, please provide credentials", PersQueue::ErrorCode::ACCESS_DENIED, ctx);
             return;
         }
@@ -97,11 +97,12 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
     Y_ABORT_UNLESS(TopicAndTablets.size() == 1);
     auto& [topic, topicInitInfo] = *TopicAndTablets.begin();
 
-    if (topicInitInfo.PartitionIdToTabletId.find(PartitionId) == topicInitInfo.PartitionIdToTabletId.end()) {
+    if (topicInitInfo.Partitions.find(PartitionId) == topicInitInfo.Partitions.end()) {
         AnswerError("partition id not found in topic", PersQueue::ErrorCode::WRONG_PARTITION_NUMBER, ctx);
+        return;
     }
 
-    ui64 tabletId = topicInitInfo.PartitionIdToTabletId.at(PartitionId);
+    ui64 tabletId = topicInitInfo.Partitions.at(PartitionId).TabletId;
 
     NTabletPipe::TClientConfig clientConfig;
     clientConfig.RetryPolicy = {

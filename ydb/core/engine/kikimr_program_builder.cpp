@@ -2,10 +2,10 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/mkql_node_printer.h>
-#include <ydb/library/yql/minikql/mkql_opt_literal.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/mkql_opt_literal.h>
 
 #include <array>
 
@@ -23,14 +23,14 @@ TType* ValidateColumns(
     rowTypeBuilder.Reserve(columns.size());
     tagsBuilder.Reserve(columns.size());
     for (auto& col : columns) {
-        // TODO: support pg types
+        // no need to support pg types in the deprecated minikql engine
         MKQL_ENSURE(col.SchemeType.GetTypeId() != 0, "Null type is not allowed");
         MKQL_ENSURE(col.SchemeType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
         TType* dataType;
         if (col.SchemeType.GetTypeId() == NYql::NProto::TypeIds::Decimal)
             dataType = TDataDecimalType::Create(
-                NScheme::DECIMAL_PRECISION,
-                NScheme::DECIMAL_SCALE,
+                col.SchemeType.GetDecimalType().GetPrecision(),
+                col.SchemeType.GetDecimalType().GetScale(),
                 builder->GetTypeEnvironment());
         else
             dataType = TDataType::Create(col.SchemeType.GetTypeId(), builder->GetTypeEnvironment());
@@ -108,7 +108,7 @@ void TUpdateRowBuilder::SetColumn(
         ui32 columnId, NScheme::TTypeInfo expectedType,
         TRuntimeNode value)
 {
-    // TODO: support pg types
+    // no need to support pg types in the deprecated minikql engine
     MKQL_ENSURE(expectedType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
 
     bool isOptional;
@@ -126,7 +126,7 @@ void TUpdateRowBuilder::InplaceUpdateColumn(
         TRuntimeNode value,
         EInplaceUpdateMode mode)
 {
-    // TODO: support pg types
+    // no need to support pg types in the deprecated minikql engine
     MKQL_ENSURE(expectedType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
     MKQL_ENSURE(AS_TYPE(TDataType, value)->GetSchemeType() == expectedType.GetTypeId(),
             "Mismatch of column type");
@@ -214,7 +214,7 @@ TVector<TRuntimeNode> TKikimrProgramBuilder::FixKeysType(
     MKQL_ENSURE(keyTypes.size() == row.size(), "Mismatch of key types count");
     TVector<TRuntimeNode> tmp(row.size());
     for (ui32 i = 0; i < row.size(); ++i) {
-        // TODO: support pg types
+        // no need to support pg types in the deprecated minikql engine
         MKQL_ENSURE(keyTypes[i].GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
         tmp[i] = RewriteNullType(row[i], keyTypes[i].GetTypeId());
         bool isOptional;

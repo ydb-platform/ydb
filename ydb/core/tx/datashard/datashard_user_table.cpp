@@ -67,12 +67,13 @@ void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     Y_ABORT_UNLESS(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
     const auto addIndexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
 
-    if (Indexes.contains(addIndexPathId)) {
+    auto it = Indexes.lower_bound(addIndexPathId);
+    if (it != Indexes.end() && it->first == addIndexPathId) {
         return;
     }
 
-    Indexes.emplace(addIndexPathId, TTableIndex(indexDesc, Columns));
-    AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EIndexType::EIndexTypeGlobalAsync);
+    Indexes.emplace_hint(it, addIndexPathId, TTableIndex(indexDesc, Columns));
+    AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EType::EIndexTypeGlobalAsync);
 
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
@@ -81,27 +82,49 @@ void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     SetSchema(schema);
 }
 
+void TUserTable::SwitchIndexState(const TPathId& indexPathId, TTableIndex::EState state) {
+    auto it = Indexes.find(indexPathId);
+    if (it == Indexes.end()) {
+        return;
+    }
+
+    it->second.State = state;
+
+    // This isn't really necessary now, because no one rely on index state
+    NKikimrSchemeOp::TTableDescription schema;
+    GetSchema(schema);
+
+    auto& indexes = *schema.MutableTableIndexes();
+    for (auto it = indexes.begin(); it != indexes.end(); ++it) {
+        if (indexPathId == TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
+            it->SetState(state);
+            SetSchema(schema);
+            return;
+        }
+    }
+
+    Y_ABORT("unreachable");
+}
+
 void TUserTable::DropIndex(const TPathId& indexPathId) {
     auto it = Indexes.find(indexPathId);
     if (it == Indexes.end()) {
         return;
     }
 
-    AsyncIndexCount -= ui32(it->second.Type == TTableIndex::EIndexType::EIndexTypeGlobalAsync);
+    AsyncIndexCount -= ui32(it->second.Type == TTableIndex::EType::EIndexTypeGlobalAsync);
     Indexes.erase(it);
 
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
 
-    for (auto it = schema.GetTableIndexes().begin(); it != schema.GetTableIndexes().end(); ++it) {
-        if (indexPathId != TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
-            continue;
+    auto& indexes = *schema.MutableTableIndexes();
+    for (auto it = indexes.begin(); it != indexes.end(); ++it) {
+        if (indexPathId == TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
+            indexes.erase(it);
+            SetSchema(schema);
+            return;
         }
-
-        schema.MutableTableIndexes()->erase(it);
-        SetSchema(schema);
-
-        return;
     }
 
     Y_ABORT("unreachable");
@@ -124,7 +147,7 @@ static bool IsJsonCdcStream(TUserTable::TCdcStream::EFormat format) {
 
 void TUserTable::AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
     Y_ABORT_UNLESS(streamDesc.HasPathId());
-    const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
+    const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
 
     if (CdcStreams.contains(streamPathId)) {
         return;
@@ -152,7 +175,7 @@ void TUserTable::SwitchCdcStreamState(const TPathId& streamPathId, TCdcStream::E
     GetSchema(schema);
 
     for (auto it = schema.MutableCdcStreams()->begin(); it != schema.MutableCdcStreams()->end(); ++it) {
-        if (streamPathId != PathIdFromPathId(it->GetPathId())) {
+        if (streamPathId != TPathId::FromProto(it->GetPathId())) {
             continue;
         }
 
@@ -178,7 +201,7 @@ void TUserTable::DropCdcStream(const TPathId& streamPathId) {
     GetSchema(schema);
 
     for (auto it = schema.GetCdcStreams().begin(); it != schema.GetCdcStreams().end(); ++it) {
-        if (streamPathId != PathIdFromPathId(it->GetPathId())) {
+        if (streamPathId != TPathId::FromProto(it->GetPathId())) {
             continue;
         }
 
@@ -206,6 +229,10 @@ bool TUserTable::IsReplicated() const {
         default:
             return true;
     }
+}
+
+bool TUserTable::IsIncrementalRestore() const {
+    return IncrementalBackupConfig.Mode == NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP;
 }
 
 void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
@@ -288,18 +315,19 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     TableSchemaVersion = descr.GetTableSchemaVersion();
     IsBackup = descr.GetIsBackup();
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
+    IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
 
     CheckSpecialColumns();
 
     for (const auto& indexDesc : descr.GetTableIndexes()) {
         Y_ABORT_UNLESS(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
         Indexes.emplace(TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId()), TTableIndex(indexDesc, Columns));
-        AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EIndexType::EIndexTypeGlobalAsync);
+        AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EType::EIndexTypeGlobalAsync);
     }
 
     for (const auto& streamDesc : descr.GetCdcStreams()) {
         Y_ABORT_UNLESS(streamDesc.HasPathId());
-        CdcStreams.emplace(PathIdFromPathId(streamDesc.GetPathId()), TCdcStream(streamDesc));
+        CdcStreams.emplace(TPathId::FromProto(streamDesc.GetPathId()), TCdcStream(streamDesc));
         JsonCdcStreamCount += ui32(IsJsonCdcStream(streamDesc.GetFormat()));
     }
 }
@@ -369,6 +397,9 @@ void TUserTable::AlterSchema() {
     schema.SetPartitionRangeEnd(Range.To.GetBuffer());
     schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive);
 
+    ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
+    IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
+
     schema.SetName(Name);
     schema.SetPath(Path);
 
@@ -410,7 +441,7 @@ void TUserTable::DoApplyCreate(
         alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
         if (appliedRooms.insert(family.GetRoomId()).second) {
             // Call SetRoom once per room
-            alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel());
+            alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannels(), family.OuterChannel());
         }
     }
 
@@ -419,8 +450,7 @@ void TUserTable::DoApplyCreate(
         const TUserColumn& column = col.second;
 
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-        ui32 pgTypeId = columnType.TypeInfo ? columnType.TypeInfo->GetPgTypeId() : 0;
-        alter.AddPgColumn(tid, column.Name, columnId, columnType.TypeId, pgTypeId, column.TypeMod, column.NotNull);
+        alter.AddColumnWithTypeInfo(tid, column.Name, columnId, columnType.TypeId, columnType.TypeInfo, column.NotNull);
         alter.AddColumnToFamily(tid, columnId, column.Family);
     }
 
@@ -511,7 +541,7 @@ void TUserTable::ApplyAlter(
         if (appliedRooms.insert(family.GetRoomId()).second) {
             // Call SetRoom once per room
             for (ui32 tid : tids) {
-                alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel());
+                alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannels(), family.OuterChannel());
             }
         }
     }
@@ -523,8 +553,7 @@ void TUserTable::ApplyAlter(
         if (!oldTable.Columns.contains(colId)) {
             for (ui32 tid : tids) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                ui32 pgTypeId = columnType.TypeInfo ? columnType.TypeInfo->GetPgTypeId() : 0;
-                alter.AddPgColumn(tid, column.Name, colId, columnType.TypeId, pgTypeId, column.TypeMod, column.NotNull);
+                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull);
             }
         }
 

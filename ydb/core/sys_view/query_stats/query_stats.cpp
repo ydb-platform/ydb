@@ -172,9 +172,7 @@ private:
         auto request = MakeHolder<TEvSysView::TEvGetQueryMetricsRequest>();
         request->Record.CopyFrom(Request);
 
-        this->Send(MakePipePeNodeCacheID(false),
-            new TEvPipeCache::TEvForward(request.Release(), this->SysViewProcessorId, true),
-            IEventHandle::FlagTrackDelivery);
+        this->SendThroughPipeCache(request.Release(), this->SysViewProcessorId);
 
         this->BatchRequestInFlight = true;
     }
@@ -468,9 +466,7 @@ private:
     }
 
     void PassAway() override {
-        if (UseProcessor) {
-            this->Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
-        } else {
+        if (!UseProcessor) {
             for (auto& [nodeId, _] : Nodes) {
                 this->Send(TActorContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
             }

@@ -9,12 +9,9 @@ IF (SANDBOX_RESOURCE_URI != "")
 
     PRIMARY_OUTPUT(${PROTOC_RESOURCE_GLOBAL}/protoc${MODULE_SUFFIX})
 
-    INCLUDE(ya.make.induced_deps)
-
     END()
 ELSE()
     PROGRAM(protoc)
     SRCS(main.c)
-    INCLUDE(ya.make.induced_deps)
     END()
 ENDIF()

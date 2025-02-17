@@ -2,15 +2,16 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
-#include <ydb/library/mkql_proto/mkql_proto.h>
-#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/core/kqp/common/simple/helpers.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/services/services.pb.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -89,11 +90,15 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
             for(ui32 i = 0; i < structType->GetMembersCount(); ++i) {
                 memberIndices[TString(structType->GetMemberName(i))] = i;
             }
-
-            for(auto& name: txResult.GetColumnHints()) {
-                auto it = memberIndices.find(name);
+            NYql::TColumnOrder order;
+            for (auto& name: txResult.GetColumnHints()) {
+                order.AddColumn(name);
+            }
+            for (auto& [name, phy_name]: order) {
+                auto it = memberIndices.find(phy_name);
                 YQL_ENSURE(it != memberIndices.end(), "undetermined column name: " << name);
                 result.ColumnOrder.push_back(it->second);
+                result.ColumnHints.push_back(name);
             }
         }
     }
@@ -154,7 +159,7 @@ const NKikimr::NKqp::TStagePredictor& TKqpPhyTxHolder::GetCalculationPredictor(c
 }
 
 TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry)
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, bool noFillTables)
     : Proto(proto)
     , Alloc(nullptr)
     , TableConstInfoById(MakeIntrusive<TTableConstInfoMap>())
@@ -162,6 +167,11 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
 
     if (functionRegistry) {
         Alloc = std::make_shared<TPreparedQueryAllocHolder>(functionRegistry);
+    }
+
+    // In case of some compilation failures filling tables may produce new problems which may replace original error messages.
+    if (noFillTables) {
+        return;
     }
 
     THashSet<TString> tablesSet;

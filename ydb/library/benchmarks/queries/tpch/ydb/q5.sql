@@ -57,8 +57,8 @@ join
 on
     c.c_custkey = o.o_custkey
 where
-    CAST(o.o_orderdate AS Timestamp) >= $border
-    and CAST(o.o_orderdate AS Timestamp) < ($border + Interval("P365D"))
+    o.o_orderdate >= $border
+    and o.o_orderdate < ($border + Interval("P365D"))
 );
 
 $j5 = (

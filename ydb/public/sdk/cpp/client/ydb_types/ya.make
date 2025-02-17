@@ -3,7 +3,7 @@ LIBRARY()
 PEERDIR(
     contrib/libs/protobuf
     ydb/library/grpc/client
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
 )
 
 GENERATE_ENUM_SERIALIZATION(s3_settings.h)

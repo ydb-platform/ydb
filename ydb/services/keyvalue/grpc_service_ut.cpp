@@ -9,15 +9,15 @@
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/logger/backend.h>
 
-#include <grpc++/client_context.h>
-#include <grpc++/create_channel.h>
+#include <grpcpp/client_context.h>
+#include <grpcpp/create_channel.h>
 
 #include <util/string/builder.h>
 
@@ -26,7 +26,6 @@
     UNIT_ASSERT_C(got.status() == exp, "exp# " << Ydb::StatusIds::StatusCode_Name(exp) \
             << " got# " << Ydb::StatusIds::StatusCode_Name(got.status()) << " issues# "  << got.issues()) \
 // UNIT_ASSERT_CHECK_STATUS
-
 
 namespace NKikimr::NGRpcService {
 
@@ -620,6 +619,47 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
             Write(tablePath, 0, "key", "value", 0, stub);
             AcquireLock(tablePath, 0, stub);
+            Ydb::KeyValue::ReadRequest readRequest;
+            readRequest.set_path(tablePath);
+            readRequest.set_partition_id(0);
+            readRequest.set_key("key");
+            Ydb::KeyValue::ReadResponse readResponse;
+            Ydb::KeyValue::ReadResult readResult;
+
+            grpc::ClientContext readCtx;
+            AdjustCtxForDB(readCtx);
+            stub->Read(&readCtx, readRequest, &readResponse);
+            UNIT_ASSERT_CHECK_STATUS(readResponse.operation(), Ydb::StatusIds::SUCCESS);
+        });
+    }
+
+    Y_UNIT_TEST(SimpleWriteReadWithGetChannelStatus) {
+        TString tablePath = "/Root/mydb/kvtable";
+        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
+            Ydb::KeyValue::GetStorageChannelStatusRequest getStatusRequest;
+            getStatusRequest.set_path(tablePath);
+            getStatusRequest.add_storage_channel(0);
+            getStatusRequest.add_storage_channel(1);
+            getStatusRequest.add_storage_channel(2);
+            Ydb::KeyValue::GetStorageChannelStatusResponse getStatusResponse;
+            grpc::ClientContext getStatusCtx;
+            AdjustCtxForDB(getStatusCtx);
+            stub->GetStorageChannelStatus(&getStatusCtx, getStatusRequest, &getStatusResponse);
+            UNIT_ASSERT_CHECK_STATUS(getStatusResponse.operation(), Ydb::StatusIds::SUCCESS);
+
+            Write(tablePath, 0, "key", "value", 0, stub);
+
+            Ydb::KeyValue::GetStorageChannelStatusRequest getStatusRequest2;
+            getStatusRequest2.set_path(tablePath);
+            getStatusRequest2.add_storage_channel(0);
+            getStatusRequest2.add_storage_channel(1);
+            getStatusRequest2.add_storage_channel(2);
+            Ydb::KeyValue::GetStorageChannelStatusResponse getStatusResponse2;
+            grpc::ClientContext getStatusCtx2;
+            AdjustCtxForDB(getStatusCtx2);
+            stub->GetStorageChannelStatus(&getStatusCtx2, getStatusRequest2, &getStatusResponse2);
+            UNIT_ASSERT_CHECK_STATUS(getStatusResponse2.operation(), Ydb::StatusIds::SUCCESS);
+
             Ydb::KeyValue::ReadRequest readRequest;
             readRequest.set_path(tablePath);
             readRequest.set_partition_id(0);

@@ -2,30 +2,37 @@ import os
 import sys
 import logging
 import subprocess
+import queue
 
 
 logger = logging.getLogger(__name__)
 
 
 class Nodes(object):
-    def __init__(self, nodes, dry_run=False, ssh_user=None):
+    def __init__(self, nodes, dry_run=False, ssh_user=None, queue_size=0, ssh_key_path=None):
         assert isinstance(nodes, list)
         assert len(nodes) > 0
         assert isinstance(nodes[0], str)
         self._nodes = nodes
         self._dry_run = bool(dry_run)
         self._ssh_user = ssh_user
+        self._ssh_key_path = ssh_key_path
         self._logger = logger.getChild(self.__class__.__name__)
+        self._queue = queue.Queue(queue_size)
+        self._qsize = queue_size
 
     @property
     def nodes_list(self):
         return self._nodes
 
-    def _get_ssh_command_prefix(self):
+    def _get_ssh_command_prefix(self, remote=False):
         command = []
         command.extend(['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-A'])
         if (self._ssh_user):
             command.extend(['-l', self._ssh_user])
+
+        if not remote and self._ssh_key_path:
+            command.extend(['-i', self._ssh_key_path])
 
         return command
 
@@ -83,7 +90,23 @@ class Nodes(object):
 
             actual_cmd = self._get_ssh_command_prefix() + [host, cmd]
             process = subprocess.Popen(actual_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            if self._qsize > 0:
+                self._queue.put((actual_cmd, process, host))
+                if not self._queue.full():
+                    continue
+                if not self._queue.empty():
+                    actual_cmd, process, host = self._queue.get()
+                    process.wait()
+
             running_jobs.append((actual_cmd, process, host))
+
+        if self._qsize > 0:
+            while not self._queue.empty():
+                actual_cmd, process, host = self._queue.get()
+                process.wait()
+                running_jobs.append((actual_cmd, process, host))
+
         return running_jobs
 
     def execute_async(self, cmd, check_retcode=True, nodes=None, results=None):
@@ -125,9 +148,9 @@ class Nodes(object):
             if self._dry_run:
                 continue
             cmd = self._get_ssh_command_prefix() + [dst]
-            rsh = " ".join(self._get_ssh_command_prefix())
+            rsh = " ".join(self._get_ssh_command_prefix(remote=True))
             cmd.extend([
-                "sudo", "SSH_AUTH_SOCK=$SSH_AUTH_SOCK", "rsync", "-avqW", "--del", "--no-o", "--no-g",
+                "sudo", "--preserve-env=SSH_AUTH_SOCK", "rsync", "-avqW", "--del", "--no-o", "--no-g",
                 "--rsh='{}'".format(rsh),
                 src, remote_path
             ])

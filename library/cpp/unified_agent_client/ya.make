@@ -16,6 +16,7 @@ SRCS(
     clock.cpp
     duration_counter.cpp
     logger.cpp
+    stream.cpp
     throttling.cpp
     proto_weighing.cpp
     GLOBAL registrar.cpp

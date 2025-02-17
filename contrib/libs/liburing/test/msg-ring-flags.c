@@ -118,7 +118,7 @@ static void *thread_fn(void *data)
 	return NULL;
 }
 
-int main(int argc, char *argv[])
+static int test(int ring_flags)
 {
 	struct io_uring ring, ring2;
 	pthread_t thread;
@@ -126,16 +126,13 @@ int main(int argc, char *argv[])
 	void *ret2;
 	int ret, i;
 
-	if (argc > 1)
-		return T_EXIT_SKIP;
-
-	ret = io_uring_queue_init(2, &ring, 0);
+	ret = io_uring_queue_init(2, &ring, ring_flags);
 	if (ret) {
 		fprintf(stderr, "io_uring_queue_init failed for ring1: %d\n", ret);
 		return T_EXIT_FAIL;
 	}
 
-	ret = io_uring_queue_init(2, &ring2, 0);
+	ret = io_uring_queue_init(2, &ring2, ring_flags);
 	if (ret) {
 		fprintf(stderr, "io_uring_queue_init failed for ring2: %d\n", ret);
 		return T_EXIT_FAIL;
@@ -190,4 +187,27 @@ int main(int argc, char *argv[])
 	}
 
 	return T_EXIT_PASS;
+}
+
+int main(int argc, char *argv[])
+{
+	int ret;
+
+	if (argc > 1)
+		return T_EXIT_SKIP;
+
+	ret = test(0);
+	if (ret == T_EXIT_FAIL) {
+		fprintf(stderr, "test ring_flags 0 failed\n");
+		return ret;
+	} else if (ret == T_EXIT_SKIP)
+		return ret;
+
+	ret = test(IORING_SETUP_SINGLE_ISSUER|IORING_SETUP_DEFER_TASKRUN);
+	if (ret == T_EXIT_FAIL) {
+		fprintf(stderr, "test ring_flags defer failed\n");
+		return ret;
+	}
+
+	return ret;
 }

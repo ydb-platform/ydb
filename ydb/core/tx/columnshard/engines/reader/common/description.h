@@ -11,24 +11,38 @@ struct TReadDescription {
 private:
     TSnapshot Snapshot;
     TProgramContainer Program;
+    std::shared_ptr<IScanCursor> ScanCursor;
+    YDB_ACCESSOR_DEF(TString, ScanIdentifier);
+
 public:
     // Table
+    ui64 TxId = 0;
+    std::optional<ui64> LockId;
     ui64 PathId = 0;
     TString TableName;
     bool ReadNothing = false;
     // Less[OrEqual], Greater[OrEqual] or both
     // There's complex logic in NKikimr::TTableRange comparison that could be emulated only with separated compare
     // operations with potentially different columns. We have to remove columns to support -Inf (Null) and +Inf.
-    NOlap::TPKRangesFilter PKRangesFilter;
+    std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
 
     // List of columns
     std::vector<ui32> ColumnIds;
-    std::vector<TString> ColumnNames;
-    
+
+    const std::shared_ptr<IScanCursor>& GetScanCursor() const {
+        AFL_VERIFY(ScanCursor);
+        return ScanCursor;
+    }
+
+    void SetScanCursor(const std::shared_ptr<IScanCursor>& cursor) {
+        AFL_VERIFY(!ScanCursor);
+        ScanCursor = cursor;
+    }
+
     TReadDescription(const TSnapshot& snapshot, const bool isReverse)
         : Snapshot(snapshot)
-        , PKRangesFilter(isReverse) {
+        , PKRangesFilter(std::make_shared<NOlap::TPKRangesFilter>(isReverse)) {
     }
 
     void SetProgram(TProgramContainer&& value) {

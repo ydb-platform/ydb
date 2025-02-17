@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/hulldb/base)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -20,6 +18,7 @@ SRCS(
     blobstorage_hullstorageratio_ut.cpp
     hullbase_barrier_ut.cpp
     hullds_generic_it_ut.cpp
+    hullds_heap_it_ut.cpp
 )
 
 END()

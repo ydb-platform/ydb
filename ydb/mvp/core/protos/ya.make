@@ -1,7 +1,5 @@
 PROTO_LIBRARY()
 
-OWNER(xenoxeno g:kikimr)
-
 SRCS(
     mvp.proto
 )

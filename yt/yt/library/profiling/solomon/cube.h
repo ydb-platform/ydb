@@ -21,9 +21,10 @@ struct TReadOptions
 {
     TReadWindow Times;
 
-    std::function<bool(const TString&)> SensorFilter;
+    std::function<bool(const std::string&)> SensorFilter;
 
     bool ConvertCountersToRateGauge = false;
+    bool ConvertCountersToDeltaGauge = false;
     bool RenameConvertedCounters = true;
     double RateDenominator = 1.0;
     bool EnableHistogramCompat = false;
@@ -35,7 +36,7 @@ struct TReadOptions
 
     bool MarkAggregates = false;
 
-    std::optional<TString> Host;
+    std::optional<std::string> Host;
 
     std::vector<TTag> InstanceTags;
 
@@ -101,7 +102,7 @@ public:
     T Rollup(const TProjection& window, int index) const;
 
     int ReadSensors(
-        const TString& name,
+        const std::string& name,
         const TReadOptions& options,
         TTagWriter* tagWriter,
         ::NMonitoring::IMetricConsumer* consumer) const;
@@ -113,7 +114,7 @@ public:
         const TTagRegistry& tagRegistry,
         NYTree::TFluentAny fluent) const;
 
-    void DumpCube(NProto::TCube* cube) const;
+    void DumpCube(NProto::TCube* cube, const std::vector<TTagId>& extraTags) const;
 
 private:
     const int WindowSize_;

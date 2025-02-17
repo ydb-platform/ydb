@@ -1,0 +1,12 @@
+--- contrib/libs/pybind11/include/pybind11/detail/common.h	(index)
++++ contrib/libs/pybind11/include/pybind11/detail/common.h	(working tree)
+@@ -321,6 +321,9 @@ PYBIND11_WARNING_POP
+ #endif
+ 
+ // See description of PR #4246:
++#if PY_MAJOR_VERSION < 3
++#    define PYBIND11_NO_ASSERT_GIL_HELD_INCREF_DECREF
++#endif
+ #if !defined(PYBIND11_NO_ASSERT_GIL_HELD_INCREF_DECREF) && !defined(NDEBUG)                       \
+     && !defined(PYPY_VERSION) && !defined(PYBIND11_ASSERT_GIL_HELD_INCREF_DECREF)
+ #    define PYBIND11_ASSERT_GIL_HELD_INCREF_DECREF

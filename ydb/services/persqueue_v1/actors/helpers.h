@@ -13,8 +13,11 @@ static constexpr ui64 READ_BLOCK_SIZE = 8_KB; // metering
 
 using namespace Ydb;
 
-bool RemoveEmptyMessages(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch& data);
+bool HasMessages(const PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch& data);
 
-bool RemoveEmptyMessages(Topic::StreamReadMessage::ReadResponse& data);
+bool HasMessages(const Topic::StreamReadMessage::ReadResponse& data);
+
+TString CleanupCounterValueString(const TString& value);
+TString DropUserAgentSuffix(const TString& userAgent);
 
 }

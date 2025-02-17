@@ -8,6 +8,18 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TRowBuffer::TRowBuffer(
+    TRefCountedTypeCookie tagCookie,
+    IMemoryChunkProviderPtr chunkProvider,
+    size_t startChunkSize,
+    IMemoryUsageTrackerPtr tracker)
+    : MemoryTracker_(std::move(tracker))
+    , Pool_(
+        tagCookie,
+        std::move(chunkProvider),
+        startChunkSize)
+{ }
+
 TChunkedMemoryPool* TRowBuffer::GetPool()
 {
     return &Pool_;
@@ -87,7 +99,7 @@ TMutableUnversionedRow TRowBuffer::CaptureRow(TUnversionedValueRange values, boo
     auto capturedRow = TMutableUnversionedRow::Allocate(&Pool_, count);
     auto* capturedBegin = capturedRow.Begin();
 
-    ::memcpy(capturedBegin, values.Begin(), count * sizeof (TUnversionedValue));
+    ::memcpy(capturedBegin, values.Begin(), count * sizeof(TUnversionedValue));
 
     if (captureValues) {
         for (int index = 0; index < count; ++index) {
@@ -102,7 +114,7 @@ TMutableUnversionedRow TRowBuffer::CaptureRow(TUnversionedValueRange values, boo
 
 std::vector<TMutableUnversionedRow> TRowBuffer::CaptureRows(TRange<TUnversionedRow> rows, bool captureValues)
 {
-    int rowCount = static_cast<int>(rows.Size());
+    int rowCount = std::ssize(rows);
     std::vector<TMutableUnversionedRow> capturedRows(rowCount);
     for (int index = 0; index < rowCount; ++index) {
         capturedRows[index] = CaptureRow(rows[index], captureValues);
@@ -115,14 +127,14 @@ TMutableUnversionedRow TRowBuffer::CaptureAndPermuteRow(
     const TTableSchema& tableSchema,
     int schemafulColumnCount,
     const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer,
+    bool validateDuplicateAndRequiredValueColumns,
     bool preserveIds,
     std::optional<TUnversionedValue> addend)
 {
     int valueCount = schemafulColumnCount;
 
-    if (columnPresenceBuffer) {
-        ValidateDuplicateAndRequiredValueColumns(row, tableSchema, idMapping, columnPresenceBuffer);
+    if (validateDuplicateAndRequiredValueColumns) {
+        ValidateDuplicateAndRequiredValueColumns(row, tableSchema, idMapping);
     }
 
     for (const auto& value : row) {
@@ -212,7 +224,7 @@ TMutableVersionedRow TRowBuffer::CaptureAndPermuteRow(
     TVersionedRow row,
     const TTableSchema& tableSchema,
     const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer,
+    bool validateDuplicateAndRequiredValueColumns,
     bool allowMissingKeyColumns)
 {
     int keyColumnCount = tableSchema.GetKeyColumnCount();
@@ -240,14 +252,13 @@ TMutableVersionedRow TRowBuffer::CaptureAndPermuteRow(
 
     std::sort(writeTimestamps.begin(), writeTimestamps.end(), std::greater<TTimestamp>());
     writeTimestamps.erase(std::unique(writeTimestamps.begin(), writeTimestamps.end()), writeTimestamps.end());
-    int writeTimestampCount = static_cast<int>(writeTimestamps.size());
+    int writeTimestampCount = std::ssize(writeTimestamps);
 
-    if (columnPresenceBuffer) {
+    if (validateDuplicateAndRequiredValueColumns) {
         ValidateDuplicateAndRequiredValueColumns(
             row,
             tableSchema,
             idMapping,
-            columnPresenceBuffer,
             writeTimestamps.data(),
             writeTimestampCount);
     }
@@ -259,8 +270,8 @@ TMutableVersionedRow TRowBuffer::CaptureAndPermuteRow(
         writeTimestampCount,
         deleteTimestampCount);
 
-    ::memcpy(capturedRow.BeginWriteTimestamps(), writeTimestamps.data(), sizeof (TTimestamp) * writeTimestampCount);
-    ::memcpy(capturedRow.BeginDeleteTimestamps(), row.BeginDeleteTimestamps(), sizeof (TTimestamp) * deleteTimestampCount);
+    ::memcpy(capturedRow.BeginWriteTimestamps(), writeTimestamps.data(), sizeof(TTimestamp) * writeTimestampCount);
+    ::memcpy(capturedRow.BeginDeleteTimestamps(), row.BeginDeleteTimestamps(), sizeof(TTimestamp) * deleteTimestampCount);
 
     if (!allowMissingKeyColumns) {
         int index = 0;

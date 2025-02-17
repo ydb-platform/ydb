@@ -184,7 +184,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
 
     void Boot() {
         const TActorId proxy = MakeStateStorageProxyID();
-        Send(proxy, new TEvStateStorage::TEvListSchemeBoard(), IEventHandle::FlagTrackDelivery);
+        Send(proxy, new TEvStateStorage::TEvListSchemeBoard(false), IEventHandle::FlagTrackDelivery);
 
         Become(&TThis::StateBoot);
     }

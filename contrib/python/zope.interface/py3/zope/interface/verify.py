@@ -45,10 +45,11 @@ def _verify(iface, candidate, tentative=False, vtype=None):
     This involves:
 
     - Making sure the candidate claims that it provides the
-      interface using ``iface.providedBy`` (unless *tentative* is `True`,
-      in which case this step is skipped). This means that the candidate's class
-      declares that it `implements <zope.interface.implementer>` the interface,
-      or the candidate itself declares that it `provides <zope.interface.provider>`
+      interface using ``iface.providedBy`` (unless *tentative* is `True`, in
+      which case this step is skipped). This means that the candidate's class
+      declares that it `implements <zope.interface.implementer>` the
+      interface, or the candidate itself declares that it `provides
+      <zope.interface.provider>`
       the interface
 
     - Making sure the candidate defines all the necessary methods
@@ -65,9 +66,9 @@ def _verify(iface, candidate, tentative=False, vtype=None):
 
     .. versionchanged:: 5.0
         If multiple methods or attributes are invalid, all such errors
-        are collected and reported. Previously, only the first error was reported.
-        As a special case, if only one such error is present, it is raised
-        alone, like before.
+        are collected and reported. Previously, only the first error was
+        reported.  As a special case, if only one such error is present, it is
+        raised alone, like before.
     """
 
     if vtype == 'c':
@@ -92,15 +93,18 @@ def _verify(iface, candidate, tentative=False, vtype=None):
 
     return True
 
+
 def _verify_element(iface, name, desc, candidate, vtype):
     # Here the `desc` is either an `Attribute` or `Method` instance
     try:
         attr = getattr(candidate, name)
     except AttributeError:
+
         if (not isinstance(desc, Method)) and vtype == 'c':
             # We can't verify non-methods on classes, since the
             # class may provide attrs in it's __init__.
             return
+
         # TODO: This should use ``raise...from``
         raise BrokenImplementation(iface, desc, candidate)
 
@@ -118,11 +122,13 @@ def _verify_element(iface, name, desc, candidate, vtype):
         # ValueError: no signature found. The ``__text_signature__`` attribute
         # isn't typically populated either.
         #
-        # Note that on PyPy 2 or 3 (up through 7.3 at least), these are
-        # not true for things like ``dict.pop`` (but might be true for C extensions?)
+        # Note that on PyPy 2 or 3 (up through 7.3 at least), these are not
+        # true for things like ``dict.pop`` (but might be true for C
+        # extensions?)
         return
 
     if isinstance(attr, FunctionType):
+
         if isinstance(candidate, type) and vtype == 'c':
             # This is an "unbound method".
             # Only unwrap this if we're verifying implementedBy;
@@ -132,9 +138,13 @@ def _verify_element(iface, name, desc, candidate, vtype):
         else:
             # Nope, just a normal function
             meth = fromFunction(attr, iface, name=name)
-    elif (isinstance(attr, MethodTypes)
-          and type(attr.__func__) is FunctionType):
+
+    elif (
+        isinstance(attr, MethodTypes) and
+        type(attr.__func__) is FunctionType
+    ):
         meth = fromMethod(attr, iface, name)
+
     elif isinstance(attr, property) and vtype == 'c':
         # Without an instance we cannot be sure it's not a
         # callable.
@@ -144,8 +154,13 @@ def _verify_element(iface, name, desc, candidate, vtype):
 
     else:
         if not callable(attr):
-            raise BrokenMethodImplementation(desc, "implementation is not a method",
-                                             attr, iface, candidate)
+            raise BrokenMethodImplementation(
+                desc,
+                "implementation is not a method",
+                attr,
+                iface,
+                candidate
+            )
         # sigh, it's callable, but we don't know how to introspect it, so
         # we have to give it a pass.
         return
@@ -157,31 +172,38 @@ def _verify_element(iface, name, desc, candidate, vtype):
         raise BrokenMethodImplementation(desc, mess, attr, iface, candidate)
 
 
-
 def verifyClass(iface, candidate, tentative=False):
     """
     Verify that the *candidate* might correctly provide *iface*.
     """
     return _verify(iface, candidate, tentative, vtype='c')
 
+
 def verifyObject(iface, candidate, tentative=False):
     return _verify(iface, candidate, tentative, vtype='o')
+
 
 verifyObject.__doc__ = _verify.__doc__
 
 _MSG_TOO_MANY = 'implementation requires too many arguments'
 
+
 def _incompat(required, implemented):
-    #if (required['positional'] !=
-    #    implemented['positional'][:len(required['positional'])]
-    #    and implemented['kwargs'] is None):
-    #    return 'imlementation has different argument names'
+    # if (required['positional'] !=
+    #     implemented['positional'][:len(required['positional'])]
+    #     and implemented['kwargs'] is None):
+    #     return 'imlementation has different argument names'
     if len(implemented['required']) > len(required['required']):
         return _MSG_TOO_MANY
-    if ((len(implemented['positional']) < len(required['positional']))
-        and not implemented['varargs']):
+
+    if (
+        (len(implemented['positional']) < len(required['positional'])) and
+        not implemented['varargs']
+    ):
         return "implementation doesn't allow enough arguments"
+
     if required['kwargs'] and not implemented['kwargs']:
         return "implementation doesn't support keyword arguments"
+
     if required['varargs'] and not implemented['varargs']:
         return "implementation doesn't support variable arguments"

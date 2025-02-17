@@ -1,0 +1,17 @@
+commit 90119e80c547f12b1455c27b10223912cce276ce
+author: nechda
+date: 2024-08-08T14:02:37+03:00
+
+    [PROTOBUF] DefaultFieldComparator not final class anymore
+
+--- contrib/libs/protobuf/src/google/protobuf/util/field_comparator.h	(03293607825fc752066f258b5641bb694ce9bc61)
++++ contrib/libs/protobuf/src/google/protobuf/util/field_comparator.h	(90119e80c547f12b1455c27b10223912cce276ce)
+@@ -258,7 +258,7 @@ class PROTOBUF_EXPORT SimpleFieldComparator : public FieldComparator {
+ };
+ 
+ // Default field comparison: use the basic implementation of FieldComparator.
+-class PROTOBUF_EXPORT DefaultFieldComparator final
++class PROTOBUF_EXPORT DefaultFieldComparator
+     : public SimpleFieldComparator {
+  public:
+   ComparisonResult Compare(const Message& message_1, const Message& message_2,

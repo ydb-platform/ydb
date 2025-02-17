@@ -6,6 +6,8 @@
 #undef FUTURE_INL_H_
 
 #include "bind.h"
+#include "cancelation_token.h"
+#include "invoker_util.h"
 
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/thread_affinity.h>
@@ -13,7 +15,7 @@
 #include <library/cpp/yt/threading/event_count.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <atomic>
 #include <type_traits>
@@ -40,21 +42,38 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline NYT::TError MakeAbandonedError()
+inline TError WrapIntoCancelationError(const TError& error)
 {
-    return NYT::TError(NYT::EErrorCode::Canceled, "Promise abandoned");
-}
-
-inline NYT::TError MakeCanceledError(const NYT::TError& error)
-{
-    return NYT::TError(NYT::EErrorCode::Canceled, "Operation canceled")
+    return TError(NYT::EErrorCode::Canceled, "Operation canceled")
         << error;
 }
 
-template <class T>
-TFuture<T> MakeWellKnownFuture(NYT::TErrorOr<T> value)
+inline TError TryExtractCancelationError()
 {
-    return TFuture<T>(New<NYT::NDetail::TPromiseState<T>>(true, -1, -1, -1, std::move(value)));
+    const auto& currentToken = GetCurrentCancelationToken();
+
+    if (IsCancelationRequested(currentToken)) {
+        // NB(arkady-e1ppa): This clown fiesta is present because some external
+        // users managed to both hardcode "Promise abandoned" error message
+        // as the retriable one (or expected in tests) and
+        // rely on their cancelation error to never be wrapped
+        // into anything with a different error code.
+        const auto& tokenError = GetCancelationError(currentToken);
+        return TError(tokenError.GetCode(), "Promise abandoned") << tokenError;
+    }
+
+    return TError(NYT::EErrorCode::Canceled, "Promise abandoned");
+}
+
+template <class T>
+TFuture<T> MakeWellKnownFuture(TErrorOr<T> value)
+{
+    return TFuture<T>(New<NDetail::TPromiseState<T>>(
+        /*wellKnown*/ true,
+        /*promiseRefCount*/ -1,
+        /*futureRefCount*/ -1,
+        /*cancelableRefCount*/ -1,
+        std::move(value)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -92,7 +111,7 @@ public:
             return false;
         }
         cookie -= MinCookie;
-        YT_ASSERT(cookie >= 0 && cookie < static_cast<int>(Callbacks_.size()));
+        YT_ASSERT(cookie >= 0 && cookie < std::ssize(Callbacks_));
         YT_ASSERT(Callbacks_[cookie]);
         SpareCookies_.push_back(cookie);
         auto callback = std::move(Callbacks_[cookie]);
@@ -314,6 +333,12 @@ public:
         return Canceled_;
     }
 
+    // Only safe to call after IsCanceled returned |true|.
+    const TError& GetCancelationError() const
+    {
+        return CancelationError_;
+    }
+
     bool Wait(TDuration timeout) const;
     bool Wait(TInstant deadline) const;
 
@@ -503,14 +528,14 @@ private:
 
     void SetResultError(const NYT::TError& error) override
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
         TFutureState<void>::SetResultError(error);
         Result_.emplace(error);
     }
 
     bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard) override
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
         return
             ResultHandlers_.TryRemove(cookie, guard) ||
             TFutureState<void>::DoUnsubscribe(cookie, guard);
@@ -694,13 +719,18 @@ template <class T, class F>
 void InterceptExceptions(const TPromise<T>& promise, const F& func)
 {
     try {
+        auto guard = MakeFutureCurrentTokenGuard(promise.Impl_.Get());
         func();
     } catch (const NYT::TErrorException& ex) {
         promise.Set(ex.Error());
     } catch (const std::exception& ex) {
         promise.Set(NYT::TError(ex));
     } catch (const NConcurrency::TFiberCanceledException&) {
-        promise.Set(MakeAbandonedError());
+        if (auto error = promise.GetCancelationError(); !error.IsOK()) {
+            promise.Set(std::move(error));
+        } else {
+            promise.Set(TryExtractCancelationError());
+        }
     }
 }
 
@@ -862,8 +892,7 @@ template <class T, class D>
 TFuture<T> ApplyTimeoutHelper(
     TFutureBase<T> this_,
     D timeoutOrDeadline,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker)
+    TFutureTimeoutOptions options)
 {
     auto promise = NewPromise<T>();
 
@@ -888,7 +917,7 @@ TFuture<T> ApplyTimeoutHelper(
             cancelable.Cancel(error);
         }),
         timeoutOrDeadline,
-        std::move(invoker));
+        options.Invoker);
 
     this_.Subscribe(BIND_NO_PROPAGATE([=] (const NYT::TErrorOr<T>& value) {
         NConcurrency::TDelayedExecutor::Cancel(cookie);
@@ -1124,7 +1153,7 @@ TFuture<T> TFutureBase<T>::ToImmediatelyCancelable() const
 
     promise.OnCanceled(BIND_NO_PROPAGATE([=, cancelable = AsCancelable()] (const NYT::TError& error) {
         cancelable.Cancel(error);
-        promise.TrySet(NYT::NDetail::MakeCanceledError(error));
+        promise.TrySet(NYT::NDetail::WrapIntoCancelationError(error));
     }));
 
     return promise;
@@ -1133,8 +1162,7 @@ TFuture<T> TFutureBase<T>::ToImmediatelyCancelable() const
 template <class T>
 TFuture<T> TFutureBase<T>::WithDeadline(
     TInstant deadline,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker) const
+    TFutureTimeoutOptions options) const
 {
     YT_ASSERT(Impl_);
 
@@ -1142,14 +1170,13 @@ TFuture<T> TFutureBase<T>::WithDeadline(
         return TFuture<T>(Impl_);
     }
 
-    return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(options), std::move(invoker));
+    return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(options));
 }
 
 template <class T>
 TFuture<T> TFutureBase<T>::WithTimeout(
     TDuration timeout,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker) const
+    TFutureTimeoutOptions options) const
 {
     YT_ASSERT(Impl_);
 
@@ -1157,16 +1184,15 @@ TFuture<T> TFutureBase<T>::WithTimeout(
         return TFuture<T>(Impl_);
     }
 
-    return NYT::NDetail::ApplyTimeoutHelper(*this, timeout, std::move(options), std::move(invoker));
+    return NYT::NDetail::ApplyTimeoutHelper(*this, timeout, std::move(options));
 }
 
 template <class T>
 TFuture<T> TFutureBase<T>::WithTimeout(
     std::optional<TDuration> timeout,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker) const
+    TFutureTimeoutOptions options) const
 {
-    return timeout ? WithTimeout(*timeout, std::move(options), std::move(invoker)) : TFuture<T>(Impl_);
+    return timeout ? WithTimeout(*timeout, std::move(options)) : TFuture<T>(Impl_);
 }
 
 template <class T>
@@ -1431,6 +1457,15 @@ bool TPromiseBase<T>::IsCanceled() const
 }
 
 template <class T>
+NYT::TError TPromiseBase<T>::GetCancelationError() const
+{
+    if (!IsCanceled()) {
+        return NYT::TError{};
+    }
+    return Impl_->GetCancelationError();
+}
+
+template <class T>
 bool TPromiseBase<T>::OnCanceled(TCallback<void(const NYT::TError&)> handler) const
 {
     YT_ASSERT(Impl_);
@@ -1578,11 +1613,29 @@ struct TAsyncViaHelper<R(TArgs...)>
         TArgs... args)
     {
         auto promise = NewPromise<TUnderlying>();
-        invoker->Invoke(BIND_NO_PROPAGATE(
-            &Inner,
-            std::move(this_),
-            promise,
-            WrapToPassed(std::forward<TArgs>(args))...));
+        auto makeOnSuccess = [&] <size_t... Indeces> (std::index_sequence<Indeces...>) mutable {
+            return
+                [
+                    promise,
+                    this_ = std::move(this_),
+                    // NB(arkady-e1ppa): TArgs = [std::tuple<...>] will cause
+                    // copy/move ctor inference instead of a nested tuple if we don't
+                    // write template arguments explicitly.
+                    tuple = std::tuple<std::remove_reference_t<TArgs>...>(std::forward<TArgs>(args)...)
+                ] () mutable {
+                    if constexpr (sizeof...(TArgs) == 0) {
+                        Y_UNUSED(tuple);
+                    }
+                    Inner(std::move(this_), promise, std::forward<TArgs>(std::get<Indeces>(tuple))...);
+                };
+        };
+
+        GuardedInvoke(
+            invoker,
+            makeOnSuccess(std::make_index_sequence<sizeof...(TArgs)>()),
+            [promise] {
+                promise.Set(TryExtractCancelationError());
+            });
         return promise;
     }
 
@@ -1593,13 +1646,13 @@ struct TAsyncViaHelper<R(TArgs...)>
         TArgs... args)
     {
         auto promise = NewPromise<TUnderlying>();
-        auto makeOnSuccess = [&] <size_t... Indeces> (std::index_sequence<Indeces...>) {
+        auto makeOnSuccess = [&] <size_t... Indeces> (std::index_sequence<Indeces...>) mutable {
             return
                 [
                     promise,
                     this_ = std::move(this_),
-                    tuple = std::tuple(std::forward<TArgs>(args)...)
-                ] {
+                    tuple = std::tuple<std::remove_reference_t<TArgs>...>(std::forward<TArgs>(args)...)
+                ] () mutable {
                     if constexpr (sizeof...(TArgs) == 0) {
                         Y_UNUSED(tuple);
                     }
@@ -2055,7 +2108,7 @@ public:
             return MakeFuture<typename TResultHolder::TResult>({});
         }
 
-        for (int index = 0; index < static_cast<int>(this->Futures_.size()); ++index) {
+        for (int index = 0; index < std::ssize(this->Futures_); ++index) {
             const auto& future = this->Futures_[index];
             if (future.IsSet()) {
                 OnFutureSet(index, future.Get());
@@ -2098,7 +2151,7 @@ private:
             return;
         }
 
-        if (++ResponseCount_ == static_cast<int>(this->Futures_.size())) {
+        if (++ResponseCount_ == std::ssize(this->Futures_)) {
             ResultHolder_.TrySetPromise(Promise_);
         }
     }
@@ -2135,7 +2188,7 @@ public:
             return MakeFuture<typename TResultHolder::TResult>({});
         }
 
-        if (static_cast<int>(this->Futures_.size()) < N_) {
+        if (std::ssize(this->Futures_) < N_) {
             if (Options_.CancelInputOnShortcut) {
                 this->CancelFutures(NYT::TError(
                     NYT::EErrorCode::FutureCombinerShortcut,
@@ -2151,7 +2204,7 @@ public:
 
         std::vector<TFutureCallbackCookie> subscriptionCookies;
         subscriptionCookies.reserve(this->Futures_.size());
-        for (int index = 0; index < static_cast<int>(this->Futures_.size()); ++index) {
+        for (int index = 0; index < std::ssize(this->Futures_); ++index) {
             TFutureCallbackCookie cookie;
             const auto& future = this->Futures_[index];
             if (future.IsSet()) {
@@ -2220,7 +2273,7 @@ private:
             }
 
             if (Options_.CancelInputOnShortcut &&
-                responseIndex < static_cast<int>(this->Futures_.size()) - 1 &&
+                responseIndex < std::ssize(this->Futures_) - 1 &&
                 this->TryAcquireFuturesCancelLatch())
             {
                 this->CancelFutures(NYT::TError(
@@ -2236,8 +2289,8 @@ private:
 
         Errors_.push_back(error);
 
-        auto totalCount = static_cast<int>(this->Futures_.size());
-        auto failedCount = static_cast<int>(Errors_.size());
+        auto totalCount = std::ssize(this->Futures_);
+        auto failedCount = std::ssize(Errors_);
         if (totalCount - failedCount >= N_) {
             return;
         }
@@ -2327,7 +2380,7 @@ TFuture<std::vector<TErrorOr<T>>> AllSetWithTimeout(
     IInvokerPtr invoker)
 {
     std::vector<TPromise<T>> promises(futures.size());
-    for (int index = 0; index < static_cast<int>(futures.size()); ++index) {
+    for (int index = 0; index < std::ssize(futures); ++index) {
         auto promise = NewPromise<T>();
         futures[index].Subscribe(BIND_NO_PROPAGATE([promise] (const NYT::TErrorOr<T>& value) {
             promise.TrySet(value);
@@ -2347,7 +2400,7 @@ TFuture<std::vector<TErrorOr<T>>> AllSetWithTimeout(
 
     auto cookie = NConcurrency::TDelayedExecutor::Submit(
         BIND_NO_PROPAGATE([promises, futures] {
-            for (int index = 0; index < static_cast<int>(futures.size()); ++index) {
+            for (int index = 0; index < std::ssize(futures); ++index) {
                 auto error = NYT::TError(NYT::EErrorCode::Timeout, "Operation timed out");
                 promises[index].TrySet(error);
                 futures[index].Cancel(error);
@@ -2402,12 +2455,14 @@ class TCancelableBoundedConcurrencyRunner
 public:
     TCancelableBoundedConcurrencyRunner(
         std::vector<TCallback<TFuture<T>()>> callbacks,
-        int concurrencyLimit)
+        int concurrencyLimit,
+        bool failOnError = false)
         : Callbacks_(std::move(callbacks))
         , ConcurrencyLimit_(concurrencyLimit)
         , Futures_(Callbacks_.size(), VoidFuture)
         , Results_(Callbacks_.size())
-        , CurrentIndex_(std::min<int>(ConcurrencyLimit_, ssize(Callbacks_)))
+        , CurrentIndex_(std::min<int>(ConcurrencyLimit_, std::ssize(Callbacks_)))
+        , FailOnFirstError_(failOnError)
     { }
 
     TFuture<std::vector<TErrorOr<T>>> Run()
@@ -2434,47 +2489,62 @@ private:
     const TPromise<std::vector<TErrorOr<T>>> Promise_ = NewPromise<std::vector<TErrorOr<T>>>();
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-    std::optional<TError> CancelationError_;
+    std::optional<TError> Error_;
     std::vector<TFuture<void>> Futures_;
     std::vector<TErrorOr<T>> Results_;
     int CurrentIndex_;
     int FinishedCount_ = 0;
+    const bool FailOnFirstError_ = false;
 
 
     void RunCallback(int index)
     {
-        auto future = Callbacks_[index]();
+        // ORD-2002: Avoid calling OnResult directly to prevent unbounded
+        // recursive chains like RunCallback -> OnResult -> RunCallback...
+        while (true) {
+            auto future = Callbacks_[index]();
+            if (!future.IsSet()) {
+                {
+                    auto guard = Guard(SpinLock_);
+                    if (Error_) {
+                        guard.Release();
+                        future.Cancel(*Error_);
+                        return;
+                    }
 
-        if (future.IsSet()) {
-            OnResult(index, std::move(future.Get()));
-            return;
-        }
+                    Futures_[index] = future.template As<void>();
+                }
 
-        {
-            auto guard = Guard(SpinLock_);
-            if (CancelationError_) {
-                guard.Release();
-                future.Cancel(*CancelationError_);
-                return;
+                future.Subscribe(
+                    BIND_NO_PROPAGATE(&TCancelableBoundedConcurrencyRunner::OnResult, MakeStrong(this), index)
+                        // NB: Sync invoker protects from unbounded recursion.
+                        .Via(GetSyncInvoker()));
+                break;
             }
 
-            Futures_[index] = future.template As<void>();
-        }
+            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, std::move(future.Get()));
+            if (!suggestedIndex) {
+                break;
+            }
 
-        future.Subscribe(
-            BIND_NO_PROPAGATE(&TCancelableBoundedConcurrencyRunner::OnResult, MakeStrong(this), index)
-                // NB: Sync invoker protects from unbounded recursion.
-                .Via(GetSyncInvoker()));
+            index = *suggestedIndex;
+        }
     }
 
-    void OnResult(int index, const NYT::TErrorOr<T>& result)
+    [[nodiscard]]
+    std::optional<int> HandleResultAndSuggestNextIndex(int index, const TErrorOr<T>& result)
     {
+        if (FailOnFirstError_ && !result.IsOK()) {
+            OnError(result);
+            return std::nullopt;
+        }
+
         int newIndex;
         int finishedCount;
         {
             auto guard = Guard(SpinLock_);
-            if (CancelationError_) {
-                return;
+            if (Error_) {
+                return std::nullopt;
             }
 
             newIndex = CurrentIndex_++;
@@ -2482,13 +2552,36 @@ private:
             Results_[index] = result;
         }
 
-        if (finishedCount == ssize(Callbacks_)) {
+        if (finishedCount == std::ssize(Callbacks_)) {
             Promise_.TrySet(Results_);
         }
 
-        if (newIndex < ssize(Callbacks_)) {
-            RunCallback(newIndex);
+        return newIndex < std::ssize(Callbacks_) ? std::optional(newIndex) : std::nullopt;
+    }
+
+    void OnResult(int index, const TErrorOr<T>& result)
+    {
+        if (auto suggestedIndex = HandleResultAndSuggestNextIndex(index, result)) {
+            RunCallback(*suggestedIndex);
         }
+    }
+
+    void OnError(const NYT::TError& error)
+    {
+        {
+            auto guard = Guard(SpinLock_);
+            if (Error_) {
+                return;
+            }
+            Error_ = error;
+        }
+
+        // NB: Setting of Error_ disallows modification of CurrentIndex_ and Futures_.
+        for (int index = 0; index < std::min<int>(ssize(Futures_), CurrentIndex_); ++index) {
+            Futures_[index].Cancel(error);
+        }
+
+        Promise_.TrySet(error);
     }
 
     void OnCanceled(const NYT::TError& error)
@@ -2496,20 +2589,7 @@ private:
         auto wrappedError = NYT::TError(NYT::EErrorCode::Canceled, "Canceled")
             << error;
 
-        {
-            auto guard = Guard(SpinLock_);
-            if (CancelationError_) {
-                return;
-            }
-            CancelationError_ = wrappedError;
-        }
-
-        // NB: Setting of CancelationError_ disallows modification of CurrentIndex_ and Futures_.
-        for (int index = 0; index < std::min<int>(ssize(Futures_), CurrentIndex_); ++index) {
-            Futures_[index].Cancel(wrappedError);
-        }
-
-        Promise_.TrySet(wrappedError);
+        OnError(wrappedError);
     }
 };
 
@@ -2531,7 +2611,7 @@ public:
         if (Callbacks_.empty()) {
             return MakeFuture(std::vector<TErrorOr<T>>());
         }
-        int startImmediatelyCount = std::min(ConcurrencyLimit_, static_cast<int>(Callbacks_.size()));
+        int startImmediatelyCount = std::min<int>(ConcurrencyLimit_, std::ssize(Callbacks_));
         CurrentIndex_ = startImmediatelyCount;
         for (int index = 0; index < startImmediatelyCount; ++index) {
             RunCallback(index);
@@ -2550,26 +2630,44 @@ private:
 
     void RunCallback(int index)
     {
-        auto future = Callbacks_[index]();
-        if (future.IsSet()) {
-            OnResult(index, future.Get());
-        } else {
-            future.Subscribe(
-                BIND_NO_PROPAGATE(&TBoundedConcurrencyRunner::OnResult, MakeStrong(this), index));
+        // ORD-2002: Avoid calling OnResult directly to prevent unbounded
+        // recursive chains like RunCallback -> OnResult -> RunCallback...
+        while (true) {
+            auto future = Callbacks_[index]();
+            if (!future.IsSet()) {
+                future.Subscribe(
+                    BIND_NO_PROPAGATE(&TBoundedConcurrencyRunner::OnResult, MakeStrong(this), index)
+                        // NB: Sync invoker protects from unbounded recursion.
+                        .Via(GetSyncInvoker()));
+                        break;
+            }
+
+            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, future.Get());
+            if (!suggestedIndex) {
+                break;
+            }
+
+            index = *suggestedIndex;
         }
     }
 
-    void OnResult(int index, const NYT::TErrorOr<T>& result)
+    [[nodiscard]]
+    std::optional<int> HandleResultAndSuggestNextIndex(int index, const TErrorOr<T>& result)
     {
         Results_[index] = result;
 
         int newIndex = CurrentIndex_++;
-        if (newIndex < static_cast<ssize_t>(Callbacks_.size())) {
-            RunCallback(newIndex);
+        if (++FinishedCount_ == std::ssize(Callbacks_)) {
+            Promise_.Set(Results_);
         }
 
-        if (++FinishedCount_ == static_cast<ssize_t>(Callbacks_.size())) {
-            Promise_.Set(Results_);
+        return newIndex < std::ssize(Callbacks_) ? std::optional(newIndex) : std::nullopt;
+    }
+
+    void OnResult(int index, const TErrorOr<T>& result)
+    {
+        if (auto suggestedIndex = HandleResultAndSuggestNextIndex(index, result)) {
+            RunCallback(*suggestedIndex);
         }
     }
 };
@@ -2589,10 +2687,21 @@ TFuture<std::vector<TErrorOr<T>>> RunWithBoundedConcurrency(
 template <class T>
 TFuture<std::vector<TErrorOr<T>>> CancelableRunWithBoundedConcurrency(
     std::vector<TCallback<TFuture<T>()>> callbacks,
+    int concurrencyLimit,
+    bool failOnError)
+{
+    YT_VERIFY(concurrencyLimit >= 0);
+    return New<NYT::NDetail::TCancelableBoundedConcurrencyRunner<T>>(std::move(callbacks), concurrencyLimit, failOnError)
+        ->Run();
+}
+
+template <class T>
+TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
+    std::vector<TCallback<TFuture<T>()>> callbacks,
     int concurrencyLimit)
 {
     YT_VERIFY(concurrencyLimit >= 0);
-    return New<NYT::NDetail::TCancelableBoundedConcurrencyRunner<T>>(std::move(callbacks), concurrencyLimit)
+    return New<NYT::NDetail::TCancelableBoundedConcurrencyRunner<T>>(std::move(callbacks), concurrencyLimit, true)
         ->Run();
 }
 

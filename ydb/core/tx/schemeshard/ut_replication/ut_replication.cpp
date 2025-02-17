@@ -143,6 +143,102 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         }
     }
 
+    Y_UNIT_TEST(CreateWithoutCredentials) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = DescribePath(runtime, "/MyRoot/Replication");
+        const auto& params = desc.GetPathDescription().GetReplicationDescription().GetConfig().GetSrcConnectionParams();
+        UNIT_ASSERT_VALUES_UNEQUAL("root@builtin", params.GetOAuthToken().GetToken());
+    }
+
+    Y_UNIT_TEST(ConsistencyLevel) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication1"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication1");
+            const auto& config = desc.GetPathDescription().GetReplicationDescription().GetConfig();
+            UNIT_ASSERT(config.GetConsistencySettings().HasRow());
+        }
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication2"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+              ConsistencySettings {
+                Row {}
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication2");
+            const auto& config = desc.GetPathDescription().GetReplicationDescription().GetConfig();
+            UNIT_ASSERT(config.GetConsistencySettings().HasRow());
+        }
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication3"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+              ConsistencySettings {
+                Global {
+                  CommitIntervalMilliSeconds: 10000
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication3");
+            const auto& config = desc.GetPathDescription().GetReplicationDescription().GetConfig();
+            UNIT_ASSERT(config.GetConsistencySettings().HasGlobal());
+            UNIT_ASSERT_VALUES_EQUAL(config.GetConsistencySettings().GetGlobal().GetCommitIntervalMilliSeconds(), 10000);
+        }
+    }
+
     Y_UNIT_TEST(Alter) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
@@ -323,6 +419,75 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
 
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "by_value", {"value"},
             Ydb::StatusIds::BAD_REQUEST);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+            Name: "Table"
+            ReplicationConfig {
+              Mode: REPLICATION_MODE_NONE
+              ConsistencyLevel: CONSISTENCY_LEVEL_ROW
+            }
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusInvalidParameter});
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+            Name: "Table"
+            ReplicationConfig {
+              Mode: REPLICATION_MODE_NONE
+            }
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
+            NLs::UserAttrsEqual({}),
+        });
+    }
+
+    Y_UNIT_TEST(AlterReplicatedIndexTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(CreateIndexedTableRequest(++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+              ReplicationConfig {
+                Mode: REPLICATION_MODE_READ_ONLY
+              }
+            }
+            IndexDescription {
+              Name: "Index"
+              KeyColumnNames: ["indexed"]
+              IndexImplTableDescriptions: [ {
+                ReplicationConfig {
+                  Mode: REPLICATION_MODE_READ_ONLY
+                }
+              } ]
+            }
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY),
+        });
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot/Table/Index", R"(
+            Name: "indexImplTable"
+            ReplicationConfig {
+              Mode: REPLICATION_MODE_NONE
+            }
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
+        });
     }
 
     Y_UNIT_TEST(CopyReplicatedTable) {
@@ -350,6 +515,64 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         const auto desc = DescribePath(runtime, "/MyRoot/CopyTable");
         const auto& table = desc.GetPathDescription().GetTable();
         UNIT_ASSERT(!table.HasReplicationConfig());
+    }
+
+    Y_UNIT_TEST(DropReplicationWithInvalidCredentials) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathExist});
+
+        TestDropReplication(runtime, ++txId, "/MyRoot", "Replication");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(DropReplicationWithUnknownSecret) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            Config {
+              SrcConnectionParams {
+                StaticCredentials {
+                  User: "user"
+                  PasswordSecretName: "unknown_secret"
+                }
+              }
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathExist});
+
+        TestDropReplication(runtime, ++txId, "/MyRoot", "Replication");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
     }
 
 } // TReplicationTests

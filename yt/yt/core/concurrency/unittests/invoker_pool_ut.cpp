@@ -49,7 +49,7 @@ using IMockInvokerPoolPtr = TIntrusivePtr<IMockInvokerPool>;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TMockInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<false>
 {
 public:
     explicit TMockInvoker(IInvokerPtr underlyingInvoker)
@@ -57,13 +57,15 @@ public:
         , InvocationCount_(0)
     { }
 
+    using TInvokerWrapper::Invoke;
+
     void Invoke(TClosure callback) override
     {
         ++InvocationCount_;
         if (Bounded_ ) {
             EXPECT_TRUE(Parent_.Lock());
         }
-        TInvokerWrapper::Invoke(std::move(callback));
+        UnderlyingInvoker_->Invoke(std::move(callback));
     }
 
     void Bound(const IMockInvokerPoolPtr& parent)

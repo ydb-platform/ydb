@@ -1,6 +1,7 @@
 #include "parameters.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/async.h>
@@ -8,59 +9,232 @@
 namespace NYdb {
 namespace NConsoleClient {
 
+namespace {
+    const size_t DEFAULT_BATCH_LIMIT = 1000;
+    const TDuration DEFAULT_BATCH_MAX_DELAY = TDuration::Seconds(1);
+
+    THashMap<EDataFormat, TString> InputFormatParamDescriptions = {
+        { EDataFormat::Json, "Parameters from the input are parsed in json format, binary string encoding can be set with --input-binary-strings option" },
+        { EDataFormat::Csv, "Parameters from the input are parsed in csv format" },
+        { EDataFormat::Tsv, "Parameters from the input are parsed in tsv format" },
+        { EDataFormat::Raw, "Input is read as parameter value[s] with no transformation or parsing. Parameter name should be set with \"--input-param-name\" option" },
+    };
+}
+
+void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config, const TString& clarification) {
+    TStringStream descr;
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    descr << "Query parameter[s].";
+    if (clarification) {
+        descr << ' ' << clarification;
+    }
+    descr << Endl << "Format should be 'name=value' or '$name=value' where value is parsed as Json." << Endl
+        << "Several parameter options can be specified. "
+        << "To change binary strings encoding use --input-binary-strings option. "
+        << "Escaping depends on operating system.";
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        descr << Endl << "Use -hh option to see usage examples and all other options to work with parameters.";
+    }
+    descr << Endl << "More information and examples in the documentation:" << Endl
+        << "  https://ydb.tech/docs/en/reference/ydb-cli/parameterized-queries-cli";
+    config.Opts->AddLongOption('p', "param", descr.Str())
+        .RequiredArgument("STRING").AppendTo(&ParameterOptions);
+
+    TStringStream inputFileDescr;
+    inputFileDescr << "File name with input parameter names and values. Format is configured with --input-format option.";
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        inputFileDescr << Endl << "Use -hh option to see all options to work with parameters.";
+    }
+    AddInputFileOption(config, false, inputFileDescr.Str());
+
+    if (config.HelpCommandVerbosiltyLevel > 1) {
+        AddOptionExamples(
+            "param",
+            TExampleSetBuilder()
+                .Title("Examples (with default json-unicode format)")
+                .BeginExample()
+                    .Title("One parameter of type Uint64")
+                    .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$id=3" << colors.OldColor() << Endl
+                        << "How to pass in linux: " << colors.BoldColor() << "--param '$id=3'" << colors.OldColor())
+                .EndExample()
+                .BeginExample()
+                    .Title("Two parameters of types Uint64 and Utf8")
+                    .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$key=1 $value=\"One\"" << colors.OldColor() << Endl
+                        << "How to pass in linux: " << colors.BoldColor() << "--param '$key=3' --param '$value=\"One\"'" << colors.OldColor())
+                .EndExample()
+                .BeginExample()
+                    .Title("More complex parameter of type List<Struct<key:Uint64, value:Utf8>>")
+                    .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]" << colors.OldColor() << Endl
+                        << "How to pass in linux: " << colors.BoldColor() << "--param '$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]'" << colors.OldColor())
+                .EndExample()
+            .Build()
+        );
+    }
+}
+
+void TCommandWithParameters::AddLegacyParametersFileOption(TClientCommand::TConfig& config) {
+    config.Opts->AddLongOption("param-file", "File name with parameter names and values "
+        "in json format. You may specify this option repeatedly.")
+        .RequiredArgument("PATH").AppendTo(&ParameterFiles)
+        .Hidden();
+}
+
+void TCommandWithParameters::AddDefaultParamFormats(TClientCommand::TConfig& config) {
+    AddInputFormats(config, {
+        EDataFormat::Json,
+        EDataFormat::Csv,
+        EDataFormat::Tsv,
+        EDataFormat::Raw,
+    });
+    AddInputFramingFormats(config, {
+        EFramingFormat::NoFraming,
+        EFramingFormat::NewlineDelimited,
+    });
+    AddInputBinaryStringEncodingFormats(config, {
+        EBinaryStringEncodingFormat::Unicode,
+        EBinaryStringEncodingFormat::Base64,
+    });
+}
+
+void TCommandWithParameters::AddLegacyStdinFormats(TClientCommand::TConfig& config) {
+    AddLegacyInputFormats(config, "stdin-format", {"input-format", "input-framing"},
+        {
+            EDataFormat::JsonUnicode,
+            EDataFormat::JsonBase64,
+        }
+    );
+}
+
+void TCommandWithParameters::AddBatchParametersOptions(TClientCommand::TConfig& config, const TString& requestString) {
+    TStringStream descr;
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    descr << "Batching mode for input parameters processing. Available options:\n  "
+        << colors.BoldColor() << "iterative" << colors.OldColor()
+        << "\n    Executes " << requestString << " for each parameter set (exactly one execution "
+        "when no framing specified in \"stdin-format\")\n  "
+        << colors.BoldColor() << "full" << colors.OldColor()
+        << "\n    Executes " << requestString << " once, with all parameter sets wrapped in json list, when EOF is reached on stdin\n  "
+        << colors.BoldColor() << "adaptive" << colors.OldColor()
+        << "\n    Executes " << requestString << " with a json list of parameter sets every time when its number reaches batch-limit, "
+        "or the waiting time reaches batch-max-delay."
+        "\nDefault: " << colors.CyanColor() << "\"iterative\"" << colors.OldColor() << ".";
+    auto& inputParamName = config.Opts->AddLongOption("input-param-name",
+            "Parameter name on the input stream, required/applicable when input format implies values only (i.e. raw).")
+        .RequiredArgument("STRING").AppendTo(&InputParamNames);
+    auto& inputColumns = config.Opts->AddLongOption("input-columns", "String with column names that replaces CSV/TSV header. "
+            "Relevant when passing parameters in CSV/TSV format only. "
+            "It is assumed that there is no header in the file")
+            .RequiredArgument("STR").StoreResult(&Columns);
+    auto& inputSkipRows = config.Opts->AddLongOption("input-skip-rows",
+            "Number of CSV/TSV header rows to skip in the input data (not including the row of column names, if any). "
+            "Relevant when passing parameters in CSV/TSV format only.")
+            .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(0);
+    auto& inputBatch = config.Opts->AddLongOption("input-batch", descr.Str()).RequiredArgument("STRING").StoreResult(&BatchMode);
+    auto& inputBatchMaxRows = config.Opts->AddLongOption("input-batch-max-rows", "Maximum size of list for input adaptive batching mode")
+        .RequiredArgument("INT").StoreResult(&BatchLimit).DefaultValue(DEFAULT_BATCH_LIMIT);
+    auto& inputBatchMaxDelay = config.Opts->AddLongOption("input-batch-max-delay", "Maximum delay to process first item in the list for adaptive batching mode")
+            .RequiredArgument("VAL").StoreResult(&BatchMaxDelay).DefaultValue(DEFAULT_BATCH_MAX_DELAY);
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        inputParamName.Hidden();
+        inputColumns.Hidden();
+        inputSkipRows.Hidden();
+        inputBatch.Hidden();
+        inputBatchMaxRows.Hidden();
+        inputBatchMaxDelay.Hidden();
+    }
+}
+
+void TCommandWithParameters::AddLegacyBatchParametersOptions(TClientCommand::TConfig& config) {
+    // For backward compatibility:
+    config.Opts->AddLongOption("columns").RequiredArgument("STR").StoreResult(&Columns)
+        .Hidden();
+    config.Opts->MutuallyExclusive("input-columns", "columns");
+    config.Opts->AddLongOption("skip-rows").RequiredArgument("NUM")
+        .StoreResult(&DeprecatedSkipRows)
+        .Hidden();
+    config.Opts->MutuallyExclusive("input-skip-rows", "skip-rows");
+    config.Opts->AddLongOption("stdin-par",
+            "Parameter name on stdin, required/applicable when stdin-format implies values only.")
+        .RequiredArgument("STRING").AppendTo(&InputParamNames)
+        .Hidden();
+    config.Opts->MutuallyExclusive("input-param-name", "stdin-par");
+    config.Opts->AddLongOption("batch").RequiredArgument("STRING")
+        .StoreResult(&BatchMode)
+        .Hidden();
+    config.Opts->MutuallyExclusive("input-batch", "batch");
+    config.Opts->AddLongOption("batch-limit")
+        .RequiredArgument("INT").StoreResult(&DeprecatedBatchLimit)
+        .Hidden();
+    config.Opts->MutuallyExclusive("input-batch-max-rows", "batch-limit");
+    config.Opts->AddLongOption("batch-max-delay").RequiredArgument("VAL")
+        .StoreResult(&DeprecatedBatchMaxDelay)
+        .Hidden();
+    config.Opts->MutuallyExclusive("input-batch-max-delay", "batch-max-delay");
+}
+
+THashMap<EDataFormat, TString>& TCommandWithParameters::GetInputFormatDescriptions() {
+    return InputFormatParamDescriptions;
+}
+
+void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
+    for (const auto&[name, value] : Parameters) {
+        auto paramIt = ParamTypes.find(name);
+        if (paramIt == ParamTypes.end()) {
+            if (ParameterSources[name] == "\'--param\' option") {
+                throw TMisuseException() << "Query does not contain parameter \"" << name << "\".";
+            } else {
+                continue;
+            }
+        }
+        const TType& type = (*paramIt).second;
+        paramBuilder.AddParam(name, JsonToYdbValue(value, type, InputBinaryStringEncoding));
+    }
+}
+
 void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
-    switch (InputFormat) {
-        case EOutputFormat::Default:
-        case EOutputFormat::JsonUnicode:
-            InputEncoding = EBinaryStringEncoding::Unicode;
-            break;
-        case EOutputFormat::JsonBase64:
-            InputEncoding = EBinaryStringEncoding::Base64;
-            break;
-        default:
-            throw TMisuseException() << "Unknown input format: " << InputFormat;
+    // Deprecated options with defaults:
+    if (!DeprecatedSkipRows.empty()) {
+        SkipRows = FromString<size_t>(DeprecatedSkipRows);
+    }
+    if (!DeprecatedBatchLimit.empty()) {
+        BatchLimit = FromString<size_t>(DeprecatedBatchLimit);
+    }
+    if (!DeprecatedBatchMaxDelay.empty()) {
+        BatchMaxDelay = FromString<TDuration>(DeprecatedBatchMaxDelay);
     }
 
-    switch (StdinFormat) {
-        case EOutputFormat::Csv:
+    switch (InputFormat) {
+        case EDataFormat::Csv:
             Delimiter = ',';
             break;
-        case EOutputFormat::Tsv:
+        case EDataFormat::Tsv:
             Delimiter = '\t';
             break;
-        case EOutputFormat::Raw:
-            break;
-        case EOutputFormat::Default:
-        case EOutputFormat::JsonUnicode:
-            StdinEncoding = EBinaryStringEncoding::Unicode;
-            break;
-        case EOutputFormat::JsonBase64:
-            StdinEncoding = EBinaryStringEncoding::Base64;
-            break;
         default:
-            throw TMisuseException() << "Unknown stdin format: " << StdinFormat;
+            break;
     }
 
     for (const auto& parameterOption : ParameterOptions) {
         auto equalPos = parameterOption.find("=");
         if (equalPos == TString::npos) {
             throw TMisuseException() << "Wrong parameter format for \"" << parameterOption
-                << "\". Parameter option should have equal sign. Example (for linux):\n"
-                << "--param '$input=1'";
+                << "\". Parameter option should have equal sign. Examples (for linux):\n"
+                << "--param 'input=1'";
         }
 
         auto paramName = parameterOption.substr(0, equalPos);
-
-        if (!paramName.StartsWith('$') || equalPos <= 1) {
-            throw TMisuseException() << "Wrong parameter name \"" << paramName << "\" at option \""
-                << parameterOption << "\". " << "Parameter name should start with '$' sign. Example (for linux):\n"
-                << "--param '$input=1'";
+        if (!paramName.StartsWith('$')) {
+            paramName = "$" + paramName;
         }
         if (Parameters.find(paramName) != Parameters.end()) {
-            throw TMisuseException() << "Parameter $" << paramName << " value found in more than one source: \'--param\' option.";
+            throw TMisuseException() << "Parameter " << paramName << " value found in more than one \'--param\' option.";
         }
         Parameters[paramName] = parameterOption.substr(equalPos + 1);
         ParameterSources[paramName] = "\'--param\' option";
+    }
+    
+    if (!ParameterFiles.empty() && !InputFiles.empty()) {
+        throw TMisuseException() << "Can't use both \"--input-file\" and \"--param-file\" options";
     }
 
     for (auto& file : ParameterFiles) {
@@ -77,325 +251,306 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
             ParameterSources[name] = "param file " + file;
         }
     }
-    if (StdinFormat != EOutputFormat::Csv && StdinFormat != EOutputFormat::Tsv && (!Columns.Empty() || config.ParseResult->Has("skip-rows"))) {
-        throw TMisuseException() << "Options \"--columns\" and  \"--skip-rows\" requires \"csv\" or \"tsv\" formats";
-    }
-    if (StdinParameters.empty() && StdinFormat == EOutputFormat::Raw) {
-        throw TMisuseException() << "For \"raw\" format \"--stdin-par\" option should be used.";
-    }
-    if (!StdinParameters.empty() && IsStdinInteractive()) {
-        throw TMisuseException() << "\"--stdin-par\" option is allowed only with non-interactive stdin.";
-    }
-    if (BatchMode == EBatchMode::Full || BatchMode == EBatchMode::Adaptive) {
-        if (StdinParameters.size() > 1) {
-            throw TMisuseException() << "Only one stdin parameter allowed in \""
-                << BatchMode << "\" batch mode.";
+
+    if (InputFiles.empty()) {
+        if (!IsStdinInteractive() && !ReadingSomethingFromStdin) {
+            // By default reading params from stdin
+            SetParamsInputFromStdin();
         }
-        if (StdinParameters.empty()) {
-            throw TMisuseException() << "An stdin parameter name must be specified in \""
-                << BatchMode << "\" batch mode.";
+    } else {
+        auto& file = InputFiles[0];
+        if (file == "-") {
+            if (IsStdinInteractive()) {
+                throw TMisuseException() << "Path to input file is \"-\", meaning that parameter value[s] should be read "
+                    "from stdin. This is only available in non-interactive mode";
+            }
+            SetParamsInputFromStdin();
+        } else {
+            if (IsStdinInteractive() || ReadingSomethingFromStdin) {
+                SetParamsInputFromFile(file);
+            } else {
+                throw TMisuseException() << "Path to input file is \"" << file << "\", meaning that parameter value[s]"
+                    " should be read from file. This is only available in interactive mode. Can't read parameters both"
+                    " from stdin and file. Choose only one of theese options";
+            }
         }
     }
 
-    for (auto it = StdinParameters.begin(); it != StdinParameters.end(); ++it) {
-        if (std::find(StdinParameters.begin(), it, *it) != it) {
-            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: \'--stdin-par\' option.";
+    if (InputFormat != EDataFormat::Csv && InputFormat != EDataFormat::Tsv && (!Columns.empty()
+            || SkipRows != 0 || !DeprecatedSkipRows.empty())) {
+        throw TMisuseException() << "Options \"--input-columns\" and  \"--input-skip-rows\" requires \"csv\" or \"tsv\" formats";
+    }
+    if (InputParamNames.empty() && InputFormat == EDataFormat::Raw) {
+        throw TMisuseException() << "For \"raw\" format \"--input-param-name\" option should be used.";
+    }
+    if (!InputParamNames.empty() && !InputParamStream) {
+        throw TMisuseException() << "\"--input-param-name\" option is allowed only with input from stdin or input file.";
+    }
+    if (BatchMode == EBatchMode::Full || BatchMode == EBatchMode::Adaptive) {
+        if (InputParamNames.size() > 1) {
+            throw TMisuseException() << "Only one input parameter with --input-param-name is allowed in \""
+                << BatchMode << "\" batch mode.";
+        }
+        if (InputParamNames.empty()) {
+            throw TMisuseException() << "Input parameter name must be specified in \""
+                << BatchMode << "\" batch mode with --input-param-name option.";
+        }
+    }
+
+    for (auto it = InputParamNames.begin(); it != InputParamNames.end(); ++it) {
+        if (std::find(InputParamNames.begin(), it, *it) != it) {
+            throw TMisuseException() << "Parameter $" << *it << " value found in more than one --input-param-name option.";
         }
         if (Parameters.find("$" + *it) != Parameters.end()) {
-            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: \'--stdin-par\' option, "
+            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: \'--input-param-name\' option, "
                 << ParameterSources["$" + *it] << ".";
         }
     }
-    if (BatchMode != EBatchMode::Adaptive && (config.ParseResult->Has("batch-limit") || config.ParseResult->Has("batch-max-delay"))) {
-        throw TMisuseException() << "Options \"--batch-limit\" and \"--batch-max-delay\" are allowed only in \"adaptive\" batch mode.";
+    if (BatchMode != EBatchMode::Adaptive && (config.ParseResult->Has("input-batch-max-rows") || config.ParseResult->Has("input-batch-max-delay"))) {
+        throw TMisuseException() << "Options \"--input-batch-max-rows\" and \"--input-batch-max-delay\" are allowed only in \"adaptive\" batch mode.";
     }
 }
 
-void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config, const TString& clarification) {
-    TStringStream descr;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    descr << "Query parameter[s].";
-    if (clarification) {
-        descr << ' ' << clarification;
-    }
-    descr << Endl << "Several parameter options can be specified. " << Endl
-        << "To change input format use --input-format option." << Endl
-        << "Escaping depends on operating system.";
-    config.Opts->AddLongOption('p', "param", descr.Str())
-        .RequiredArgument("$name=value").AppendTo(&ParameterOptions);
-    config.Opts->AddLongOption("param-file", "File name with parameter names and values "
-        "in json format. You may specify this option repeatedly.")
-        .RequiredArgument("PATH").AppendTo(&ParameterFiles);
-
-    AddOptionExamples(
-        "param",
-        TExampleSetBuilder()
-            .Title("Examples (with default json-unicode format)")
-            .BeginExample()
-                .Title("One parameter of type Uint64")
-                .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$id=3" << colors.OldColor() << Endl
-                    << "How to pass in linux: " << colors.BoldColor() << "--param '$id=3'" << colors.OldColor())
-            .EndExample()
-            .BeginExample()
-                .Title("Two parameters of types Uint64 and Utf8")
-                .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$key=1 $value=\"One\"" << colors.OldColor() << Endl
-                    << "How to pass in linux: " << colors.BoldColor() << "--param '$key=3' --param '$value=\"One\"'" << colors.OldColor())
-            .EndExample()
-            .BeginExample()
-                .Title("More complex parameter of type List<Struct<key:Uint64, value:Utf8>>")
-                .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]" << colors.OldColor() << Endl
-                    << "How to pass in linux: " << colors.BoldColor() << "--param '$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]'" << colors.OldColor())
-            .EndExample()
-        .Build()
-    );
-}
-
-void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& config, const TString& requestString) {
-    TStringStream descr;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    descr << "Batching mode for stdin parameters processing. Available options:\n  "
-        << colors.BoldColor() << "iterative" << colors.OldColor()
-        << "\n    Executes " << requestString << " for each parameter set (exactly one execution "
-        "when no framing specified in \"stdin-format\")\n  "
-        << colors.BoldColor() << "full" << colors.OldColor()
-        << "\n    Executes " << requestString << " once, with all parameter sets wrapped in json list, when EOF is reached on stdin\n  "
-        << colors.BoldColor() << "adaptive" << colors.OldColor()
-        << "\n    Executes " << requestString << " with a json list of parameter sets every time when its number reaches batch-limit, "
-        "or the waiting time reaches batch-max-delay."
-        "\nDefault: " << colors.CyanColor() << "\"iterative\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("columns", "String with column names that replaces header. "
-            "It is assumed that there is no header in the file")
-            .RequiredArgument("STR").StoreResult(&Columns);
-    config.Opts->AddLongOption("skip-rows", "Number of header rows to skip (not including the row of column names, if any)")
-            .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(0);
-    config.Opts->AddLongOption("stdin-par", "Parameter name on stdin, required/applicable when stdin-format implies values only.")
-            .RequiredArgument("STRING").AppendTo(&StdinParameters);
-    config.Opts->AddLongOption("batch", descr.Str()).RequiredArgument("STRING").StoreResult(&BatchMode);
-    config.Opts->AddLongOption("batch-limit", "Maximum size of list for adaptive batching mode").RequiredArgument("INT")
-            .StoreResult(&BatchLimit).DefaultValue(1000);
-    config.Opts->AddLongOption("batch-max-delay", "Maximum delay to process first item in the list for adaptive batching mode")
-            .RequiredArgument("VAL").StoreResult(&BatchMaxDelay).DefaultValue(TDuration::Seconds(1));
-}
-
-void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
-     switch (InputFormat) {
-        case EOutputFormat::Default:
-        case EOutputFormat::JsonUnicode:
-        case EOutputFormat::JsonBase64: {
-            for (const auto&[name, value] : Parameters) {
-                auto paramIt = ParamTypes.find(name);
-                if (paramIt == ParamTypes.end()) {
-                    if (ParameterSources[name] == "\'--param\' option") {
-                        throw TMisuseException() << "Query does not contain parameter \"" << name << "\".";
-                    } else {
-                        continue;
-                    }
-                }
-                const TType& type = (*paramIt).second;
-                paramBuilder.AddParam(name, JsonToYdbValue(value, type, InputEncoding));
-            }
-            break;
-        }
-        default:
-            Y_ABORT_UNLESS(false, "Unexpected input format");
+void TCommandWithParameters::SetParamsInput(IInputStream* input) {
+    if (InputFormat == EDataFormat::Csv || InputFormat == EDataFormat::Tsv) {
+        InputParamStream = MakeHolder<TCsvParamStream>(input);
+    } else {
+        InputParamStream = MakeHolder<TSimpleParamStream>(input);
     }
 }
 
-bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder) {
+void TCommandWithParameters::SetParamsInputFromStdin() {
+    if (ReadingSomethingFromStdin) {
+        throw TMisuseException() << "Can't read both parameters and query text from stdinput";
+    }
+    ReadingSomethingFromStdin = true;
+    SetParamsInput(&Cin);
+}
+
+void TCommandWithParameters::SetParamsInputFromFile(TString& file) {
+    TFsPath fsPath = GetExistingFsPath(file, "input file");
+    InputFileHolder = MakeHolder<TFileInput>(fsPath);
+    SetParamsInput(InputFileHolder.Get());
+}
+
+void TCommandWithParameters::GetParamTypes(const TDriver& driver, const TString& queryText) {
+    NScripting::TScriptingClient client(driver);
+
+    NScripting::TExplainYqlRequestSettings explainSettings;
+    explainSettings.Mode(NScripting::ExplainYqlRequestMode::Validate);
+
+    auto result = client.ExplainYqlScript(
+        queryText,
+        explainSettings
+    ).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    ParamTypes = result.GetParameterTypes();
+}
+
+bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString& queryText,
+        THolder<TParamsBuilder>& paramBuilder) {
     paramBuilder = MakeHolder<TParamsBuilder>();
     if (IsFirstEncounter) {
         IsFirstEncounter = false;
-        ParamTypes = ValidateResult->GetParameterTypes();
-        if (IsStdinInteractive()) {
+        GetParamTypes(driver, queryText);
+        if (!InputParamStream) {
             AddParams(*paramBuilder);
             return true;
         }
-        if (StdinFormat == EOutputFormat::Csv || StdinFormat == EOutputFormat::Tsv) {
-            Input = MakeHolder<TCsvParamStream>();
+        if (InputFormat == EDataFormat::Csv || InputFormat == EDataFormat::Tsv) {
             TString headerRow, temp;
             if (Columns) {
                 headerRow = Columns;
             } else {
-                if (!Input->ReadLine(headerRow)) {
+                if (!InputParamStream->ReadLine(headerRow)) {
                     return false;
                 }
             }
 
             while (SkipRows > 0) {
-                if (!Input->ReadLine(temp)) {
+                if (!InputParamStream->ReadLine(temp)) {
                     return false;
                 }
                 --SkipRows;
             }
             CsvParser = TCsvParser(std::move(headerRow), Delimiter, "", &ParamTypes, &ParameterSources);
-        } else {
-            Input = MakeHolder<TSimpleParamStream>();
         }
     }
-    if (IsStdinInteractive()) {
+    if (!InputParamStream) {
         return false;
     }
 
     AddParams(*paramBuilder);
-    if (BatchMode == EBatchMode::Iterative) {
-        if (StdinParameters.empty()) {
-            auto data = ReadData();
-            if (!data.Defined()) {
-                return false;
-            }
-            if (data->empty()) {
-                return true;
-            }
-            switch (StdinFormat) {
-                case EOutputFormat::Default:
-                case EOutputFormat::JsonUnicode:
-                case EOutputFormat::JsonBase64: {
-                    std::map<TString, TString> result;
-                    ParseJson(std::move(*data), result);
-                    ApplyJsonParams(result, *paramBuilder);
-                    break;
-                }
-                case EOutputFormat::Csv:
-                case EOutputFormat::Tsv: {
-                    CsvParser.GetParams(std::move(*data), *paramBuilder);
-                    break;
-                }
-                default:
-                    Y_ABORT_UNLESS(false, "Unexpected stdin format");
-            }
-        } else {
-            for (const auto &name: StdinParameters) {
+
+    switch(BatchMode) {
+        case EBatchMode::Default:
+        case EBatchMode::Iterative:
+            if (InputParamNames.empty()) {
                 auto data = ReadData();
                 if (!data.Defined()) {
                     return false;
                 }
-                TString fullname = "$" + name;
-                auto paramIt = ParamTypes.find(fullname);
-                if (paramIt == ParamTypes.end()) {
-                    throw TMisuseException() << "Query does not contain parameter \"" << fullname << "\".";
+                if (data->empty()) {
+                    return true;
                 }
-
-                const TType &type = (*paramIt).second;
-                switch (StdinFormat) {
-                    case EOutputFormat::Default:
-                    case EOutputFormat::JsonUnicode:
-                    case EOutputFormat::JsonBase64: {
-                        paramBuilder->AddParam(fullname, JsonToYdbValue(*data, type, StdinEncoding));
+                switch (InputFormat) {
+                    case EDataFormat::Default:
+                    case EDataFormat::Json:
+                    case EDataFormat::JsonUnicode:
+                    case EDataFormat::JsonBase64: {
+                        std::map<TString, TString> result;
+                        ParseJson(std::move(*data), result);
+                        ApplyJsonParams(result, *paramBuilder);
                         break;
                     }
-                    case EOutputFormat::Raw: {
-                        TTypeParser parser(type);
-                        if (parser.GetKind() != TTypeParser::ETypeKind::Primitive) {
-                            throw TMisuseException() << "Wrong type of parameter \"" << fullname << "\".";
-                        }
-                        if (parser.GetPrimitive() == EPrimitiveType::String) {
-                            paramBuilder->AddParam(fullname, TValueBuilder().String(*data).Build());
-                        } else if (parser.GetPrimitive() == EPrimitiveType::Utf8) {
-                            paramBuilder->AddParam(fullname, TValueBuilder().Utf8(*data).Build());
-                        } else {
-                            throw TMisuseException() << "Wrong type of parameter \"" << fullname << "\".";
-                        }
-                        break;
-                    }
-                    case EOutputFormat::Csv:
-                    case EOutputFormat::Tsv: {
-                        TValueBuilder valueBuilder;
-                        CsvParser.GetValue(std::move(*data), valueBuilder, type);
-                        paramBuilder->AddParam(fullname, valueBuilder.Build());
+                    case EDataFormat::Csv:
+                    case EDataFormat::Tsv: {
+                        CsvParser.BuildParams(*data, *paramBuilder, TCsvParser::TParseMetadata{});
                         break;
                     }
                     default:
-                        Y_ABORT_UNLESS(false, "Unexpected stdin format");
+                        Y_ABORT_UNLESS(false, "Unexpected input format");
+                }
+            } else {
+                for (const auto &name: InputParamNames) {
+                    auto data = ReadData();
+                    if (!data.Defined()) {
+                        return false;
+                    }
+                    TString fullname = "$" + name;
+                    auto paramIt = ParamTypes.find(fullname);
+                    if (paramIt == ParamTypes.end()) {
+                        throw TMisuseException() << "Query does not contain parameter \"" << fullname << "\".";
+                    }
+
+                    const TType &type = (*paramIt).second;
+                    switch (InputFormat) {
+                        case EDataFormat::Default:
+                        case EDataFormat::Json:
+                        case EDataFormat::JsonUnicode:
+                        case EDataFormat::JsonBase64: {
+                            paramBuilder->AddParam(fullname, JsonToYdbValue(*data, type, InputBinaryStringEncoding));
+                            break;
+                        }
+                        case EDataFormat::Raw: {
+                            TTypeParser parser(type);
+                            if (parser.GetKind() != TTypeParser::ETypeKind::Primitive) {
+                                throw TMisuseException() << "Wrong type of parameter \"" << fullname << "\".";
+                            }
+                            if (parser.GetPrimitive() == EPrimitiveType::String) {
+                                paramBuilder->AddParam(fullname, TValueBuilder().String(*data).Build());
+                            } else if (parser.GetPrimitive() == EPrimitiveType::Utf8) {
+                                paramBuilder->AddParam(fullname, TValueBuilder().Utf8(*data).Build());
+                            } else {
+                                throw TMisuseException() << "Wrong type of parameter \"" << fullname << "\".";
+                            }
+                            break;
+                        }
+                        case EDataFormat::Csv:
+                        case EDataFormat::Tsv: {
+                            TValueBuilder valueBuilder;
+                            CsvParser.BuildValue(*data, valueBuilder, type, TCsvParser::TParseMetadata{});
+                            paramBuilder->AddParam(fullname, valueBuilder.Build());
+                            break;
+                        }
+                        default:
+                            Y_ABORT_UNLESS(false, "Unexpected input format");
+                    }
                 }
             }
-        }
-    } else if (BatchMode == EBatchMode::Full || BatchMode == EBatchMode::Adaptive) {
-        static bool isEndReached = false;
-        static auto pool = CreateThreadPool(2);
-        if (isEndReached) {
-            return false;
-        }
-        Y_ABORT_UNLESS(StdinParameters.size() == 1, "Wrong number of stdin parameters");
-        TString name = StdinParameters.front();
-        TString fullname = "$" + name;
-        auto paramIt = ParamTypes.find(fullname);
-        if (paramIt == ParamTypes.end()) {
-            throw TMisuseException() << "Query does not contain parameter \"" << fullname << "\".";
-        }
-        const TType &type = (*paramIt).second;
-        TTypeParser parser(type);
-
-        if (parser.GetKind() != TTypeParser::ETypeKind::List) {
-            throw TMisuseException() << "Wrong type of parameter \"" << fullname << "\".";
-        }
-
-        TMaybe<TString> data;
-        size_t listSize = 0;
-        TInstant endTime;
-        auto readData = [this] {
-            return ReadData();
-        };
-
-        TValueBuilder valueBuilder;
-        valueBuilder.BeginList();
-        parser.OpenList();
-        while (true) {
-            static NThreading::TFuture<TMaybe<TString>> futureData;
-            if (!futureData.Initialized() || listSize) {
-                futureData = NThreading::Async(readData, *pool);
+            break;
+        case EBatchMode::Full:
+        case EBatchMode::Adaptive:
+        {
+            static bool isEndReached = false;
+            static auto pool = CreateThreadPool(2);
+            if (isEndReached) {
+                return false;
             }
-            if (BatchMode == EBatchMode::Adaptive && listSize &&
-                ((BatchMaxDelay != TDuration::Zero() && !futureData.Wait(endTime)) || listSize == BatchLimit)) {
-                break;
+            Y_ABORT_UNLESS(InputParamNames.size() == 1, "Wrong number of input parameter names");
+            TString name = InputParamNames.front();
+            TString fullname = "$" + name;
+            auto paramIt = ParamTypes.find(fullname);
+            if (paramIt == ParamTypes.end()) {
+                throw TMisuseException() << "Query does not contain parameter \"" << fullname << "\".";
             }
-            data = futureData.GetValueSync();
-            if (!data.Defined()) {
-                isEndReached = true;
-                break;
+            const TType &type = (*paramIt).second;
+            TTypeParser parser(type);
+
+            if (parser.GetKind() != TTypeParser::ETypeKind::List) {
+                throw TMisuseException() << "Wrong type of parameter \"" << fullname << "\".";
+            }
+
+            TMaybe<TString> data;
+            size_t listSize = 0;
+            TInstant endTime;
+            auto readData = [this] {
+                return ReadData();
+            };
+
+            TValueBuilder valueBuilder;
+            valueBuilder.BeginList();
+            parser.OpenList();
+            while (true) {
+                static NThreading::TFuture<TMaybe<TString>> futureData;
+                if (!futureData.Initialized() || listSize) {
+                    futureData = NThreading::Async(readData, *pool);
+                }
+                if (BatchMode == EBatchMode::Adaptive && listSize &&
+                    ((BatchMaxDelay != TDuration::Zero() && !futureData.Wait(endTime)) || listSize == BatchLimit)) {
+                    break;
+                }
+                data = futureData.GetValueSync();
+                if (!data.Defined()) {
+                    isEndReached = true;
+                    break;
+                }
+                if (!listSize) {
+                    endTime = Now() + BatchMaxDelay;
+                }
+                switch (InputFormat) {
+                    case EDataFormat::Default:
+                    case EDataFormat::Json:
+                    case EDataFormat::JsonUnicode:
+                    case EDataFormat::JsonBase64: {
+                        valueBuilder.AddListItem(JsonToYdbValue(*data, type.GetProto().list_type().item(),
+                            InputBinaryStringEncoding));
+                        break;
+                    }
+                    case EDataFormat::Raw: {
+                        if (parser.GetKind() != TTypeParser::ETypeKind::Primitive) {
+                            throw TMisuseException() << "Wrong type of list \"" << fullname << "\" elements.";
+                        }
+                        if (parser.GetPrimitive() == EPrimitiveType::String) {
+                            valueBuilder.AddListItem(TValueBuilder().String(*data).Build());
+                        } else if (parser.GetPrimitive() == EPrimitiveType::Utf8) {
+                            valueBuilder.AddListItem(TValueBuilder().Utf8(*data).Build());
+                        } else {
+                            throw TMisuseException() << "Wrong type of list \"" << fullname << "\" elements.";
+                        }
+                        break;
+                    }
+                    case EDataFormat::Csv:
+                    case EDataFormat::Tsv: {
+                        valueBuilder.AddListItem();
+                        CsvParser.BuildValue(*data, valueBuilder, type.GetProto().list_type().item(), TCsvParser::TParseMetadata{});
+                        break;
+                    }
+                    default:
+                        Y_ABORT_UNLESS(false, "Unexpected input format");
+                }
+                ++listSize;
             }
             if (!listSize) {
-                endTime = Now() + BatchMaxDelay;
+                return false;
             }
-            switch (StdinFormat) {
-                case EOutputFormat::Default:
-                case EOutputFormat::JsonUnicode:
-                case EOutputFormat::JsonBase64: {
-                    valueBuilder.AddListItem(JsonToYdbValue(*data, type.GetProto().list_type().item(), StdinEncoding));
-                    break;
-                }
-                case EOutputFormat::Raw: {
-                    if (parser.GetKind() != TTypeParser::ETypeKind::Primitive) {
-                        throw TMisuseException() << "Wrong type of list \"" << fullname << "\" elements.";
-                    }
-                    if (parser.GetPrimitive() == EPrimitiveType::String) {
-                        valueBuilder.AddListItem(TValueBuilder().String(*data).Build());
-                    } else if (parser.GetPrimitive() == EPrimitiveType::Utf8) {
-                        valueBuilder.AddListItem(TValueBuilder().Utf8(*data).Build());
-                    } else {
-                        throw TMisuseException() << "Wrong type of list \"" << fullname << "\" elements.";
-                    }
-                    break;
-                }
-                case EOutputFormat::Csv:
-                case EOutputFormat::Tsv: {
-                    valueBuilder.AddListItem();
-                    CsvParser.GetValue(std::move(*data), valueBuilder, type.GetProto().list_type().item());
-                    break;
-                }
-                default:
-                    Y_ABORT_UNLESS(false, "Unexpected stdin format");
-            }
-            ++listSize;
+            valueBuilder.EndList();
+            paramBuilder->AddParam(fullname, valueBuilder.Build());
+            break;
         }
-        if (!listSize) {
-            return false;
-        }
-        valueBuilder.EndList();
-        paramBuilder->AddParam(fullname, valueBuilder.Build());
-    } else {
-        throw TMisuseException() << "Unknown batch format.";
+        default:
+            throw TMisuseException() << "Unknown batch format.";
     }
-
     return true;
 }
 
@@ -423,25 +578,25 @@ void TCommandWithParameters::ApplyJsonParams(const std::map<TString, TString> &p
         if (paramSource != ParameterSources.end()) {
             throw TMisuseException() << "Parameter " << name << " value found in more than one source: stdin, " << paramSource->second << ".";
         }
-        paramBuilder.AddParam(name, JsonToYdbValue(value, paramIt->second, StdinEncoding));
+        paramBuilder.AddParam(name, JsonToYdbValue(value, paramIt->second, InputBinaryStringEncoding));
     }
 }
 
 TMaybe<TString> TCommandWithParameters::ReadData() {
     TString result;
-    if (FramingFormat == EOutputFormat::Default || FramingFormat == EOutputFormat::NoFraming) {
+    if (InputFramingFormat == EFramingFormat::Default || InputFramingFormat == EFramingFormat::NoFraming) {
         static bool isFirstLine = true;
         if (!isFirstLine) {
             return Nothing();
         }
-        result = Input->ReadAll();
+        result = InputParamStream->ReadAll();
         isFirstLine = false;
-    } else if (FramingFormat == EOutputFormat::NewlineDelimited) {
-        if (!Input->ReadLine(result)) {
+    } else if (InputFramingFormat == EFramingFormat::NewlineDelimited) {
+        if (!InputParamStream->ReadLine(result)) {
             return Nothing();
         }
     } else {
-        throw TMisuseException() << "Unknown framing format: " << FramingFormat;
+        throw TMisuseException() << "Unknown framing format: " << InputFramingFormat;
     }
     return result;
 

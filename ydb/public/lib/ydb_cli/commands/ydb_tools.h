@@ -7,7 +7,7 @@
 #include <ydb/public/lib/ydb_cli/common/examples.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
 
-#include <library/cpp/regex/pcre/regexp.h>
+class TRegExMatch;
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -32,7 +32,7 @@ class TCommandDump : public TToolsCommand, public TCommandWithPath {
 public:
     TCommandDump();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -50,7 +50,7 @@ class TCommandRestore : public TToolsCommand, public TCommandWithPath {
 public:
     TCommandRestore();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -58,6 +58,7 @@ private:
     bool IsDryRun = false;
     bool RestoreData = true;
     bool RestoreIndexes = true;
+    bool RestoreACL = true;
     bool SkipDocumentTables = false;
     bool SavePartialResult = false;
     TString UploadBandwidth;
@@ -65,7 +66,7 @@ private:
     TString RowsPerRequest;
     TString BytesPerRequest;
     TString RequestUnitsPerRequest;
-    ui32 InFly;
+    ui32 InFlight;
     bool UseBulkUpsert = false;
     bool UseImportData = false;
 };
@@ -75,6 +76,7 @@ public:
     TCommandCopy();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -93,6 +95,7 @@ public:
     TCommandRename();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -111,7 +114,6 @@ class TCommandPgConvert : public TToolsCommand {
 public:
     TCommandPgConvert();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:

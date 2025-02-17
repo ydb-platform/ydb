@@ -14,9 +14,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/public/udf/service/stub
-    ydb/library/yql/sql/pg_dummy
-    ydb/services/ydb
+    yql/essentials/sql/pg_dummy
+    ydb/core/testlib
 )
 
 YQL_LAST_ABI_VERSION()

@@ -50,7 +50,7 @@ def main(args):
         m = re.match(OUT_DIR_FLAG_PATTERN, args[i])
         if m:
             out_dir_flag = m.group(1)
-            index = max(len(out_dir_flag), args[i].rfind(':') + 1)
+            index = len(out_dir_flag)
             out_dir = args[i][index:]
             if out_dir_orig:
                 assert out_dir_orig == out_dir, 'Output directories do not match: [{}] and [{}]'.format(
@@ -66,7 +66,7 @@ def main(args):
         subprocess.check_output(args, stdin=None, stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
         sys.stderr.write(
-            '{} returned non-zero exit code {}.\n{}\n'.format(' '.join(e.cmd), e.returncode, e.output.decode('utf-8'))
+            '{} returned non-zero exit code {}.\n{}\n'.format(' '.join(e.cmd), e.returncode, e.output.decode('utf-8', errors='ignore'))
         )
         return e.returncode
 

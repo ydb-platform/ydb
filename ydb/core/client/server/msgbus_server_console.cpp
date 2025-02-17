@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -30,8 +31,21 @@ public:
         : TBase(msg)
         , Request(request)
     {
-        TBase::SetSecurityToken(request.GetSecurityToken());
-        TBase::SetRequireAdminAccess(true);
+        const auto& token = request.GetSecurityToken();
+        if (!token.empty()) {
+            TBase::SetSecurityToken(token);
+        } else {
+            const auto& clientCertificates = msg.FindClientCert();
+            if (!clientCertificates.empty()) {
+                TBase::SetSecurityToken(TString(clientCertificates.front()));
+            }
+        }
+        // Don`t require admin access for GetNodeConfigRequest
+        if (Request.GetRequestCase() != NKikimrClient::TConsoleRequest::kGetNodeConfigRequest) {
+            TBase::SetRequireAdminAccess(true);
+        }
+
+        TBase::SetPeerName(msg.GetPeerName());
     }
 
     void Bootstrap(const TActorContext &ctx)
@@ -107,6 +121,10 @@ public:
             request->Record.CopyFrom(Request.GetGetNodeConfigItemsRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetNodeConfigRequest()) {
+            if (!CheckAccessGetNodeConfig()) {
+                ReplyWithErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "Cannot get node config. Access denied. Node is not authorized", ctx);
+                return;
+            }
             auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
             request->Record.CopyFrom(Request.GetGetNodeConfigRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
@@ -333,6 +351,14 @@ public:
                    ev->GetTypeRewrite(),
                    ev->ToString().data());
         }
+    }
+
+    bool CheckAccessGetNodeConfig() const {
+        if (TBase::IsTokenRequired()) {
+            return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
+        }
+        // if token is not required access is granted
+        return true;
     }
 
 private:

@@ -14,11 +14,11 @@ namespace NKikimr {
 
         Y_UNIT_TEST(Ingress) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-
-            TVDiskID vdisk01 = TVDiskID(0, 1, 0, 0, 1);
-            TVDiskID vdisk10 = TVDiskID(0, 1, 0, 1, 0);
-            TVDiskID vdisk21 = TVDiskID(0, 1, 0, 2, 1);
-            TVDiskID vdisk30 = TVDiskID(0, 1, 0, 3, 0);
+            using TGroupId = TGroupId;
+            TVDiskID vdisk01 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 1);
+            TVDiskID vdisk10 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 0);
+            TVDiskID vdisk21 = TVDiskID(TGroupId::Zero(), 1, 0, 2, 1);
+            TVDiskID vdisk30 = TVDiskID(TGroupId::Zero(), 1, 0, 3, 0);
 
             TLogoBlobID lb1(0, 0, 0, 0, 0, 0);
 
@@ -59,12 +59,12 @@ namespace NKikimr {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
             TLogoBlobID lb1(78364, 2, 763, 0, 0, 0);
             STR << "INFO: " << TIngress::PrintVDisksForLogoBlob(&groupInfo, lb1) << "\n";
-
+            using TGroupId = TGroupId;
             // subgroup
-            TVDiskID vdisk01 = TVDiskID(0, 1, 0, 0, 1);
-            TVDiskID vdisk10 = TVDiskID(0, 1, 0, 1, 0);
-            TVDiskID vdisk21 = TVDiskID(0, 1, 0, 2, 1);
-            TVDiskID vdisk30 = TVDiskID(0, 1, 0, 3, 0);
+            TVDiskID vdisk01 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 1);
+            TVDiskID vdisk10 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 0);
+            TVDiskID vdisk21 = TVDiskID(TGroupId::Zero(), 1, 0, 2, 1);
+            TVDiskID vdisk30 = TVDiskID(TGroupId::Zero(), 1, 0, 3, 0);
 
             // correspondings parts
             // main
@@ -288,7 +288,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(IngressCacheMirror3) {
             TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-            TVDiskID vdisk(0, 1, 0, 1 /*domain*/, 0 /*vdisk*/);
+            TVDiskID vdisk(TGroupId::Zero(), 1, 0, 1 /*domain*/, 0 /*vdisk*/);
             TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
 
             UNIT_ASSERT(cache->VDiskOrderNum == 2);
@@ -303,7 +303,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(IngressCache4Plus2) {
             TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 2, 8);
-            TVDiskID vdisk(0, 1, 0, 3 /*domain*/, 1 /*vdisk*/);
+            TVDiskID vdisk(TGroupId::Zero(), 1, 0, 3 /*domain*/, 1 /*vdisk*/);
             TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
 
             UNIT_ASSERT(cache->VDiskOrderNum == 7);
@@ -317,7 +317,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(BarrierIngressQuorumBasicMirror3_4_2) {
             TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-            TVDiskID vdisk(0, 1, 0, 1 /*domain*/, 0 /*vdisk*/);
+            TVDiskID vdisk(TGroupId::Zero(), 1, 0, 1 /*domain*/, 0 /*vdisk*/);
             TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
 
             TBarrierIngress i1(2);
@@ -356,7 +356,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(BarrierIngressQuorumBasic4Plus2_8_1) {
             TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 1, 8);
-            TVDiskID vdisk(0, 1, 0, 4 /*domain*/, 0 /*vdisk*/);
+            TVDiskID vdisk(TGroupId::Zero(), 1, 0, 4 /*domain*/, 0 /*vdisk*/);
             TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
 
             TBarrierIngress i1(2);
@@ -399,17 +399,18 @@ namespace NKikimr {
 
         Y_UNIT_TEST(BarrierIngressQuorumMirror3) {
             TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-            TVDiskID vdisk(0, 1, 0, 1 /*domain*/, 0 /*vdisk*/);
+            using TGroupId = TGroupId;
+            TVDiskID vdisk(TGroupId::Zero(), 1, 0, 1 /*domain*/, 0 /*vdisk*/);
             TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
 
-            TVDiskID vdisk00 = TVDiskID(0, 1, 0, 0, 0);
-            TVDiskID vdisk01 = TVDiskID(0, 1, 0, 0, 1);
-            TVDiskID vdisk10 = TVDiskID(0, 1, 0, 1, 0);
-            TVDiskID vdisk11 = TVDiskID(0, 1, 0, 1, 1);
-            TVDiskID vdisk20 = TVDiskID(0, 1, 0, 2, 0);
-            TVDiskID vdisk21 = TVDiskID(0, 1, 0, 2, 1);
-            TVDiskID vdisk30 = TVDiskID(0, 1, 0, 3, 0);
-            TVDiskID vdisk31 = TVDiskID(0, 1, 0, 3, 1);
+            TVDiskID vdisk00 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 0);
+            TVDiskID vdisk01 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 1);
+            TVDiskID vdisk10 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 0);
+            TVDiskID vdisk11 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 1);
+            TVDiskID vdisk20 = TVDiskID(TGroupId::Zero(), 1, 0, 2, 0);
+            TVDiskID vdisk21 = TVDiskID(TGroupId::Zero(), 1, 0, 2, 1);
+            TVDiskID vdisk30 = TVDiskID(TGroupId::Zero(), 1, 0, 3, 0);
+            TVDiskID vdisk31 = TVDiskID(TGroupId::Zero(), 1, 0, 3, 1);
 
             UNIT_ASSERT(info.GetOrderNumber(vdisk00) == 0);
             UNIT_ASSERT(info.GetOrderNumber(vdisk01) == 1);

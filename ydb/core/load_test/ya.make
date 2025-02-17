@@ -16,10 +16,12 @@ PEERDIR(
     ydb/core/kqp/rm_service
     ydb/core/tx/columnshard
     ydb/core/tx/datashard
-    ydb/library/workload
+    ydb/library/workload/abstract
+    ydb/library/workload/kv
+    ydb/library/workload/stock
     ydb/public/lib/base
-    ydb/public/lib/operation_id
-    ydb/public/sdk/cpp/client/ydb_proto
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/client/proto
     ydb/services/kesus
     ydb/services/metadata
     ydb/services/persqueue_cluster_discovery
@@ -60,5 +62,6 @@ GENERATE_ENUM_SERIALIZATION(percentile.h)
 END()
 
 RECURSE_FOR_TESTS(
+    ut
     ut_ycsb
 )

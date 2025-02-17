@@ -3,11 +3,14 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
+    config.cpp
     cube.cpp
     exporter.cpp
+    helpers.cpp
     percpu.cpp
     producer.cpp
-    registry.cpp
+    proxy.cpp
+    GLOBAL registry.cpp
     remote.cpp
     sensor.cpp
     sensor_service.cpp
@@ -31,3 +34,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    proxy_example
+)

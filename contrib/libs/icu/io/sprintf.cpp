@@ -40,10 +40,10 @@ u_sprintf_write(void        *context,
                 const char16_t *str,
                 int32_t     count)
 {
-    u_localized_print_string *output = (u_localized_print_string *)context;
+    u_localized_print_string* output = static_cast<u_localized_print_string*>(context);
 
     /* just calculating buffer size */
-    if (output->str == 0) {
+    if (output->str == nullptr) {
         return count;
     }
 
@@ -60,12 +60,12 @@ u_sprintf_pad_and_justify(void                        *context,
                           const char16_t              *result,
                           int32_t                     resultLen)
 {
-    u_localized_print_string *output = (u_localized_print_string *)context;
+    u_localized_print_string* output = static_cast<u_localized_print_string*>(context);
     int32_t written = 0;
     int32_t lengthOfResult = resultLen;
 
     /* just calculating buffer size */
-    if (output->str == 0 &&
+    if (output->str == nullptr &&
         info->fWidth != -1 && resultLen < info->fWidth) {
         return info->fWidth;
     }
@@ -193,9 +193,9 @@ u_vsnprintf(char16_t    *buffer,
     int32_t size = (int32_t)strlen(patternSpecification) + 1;
 
     /* convert from the default codepage to Unicode */
-    if (size >= (int32_t)MAX_UCHAR_BUFFER_SIZE(patBuffer)) {
+    if (size >= MAX_UCHAR_BUFFER_SIZE(patBuffer)) {
         pattern = (char16_t *)uprv_malloc(size * sizeof(char16_t));
-        if(pattern == 0) {
+        if (pattern == nullptr) {
             return 0;
         }
     }
@@ -247,7 +247,7 @@ u_vsnprintf_u(char16_t *buffer,
     outStr.len = count;
     outStr.available = count;
 
-    if(u_locbund_init(&outStr.fBundle, "en_US_POSIX") == 0) {
+    if (u_locbund_init(&outStr.fBundle, "en_US_POSIX") == nullptr) {
         return 0;
     }
 

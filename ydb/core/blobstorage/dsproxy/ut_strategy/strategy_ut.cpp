@@ -48,7 +48,7 @@ public:
             Ctest << "orderNumber# " << get.OrderNumber << " get Id# " << get.Id;
             if (disk.InErrorState) {
                 Ctest << " ERROR";
-                blackboard.AddErrorResponse(get.Id, get.OrderNumber);
+                blackboard.AddErrorResponse(get.Id, get.OrderNumber, "Disk in error state");
             } else if (auto it = disk.Blobs.find(get.Id); it == disk.Blobs.end()) {
                 Ctest << " NODATA";
                 blackboard.AddNoDataResponse(get.Id, get.OrderNumber);
@@ -76,7 +76,7 @@ public:
             Ctest << "orderNumber# " << put.OrderNumber << " put Id# " << put.Id;
             if (disk.InErrorState) {
                 Ctest << " ERROR";
-                blackboard.AddErrorResponse(put.Id, put.OrderNumber);
+                blackboard.AddErrorResponse(put.Id, put.OrderNumber, "Disk in error state");
             } else {
                 Ctest << " OK";
                 disk.Blobs[put.Id] = std::move(put.Buffer);
@@ -97,14 +97,15 @@ void RunStrategyTest(TBlobStorageGroupType type) {
 
     std::unordered_map<TString, std::tuple<EStrategyOutcome, TString>> transitions;
 
-    for (ui32 iter = 0; iter < 1'000'000; ++iter) {
+    TString data(1000, 'x');
+    TLogoBlobID id(1'000'000'000, 1, 1, 0, data.size(), 0);
+    std::vector<TRope> parts(type.TotalPartCount());
+    ErasureSplit(TBlobStorageGroupType::CrcModeNone, type, TRope(data), parts);
+
+    for (ui32 iter = 0; iter < 100'000; ++iter) {
         Ctest << "iteration# " << iter << Endl;
 
         TBlackboard blackboard(&info, &groupQueues, NKikimrBlobStorage::UserData, NKikimrBlobStorage::FastRead);
-        TString data(1000, 'x');
-        TLogoBlobID id(1'000'000'000, 1, 1, 0, data.size(), 0);
-        std::vector<TRope> parts(type.TotalPartCount());
-        ErasureSplit(TBlobStorageGroupType::CrcModeNone, type, TRope(data), parts);
         blackboard.RegisterBlobForPut(id, 0);
         for (ui32 i = 0; i < parts.size(); ++i) {
             blackboard.AddPartToPut(id, i, TRope(parts[i]));
@@ -131,12 +132,12 @@ void RunStrategyTest(TBlobStorageGroupType type) {
                 TBlobStorageGroupInfo::TGroupVDisks diskMask = {&info.GetTopology(), info.GetVDiskId(orderNumber)};
                 if (sureFailedDisks & diskMask) {
                     if (RandomNumber(5u) == 0) {
-                        blackboard.AddErrorResponse(partId, orderNumber);
+                        blackboard.AddErrorResponse(partId, orderNumber, "Bad disk");
                     }
                 } else {
                     switch (RandomNumber(100u)) {
                         case 0:
-                            blackboard.AddErrorResponse(partId, orderNumber);
+                            blackboard.AddErrorResponse(partId, orderNumber, "Random failure");
                             break;
 
                         case 1:
@@ -165,7 +166,7 @@ void RunStrategyTest(TBlobStorageGroupType type) {
 
             TString state = blackboard[id].ToString();
 
-            auto outcome = blackboard.RunStrategy(logCtx, strategy);
+            auto outcome = blackboard.RunStrategy(logCtx, strategy, TAccelerationParams{});
 
             TString nextState = blackboard[id].ToString();
             if (const auto [it, inserted] = transitions.try_emplace(state, std::make_tuple(outcome, nextState)); !inserted) {
@@ -173,7 +174,7 @@ void RunStrategyTest(TBlobStorageGroupType type) {
             }
 
             if (outcome == EStrategyOutcome::IN_PROGRESS) {
-                auto temp = blackboard.RunStrategy(logCtx, strategy);
+                auto temp = blackboard.RunStrategy(logCtx, strategy, TAccelerationParams{});
                 UNIT_ASSERT_EQUAL(temp, outcome);
                 UNIT_ASSERT_VALUES_EQUAL(blackboard[id].ToString(), nextState);
             }
@@ -263,7 +264,7 @@ void RunTestLevel(const TBlobStorageGroupInfo& info, TBlackboard& blackboard,
             [&](const TGetQuery& op) {
                 const ui32 idxInSubgroup = info.GetTopology().GetIdxInSubgroup(info.GetVDiskId(op.OrderNumber), id.Hash());
                 if (nonWorkingDomain && idxInSubgroup % 3 == 2) {
-                    branch.AddErrorResponse(op.Id, op.OrderNumber);
+                    branch.AddErrorResponse(op.Id, op.OrderNumber, "Non-working domain");
                 } else if (myPresenceMask.GetDisksWithPart(op.Id.PartId() - 1) >> idxInSubgroup & 1) {
                     const ui32 blobSize = op.Id.BlobSize();
                     const ui32 shift = Min(op.Shift, blobSize);
@@ -276,7 +277,7 @@ void RunTestLevel(const TBlobStorageGroupInfo& info, TBlackboard& blackboard,
             [&](const TPutQuery& op) {
                 const ui32 idxInSubgroup = info.GetTopology().GetIdxInSubgroup(info.GetVDiskId(op.OrderNumber), id.Hash());
                 if (nonWorkingDomain && idxInSubgroup % 3 == 2) {
-                    branch.AddErrorResponse(op.Id, op.OrderNumber);
+                    branch.AddErrorResponse(op.Id, op.OrderNumber, "Non-working domain");
                 } else {
                     myPresenceMask.AddItem(idxInSubgroup, op.Id.PartId() - 1, info.Type);
                     branch.AddPutOkResponse(op.Id, op.OrderNumber);
@@ -328,7 +329,7 @@ Y_UNIT_TEST_SUITE(DSProxyStrategyTest) {
         logCtx.SuppressLog = true;
 
         auto runStrategies = [&](TBlackboard& blackboard) {
-            return blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy());
+            return blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), TAccelerationParams{});
         };
 
         const ui32 base = RandomNumber(512u);

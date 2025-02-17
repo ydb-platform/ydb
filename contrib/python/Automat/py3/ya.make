@@ -2,14 +2,9 @@
 
 PY3_LIBRARY()
 
-VERSION(22.10.0)
+VERSION(24.8.1)
 
 LICENSE(MIT)
-
-PEERDIR(
-    contrib/python/attrs
-    contrib/python/six
-)
 
 NO_LINT()
 
@@ -25,6 +20,8 @@ PY_SRCS(
     automat/_discover.py
     automat/_introspection.py
     automat/_methodical.py
+    automat/_runtimeproto.py
+    automat/_typed.py
     automat/_visualize.py
 )
 
@@ -33,6 +30,7 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
+    automat/py.typed
 )
 
 END()

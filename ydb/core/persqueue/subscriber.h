@@ -7,6 +7,7 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/blob_refcounter.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -42,6 +43,8 @@ struct TReadInfo {
     ui64 RealReadOffset = 0;
     ui64 LastOffset = 0;
     bool Error = false;
+
+    TBlobKeyTokens BlobKeyTokens;
 
     TReadInfo() = delete;
     TReadInfo(
@@ -81,10 +84,11 @@ struct TReadInfo {
         const ui64 endOffset,
         const TPartitionId& partition,
         TUserInfo* ui,
-        const ui64 dst, 
+        const ui64 dst,
         const ui64 sizeLag,
         const TActorId& tablet,
-        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
+        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
+        const bool isActive
     );
 
     TReadAnswer FormAnswer(
@@ -95,10 +99,11 @@ struct TReadInfo {
         const ui64 dst,
         const ui64 sizeLag,
         const TActorId& tablet,
-        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
+        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
+        const bool isActive
     ) {
         TEvPQ::TEvBlobResponse response(0, TVector<TRequestedBlob>());
-        return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode);
+        return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive);
     }
 };
 

@@ -41,6 +41,25 @@ def wait_tablets_state_by_id(
     return None
 
 
+def wait_kv_tablets_state(kv_client, status, path, partition_ids, message='', timeout_seconds=120, skip_generations=None, generation_matcher=None):
+    if skip_generations is None:
+        skip_generations = {}
+    if generation_matcher is None:
+        generation_matcher = is_not
+
+    def query_tablets_write_state():
+        return kv_client.kv_get_tablets_write_state(path, partition_ids)
+
+    def predicate():
+        return all(
+            response.operation.status == status
+            for response in query_tablets_write_state()
+        )
+
+    wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=1.0)
+    return None
+
+
 def collect_tablets_state(client, tablet_ids=()):
     tablet_state = client.tablet_state(tablet_ids=tablet_ids)
 

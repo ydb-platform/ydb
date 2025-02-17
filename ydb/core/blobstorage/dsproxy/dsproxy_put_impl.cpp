@@ -37,7 +37,7 @@ void TPutImpl::RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutR
         const TBlobStorageGroupInfo::TGroupVDisks& expired) {
     Y_VERIFY_S(Blackboard.BlobStates.size(), "State# " << DumpFullState());
     TBatchedVec<TBlackboard::TFinishedBlob> finished;
-    const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, &finished, &expired);
+    const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, AccelerationParams, &finished, &expired);
     for (const TBlackboard::TFinishedBlob& item : finished) {
         Y_ABORT_UNLESS(item.BlobIdx < Blobs.size());
         Y_ABORT_UNLESS(!IsDone[item.BlobIdx]);
@@ -69,14 +69,14 @@ void TPutImpl::PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx
             Info->GroupID, ApproximateFreeSpaceShare);
         ev->ErrorReason = std::move(errorReason);
         const NLog::EPriority priority = GetPriorityForReply(Info->PutErrorMuteChecker, status);
-        A_LOG_LOG_SX(logCtx, true, priority, "BPP12", "Result# " << ev->Print(false));
+        DSP_LOG_LOG_SX(logCtx, priority, "BPP12", "Result# " << ev->Print(false) << " GroupId# " << Info->GroupID);
         outPutResults.emplace_back(blobIdx, std::move(ev));
     }
 }
 
 void TPutImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx, TString errorReason,
         TPutResultVec &outPutResults) {
-    A_LOG_DEBUG_SX(logCtx, "BPP34", "PrepareReply status# " << status << " errorReason# " << errorReason);
+    DSP_LOG_DEBUG_SX(logCtx, "BPP34", "PrepareReply status# " << status << " errorReason# " << errorReason);
     for (size_t blobIdx = 0; blobIdx < Blobs.size(); ++blobIdx) {
         PrepareOneReply(status, blobIdx, logCtx, errorReason, outPutResults);
     }
@@ -85,24 +85,21 @@ void TPutImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logC
 ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx) {
     Y_UNUSED(logCtx);
     Y_ABORT_UNLESS(!Blackboard.BlobStates.empty());
-    TBatchedVec<ui64> nextToWorstPredictedNsVec(Blackboard.BlobStates.size());
+    TBatchedVec<ui64> nthWorstPredictedNsVec(Blackboard.BlobStates.size());
     ui64 idx = 0;
     for (auto &[_, state] : Blackboard.BlobStates) {
-        // Find the slowest disk
-        i32 worstSubgroupIdx = -1;
-        ui64 worstPredictedNs = 0;
+        // Find the n'th slowest disk
+        TDiskDelayPredictions worstDisks;
         state.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, HandleClassToQueueId(Blackboard.PutHandleClass),
-                &worstPredictedNs, &nextToWorstPredictedNsVec[idx], &worstSubgroupIdx);
-        idx++;
+                &worstDisks, AccelerationParams);
+        nthWorstPredictedNsVec[idx++] = worstDisks[AccelerationParams.MaxNumOfSlowDisks].PredictedNs;
     }
-    return *MaxElement(nextToWorstPredictedNsVec.begin(), nextToWorstPredictedNsVec.end());
+    return *MaxElement(nthWorstPredictedNsVec.begin(), nthWorstPredictedNsVec.end());
 }
 
 TString TPutImpl::DumpFullState() const {
     TStringStream str;
-    str << "{Deadline# " << Deadline;
-    str << Endl;
-    str << " Info# " << Info->ToString();
+    str << "{Info# " << Info->ToString();
     str << Endl;
     str << " Blackboard# " << Blackboard.ToString();
     str << Endl;

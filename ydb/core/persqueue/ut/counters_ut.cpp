@@ -2,8 +2,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/env.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/partition.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -54,7 +56,7 @@ struct THttpRequest : NMonitoring::IHttpRequest {
     }
 
     TStringBuf GetPostContent() const override {
-        return TString();
+        return TStringBuf();
     }
 
     HTTP_METHOD GetMethod() const override {
@@ -423,7 +425,10 @@ Y_UNIT_TEST(PartitionFirstClass) {
             auto counters = tc.Runtime->GetAppData(0).Counters;
             auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
 
-            auto group = dbGroup->GetSubgroup("host", "")->GetSubgroup("database", "/Root")->GetSubgroup("cloud_id", "cloud_id")->GetSubgroup("folder_id", "folder_id")
+            auto group = dbGroup->GetSubgroup("host", "")
+                                ->GetSubgroup("database", "/Root")
+                                ->GetSubgroup("cloud_id", "cloud_id")
+                                ->GetSubgroup("folder_id", "folder_id")
                                 ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
             group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
@@ -554,6 +559,170 @@ Y_UNIT_TEST(ImportantFlagSwitching) {
     });
 }
 
+Y_UNIT_TEST(NewConsumersCountersAppear) {
+    TTestContext tc;
+    tc.InitialEventsFilter.Prepare();
+
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    bool dbRegistered{false};
+    bool labeledCountersReceived =false ;
+
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, true, true, true);
+
+    tc.Runtime->SetScheduledLimit(5000);
+
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == NSysView::TEvSysView::EvRegisterDbCounters) {
+            auto database = event.Get()->Get<NSysView::TEvSysView::TEvRegisterDbCounters>()->Database;
+            UNIT_ASSERT_VALUES_EQUAL(database, "/Root/PQ");
+            dbRegistered = true;
+        } else if (event->GetTypeRewrite() == TEvTabletCounters::EvTabletAddLabeledCounters) {
+            labeledCountersReceived = true;
+        }
+        return TTestActorRuntime::DefaultObserverFunc(event);
+    });
+    PQTabletPrepare({.deleteTime=3600, .writeSpeed = 100_KB, .meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS}, {{"client", true}}, tc);
+    TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
+    ui64 ssId = 325;
+    BootFakeSchemeShard(*tc.Runtime, ssId, state);
+
+    PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, ssId, tc, false, false, {"user1", "user2"});
+
+    IActor* actor = CreateTabletCountersAggregator(false);
+    auto aggregatorId = tc.Runtime->Register(actor);
+    tc.Runtime->EnableScheduleForActor(aggregatorId);
+
+    CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
+    CmdWrite(0, "sourceid1", TestData(), tc, false);
+    CmdWrite(0, "sourceid2", TestData(), tc, false);
+    PQGetPartInfo(0, 30, tc);
+
+    {
+        NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};
+        result->SetPath("/Root");
+        TVector<TString> attrs = {"folder_id", "cloud_id", "database_id"};
+        for (auto& attr : attrs) {
+            auto ua = result->MutablePathDescription()->AddUserAttributes();
+            ua->SetKey(attr);
+            ua->SetValue(attr);
+        }
+        NSchemeCache::TDescribeResult::TCPtr cres = result;
+        auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+        TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
+        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvWatchNotifyUpdated);
+        auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+        UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+    }
+    {
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
+        auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+        UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+    }
+
+    {
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
+
+        auto group = dbGroup->GetSubgroup("host", "")
+                            ->GetSubgroup("database", "/Root")
+                            ->GetSubgroup("cloud_id", "cloud_id")
+                            ->GetSubgroup("folder_id", "folder_id")
+                            ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
+        for (const auto& user : {"client", "user1", "user2"}) {
+            auto consumerSG = group->FindSubgroup("consumer", user);
+            UNIT_ASSERT_C(consumerSG, user);
+        }
+    }
+    PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, ssId, tc, false, false, {"user3", "user2"});
+    {
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
+        auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+        UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+    }
+
+    {
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
+
+        auto group = dbGroup->GetSubgroup("host", "")
+                            ->GetSubgroup("database", "/Root")
+                            ->GetSubgroup("cloud_id", "cloud_id")
+                            ->GetSubgroup("folder_id", "folder_id")
+                            ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
+        for (const auto& user : {"user2", "user3"}) {
+            auto consumerSG = group->FindSubgroup("consumer", user);
+            UNIT_ASSERT_C(consumerSG, user);
+        }
+    }
+}
+
 } // Y_UNIT_TEST_SUITE(PQCountersLabeled)
+
+Y_UNIT_TEST_SUITE(TMultiBucketCounter) {
+void CheckBucketsValues(const TVector<std::pair<double, ui64>>& actual, const TVector<std::pair<double, ui64>>& expected) {
+    UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
+    for (auto i = 0u; i < expected.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(actual[i].second, expected[i].second);
+        UNIT_ASSERT_C(abs(actual[i].first - expected[i].first) < 0.0001, TStringBuilder() << actual[i].first << "-" << expected[i].first);
+    }
+}
+
+Y_UNIT_TEST(InsertAndUpdate) {
+    TMultiBucketCounter counter({100, 200, 500, 1000, 5000}, 5, 0);
+    counter.Insert(19, 3);
+    counter.Insert(15, 1);
+    counter.Insert(17, 1);
+
+    counter.Insert(100, 1);
+    counter.Insert(50001, 5);
+
+    CheckBucketsValues(counter.GetValues(), {{(19*3 + 15 + 17) / 5.0, 5}, {100, 1}, {50001, 5}});
+
+    counter.UpdateTimestamp(50);
+
+    CheckBucketsValues(counter.GetValues(), {{50.0 + (19*3 + 15 + 17) / 5.0, 5}, {150, 1}, {50051, 5}});
+    counter.Insert(190, 1);
+    counter.Insert(155, 1);
+
+    CheckBucketsValues(counter.GetValues(), {{50.0 + (19*3 + 15 + 17) / 5.0, 5}, {152.5, 2}, {190, 1}, {50051, 5}});
+
+    counter.UpdateTimestamp(1050);
+
+    CheckBucketsValues(counter.GetValues(), {{(1067.8 * 5 + 1152.5 * 2 + 1190) / 8, 8}, {51051, 5}});
+}
+
+Y_UNIT_TEST(ManyCounters) {
+    TVector<ui64> buckets = {100, 200, 500, 1000, 2000, 5000};
+    ui64 multiplier = 20;
+    TMultiBucketCounter counter(buckets, multiplier, 0);
+    for (auto i = 1u; i <= 5000; i++) {
+        counter.Insert(1, 1);
+        counter.UpdateTimestamp(i);
+    }
+    counter.Insert(1, 1);
+
+    const auto& values = counter.GetValues(true);
+    ui64 prev = 0;
+    for (auto i = 0u; i < buckets.size(); i++) {
+        ui64 sum = 0u;
+        for (auto j = 0u; j < multiplier; j++) {
+            sum += values[i * multiplier + j].second;
+        }
+        Cerr << "Bucket: " << buckets[i] << " elems count: " << sum << Endl;
+        ui64 bucketSize = buckets[i] - prev;
+        prev = buckets[i];
+        i64 diff = sum - bucketSize;
+        UNIT_ASSERT(std::abs(diff) < (i64)(bucketSize / 10));
+    }
+
+}
+
+} // Y_UNIT_TEST_SUITE(TMultiBucketCounter)
 
 } // namespace NKikimr::NPQ

@@ -7,16 +7,33 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-void TSessionsManager::Start(const NColumnShard::TColumnShard& shard) const {
+void TSessionsManager::Start(NColumnShard::TColumnShard& shard) const {
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("sessions", "start")("tablet_id", shard.TabletID());
     for (auto&& i : SourceSessions) {
-        if (!i.second->IsStarted()) {
-            i.second->Start(shard);
+        if (i.second->IsReadyForStarting()) {
+            i.second->PrepareToStart(shard);
         }
     }
     for (auto&& i : DestSessions) {
-        if (!i.second->IsStarted() && i.second->IsConfirmed()) {
-            i.second->Start(shard);
+        if (i.second->IsReadyForStarting() && i.second->IsConfirmed()) {
+            i.second->PrepareToStart(shard);
+        }
+    }
+
+    for (auto&& i : SourceSessions) {
+        if (i.second->IsPrepared()) {
+            TConclusionStatus status = i.second->TryStart(shard);
+            AFL_VERIFY(status.Ok())("failed to start source session", status.GetErrorMessage());
+        }
+    }
+    for (auto&& i : DestSessions) {
+        if (i.second->IsPrepared() && i.second->IsConfirmed()) {
+            TConclusionStatus status = i.second->TryStart(shard);
+            AFL_VERIFY(status.Ok())("failed to start dest session", status.GetErrorMessage());
+
+            if (!i.second->GetSourcesInProgressCount()) {
+                i.second->Finish(shard, shard.GetDataLocksManager());
+            }
         }
     }
     NYDBTest::TControllers::GetColumnShardController()->OnAfterSharingSessionsManagerStart(shard);
@@ -28,7 +45,7 @@ void TSessionsManager::InitializeEventsExchange(const NColumnShard::TColumnShard
         if (sessionCookie && *sessionCookie != i.second->GetRuntimeId()) {
             continue;
         }
-        i.second->ActualizeDestination(shard.GetDataLocksManager());
+        i.second->ActualizeDestination(shard, shard.GetDataLocksManager());
     }
     for (auto&& i : DestSessions) {
         if (sessionCookie && *sessionCookie != i.second->GetRuntimeId()) {
@@ -53,11 +70,21 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
             NKikimrColumnShardDataSharingProto::TSourceSession protoSession;
             AFL_VERIFY(protoSession.ParseFromString(rowset.GetValue<Schema::SourceSessions::Details>()));
 
-            NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic protoSessionCursorDynamic;
-            AFL_VERIFY(protoSessionCursorDynamic.ParseFromString(rowset.GetValue<Schema::SourceSessions::CursorDynamic>()));
+            std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic> protoSessionCursorDynamic;
+            if (rowset.HaveValue<Schema::SourceSessions::CursorDynamic>()) {
+                protoSessionCursorDynamic = NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic{};
+                AFL_VERIFY(protoSessionCursorDynamic->ParseFromString(rowset.GetValue<Schema::SourceSessions::CursorDynamic>()));
+            }
 
-            NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic protoSessionCursorStatic;
-            AFL_VERIFY(protoSessionCursorStatic.ParseFromString(rowset.GetValue<Schema::SourceSessions::CursorStatic>()));
+            std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic> protoSessionCursorStatic;
+            if (rowset.HaveValue<Schema::SourceSessions::CursorStatic>()) {
+                protoSessionCursorStatic = NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic{};
+                AFL_VERIFY(protoSessionCursorStatic->ParseFromString(rowset.GetValue<Schema::SourceSessions::CursorStatic>()));
+            }
+
+            if (protoSessionCursorDynamic && !protoSessionCursorStatic) {
+                protoSessionCursorStatic = NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic{};
+            }
 
             AFL_VERIFY(index);
             session->DeserializeFromProto(protoSession, protoSessionCursorDynamic, protoSessionCursorStatic).Validate();

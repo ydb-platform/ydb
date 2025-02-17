@@ -51,11 +51,15 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             null = TCell(raw.data(), raw.size());
         }
 
-        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(delta.GetColumnType(),
-            delta.HasColumnTypeInfo() ? &delta.GetColumnTypeInfo() : nullptr);
-        ui32 pgTypeId = NPg::PgTypeIdFromTypeDesc(typeInfoMod.TypeInfo.GetTypeDesc());
-        changes |= AddPgColumn(table, delta.GetColumnName(), delta.GetColumnId(),
-            delta.GetColumnType(), pgTypeId, typeInfoMod.TypeMod, delta.GetNotNull(), null);
+        std::optional<NKikimrProto::TTypeInfo> typeInfoProto;
+        if (delta.HasColumnTypeInfo()) {
+            typeInfoProto = delta.GetColumnTypeInfo();
+        } else if (delta.GetColumnType() == NScheme::NTypeIds::Decimal) {
+            // Migration from table with no decimal typeInfo
+            typeInfoProto = NKikimr::NScheme::DefaultDecimalProto();
+        }
+        changes |= AddColumnWithTypeInfo(table, delta.GetColumnName(), delta.GetColumnId(),
+            delta.GetColumnType(), typeInfoProto, delta.GetNotNull(), null);
     } else if (action == TAlterRecord::DropColumn) {
         changes |= DropColumn(table, delta.GetColumnId());
     } else if (action == TAlterRecord::AddColumnToKey) {
@@ -93,6 +97,9 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
 
         Y_ABORT_UNLESS(ui32(cache) <= 2, "Invalid pages cache policy value");
+        if (family.Cache != cache && cache == ECache::Ever) {
+            ChangeTableSetting(table, tableInfo.PendingCacheEnable, true);
+        }
         changes |= ChangeTableSetting(table, family.Cache, cache);
         changes |= ChangeTableSetting(table, family.Codec, codec);
         changes |= ChangeTableSetting(table, family.Small, small);
@@ -109,7 +116,17 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         auto &room = tableInfo.Rooms[delta.GetRoomId()];
 
         ui8 main = delta.HasMain() ? delta.GetMain() : room.Main;
-        ui8 blobs = delta.HasBlobs() ? delta.GetBlobs() : room.Blobs;
+        TVector<ui8> blobs;
+        if (delta.ExternalBlobsSize() > 0) {
+            for (auto blob : delta.GetExternalBlobs()) {
+                blobs.push_back(blob);
+            }
+        } else if (delta.HasBlobs()) {
+            // Fallback to old format
+            blobs = {static_cast<ui8>(delta.GetBlobs())};
+        } else {
+            blobs = room.Blobs;
+        }
         ui8 outer = delta.HasOuter() ? delta.GetOuter() : room.Outer;
 
         changes |= ChangeTableSetting(table, room.Main, main);
@@ -243,11 +260,11 @@ bool TSchemeModifier::DropTable(ui32 id)
 
 bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, TCell null)
 {
-    Y_ABORT_UNLESS(type != (ui32)NScheme::NTypeIds::Pg, "No pg type data");
-    return AddPgColumn(tid, name, id, type, 0, "", notNull, null);
+    Y_ABORT_UNLESS(!NScheme::NTypeIds::IsParametrizedType(type));
+    return AddColumnWithTypeInfo(tid, name, id, type, {}, notNull, null);
 }
 
-bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 type, ui32 pgType, const TString& pgTypeMod, bool notNull, TCell null)
+bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 id, ui32 type, const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, TCell null)
 {
     auto *table = Table(tid);
 
@@ -255,13 +272,24 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
     auto itName = table->ColumnNames.find(name);
 
     NScheme::TTypeInfo typeInfo;
-    if (pgType != 0) {
-        Y_ABORT_UNLESS((NScheme::TTypeId)type == NScheme::NTypeIds::Pg);
-        auto* typeDesc = NPg::TypeDescFromPgTypeId(pgType);
-        Y_ABORT_UNLESS(typeDesc);
-        typeInfo = NScheme::TTypeInfo(type, typeDesc);
-    } else {
+    TString pgTypeMod;
+    Y_ABORT_UNLESS((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));
+    switch ((NScheme::TTypeId)type) {
+    case NScheme::NTypeIds::Pg: {
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
+        typeInfo = typeInfoMod.TypeInfo;
+        pgTypeMod = typeInfoMod.TypeMod;
+        break;
+    }
+    case NScheme::NTypeIds::Decimal: {
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
+        typeInfo = typeInfoMod.TypeInfo;
+        break;
+    }
+    default: {
         typeInfo = NScheme::TTypeInfo(type);
+        break;
+    }
     }
 
     // We verify ids and types match when column with the same name already exists
@@ -369,7 +397,7 @@ bool TSchemeModifier::SetExecutorResourceProfile(const TString &name)
     return ChangeExecutorSetting(Scheme.Executor.ResourceProfile, name);
 }
 
-bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrSchemeOp::TCompactionPolicy &proto)
+bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrCompaction::TCompactionPolicy &proto)
 {
     auto *table = Table(tid);
     TIntrusiveConstPtr<TCompactionPolicy> policy(new TCompactionPolicy(proto));

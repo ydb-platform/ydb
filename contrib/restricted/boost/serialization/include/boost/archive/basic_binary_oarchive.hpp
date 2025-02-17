@@ -17,7 +17,7 @@
 //  See http://www.boost.org for updates, documentation, and revision history.
 
 // archives stored as native binary - this should be the fastest way
-// to archive the state of a group of obects.  It makes no attempt to
+// to archive the state of a group of objects.  It makes no attempt to
 // convert to any canonical form.
 
 // IN GENERAL, ARCHIVES CREATED WITH THIS CLASS WILL NOT BE READABLE
@@ -53,9 +53,9 @@ namespace detail {
 // class basic_binary_oarchive - write serialized objects to a binary output stream
 // note: this archive has no pretensions to portability.  Archive format
 // may vary across machine architectures and compilers.  About the only
-// guarentee is that an archive created with this code will be readable
-// by a program built with the same tools for the same machne.  This class
-// does have the virtue of buiding the smalles archive in the minimum amount
+// guarantee is that an archive created with this code will be readable
+// by a program built with the same tools for the same machine.  This class
+// does have the virtue of building the smallest archive in the minimum amount
 // of time.  So under some circumstances it may be he right choice.
 template<class Archive>
 class BOOST_SYMBOL_VISIBLE basic_binary_oarchive :
@@ -73,7 +73,7 @@ protected:
         friend class detail::interface_oarchive<Archive>;
     #endif
 #endif
-    // any datatype not specifed below will be handled by base class
+    // any datatype not specified below will be handled by base class
     typedef detail::common_oarchive<Archive> detail_common_oarchive;
     template<class T>
     void save_override(const T & t){

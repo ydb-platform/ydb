@@ -3,14 +3,18 @@
 #include "blob_constructor.h"
 #include "write_controller.h"
 
-#include <ydb/core/tx/data_events/write_data.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
-#include <ydb/core/tx/columnshard/engines/portion_info.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/core/tx/columnshard/engines/insert_table/user_data.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/data_events/write_data.h>
 
+namespace NKikimr::NColumnShard {
+class TColumnShard;
+}
 
 namespace NKikimr::NOlap {
 
@@ -22,7 +26,9 @@ private:
     YDB_ACCESSOR_DEF(TBlobRange, Range);
     YDB_READONLY(TInstant, StartInstant, AppDataVerified().TimeProvider->Now());
     TWriteAggregation* ParentAggregation;
+
 public:
+    std::shared_ptr<TUserData> BuildInsertionUserData(const NColumnShard::TColumnShard& owner) const;
     void InitBlobId(const TUnifiedBlobId& id);
 
     const NArrow::TSerializedBatch& GetSplittedBlobs() const {
@@ -43,23 +49,27 @@ public:
 
     TWideSerializedBatch(NArrow::TSerializedBatch&& splitted, TWriteAggregation& parentAggregation)
         : SplittedBlobs(std::move(splitted))
-        , ParentAggregation(&parentAggregation)
-    {
-
+        , ParentAggregation(&parentAggregation) {
     }
 };
 
 class TWritingBlob {
 private:
     std::vector<TWideSerializedBatch*> Ranges;
-    YDB_READONLY_DEF(TString, BlobData);
+    std::vector<TString> BlobData;
+    ui64 BlobSize = 0;
+    bool Extracted = false;
+
 public:
     TWritingBlob() = default;
     bool AddData(TWideSerializedBatch& batch) {
-        if (BlobData.size() + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
+        AFL_VERIFY(!Extracted);
+        if (BlobSize + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
             Ranges.emplace_back(&batch);
-            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobData.size() + batch.GetSplittedBlobs().GetSize()), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
-            BlobData += batch.GetSplittedBlobs().GetData();
+            BlobSize += batch.GetSplittedBlobs().GetSize();
+            batch.SetRange(TBlobRange(
+                TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobSize), BlobSize - batch.GetSplittedBlobs().GetSize(), batch.GetSplittedBlobs().GetSize()));
+            BlobData.emplace_back(batch.GetSplittedBlobs().GetData());
             return true;
         } else {
             AFL_VERIFY(BlobData.size());
@@ -73,30 +83,70 @@ public:
         }
     }
 
+    TString ExtractBlobData();
+
     ui64 GetSize() const {
-        return BlobData.size();
+        return BlobSize;
     }
 };
 
 class TWriteAggregation {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteData>, WriteData);
+    std::shared_ptr<NEvWrite::TWriteMeta> WriteMeta;
+    YDB_READONLY(ui64, SchemaVersion, 0);
+    YDB_READONLY(ui64, Size, 0);
+    YDB_READONLY(ui64, Rows, 0);
     YDB_ACCESSOR_DEF(std::vector<TWideSerializedBatch>, SplittedBlobs);
-    YDB_READONLY_DEF(TVector<TWriteId>, WriteIds);
+    YDB_READONLY_DEF(std::vector<TInsertWriteId>, InsertWriteIds);
+    YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
+    YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
+    std::shared_ptr<arrow::RecordBatch> RecordBatch;
+
 public:
-    void AddWriteId(const TWriteId& id) {
-        WriteIds.emplace_back(id);
+    const std::shared_ptr<arrow::RecordBatch>& GetRecordBatch() const {
+        AFL_VERIFY(RecordBatch);
+        return RecordBatch;
     }
 
-    TWriteAggregation(const std::shared_ptr<NEvWrite::TWriteData>& writeData, std::vector<NArrow::TSerializedBatch>&& splittedBlobs)
-        : WriteData(writeData) {
+    const NEvWrite::TWriteMeta& GetWriteMeta() const {
+        return *WriteMeta;
+    }
+
+    const std::shared_ptr<NEvWrite::TWriteMeta>& GetWriteMetaPtr() const {
+        return WriteMeta;
+    }
+
+    NEvWrite::TWriteMeta& MutableWriteMeta() {
+        return *WriteMeta;
+    }
+
+    void AddInsertWriteId(const TInsertWriteId id) {
+        InsertWriteIds.emplace_back(id);
+    }
+
+    TWriteAggregation(const NEvWrite::TWriteData& writeData, std::vector<NArrow::TSerializedBatch>&& splittedBlobs,
+        const std::shared_ptr<arrow::RecordBatch>& batch)
+        : WriteMeta(writeData.GetWriteMetaPtr())
+        , SchemaVersion(writeData.GetData()->GetSchemaVersion())
+        , Size(writeData.GetSize())
+        , BlobsAction(writeData.GetBlobsAction())
+        , SchemaSubset(writeData.GetSchemaSubsetVerified())
+        , RecordBatch(batch) {
+        AFL_VERIFY(WriteMeta);
         for (auto&& s : splittedBlobs) {
             SplittedBlobs.emplace_back(std::move(s), *this);
         }
+        for (const auto& batch : SplittedBlobs) {
+            Rows += batch->GetRowsCount();
+        }
     }
 
-    TWriteAggregation(const std::shared_ptr<NEvWrite::TWriteData>& writeData)
-        : WriteData(writeData) {
+    TWriteAggregation(const NEvWrite::TWriteData& writeData)
+        : WriteMeta(writeData.GetWriteMetaPtr())
+        , SchemaVersion(writeData.GetData()->GetSchemaVersion())
+        , Size(writeData.GetSize())
+        , BlobsAction(writeData.GetBlobsAction()) {
+        AFL_VERIFY(!writeData.GetSchemaSubset());
     }
 };
 
@@ -106,15 +156,15 @@ private:
     std::shared_ptr<IBlobsDeclareRemovingAction> DeclareRemoveAction;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<TWriteAggregation>>, Aggregations);
     YDB_READONLY(ui64, SumSize, 0);
+
 public:
     TWritingBuffer() = default;
     TWritingBuffer(const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations)
         : BlobsAction(action)
-        , Aggregations(std::move(aggregations))
-    {
+        , Aggregations(std::move(aggregations)) {
         AFL_VERIFY(BlobsAction);
         for (auto&& aggr : Aggregations) {
-            SumSize += aggr->GetWriteData()->GetSize();
+            SumSize += aggr->GetSize();
         }
     }
 
@@ -148,12 +198,12 @@ public:
     }
 
     std::vector<std::shared_ptr<IBlobsWritingAction>> GetAddActions() const {
-        return {BlobsAction};
+        return { BlobsAction };
     }
 
     std::vector<std::shared_ptr<IBlobsDeclareRemovingAction>> GetRemoveActions() const {
         if (DeclareRemoveAction) {
-            return {DeclareRemoveAction};
+            return { DeclareRemoveAction };
         } else {
             return {};
         }
@@ -166,7 +216,8 @@ public:
     std::vector<TWritingBlob> GroupIntoBlobs();
 };
 
-class TIndexedWriteController : public NColumnShard::IWriteController, public NColumnShard::TMonitoringObjectsCounter<TIndexedWriteController, true> {
+class TIndexedWriteController: public NColumnShard::IWriteController,
+                               public NColumnShard::TMonitoringObjectsCounter<TIndexedWriteController, true> {
 private:
     TWritingBuffer Buffer;
     TActorId DstActor;
@@ -174,8 +225,8 @@ private:
     virtual void DoOnStartSending() override;
 
 public:
-    TIndexedWriteController(const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations);
-
+    TIndexedWriteController(const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action,
+        std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations);
 };
 
-}
+}   // namespace NKikimr::NOlap

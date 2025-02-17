@@ -1,10 +1,11 @@
 RECURSE(
     auth
+    backup
     bg_tasks
+    bsconfig
     cms
     datastreams
     deprecated/persqueue_v0
-    deprecated/persqueue_v0/api
     discovery
     dynamic_config
     ext_index
@@ -19,5 +20,9 @@ RECURSE(
     persqueue_cluster_discovery
     persqueue_v1
     rate_limiter
+    replication
+    tablet
+    view
     ydb
+    ymq
 )

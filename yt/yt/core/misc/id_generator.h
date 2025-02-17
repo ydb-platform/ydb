@@ -10,6 +10,9 @@ namespace NYT {
 class TIdGenerator
 {
 public:
+    //! For persistence only.
+    TIdGenerator& operator=(const TIdGenerator& other);
+
     ui64 Next();
     void Reset();
 
@@ -18,7 +21,6 @@ public:
 
 private:
     std::atomic<ui64> Current_ = 0;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////

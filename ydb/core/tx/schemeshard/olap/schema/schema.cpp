@@ -1,97 +1,22 @@
 #include "schema.h"
+
 #include <ydb/core/tx/schemeshard/common/validation.h>
-#include <ydb/core/tx/columnshard/engines/scheme/statistics/max/constructor.h>
+#include <ydb/core/tx/schemeshard/olap/ttl/validator.h>
 
 namespace NKikimr::NSchemeShard {
 
-namespace {
-static inline bool IsDropped(const TOlapColumnsDescription::TColumn& col) {
-    Y_UNUSED(col);
-    return false;
-}
-
-static inline ui32 GetType(const TOlapColumnsDescription::TColumn& col) {
-    Y_ABORT_UNLESS(col.GetType().GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
-    return col.GetType().GetTypeId();
-}
-
-}
-
-static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl,
-    const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns,
-    const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns,
-    const THashMap<TString, ui32>& colName2Id,
-    IErrorCollector& errors) {
-    const TString colName = ttl.GetColumnName();
-
-    auto it = colName2Id.find(colName);
-    if (it == colName2Id.end()) {
-        errors.AddError(Sprintf("Cannot enable TTL on unknown column: '%s'", colName.data()));
-        return false;
-    }
-
-    const TOlapColumnsDescription::TColumn* column = nullptr;
-    const ui32 colId = it->second;
-    if (alterColumns.contains(colId)) {
-        column = &alterColumns.at(colId);
-    } else if (sourceColumns.contains(colId)) {
-        column = &sourceColumns.at(colId);
-    } else {
-        Y_ABORT_UNLESS("Unknown column");
-    }
-
-    if (IsDropped(*column)) {
-        errors.AddError(Sprintf("Cannot enable TTL on dropped column: '%s'", colName.data()));
-        return false;
-    }
-
-    if (ttl.HasExpireAfterBytes()) {
-        errors.AddError("TTL with eviction by size is not supported yet");
-        return false;
-    }
-
-    if (!ttl.HasExpireAfterSeconds()) {
-        errors.AddError("TTL without eviction time");
-        return false;
-    }
-
-    auto unit = ttl.GetColumnUnit();
-
-    switch (GetType(*column)) {
-        case NScheme::NTypeIds::DyNumber:
-            errors.AddError("Unsupported column type for TTL in column tables");
-            return false;
-        default:
-            break;
-    }
-
-    TString errStr;
-    if (!NValidation::TTTLValidator::ValidateUnit(GetType(*column), unit, errStr)) {
-        errors.AddError(errStr);
-        return false;
-    }
-    return true;
-}
-
-bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, IErrorCollector& errors) const {
+bool TOlapSchema::ValidateTtlSettings(
+    const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, const TOperationContext& context, IErrorCollector& errors) const {
     using TTtlProto = NKikimrSchemeOp::TColumnDataLifeCycle;
     switch (ttl.GetStatusCase()) {
-        case TTtlProto::kEnabled:
+        case TTtlProto::kEnabled: 
         {
             const auto* column = Columns.GetByName(ttl.GetEnabled().GetColumnName());
             if (!column) {
                 errors.AddError("Incorrect ttl column - not found in scheme");
                 return false;
             }
-            if (!Statistics.GetByIdOptional(NOlap::NStatistics::EType::Max, {column->GetId()})) {
-                TOlapStatisticsModification modification;
-                NOlap::NStatistics::TConstructorContainer container(std::make_shared<NOlap::NStatistics::NMax::TConstructor>(column->GetName()));
-                modification.AddUpsert("__TTL_PROVIDER::" + TGUID::CreateTimebased().AsUuidString(), container);
-                if (!Statistics.ApplyUpdate(*this, modification, errors)) {
-                    return false;
-                }
-            }
-            return ValidateColumnTableTtl(ttl.GetEnabled(), {}, Columns.GetColumns(), Columns.GetColumnsByName(), errors);
+            return TTTLValidator::ValidateColumnTableTtl(ttl.GetEnabled(), Indexes, {}, Columns.GetColumns(), Columns.GetColumnsByName(), context, errors);
         }
         case TTtlProto::kDisabled:
         default:
@@ -102,7 +27,11 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
 }
 
 bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
-    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), errors, NextColumnId)) {
+    if (!ColumnFamilies.ApplyUpdate(schemaUpdate.GetColumnFamilies(), errors, NextColumnFamilyId)) {
+        return false;
+    }
+
+    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), ColumnFamilies, errors, NextColumnId)) {
         return false;
     }
 
@@ -110,21 +39,8 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
         return false;
     }
 
-    if (!Statistics.ApplyUpdate(*this, schemaUpdate.GetStatistics(), errors)) {
-        return false;
-    }
-
     if (!Options.ApplyUpdate(schemaUpdate.GetOptions(), errors)) {
         return false;
-    }
-
-    if (!HasEngine()) {
-        Engine = schemaUpdate.GetEngineDef(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
-    } else {
-        if (schemaUpdate.HasEngine()) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, "No engine updates supported");
-            return false;
-        }
     }
 
     ++Version;
@@ -133,27 +49,26 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
 
 void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     NextColumnId = tableSchema.GetNextColumnId();
+    NextColumnFamilyId = tableSchema.GetNextColumnFamilyId();
     Version = tableSchema.GetVersion();
-    Y_ABORT_UNLESS(tableSchema.HasEngine());
-    Engine = tableSchema.GetEngine();
 
+    ColumnFamilies.Parse(tableSchema);
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
     Options.Parse(tableSchema);
-    Statistics.Parse(tableSchema);
 }
 
-void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
-    tableSchema.SetNextColumnId(NextColumnId);
-    tableSchema.SetVersion(Version);
+void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {
+    NKikimrSchemeOp::TColumnTableSchema resultLocal;
+    resultLocal.SetNextColumnId(NextColumnId);
+    resultLocal.SetNextColumnFamilyId(NextColumnFamilyId);
+    resultLocal.SetVersion(Version);
 
-    Y_ABORT_UNLESS(HasEngine());
-    tableSchema.SetEngine(GetEngineUnsafe());
-
-    Columns.Serialize(tableSchema);
-    Indexes.Serialize(tableSchema);
-    Options.Serialize(tableSchema);
-    Statistics.Serialize(tableSchema);
+    ColumnFamilies.Serialize(resultLocal);
+    Columns.Serialize(resultLocal);
+    Indexes.Serialize(resultLocal);
+    Options.Serialize(resultLocal);
+    std::swap(resultLocal, tableSchemaExt);
 }
 
 bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
@@ -166,15 +81,6 @@ bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, 
     }
 
     if (!Options.Validate(opSchema, errors)) {
-        return false;
-    }
-
-    if (!Statistics.Validate(opSchema, errors)) {
-        return false;
-    }
-
-    if (opSchema.GetEngine() != Engine) {
-        errors.AddError("Specified schema engine does not match schema preset");
         return false;
     }
     return true;

@@ -1,0 +1,4 @@
+(
+(let $sqr (lambda '($x) (* $x $x)))
+(export $sqr)
+)

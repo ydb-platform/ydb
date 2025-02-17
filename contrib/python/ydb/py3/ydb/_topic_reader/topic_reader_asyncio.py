@@ -5,10 +5,12 @@ import concurrent.futures
 import gzip
 import typing
 from asyncio import Task
-from collections import deque
+from collections import OrderedDict
 from typing import Optional, Set, Dict, Union, Callable
 
+import ydb
 from .. import _apis, issues
+from .._topic_common import common as topic_common
 from .._utilities import AtomicCounter
 from ..aio import Driver
 from ..issues import Error as YdbError, _process_response
@@ -35,7 +37,7 @@ class TopicReaderError(YdbError):
     pass
 
 
-class TopicReaderUnexpectedCodec(YdbError):
+class PublicTopicReaderUnexpectedCodecError(YdbError):
     pass
 
 
@@ -86,7 +88,8 @@ class PublicAsyncIOReader:
 
     def __del__(self):
         if not self._closed:
-            self._loop.create_task(self.close(flush=False), name="close reader")
+            task = self._loop.create_task(self.close(flush=False))
+            topic_common.wrap_set_name_for_asyncio_task(task, task_name="close reader")
 
     async def wait_message(self):
         """
@@ -96,6 +99,7 @@ class PublicAsyncIOReader:
 
     async def receive_batch(
         self,
+        max_messages: typing.Union[int, None] = None,
     ) -> typing.Union[datatypes.PublicBatch, None]:
         """
         Get one messages batch from reader.
@@ -104,7 +108,9 @@ class PublicAsyncIOReader:
         use asyncio.wait_for for wait with timeout.
         """
         await self._reconnector.wait_message()
-        return self._reconnector.receive_batch_nowait()
+        return self._reconnector.receive_batch_nowait(
+            max_messages=max_messages,
+        )
 
     async def receive_message(self) -> typing.Optional[datatypes.PublicMessage]:
         """
@@ -191,7 +197,7 @@ class ReaderReconnector:
                 if self._stream_reader is not None:
                     # noinspection PyBroadException
                     try:
-                        await self._stream_reader.close()
+                        await self._stream_reader.close(flush=False)
                     except BaseException:
                         # supress any error on close stream reader
                         pass
@@ -211,8 +217,10 @@ class ReaderReconnector:
             await self._state_changed.wait()
             self._state_changed.clear()
 
-    def receive_batch_nowait(self):
-        return self._stream_reader.receive_batch_nowait()
+    def receive_batch_nowait(self, max_messages: Optional[int] = None):
+        return self._stream_reader.receive_batch_nowait(
+            max_messages=max_messages,
+        )
 
     def receive_message_nowait(self):
         return self._stream_reader.receive_message_nowait()
@@ -222,9 +230,7 @@ class ReaderReconnector:
 
     async def close(self, flush: bool):
         if self._stream_reader:
-            if flush:
-                await self.flush()
-            await self._stream_reader.close()
+            await self._stream_reader.close(flush)
         for task in self._background_tasks:
             task.cancel()
 
@@ -265,7 +271,7 @@ class ReaderStream:
 
     _state_changed: asyncio.Event
     _closed: bool
-    _message_batches: typing.Deque[datatypes.PublicBatch]
+    _message_batches: typing.Dict[int, datatypes.PublicBatch]  # keys are partition session ID
     _first_error: asyncio.Future[YdbError]
 
     _update_token_interval: Union[int, float]
@@ -297,7 +303,7 @@ class ReaderStream:
         self._closed = False
         self._first_error = asyncio.get_running_loop().create_future()
         self._batches_to_decode = asyncio.Queue()
-        self._message_batches = deque()
+        self._message_batches = OrderedDict()
 
         self._update_token_interval = settings.update_token_interval
         self._get_token_function = get_token_function
@@ -338,10 +344,31 @@ class ReaderStream:
 
         self._update_token_event.set()
 
-        self._background_tasks.add(asyncio.create_task(self._read_messages_loop(), name="read_messages_loop"))
-        self._background_tasks.add(asyncio.create_task(self._decode_batches_loop()))
+        self._background_tasks.add(
+            topic_common.wrap_set_name_for_asyncio_task(
+                asyncio.create_task(self._read_messages_loop()),
+                task_name="read_messages_loop",
+            ),
+        )
+        self._background_tasks.add(
+            topic_common.wrap_set_name_for_asyncio_task(
+                asyncio.create_task(self._decode_batches_loop()),
+                task_name="decode_batches",
+            ),
+        )
         if self._get_token_function:
-            self._background_tasks.add(asyncio.create_task(self._update_token_loop(), name="update_token_loop"))
+            self._background_tasks.add(
+                topic_common.wrap_set_name_for_asyncio_task(
+                    asyncio.create_task(self._update_token_loop()),
+                    task_name="update_token_loop",
+                ),
+            )
+        self._background_tasks.add(
+            topic_common.wrap_set_name_for_asyncio_task(
+                asyncio.create_task(self._handle_background_errors()),
+                task_name="handle_background_errors",
+            ),
+        )
 
     async def wait_error(self):
         raise await self._first_error
@@ -357,29 +384,55 @@ class ReaderStream:
             await self._state_changed.wait()
             self._state_changed.clear()
 
-    def receive_batch_nowait(self):
+    def _get_first_batch(self) -> typing.Tuple[int, datatypes.PublicBatch]:
+        partition_session_id, batch = self._message_batches.popitem(last=False)
+        return partition_session_id, batch
+
+    def _return_batch_to_queue(self, part_sess_id: int, batch: datatypes.PublicBatch):
+        self._message_batches[part_sess_id] = batch
+
+        # In case of auto-split we should return all parent messages ASAP
+        # without queue rotation to prevent child's messages before parent's.
+        if part_sess_id in self._partition_sessions and self._partition_sessions[part_sess_id].ended:
+            self._message_batches.move_to_end(part_sess_id, last=False)
+
+    def receive_batch_nowait(self, max_messages: Optional[int] = None):
         if self._get_first_error():
             raise self._get_first_error()
 
         if not self._message_batches:
             return None
 
-        batch = self._message_batches.popleft()
-        self._buffer_release_bytes(batch._bytes_size)
-        return batch
+        part_sess_id, batch = self._get_first_batch()
+
+        if max_messages is None or len(batch.messages) <= max_messages:
+            self._buffer_release_bytes(batch._bytes_size)
+            return batch
+
+        cutted_batch = batch._pop_batch(message_count=max_messages)
+
+        self._return_batch_to_queue(part_sess_id, batch)
+
+        self._buffer_release_bytes(cutted_batch._bytes_size)
+
+        return cutted_batch
 
     def receive_message_nowait(self):
         if self._get_first_error():
             raise self._get_first_error()
 
-        try:
-            batch = self._message_batches[0]
-            message = batch.pop_message()
-        except IndexError:
+        if not self._message_batches:
             return None
 
-        if batch.empty():
-            self.receive_batch_nowait()
+        part_sess_id, batch = self._get_first_batch()
+
+        message, msgs_left = batch._pop()
+
+        if not msgs_left:
+            self._buffer_release_bytes(batch._bytes_size)
+        else:
+            # TODO: we should somehow release bytes from single message as well
+            self._return_batch_to_queue(part_sess_id, batch)
 
         return message
 
@@ -410,6 +463,17 @@ class ReaderStream:
             self._stream.write(StreamReadMessage.FromClient(client_message=client_message))
 
         return waiter
+
+    async def _handle_background_errors(self):
+        done, _ = await asyncio.wait(self._background_tasks, return_when=asyncio.FIRST_EXCEPTION)
+        for f in done:
+            f = f  # type: asyncio.Future
+            err = f.exception()
+            if not isinstance(err, ydb.Error):
+                old_err = err
+                err = ydb.Error("Background process failed unexpected")
+                err.__cause__ = old_err
+            self._set_first_error(err)
 
     async def _read_messages_loop(self):
         try:
@@ -443,6 +507,12 @@ class ReaderStream:
                     ):
                         self._on_partition_session_stop(message.server_message)
 
+                    elif isinstance(
+                        message.server_message,
+                        StreamReadMessage.EndPartitionSession,
+                    ):
+                        self._on_end_partition_session(message.server_message)
+
                     elif isinstance(message.server_message, UpdateTokenResponse):
                         self._update_token_event.set()
 
@@ -461,7 +531,10 @@ class ReaderStream:
     async def _update_token_loop(self):
         while True:
             await asyncio.sleep(self._update_token_interval)
-            await self._update_token(token=self._get_token_function())
+            token = self._get_token_function()
+            if asyncio.iscoroutine(token):
+                token = await token
+            await self._update_token(token=token)
 
     async def _update_token(self, token: str):
         await self._update_token_event.wait()
@@ -517,6 +590,16 @@ class ReaderStream:
                 )
             )
 
+    def _on_end_partition_session(self, message: StreamReadMessage.EndPartitionSession):
+        logger.debug(
+            f"End partition session with id: {message.partition_session_id}, "
+            f"child partitions: {message.child_partition_ids}"
+        )
+
+        if message.partition_session_id in self._partition_sessions:
+            # Mark partition session as ended not to shuffle messages.
+            self._partition_sessions[message.partition_session_id].end()
+
     def _on_read_response(self, message: StreamReadMessage.ReadResponse):
         self._buffer_consume_bytes(message.bytes_size)
 
@@ -569,6 +652,7 @@ class ReaderStream:
                         written_at=server_batch.written_at,
                         producer_id=server_batch.producer_id,
                         data=message_data.data,
+                        metadata_items=message_data.metadata_items,
                         _partition_session=partition_session,
                         _commit_start_offset=partition_session._next_message_start_commit_offset,
                         _commit_end_offset=message_data.offset + 1,
@@ -592,8 +676,16 @@ class ReaderStream:
         while True:
             batch = await self._batches_to_decode.get()
             await self._decode_batch_inplace(batch)
-            self._message_batches.append(batch)
+            self._add_batch_to_queue(batch)
             self._state_changed.set()
+
+    def _add_batch_to_queue(self, batch: datatypes.PublicBatch):
+        part_sess_id = batch._partition_session.id
+        if part_sess_id in self._message_batches:
+            self._message_batches[part_sess_id]._extend(batch)
+            return
+
+        self._message_batches[part_sess_id] = batch
 
     async def _decode_batch_inplace(self, batch):
         if batch._codec == Codec.CODEC_RAW:
@@ -602,7 +694,7 @@ class ReaderStream:
         try:
             decode_func = self._decoders[batch._codec]
         except KeyError:
-            raise TopicReaderUnexpectedCodec("Receive message with unexpected codec: %s" % batch._codec)
+            raise PublicTopicReaderUnexpectedCodecError("Receive message with unexpected codec: %s" % batch._codec)
 
         decode_data_futures = []
         for message in batch.messages:
@@ -628,9 +720,6 @@ class ReaderStream:
             return self._first_error.result()
 
     async def flush(self):
-        if self._closed:
-            raise RuntimeError("Flush on closed Stream")
-
         futures = []
         for session in self._partition_sessions.values():
             futures.extend(w.future for w in session._ack_waiters)
@@ -638,11 +727,14 @@ class ReaderStream:
         if futures:
             await asyncio.wait(futures)
 
-    async def close(self):
+    async def close(self, flush: bool):
         if self._closed:
             return
 
         self._closed = True
+
+        if flush:
+            await self.flush()
 
         self._set_first_error(TopicReaderStreamClosedError())
         self._state_changed.set()

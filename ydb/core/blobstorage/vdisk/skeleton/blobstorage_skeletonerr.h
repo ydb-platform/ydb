@@ -240,27 +240,27 @@ namespace NKikimr {
         {
             if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVMovedPatch::TPtr>) {
                 TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetOriginalBlobId());
-                LWTRACK(VDiskSkeletonFrontVMovedPatchRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId,
+                LWTRACK(VDiskSkeletonFrontVMovedPatchRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId.GetRawId(),
                     vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
             }
             if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchStart::TPtr>) {
                 TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetOriginalBlobId());
-                LWTRACK(VDiskSkeletonFrontVPatchStartRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId,
+                LWTRACK(VDiskSkeletonFrontVPatchStartRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId.GetRawId(),
                     vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
             }
             if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchDiff::TPtr>) {
                 TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetOriginalPartBlobId());
-                LWTRACK(VDiskSkeletonFrontVPatchDiffRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId,
+                LWTRACK(VDiskSkeletonFrontVPatchDiffRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId.GetRawId(),
                     vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
             }
             if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchXorDiff::TPtr>) {
                 TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetOriginalPartBlobId());
-                LWTRACK(VDiskSkeletonFrontVPatchXorDiffRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId,
+                LWTRACK(VDiskSkeletonFrontVPatchXorDiffRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId.GetRawId(),
                     vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
             }
             if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPut::TPtr>) {
                 TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID());
-                LWTRACK(VDiskSkeletonFrontVPutRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId,
+                LWTRACK(VDiskSkeletonFrontVPutRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId.GetRawId(),
                     vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
             }
 
@@ -278,7 +278,7 @@ namespace NKikimr {
                         const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo)
         {
             NKikimrBlobStorage::TEvVMultiPut &record = ev->Get()->Record;
-            LWTRACK(VDiskSkeletonFrontVMultiPutRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId,
+            LWTRACK(VDiskSkeletonFrontVMultiPutRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId.GetRawId(),
                    vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), ev->Get()->Record.ItemsSize(),
                    ev->Get()->GetBufferBytes());
             const ui64 vcookie = record.GetCookie();

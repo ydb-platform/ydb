@@ -6,18 +6,18 @@ SIZE(SMALL)
 
 PEERDIR(
     ydb/library/actors/testlib
-    ydb/library/yql/public/udf/service/stub
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg_dummy
     ydb/library/yql/providers/dq/actors/yt
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/dq/actors/compute
-    ydb/library/yql/minikql/computation/llvm14
-    ydb/library/yql/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/computation/llvm14
+    yql/essentials/minikql/comp_nodes/llvm14
 
-    ydb/library/yql/dq/integration/transform
+    yql/essentials/core/dq_integration/transform
     ydb/library/yql/dq/comp_nodes
-    ydb/library/yql/providers/common/comp_nodes
-    ydb/library/yql/minikql/comp_nodes
+    yql/essentials/providers/common/comp_nodes
+    yql/essentials/minikql/comp_nodes
     ydb/library/yql/dq/transform
     ydb/library/yql/providers/dq/task_runner    
 )

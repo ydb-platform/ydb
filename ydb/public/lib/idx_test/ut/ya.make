@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/public/lib/idx_test)
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 FORK_SUBTESTS()

@@ -37,13 +37,6 @@ using TClusterInfoPtr = TIntrusivePtr<TClusterInfo>;
 struct TCmsState;
 using TCmsStatePtr = TIntrusivePtr<TCmsState>;
 
-struct TErrorInfo {
-    NKikimrCms::TStatus::ECode Code = NKikimrCms::TStatus::ALLOW;
-    TString Reason;
-    TInstant Deadline;
-    ui64 RollbackPoint = 0;
-};
-
 /**
  * Structure to hold info about issued permission. A set of
  * all issued permissions is a part of CMS persistent state.

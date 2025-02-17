@@ -8,11 +8,11 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -32,7 +32,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize, bool isIncrement = false) {
+NYql::NDq::TComputeActorState MakeStateFromBlob(size_t blobSize, bool isIncrement = false) {
     TString blob;
     blob.reserve(blobSize);
     for (size_t i = 0; i < blobSize; ++i) {
@@ -51,8 +51,8 @@ NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize, bool isInc
     const TStringBuf savedBuf = value.AsStringRef();
     TString result;
     NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, savedBuf);
-    NYql::NDqProto::TComputeActorState state;
-    state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
+    NYql::NDq::TComputeActorState state;
+    state.MiniKqlProgram.ConstructInPlace().Data.Blob = result;
     return state;
 }
 

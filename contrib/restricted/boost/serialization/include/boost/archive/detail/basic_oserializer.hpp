@@ -7,7 +7,7 @@
 #endif
 
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
-// basic_oserializer.hpp: extenstion of type_info required for serialization.
+// basic_oserializer.hpp: extension of type_info required for serialization.
 
 // (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software

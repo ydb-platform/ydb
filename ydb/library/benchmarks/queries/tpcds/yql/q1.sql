@@ -7,7 +7,7 @@ $customer_total_return =
 (select a.sr_customer_sk as ctr_customer_sk
 ,a.sr_store_sk as ctr_store_sk
 -- NB: renamed "SR_FEE" -> "sr_fee"
-,sum(a.sr_fee) as ctr_total_return
+,sum(a.sr_return_amt) as ctr_total_return
 from {{store_returns}} as a cross join {{date_dim}} as b
 where sr_returned_date_sk = d_date_sk
 and d_year =2000
@@ -15,7 +15,7 @@ group by a.sr_customer_sk
 ,a.sr_store_sk);
 
 $avg_total_returns = (
-    select ctr_store_sk, avg(ctr_total_return)*1.2 as ctr_avg
+    select ctr_store_sk, avg(ctr_total_return)*$z1_2_35 as ctr_avg
     from $customer_total_return
     group by ctr_store_sk
 );
@@ -29,7 +29,7 @@ cross join {{customer}}
 join $avg_total_returns ctr2 on ctr1.ctr_store_sk = ctr2.ctr_store_sk
 where ctr_total_return > ctr_avg
 and s_store_sk = ctr1.ctr_store_sk
-and s_state = 'NM'
+and s_state = 'TN'
 and ctr_customer_sk = c_customer_sk
 order by c_customer_id
 limit 100;

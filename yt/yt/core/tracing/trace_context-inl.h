@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/concurrency/thread_affinity.h>
 
+#include <yt/yt/core/concurrency/propagating_storage.h>
+
 #include <library/cpp/yt/misc/tls.h>
 
 #include <atomic>
@@ -57,7 +59,7 @@ Y_FORCE_INLINE const TString& TTraceContext::GetSpanName() const
     return SpanName_;
 }
 
-Y_FORCE_INLINE const TString& TTraceContext::GetLoggingTag() const
+Y_FORCE_INLINE const std::string& TTraceContext::GetLoggingTag() const
 {
     return LoggingTag_;
 }
@@ -73,105 +75,60 @@ Y_FORCE_INLINE NProfiling::TCpuDuration TTraceContext::GetElapsedCpuTime() const
 }
 
 template <class T>
-void TTraceContext::AddTag(const TString& tagName, const T& tagValue)
+void TTraceContext::AddTag(const std::string& tagName, const T& tagValue)
 {
     if (!IsRecorded()) {
         return;
     }
 
     using ::ToString;
-    AddTag(tagName, ToString(tagValue));
+    // TODO(babenko): migrate to std::string
+    AddTag(tagName, std::string(ToString(tagValue)));
 }
 
-template <typename TTag>
-std::optional<TTag> TTraceContext::DoFindAllocationTag(const TString& key) const
+template <typename T>
+std::optional<T> TTraceContext::FindAllocationTag(const TAllocationTagKey& key) const
 {
-    VERIFY_SPINLOCK_AFFINITY(AllocationTagsLock_);
-
-    TAllocationTagsPtr tags;
-
-    {
-        // Local guard for copy RefCounted AllocationTags_.
-        auto guard = Guard(AllocationTagsAsRefCountedLock_);
-        tags = AllocationTags_;
-    }
-
-    if (tags) {
-        auto valueOpt = tags->FindTagValue(key);
-
-        if (valueOpt.has_value()) {
-            return FromString<TTag>(valueOpt.value());
+    // NB: No lock is needed.
+    if (auto list = AllocationTagList_.Acquire()) {
+        if (auto optionalValue = list->FindTagValue(key)) {
+            return FromString<T>(*optionalValue);
         }
     }
-
     return std::nullopt;
 }
 
-template <typename TTag>
-std::optional<TTag> TTraceContext::FindAllocationTag(const TString& key) const
+template <typename T>
+std::optional<T> TTraceContext::SetAllocationTag(const TAllocationTagKey& key, const T& value)
 {
-    auto readerGuard = ReaderGuard(AllocationTagsLock_);
-    return DoFindAllocationTag<TTag>(key);
-}
+    auto newTagValue = ToString(value);
 
-template <typename TTag>
-std::optional<TTag> TTraceContext::RemoveAllocationTag(const TString& key)
-{
-    auto writerGuard = NThreading::WriterGuard(AllocationTagsLock_);
-    auto newTags = DoGetAllocationTags();
+    auto guard = Guard(AllocationTagsLock_);
 
-    auto foundTagIt = std::remove_if(
-        newTags.begin(),
-        newTags.end(),
-        [&key] (const auto& pair) {
-            return pair.first == key;
-        });
-
-    std::optional<TTag> oldTag;
-
-    if (foundTagIt != newTags.end()) {
-        oldTag = FromString<TTag>(foundTagIt->second);
-    }
-
-    newTags.erase(foundTagIt, newTags.end());
-
-    DoSetAllocationTags(std::move(newTags));
-
-    return oldTag;
-}
-
-template <typename TTag>
-std::optional<TTag> TTraceContext::SetAllocationTag(const TString& key, TTag newTag)
-{
-    auto newTagString = ToString(newTag);
-
-    auto writerGuard = NThreading::WriterGuard(AllocationTagsLock_);
-    auto newTags = DoGetAllocationTags();
-
+    auto newTags = GetAllocationTags();
     if (!newTags.empty()) {
-        std::optional<TString> oldTag;
-
-        auto tagIt = std::find_if(
+        auto it = std::find_if(
             newTags.begin(),
             newTags.end(),
-            [&key] (const auto& pair) {
+            [&] (const auto& pair) {
                 return pair.first == key;
             });
 
-        if (tagIt != newTags.end()) {
-            oldTag = std::move(tagIt->second);
-            tagIt->second = std::move(newTagString);
+        std::optional<TAllocationTagValue> oldTagValue;
+        if (it != newTags.end()) {
+            oldTagValue = std::move(it->second);
+            it->second = std::move(newTagValue);
         } else {
-            newTags.emplace_back(key, std::move(newTagString));
+            newTags.emplace_back(key, std::move(newTagValue));
         }
 
         DoSetAllocationTags(std::move(newTags));
 
-        if (oldTag.has_value()) {
-            return FromString<TTag>(oldTag.value());
+        if (oldTagValue) {
+            return FromString<T>(*oldTagValue);
         }
     } else {
-        DoSetAllocationTags({{key, std::move(newTagString)}});
+        DoSetAllocationTags({{key, std::move(newTagValue)}});
     }
 
     return std::nullopt;
@@ -181,17 +138,17 @@ std::optional<TTag> TTraceContext::SetAllocationTag(const TString& key, TTag new
 
 namespace NDetail {
 
-extern YT_THREAD_LOCAL(TTraceContext*) CurrentTraceContext;
+YT_DECLARE_THREAD_LOCAL(TTraceContext*, CurrentTraceContext);
 
-TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext);
+TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation loc);
 
 } // namespace NDetail
 
-Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TTraceContextPtr traceContext)
+Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TTraceContextPtr traceContext, TSourceLocation location)
     : Active_(static_cast<bool>(traceContext))
 {
     if (Active_) {
-        OldTraceContext_ = NDetail::SwapTraceContext(std::move(traceContext));
+        OldTraceContext_ = NDetail::SwapTraceContext(std::move(traceContext), location);
     }
 }
 
@@ -215,7 +172,7 @@ Y_FORCE_INLINE bool TCurrentTraceContextGuard::IsActive() const
 Y_FORCE_INLINE void TCurrentTraceContextGuard::Release()
 {
     if (Active_) {
-        NDetail::SwapTraceContext(std::move(OldTraceContext_));
+        NDetail::SwapTraceContext(std::move(OldTraceContext_), YT_CURRENT_SOURCE_LOCATION);
         Active_ = false;
     }
 }
@@ -227,9 +184,9 @@ Y_FORCE_INLINE const TTraceContextPtr& TCurrentTraceContextGuard::GetOldTraceCon
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard()
+Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TSourceLocation location)
     : Active_(true)
-    , OldTraceContext_(NDetail::SwapTraceContext(nullptr))
+    , OldTraceContext_(NDetail::SwapTraceContext(nullptr, location))
 { }
 
 Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TNullTraceContextGuard&& other)
@@ -252,7 +209,7 @@ Y_FORCE_INLINE bool TNullTraceContextGuard::IsActive() const
 Y_FORCE_INLINE void TNullTraceContextGuard::Release()
 {
     if (Active_) {
-        NDetail::SwapTraceContext(std::move(OldTraceContext_));
+        NDetail::SwapTraceContext(std::move(OldTraceContext_), YT_CURRENT_SOURCE_LOCATION);
         Active_ = false;
     }
 }
@@ -269,6 +226,12 @@ inline TTraceContextGuard::TTraceContextGuard(TTraceContextPtr traceContext)
     , FinishGuard_(TryGetCurrentTraceContext())
 { }
 
+inline void TTraceContextGuard::Release(
+    std::optional<NProfiling::TCpuInstant> finishTime)
+{
+    FinishGuard_.Release(finishTime);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 inline bool TChildTraceContextGuard::IsRecorded(const TTraceContextPtr& traceContext)
@@ -278,17 +241,26 @@ inline bool TChildTraceContextGuard::IsRecorded(const TTraceContextPtr& traceCon
 
 inline TChildTraceContextGuard::TChildTraceContextGuard(
     const TTraceContextPtr& traceContext,
-    TString spanName)
-    : TraceContextGuard_(IsRecorded(traceContext) ? traceContext->CreateChild(spanName) : nullptr)
+    const std::string& spanName,
+    std::optional<NProfiling::TCpuInstant> startTime)
+    : TraceContextGuard_(IsRecorded(traceContext) ? traceContext->CreateChild(spanName, startTime) : nullptr)
     , FinishGuard_(IsRecorded(traceContext) ? TryGetCurrentTraceContext() : nullptr)
 { }
 
 inline TChildTraceContextGuard::TChildTraceContextGuard(
-    TString spanName)
+    const std::string& spanName,
+    std::optional<NProfiling::TCpuInstant> startTime)
     : TChildTraceContextGuard(
         TryGetCurrentTraceContext(),
-        std::move(spanName))
+        spanName,
+        startTime)
 { }
+
+inline void TChildTraceContextGuard::Finish(
+    std::optional<NProfiling::TCpuInstant> finishTime)
+{
+    FinishGuard_.Release(finishTime);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -310,10 +282,11 @@ inline TTraceContextFinishGuard& TTraceContextFinishGuard::operator=(TTraceConte
     return *this;
 }
 
-inline void TTraceContextFinishGuard::Release()
+inline void TTraceContextFinishGuard::Release(
+    std::optional<NProfiling::TCpuInstant> finishTime)
 {
     if (TraceContext_) {
-        TraceContext_->Finish();
+        TraceContext_->Finish(finishTime);
         TraceContext_ = {};
     }
 }
@@ -322,22 +295,22 @@ inline void TTraceContextFinishGuard::Release()
 
 Y_FORCE_INLINE TTraceContext* TryGetCurrentTraceContext()
 {
-    return NDetail::CurrentTraceContext;
+    return NDetail::CurrentTraceContext();
 }
 
 Y_FORCE_INLINE TTraceContext* GetCurrentTraceContext()
 {
-    YT_ASSERT(NDetail::CurrentTraceContext);
-    return NDetail::CurrentTraceContext;
+    YT_ASSERT(NDetail::CurrentTraceContext());
+    return NDetail::CurrentTraceContext();
 }
 
-Y_FORCE_INLINE TTraceContextPtr CreateTraceContextFromCurrent(TString spanName)
+Y_FORCE_INLINE TTraceContextPtr CreateTraceContextFromCurrent(const std::string& spanName)
 {
     auto* context = TryGetCurrentTraceContext();
-    return context ? context->CreateChild(std::move(spanName)) : TTraceContext::NewRoot(std::move(spanName));
+    return context ? context->CreateChild(spanName) : TTraceContext::NewRoot(spanName);
 }
 
-Y_FORCE_INLINE TTraceContextPtr GetOrCreateTraceContext(TString spanNameIfCreate)
+Y_FORCE_INLINE TTraceContextPtr GetOrCreateTraceContext(const std::string& spanNameIfCreate)
 {
     auto* context = TryGetCurrentTraceContext();
     return context ? context : TTraceContext::NewRoot(std::move(spanNameIfCreate));

@@ -30,6 +30,8 @@ using ILoggerPtr = ::TIntrusivePtr<ILogger>;
 void SetLogger(ILoggerPtr logger);
 ILoggerPtr GetLogger();
 
+void SetUseCoreLog();
+
 ILoggerPtr CreateStdErrLogger(ILogger::ELevel cutLevel);
 ILoggerPtr CreateFileLogger(ILogger::ELevel cutLevel, const TString& path, bool append = false);
 
@@ -39,5 +41,7 @@ ILoggerPtr CreateFileLogger(ILogger::ELevel cutLevel, const TString& path, bool 
  * but in case of a crash, you would lose some log messages that haven't been flushed yet.
  */
 ILoggerPtr CreateBufferedFileLogger(ILogger::ELevel cutLevel, const TString& path, bool append = false);
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

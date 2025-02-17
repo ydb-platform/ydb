@@ -1,8 +1,12 @@
 #pragma once
 
 #include <yt/yt/core/misc/public.h>
+#include <yt/yt/core/misc/configurable_singleton_decl.h>
+#include <yt/yt/core/misc/error_code.h>
 
 #include <library/cpp/yt/memory/intrusive_ptr.h>
+
+#include <library/cpp/yt/misc/guid.h>
 
 namespace NYT::NNet {
 
@@ -11,6 +15,8 @@ namespace NYT::NNet {
 class TNetworkAddress;
 class TIP6Address;
 class TIP6Network;
+
+using TConnectionId = TGuid;
 
 DECLARE_REFCOUNTED_STRUCT(IConnection)
 DECLARE_REFCOUNTED_STRUCT(IPacketConnection)
@@ -29,6 +35,8 @@ YT_DEFINE_ERROR_ENUM(
     ((Aborted)         (1500))
     ((ResolveTimedOut) (1501))
 );
+
+YT_DECLARE_CONFIGURABLE_SINGLETON(TAddressResolverConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

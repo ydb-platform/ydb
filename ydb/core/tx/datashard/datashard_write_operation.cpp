@@ -95,6 +95,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE:
             break;
         default:
             return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << OperationType << " operation is not supported now"};
@@ -143,11 +144,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     {
         ui64 keyBytes = 0;
         for (ui16 keyColIdx = 0; keyColIdx < tableInfo.KeyColumnIds.size(); ++keyColIdx) {
-            const auto& cellType = tableInfo.KeyColumnTypes[keyColIdx];
             const TCell& cell = Matrix.GetCell(rowIdx, keyColIdx);
-            if (cellType.GetTypeId() == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127)
-                return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Keys with Uint8 column values >127 are currently prohibited"};
-
             keyBytes += cell.IsNull() ? 1 : cell.Size();
         }
 
@@ -415,8 +412,9 @@ TValidatedWriteTx::TPtr TWriteOperation::BuildWriteTx(TDataShard* self)
 void TWriteOperation::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& provider) {
     ReleasedTxDataSize = provider.GetMemoryLimit() + provider.GetRequestedMemory();
 
-    if (!WriteTx || IsTxDataReleased())
+    if (!WriteTx || WriteTx->GetIsReleased()) {
         return;
+    }
 
     WriteTx->ReleaseTxData();
     // Immediate transactions have no body stored.
@@ -611,6 +609,34 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
 
         // Immediate ops become ready when stopping flag is set
         return true;
+    } else if (HasVolatilePrepareFlag()) {
+        // Volatile transactions may be aborted at any time unless executed
+        // Note: we need to send the result (and discard the transaction) as
+        // soon as possible, because new transactions are unlikely to execute
+        // and commits will even more likely fail.
+        if (!HasResultSentFlag() && !Result() && !HasCompletedFlag()) {
+            auto status = NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED;
+            TString reason = TStringBuilder()
+                << "DataShard " << TabletId << " is restarting";
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), status, std::move(reason));
+
+            ctx.Send(GetTarget(), result.release(), 0, GetCookie());
+
+            // Make sure we also send acks and nodata readsets to expecting participants
+            std::vector<std::unique_ptr<IEventHandle>> cleanupReplies;
+            self.GetCleanupReplies(this, cleanupReplies);
+
+            for (auto& ev : cleanupReplies) {
+                TActivationContext::Send(ev.release());
+            }
+
+            SetResultSentFlag();
+            return true;
+        }
+
+        // Executed transactions will have to wait until committed
+        // There is no way to hand-off committing volatile transactions for now
+        return false;
     } else {
         // Distributed operations send notification when proposed
         if (GetTarget() && !HasCompletedFlag()) {

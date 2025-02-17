@@ -2,8 +2,9 @@
 
 #include "defs.h"
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/protos/whiteboard_disk_states.pb.h>
 
 namespace NKikimr {
     namespace NMonGroup {
@@ -29,11 +30,7 @@ namespace NKikimr {
             TIntrusivePtr<::NMonitoring::TDynamicCounters> GroupCounters;
         };
 
-        static bool IsExtendedVDiskCounters() {
-            return NActors::TlsActivationContext
-                && NActors::TlsActivationContext->ExecutorThread.ActorSystem
-                && AppData()->FeatureFlags.GetExtendedVDiskCounters();
-        }
+        bool IsExtendedVDiskCounters();
 
 #define COUNTER_DEF(name)                                                                   \
 protected:                                                                                  \
@@ -138,6 +135,24 @@ public:                                                                         
 
                 COUNTER_INIT_IF_EXTENDED(FreshSatisfactionRankPercent, false);
                 COUNTER_INIT_IF_EXTENDED(LevelSatisfactionRankPercent, false);
+
+                COUNTER_INIT_IF_EXTENDED(ThrottlingCurrentSpeedLimit, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingIsActive, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingDryRun, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingLevel0SstCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinLevel0SstCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxLevel0SstCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingInplacedSize, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinInplacedSizeHDD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxInplacedSizeHDD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinInplacedSizeSSD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxInplacedSizeSSD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingLogChunkCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinLogChunkCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxLogChunkCount, false);
             }
 
             COUNTER_DEF(EmergencyMovedPatchQueueItems);
@@ -156,6 +171,24 @@ public:                                                                         
 
             COUNTER_DEF(FreshSatisfactionRankPercent);
             COUNTER_DEF(LevelSatisfactionRankPercent);
+
+            COUNTER_DEF(ThrottlingCurrentSpeedLimit);
+            COUNTER_DEF(ThrottlingIsActive);
+            COUNTER_DEF(ThrottlingDryRun);
+            COUNTER_DEF(ThrottlingLevel0SstCount);
+            COUNTER_DEF(ThrottlingMinLevel0SstCount);
+            COUNTER_DEF(ThrottlingMaxLevel0SstCount);
+            COUNTER_DEF(ThrottlingInplacedSize);
+            COUNTER_DEF(ThrottlingMinInplacedSizeHDD);
+            COUNTER_DEF(ThrottlingMaxInplacedSizeHDD);
+            COUNTER_DEF(ThrottlingMinInplacedSizeSSD);
+            COUNTER_DEF(ThrottlingMaxInplacedSizeSSD);
+            COUNTER_DEF(ThrottlingOccupancyPerMille);
+            COUNTER_DEF(ThrottlingMinOccupancyPerMille);
+            COUNTER_DEF(ThrottlingMaxOccupancyPerMille);
+            COUNTER_DEF(ThrottlingLogChunkCount);
+            COUNTER_DEF(ThrottlingMinLogChunkCount);
+            COUNTER_DEF(ThrottlingMaxLogChunkCount);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -458,6 +491,7 @@ public:                                                                         
             TLsmLevelGroup Level9to16;
             TLsmLevelGroup Level17;
             TLsmLevelGroup Level18;
+            TLsmLevelGroup Level19;
 
             TLsmAllLevelsStat(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
                 : Group(counters->GetSubgroup("subsystem", "levels"))
@@ -466,6 +500,7 @@ public:                                                                         
                 , Level9to16(Group, "level", "9..16")
                 , Level17(Group, "level", "17")
                 , Level18(Group, "level", "18")
+                , Level19(Group, "level", "19")
             {}
         };
 
@@ -520,7 +555,11 @@ public:                                                                         
             }
                 
             void MinHugeBlobInBytes(ui32 size) {
+                if (PrevMinHugeBlobInBytes) {
+                    GroupCounters->GetNamedCounter("MinHugeBlobInBytes", ToString(PrevMinHugeBlobInBytes), false)->Dec();
+                }
                 GroupCounters->GetNamedCounter("MinHugeBlobInBytes", ToString(size), false)->Inc();
+                PrevMinHugeBlobInBytes = size;
             }
 
             COUNTER_DEF(MovedPatchMsgs);
@@ -564,6 +603,8 @@ public:                                                                         
 
             COUNTER_DEF(PutTotalBytes);
             COUNTER_DEF(GetTotalBytes);
+        private:
+            ui32 PrevMinHugeBlobInBytes = 0;
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -574,9 +615,11 @@ public:                                                                         
             GROUP_CONSTRUCTOR(TDefragGroup)
             {
                 COUNTER_INIT_IF_EXTENDED(DefragBytesRewritten, true);
+                COUNTER_INIT_IF_EXTENDED(DefragThreshold, false);
             }
 
             COUNTER_DEF(DefragBytesRewritten);
+            COUNTER_DEF(DefragThreshold);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -586,16 +629,54 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TBalancingGroup)
             {
+                COUNTER_INIT(BalancingIterations, true);
+                COUNTER_INIT(EpochTimeouts, true);
+                COUNTER_INIT(ReplTokenAquired, true);
+                COUNTER_INIT(OnMainByIngressButNotRealy, true);
+
                 COUNTER_INIT(PlannedToSendOnMain, false);
-                COUNTER_INIT(SentOnMain, false);
                 COUNTER_INIT(CandidatesToDelete, false);
-                COUNTER_INIT(MarkedReadyToDelete, false);
+
+                COUNTER_INIT(ReadFromHandoffBytes, true);
+                COUNTER_INIT(ReadFromHandoffResponseBytes, true);
+                COUNTER_INIT(ReadFromHandoffBatchTimeout, true);
+                COUNTER_INIT(SentOnMain, true);
+                COUNTER_INIT(SentOnMainBytes, true);
+                COUNTER_INIT(SentOnMainWithResponseBytes, true);
+                COUNTER_INIT(SendOnMainBatchTimeout, true);
+
+                COUNTER_INIT(CandidatesToDeleteAskedFromMain, true);
+                COUNTER_INIT(CandidatesToDeleteAskedFromMainResponse, true);
+                COUNTER_INIT(CandidatesToDeleteAskFromMainBatchTimeout, true);
+                COUNTER_INIT(MarkedReadyToDelete, true);
+                COUNTER_INIT(MarkedReadyToDeleteBytes, true);
+                COUNTER_INIT(MarkedReadyToDeleteResponse, true);
+                COUNTER_INIT(MarkedReadyToDeleteWithResponseBytes, true);
+                COUNTER_INIT(MarkReadyBatchTimeout, true);
             }
 
+            COUNTER_DEF(BalancingIterations);
+            COUNTER_DEF(EpochTimeouts);
+            COUNTER_DEF(ReplTokenAquired);
+            COUNTER_DEF(OnMainByIngressButNotRealy);
+
             COUNTER_DEF(PlannedToSendOnMain);
+            COUNTER_DEF(ReadFromHandoffBytes);
+            COUNTER_DEF(ReadFromHandoffResponseBytes);
+            COUNTER_DEF(ReadFromHandoffBatchTimeout);
             COUNTER_DEF(SentOnMain);
+            COUNTER_DEF(SentOnMainBytes);
+            COUNTER_DEF(SentOnMainWithResponseBytes);
+            COUNTER_DEF(SendOnMainBatchTimeout);
             COUNTER_DEF(CandidatesToDelete);
+            COUNTER_DEF(CandidatesToDeleteAskedFromMain);
+            COUNTER_DEF(CandidatesToDeleteAskedFromMainResponse);
+            COUNTER_DEF(CandidatesToDeleteAskFromMainBatchTimeout);
             COUNTER_DEF(MarkedReadyToDelete);
+            COUNTER_DEF(MarkedReadyToDeleteBytes);
+            COUNTER_DEF(MarkedReadyToDeleteResponse);
+            COUNTER_DEF(MarkedReadyToDeleteWithResponseBytes);
+            COUNTER_DEF(MarkReadyBatchTimeout);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -670,6 +751,15 @@ public:                                                                         
             COUNTER_DEF(BlobsFixed);
         };
 
+        class TMalfunctionGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TMalfunctionGroup)
+            {
+                COUNTER_INIT(DroppingStuckInternalQueue, false);
+            }
+
+            COUNTER_DEF(DroppingStuckInternalQueue);
+        };
+
     } // NMonGroup
 } // NKikimr
-

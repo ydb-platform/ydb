@@ -295,6 +295,7 @@ namespace boost { namespace locale {
             for(size_t pos = 0; format[pos];) {
                 if(format[pos] != obrk) {
                     if(format[pos] == cbrk && format[pos + 1] == cbrk) {
+                        // Escaped closing brace
                         out << cbrk;
                         pos += 2;
                     } else {
@@ -305,7 +306,9 @@ namespace boost { namespace locale {
                 }
                 pos++;
                 if(format[pos] == obrk) {
+                    // Escaped opening brace
                     out << obrk;
+                    pos++;
                     continue;
                 }
 
@@ -415,6 +418,10 @@ namespace boost { namespace locale {
     typedef basic_format<char> format;
     /// Definition of wchar_t based format
     typedef basic_format<wchar_t> wformat;
+#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+    /// Definition of char8_t based format
+    typedef basic_format<char8_t> u8format;
+#endif
 
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
     /// Definition of char16_t based format

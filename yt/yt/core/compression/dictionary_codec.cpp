@@ -45,19 +45,34 @@ public:
         return ZstdCreateDictionaryDecompressor(digestedDecompressionDictionary);
     }
 
-    IDigestedCompressionDictionaryPtr CreateDigestedCompressionDictionary(
+    i64 EstimateDigestedCompressionDictionarySize(i64 dictionarySize, int compressionLevel) const override
+    {
+        return ZstdEstimateDigestedCompressionDictionarySize(dictionarySize, compressionLevel);
+    }
+
+    i64 EstimateDigestedDecompressionDictionarySize(i64 dictionarySize) const override
+    {
+        return ZstdEstimateDigestedDecompressionDictionarySize(dictionarySize);
+    }
+
+    IDigestedCompressionDictionaryPtr ConstructDigestedCompressionDictionary(
         const TSharedRef& compressionDictionary,
+        TSharedMutableRef storage,
         int compressionLevel) const override
     {
-        return ZstdCreateDigestedCompressionDictionary(
+        return ZstdConstructDigestedCompressionDictionary(
             compressionDictionary,
+            std::move(storage),
             compressionLevel);
     }
 
-    IDigestedDecompressionDictionaryPtr CreateDigestedDecompressionDictionary(
-        const TSharedRef& compressionDictionary) const override
+    IDigestedDecompressionDictionaryPtr ConstructDigestedDecompressionDictionary(
+        const TSharedRef& decompressionDictionary,
+        TSharedMutableRef storage) const override
     {
-        return ZstdCreateDigestedDecompressionDictionary(compressionDictionary);
+        return ZstdConstructDigestedDecompressionDictionary(
+            decompressionDictionary,
+            std::move(storage));
     }
 
     TDictionaryCompressionFrameInfo GetFrameInfo(TRef input) const override

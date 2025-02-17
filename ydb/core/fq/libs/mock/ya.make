@@ -19,25 +19,25 @@ PEERDIR(
     ydb/core/fq/libs/shared_resources/interface
     ydb/core/protos
     ydb/library/mkql_proto
-    ydb/library/yql/ast
-    ydb/library/yql/core/facade
-    ydb/library/yql/core/services/mounts
-    ydb/library/yql/dq/integration/transform
-    ydb/library/yql/minikql/comp_nodes
+    yql/essentials/ast
+    yql/essentials/core/facade
+    yql/essentials/core/services/mounts
+    yql/essentials/core/dq_integration/transform
+    yql/essentials/minikql/comp_nodes
     ydb/library/yql/providers/clickhouse/provider
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/comp_nodes
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/schema/mkql
-    ydb/library/yql/providers/common/udf_resolve
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/comp_nodes
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/mkql
+    yql/essentials/providers/common/udf_resolve
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/worker_manager/interface
     ydb/library/yql/providers/ydb/provider
-    ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
-    ydb/library/yql/sql/settings
+    yql/essentials/public/issue
+    yql/essentials/public/issue/protos
+    yql/essentials/sql/settings
     ydb/public/api/protos
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

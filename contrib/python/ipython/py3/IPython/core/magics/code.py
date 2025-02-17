@@ -153,7 +153,9 @@ def strip_initial_indent(lines):
 
         for line in it:
             if line.startswith(indent):
-                yield line[len(indent):]
+                yield line[len(indent) :]
+            elif line in ("\n", "\r\n") or len(line) == 0:
+                yield line
             else:
                 # Less indented than the first line - stop dedenting
                 yield line
@@ -452,7 +454,7 @@ class CodeMagics(Magics):
                     # Load the parameter given as a variable. If not a string,
                     # process it as an object instead (below)
 
-                    #print '*** args',args,'type',type(args)  # dbg
+                    # print('*** args',args,'type',type(args))  # dbg
                     data = eval(args, shell.user_ns)
                     if not isinstance(data, str):
                         raise DataIsObject
@@ -636,8 +638,8 @@ class CodeMagics(Magics):
 
           In [1]: edit
           Editing... done. Executing edited code...
-          Out[1]: 'def foo():\\n    print "foo() was defined in an editing
-          session"\\n'
+          Out[1]: 'def foo():\\n    print("foo() was defined in an editing
+          session")\\n'
 
         We can then call the function foo()::
 
@@ -661,21 +663,21 @@ class CodeMagics(Magics):
           In [5]: edit
           Editing... done. Executing edited code...
           hello
-          Out[5]: "print 'hello'\\n"
+          Out[5]: "print('hello')\\n"
 
         Now we call it again with the previous output (stored in _)::
 
           In [6]: edit _
           Editing... done. Executing edited code...
           hello world
-          Out[6]: "print 'hello world'\\n"
+          Out[6]: "print('hello world')\\n"
 
         Now we call it with the output #8 (stored in _8, also as Out[8])::
 
           In [7]: edit _8
           Editing... done. Executing edited code...
           hello again
-          Out[7]: "print 'hello again'\\n"
+          Out[7]: "print('hello again')\\n"
 
 
         Changing the default editor hook:

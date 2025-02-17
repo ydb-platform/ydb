@@ -19,6 +19,7 @@ struct TSourceIdInfo {
     TInstant WriteTimestamp;
     TInstant CreateTimestamp;
     bool Explicit = false;
+    bool TxModified = false;
     TMaybe<TPartitionKeyRange> KeyRange;
     TMaybe<THeartbeat> LastHeartbeat;
     EState State = EState::Registered;

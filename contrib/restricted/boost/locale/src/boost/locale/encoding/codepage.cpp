@@ -224,6 +224,10 @@ namespace boost { namespace locale { namespace conv {
     BOOST_LOCALE_INSTANTIATE(char);
     BOOST_LOCALE_INSTANTIATE_NO_CHAR(wchar_t);
 
+#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+    BOOST_LOCALE_INSTANTIATE_NO_CHAR(char8_t);
+#endif
+
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
     BOOST_LOCALE_INSTANTIATE_NO_CHAR(char16_t);
 #endif

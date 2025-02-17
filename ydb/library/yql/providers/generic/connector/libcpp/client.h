@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/threading/future/core/future.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 
@@ -89,11 +89,11 @@ namespace NYql::NConnector {
     public:
         using TPtr = std::shared_ptr<IClient>;
 
-        virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request) = 0;
-        virtual TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request) = 0;
-        virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request) = 0;
+        virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request, TDuration timeout = {}) = 0;
+        virtual TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request, TDuration timeout = {}) = 0;
+        virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request, TDuration timeout = {}) = 0;
         virtual ~IClient() = default;
     };
 
     IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& cfg);
-}
+} // namespace NYql::NConnector

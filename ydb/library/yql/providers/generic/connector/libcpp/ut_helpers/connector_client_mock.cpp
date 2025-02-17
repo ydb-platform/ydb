@@ -6,21 +6,33 @@ namespace NYql::NConnector::NTest {
 
     using namespace fmt::literals;
 
-#define DEFINE_SIMPLE_TYPE_SETTER(T, primitiveTypeId, value_name)         \
-    template <>                                                           \
-    void SetSimpleValue(const T& value, Ydb::TypedValue* proto) {         \
-        proto->mutable_type()->set_type_id(::Ydb::Type::primitiveTypeId); \
-        proto->mutable_value()->Y_CAT(set_, value_name)(value);           \
+    ::Ydb::Type MakeYdbType(::Ydb::Type::PrimitiveTypeId primitiveType, bool optional) {
+        ::Ydb::Type type;
+        if (optional) {
+            type.mutable_optional_type()->mutable_item()->Settype_id(primitiveType);
+        } else {
+            type.Settype_id(primitiveType);
+        }
+        return type;
+    }
+
+#define DEFINE_SIMPLE_TYPE_SETTER(T, primitiveTypeId, value_name)                     \
+    template <>                                                                       \
+    void SetSimpleValue(const T& value, Ydb::TypedValue* proto, bool optional) {      \
+        *proto->mutable_type() = MakeYdbType(::Ydb::Type::primitiveTypeId, optional); \
+        proto->mutable_value()->Y_CAT(set_, value_name)(value);                       \
     }
 
     DEFINE_SIMPLE_TYPE_SETTER(bool, BOOL, bool_value);
     DEFINE_SIMPLE_TYPE_SETTER(i32, INT32, int32_value);
     DEFINE_SIMPLE_TYPE_SETTER(ui32, UINT32, uint32_value);
+    DEFINE_SIMPLE_TYPE_SETTER(i64, INT64, int64_value);
+    DEFINE_SIMPLE_TYPE_SETTER(ui64, UINT64, uint64_value);
 
     void CreatePostgreSQLExternalDataSource(
         const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
         const TString& dataSourceName,
-        NApi::EProtocol protocol,
+        NYql::EGenericProtocol protocol,
         const TString& host,
         int port,
         const TString& login,
@@ -53,7 +65,7 @@ namespace NYql::NConnector::NTest {
             "login"_a = login,
             "password"_a = password,
             "use_tls"_a = useTls ? "TRUE" : "FALSE",
-            "protocol"_a = NApi::EProtocol_Name(protocol),
+            "protocol"_a = NYql::EGenericProtocol_Name(protocol),
             "source_type"_a = PG_SOURCE_TYPE,
             "database"_a = databaseName,
             "schema"_a = schema);
@@ -64,7 +76,7 @@ namespace NYql::NConnector::NTest {
     void CreateClickHouseExternalDataSource(
         const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
         const TString& dataSourceName,
-        NApi::EProtocol protocol,
+        NYql::EGenericProtocol protocol,
         const TString& clickHouseClusterId,
         const TString& login,
         const TString& password,
@@ -98,7 +110,7 @@ namespace NYql::NConnector::NTest {
             "login"_a = login,
             "password"_a = password,
             "use_tls"_a = useTls ? "TRUE" : "FALSE",
-            "protocol"_a = NYql::NConnector::NApi::EProtocol_Name(protocol),
+            "protocol"_a = NYql::EGenericProtocol_Name(protocol),
             "service_account_id"_a = serviceAccountId,
             "service_account_id_signature"_a = serviceAccountIdSignature,
             "source_type"_a = ToString(NYql::EDatabaseType::ClickHouse),

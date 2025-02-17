@@ -1,10 +1,11 @@
 
 #pragma once
 
+#include <util/system/mem_info.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -55,6 +56,23 @@ namespace NYql::NDq {
             }
         }
 
+        // This callback is created for testing purposes and will be enabled only with spilling.
+        // Most likely this callback will be removed after KIKIMR-21481.
+        void TrySetIncreaseMemoryLimitCallbackWithRSSControl(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+            if (!CanAllocateExtraMemory) return;
+            const ui64 limitRSS = std::numeric_limits<ui64>::max();
+            const ui64 criticalRSSValue = limitRSS / 100 * 80;
+
+            alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
+                RequestExtraMemory(required - limit, alloc);
+
+                ui64 currentRSS = NMemInfo::GetMemInfo().RSS;
+                if (currentRSS > criticalRSSValue) {
+                    alloc->SetMaximumLimitValueReached(true);
+                }
+            });
+        }
+
         void TryShrinkMemory(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
             if (alloc->GetAllocated() - alloc->GetUsed() > MemoryLimits.MinMemFreeSize) {
                 alloc->ReleaseFreePages();
@@ -72,8 +90,12 @@ namespace NYql::NDq {
             }
 
             if (Y_UNLIKELY(ProfileStats)) {
-                ProfileStats->MkqlMaxUsedMemory = std::max(ProfileStats->MkqlMaxUsedMemory, alloc->GetPeakAllocated());
-                CAMQ_LOG_T("Peak memory usage: " << ProfileStats->MkqlMaxUsedMemory);
+                auto& previousMaxUsedMemory = ProfileStats->MkqlMaxUsedMemory;
+                auto currentUsedMemory = alloc->GetPeakAllocated();
+                if (currentUsedMemory > previousMaxUsedMemory) {
+                    previousMaxUsedMemory = currentUsedMemory;
+                    CAMQ_LOG_T("Peak memory usage: " << currentUsedMemory);
+                }
             }
         }
 
@@ -130,6 +152,12 @@ namespace NYql::NDq {
                 CAMQ_LOG_W("[Mem] memory " << memory << " NOT granted");
                 //            throw yexception() << "Can not allocate extra memory, limit: " << MkqlMemoryLimit
                 //                << ", requested: " << memory << ", host: " << HostName();
+            }
+
+            if (MemoryLimits.MemoryQuotaManager->IsReasonableToUseSpilling()) {
+                alloc->SetMaximumLimitValueReached(true);
+            } else {
+                alloc->SetMaximumLimitValueReached(false);
             }
 
             if (Y_UNLIKELY(ProfileStats)) {

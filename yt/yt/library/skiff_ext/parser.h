@@ -19,8 +19,8 @@ public:
         TConsumer* consumer,
         NSkiff::TSkiffSchemaList schemaList,
         const std::vector<TSkiffTableColumnIds>& tablesColumnIds,
-        const TString& rangeIndexColumnName,
-        const TString& rowIndexColumnName);
+        const std::string& rangeIndexColumnName,
+        const std::string& rowIndexColumnName);
 
     ~TSkiffMultiTableParser();
 

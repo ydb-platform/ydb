@@ -1,12 +1,12 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/import/import.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 using namespace NYdb;
 
@@ -124,6 +124,38 @@ Y_UNIT_TEST_SUITE(YdbImport) {
 
             auto result = client.ImportData("/Root/Table", "", settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ImportFromS3ToExistingTable) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(TStringBuilder()
+            << "localhost:" << server.GetPort()));
+
+        {
+            NYdb::NTable::TTableClient client(driver);
+            auto session = client.GetSession().ExtractValueSync().GetSession();
+
+            auto builder = NYdb::NTable::TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key");
+
+            auto result = session.CreateTable("/Root/Table", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            NYdb::NImport::TImportClient client(driver);
+            auto settings = NYdb::NImport::TImportFromS3Settings()
+                .AppendItem({.Src = "Fake/S3/Prefix", .Dst = "/Root/Table"})
+                .Endpoint("s3.fake.endpoint.net")
+                .Bucket("fake_bucket")
+                .AccessKey("fake_access_key")
+                .SecretKey("fake_secret_key");
+
+            auto result = client.ImportFromS3(settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status().GetStatus(), EStatus::BAD_REQUEST, result.Status().GetIssues().ToString());
         }
     }
 

@@ -20,7 +20,6 @@ class Shrinker:
         self,
         initial,
         predicate,
-        random,
         *,
         full=False,
         debug=False,
@@ -30,7 +29,6 @@ class Shrinker:
         self.setup(**kwargs)
         self.current = self.make_immutable(initial)
         self.initial = self.current
-        self.random = random
         self.full = full
         self.changes = 0
         self.name = name
@@ -40,10 +38,10 @@ class Shrinker:
         self.debugging_enabled = debug
 
     @property
-    def calls(self):
+    def calls(self) -> int:
         return len(self.__seen)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "{}({}initial={!r}, current={!r})".format(
             type(self).__name__,
             "" if self.name is None else f"{self.name!r}, ",
@@ -75,9 +73,9 @@ class Shrinker:
         Note we explicitly do not pass through full.
         """
 
-        return other_class.shrink(initial, predicate, random=self.random, **kwargs)
+        return other_class.shrink(initial, predicate, **kwargs)
 
-    def debug(self, *args):
+    def debug(self, *args: object) -> None:
         if self.debugging_enabled:
             print("DEBUG", self, *args)
 
@@ -155,7 +153,6 @@ class Shrinker:
 
         Does nothing by default.
         """
-        raise NotImplementedError
 
     def short_circuit(self):
         """Possibly attempt to do some shrinking.
@@ -163,7 +160,7 @@ class Shrinker:
         If this returns True, the ``run`` method will terminate early
         without doing any more work.
         """
-        raise NotImplementedError
+        return False
 
     def left_is_better(self, left, right):
         """Returns True if the left is strictly simpler than the right

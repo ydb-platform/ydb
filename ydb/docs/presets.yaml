@@ -2,7 +2,6 @@ default:
   tech: false # Include technical info for developers of services supporting YQL (like YDB), not for users of those services. For instance, debug pragmas.
   backend_name: YDB
   backend_name_lower: ydb
-  ydb: true
   example_cluster: ydbtest
   feature_codegen: true
   feature_secondary_index: true
@@ -10,6 +9,7 @@ default:
   feature_replace: true
   feature_upsert: true
   feature_join: true
+  feature_serial: true
   feature_map_tables: true
   feature_group_by_rollup_cube: true
   feature_window_functions: true
@@ -19,10 +19,15 @@ default:
   feature_federated_queries: true
 #  feature_topic_settings_reset: true
 #  feature_logbroker: true
+  feature_resource_pool: true
+  feature_resource_pool_classifier: true
+  feature_view: true
+  feature_async_replication: true
+  ydb: YDB
+  ydb-name: YDB
   ydb-full-name: YDB
   ydb-short-name: YDB
   yandex-cloud: Yandex.Cloud
-  ydb-name: YDB
   objstorage-full-name: Yandex Object Storage
   sf-name: Cloud Functions
   concept_secondary_index: ../../../../concepts/secondary_indexes
@@ -31,7 +36,7 @@ default:
   ydbd-install-url: https://install.ydb.tech
   ydb-cli-install-url: https://install.ydb.tech/cli
   ydb-stable-binary-archive: ydbd-stable-linux-amd64.tar.gz
-  ydb_local_docker_image: cr.yandex/yc/yandex-docker-local-ydb
+  ydb_local_docker_image: ydbplatform/local-ydb
   ydb_local_docker_image_tag: latest
   managed-k8s-full-name: Yandex Managed Service for Kubernetes
   managed-k8s-name: Managed Service for Kubernetes
@@ -52,3 +57,10 @@ default:
   corporate-paste: https://www.paste.example.com
   corporate-yt: https://www.yt.example.com
   corporate-yt-cluster: example-cluster
+
+  datalens-name: DataLens
+  airflow-name: Apache Airflow™
+  ydb-airflow: false
+  ydb-finebi: false
+  ydb-superset: false
+  ydb-datalens: false

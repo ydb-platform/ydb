@@ -1,0 +1,14 @@
+diff --git a/include/complex b/include/complex
+index 1e4d99d..5f09e3e 100644
+--- a/include/complex
++++ b/include/complex
+@@ -1342,7 +1342,8 @@ _LIBCPP_HIDE_FROM_ABI complex<_Tp> acos(const complex<_Tp>& __x) {
+   }
+   if (std::__constexpr_isinf(__x.imag()))
+     return complex<_Tp>(__pi / _Tp(2), -__x.imag());
+-  if (__x.real() == 0 && (__x.imag() == 0 || std::isnan(__x.imag())))
++  // Somehow isnan can be a macro, so we use __constexpr_isnan
++  if (__x.real() == 0 && (__x.imag() == 0 || std::__constexpr_isnan(__x.imag())))
+     return complex<_Tp>(__pi / _Tp(2), -__x.imag());
+   complex<_Tp> __z = std::log(__x + std::sqrt(std::__sqr(__x) - _Tp(1)));
+   if (std::signbit(__x.imag()))

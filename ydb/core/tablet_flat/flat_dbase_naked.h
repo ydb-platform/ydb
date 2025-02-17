@@ -24,6 +24,7 @@ namespace NTable {
             ui32 Table;
             TEpoch Head;
             TTxStamp Edge;
+            const TIntrusivePtr<TKeyRangeCacheNeedGCList>& GCList;
         };
 
         struct TTableWrapper {
@@ -32,7 +33,7 @@ namespace NTable {
 
             TTableWrapper(TArgs args)
                 : Table(args.Table)
-                , Self(new TTable(args.Head))
+                , Self(new TTable(args.Head, args.GCList))
                 , Edge(args.Edge)
             {
 
@@ -127,7 +128,8 @@ namespace NTable {
         using TMemGlob = NPageCollection::TMemGlob;
 
         TDatabaseImpl(TTxStamp weak, TAutoPtr<TScheme> scheme, const TEdges *edges)
-            : Weak(weak)
+            : GCList(new TKeyRangeCacheNeedGCList)
+            , Weak(weak)
             , Redo(*this)
             , Scheme(scheme)
         {
@@ -445,6 +447,10 @@ namespace NTable {
             SchemeRollbackState.Tables.clear();
         }
 
+        void RunGC() {
+            GCList->RunGC();
+        }
+
         TDatabaseImpl& Switch(TTxStamp stamp) noexcept
         {
             Y_ABORT_UNLESS(!InTransaction, "Unexpected switch inside a transaction");
@@ -582,7 +588,7 @@ namespace NTable {
                 edge.Head = TEpoch(i64(head));
             }
 
-            TArgs args{ table, edge.Head, edge.TxStamp };
+            TArgs args{ table, edge.Head, edge.TxStamp, GCList };
 
             auto result = Tables.emplace(table, args);
 
@@ -775,7 +781,18 @@ namespace NTable {
             }
         }
 
+    public:
+        TDbRuntimeStats GetRuntimeStats() const {
+            TDbRuntimeStats stats;
+            for (auto& pr : Tables) {
+                // TODO: use a lazy aggregate to balance many idle tables vs frequent updates
+                stats += pr.second->RuntimeStats();
+            }
+            return stats;
+        }
+
     private:
+        const TIntrusivePtr<TKeyRangeCacheNeedGCList> GCList;
         const TTxStamp Weak;    /* db bootstrap upper stamp         */
         ui64 Stamp = 0;
         ui64 Serial_ = 1;       /* db global change serial number    */

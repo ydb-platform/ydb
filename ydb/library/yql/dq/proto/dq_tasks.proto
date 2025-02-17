@@ -161,7 +161,7 @@ message TTaskOutput {
 message TDqTransform {
     string Type = 1;
 
-    // binary YSON(codec ydb/library/yql/providers/common/schema/mkql)
+    // binary YSON(codec yql/essentials/providers/common/schema/mkql)
     bytes InputType = 2;
     bytes OutputType = 3;
 
@@ -170,7 +170,9 @@ message TDqTransform {
 
 message TDqStreamLookupSource {
     bytes SerializedRowType = 1; //Serialized TStructType
-    //TODO Add provider-specific data source info
+    string ProviderName = 2;
+    google.protobuf.Any LookupSource = 3; //Provider specific DataSource
+    string Table = 4; //Table name to look up in
 }
 
 message TDqInputTransformLookupSettings {
@@ -180,7 +182,11 @@ message TDqInputTransformLookupSettings {
     string JoinType = 4; //Inner, Left, LeftSemi
     repeated string LeftJoinKeyNames = 5; //Join column names in the left hand, in the same order as the next
     repeated string RightJoinKeyNames = 6; //Join column names in the right hand, in the same order as previous
-    //TODO add lookup timings and cache paramters
+    bytes NarrowInputRowType = 7; //Serialized struct type
+    bytes NarrowOutputRowType = 8; //Serialized struct type
+    uint64 CacheLimit = 9;
+    uint64 CacheTtlSeconds = 10;
+    uint64 MaxDelayedRows = 11;
 }
 
 message TDqTask {
@@ -202,4 +208,7 @@ message TDqTask {
     optional bool UseLlvm = 16;
     repeated bytes ReadRanges = 17;
     map<string, string> RequestContext = 18;
+    optional bool EnableSpilling = 19;
+    optional uint32 ArrayBufferMinFillPercentage = 20;
+    optional bool EnableMetering = 21;
 }

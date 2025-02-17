@@ -7,6 +7,14 @@
 
 namespace NKikimr {
 
+namespace {
+
+bool IsZstdLevelSupported(i32 level) {
+    return 1 <= level && level <= 22;
+}
+
+} // anonymous namespace
+
 bool FillCompression(NKikimrSchemeOp::TBackupTask::TCompressionOptions& out, const TString& in,
         Ydb::StatusIds::StatusCode& status, TString& error)
 {
@@ -27,10 +35,11 @@ bool FillCompression(NKikimrSchemeOp::TBackupTask::TCompressionOptions& out, con
                     TStringBuilder() << "Unsupported compression codec: " << in);
             }
 
-            int level;
-            if (!TryFromString(inBuf.Tail(1), level)) {
+            i32 level;
+            if (!TryFromString(inBuf.Tail(1), level) || !IsZstdLevelSupported(level)) {
                 return returnError(Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder() << "Invalid compression level: " << inBuf.Tail(1));
+                    TStringBuilder() << "Invalid compression level: " << inBuf.Tail(1)
+                                     << ", only levels from range [1, 22] are supported");
             }
 
             out.SetLevel(level);

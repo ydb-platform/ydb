@@ -1,7 +1,6 @@
 #include "node_visitor.h"
 
 #include <util/generic/algorithm.h>
-#include <util/string/printf.h>
 
 namespace NYT {
 

@@ -16,7 +16,7 @@ Bitsets, also called bitmaps, are commonly used as fast data structures. Unfortu
 
 Roaring bitmaps are compressed bitmaps which tend to outperform conventional compressed bitmaps such as WAH, EWAH or Concise.
 They are used by several major systems such as [Apache Lucene][lucene] and derivative systems such as [Solr][solr] and
-[Elasticsearch][elasticsearch], [Metamarkets' Druid][druid], [LinkedIn Pinot][pinot], [Netflix Atlas][atlas], [Apache Spark][spark], [OpenSearchServer][opensearchserver], [Cloud Torrent][cloudtorrent], [Whoosh][whoosh], [InfluxDB](https://www.influxdata.com), [Pilosa][pilosa], [Bleve](http://www.blevesearch.com), [Microsoft Visual Studio Team Services (VSTS)][vsts], and eBay's [Apache Kylin][kylin]. The CRoaring library is used in several systems such as [Apache Doris](http://doris.incubator.apache.org), [ClickHouse](https://github.com/ClickHouse/ClickHouse), and [StarRocks](https://github.com/StarRocks/starrocks). The YouTube SQL Engine, [Google Procella](https://research.google/pubs/pub48388/), uses Roaring bitmaps for indexing.
+[Elasticsearch][elasticsearch], [Metamarkets' Druid][druid], [LinkedIn Pinot][pinot], [Netflix Atlas][atlas], [Apache Spark][spark], [OpenSearchServer][opensearchserver], [Cloud Torrent][cloudtorrent], [Whoosh][whoosh], [InfluxDB](https://www.influxdata.com), [Pilosa][pilosa], [Bleve](http://www.blevesearch.com), [Microsoft Visual Studio Team Services (VSTS)][vsts], and eBay's [Apache Kylin][kylin]. The CRoaring library is used in several systems such as [Apache Doris](http://doris.incubator.apache.org), [ClickHouse](https://github.com/ClickHouse/ClickHouse), [Redpanda](https://github.com/redpanda-data/redpanda), and [StarRocks](https://github.com/StarRocks/starrocks). The YouTube SQL Engine, [Google Procella](https://research.google/pubs/pub48388/), uses Roaring bitmaps for indexing.
 
 We published a peer-reviewed article on the design and evaluation of this library:
 
@@ -147,7 +147,7 @@ Linux or macOS users might follow the following instructions if they have a rece
 # Using Roaring as a CPM dependency
 
 
-If you like CMake and CPM, you can just a few lines in you `CMakeLists.txt` file to grab a `CRoaring` release. [See our CPM demonstration for further details](https://github.com/RoaringBitmap/CPMdemo).
+If you like CMake and CPM, you can add just a few lines in your `CMakeLists.txt` file to grab a `CRoaring` release. [See our CPM demonstration for further details](https://github.com/RoaringBitmap/CPMdemo).
 
 
 
@@ -177,7 +177,7 @@ target_link_libraries(hello roaring::roaring)
 
 # Using as a CMake dependency with FetchContent
 
-If you like CMake, you can just a few lines in you `CMakeLists.txt` file to grab a `CRoaring` release. [See our demonstration for further details](https://github.com/RoaringBitmap/croaring_cmake_demo_single_file).
+If you like CMake, you can add just a few lines in your `CMakeLists.txt` file to grab a `CRoaring` release. [See our demonstration for further details](https://github.com/RoaringBitmap/croaring_cmake_demo_single_file).
 
 If you installed the CRoaring library locally, you may use it with CMake's `find_package` function as in this example:
 
@@ -236,7 +236,16 @@ It will generate three files for C users: ``roaring.h``, ``roaring.c`` and ``ama
 
 # API
 
-The C interface is found in the file ``include/roaring/roaring.h``. We have C++ interface at `cpp/roaring.hh`.
+The C interface is found in the files
+
+- [roaring.h](https://github.com/RoaringBitmap/CRoaring/blob/master/include/roaring/roaring.h),
+- [roaring64.h](https://github.com/RoaringBitmap/CRoaring/blob/master/include/roaring/roaring64.h).
+
+We also have a C++ interface:
+
+- [roaring.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring.hh),
+- [roaring64map.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring64map.hh).
+
 
 # Dealing with large volumes
 
@@ -249,7 +258,7 @@ We have microbenchmarks constructed with the Google Benchmarks.
 Under Linux or macOS, you may run them as follows:
 
 ```
-cmake -B build
+cmake -B build -D ENABLE_ROARING_MICROBENCHMARKS=ON
 cmake --build build
 ./build/microbenchmarks/bench
 ```
@@ -266,7 +275,7 @@ have an x64 processor, you could benchmark the code without AVX-512 even if both
 and compiler supports it:
 
 ```
-cmake -B buildnoavx512 -D ROARING_DISABLE_AVX512=ON
+cmake -B buildnoavx512 -D ROARING_DISABLE_AVX512=ON -D ENABLE_ROARING_MICROBENCHMARKS=ON
 cmake --build buildnoavx512
 ./buildnoavx512/microbenchmarks/bench
 ```
@@ -274,7 +283,7 @@ cmake --build buildnoavx512
 You can benchmark without AVX or AVX-512 as well:
 
 ```
-cmake -B buildnoavx -D ROARING_DISABLE_AVX=ON
+cmake -B buildnoavx -D ROARING_DISABLE_AVX=ON -D ENABLE_ROARING_MICROBENCHMARKS=ON
 cmake --build buildnoavx
 ./buildnoavx/microbenchmarks/bench
 ```
@@ -293,6 +302,21 @@ int main(){
     ...
 }
 ```
+
+By default we use:
+```C
+static roaring_memory_t global_memory_hook = {
+    .malloc = malloc,
+    .realloc = realloc,
+    .calloc = calloc,
+    .free = free,
+    .aligned_malloc = roaring_bitmap_aligned_malloc,
+    .aligned_free = roaring_bitmap_aligned_free,
+};
+```
+
+We require that the `free`/`aligned_free` functions follow the C
+convention where `free(NULL)`/`aligned_free(NULL)` have no effect.
 
 
 # Example (C)
@@ -386,10 +410,17 @@ int main() {
     // we can write a bitmap to a pointer and recover it later
     uint32_t expectedsize = roaring_bitmap_portable_size_in_bytes(r1);
     char *serializedbytes = malloc(expectedsize);
+    // When serializing data to a file, we recommend that you also use
+    // checksums so that, at deserialization, you can be confident
+    // that you are recovering the correct data.
     roaring_bitmap_portable_serialize(r1, serializedbytes);
     // Note: it is expected that the input follows the specification
     // https://github.com/RoaringBitmap/RoaringFormatSpec
     // otherwise the result may be unusable.
+    // The 'roaring_bitmap_portable_deserialize_safe' function will not read
+    // beyond expectedsize bytes.
+    // We recommend you further use checksums to make sure that the input is from
+    // serialized data.
     roaring_bitmap_t *t = roaring_bitmap_portable_deserialize_safe(serializedbytes, expectedsize);
     if(t == NULL) { return EXIT_FAILURE; }
     const char *reason = NULL;
@@ -404,7 +435,11 @@ int main() {
         roaring_bitmap_portable_deserialize_size(serializedbytes, expectedsize);
     assert(sizeofbitmap ==
            expectedsize);  // sizeofbitmap would be zero if no bitmap were found
-    // we can also read the bitmap "safely" by specifying a byte size limit:
+    // We can also read the bitmap "safely" by specifying a byte size limit.
+    // The 'roaring_bitmap_portable_deserialize_safe' function will not read
+    // beyond expectedsize bytes.
+    // We recommend you further use checksums to make sure that the input is from
+    // serialized data.
     t = roaring_bitmap_portable_deserialize_safe(serializedbytes, expectedsize);
     if(t == NULL) {
         printf("Problem during deserialization.\n");
@@ -476,6 +511,8 @@ We also support efficient 64-bit compressed bitmaps in C:
   roaring64_bitmap_free(r2);
 ```
 
+The API is similar to the conventional 32-bit bitmaps. Please see
+the header file `roaring64.h` (compare with `roaring.h`).
 
 # Conventional bitsets (C)
 
@@ -493,26 +530,26 @@ bitset_free(b); // frees memory
 More advanced example:
 
 ```C
-    bitset_t *b = bitset_create();
-    for (int k = 0; k < 1000; ++k) {
-        bitset_set(b, 3 * k);
-    }
-    // We have bitset_count(b) == 1000.
-    // We have bitset_get(b, 3) is true
-    // You can iterate through the values:
-    size_t k = 0;
-    for (size_t i = 0; bitset_next_set_bit(b, &i); i++) {
-        // You will have i == k
-        k += 3;
-    }
-    // We support a wide range of operations on two bitsets such as
-    // bitset_inplace_symmetric_difference(b1,b2);
-    // bitset_inplace_symmetric_difference(b1,b2);
-    // bitset_inplace_difference(b1,b2);// should make no difference
-    // bitset_inplace_union(b1,b2);
-    // bitset_inplace_intersection(b1,b2);
-    // bitsets_disjoint
-    // bitsets_intersect
+bitset_t *b = bitset_create();
+for (int k = 0; k < 1000; ++k) {
+    bitset_set(b, 3 * k);
+}
+// We have bitset_count(b) == 1000.
+// We have bitset_get(b, 3) is true
+// You can iterate through the values:
+size_t k = 0;
+for (size_t i = 0; bitset_next_set_bit(b, &i); i++) {
+    // You will have i == k
+    k += 3;
+}
+// We support a wide range of operations on two bitsets such as
+// bitset_inplace_symmetric_difference(b1,b2);
+// bitset_inplace_symmetric_difference(b1,b2);
+// bitset_inplace_difference(b1,b2);// should make no difference
+// bitset_inplace_union(b1,b2);
+// bitset_inplace_intersection(b1,b2);
+// bitsets_disjoint
+// bitsets_intersect
 ```
 
 In some instances, you may want to convert a Roaring bitmap into a conventional (uncompressed) bitset.
@@ -520,28 +557,28 @@ Indeed, bitsets have advantages such as higher query performances in some cases.
 illustrates how you may do so:
 
 ```C
-    roaring_bitmap_t *r1 = roaring_bitmap_create();
-    for (uint32_t i = 100; i < 100000; i+= 1 + (i%5)) {
+roaring_bitmap_t *r1 = roaring_bitmap_create();
+for (uint32_t i = 100; i < 100000; i+= 1 + (i%5)) {
      roaring_bitmap_add(r1, i);
-    }
-    for (uint32_t i = 100000; i < 500000; i+= 100) {
+}
+for (uint32_t i = 100000; i < 500000; i+= 100) {
      roaring_bitmap_add(r1, i);
-    }
-    roaring_bitmap_add_range(r1, 500000, 600000);
-    bitset_t * bitset = bitset_create();
-    bool success = roaring_bitmap_to_bitset(r1, bitset);
-    assert(success); // could fail due to memory allocation.
-    assert(bitset_count(bitset) == roaring_bitmap_get_cardinality(r1));
-    // You can then query the bitset:
-    for (uint32_t i = 100; i < 100000; i+= 1 + (i%5)) {
-        assert(bitset_get(bitset,i));
-    }
-    for (uint32_t i = 100000; i < 500000; i+= 100) {
-        assert(bitset_get(bitset,i));
-    }
-    // you must free the memory:
-    bitset_free(bitset);
-    roaring_bitmap_free(r1);
+}
+roaring_bitmap_add_range(r1, 500000, 600000);
+bitset_t * bitset = bitset_create();
+bool success = roaring_bitmap_to_bitset(r1, bitset);
+assert(success); // could fail due to memory allocation.
+assert(bitset_count(bitset) == roaring_bitmap_get_cardinality(r1));
+// You can then query the bitset:
+for (uint32_t i = 100; i < 100000; i+= 1 + (i%5)) {
+    assert(bitset_get(bitset,i));
+}
+for (uint32_t i = 100000; i < 500000; i+= 100) {
+    assert(bitset_get(bitset,i));
+}
+// you must free the memory:
+bitset_free(bitset);
+roaring_bitmap_free(r1);
 ```
 
 You should be aware that a convention bitset (`bitset_t *`) may use much more
@@ -740,12 +777,16 @@ We have optimizations specific to AVX2 and AVX-512 in the code, and they are tur
 
 ## Usage (Using `conan`)
 
-You can install the library using the conan package manager:
+You can install pre-built binaries for `roaring` or build it from source using [Conan](https://conan.io/). Use the following command to install latest version:
 
 ```
-$ echo -e "[requires]\nroaring/0.3.3" > conanfile.txt
-$ conan install .
+conan install --requires="roaring/[*]" --build=missing
 ```
+
+For detailed instructions on how to use Conan, please refer to the [Conan documentation](https://docs.conan.io/2/).
+
+The `roaring` Conan recipe is kept up to date by Conan maintainers and community contributors.
+If the version is out of date, please [create an issue or pull request](https://github.com/conan-io/conan-center-index) on the ConanCenterIndex repository.
 
 
 ## Usage (Using `vcpkg` on Windows, Linux and macOS)

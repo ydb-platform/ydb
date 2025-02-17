@@ -140,7 +140,7 @@ void MergeFrom(TTarget* target, const TSource& source)
 }
 
 template <class TMap, class TKeySet>
-TKeySet DropMissingKeys(TMap&& map, const TKeySet& set)
+TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set)
 {
     TKeySet dropped;
     for (auto it = map.begin(); it != map.end(); ) {
@@ -152,6 +152,18 @@ TKeySet DropMissingKeys(TMap&& map, const TKeySet& set)
         }
     }
     return dropped;
+}
+
+template <class TMap, class TKeySet>
+void DropMissingKeys(TMap&& map, TKeySet&& set)
+{
+    for (auto it = map.begin(); it != map.end(); ) {
+        if (!set.contains(it->first)) {
+            map.erase(it++);
+        } else {
+            ++it;
+        }
+    }
 }
 
 template <class TMap, class TKey>
@@ -319,7 +331,7 @@ std::vector<std::pair<typename T::key_type, typename T::mapped_type>> SortHashMa
 template <class T>
 void EnsureVectorSize(std::vector<T>& vector, ssize_t size, const T& defaultValue)
 {
-    if (static_cast<ssize_t>(vector.size()) < size) {
+    if (std::ssize(vector) < size) {
         vector.resize(size, defaultValue);
     }
 }
@@ -347,7 +359,13 @@ void AssignVectorAt(std::vector<T>& vector, ssize_t index, T&& value, const T& d
 template <class T>
 const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaultValue)
 {
-    return index < static_cast<ssize_t>(vector.size()) ? vector[index] : defaultValue;
+    return index < std::ssize(vector) ? vector[index] : defaultValue;
+}
+
+template <class T>
+i64 GetVectorMemoryUsage(const std::vector<T>& vector)
+{
+    return vector.capacity() * sizeof(T);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

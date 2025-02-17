@@ -1,0 +1,24 @@
+From 5114e70b87cda3644f689026265797ec68a345eb Mon Sep 17 00:00:00 2001
+From: Yuriy Chernyshov <thegeorg@yandex-team.com>
+Date: Mon, 12 Feb 2024 16:52:32 +0100
+Subject: [PATCH 1/2] Add missing #include <Unknwn.h> on Windows
+
+---
+ Modules/_ctypes/ctypes.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/Modules/_ctypes/ctypes.h b/Modules/_ctypes/ctypes.h
+index 1989723f6f3dbb..02f48a9ed55843 100644
+--- a/Modules/_ctypes/ctypes.h
++++ b/Modules/_ctypes/ctypes.h
+@@ -32,6 +32,10 @@
+ #endif
+ #endif
+ 
++#ifdef MS_WIN32
++#include <Unknwn.h> // for IUnknown interface
++#endif
++
+ typedef struct {
+     PyTypeObject *DictRemover_Type;
+     PyTypeObject *PyCArg_Type;

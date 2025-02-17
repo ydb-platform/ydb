@@ -35,17 +35,26 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort",
+                                                "Node Type": "TopSort-Aggregate",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Limit": "10",
+                                                        "Name": "TopSort",
+                                                        "TopSortBy": "argument.Count0"
+                                                    },
                                                     {
                                                         "Inputs": [
                                                             {
                                                                 "ExternalPlanNodeId": 2
                                                             }
                                                         ],
-                                                        "Limit": "10",
-                                                        "Name": "TopSort",
-                                                        "TopSortBy": "argument.Count0"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Final"
                                                     }
                                                 ],
                                                 "PlanNodeId": 3,
@@ -62,14 +71,15 @@
                                                                 "Node Type": "Aggregate-Filter-TableFullScan",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1),_yql_agg_1: MIN(item.URL,state._yql_agg_1)}",
+                                                                        "Aggregation": "{SUM(1),MIN(item.URL)}",
                                                                         "GroupBy": "item.SearchPhrase",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
                                                                             }
                                                                         ],
-                                                                        "Name": "Aggregate"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
                                                                     },
                                                                     {
                                                                         "Inputs": [
@@ -78,22 +88,24 @@
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",
-                                                                        "Predicate": "item.URL StringContains \"google\" And item.SearchPhrase != \"\""
+                                                                        "Predicate": "item.URL StringContains \"google\" AND item.SearchPhrase != \"\""
                                                                     },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/local/clickbench/plans/row/hits",
                                                                         "ReadColumns": [
                                                                             "SearchPhrase",
                                                                             "URL"
                                                                         ],
                                                                         "ReadRanges": [
-                                                                            "EventTime (-\u221e, +\u221e)",
                                                                             "CounterID (-\u221e, +\u221e)",
                                                                             "EventDate (-\u221e, +\u221e)",
                                                                             "UserID (-\u221e, +\u221e)",
+                                                                            "EventTime (-\u221e, +\u221e)",
                                                                             "WatchID (-\u221e, +\u221e)"
                                                                         ],
+                                                                        "Scan": "Parallel",
                                                                         "Table": "clickbench/plans/row/hits"
                                                                     }
                                                                 ],
@@ -115,92 +127,10 @@
                             }
                         ]
                     }
-                ]
-            },
-            "SimplifiedPlan": {
-                "Node Type": "Query",
-                "PlanNodeId": 0,
-                "PlanNodeType": "Query",
-                "Plans": [
-                    {
-                        "Node Type": "ResultSet",
-                        "PlanNodeId": 1,
-                        "PlanNodeType": "ResultSet",
-                        "Plans": [
-                            {
-                                "Node Type": "Limit",
-                                "Operators": [
-                                    {
-                                        "Limit": "10",
-                                        "Name": "Limit"
-                                    }
-                                ],
-                                "PlanNodeId": 2,
-                                "Plans": [
-                                    {
-                                        "Node Type": "TopSort",
-                                        "Operators": [
-                                            {
-                                                "Limit": "10",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "argument.Count0"
-                                            }
-                                        ],
-                                        "PlanNodeId": 4,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "Aggregate",
-                                                "Operators": [
-                                                    {
-                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1),_yql_agg_1: MIN(item.URL,state._yql_agg_1)}",
-                                                        "GroupBy": "item.SearchPhrase",
-                                                        "Name": "Aggregate"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 6,
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "Filter",
-                                                        "Operators": [
-                                                            {
-                                                                "Name": "Filter",
-                                                                "Predicate": "item.URL StringContains \"google\" And item.SearchPhrase != \"\""
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 7,
-                                                        "Plans": [
-                                                            {
-                                                                "Node Type": "TableFullScan",
-                                                                "Operators": [
-                                                                    {
-                                                                        "Name": "TableFullScan",
-                                                                        "ReadColumns": [
-                                                                            "SearchPhrase",
-                                                                            "URL"
-                                                                        ],
-                                                                        "ReadRanges": [
-                                                                            "EventTime (-\u221e, +\u221e)",
-                                                                            "CounterID (-\u221e, +\u221e)",
-                                                                            "EventDate (-\u221e, +\u221e)",
-                                                                            "UserID (-\u221e, +\u221e)",
-                                                                            "WatchID (-\u221e, +\u221e)"
-                                                                        ],
-                                                                        "Table": "clickbench/plans/row/hits"
-                                                                    }
-                                                                ],
-                                                                "PlanNodeId": 8
-                                                            }
-                                                        ]
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {
@@ -212,10 +142,10 @@
                                 "URL"
                             ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

@@ -10,9 +10,8 @@ class TBlobStorageController::TTxUpdateNodeDrives
 {
     NKikimrBlobStorage::TEvControllerUpdateNodeDrives Record;
     std::optional<TConfigState> State;
-    std::unique_ptr<TEvBlobStorage::TEvControllerNodeServiceSetUpdate> Result;
 
-    void UpdateDevicesInfo(TConfigState& state, TEvBlobStorage::TEvControllerNodeServiceSetUpdate* result) {
+    void UpdateDevicesInfo(TConfigState& state) {
         auto nodeId = Record.GetNodeId();
 
         auto createLog = [&] () {
@@ -83,9 +82,6 @@ class TBlobStorageController::TTxUpdateNodeDrives
             if (pdiskInfo.LastSeenSerial != serial) {
                 auto *item = getMutableItem();
                 item->LastSeenSerial = serial;
-                if (serial) {
-                    Self->ReadPDisk(pdiskId, *item, result, NKikimrBlobStorage::RESTART);
-                }
             }
 
             return true;
@@ -164,14 +160,12 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const TNodeId nodeId = Record.GetNodeId();
 
-        Result = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
-
-        State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+        State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
         State->CheckConsistency();
 
         auto updateIsSuccessful = true;
         try {
-            UpdateDevicesInfo(*State, Result.get());
+            UpdateDevicesInfo(*State);
             State->CheckConsistency();
         } catch (const TExError& e) {
             updateIsSuccessful = false;
@@ -180,10 +174,6 @@ public:
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN00,
                     "Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode", (TExError, e.what()));
         }
-
-        Result->Record.SetInstanceId(Self->InstanceId);
-        Result->Record.SetComprehensive(false);
-        Result->Record.SetAvailDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
 
         TString error;
         if (!updateIsSuccessful || (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error))) {
@@ -199,9 +189,6 @@ public:
             // Send new TNodeWardenServiceSet to NodeWarder inside
             State->ApplyConfigUpdates();
             State.reset();
-        }
-        if (Result) {
-            Self->SendToWarden(Record.GetNodeId(), std::move(Result), 0);
         }
     }
 };
@@ -269,7 +256,7 @@ public:
         for (auto it = Self->VSlots.lower_bound(vslotId); it != Self->VSlots.end() && it->first.NodeId == nodeId; ++it) {
             Self->ReadVSlot(*it->second, Response.get());
             if (!it->second->IsBeingDeleted()) {
-                groupIDsToRead.insert(it->second->GroupId);
+                groupIDsToRead.insert(it->second->GroupId.GetRawId());
             }
         }
 
@@ -286,7 +273,7 @@ public:
 
         if (startedGroups.size() <= Self->GroupMap.size() / 10) {
             for (const auto& p : startedGroups) {
-                processGroup(p, Self->FindGroup(p.first));
+                processGroup(p, Self->FindGroup(TGroupId::FromValue(p.first)));
             }
         } else {
             auto started = startedGroups.begin();
@@ -296,8 +283,8 @@ public:
                 TGroupInfo *group = nullptr;
 
                 // scan through groups until we find matching one
-                for (; groupIt != Self->GroupMap.end() && groupIt->first <= started->first; ++groupIt) {
-                    if (groupIt->first == started->first) {
+                for (; groupIt != Self->GroupMap.end() && groupIt->first.GetRawId() <= started->first; ++groupIt) {
+                    if (groupIt->first.GetRawId() == started->first) {
                         group = groupIt->second.Get();
                     }
                 }
@@ -321,6 +308,15 @@ public:
             }
 
             Self->ReadPDisk(it->first, *pdisk, Response.get(), entityStatus);
+
+            const TPDiskId pdiskId(it->first);
+            if (auto& shred = Self->ShredState; shred.ShouldShred(pdiskId, *pdisk)) {
+                const auto& generation = shred.GetCurrentGeneration();
+                Y_ABORT_UNLESS(generation);
+                auto *m = Response->Record.MutableShredRequest();
+                m->SetShredGeneration(*generation);
+                m->AddPDiskIds(pdiskId.PDiskId);
+            }
         }
 
         Response->Record.SetInstanceId(Self->InstanceId);
@@ -333,9 +329,50 @@ public:
         db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::LastConnectTimestamp>(node.LastConnectTimestamp);
 
         for (ui32 groupId : record.GetGroups()) {
-            node.GroupsRequested.insert(groupId);
-            Self->GroupToNode.emplace(groupId, nodeId);
+            node.GroupsRequested.insert(TGroupId::FromValue(groupId));
+            Self->GroupToNode.emplace(TGroupId::FromValue(groupId), nodeId);
         }
+
+        for (const auto& status : record.GetShredStatus()) {
+            const TPDiskId pdiskId(nodeId, status.GetPDiskId());
+
+            switch (status.GetShredStateCase()) {
+                case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::kShredGenerationFinished:
+                    Self->ShredState.OnRegisterNode(pdiskId, status.GetShredGenerationFinished(), false, txc);
+                    break;
+
+                case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::kShredAborted:
+                case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::SHREDSTATE_NOT_SET:
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN08, "shred aborted due to error", (PDiskId, pdiskId),
+                        (ErrorReason, status.GetShredAborted()));
+                    Self->ShredState.OnRegisterNode(pdiskId, std::nullopt, false, txc);
+                    break;
+
+                case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::kShredInProgress:
+                    Self->ShredState.OnRegisterNode(pdiskId, std::nullopt, true, txc);
+                    break;
+            }
+        }
+
+        // Check config version
+        if (Self->YamlConfig && !Self->StorageYamlConfig) {
+            const auto& configVersion = GetVersion(*Self->YamlConfig);
+            const auto& nodeId = record.GetNodeID();
+            if (record.GetConfigVersion() != configVersion) {
+                if (record.GetConfigVersion() > configVersion) {
+                    STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN09, "Version on node greater than BSC", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
+                }
+                STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN10, "Send update config", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
+                auto *yamlConfig = Response->Record.MutableYamlConfig();
+                yamlConfig->SetYAML(CompressSingleConfig(*Self->YamlConfig));
+                yamlConfig->SetConfigVersion(record.GetConfigVersion());
+            }
+            else if (record.GetConfigHash() != GetSingleConfigHash(*Self->YamlConfig)) {
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN11, "Config hash on node mismatch", (NodeId, nodeId));
+            }
+        } else {
+            // TODO(mregrock): Implement for double config mode
+        } 
 
         return true;
     }
@@ -345,6 +382,7 @@ public:
             Self->SendInReply(*Request, std::move(Response));
             Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
         }
+        Self->ShredState.OnNodeReportTxComplete();
     }
 };
 
@@ -374,13 +412,13 @@ public:
 void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard,
         TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result, TNodeId nodeId) {
     for (auto it = groupIDsToRead.begin(); it != groupIDsToRead.end(); ) {
-        const TGroupId groupId = *it;
+        const TGroupId groupId = TGroupId::FromValue(*it);
         TGroupInfo *group = FindGroup(groupId);
         if (group || discard) {
             NKikimrBlobStorage::TNodeWardenServiceSet *serviceSetProto = result->Record.MutableServiceSet();
             NKikimrBlobStorage::TGroupInfo *groupProto = serviceSetProto->AddGroups();
             if (!group) {
-                groupProto->SetGroupID(groupId);
+                groupProto->SetGroupID(groupId.GetRawId());
                 groupProto->SetEntityStatus(NKikimrBlobStorage::DESTROY);
             } else if (group->Listable()) {
                 const TStoragePoolInfo& info = StoragePools.at(group->StoragePoolId);
@@ -432,6 +470,11 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
     pDisk->SetManagementStage(SerialManagementStage);
     pDisk->SetSpaceColorBorder(PDiskSpaceColorBorder);
     pDisk->SetEntityStatus(entityStatus);
+    if (pdisk.Mood == TPDiskMood::ReadOnly) {
+        pDisk->SetReadOnly(true);
+    } else if (pdisk.Mood == TPDiskMood::Stop) {
+        pDisk->SetStop(true);
+    }
 }
 
 void TBlobStorageController::ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result) {
@@ -525,6 +568,8 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
     }
 
     node.LastConnectTimestamp = TInstant::Now();
+
+    ShredState.OnWardenConnected(nodeId);
 }
 
 void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serverId) {
@@ -549,25 +594,36 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
         SysViewChangedPDisks.insert(it->first);
     }
     const TVSlotId startingId(nodeId, Min<Schema::VSlot::PDiskID::Type>(), Min<Schema::VSlot::VSlotID::Type>());
-    auto sh = MakeHolder<TEvControllerUpdateSelfHealInfo>();
+    std::vector<TEvControllerUpdateSelfHealInfo::TVDiskStatusUpdate> updates;
     for (auto it = VSlots.lower_bound(startingId); it != VSlots.end() && it->first.NodeId == nodeId; ++it) {
         if (const TGroupInfo *group = it->second->Group) {
             if (it->second->IsReady) {
                 NotReadyVSlotIds.insert(it->second->VSlotId);
-                sh->VDiskIsReadyUpdate.emplace_back(it->second->GetVDiskId(), false);
             }
             it->second->SetStatus(NKikimrBlobStorage::EVDiskStatus::ERROR, mono, now, false);
             timingQ.emplace_back(*it->second);
-            sh->VDiskStatusUpdate.emplace_back(it->second->GetVDiskId(), it->second->Status, false);
+            updates.push_back({
+                .VDiskId = it->second->GetVDiskId(),
+                .IsReady = it->second->IsReady,
+                .VDiskStatus = it->second->GetStatus(),
+            });
             ScrubState.UpdateVDiskState(&*it->second);
+            SysViewChangedVSlots.insert(it->second->VSlotId);
         }
     }
     for (auto it = StaticVSlots.lower_bound(startingId); it != StaticVSlots.end() && it->first.NodeId == nodeId; ++it) {
-        it->second.VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
-        it->second.ReadySince = TMonotonic::Max();
+        auto& slot = it->second;
+        slot.ReadySince = TMonotonic::Max();
+        slot.VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        updates.push_back({
+            .VDiskId = slot.VDiskId,
+            .ReadySince = slot.ReadySince,
+            .VDiskStatus = slot.VDiskStatus,
+        });
+        SysViewChangedVSlots.insert(it->first);
     }
-    if (sh->VDiskStatusUpdate) {
-        Send(SelfHealId, sh.Release());
+    if (!updates.empty()) {
+        Send(SelfHealId, new TEvControllerUpdateSelfHealInfo(std::move(updates)));
     }
     ScrubState.OnNodeDisconnected(nodeId);
     EraseKnownDrivesOnDisconnected(&node);
@@ -607,3 +663,4 @@ void TBlobStorageController::SendInReply(const IEventHandle& query, std::unique_
 }
 
 } // NKikimr::NBsController
+

@@ -105,6 +105,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
 
         TAG(TH3) { out << "StorageConfig"; }
         DIV() {
+            out << "<p>Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "</p>";
             TString s;
             NProtoBuf::TextFormat::PrintToString(StorageConfig, &s);
             out << "<pre>" << s << "</pre>";
@@ -134,17 +135,46 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                     TABLEH() { out << "Path"; }
                     TABLEH() { out << "Guid"; }
                     TABLEH() { out << "Category"; }
+                    TABLEH() { out << "Temporary"; }
+                    TABLEH() { out << "Pending"; }
                 }
             }
             TABLEBODY() {
                 for (auto& [key, value] : LocalPDisks) {
+                    TString pending;
+                    if (const auto it = PDiskByPath.find(value.Record.GetPath()); it != PDiskByPath.end()) {
+                        if (it->second.Pending) {
+                            pending = TStringBuilder() << "PDiskId# " << it->second.Pending->GetPDiskID();
+                        } else {
+                            pending = "<none>";
+                        }
+                    } else {
+                        pending = "<path not found>"; // this is strange
+                    }
+
                     TABLER() {
-                        TABLED() { out << "(" << key.NodeId << "," << key.PDiskId << ")"; }
+                        TABLED() { out << "[" << key.NodeId << ":" << key.PDiskId << "]"; }
                         TABLED() { out << value.Record.GetPath(); }
                         TABLED() { out << value.Record.GetPDiskGuid(); }
                         TABLED() { out << value.Record.GetPDiskCategory(); }
+                        TABLED() { out << value.Temporary; }
+                        TABLED() { out << pending; }
                     }
                 }
+            }
+        }
+        if (!PDiskRestartInFlight.empty()) {
+            DIV() {
+                out << "PDiskRestartInFlight# [";
+                for (const auto& item : PDiskRestartInFlight) {
+                    out << "pdiskId:" << item.first << " -> needsAnotherRestart: " << item.second << ", ";
+                }
+                out << "]";
+            }
+        }
+        if (!PDisksWaitingToStart.empty()) {
+            DIV() {
+                out << "PDisksWaitingToStart# " << FormatList(PDisksWaitingToStart);
             }
         }
 
@@ -152,7 +182,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
         TABLE_CLASS("table oddgray") {
             TABLEHEAD() {
                 TABLER() {
-                    TABLEH() { out << "Location (NodeId, PDiskId, VSlotId)"; }
+                    TABLEH() { out << "Location"; }
                     TABLEH() { out << "VDiskId"; }
                     TABLEH() { out << "Running"; }
                     TABLEH() { out << "StoragePoolName"; }
@@ -164,7 +194,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             TABLEBODY() {
                 for (auto& [key, value] : LocalVDisks) {
                     TABLER() {
-                        TABLED() { out << "(" << key.NodeId << "," << key.PDiskId << "," << key.VDiskSlotId << ")"; }
+                        TABLED() { out << "[" << key.NodeId << ":" << key.PDiskId << ":" << key.VDiskSlotId << "]"; }
                         TABLED() { out << value.GetVDiskId(); }
                         TABLED() { out << (value.RuntimeData ? "true" : "false"); }
                         TABLED() { out << value.Config.GetStoragePoolName(); }
@@ -317,12 +347,13 @@ void TNodeWarden::RenderLocalDrives(IOutputStream& out) {
                         TABLED() { out << (initialData ? "true" : "<b style='color: red'>false</b>"); }
                         TABLED() { out << (onlineData ? "true" : "<b style='color: red'>false</b>"); }
                         NPDisk::TDriveData *data = initialData ? initialData : onlineData ? onlineData : nullptr;
-                        Y_ABORT_UNLESS(data);
-                        TABLED() { out << data->Path; }
-                        TABLED() { out << data->SerialNumber.Quote(); }
-                        TABLED() {
-                            out << NPDisk::DeviceTypeStr(data->DeviceType, true);
-                            out << (data->IsMock ? "(mock)" : "");
+                        if (data) {
+                            TABLED() { out << data->Path; }
+                            TABLED() { out << data->SerialNumber.Quote(); }
+                            TABLED() {
+                                out << NPDisk::DeviceTypeStr(data->DeviceType, true);
+                                out << (data->IsMock ? "(mock)" : "");
+                            }
                         }
                     }
                     out << "\n";

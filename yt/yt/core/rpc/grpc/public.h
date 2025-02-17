@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yt/yt/core/misc/configurable_singleton_decl.h>
+
 #include <yt/yt/core/logging/log.h>
 
 namespace NYT::NRpc::NGrpc {
@@ -14,6 +16,8 @@ DECLARE_REFCOUNTED_CLASS(TServerConfig)
 DECLARE_REFCOUNTED_CLASS(TChannelCredentialsConfig)
 DECLARE_REFCOUNTED_CLASS(TChannelConfigTemplate)
 DECLARE_REFCOUNTED_CLASS(TChannelConfig)
+
+DECLARE_REFCOUNTED_STRUCT(IGrpcChannel)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -41,6 +45,8 @@ extern const char* const ResponseCodecKey;
 const THashSet<TStringBuf>& GetNativeMetadataKeys();
 
 constexpr int GenericErrorStatusCode = 100;
+
+YT_DECLARE_CONFIGURABLE_SINGLETON(TDispatcherConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

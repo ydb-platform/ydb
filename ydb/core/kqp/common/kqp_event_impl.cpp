@@ -18,13 +18,15 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
     const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
     const ::Ydb::Operations::OperationParams* operationParams,
-    const TQueryRequestSettings& querySettings)
+    const TQueryRequestSettings& querySettings,
+    const TString& poolId)
     : RequestCtx(ctx)
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
     , SessionId(sessionId)
     , YqlText(std::move(yqlText))
     , QueryId(std::move(queryId))
+    , PoolId(poolId)
     , QueryAction(queryAction)
     , QueryType(queryType)
     , TxControl(txControl)
@@ -47,6 +49,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         if (RequestCtx->GetSerializedToken()) {
             Record.SetUserToken(RequestCtx->GetSerializedToken());
         }
+        Record.MutableRequest()->SetClientAddress(RequestCtx->GetPeerName());
 
         Record.MutableRequest()->SetDatabase(Database);
         ActorIdToProto(RequestActorId, Record.MutableCancelationActor());
@@ -84,6 +87,15 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetPreparedQuery(QueryId);
         }
 
+        if (!PoolId.empty()) {
+            Record.MutableRequest()->SetPoolId(PoolId);
+        }
+
+        if (!DatabaseId.empty()) {
+            Record.MutableRequest()->SetDatabaseId(DatabaseId);
+        }
+
+        Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
         Record.MutableRequest()->SetSessionId(SessionId);
         Record.MutableRequest()->SetAction(QueryAction);
         Record.MutableRequest()->SetType(QueryType);

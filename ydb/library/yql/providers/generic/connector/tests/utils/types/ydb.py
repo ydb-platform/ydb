@@ -12,8 +12,8 @@ class PrimitiveType(Type):
         return type(self).__name__
 
     @classmethod
-    def to_nullable(cls):
-        return Nullable(cls())
+    def to_non_nullable(cls):
+        return NonNullable(cls())
 
 
 class Bool(PrimitiveType):
@@ -36,19 +36,19 @@ class Int64(PrimitiveType):
     pass
 
 
-class UInt8(PrimitiveType):
+class Uint8(PrimitiveType):
     pass
 
 
-class UInt16(PrimitiveType):
+class Uint16(PrimitiveType):
     pass
 
 
-class UInt32(PrimitiveType):
+class Uint32(PrimitiveType):
     pass
 
 
-class UInt64(PrimitiveType):
+class Uint64(PrimitiveType):
     pass
 
 
@@ -64,16 +64,43 @@ class String(PrimitiveType):
     pass
 
 
-class FixedString(PrimitiveType):
-    def to_sql(self) -> str:
-        return "FixedString(5)"
+class Utf8(PrimitiveType):
+    pass
 
 
-class Nullable(Type):
+class Date(PrimitiveType):
+    pass
+
+
+class Datetime(PrimitiveType):
+    pass
+
+
+class Timestamp(PrimitiveType):
+    pass
+
+
+class Interval(PrimitiveType):
+    pass
+
+
+class Json(PrimitiveType):
+    pass
+
+
+class JsonDocument(PrimitiveType):
+    pass
+
+
+class NonNullable(Type):
+    '''
+    See https://ydb.tech/docs/ru/yql/reference/types/optional#tipy-dannyh,-dopuskayushie-znachenie-null
+    '''
+
     primitive: PrimitiveType
 
     def __init__(self, primitive: PrimitiveType):
         self.primitive = primitive
 
     def to_sql(self) -> str:
-        return f'Nullable({self.primitive.to_sql()})'
+        return f'{self.primitive.to_sql()} NOT NULL'

@@ -15,9 +15,9 @@ struct TPartInfo {
     ui32 PartitionId;
     ui32 Group;
     ui64 TabletId;
-    NSchemeShard::TTopicTabletInfo::TKeyRange KeyRange;
+    NKikimrPQ::TPartitionKeyRange KeyRange;
 
-    TPartInfo(const ui32 partitionId, const ui64 tabletId, const ui32 group, NSchemeShard::TTopicTabletInfo::TKeyRange keyRange)
+    TPartInfo(const ui32 partitionId, const ui64 tabletId, const ui32 group, const NKikimrPQ::TPartitionKeyRange& keyRange)
         : PartitionId(partitionId)
         , Group(group)
         , TabletId(tabletId)
@@ -93,7 +93,6 @@ struct TPersQueueReadBalancer::TTxWrite : public ITransaction {
         }
         Self->WaitingResponse.clear();
 
-        Self->NoGroupsInBase = false;
         if (!Self->Inited) {
             Self->Inited = true;
             Self->InitDone(ctx);

@@ -1,0 +1,74 @@
+LIBRARY()
+
+SRCS(
+    cast.h
+    chunked_buffer.cpp
+    chunked_buffer.h
+    debug_info.cpp
+    debug_info.h
+    exceptions.cpp
+    exceptions.h
+    future_action.cpp
+    future_action.h
+    hash.cpp
+    hash.h
+    limiting_allocator.cpp
+    line_split.cpp
+    md5_stream.cpp
+    md5_stream.h
+    method_index.cpp
+    method_index.h
+    multi_resource_lock.cpp
+    multi_resource_lock.h
+    parse_double.cpp
+    parse_double.h
+    proc_alive.cpp
+    proc_alive.h
+    rand_guid.cpp
+    rand_guid.h
+    resetable_setting.h
+    retry.cpp
+    retry.h
+    sort.cpp
+    sort.h
+    swap_bytes.cpp
+    swap_bytes.h
+    tty.cpp
+    tty.h
+    url_builder.cpp
+    utf8.cpp
+    yql_panic.cpp
+    yql_panic.h
+    yql_paths.cpp
+    yql_paths.h
+)
+
+PEERDIR(
+    library/cpp/digest/md5
+    library/cpp/string_utils/quote
+    library/cpp/threading/future
+    library/cpp/deprecated/atomic
+    contrib/libs/miniselect
+)
+
+END()
+
+RECURSE_FOR_TESTS(
+    ut
+)
+
+IF (OPENSOURCE_PROJECT != "yt")
+    RECURSE(
+        backtrace
+        failure_injector
+        fetch
+        log
+        memory_profiling
+        network
+        oom_helper
+        signals
+        sys
+        test_http_server
+        threading
+    )
+ENDIF()

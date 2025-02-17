@@ -86,6 +86,11 @@ private:
         request->SendResult(*result, Ydb::StatusIds::SUCCESS);
     }
 
+    void Handle(TEvRequestAuthAndCheck::TPtr& ev, const TActorContext&) {
+        ev->Get()->FinishSpan();
+        ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
+    }
+
     void Handle(TEvProxyRuntimeEvent::TPtr& event, const TActorContext&) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         TString validationError;
@@ -172,9 +177,22 @@ void TGRpcRequestProxySimple::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev
 
 bool TGRpcRequestProxySimple::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     const auto& state = ctx.GetAuthState();
-    return state.State == NYdbGrpc::TAuthState::AS_OK ||
-           state.State == NYdbGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
-           state.NeedAuth == false && !ctx.GetYdbToken();
+    if (state.State == NYdbGrpc::TAuthState::AS_OK) {
+        return true;
+    }
+
+    const bool authorizationParamsAreSet = ctx.GetYdbToken() || !ctx.FindClientCertPropertyValues().empty();
+    if (!state.NeedAuth && !authorizationParamsAreSet) {
+        return true;
+    }
+
+    if (!state.NeedAuth && state.State == NYdbGrpc::TAuthState::AS_FAIL) {
+        if (AppData()->EnforceUserTokenCheckRequirement && authorizationParamsAreSet) {
+            return false;
+        }
+        return true;
+    }
+    return false;
 }
 
 template<typename TEvent>
@@ -208,6 +226,7 @@ void TGRpcRequestProxySimple::StateFunc(TAutoPtr<IEventHandle>& ev) {
         hFunc(TEvents::TEvUndelivered, HandleUndelivery);
         HFunc(TEvListEndpointsRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);
+        HFunc(TEvRequestAuthAndCheck, PreHandle);
         default:
             Y_ABORT("Unknown request: %u\n", ev->GetTypeRewrite());
         break;

@@ -1,6 +1,6 @@
-To run the example against any available YDB database, you need to know the [endpoint](../../../../concepts/connect.md#endpoint) and the [database path](../../../../concepts/connect.md#database).
+To run the example against any available {{ ydb-short-name }} database, the [endpoint](../../../../concepts/connect.md#endpoint) and the [database path](../../../../concepts/connect.md#database) need to be provide.
 
-If authentication is enabled in the database, you also need to select the [authentication mode](../../../../concepts/auth.md) and get secrets (a token or username/password pair).
+If authentication is enabled for the database, the [authentication mode](../../../../security/authentication.md) needs to be chosen and credentials (a token or a username/password pair) need to be provided.
 
 Run the command as follows:
 

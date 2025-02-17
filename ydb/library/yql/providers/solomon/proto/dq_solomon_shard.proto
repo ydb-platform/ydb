@@ -39,3 +39,30 @@ message TDqSolomonShard {
     string ServiceAccount = 40;
     TToken Token = 41;
 }
+
+message TDownsampling {
+    bool Disabled = 1;
+    string Aggregation = 2;
+    string Fill = 3;
+    int64 GridMs = 4;
+}
+
+message TDqSolomonSource {
+    ESolomonClusterType ClusterType = 1;
+    string Endpoint = 2;
+    bool UseSsl = 3;
+    string ServiceAccount = 4;
+    TToken Token = 5;
+
+    string Project = 6;
+    oneof p {
+        string Selectors = 7;
+        string Program = 8;
+    }
+    // seconds since Epoch
+    int64 From = 9;
+    int64 To = 10;
+    TDownsampling Downsampling = 11;
+    repeated string SystemColumns = 12;
+    repeated string LabelNames = 13;
+}

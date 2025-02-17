@@ -1,7 +1,8 @@
 #include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common_subdomain.h"
-#include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_subdomain.h"
+#include "schemeshard__op_traits.h"
 
 #include <ydb/core/base/subdomain.h>
 
@@ -84,7 +85,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory();
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -191,13 +193,12 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        context.SS->PersistPath(db, newNode->PathId);
         context.SS->ApplyAndPersistUserAttrs(db, newNode->PathId);
 
         if (!acl.empty()) {
             newNode->ApplyACL(acl);
-            context.SS->PersistACL(db, newNode);
         }
+        context.SS->PersistPath(db, newNode->PathId);
 
         context.SS->PersistUpdateNextPathId(db);
 
@@ -260,8 +261,8 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, newNode->PathId);
 
         Y_ABORT_UNLESS(0 == txState.Shards.size());
-        parentPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
+        parentPath.DomainInfo()->IncPathsInside(context.SS);
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
@@ -285,6 +286,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetSubDomain().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableSubDomain()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateExtSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateExtSubDomain>(id, tx);

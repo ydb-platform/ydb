@@ -1,4 +1,5 @@
 #include "blobstorage_cost_tracker.h"
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
 
@@ -42,15 +43,16 @@ public:
 };
 
 TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
-        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 burstThresholdNs,
-        float diskTimeAvailableScale)
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+        const TCostMetricsParameters& costMetricsParameters)
     : GroupType(groupType)
     , CostCounters(counters->GetSubgroup("subsystem", "advancedCost"))
     , MonGroup(std::make_shared<NMonGroup::TCostTrackerGroup>(CostCounters))
-    , BucketCapacity(burstThresholdNs * diskTimeAvailableScale)
-    , Bucket(&DiskTimeAvailable, &BucketCapacity, nullptr, nullptr, nullptr, nullptr, true)
-    , DiskTimeAvailableScale(diskTimeAvailableScale)
+    , Bucket(BucketUpperLimit, BucketLowerLimit, DiskTimeAvailable)
+    , BurstThresholdNs(costMetricsParameters.BurstThresholdNs)
+    , DiskTimeAvailableScale(costMetricsParameters.DiskTimeAvailableScale)
 {
+    BucketUpperLimit.store(BurstThresholdNs * GetDiskTimeAvailableScale());
     BurstDetector.Initialize(CostCounters, "BurstDetector");
     switch (GroupType.GetErasure()) {
     case TBlobStorageGroupType::ErasureMirror3dc:
@@ -65,6 +67,19 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
     default:
         CostModel = std::make_unique<TBsCostModelErasureNone>(diskType);
         break;
+    }
+}
+
+
+ui64 TBsCostModelBase::GetCost(const NPDisk::TEvChunkRead& ev) const {
+    return ReadCost(ev.Size);
+}
+
+ui64 TBsCostModelBase::GetCost(const NPDisk::TEvChunkWrite& ev) const {
+    if (ev.PriorityClass == NPriPut::Log) {
+        return WriteCost(ev.PartsPtr->ByteSize());
+    } else {
+        return HugeWriteCost(ev.PartsPtr->ByteSize());
     }
 }
 

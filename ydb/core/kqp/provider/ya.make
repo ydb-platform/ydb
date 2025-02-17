@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    read_attributes_utils.cpp
     rewrite_io_utils.cpp
     yql_kikimr_datasink.cpp
     yql_kikimr_datasource.cpp
@@ -27,42 +28,44 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/docapi
+    ydb/core/scheme
     ydb/core/kqp/query_data
     ydb/library/aclib
     ydb/library/aclib/protos
-    ydb/library/binary_json
-    ydb/library/dynumber
-    ydb/library/yql/core/services
-    ydb/library/yql/minikql
-    ydb/library/yql/public/decimal
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
+    yql/essentials/core/services
+    yql/essentials/minikql
+    yql/essentials/public/decimal
     ydb/public/lib/scheme_types
-    ydb/public/sdk/cpp/client/ydb_topic
-    ydb/library/yql/core/expr_nodes
-    ydb/library/yql/core/peephole_opt
-    ydb/library/yql/parser/pg_wrapper/interface
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/config
-    ydb/library/yql/providers/common/gateway
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/schema/expr
+    ydb/public/sdk/cpp/src/client/topic
+    yql/essentials/core/expr_nodes
+    yql/essentials/core/peephole_opt
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/config
+    yql/essentials/providers/common/gateway
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/expr
     ydb/library/yql/providers/dq/expr_nodes
-    ydb/library/yql/providers/pg/expr_nodes
-    ydb/library/yql/providers/result/expr_nodes
-    ydb/library/yql/providers/result/provider
-    ydb/library/yql/sql
+    yql/essentials/providers/pg/expr_nodes
+    yql/essentials/providers/result/expr_nodes
+    yql/essentials/providers/result/provider
+    yql/essentials/sql
+    yql/essentials/sql/v1
     ydb/library/ydb_issue/proto
-    ydb/library/yql/public/issue
-    ydb/library/yql/utils/log
+    yql/essentials/public/issue
+    yql/essentials/utils/log
 )
 
 YQL_LAST_ABI_VERSION()
 
-SRCDIR(ydb/library/yql/core/expr_nodes_gen)
+SRCDIR(yql/essentials/core/expr_nodes_gen)
 
 IF(EXPORT_CMAKE)
     RUN_PYTHON3(
-        ${ARCADIA_ROOT}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
+        ${ARCADIA_ROOT}/yql/essentials/core/expr_nodes_gen/gen/__main__.py
             yql_expr_nodes_gen.jnj
             yql_kikimr_expr_nodes.json
             yql_kikimr_expr_nodes.gen.h
@@ -74,12 +77,12 @@ IF(EXPORT_CMAKE)
         OUT yql_kikimr_expr_nodes.decl.inl.h
         OUT yql_kikimr_expr_nodes.defs.inl.h
         OUTPUT_INCLUDES
-        ${ARCADIA_ROOT}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h
+        ${ARCADIA_ROOT}/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h
         ${ARCADIA_ROOT}/util/generic/hash_set.h
     )
 ELSE()
     RUN_PROGRAM(
-        ydb/library/yql/core/expr_nodes_gen/gen
+        yql/essentials/core/expr_nodes_gen/gen
             yql_expr_nodes_gen.jnj
             yql_kikimr_expr_nodes.json
             yql_kikimr_expr_nodes.gen.h
@@ -91,7 +94,7 @@ ELSE()
         OUT yql_kikimr_expr_nodes.decl.inl.h
         OUT yql_kikimr_expr_nodes.defs.inl.h
         OUTPUT_INCLUDES
-        ${ARCADIA_ROOT}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h
+        ${ARCADIA_ROOT}/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h
         ${ARCADIA_ROOT}/util/generic/hash_set.h
     )
 ENDIF()

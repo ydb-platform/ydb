@@ -2,15 +2,22 @@
 
 #include "ydb_service_topic.h"
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/set.h>
 #include <util/stream/str.h>
+#include <util/string/cast.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/join.h>
+
+#define TIMESTAMP_FORMAT_OPTION_DESCRIPTION "Timestamp may be specified in unix time format (seconds from 1970.01.01) or in ISO-8601 format (like 2020-07-10T15:00:00Z)"
 
 namespace NYdb::NConsoleClient {
     namespace {
@@ -36,6 +43,20 @@ namespace NYdb::NConsoleClient {
         THashMap<NTopic::EMeteringMode, TString> MeteringModesDescriptions = {
             std::pair<NTopic::EMeteringMode, TString>(NTopic::EMeteringMode::ReservedCapacity, "Throughput and storage limits on hourly basis, write operations."),
             std::pair<NTopic::EMeteringMode, TString>(NTopic::EMeteringMode::RequestUnits, "Read/write operations valued in request units, storage usage on hourly basis."),
+        };
+
+        THashMap<TString, NTopic::EAutoPartitioningStrategy> AutoPartitioningStrategies = {
+            std::pair<TString, NTopic::EAutoPartitioningStrategy>("disabled", NTopic::EAutoPartitioningStrategy::Disabled),
+            std::pair<TString, NTopic::EAutoPartitioningStrategy>("up", NTopic::EAutoPartitioningStrategy::ScaleUp),
+            std::pair<TString, NTopic::EAutoPartitioningStrategy>("up-and-down", NTopic::EAutoPartitioningStrategy::ScaleUpAndDown),
+            std::pair<TString, NTopic::EAutoPartitioningStrategy>("paused", NTopic::EAutoPartitioningStrategy::Paused),
+        };
+
+        THashMap<NTopic::EAutoPartitioningStrategy, TString> AutoscaleStrategiesDescriptions = {
+            std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::Disabled, "Automatic scaling of the number of partitions is disabled"),
+            std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::ScaleUp, "The number of partitions can increase under high load, but cannot decrease"),
+            std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::ScaleUpAndDown, "The number of partitions can increase under high load and decrease under low load"),
+            std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::Paused, "Automatic scaling of the number of partitions is paused"),
         };
 
         THashMap<ETopicMetadataField, TString> TopicMetadataFieldsDescriptions = {
@@ -80,36 +101,55 @@ namespace NYdb::NConsoleClient {
         }
     } // namespace
 
-
-        TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs) {
-            TStringStream description;
-            description << descriptionPrefix << ". Available codecs: ";
-            NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-            for (const auto& codec : codecs) {
-                auto findResult = CodecsDescriptions.find(codec);
-                Y_ABORT_UNLESS(findResult != CodecsDescriptions.end(),
-                         "Couldn't find description for %s codec", (TStringBuilder() << codec).c_str());
-                description << "\n  " << colors.BoldColor() << codec << colors.OldColor()
-                            << "\n    " << findResult->second;
+    std::function<void(const TString& opt)> TimestampOptionHandler(TMaybe<TInstant>* destination) {
+        return [destination](const TString& opt) {
+            ui64 seconds = 0;
+            if (TryFromString(opt, seconds)) { // unix time
+                destination->ConstructInPlace(TInstant::Seconds(seconds));
+                return;
             }
 
-            return description.Str();
-        }
-
-namespace {
-            NTopic::ECodec ParseCodec(const TString& codecStr, const TVector<NTopic::ECodec>& allowedCodecs) {
-                auto exists = ExistingCodecs.find(to_lower(codecStr));
-                if (exists == ExistingCodecs.end()) {
-                    throw TMisuseException() << "Codec " << codecStr << " is not available for this command";
-                }
-
-                if (std::find(allowedCodecs.begin(), allowedCodecs.end(), exists->second) == allowedCodecs.end()) {
-                    throw TMisuseException() << "Codec " << codecStr << " is not available for this command";
-                }
-
-                return exists->second;
+            TInstant time;
+            if (TInstant::TryParseIso8601(opt, time)) {
+                destination->ConstructInPlace(time);
+                return;
             }
+
+            TStringBuilder err;
+            err << "failed to parse \"" << opt << "\" as a timestamp. It must be either unix time format or ISO-8601 format";
+            throw std::runtime_error(err);
+        };
+    }
+
+    TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs) {
+        TStringStream description;
+        description << descriptionPrefix << ". Available codecs: ";
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        for (const auto& codec : codecs) {
+            auto findResult = CodecsDescriptions.find(codec);
+            Y_ABORT_UNLESS(findResult != CodecsDescriptions.end(),
+                        "Couldn't find description for %s codec", (TStringBuilder() << codec).c_str());
+            description << "\n  " << colors.BoldColor() << codec << colors.OldColor()
+                        << "\n    " << findResult->second;
         }
+
+        return description.Str();
+    }
+
+    namespace {
+        NTopic::ECodec ParseCodec(const TString& codecStr, const TVector<NTopic::ECodec>& allowedCodecs) {
+            auto exists = ExistingCodecs.find(to_lower(codecStr));
+            if (exists == ExistingCodecs.end()) {
+                throw TMisuseException() << "Codec " << codecStr << " is not available for this command";
+            }
+
+            if (std::find(allowedCodecs.begin(), allowedCodecs.end(), exists->second) == allowedCodecs.end()) {
+                throw TMisuseException() << "Codec " << codecStr << " is not available for this command";
+            }
+
+            return exists->second;
+        }
+    }
 
     void TCommandWithSupportedCodecs::AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NYdb::NTopic::ECodec>& supportedCodecs) {
         TString description = PrepareAllowedCodecsDescription("Comma-separated list of supported codecs", supportedCodecs);
@@ -172,6 +212,81 @@ namespace {
         return MeteringMode_;
     }
 
+    void TCommandWithAutoPartitioning::AddAutoPartitioning(TClientCommand::TConfig& config, bool isAlter) {
+        TStringStream description;
+        description << "A strategy to automatically change the number of partitions depending on the load. Available strategies: ";
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        for (const auto& strategy: AutoPartitioningStrategies) {
+            auto findResult = AutoscaleStrategiesDescriptions.find(strategy.second);
+            Y_ABORT_UNLESS(findResult != AutoscaleStrategiesDescriptions.end(),
+                     "Couldn't find description for %s autoscale strategy", (TStringBuilder() << strategy.second).c_str());
+            description << "\n  " << colors.BoldColor() << strategy.first << colors.OldColor()
+                        << "\n    " << findResult->second;
+        }
+
+        if (isAlter) {
+            config.Opts->AddLongOption("auto-partitioning-strategy", description.Str())
+                .Optional()
+                .StoreResult(&AutoPartitioningStrategyStr_);
+            config.Opts->AddLongOption("auto-partitioning-stabilization-window-seconds", "Duration in seconds of high or low load before automatically scale the number of partitions")
+                .Optional()
+                .StoreResult(&ScaleThresholdTime_);
+            config.Opts->AddLongOption("auto-partitioning-up-utilization-percent", "The load percentage at which the number of partitions will increase")
+                .Optional()
+                .StoreResult(&ScaleUpThresholdPercent_);
+            config.Opts->AddLongOption("auto-partitioning-down-utilization-percent", "The load percentage at which the number of partitions will decrease")
+                .Optional()
+                .StoreResult(&ScaleDownThresholdPercent_);
+        } else {
+            config.Opts->AddLongOption("auto-partitioning-strategy", description.Str())
+                .Optional()
+                .DefaultValue("disabled")
+                .StoreResult(&AutoPartitioningStrategyStr_);
+            config.Opts->AddLongOption("auto-partitioning-stabilization-window-seconds", "Duration in seconds of high or low load before automatically scale the number of partitions")
+                .Optional()
+                .DefaultValue(300)
+                .StoreResult(&ScaleThresholdTime_);
+            config.Opts->AddLongOption("auto-partitioning-up-utilization-percent", "The load percentage at which the number of partitions will increase")
+                .Optional()
+                .DefaultValue(90)
+                .StoreResult(&ScaleUpThresholdPercent_);
+            config.Opts->AddLongOption("auto-partitioning-down-utilization-percent", "The load percentage at which the number of partitions will decrease")
+                .Optional()
+                .DefaultValue(30)
+                .StoreResult(&ScaleDownThresholdPercent_);
+        }
+    }
+
+    void TCommandWithAutoPartitioning::ParseAutoPartitioningStrategy() {
+        if (AutoPartitioningStrategyStr_.empty()) {
+            return;
+        }
+
+        TString toLowerStrategy = to_lower(AutoPartitioningStrategyStr_);
+        auto strategyIt = AutoPartitioningStrategies.find(toLowerStrategy);
+        if (strategyIt.IsEnd()) {
+            throw TMisuseException() << "Auto partitioning strategy " << AutoPartitioningStrategyStr_ << " is not available for this command";
+        } else {
+            AutoPartitioningStrategy_ = strategyIt->second;
+        }
+    }
+
+    TMaybe<NTopic::EAutoPartitioningStrategy> TCommandWithAutoPartitioning::GetAutoPartitioningStrategy() const {
+        return AutoPartitioningStrategy_;
+    }
+
+    TMaybe<ui32> TCommandWithAutoPartitioning::GetAutoPartitioningStabilizationWindowSeconds() const {
+        return ScaleThresholdTime_;
+    }
+
+    TMaybe<ui32> TCommandWithAutoPartitioning::GetAutoPartitioningUpUtilizationPercent() const {
+        return ScaleUpThresholdPercent_;
+    }
+
+    TMaybe<ui32> TCommandWithAutoPartitioning::GetAutoPartitioninDownUtilizationPercent() const {
+        return ScaleDownThresholdPercent_;
+    }
+
     TCommandTopic::TCommandTopic()
         : TClientCommandTree("topic", {}, "TopicService operations") {
         AddCommand(std::make_unique<TCommandTopicCreate>());
@@ -188,9 +303,10 @@ namespace {
 
     void TCommandTopicCreate::Config(TConfig& config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption("partitions-count", "Total partitions count for topic")
-            .DefaultValue(1)
-            .StoreResult(&PartitionsCount_);
+        config.Opts->AddLongOption("partitions-count", "Initial and minimum number of partitions for topic")
+            .Optional()
+            .StoreResult(&MinActivePartitions_)
+            .DefaultValue(1);
         config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored")
             .DefaultValue(24)
             .Optional()
@@ -207,6 +323,16 @@ namespace {
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
+
+        config.Opts->AddLongOption("auto-partitioning-max-partitions-count", "Maximum number of partitions for topic")
+            .Optional()
+            .StoreResult(&MaxActivePartitions_);
+        AddAutoPartitioning(config, false);
+
+        config.Opts->AddLongOption("partitions-per-tablet", "Partitions per PQ tablet")
+            .Optional()
+            .Hidden()
+            .StoreResult(&PartitionsPerTablet_);
     }
 
     void TCommandTopicCreate::Parse(TConfig& config) {
@@ -214,6 +340,7 @@ namespace {
         ParseTopicName(config, 0);
         ParseCodecs();
         ParseMeteringMode();
+        ParseAutoPartitioningStrategy();
     }
 
     int TCommandTopicCreate::Run(TConfig& config) {
@@ -221,15 +348,25 @@ namespace {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto settings = NYdb::NTopic::TCreateTopicSettings();
-        settings.PartitioningSettings(PartitionsCount_, PartitionsCount_);
+
+        auto autoscaleSettings = NTopic::TAutoPartitioningSettings(
+        GetAutoPartitioningStrategy() ? *GetAutoPartitioningStrategy() : NTopic::EAutoPartitioningStrategy::Disabled,
+        GetAutoPartitioningStabilizationWindowSeconds() ? TDuration::Seconds(*GetAutoPartitioningStabilizationWindowSeconds()) : TDuration::Seconds(0),
+        GetAutoPartitioninDownUtilizationPercent() ? *GetAutoPartitioninDownUtilizationPercent() : 0,
+        GetAutoPartitioningUpUtilizationPercent() ? *GetAutoPartitioningUpUtilizationPercent() : 0);
+
+        ui32 finalMaxActivePartitions = MaxActivePartitions_.Defined() ? *MaxActivePartitions_
+                                      : autoscaleSettings.GetStrategy() != NTopic::EAutoPartitioningStrategy::Disabled ? MinActivePartitions_ + 50
+                                      : MinActivePartitions_;
+
+        settings.PartitioningSettings(MinActivePartitions_, finalMaxActivePartitions, autoscaleSettings);
         settings.PartitionWriteBurstBytes(PartitionWriteSpeedKbps_ * 1_KB);
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
 
         auto codecs = GetCodecs();
-        if (codecs.empty()) {
-            codecs.push_back(NTopic::ECodec::RAW);
+        if (!codecs.empty()) {
+            settings.SetSupportedCodecs(codecs);
         }
-        settings.SetSupportedCodecs(codecs);
 
         if (GetMeteringMode() != NTopic::EMeteringMode::Unspecified) {
             settings.MeteringMode(GetMeteringMode());
@@ -238,8 +375,12 @@ namespace {
         settings.RetentionPeriod(TDuration::Hours(RetentionPeriodHours_));
         settings.RetentionStorageMb(RetentionStorageMb_);
 
+        if (PartitionsPerTablet_.Defined()) {
+            settings.AddAttribute("_partitions_per_tablet", ToString(*PartitionsPerTablet_));
+        }
+
         auto status = topicClient.CreateTopic(TopicName, settings).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -249,8 +390,9 @@ namespace {
 
     void TCommandTopicAlter::Config(TConfig& config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption("partitions-count", "Total partitions count for topic")
-            .StoreResult(&PartitionsCount_);
+        config.Opts->AddLongOption("partitions-count", "Initial and minimum number of partitions for topic")
+            .Optional()
+            .StoreResult(&MinActivePartitions_);
         config.Opts->AddLongOption("retention-period-hours", "Duration for which data in topic is stored")
             .Optional()
             .StoreResult(&RetentionPeriodHours_);
@@ -264,6 +406,11 @@ namespace {
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
+
+        config.Opts->AddLongOption("auto-partitioning-max-partitions-count", "Maximum number of partitions for topic")
+            .Optional()
+            .StoreResult(&MaxActivePartitions_);
+        AddAutoPartitioning(config, true);
     }
 
     void TCommandTopicAlter::Parse(TConfig& config) {
@@ -271,14 +418,40 @@ namespace {
         ParseTopicName(config, 0);
         ParseCodecs();
         ParseMeteringMode();
+        ParseAutoPartitioningStrategy();
     }
 
     NYdb::NTopic::TAlterTopicSettings TCommandTopicAlter::PrepareAlterSettings(
         NYdb::NTopic::TDescribeTopicResult& describeResult) {
         auto settings = NYdb::NTopic::TAlterTopicSettings();
+        auto& partitioningSettings = settings.BeginAlterPartitioningSettings();
+        auto& originPartitioningSettings = describeResult.GetTopicDescription().GetPartitioningSettings();
 
-        if (PartitionsCount_.Defined() && (*PartitionsCount_ != describeResult.GetTopicDescription().GetTotalPartitionsCount())) {
-            settings.AlterPartitioningSettings(*PartitionsCount_, *PartitionsCount_);
+        if (MinActivePartitions_.Defined() && (*MinActivePartitions_ != originPartitioningSettings.GetMinActivePartitions())) {
+            partitioningSettings.MinActivePartitions(*MinActivePartitions_);
+        }
+
+        if (MaxActivePartitions_.Defined() && (*MaxActivePartitions_ != originPartitioningSettings.GetMaxActivePartitions())) {
+            partitioningSettings.MaxActivePartitions(*MaxActivePartitions_);
+        }
+
+        auto& autoPartitioningSettings = partitioningSettings.BeginAlterAutoPartitioningSettings();
+        const auto& originalAutoPartitioningSettings = originPartitioningSettings.GetAutoPartitioningSettings();
+
+        if (GetAutoPartitioningStabilizationWindowSeconds().Defined() && *GetAutoPartitioningStabilizationWindowSeconds() != originalAutoPartitioningSettings.GetStabilizationWindow().Seconds()) {
+            autoPartitioningSettings.StabilizationWindow(TDuration::Seconds(*GetAutoPartitioningStabilizationWindowSeconds()));
+        }
+
+        if (GetAutoPartitioningStrategy().Defined() && *GetAutoPartitioningStrategy() != originalAutoPartitioningSettings.GetStrategy()) {
+            autoPartitioningSettings.Strategy(*GetAutoPartitioningStrategy());
+        }
+
+        if (GetAutoPartitioninDownUtilizationPercent().Defined() && *GetAutoPartitioninDownUtilizationPercent() != originalAutoPartitioningSettings.GetDownUtilizationPercent()) {
+            autoPartitioningSettings.DownUtilizationPercent(*GetAutoPartitioninDownUtilizationPercent());
+        }
+
+        if (GetAutoPartitioningUpUtilizationPercent().Defined() && *GetAutoPartitioningUpUtilizationPercent() != originalAutoPartitioningSettings.GetUpUtilizationPercent()) {
+            autoPartitioningSettings.UpUtilizationPercent(*GetAutoPartitioningUpUtilizationPercent());
         }
 
         auto codecs = GetCodecs();
@@ -311,14 +484,14 @@ namespace {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         auto describeResult = topicClient.DescribeTopic(TopicName).GetValueSync();
-        ThrowOnError(describeResult);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
 
         auto settings = PrepareAlterSettings(describeResult);
         auto result = topicClient.AlterTopic(TopicName, settings).GetValueSync();
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         return EXIT_SUCCESS;
     }
 
@@ -342,11 +515,11 @@ namespace {
         NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         auto settings = NYdb::NTopic::TDropTopicSettings();
         TStatus status = topicClient.DropTopic(TopicName, settings).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -354,6 +527,7 @@ namespace {
         : TClientCommandTree("consumer", {}, "Consumer operations") {
         AddCommand(std::make_unique<TCommandTopicConsumerAdd>());
         AddCommand(std::make_unique<TCommandTopicConsumerDrop>());
+        AddCommand(std::make_unique<TCommandTopicConsumerDescribe>());
         AddCommand(std::make_unique<TCommandTopicConsumerOffset>());
     }
 
@@ -372,9 +546,14 @@ namespace {
         config.Opts->AddLongOption("consumer", "New consumer for topic")
             .Required()
             .StoreResult(&ConsumerName_);
-        config.Opts->AddLongOption("starting-message-timestamp", "Unix timestamp starting from '1970-01-01 00:00:00' from which read is allowed")
+        config.Opts->AddLongOption("starting-message-timestamp", "'Written_at' timestamp from which read is allowed. " TIMESTAMP_FORMAT_OPTION_DESCRIPTION)
+            .RequiredArgument("TIMESTAMP")
             .Optional()
-            .StoreResult(&StartingMessageTimestamp_);
+            .Handler1T<TString>(TimestampOptionHandler(&StartingMessageTimestamp_));
+        config.Opts->AddLongOption("important", "Is consumer important")
+            .Optional()
+            .DefaultValue(false)
+            .StoreResult(&IsImportant_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -391,25 +570,25 @@ namespace {
         NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         NYdb::NTopic::TAlterTopicSettings readRuleSettings = NYdb::NTopic::TAlterTopicSettings();
         NYdb::NTopic::TConsumerSettings<NYdb::NTopic::TAlterTopicSettings> consumerSettings(readRuleSettings);
         consumerSettings.ConsumerName(ConsumerName_);
         if (StartingMessageTimestamp_.Defined()) {
-            consumerSettings.ReadFrom(TInstant::Seconds(*StartingMessageTimestamp_));
+            consumerSettings.ReadFrom(*StartingMessageTimestamp_);
         }
 
-        TVector<NTopic::ECodec> codecs = GetCodecs();
-        if (codecs.empty()) {
-            codecs.push_back(NTopic::ECodec::RAW);
+        auto codecs = GetCodecs();
+        if (!codecs.empty()) {
+            consumerSettings.SetSupportedCodecs(codecs);
         }
-        consumerSettings.SetSupportedCodecs(codecs);
+        consumerSettings.SetImportant(IsImportant_);
 
         readRuleSettings.AppendAddConsumers(consumerSettings);
 
         TStatus status = topicClient.AlterTopic(TopicName, readRuleSettings).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -436,7 +615,7 @@ namespace {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         auto consumers = topicDescription.GetTopicDescription().GetConsumers();
         if (!std::any_of(consumers.begin(), consumers.end(), [&](const auto& consumer) { return consumer.GetConsumerName() == ConsumerName_; }))
@@ -449,10 +628,45 @@ namespace {
         removeReadRuleSettings.AppendDropConsumers(ConsumerName_);
 
         TStatus status = topicClient.AlterTopic(TopicName, removeReadRuleSettings).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
+    TCommandTopicConsumerDescribe::TCommandTopicConsumerDescribe()
+        : TYdbCommand("describe", {}, "Consumer describe operation") {
+    }
+
+    void TCommandTopicConsumerDescribe::Config(TConfig& config) {
+        TYdbCommand::Config(config);
+        config.Opts->AddLongOption("consumer", "Consumer to describe")
+            .Required()
+            .StoreResult(&ConsumerName_);
+        config.Opts->AddLongOption("partition-stats", "Show partition statistics")
+            .StoreTrue(&ShowPartitionStats_);
+        config.Opts->SetFreeArgsNum(1);
+        AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
+    }
+
+    void TCommandTopicConsumerDescribe::Parse(TConfig& config) {
+        TYdbCommand::Parse(config);
+        ParseOutputFormats();
+        ParseTopicName(config, 0);
+    }
+
+    int TCommandTopicConsumerDescribe::Run(TConfig& config) {
+        TDriver driver = CreateDriver(config);
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        auto consumerDescription = topicClient.DescribeConsumer(TopicName, ConsumerName_, NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(ShowPartitionStats_)).GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(consumerDescription);
+
+        return PrintDescription(this, OutputFormat, consumerDescription.GetConsumerDescription(), &TCommandTopicConsumerDescribe::PrintPrettyResult);
+    }
+
+    int TCommandTopicConsumerDescribe::PrintPrettyResult(const NYdb::NTopic::TConsumerDescription& description) const {
+        return PrintPrettyDescribeConsumerResult(description, ShowPartitionStats_);
+    }
 
     TCommandTopicConsumerCommitOffset::TCommandTopicConsumerCommitOffset()
         : TYdbCommand("commit", {}, "Commit offset for consumer") {
@@ -486,7 +700,7 @@ namespace {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         auto consumers = topicDescription.GetTopicDescription().GetConsumers();
         if (!std::any_of(consumers.begin(), consumers.end(), [&](const auto& consumer) { return consumer.GetConsumerName() == ConsumerName_; }))
@@ -496,7 +710,7 @@ namespace {
         }
 
         TStatus status = topicClient.CommitOffset(TopicName, PartitionId_, ConsumerName_, Offset_).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -565,9 +779,10 @@ namespace {
                            });
 
         // TODO(shmel1k@): improve help.
-        config.Opts->AddLongOption('c', "consumer", "Consumer name.")
-            .Required()
+        config.Opts->AddLongOption('c', "consumer", "Consumer name. If not set, then you need to specify partitions through --partition-ids to read without consumer")
+            .Optional()
             .StoreResult(&Consumer_);
+
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
             .StoreResult(&File_);
@@ -589,9 +804,10 @@ namespace {
             .Optional()
             .NoArgument()
             .StoreValue(&Wait_, true);
-        config.Opts->AddLongOption("timestamp", "Timestamp from which messages will be read. If not specified, messages are read from the last commit point for the chosen consumer.")
+        config.Opts->AddLongOption("timestamp", "'Written_at' timestamp from which messages will be read. If not specified, messages are read from the last commit point for the chosen consumer. " TIMESTAMP_FORMAT_OPTION_DESCRIPTION)
+            .RequiredArgument("TIMESTAMP")
             .Optional()
-            .StoreResult(&Timestamp_);
+            .Handler1T<TString>(TimestampOptionHandler(&Timestamp_));
         config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions.")
             .Optional()
             .SplitHandler(&PartitionIds_, ',');
@@ -646,10 +862,15 @@ namespace {
 
     NTopic::TReadSessionSettings TCommandTopicRead::PrepareReadSessionSettings() {
         NTopic::TReadSessionSettings settings;
-        settings.ConsumerName(Consumer_);
+        settings.AutoPartitioningSupport(true);
+        if (Consumer_) {
+            settings.ConsumerName(Consumer_);
+        } else {
+            settings.WithoutConsumer();
+        }
         // settings.ReadAll(); // TODO(shmel1k@): change to read only original?
         if (Timestamp_.Defined()) {
-            settings.ReadFromTimestamp(TInstant::Seconds(*(Timestamp_.Get())));
+            settings.ReadFromTimestamp(*Timestamp_);
         }
 
         // TODO(shmel1k@): partition can be added here.
@@ -666,8 +887,13 @@ namespace {
     void TCommandTopicRead::ValidateConfig() {
         // TODO(shmel1k@): add more formats.
         if (!IsStreamingFormat(MessagingFormat) && (Limit_.Defined() && (Limit_ <= 0 || Limit_ > 500))) {
-            throw TMisuseException() << "OutputFormat " << OutputFormat << " is not compatible with "
+            throw TMisuseException() << "OutputFormat " << MessagingFormat << " is not compatible with "
                                      << "limit less and equal '0' or more than '500': '" << *Limit_ << "' was given";
+        }
+
+        // validate partitions ids are specified, if no consumer is provided. no-consumer mode will be used. 
+        if (!Consumer_ && !PartitionIds_) {
+            throw TMisuseException() << "Please specify either --consumer or --partition-ids to read without consumer";
         }
     }
 
@@ -675,7 +901,7 @@ namespace {
         ValidateConfig();
 
         auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
+            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
         NTopic::TTopicClient topicClient(*driver);
 
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
@@ -715,7 +941,7 @@ namespace {
         TString description = PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", allowedCodecs);
         config.Opts->AddLongOption("codec", description)
             .Optional()
-            .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
+            .DefaultValue("RAW")
             .StoreResult(&CodecStr_);
         AllowedCodecs_ = allowedCodecs;
     }
@@ -728,7 +954,7 @@ namespace {
         Codec_ = ::NYdb::NConsoleClient::ParseCodec(CodecStr_, AllowedCodecs_);
     }
 
-    NTopic::ECodec TCommandWithCodec::GetCodec() const {
+    TMaybe<NTopic::ECodec> TCommandWithCodec::GetCodec() const {
         return Codec_;
     }
 
@@ -744,8 +970,8 @@ namespace {
         AddMessagingFormats(config, {
                                     EMessagingFormat::NewlineDelimited,
                                     EMessagingFormat::SingleMessage,
-                                    //      EOutputFormat::JsonRawStreamConcat,
-                                    //      EOutputFormat::JsonRawArray,
+                                    //      EDataFormat::JsonRawStreamConcat,
+                                    //      EDataFormat::JsonRawArray,
                                 });
         AddAllowedCodecs(config, AllowedCodecs);
 
@@ -778,7 +1004,9 @@ namespace {
 
     NTopic::TWriteSessionSettings TCommandTopicWrite::PrepareWriteSessionSettings() {
         NTopic::TWriteSessionSettings settings;
-        settings.Codec(GetCodec());
+        if (auto codec = GetCodec(); codec.Defined()) {
+            settings.Codec(*codec);
+        }
         settings.Path(TopicName);
 
         if (!MessageGroupId_.Defined()) {
@@ -804,7 +1032,7 @@ namespace {
         SetInterruptHandlers();
 
         auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
+            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
         NTopic::TTopicClient topicClient(*driver);
 
         {

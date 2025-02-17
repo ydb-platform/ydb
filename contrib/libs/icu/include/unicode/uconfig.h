@@ -52,7 +52,7 @@
  * @internal ICU 4.0
  */
 #if defined(UCONFIG_USE_LOCAL)
-#include "uconfig_local.h"
+#error #include "uconfig_local.h"
 #endif
 
 /**
@@ -411,6 +411,17 @@
  */
 #ifndef UCONFIG_NO_FORMATTING
 #   define UCONFIG_NO_FORMATTING 0
+#endif
+
+/**
+ * \def UCONFIG_NO_MF2
+ * This switch turns off the experimental MessageFormat 2.0 API.
+ *
+ * @internal ICU 75 technology preview
+ * @deprecated This API is for technology preview only.
+ */
+#ifndef UCONFIG_NO_MF2
+#   define UCONFIG_NO_MF2 0
 #endif
 
 /**

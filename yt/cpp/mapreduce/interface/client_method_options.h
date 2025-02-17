@@ -37,6 +37,7 @@ enum ENodeType : int
     NT_LINK                 /* "link" */,
     NT_GROUP                /* "group" */,
     NT_PORTAL               /* "portal_entrance" */,
+    NT_CHAOS_TABLE_REPLICA  /* "chaos_table_replica" */,
 };
 
 ///
@@ -263,6 +264,12 @@ struct TConcatenateOptions
 
     /// Whether we should append to destination or rewrite it.
     FLUENT_FIELD_OPTION(bool, Append);
+
+    // Maximum number of items to process in single concat request.
+    //
+    // If number of items provided is greater then this parameter
+    // client might split concatenate to several requests.
+    FLUENT_FIELD_DEFAULT(int, MaxBatchSize, 20);
 };
 
 ///
@@ -286,9 +293,12 @@ struct TBlobTableReaderOptions
     ///
     /// All blob parts except the last part of the blob must be of this size
     /// otherwise blob table reader emits error.
-    FLUENT_FIELD_DEFAULT(ui64, PartSize, 4 * 1024 * 1024);
+    FLUENT_FIELD_DEFAULT(i64, PartSize, 4 * 1024 * 1024);
 
-    /// @brief Offset from which to start reading
+    /// @brief Part index from which to start reading.
+    FLUENT_FIELD_DEFAULT(i64, StartPartIndex, 0);
+
+    /// @brief Offset from which to start reading.
     FLUENT_FIELD_DEFAULT(i64, Offset, 0);
 };
 
@@ -378,6 +388,11 @@ struct TSuspendOperationOptions
     ///
     /// By default running jobs are not aborted.
     FLUENT_FIELD_OPTION(bool, AbortRunningJobs);
+
+    ///
+    /// @brief Something to show in the alert.
+    ///
+    FLUENT_FIELD_OPTION(std::optional<TString>, Reason);
 };
 
 ///
@@ -467,7 +482,7 @@ struct TFileReaderOptions
     /// @brief Offset to start reading from.
     ///
     /// By default reading is started from the beginning of the file.
-    FLUENT_FIELD_OPTION(i64, Offset);
+    FLUENT_FIELD_DEFAULT(i64, Offset, 0);
 
     ///
     /// @brief Maximum length to read.
@@ -554,7 +569,8 @@ struct TFileWriterOptions
     FLUENT_FIELD_OPTION(TWriterOptions, WriterOptions);
 };
 
-class TSkiffRowHints {
+class TSkiffRowHints
+{
 public:
     /// @cond Doxygen_Suppress
     using TSelf = TSkiffRowHints;
@@ -565,6 +581,12 @@ public:
     ///
     /// You can set something in it to pass necessary information to CreateSkiffParser<...>() and GetSkiffSchema<...>() functions.
     FLUENT_FIELD_OPTION(TNode, Attributes);
+
+    ///
+    /// @brief Index of table in parallel table reader.
+    ///
+    /// For internal usage only. If you set it, it will be overriden by parallel table reader.
+    FLUENT_FIELD_OPTION(int, TableIndex);
 };
 
 /// Options that control how C++ objects represent table rows when reading or writing a table.
@@ -1096,6 +1118,9 @@ struct TCreateClientOptions
 
     /// @brief Proxy Address to be used for connection
     FLUENT_FIELD_OPTION(TString, ProxyAddress);
+
+    /// @brief Desired proxy role to be used for connection.
+    FLUENT_FIELD_OPTION(TString, ProxyRole);
 };
 
 ///
@@ -1476,6 +1501,9 @@ struct TSkyShareTableOptions
 
     /// @brief Allow skynet manager to return fastbone links to skynet. See YT-11437
     FLUENT_FIELD_OPTION(bool, EnableFastbone);
+
+    /// @brief Custom pool.
+    FLUENT_FIELD_OPTION(TString, Pool);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

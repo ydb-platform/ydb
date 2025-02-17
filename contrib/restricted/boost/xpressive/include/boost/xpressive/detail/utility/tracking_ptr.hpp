@@ -24,8 +24,8 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/mpl/assert.hpp>
 #include <boost/intrusive_ptr.hpp>
-#include <boost/detail/workaround.hpp>
-#include <boost/detail/atomic_count.hpp>
+#include <boost/config/workaround.hpp>
+#include <boost/smart_ptr/detail/atomic_count.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 #include <boost/iterator/filter_iterator.hpp>
 #include <boost/type_traits/is_base_and_derived.hpp>

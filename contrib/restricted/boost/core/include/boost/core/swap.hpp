@@ -23,11 +23,13 @@
 #pragma once
 #endif
 
+BOOST_HEADER_DEPRECATED("boost/core/invoke_swap.hpp")
 
 namespace boost
 {
   template<class T1, class T2>
   BOOST_GPU_ENABLED
+  BOOST_DEPRECATED("This function is deprecated, use boost::core::invoke_swap instead.")
   inline typename enable_if_c< !boost_swap_impl::is_const<T1>::value && !boost_swap_impl::is_const<T2>::value >::type
   swap(T1& left, T2& right)
   {

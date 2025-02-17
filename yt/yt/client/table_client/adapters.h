@@ -1,7 +1,6 @@
 #pragma once
 
 #include "public.h"
-#include "unversioned_writer.h"
 
 #include <yt/yt/client/api/table_reader.h>
 
@@ -14,10 +13,16 @@ namespace NYT::NTableClient {
 ////////////////////////////////////////////////////////////////////////////////
 
 IUnversionedWriterPtr CreateSchemalessFromApiWriterAdapter(
+    NApi::IRowBatchWriterPtr underlyingWriter);
+
+IUnversionedWriterPtr CreateSchemalessFromApiWriterAdapter(
     NApi::ITableWriterPtr underlyingWriter);
 
 NApi::ITableWriterPtr CreateApiFromSchemalessWriterAdapter(
     IUnversionedWriterPtr underlyingWriter);
+
+NApi::ITableFragmentWriterPtr CreateApiFromSchemalessWriterAdapter(
+    IUnversionedTableFragmentWriterPtr underlyingWriter);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -33,15 +38,16 @@ struct TPipeReaderToWriterOptions
 };
 
 void PipeReaderToWriter(
-    const NApi::ITableReaderPtr& reader,
+    const NApi::IRowBatchReaderPtr& reader,
     const IUnversionedRowsetWriterPtr& writer,
     const TPipeReaderToWriterOptions& options);
 
 //! Parameter #pipeDelay is used only for testing.
 void PipeReaderToWriterByBatches(
-    const NApi::ITableReaderPtr& reader,
+    const NApi::IRowBatchReaderPtr& reader,
     const NFormats::ISchemalessFormatWriterPtr& writer,
-    const TRowBatchReadOptions& options,
+    TRowBatchReadOptions startingOptions,
+    TCallback<void(TRowBatchReadOptions* mutableOptions, TDuration timeForBatch)> optionsUpdater = {},
     TDuration pipeDelay = TDuration::Zero());
 
 void PipeInputToOutput(
@@ -53,6 +59,10 @@ void PipeInputToOutput(
     const NConcurrency::IAsyncInputStreamPtr& input,
     IOutputStream* output,
     i64 bufferBlockSize);
+
+void PipeInputToOutput(
+    const NConcurrency::IAsyncZeroCopyInputStreamPtr& input,
+    IOutputStream* output);
 
 ////////////////////////////////////////////////////////////////////////////////
 

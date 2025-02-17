@@ -1,0 +1,104 @@
+#include "fastcheck.h"
+#include <yql/essentials/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/user_data/yql_user_data.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_user_data_storage.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
+
+namespace NYql {
+namespace NFastCheck {
+
+bool CheckProgram(const TString& program, const TOptions& options, TIssues& errors) {
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
+    TAstParseResult astRes;
+    if (options.IsSql) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.ClusterMapping = options.ClusterMapping;
+        settings.SyntaxVersion = options.SyntaxVersion;
+        settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
+        settings.EmitReadsForExists = true;
+        if (options.IsLibrary) {
+            settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
+        }
+
+        astRes = SqlToYql(translators, program, settings);
+    } else {
+        astRes = ParseAst(program);
+    }
+
+    if (!astRes.IsOk()) {
+        errors = std::move(astRes.Issues);
+        return false;
+    }
+
+    if (options.IsLibrary) {
+        return true;
+    }
+
+    if (options.ParseOnly) {
+        // parse SQL libs
+        for (const auto& x : options.SqlLibs) {
+            NSQLTranslation::TTranslationSettings settings;
+            settings.ClusterMapping = options.ClusterMapping;
+            settings.SyntaxVersion = options.SyntaxVersion;
+            settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
+            settings.File = x.first;
+            settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
+
+            astRes = SqlToYql(translators, x.second, settings);
+            if (!astRes.IsOk()) {
+                errors = std::move(astRes.Issues);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    TVector<NUserData::TUserData> userData;
+    for (const auto& x : options.SqlLibs) {
+        NUserData::TUserData data;
+        data.Type_ = NUserData::EType::LIBRARY;
+        data.Disposition_ = NUserData::EDisposition::INLINE;
+        data.Name_ = x.first;
+        data.Content_ = x.second;
+        userData.push_back(data);
+    }
+
+    TExprContext libCtx;
+    libCtx.IssueManager.AddIssues(std::move(astRes.Issues));
+    IModuleResolver::TPtr moduleResolver;
+    TUserDataTable userDataTable = GetYqlModuleResolver(libCtx, moduleResolver, userData, options.ClusterMapping, {});
+    if (!userDataTable) {
+        errors = libCtx.IssueManager.GetIssues();
+        libCtx.IssueManager.Reset();
+        return false;
+    }
+
+    auto userDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, userDataTable, nullptr, nullptr);
+    if (auto modules = dynamic_cast<TModuleResolver*>(moduleResolver.get())) {
+        modules->AttachUserData(userDataStorage);
+    }
+
+    TExprContext exprCtx(libCtx.NextUniqueId);
+    TExprNode::TPtr exprRoot;
+    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, moduleResolver.get(), nullptr, false, Max<ui32>(), options.SyntaxVersion)) {
+        errors = exprCtx.IssueManager.GetIssues();
+        exprCtx.IssueManager.Reset();
+        return false;
+    }
+
+    return true;
+}
+
+}
+}

@@ -1,0 +1,24 @@
+commit add36301f7cf40e71d9e10647b83ce8eeed2ce07
+merge: e4dcf40743308e1c26bec5b40a65986757c9c860 aa536ca98b2b42596ea704253d8a864e0eddd513
+author: zhshishkin
+date: 2020-12-28T11:18:38+03:00
+revision: 7722626
+
+    implement __str__ and __repr__ for _Method
+    
+    https://bugs.python.org/issue1690840
+    
+    REVIEW: 1578078
+
+--- contrib/python/future/py3/future/backports/xmlrpc/client.py	(e4dcf40743308e1c26bec5b40a65986757c9c860)
++++ contrib/python/future/py3/future/backports/xmlrpc/client.py	(add36301f7cf40e71d9e10647b83ce8eeed2ce07)
+@@ -1102,6 +1102,9 @@ class _Method(object):
+     def __init__(self, send, name):
+         self.__send = send
+         self.__name = name
++    def __repr__(self):
++        return "<_Method for %s>" % self.__name
++    __str__ = __repr__
+     def __getattr__(self, name):
+         return _Method(self.__send, "%s.%s" % (self.__name, name))
+     def __call__(self, *args):

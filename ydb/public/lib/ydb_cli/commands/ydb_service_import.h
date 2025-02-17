@@ -2,8 +2,8 @@
 
 #include "ydb_command.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/import/import.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/ydb_cli/common/aws.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
@@ -17,11 +17,12 @@ public:
 
 class TCommandImportFromS3 : public TYdbOperationCommand,
                            public TCommandWithAwsCredentials,
-                           public TCommandWithFormat {
+                           public TCommandWithOutput {
 public:
     TCommandImportFromS3();
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
+    void ExtractParams(TConfig& config) override;
     int Run(TConfig& config) override;
 
 private:
@@ -38,6 +39,8 @@ private:
     TString Description;
     ui32 NumberOfRetries = 10;
     bool UseVirtualAddressing = true;
+    bool NoACL = false;
+    bool SkipChecksumValidation = false;
 };
 
 class TCommandImportFromFile : public TClientCommandTree {
@@ -46,7 +49,7 @@ public:
 };
 
 class TCommandImportFileBase : public TYdbCommand,
-    public TCommandWithPath, public TCommandWithFormat {
+    public TCommandWithPath, public TCommandWithInput {
 public:
     TCommandImportFileBase(const TString& cmd, const TString& cmdDescription)
       : TYdbCommand(cmd, {}, cmdDescription)
@@ -54,6 +57,7 @@ public:
         Args[0] = "<input files...>";
     }
     void Config(TConfig& config) override;
+    void ExtractParams(TConfig& config) override;
     void Parse(TConfig& config) override;
 
 protected:
@@ -69,7 +73,7 @@ public:
     TCommandImportFromCsv(const TString& cmd = "csv", const TString& cmdDescription = "Import data from CSV file")
         : TCommandImportFileBase(cmd, cmdDescription)
     {
-        InputFormat = EOutputFormat::Csv;
+        InputFormat = EDataFormat::Csv;
         Delimiter = ",";
     }
     void Config(TConfig& config) override;
@@ -78,7 +82,7 @@ public:
 protected:
     TString HeaderRow;
     TString Delimiter;
-    TString NullValue;
+    std::optional<TString> NullValue;
     ui32 SkipRows = 0;
     bool Header = false;
     bool NewlineDelimited = true;
@@ -89,7 +93,7 @@ public:
     TCommandImportFromTsv()
         : TCommandImportFromCsv("tsv", "Import data from TSV file")
     {
-        InputFormat = EOutputFormat::Tsv;
+        InputFormat = EDataFormat::Tsv;
         Delimiter = "\t";
     }
 };
@@ -99,7 +103,7 @@ public:
     TCommandImportFromJson()
        : TCommandImportFileBase("json", "Import data from JSON file")
     {
-        InputFormat = EOutputFormat::JsonUnicode;
+        InputFormat = EDataFormat::JsonUnicode;
     }
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
@@ -111,7 +115,7 @@ public:
     TCommandImportFromParquet(const TString& cmd = "parquet", const TString& cmdDescription = "Import data from Parquet file")
         : TCommandImportFileBase(cmd, cmdDescription)
         {
-            InputFormat = EOutputFormat::Parquet;
+            InputFormat = EDataFormat::Parquet;
         }
     void Config(TConfig& config) override;
     int Run(TConfig& config) override;

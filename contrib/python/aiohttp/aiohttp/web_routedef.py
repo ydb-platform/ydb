@@ -20,7 +20,7 @@ from . import hdrs
 from .abc import AbstractView
 from .typedefs import Handler, PathLike
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from .web_request import Request
     from .web_response import StreamResponse
     from .web_urldispatcher import AbstractRoute, UrlDispatcher
@@ -156,7 +156,7 @@ class RouteTableDef(Sequence[AbstractRouteDef]):
     """Route definition table"""
 
     def __init__(self) -> None:
-        self._items = []  # type: List[AbstractRouteDef]
+        self._items: List[AbstractRouteDef] = []
 
     def __repr__(self) -> str:
         return f"<RouteTableDef count={len(self._items)}>"
@@ -205,6 +205,9 @@ class RouteTableDef(Sequence[AbstractRouteDef]):
 
     def delete(self, path: str, **kwargs: Any) -> _Deco:
         return self.route(hdrs.METH_DELETE, path, **kwargs)
+
+    def options(self, path: str, **kwargs: Any) -> _Deco:
+        return self.route(hdrs.METH_OPTIONS, path, **kwargs)
 
     def view(self, path: str, **kwargs: Any) -> _Deco:
         return self.route(hdrs.METH_ANY, path, **kwargs)

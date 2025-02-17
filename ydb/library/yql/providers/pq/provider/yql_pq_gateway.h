@@ -1,7 +1,10 @@
 #pragma once
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+
+#include "yql_pq_topic_client.h"
+
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
+#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
@@ -25,6 +28,8 @@ struct IPqGateway : public TThrRefBase {
 
     // DS API.
     virtual NThreading::TFuture<TListStreams> ListStreams(const TString& sessionId, const TString& cluster, const TString& database, const TString& token, ui32 limit, const TString& exclusiveStartStreamName = {}) = 0;
+    
+    virtual ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) = 0;
 
     virtual void UpdateClusterConfigs(
         const TString& clusterName,

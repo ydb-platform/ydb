@@ -12,6 +12,7 @@ SRCS(
     alloc.proto
     auth.proto
     base.proto
+    backup.proto
     bind_channel_storage_pool.proto
     blob_depot.proto
     blob_depot_config.proto
@@ -31,6 +32,7 @@ SRCS(
     change_exchange.proto
     channel_purpose.proto
     cms.proto
+    compaction.proto
     compile_service_config.proto
     config.proto
     config_units.proto
@@ -39,6 +41,7 @@ SRCS(
     console_config.proto
     console_tenant.proto
     counters.proto
+    counters_backup.proto
     counters_blob_depot.proto
     counters_bs_controller.proto
     counters_cms.proto
@@ -49,6 +52,7 @@ SRCS(
     counters_kesus.proto
     counters_keyvalue.proto
     counters_mediator.proto
+    counters_node_broker.proto
     counters_pq.proto
     counters_replication.proto
     counters_schemeshard.proto
@@ -59,6 +63,7 @@ SRCS(
     counters_tx_allocator.proto
     counters_tx_proxy.proto
     data_events.proto
+    data_integrity_trails.proto
     database_basic_sausage_metainfo.proto
     datashard_config.proto
     datashard_load.proto
@@ -89,6 +94,8 @@ SRCS(
     local.proto
     long_tx_service.proto
     maintenance.proto
+    memory_controller_config.proto
+    memory_stats.proto
     metrics.proto
     minikql_engine.proto
     mon.proto
@@ -114,7 +121,6 @@ SRCS(
     serverless_proxy_config.proto
     shared_cache.proto
     sqs.proto
-    ssa.proto
     statestorage.proto
     statistics.proto
     stream.proto
@@ -140,31 +146,39 @@ SRCS(
     tx_proxy.proto
     tx_scheme.proto
     tx_sequenceshard.proto
+    whiteboard_disk_states.proto
+    whiteboard_flags.proto
     ydb_result_set_old.proto
     ydb_table_impl.proto
+    yql_translation_settings.proto
 )
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)
 GENERATE_ENUM_SERIALIZATION(datashard_load.pb.h)
+GENERATE_ENUM_SERIALIZATION(shared_cache.pb.h)
 
 PEERDIR(
-    ydb/library/actors/protos
     ydb/core/config/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/protos/schemeshard
     ydb/core/scheme/protos
+    ydb/core/tx/columnshard/common/protos
+    ydb/core/tx/columnshard/engines/protos
+    ydb/core/tx/columnshard/engines/scheme/defaults/protos
+    ydb/library/actors/protos
+    ydb/library/formats/arrow/protos
     ydb/library/login/protos
     ydb/library/mkql_proto/protos
-    ydb/public/api/protos
-    ydb/library/yql/core/file_storage/proto
-    ydb/library/yql/core/issue/protos
-    ydb/library/yql/dq/actors/protos
-    ydb/library/yql/dq/proto
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/public/issue/protos
-    ydb/library/yql/public/types
     ydb/library/services
     ydb/library/ydb_issue/proto
-    ydb/core/tx/columnshard/engines/scheme/statistics/protos
+    ydb/library/yql/dq/actors/protos
+    ydb/library/yql/dq/proto
+    ydb/public/api/protos
+    yql/essentials/core/file_storage/proto
+    yql/essentials/core/issue/protos
+    yql/essentials/providers/common/proto
+    yql/essentials/public/issue/protos
+    yql/essentials/public/types
 )
 
 CPP_PROTO_PLUGIN0(config_proto_plugin ydb/core/config/tools/protobuf_plugin)

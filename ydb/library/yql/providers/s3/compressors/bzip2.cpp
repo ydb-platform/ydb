@@ -1,7 +1,9 @@
 #include "bzip2.h"
 
 #include <util/generic/size_literals.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/exceptions.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include "output_queue_impl.h"
 
 namespace NYql {
@@ -57,7 +59,7 @@ bool TReadBuffer::nextImpl() {
 
                 break;
             default:
-                ythrow yexception() << "Bzip error: " << code;
+                ythrow TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Bzip error: " << code;
         }
     }
 }

@@ -50,11 +50,7 @@ template <typename TMsg>
 inline TString FormatMessage(const TMsg& message, bool ok = true) {
     if (ok) {
         if (LogBodyEnabled) {
-            TString text;
-            NKikimr::TSecurityTextFormatPrinter<TMsg> printer;
-            printer.SetSingleLineMode(true);
-            printer.PrintToString(message, &text);
-            return text;
+            return NKikimr::SecureDebugString<TMsg>(message);
         } else {
             return "<hidden>";
         }

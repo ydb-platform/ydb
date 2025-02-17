@@ -11,36 +11,36 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/core/facade/yql_facade.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
-#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
-#include <ydb/library/yql/sql/settings/translation_settings.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
 #include <library/cpp/yson/node/node_io.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/protos/issue_message.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 
 #include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
@@ -53,6 +53,7 @@
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -135,7 +136,7 @@ class TPendingFetcher : public NActors::TActorBootstrapped<TPendingFetcher> {
 
     private:
         static ::NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
-            return ::NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
+            return ::NMonitoring::ExplicitHistogram({0, 10, 100, 1000, 10000});
         }
     };
 
@@ -155,7 +156,9 @@ public:
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
         const ::NMonitoring::TDynamicCounterPtr& clientCounters,
         const TString& tenantName,
-        NActors::TMon* monitoring
+        NActors::TMon* monitoring,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+        NYql::IPqGateway::TPtr defaultPqGateway
         )
         : YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
@@ -177,6 +180,8 @@ public:
         , InternalServiceId(MakeInternalServiceActorId())
         , Monitoring(monitoring)
         , ComputeConfig(config.GetCompute())
+        , S3ActorsFactory(std::move(s3ActorsFactory))
+        , DefaultPqGateway(std::move(defaultPqGateway))
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -193,6 +198,8 @@ public:
         if (Monitoring) {
             Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"),
                 "fetcher", "Pending Fetcher", false, TActivationContext::ActorSystem(), SelfId());
+            Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"),
+                "local_worker_manager", "Local Worker Manager", false, TActivationContext::ActorSystem(), NYql::NDqs::MakeWorkerManagerActorID(SelfId().NodeId()));
         }
 
         Become(&TPendingFetcher::StateFunc);
@@ -354,6 +361,16 @@ private:
         const TString folderId = NYdb::NFq::TScope(task.scope()).ParseFolder();
         const TString cloudId = task.sensor_labels().at("cloud_id");
         const TString queryId = task.query_id().value();
+        const bool isStreaming = task.query_type() == FederatedQuery::QueryContent::STREAMING;
+        TString queryIdLabel;
+        TString queryNameLabel = SanitizeLabel(task.query_name());
+        if (task.automatic()) {
+            queryIdLabel = isStreaming ? "streaming" : "analytics";
+        } else if (isStreaming) {
+            queryIdLabel = queryId;
+        } else {
+            queryIdLabel = "manual";
+        }
 
         ::NYql::NCommon::TServiceCounters queryCounters(ServiceCounters);
         auto publicCountersParent = ServiceCounters.PublicCounters;
@@ -361,8 +378,15 @@ private:
         if (cloudId && folderId) {
             publicCountersParent = publicCountersParent->GetSubgroup("cloud_id", cloudId)->GetSubgroup("folder_id", folderId);
         }
-        queryCounters.PublicCounters = publicCountersParent->GetSubgroup("query_id",
-            task.automatic() ? (task.query_name() ? task.query_name() : "automatic") : queryId);
+
+        ::NMonitoring::TDynamicCounterPtr queryPublicCounters = publicCountersParent;
+        // use original query id here
+        queryPublicCounters = queryPublicCounters->GetSubgroup("query_id", queryId);
+
+        if (queryNameLabel) {
+            queryPublicCounters = queryPublicCounters->GetSubgroup("query_name", queryNameLabel);
+        }
+        queryCounters.PublicCounters = queryPublicCounters;
 
         auto rootCountersParent = ServiceCounters.RootCounters;
         std::set<std::pair<TString, TString>> sensorLabels(task.sensor_labels().begin(), task.sensor_labels().end());
@@ -370,9 +394,17 @@ private:
             rootCountersParent = rootCountersParent->GetSubgroup(label, item);
         }
 
-        queryCounters.RootCounters = rootCountersParent->GetSubgroup("query_id",
-            task.automatic() ? (folderId ? "automatic_" + folderId : "automatic") : queryId);
-        queryCounters.Counters = queryCounters.RootCounters;
+        ::NMonitoring::TDynamicCounterPtr queryRootCounters = rootCountersParent;
+        if (queryIdLabel) {
+            queryRootCounters = queryRootCounters->GetSubgroup("query_id", queryIdLabel);
+        }
+
+        if (!task.automatic() && isStreaming && queryNameLabel) {
+            queryRootCounters = queryRootCounters->GetSubgroup("query_name", queryNameLabel);
+        }
+
+        queryCounters.RootCounters = queryRootCounters;
+        queryCounters.Counters = queryRootCounters;
 
         queryCounters.InitUptimeCounter();
         const auto createdAt = TInstant::Now();
@@ -431,6 +463,7 @@ private:
             TenantName,
             task.result_limit(),
             NProtoInterop::CastFromProto(task.execution_limit()),
+            NProtoInterop::CastFromProto(task.request_submitted_at()),
             NProtoInterop::CastFromProto(task.request_started_at()),
             task.restart_count(),
             task.job_id().value(),
@@ -439,7 +472,10 @@ private:
             task.operation_id(),
             computeConnection,
             NProtoInterop::CastFromProto(task.result_ttl()),
-            std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end())
+            std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end()),
+            S3ActorsFactory,
+            ComputeConfig.GetWorkloadManagerConfig(task.scope()),
+            DefaultPqGateway
             );
 
         auto runActorId =
@@ -448,9 +484,7 @@ private:
                 : Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 
         RunActorMap[runActorId] = TRunActorInfo { .QueryId = queryId, .QueryName = task.query_name() };
-        if (!task.automatic()) {
-            CountersMap[queryId] = { rootCountersParent, publicCountersParent, runActorId };
-        }
+        CountersMap[queryId] = { rootCountersParent, publicCountersParent, runActorId };
     }
 
     NActors::IActor* CreateYdbRunActor(TRunActorParams&& params, const ::NYql::NCommon::TServiceCounters& queryCounters) const {
@@ -516,6 +550,8 @@ private:
     TActorId InternalServiceId;
     NActors::TMon* Monitoring;
     TComputeConfig ComputeConfig;
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
+    NYql::IPqGateway::TPtr DefaultPqGateway;
 };
 
 
@@ -534,7 +570,9 @@ NActors::IActor* CreatePendingFetcher(
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const ::NMonitoring::TDynamicCounterPtr& clientCounters,
     const TString& tenantName,
-    NActors::TMon* monitoring)
+    NActors::TMon* monitoring,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    NYql::IPqGateway::TPtr defaultPqGateway)
 {
     return new TPendingFetcher(
         yqSharedResources,
@@ -551,7 +589,9 @@ NActors::IActor* CreatePendingFetcher(
         std::move(pqCmConnections),
         clientCounters,
         tenantName,
-        monitoring);
+        monitoring,
+        std::move(s3ActorsFactory),
+        defaultPqGateway);
 }
 
 TActorId MakePendingFetcherId(ui32 nodeId) {

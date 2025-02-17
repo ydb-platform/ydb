@@ -1,7 +1,7 @@
 #include "dq_worker.h"
 
-#include <ydb/library/yql/utils/signals/signals.h>
-#include <ydb/library/yql/utils/bind_in_range.h>
+#include <yql/essentials/utils/signals/signals.h>
+#include <yql/essentials/utils/network/bind_in_range.h>
 
 #include <ydb/library/yql/providers/dq/stats_collector/pool_stats_collector.h>
 #include <ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.h>
@@ -15,10 +15,10 @@
 
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/log/tls_backend.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/range_walker.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/tls_backend.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/range_walker.h>
 
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/concurrency/action_queue.h>
@@ -33,6 +33,7 @@
 #include <util/system/env.h>
 #include <util/system/shellcommand.h>
 #include <util/string/type.h>
+#include <util/system/execpath.h>
 
 using namespace NYql::NDqs;
 
@@ -171,7 +172,6 @@ namespace NYql::NDq::NWorker {
 
         TString fileCacheDir = GetEnv(NCommonJobVars::UDFS_PATH);
         TString ytCoordinatorStr = GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_COORDINATOR);
-
         TString ytBackendStr = GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_BACKEND);
 
         TString operationId = GetEnv("YT_OPERATION_ID");
@@ -191,7 +191,13 @@ namespace NYql::NDq::NWorker {
         auto ports = BindInRange(portWalker);
 
         auto forceIPv4 = IsTrue(GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_FORCE_IPV4, ""));
-        if (forceIPv4) {
+
+        auto addressResolverStr = GetEnv(NCommonJobVars::ADDRESS_RESOLVER_CONFIG, "");
+        if (!addressResolverStr.empty()) {
+            auto addressResolverConfig = NYT::NYTree::ConvertTo<NYT::NNet::TAddressResolverConfigPtr>(NYT::NYson::TYsonString(addressResolverStr));
+            NYT::NNet::TAddressResolver::Get()->Configure(addressResolverConfig);
+        } else if (forceIPv4) {
+            // Keep the previous behavior for compatibility.
             auto config = NYT::New<NYT::NNet::TAddressResolverConfig>();
             config->EnableIPv4 = true;
             config->EnableIPv6 = false;
@@ -217,6 +223,11 @@ namespace NYql::NDq::NWorker {
                 auto archive = layerPath.substr(pos+1);
                 TShellCommand cmd("tar", {"xf", archive, "-C", layerDir});
                 cmd.Run().Wait();
+                TMaybe<int> exitCode = cmd.GetExitCode();
+                if (!exitCode.Defined() || exitCode != 0) {
+                    const TString msg = TStringBuilder() << "'tar' exited with non-zero code, stderr: " << cmd.GetError();
+                    YQL_LOG(ERROR) << msg;
+                }
             }
         } else {
             NFs::MakeDirectoryRecursive("mnt/work");
@@ -236,6 +247,10 @@ namespace NYql::NDq::NWorker {
         }
         if (backendConfig.GetEnforceJobUtc()) {
             pfOptions.Env["TZ"] = "UTC0";
+        }
+        if (backendConfig.GetEnforceJobYtIsolation()) {
+            pfOptions.Env["YT_ALLOW_HTTP_REQUESTS_TO_YT_FROM_JOB"] = "0";
+            pfOptions.Env["YT_FORBID_REQUESTS_FROM_JOB"] = "1";
         }
         pfOptions.EnablePorto = backendConfig.GetEnablePorto() == "isolate";
         pfOptions.PortoLayer = backendConfig.GetPortoLayer().size() == 0 ? "" : layerDir;

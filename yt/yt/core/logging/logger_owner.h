@@ -2,7 +2,15 @@
 
 #include "serializable_logger.h"
 
+#include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/type_decl.h>
+#include <yt/yt/core/phoenix/type_def.h>
+
 namespace NYT::NLogging {
+
+using NPhoenix::TLoadContext;
+using NPhoenix::TSaveContext;
+using NPhoenix::TPersistenceContext;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -14,9 +22,7 @@ protected:
 
     TLoggerOwner() = default;
 
-    void Save(TStreamSaveContext& context) const;
-    void Load(TStreamLoadContext& context);
-    void Persist(const TStreamPersistenceContext& context);
+    PHOENIX_DECLARE_TYPE(TLoggerOwner, 0x9feb0be1);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -2,6 +2,10 @@
 
 #include "public.h"
 
+#if defined(_win_)
+#include <windows.h>
+#endif
+
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -66,7 +70,6 @@ private:
     friend TExecutionContext CreateExecutionContext(
         TExecutionStack* stack,
         void (*trampoline)(void*));
-
 };
 
 #else
@@ -77,13 +80,4 @@ std::shared_ptr<TExecutionStack> CreateExecutionStack(EExecutionStackKind kind);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Returns the current global limit for the number of pooled fiber stacks of a given size.
-int GetFiberStackPoolSize(EExecutionStackKind stackKind);
-
-//! Sets the global limit for the number of pooled fiber stacks of a given size.
-void SetFiberStackPoolSize(EExecutionStackKind stackKind, int poolSize);
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NTY::NConcurrency
-

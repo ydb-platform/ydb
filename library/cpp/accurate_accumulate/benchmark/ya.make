@@ -1,3 +1,4 @@
+
 Y_BENCHMARK()
 
 BENCHMARK_OPTS(--budget=10)

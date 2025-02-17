@@ -17,6 +17,7 @@ They only use the values entered directly on the command line without accessing 
 ```
 
 Where:
+
 - `<profile_name>` is the required profile name.
 - `<connection options>` are [connection parameters](../../connect.md#command-line-pars) to be written to the profile. You need to specify at least one connection parameter; otherwise the command will run [in interactive mode](#interactive).
 
@@ -31,6 +32,7 @@ If a profile with the specified name exists, the command will return an error.
 ```
 
 Where:
+
 - `<profile_name>` is the required profile name.
 - `<connection options>` are optional [connection parameters](../../connect.md#command-line-pars) to be written to the profile.
 
@@ -45,14 +47,15 @@ If a profile with the specified name already exists, it will be overwritten with
 ```
 
 Where:
+
 - `<profile_name>` is the required profile name.
 - `<connection options>` are optional [connection parameters](../../connect.md#command-line-pars) to be written to the profile.
 - `<reset options>` are optional settings for deleting parameters from an existing profile. Possible values:
 
-   `--no-endpoint`: Delete an endpoint from the profile
-   `--no-database`: Delete the database path from the profile
-   `--no-auth`: Delete authentication information from the profile
-   `--no-iam-endpoint`: Delete the IAM server URL
+   - `--no-endpoint`: Delete an endpoint from the profile
+   - `--no-database`: Delete the database path from the profile
+   - `--no-auth`: Delete authentication information from the profile
+   - `--no-iam-endpoint`: Delete the IAM server URL
 
 The profile will update with the parameters entered on the command line. Any properties not listed on the command line will remain unchanged.
 
@@ -68,8 +71,8 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
 
 * `path_database`: Database path. Specify one of these values:
 
-   * `/Root/test`: If you used an executable to deploy your cluster.
-   * `/local`: If you deployed your cluster from a Docker image.
+  * `/Root/test`: If you used an executable to deploy your cluster.
+  * `/local`: If you deployed your cluster from a Docker image.
 
 #### Creating a profile from previous connection settings {#cmdline-example-from-explicit}
 
@@ -78,7 +81,7 @@ Any command with explicit connection settings performing a YDB database transact
 For instance, if you successfully ran the `scheme Is` command with the following properties:
 
 ```bash
-{{ydb-cli}} \
+{{ ydb-cli }} \
   -e grpcs://example.com:2135 -d /Root/somedatabase --sa-key-file ~/sa_key.json \
   scheme ls
 ```
@@ -86,7 +89,7 @@ For instance, if you successfully ran the `scheme Is` command with the following
 You can create a profile to connect to the accessed database using the following command:
 
 ```bash
-{{ydb-cli}} \
+{{ ydb-cli }} \
   config profile create db1 \
   -e grpcs://example.com:2135 -d /Root/somedatabase --sa-key-file ~/sa_key.json
 ```
@@ -94,7 +97,7 @@ You can create a profile to connect to the accessed database using the following
 You can now use much shorter syntax to re-write the original command:
 
 ```bash
-{{ydb-cli}} -p db1 scheme ls
+{{ ydb-cli }} -p db1 scheme ls
 ```
 
 #### Profile to connect to a local database {#cmdline-example-local}
@@ -102,13 +105,13 @@ You can now use much shorter syntax to re-write the original command:
 Creating/replacing a `local` profile to connect to a local {{ ydb-short-name }} database deployed using [quick start](../../../../quickstart.md):
 
 ```bash
-{{ydb-cli}} config profile replace local --endpoint grpc://localhost:2136 --database /Root/local
+{{ ydb-cli }} config profile replace local --endpoint grpc://localhost:2136 --database /Root/local
 ```
 
 Defining the login and password authentication method in the `local` profile:
 
 ```bash
-{{ydb-cli}} config profile update local --user user1 --password-file ~/pwd.txt
+{{ ydb-cli }} config profile update local --user user1 --password-file ~/pwd.txt
 ```
 
 ## Interactive mode {#interactive}
@@ -126,6 +129,7 @@ or
 ```
 
 Where:
+
 - `[profile_name]` is an optional name of the profile to create or update.
 - `[connection_options]` are optional [connection settings](../../connect.md#command-line-pars) to write to the profile.
 
@@ -157,6 +161,7 @@ The interactive scenario starts differently for the `init` and the `profile crea
 - Profile Create
 
    If no profile name is specified on the command line, it is requested:
+
    ```text
    Please enter configuration profile name to create or re-configure:
    ```
@@ -206,12 +211,12 @@ Creating a new `mydb1` profile:
      [3] Use OAuth token of a Yandex Passport user (yc-token). Doesn't work with federative accounts. cloud.yandex.com/docs/iam/concepts/authorization/oauth-token
      [4] Use metadata service on a virtual machine (use-metadata-credentials) cloud.yandex.com/docs/compute/operations/vm-connect/auth-inside-vm
      [5] Use service account key file (sa-key-file) cloud.yandex.com/docs/iam/operations/iam-token/create-for-sa
-     [6] Set new OAuth token (ydb-token)
+     [6] Set new access token (ydb-token)
      [7] Don't save authentication data for profile "mydb1"
    Please enter your numeric choice:
    ```
 
-   All the available authentication methods are described in [{#T}](../../../../concepts/auth.md). The set of methods and text of the hints may differ from those given in this example.
+   All the available authentication methods are described in [{#T}](../../../../security/authentication.md). The set of methods and text of the hints may differ from those given in this example.
 
    If the method you choose involves specifying an additional parameter, you'll be prompted to enter it. For example, if you select `4` (Use service account key file):
 

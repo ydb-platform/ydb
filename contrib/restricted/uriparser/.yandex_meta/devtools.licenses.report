@@ -1,0 +1,177 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-3-Clause         09d0bc1f9a13b29daac22dcd67c051e2
+BELONGS tool/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        UriConfig.h [7:36]
+        include/uriparser/Uri.h [9:38]
+        include/uriparser/UriBase.h [8:37]
+        include/uriparser/UriDefsAnsi.h [8:37]
+        include/uriparser/UriDefsConfig.h [8:37]
+        include/uriparser/UriDefsUnicode.h [8:37]
+        include/uriparser/UriIp4.h [8:37]
+        src/UriCommon.c [8:37]
+        src/UriCommon.h [8:37]
+        src/UriCompare.c [8:37]
+        src/UriEscape.c [8:37]
+        src/UriFile.c [8:37]
+        src/UriIp4.c [8:37]
+        src/UriIp4Base.c [8:37]
+        src/UriIp4Base.h [8:37]
+        src/UriMemory.c [8:37]
+        src/UriMemory.h [8:37]
+        src/UriNormalize.c [8:37]
+        src/UriNormalizeBase.c [8:37]
+        src/UriNormalizeBase.h [8:37]
+        src/UriParse.c [8:37]
+        src/UriParseBase.c [8:37]
+        src/UriParseBase.h [8:37]
+        src/UriQuery.c [8:37]
+        src/UriRecompose.c [8:37]
+        src/UriResolve.c [8:37]
+        src/UriShorten.c [8:37]
+        tool/uriparse.c [8:37]
+
+KEEP     BSD-3-Clause         309575f4690522ea49ab8dd7775905e0
+BELONGS ya.make
+    License text:
+          * Changed: Library code is now licensed under the new BSD license.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ChangeLog [624:624]
+
+KEEP     LGPL-2.1-only        42367b383530349bbb6706a8c32679e2
+BELONGS test/ya.make
+FILE_INCLUDE COPYING found in files: test/COPYING at line 116
+FILE_INCLUDE test/COPYING found in files: test/COPYING at line 116
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        test/COPYING [1:502]
+
+KEEP     BSD-3-Clause         7960111c24a80f6998cdff1df2f1d44c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 54.62
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        GOALS.txt [10:13]
+
+SKIP     LGPL-2.0-or-later    bb62c4f4627eb2ae7bbf10e6304263ee
+BELONGS ya.make
+    License text:
+             Test suite code licensed under LGPL.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        GOALS.txt [12:12]
+
+SKIP     LGPL-2.0-or-later    c1a07d6c361dffbd8ab9089d07626cc5
+BELONGS ya.make
+    License text:
+              The test suite code is licensed under LGPL.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        ChangeLog [625:625]
+
+SKIP     LicenseRef-scancode-unknown-license-reference ce1f972e75639856f8c7249d9e99fb6d
+BELONGS ya.make
+    License text:
+         (3) Library licensed under "New BSD license".
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        GOALS.txt [10:10]
+
+KEEP     LGPL-2.1-or-later    d6dfce0568e9d0e05b55a83b6fb0d193
+BELONGS test/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        test/FourSuite.cpp [7:19]
+        test/MemoryManagerSuite.cpp [7:19]
+        test/VersionSuite.cpp [6:18]
+        test/test.cpp [7:19]
+
+KEEP     BSD-3-Clause         da69c5fe91ac1ba539217e0fceff9e82
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [7:36]
+
+KEEP     BSD-3-Clause         e8d0972ba32b7b11feea22d8a6263dc0
+BELONGS ya.make
+    License text:
+        is licensed under the [New BSD license](https://github.com/uriparser/uriparser/blob/master/COPYING).
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [14:14]

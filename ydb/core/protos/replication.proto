@@ -1,21 +1,54 @@
 import "ydb/core/scheme/protos/pathid.proto";
+import "ydb/core/protos/base.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
 
+message TReplicationDefaults {
+    message TSchemeOperationLimits {
+        optional uint32 InflightCreateStreamLimit = 1 [default = 1];
+        optional uint32 InflightDropStreamLimit = 2 [default = 1];
+    }
+
+    optional int32 RetentionPeriodSeconds = 1 [default = 86400]; // 1d
+    optional TSchemeOperationLimits SchemeOperationLimits = 2;
+}
+
 message TStaticCredentials {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
+    optional string PasswordSecretName = 3;
+}
+
+message TOAuthToken {
+    optional string Token = 1 [(Ydb.sensitive) = true];
+    optional string TokenSecretName = 2;
 }
 
 message TConnectionParams {
     optional string Endpoint = 1;
     optional string Database = 2;
+    optional bool EnableSsl = 5;
     // credentials
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;
-        string OAuthToken = 4 [(Ydb.sensitive) = true];
+        TOAuthToken OAuthToken = 4;
+    }
+}
+
+message TConsistencySettings {
+    message TRowConsistency {
+    }
+
+    message TGlobalConsistency {
+        optional uint64 CommitIntervalMilliSeconds = 1;
+    }
+
+    oneof Level {
+        TRowConsistency Row = 1;
+        TGlobalConsistency Global = 2;
     }
 }
 
@@ -26,14 +59,41 @@ message TReplicationConfig {
 
     message TTargetSpecific {
         message TTarget {
+            // in/out
             optional string SrcPath = 1;
             optional string DstPath = 2;
+            optional string SrcStreamName = 3;
+            // out
+            optional uint64 Id = 4;
+            optional uint32 LagMilliSeconds = 5;
+            optional float InitialScanProgress = 6; // pencentage
+        }
+
+        repeated TTarget Targets = 1;
+    }
+
+    message TTransferSpecific {
+        message TTarget {
+            // in/out
+            optional string SrcPath = 1;
+
+            oneof Dst {
+                string DstPath = 2;
+                string DstPathLambda = 3;
+            }
+
+            // out
+            optional uint64 Id = 4;
+            optional uint32 LagMilliSeconds = 5;
+            // transfer
+            optional string TransformLambda = 6;
         }
 
         repeated TTarget Targets = 1;
     }
 
     optional TConnectionParams SrcConnectionParams = 1;
+    optional TConsistencySettings ConsistencySettings = 7;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.
@@ -42,13 +102,17 @@ message TReplicationConfig {
         TTargetEverything Everything = 4;
         // replicate specified objects
         TTargetSpecific Specific = 5;
+        // transfer  specified objects
+        TTransferSpecific TransferSpecific = 8;
     }
 
-    optional bool InitialSync = 6;
+    reserved 6; // InitialSync
 }
 
 message TReplicationState {
     message TStandBy {
+        optional uint32 LagMilliSeconds = 1;
+        optional float InitialScanProgress = 2; // pencentage
     }
 
     message TPaused {
@@ -64,10 +128,15 @@ message TReplicationState {
         optional EFailoverMode FailoverMode = 1;
     }
 
+    message TError {
+        repeated Ydb.Issue.IssueMessage Issues = 1;
+    }
+
     oneof State {
         TStandBy StandBy = 1;
         TPaused Paused = 2;
         TDone Done = 3;
+        TError Error = 4;
     }
 }
 
@@ -98,6 +167,7 @@ message TEvAlterReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
     optional TReplicationState SwitchState = 3;
+    optional TReplicationConfig Config = 4;
 }
 
 message TEvAlterReplicationResult {
@@ -114,6 +184,7 @@ message TEvAlterReplicationResult {
 message TEvDropReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
+    optional bool Cascade = 3 [default = true];
 }
 
 message TEvDropReplicationResult {
@@ -126,6 +197,25 @@ message TEvDropReplicationResult {
     optional TOperationId OperationId = 1;
     optional uint64 Origin = 2;
     optional EStatus Status = 3;
+}
+
+message TEvDescribeReplication {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional bool IncludeStats = 2;
+}
+
+message TEvDescribeReplicationResult {
+    enum EStatus {
+        UNKNOWN = 0;
+        SUCCESS = 1;
+        NOT_FOUND = 2;
+    }
+
+    optional EStatus Status = 1;
+    optional TConnectionParams ConnectionParams = 2;
+    optional TConsistencySettings ConsistencySettings = 5;
+    repeated TReplicationConfig.TTargetSpecific.TTarget Targets = 3;
+    optional TReplicationState State = 4;
 }
 
 message TControllerIdentity {
@@ -166,6 +256,8 @@ message TRunWorkerCommand {
     oneof Writer {
         TLocalTableWriterSettings LocalTableWriter = 2;
     }
+
+    optional TConsistencySettings ConsistencySettings = 3;
 }
 
 message TEvRunWorker {
@@ -177,4 +269,51 @@ message TEvRunWorker {
 message TEvStopWorker {
     optional TControllerIdentity Controller = 1;
     optional TWorkerIdentity Worker = 2;
+}
+
+message TEvWorkerStatus {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_RUNNING = 1;
+        STATUS_STOPPED = 2;
+    }
+
+    enum EReason {
+        REASON_UNSPECIFIED = 0;
+        REASON_ACK = 1;
+        REASON_ERROR = 2;
+        REASON_INFO = 3;
+    }
+
+    optional TWorkerIdentity Worker = 1;
+    optional EStatus Status = 2;
+    optional EReason Reason = 3;
+    optional string ErrorDescription = 4;
+    optional uint32 LagMilliSeconds = 5;
+}
+
+message TEvWorkerDataEnd {
+    optional TWorkerIdentity Worker = 1;
+    optional uint64 PartitionId = 2;
+    repeated uint64 AdjacentPartitionsIds = 3;
+    repeated uint64 ChildPartitionsIds = 4;
+}
+
+message TEvGetTxId {
+    repeated NKikimrProto.TRowVersion Versions = 1;
+}
+
+message TEvTxIdResult {
+    message TVersionTxId {
+        optional NKikimrProto.TRowVersion Version = 1;
+        optional uint64 TxId = 2;
+    }
+
+    optional TControllerIdentity Controller = 1;
+    repeated TVersionTxId VersionTxIds = 2;
+}
+
+message TEvHeartbeat {
+    optional TWorkerIdentity Worker = 1;
+    optional NKikimrProto.TRowVersion Version = 2;
 }

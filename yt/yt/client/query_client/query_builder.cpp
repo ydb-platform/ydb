@@ -22,6 +22,12 @@ void TQueryBuilder::SetSource(TString source)
     Source_ = std::move(source);
 }
 
+void TQueryBuilder::SetSource(TString source, TString alias)
+{
+    Source_ = std::move(source);
+    SourceAlias_ = std::move(alias);
+}
+
 int TQueryBuilder::AddSelectExpression(TString expression)
 {
     SelectEntries_.push_back(TEntryWithAlias{
@@ -61,6 +67,11 @@ void TQueryBuilder::AddGroupByExpression(TString expression, TString alias)
     });
 }
 
+void TQueryBuilder::SetWithTotals(EWithTotalsMode withTotalsMode)
+{
+    WithTotalsMode_ = withTotalsMode;
+}
+
 void TQueryBuilder::AddHavingConjunct(TString expression)
 {
     HavingConjuncts_.push_back(std::move(expression));
@@ -97,6 +108,20 @@ void TQueryBuilder::SetLimit(i64 limit)
     Limit_ = limit;
 }
 
+void TQueryBuilder::AddJoinExpression(
+    TString table,
+    TString alias,
+    TString onExpression,
+    ETableJoinType type)
+{
+    JoinEntries_.push_back(TJoinEntry{
+        std::move(table),
+        std::move(alias),
+        std::move(onExpression),
+        type,
+    });
+}
+
 TString TQueryBuilder::Build()
 {
     std::vector<TString> parts;
@@ -110,7 +135,16 @@ TString TQueryBuilder::Build()
     if (!Source_) {
         THROW_ERROR_EXCEPTION("Source must be specified in query");
     }
-    parts.push_back(Format("FROM [%v]", *Source_));
+    if (!SourceAlias_) {
+        parts.push_back(Format("FROM [%v]", *Source_));
+    } else {
+        parts.push_back(Format("FROM [%v] AS %v", *Source_, *SourceAlias_));
+    }
+
+    for (const auto& join : JoinEntries_) {
+        TStringBuf joinType = join.Type == ETableJoinType::Inner ? "JOIN" : "LEFT JOIN";
+        parts.push_back(Format("%v [%v] AS [%v] ON %v", joinType, join.Table, join.Alias, join.OnExpression));
+    }
 
     if (!WhereConjuncts_.empty()) {
         parts.push_back("WHERE");
@@ -122,12 +156,20 @@ TString TQueryBuilder::Build()
         parts.push_back(JoinSeq(", ", GroupByEntries_));
     }
 
+    if (WithTotalsMode_ == EWithTotalsMode::BeforeHaving) {
+        parts.push_back("WITH TOTALS");
+    }
+
     if (!HavingConjuncts_.empty()) {
         if (GroupByEntries_.empty()) {
             THROW_ERROR_EXCEPTION("Having without group by is not valid");
         }
         parts.push_back("HAVING");
         parts.push_back(JoinSeq(" AND ", Parenthesize(HavingConjuncts_)));
+    }
+
+    if (WithTotalsMode_ == EWithTotalsMode::AfterHaving) {
+        parts.push_back("WITH TOTALS");
     }
 
     if (!OrderByEntries_.empty()) {

@@ -1,0 +1,129 @@
+diff --git a/include/__compare/ordering.h b/include/__compare/ordering.h
+index 1d466d6..337b562 100644
+--- a/include/__compare/ordering.h
++++ b/include/__compare/ordering.h
+@@ -16,7 +16,14 @@
+ #  pragma GCC system_header
+ #endif
+ 
++#if defined(_MSC_VER) && !defined(__clang__)
++// Omit inline namespace __y1, as MSVC2019 fails to find ordering classes
++// inside the inlined namespace when compiling the <=> operators.
++// See CROWDFUNDING-6 for the details.
++namespace std {
++#else
+ _LIBCPP_BEGIN_NAMESPACE_STD
++#endif
+ 
+ #if _LIBCPP_STD_VER > 17
+ 
+@@ -314,6 +321,10 @@ inline constexpr strong_ordering strong_ordering::greater(_OrdResult::__greater)
+ 
+ #endif // _LIBCPP_STD_VER > 17
+ 
++#if defined(_MSC_VER) && !defined(__clang__)
++}
++#else
+ _LIBCPP_END_NAMESPACE_STD
++#endif
+ 
+ #endif // _LIBCPP___COMPARE_ORDERING_H
+diff --git a/include/__config b/include/__config
+index 0a8af3c..0f32067 100644
+--- a/include/__config
++++ b/include/__config
+@@ -1250,7 +1250,7 @@ extern "C" _LIBCPP_FUNC_VIS void __sanitizer_annotate_contiguous_container(
+ #   define _LIBCPP_THREAD_SAFETY_ANNOTATION(x)
+ #endif
+ 
+-#if _LIBCPP_STD_VER > 17
++#if _LIBCPP_STD_VER > 17 && (!defined(_MSC_VER) || _MSC_VER >= 1929)
+ #  define _LIBCPP_CONSTINIT constinit
+ #elif __has_attribute(require_constant_initialization)
+ #  define _LIBCPP_CONSTINIT __attribute__((__require_constant_initialization__))
+diff --git a/include/iostream b/include/iostream
+index 10d17d6..dbabf3a 100644
+--- a/include/iostream
++++ b/include/iostream
+@@ -46,17 +46,43 @@ extern wostream wclog;
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
++#if defined(_MSC_VER) && !defined(__clang__)
++extern _LIBCPP_FUNC_VIS istream& cin;
++#else
+ extern _LIBCPP_FUNC_VIS istream cin;
++#endif
++#if defined(_MSC_VER) && !defined(__clang__)
++extern _LIBCPP_FUNC_VIS ostream& cout;
++#else
+ extern _LIBCPP_FUNC_VIS ostream cout;
++#endif
++#if defined(_MSC_VER) && !defined(__clang__)
++extern _LIBCPP_FUNC_VIS ostream& cerr;
++extern _LIBCPP_FUNC_VIS ostream& clog;
++#else
+ extern _LIBCPP_FUNC_VIS ostream cerr;
+ extern _LIBCPP_FUNC_VIS ostream clog;
++#endif
+ 
+ #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
++#if defined(_MSC_VER) && !defined(__clang__)
++extern _LIBCPP_FUNC_VIS wistream& wcin;
++#else
+ extern _LIBCPP_FUNC_VIS wistream wcin;
++#endif
++#if defined(_MSC_VER) && !defined(__clang__)
++extern _LIBCPP_FUNC_VIS wostream& wcout;
++#else
+ extern _LIBCPP_FUNC_VIS wostream wcout;
++#endif
++#if defined(_MSC_VER) && !defined(__clang__)
++extern _LIBCPP_FUNC_VIS wostream& wcerr;
++extern _LIBCPP_FUNC_VIS wostream& wclog;
++#else
+ extern _LIBCPP_FUNC_VIS wostream wcerr;
+ extern _LIBCPP_FUNC_VIS wostream wclog;
+ #endif
++#endif
+ 
+ _LIBCPP_END_NAMESPACE_STD
+ 
+diff --git a/include/locale b/include/locale
+index 7e00dfe..1e43702 100644
+--- a/include/locale
++++ b/include/locale
+@@ -2577,8 +2577,12 @@ public:
+         : time_put<_CharT, _OutputIterator>(__nm, __refs) {}
+ 
+ protected:
++#if defined(_MSC_VER) && defined(__clang__)
++    ~time_put_byname() {}
++#else
+     _LIBCPP_INLINE_VISIBILITY
+     ~time_put_byname() {}
++#endif
+ };
+ 
+ _LIBCPP_EXTERN_TEMPLATE_EVEN_IN_DEBUG_MODE(class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS time_put_byname<char>)
+diff --git a/src/filesystem/filesystem_common.h b/src/filesystem/filesystem_common.h
+index c98d144..f6ba686 100644
+--- a/src/filesystem/filesystem_common.h
++++ b/src/filesystem/filesystem_common.h
+@@ -138,6 +138,16 @@ size_t error_value<size_t>() {
+   return size_t(-1);
+ }
+ #endif
++
++#if defined(_MSC_VER) && !defined(__clang__) && defined(_M_IX86)
++// FIXME thegeorg@ MSVC on i686 somehow depends on this function presence.
++// Further investigation is needed in order to understand the logic behind this.
++template <>
++unsigned int error_value<unsigned int>() {
++  return unsigned int(-1);
++}
++#endif
++
+ template <>
+ uintmax_t error_value<uintmax_t>() {
+   return uintmax_t(-1);

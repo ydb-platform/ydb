@@ -407,13 +407,13 @@ class TestTenants():
                     permissions=[x.to_pb() for x in entry.permissions],
                 )
 
-            if type(item) == ydb.scheme.Directory:
+            if isinstance(item, ydb.scheme.Directory):
                 d = dict(scheme_type='Directory')
                 d.update(_get_entry_schema(item))
                 d.update(dict(
                     children=[convert(x) for x in item.children]
                 ))
-            elif type(item) == ydb.scheme.SchemeEntry:
+            elif isinstance(item, ydb.scheme.SchemeEntry):
                 d = dict(scheme_type='SchemeEntry')
                 d.update(_get_entry_schema(item))
             else:

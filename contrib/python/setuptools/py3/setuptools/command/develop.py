@@ -1,14 +1,15 @@
-from distutils.util import convert_path
+import glob
+import os
+
+import setuptools
+from setuptools import _normalization, _path, namespaces
+from setuptools.command.easy_install import easy_install
+
+from ..unicode_utils import _read_utf8_with_fallback
+
 from distutils import log
 from distutils.errors import DistutilsOptionError
-import os
-import glob
-
-from setuptools.command.easy_install import easy_install
-from setuptools import _normalization
-from setuptools import _path
-from setuptools import namespaces
-import setuptools
+from distutils.util import convert_path
 
 
 class develop(namespaces.DevelopInstaller, easy_install):
@@ -41,7 +42,7 @@ class develop(namespaces.DevelopInstaller, easy_install):
         self.setup_path = None
         self.always_copy_from = '.'  # always copy eggs installed in curdir
 
-    def finalize_options(self):
+    def finalize_options(self) -> None:
         import pkg_resources
 
         ei = self.get_finalized_command("egg_info")
@@ -103,11 +104,11 @@ class develop(namespaces.DevelopInstaller, easy_install):
             )
         return path_to_setup
 
-    def install_for_development(self):
+    def install_for_development(self) -> None:
         self.run_command('egg_info')
 
         # Build extensions in-place
-        self.reinitialize_command('build_ext', inplace=1)
+        self.reinitialize_command('build_ext', inplace=True)
         self.run_command('build_ext')
 
         if setuptools.bootstrap_install_from:
@@ -119,18 +120,21 @@ class develop(namespaces.DevelopInstaller, easy_install):
         # create an .egg-link in the installation dir, pointing to our egg
         log.info("Creating %s (link to %s)", self.egg_link, self.egg_base)
         if not self.dry_run:
-            with open(self.egg_link, "w") as f:
+            with open(self.egg_link, "w", encoding="utf-8") as f:
                 f.write(self.egg_path + "\n" + self.setup_path)
         # postprocess the installed distro, fixing up .pth, installing scripts,
         # and handling requirements
         self.process_distribution(None, self.dist, not self.no_deps)
 
-    def uninstall_link(self):
+    def uninstall_link(self) -> None:
         if os.path.exists(self.egg_link):
             log.info("Removing %s (link to %s)", self.egg_link, self.egg_base)
-            egg_link_file = open(self.egg_link)
-            contents = [line.rstrip() for line in egg_link_file]
-            egg_link_file.close()
+
+            contents = [
+                line.rstrip()
+                for line in _read_utf8_with_fallback(self.egg_link).splitlines()
+            ]
+
             if contents not in ([self.egg_path], [self.egg_path, self.setup_path]):
                 log.warn("Link points to %s: uninstall aborted", contents)
                 return
@@ -156,8 +160,7 @@ class develop(namespaces.DevelopInstaller, easy_install):
         for script_name in self.distribution.scripts or []:
             script_path = os.path.abspath(convert_path(script_name))
             script_name = os.path.basename(script_path)
-            with open(script_path) as strm:
-                script_text = strm.read()
+            script_text = _read_utf8_with_fallback(script_path)
             self.install_script(dist, script_name, script_text, script_path)
 
         return None
@@ -182,10 +185,10 @@ class VersionlessRequirement:
     'foo'
     """
 
-    def __init__(self, dist):
+    def __init__(self, dist) -> None:
         self.__dist = dist
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str):
         return getattr(self.__dist, name)
 
     def as_requirement(self):

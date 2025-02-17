@@ -219,7 +219,7 @@ namespace NMonitoring {
 
         private:
             bool HasRemaining() const noexcept {
-                return CurrentPos_ < Data_.Size();
+                return CurrentPos_ < Data_.size();
             }
 
             // # 'TYPE' metric_name {counter|gauge|histogram|summary|untyped}
@@ -234,7 +234,7 @@ namespace NMonitoring {
                     SkipSpaces();
 
                     TStringBuf nextName = ReadTokenAsMetricName();
-                    Y_PARSER_ENSURE(!nextName.Empty(), "invalid metric name");
+                    Y_PARSER_ENSURE(!nextName.empty(), "invalid metric name");
 
                     SkipSpaces();
                     EPrometheusMetricType nextType = ReadType();

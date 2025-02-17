@@ -10,6 +10,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/services/lib/sharding/sharding.h>
+#include <ydb/services/persqueue_v1/actors/helpers.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <util/string/hex.h>
@@ -160,6 +161,7 @@ void TWriteSessionActor::CheckFinish(const TActorContext& ctx) {
 }
 
 void TWriteSessionActor::Handle(TEvPQProxy::TEvDone::TPtr&, const TActorContext& ctx) {
+    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session cookie: " << Cookie << " sessionId: " << OwnerCookie << " got TEvDone");
     WritesDone = true;
     CheckFinish(ctx);
 }
@@ -255,6 +257,16 @@ void TWriteSessionActor::InitAfterDiscovery(const TActorContext& ctx) {
 }
 
 
+void TWriteSessionActor::SetupBytesWrittenByUserAgentCounter() {
+    BytesWrittenByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", "pqv0")
+        ->GetSubgroup("topic", FullConverter->GetFederationPath())
+        ->GetSubgroup("user_agent", V1::DropUserAgentSuffix(V1::CleanupCounterValueString(UserAgent)))
+        ->GetExpiringNamedCounter("sensor", "BytesWrittenByUserAgent", true);
+}
+
+
 void TWriteSessionActor::SetupCounters()
 {
     if (SessionsCreated) {
@@ -285,6 +297,8 @@ void TWriteSessionActor::SetupCounters()
 
     SessionsCreated.Inc();
     SessionsActive.Inc();
+
+    SetupBytesWrittenByUserAgentCounter();
 }
 
 
@@ -306,6 +320,8 @@ void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& db
 
     SessionsCreated.Inc();
     SessionsActive.Inc();
+
+    SetupBytesWrittenByUserAgentCounter();
 }
 
 
@@ -339,7 +355,7 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
             errorReason = Sprintf("topic '%s' describe error, Status# %s, Marker# PQ1", path.back().c_str(),
                                   ToString(entry.Status).c_str());
             CloseSession(errorReason, NPersQueue::NErrorCode::ERROR, ctx);
-            break;
+            return;
         }
     }
     if (!entry.PQGroupInfo) {
@@ -350,6 +366,8 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         return;
     }
     PQInfo = entry.PQGroupInfo;
+    Y_ABORT_UNLESS(PQInfo->PartitionChooser);
+    Y_ABORT_UNLESS(PQInfo->PartitionGraph);
     Config = std::move(PQInfo->Description);
     //const TString topicName = description.GetName();
 
@@ -387,7 +405,7 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         LOG_WARN_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session without AuthInfo : " << DiscoveryConverter->GetPrintableString()
                                                          << " sourceId " << SourceId << " from " << PeerName);
         SessionsWithoutAuth.Inc();
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             CloseSession("Unauthenticated access is forbidden, please provide credentials", NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
             return;
         }
@@ -451,8 +469,12 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
 void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
     State = ES_WAIT_PARTITION;
 
+    if (PartitionChooser) {
+        ctx.Send(PartitionChooser,  new TEvents::TEvPoison());
+    }
+
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
-    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, FullConverter, SourceId, preferedPartition));
+    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, PQInfo->PartitionChooser, PQInfo->PartitionGraph, FullConverter, SourceId, preferedPartition, {}));
 }
 
 void TWriteSessionActor::Handle(NPQ::TEvPartitionChooser::TEvChooseResult::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -532,7 +554,7 @@ void TWriteSessionActor::CloseSession(const TString& errorReason, const NPersQue
                    "session error cookie: " << Cookie << " reason: \"" << errorReason << "\" code: "
                                             << EErrorCode_Name(errorCode) << " sessionId: " << OwnerCookie);
 
-        Handler->Reply(result);
+        Handler->Reply(std::move(result));
     } else {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session closed cookie: " << Cookie << " sessionId: " << OwnerCookie);
     }
@@ -569,7 +591,7 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session inited cookie: " << Cookie << " partition: " << Partition
                             << " MaxSeqNo: " << maxSeqNo << " sessionId: " << OwnerCookie);
 
-    Handler->Reply(response);
+    Handler->Reply(std::move(response));
 
     State = ES_INITED;
 
@@ -678,7 +700,7 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr&
             addAck(resp.GetCmdWriteResult(cmdWriteResultIndex), ack, ack->MutableStat());
             ++cmdWriteResultIndex;
         }
-        Handler->Reply(result);
+        Handler->Reply(std::move(result));
     }
 
     ui64 diff = writeRequest->ByteSize;
@@ -844,6 +866,8 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWrite::TPtr& ev, const TActorCont
     BytesInflight.Inc(diff);
     BytesInflightTotal.Inc(diff);
 
+    BytesWrittenByUserAgent->Add(diff);
+
     if (BytesInflight_ < MAX_BYTES_INFLIGHT) { //allow only one big request to be readed but not sended
         Y_ABORT_UNLESS(NextRequestInited);
         Handler->ReadyForNextRead();
@@ -894,7 +918,7 @@ void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
         ctx.Send(PartitionChooser, new NPQ::TEvPartitionChooser::TEvRefreshRequest());
         LastSourceIdUpdate = now + SOURCEID_UPDATE_PERIOD;
     }
-    
+
     if (now >= LogSessionDeadline) {
         LogSession(ctx);
     }

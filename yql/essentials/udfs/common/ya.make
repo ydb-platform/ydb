@@ -1,0 +1,32 @@
+RECURSE(
+    compress_base
+    datetime2
+    digest
+    file
+    histogram
+    hyperloglog
+    ip_base
+    json
+    json2
+    math
+    pire
+    protobuf
+    python
+    re2
+    set
+    stat
+    streaming
+    string
+    top
+    topfreq
+    unicode_base
+    url_base
+    vector
+    yson2
+)
+
+IF (ARCH_X86_64)
+    RECURSE(
+        hyperscan
+    )
+ENDIF()

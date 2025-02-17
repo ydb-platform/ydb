@@ -6,11 +6,14 @@ SRCS(
     base_with_blobs.cpp
     read_with_blobs.cpp
     write_with_blobs.cpp
-    constructor.cpp
+    constructors.cpp
+    constructor_portion.cpp
+    constructor_accessor.cpp
     constructor_meta.cpp
     meta.cpp
     common.cpp
     index_chunk.cpp
+    data_accessor.cpp
 )
 
 PEERDIR(
@@ -18,6 +21,7 @@ PEERDIR(
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/common
     ydb/core/tx/columnshard/data_sharing/protos
+    ydb/core/tx/columnshard/engines/protos
     ydb/core/tablet_flat
 )
 

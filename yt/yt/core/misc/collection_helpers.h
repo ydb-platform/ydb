@@ -40,7 +40,10 @@ template <class TSource, class TTarget>
 void MergeFrom(TTarget* target, const TSource& source);
 
 template <class TMap, class TKeySet>
-TKeySet DropMissingKeys(TMap&& map, const TKeySet& set);
+[[nodiscard]] TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set);
+
+template <class TMap, class TKeySet>
+void DropMissingKeys(TMap&& map, TKeySet&& set);
 
 /*!
  * This function is supposed to replace a frequent pattern
@@ -153,6 +156,9 @@ void AssignVectorAt(std::vector<T>& vector, ssize_t index, T&& value, const T& d
 //! If vector size is not enough for vector[size] to exist, return defaultValue, otherwise return vector[size].
 template <class T>
 const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaultValue = T());
+
+template <class T>
+i64 GetVectorMemoryUsage(const std::vector<T>& vector);
 
 ////////////////////////////////////////////////////////////////////////////////
 

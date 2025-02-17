@@ -4,11 +4,9 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
 IF (WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -28,13 +26,13 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
-    ydb/library/yql/sql/pg
-    ydb/library/yql/parser/pg_wrapper
-    ydb/library/yql/udfs/common/re2
+    yql/essentials/sql/pg
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/udfs/common/re2
 )
 
 ADDINCL(
-    ydb/library/yql/parser/pg_wrapper/postgresql/src/include
+    yql/essentials/parser/pg_wrapper/postgresql/src/include
 )
 
 NO_COMPILER_WARNINGS()

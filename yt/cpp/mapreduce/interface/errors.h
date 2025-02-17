@@ -6,14 +6,14 @@
 /// Errors and exceptions emitted by library.
 
 #include "fwd.h"
-#include "common.h"
 
 #include <library/cpp/yson/node/node.h>
 
 #include <util/generic/bt_exception.h>
-#include <util/generic/yexception.h>
+#include <util/generic/guid.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/generic/yexception.h>
 
 namespace NJson {
     class TJsonValue;
@@ -67,8 +67,8 @@ public:
     /// Constructs error with NYT::NClusterErrorCodes::Generic code and given message.
     explicit TYtError(const TString& message);
 
-    /// Constructs error with given code and given message.
-    TYtError(int code, const TString& message);
+    /// Constructs error from given parameters.
+    TYtError(int code, TString message, TVector<TYtError> inner = {}, TNode::TMapType attributes = {});
 
     /// Construct error from json representation.
     TYtError(const ::NJson::TJsonValue& value);
@@ -158,7 +158,8 @@ class TErrorResponse
 {
 public:
     TErrorResponse(int httpCode, const TString& requestId);
-    TErrorResponse(int httpCode, TYtError error);
+
+    TErrorResponse(TYtError error, const TString& requestId);
 
     /// Get error object returned by server.
     const TYtError& GetError() const;
@@ -218,6 +219,16 @@ private:
     TString RequestId_;
     TYtError Error_;
     bool IsFromTrailers_ = false;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+/// @brief System error indicating that response from server cannot be received
+class TTransportError
+    : public yexception
+{
+public:
+    explicit TTransportError(TYtError error);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

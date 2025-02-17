@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/common/executor.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/executor.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
 #include <util/generic/queue.h>
@@ -8,7 +9,7 @@
 #include <util/thread/pool.h>
 
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 class IAsyncExecutor : public IExecutor {
 private:

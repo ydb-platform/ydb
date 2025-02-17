@@ -3,7 +3,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <ydb/library/actors/core/actorid.h>
 

@@ -2,6 +2,7 @@
 #include "schemeshard__operation_common_subdomain.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/persqueue/config/config.h>
@@ -116,7 +117,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory();
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -256,13 +258,12 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        context.SS->PersistPath(db, newNode->PathId);
         context.SS->ApplyAndPersistUserAttrs(db, newNode->PathId);
 
         if (!acl.empty()) {
             newNode->ApplyACL(acl);
-            context.SS->PersistACL(db, newNode);
         }
+        context.SS->PersistPath(db, newNode->PathId);
 
         context.SS->PersistUpdateNextPathId(db);
 
@@ -296,7 +297,7 @@ public:
 
         if (settings.HasDatabaseQuotas()) {
             if (!requestedStoragePools.empty()
-                    && !CheckStorageQuotasKinds(settings.GetDatabaseQuotas(), requestedStoragePools, dstPath.PathString(), errStr)
+                    && !CheckStoragePoolsInQuotas(settings.GetDatabaseQuotas(), requestedStoragePools, dstPath.PathString(), errStr)
             ) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
@@ -339,11 +340,11 @@ public:
 
 
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());
-        parentPath.DomainInfo()->IncPathsInside();
-        dstPath.DomainInfo()->AddInternalShards(txState);
+        parentPath.DomainInfo()->IncPathsInside(context.SS);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
@@ -367,6 +368,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetSubDomain().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableSubDomain()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateSubDomain>(id, tx);

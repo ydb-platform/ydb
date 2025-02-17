@@ -5,6 +5,8 @@
 
 #include <yt/yt/core/actions/callback.h>
 
+#include <library/cpp/yt/misc/concepts.h>
+
 #include <util/system/context.h>
 
 #include <optional>
@@ -40,7 +42,8 @@ protected:
     void Suspend();
 
 private:
-    enum class ECoroState {
+    enum class EState
+    {
         Running,
         Abandoned,
         Completed,
@@ -56,7 +59,7 @@ private:
         TExceptionSafeContext CoroutineContext;
     };
 
-    ECoroState State_ = ECoroState::Running;
+    EState State_ = EState::Running;
     struct TCoroutineAbandonedException
     { };
 

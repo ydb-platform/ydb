@@ -8,6 +8,7 @@
 #include "flat_part_pinout.h"
 #include "flat_part_slice.h"
 #include "flat_table_committed.h"
+#include "flat_page_data.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -922,8 +923,12 @@ namespace NTable {
 
         EReady SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
                                 NTable::ITransactionMapSimplePtr committedTransactions,
-                                NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
+                                NTable::ITransactionObserverSimplePtr transactionObserver,
+                                const NTable::ITransactionSet& decidedTransactions) noexcept
         {
+            // Temporary: we don't cache erases when there are uncompacted deltas
+            Y_UNUSED(decidedTransactions);
+
             Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Attempt to use an invalid iterator");
 
             // We cannot use min/max hints when part has uncommitted deltas
@@ -947,6 +952,7 @@ namespace NTable {
                             transactionObserver.OnSkipCommitted(Part->MinRowVersion);
                         }
                         stats.InvisibleRowSkips++;
+                        stats.UncertainErase = true;
                     }
                     return EReady::Gone;
                 }
@@ -959,6 +965,9 @@ namespace NTable {
                 const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
 
                 while (data->IsDelta()) {
+                    // We cannot cache when there are uncompacted deltas
+                    stats.UncertainErase = true;
+
                     ui64 txId = data->GetDeltaTxId(info);
                     const auto* commitVersion = committedTransactions.Find(txId);
                     if (commitVersion && *commitVersion <= rowVersion) {
@@ -990,6 +999,7 @@ namespace NTable {
                     SkipEraseVersion = true;
                     transactionObserver.OnSkipCommitted(current);
                     stats.InvisibleRowSkips++;
+                    stats.UncertainErase = true;
                 }
 
                 TRowVersion current = data->IsVersioned() ? data->GetMinVersion(info) : Part->MinRowVersion;
@@ -1000,6 +1010,7 @@ namespace NTable {
 
                 transactionObserver.OnSkipCommitted(current);
                 stats.InvisibleRowSkips++;
+                stats.UncertainErase = true;
 
                 if (!data->HasHistory()) {
                     // There is no history, reset
@@ -1302,6 +1313,7 @@ namespace NTable {
 
                 if (ref >> (sizeof(ui32) * 8))
                     Y_ABORT("Upper bits of ELargeObj ref now isn't used");
+
                 if (auto blob = Env->Locate(Part, ref, op)) {
                     const auto got = NPage::TLabelWrapper().Read(**blob);
 
@@ -1315,13 +1327,12 @@ namespace NTable {
                 } else {
                     Y_ABORT_UNLESS(ref < (*Part->Blobs)->size(), "out of blobs catalog");
 
+                    op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
+
                     /* Have to preserve reference to memory with TGlobId until
                         of next iterator alteration method invocation. This is
                         why here direct array of TGlobId is used.
                     */
-
-                    op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
-
                     row.Set(pin.To, op, TCell::Make((**Part->Blobs)[ref]));
                 }
             } else {
@@ -1660,10 +1671,11 @@ namespace NTable {
 
         EReady SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
                                 NTable::ITransactionMapSimplePtr committedTransactions,
-                                NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
+                                NTable::ITransactionObserverSimplePtr transactionObserver,
+                                const NTable::ITransactionSet& decidedTransactions) noexcept
         {
             Y_DEBUG_ABORT_UNLESS(CurrentIt);
-            auto ready = CurrentIt->SkipToRowVersion(rowVersion, stats, committedTransactions, transactionObserver);
+            auto ready = CurrentIt->SkipToRowVersion(rowVersion, stats, committedTransactions, transactionObserver, decidedTransactions);
             return ready;
         }
 

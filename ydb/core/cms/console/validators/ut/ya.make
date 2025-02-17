@@ -2,7 +2,6 @@ UNITTEST_FOR(ydb/core/cms/console/validators)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 PEERDIR(

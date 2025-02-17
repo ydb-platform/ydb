@@ -85,12 +85,12 @@ namespace NKikimr {
 
     void TBlobStorageGroupProxy::Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
         auto *msg = ev->Get();
-        ApplyGroupInfo(std::move(msg->Info), std::move(msg->StoragePoolCounters));
+        ApplyGroupInfo(std::move(msg->Info), std::move(msg->NodeLayoutInfo), std::move(msg->StoragePoolCounters));
     }
 
     void TBlobStorageGroupProxy::ApplyGroupInfo(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
-            TIntrusivePtr<TStoragePoolCounters>&& counters) {
-        Info = std::move(info);
+            TNodeLayoutInfoPtr nodeLayoutInfo, TIntrusivePtr<TStoragePoolCounters>&& counters) {
+        auto prevInfo = std::exchange(Info, std::move(info));
         if (Info) {
             if (Topology) {
                 Y_DEBUG_ABORT_UNLESS(Topology->EqualityCheck(Info->GetTopology()));
@@ -98,8 +98,16 @@ namespace NKikimr {
                 Topology = Info->PickTopology();
             }
         }
-        NodeLayoutInfo = nullptr;
-        Send(MonActor, new TEvBlobStorage::TEvConfigureProxy(Info));
+        NodeLayoutInfo = std::move(nodeLayoutInfo);
+        if (counters) {
+            StoragePoolCounters = std::move(counters);
+        }
+
+        if (prevInfo && Info && prevInfo->GroupGeneration == Info->GroupGeneration) {
+            return; // group did not actually change
+        }
+
+        Send(MonActor, new TEvBlobStorage::TEvConfigureProxy(Info, nullptr));
         if (Info) {
             Y_ABORT_UNLESS(!EncryptionMode || *EncryptionMode == Info->GetEncryptionMode());
             Y_ABORT_UNLESS(!LifeCyclePhase || *LifeCyclePhase == Info->GetLifeCyclePhase());
@@ -109,10 +117,6 @@ namespace NKikimr {
             LifeCyclePhase = Info->GetLifeCyclePhase();
             GroupKeyNonce = Info->GetGroupKeyNonce();
             CypherKey = *Info->GetCypherKey();
-            Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
-        }
-        if (counters) {
-            StoragePoolCounters = std::move(counters);
         }
         IsLimitedKeyless = false;
         if (Info && Info->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE) {
@@ -150,7 +154,8 @@ namespace NKikimr {
                 }
             } else { // this is the first time configuration arrives -- no queues are created yet
                 EnsureMonitoring(false);
-                Sessions = MakeIntrusive<TGroupSessions>(Info, BSProxyCtx, MonActor, SelfId());
+                Sessions = MakeIntrusive<TGroupSessions>(Info, BSProxyCtx, MonActor, SelfId(),
+                        UseActorSystemTimeInBSQueue);
                 NumUnconnectedDisks = Sessions->GetNumUnconnectedDisks();
                 NodeMon->IncNumUnconnected(NumUnconnectedDisks);
             }
@@ -207,7 +212,7 @@ namespace NKikimr {
         Y_ABORT_UNLESS(Topology);
         Sessions->QueueConnectUpdate(Topology->GetOrderNumber(msg->VDiskId), msg->QueueId, msg->IsConnected,
             msg->ExtraBlockChecksSupport, msg->CostModel, *Topology);
-        MinREALHugeBlobInBytes = Sessions->GetMinREALHugeBlobInBytes();
+        MinHugeBlobInBytes = Sessions->GetMinHugeBlobInBytes();
         if (msg->IsConnected && (CurrentStateFunc() == &TThis::StateEstablishingSessions ||
                 CurrentStateFunc() == &TThis::StateEstablishingSessionsTimeout)) {
             SwitchToWorkWhenGoodToGo();
@@ -215,7 +220,7 @@ namespace NKikimr {
             SetStateEstablishingSessions();
         }
 
-        Y_DEBUG_ABORT_UNLESS(CurrentStateFunc() != &TThis::StateWork || MinREALHugeBlobInBytes);
+        Y_DEBUG_ABORT_UNLESS(CurrentStateFunc() != &TThis::StateWork || MinHugeBlobInBytes);
 
         if (const ui32 prev = std::exchange(NumUnconnectedDisks, Sessions->GetNumUnconnectedDisks()); prev != NumUnconnectedDisks) {
             NodeMon->IncNumUnconnected(NumUnconnectedDisks);
@@ -239,23 +244,13 @@ namespace NKikimr {
                     new IEventHandle(SelfId(), SelfId(), new TEvStopBatchingPutRequests));
             StopGetBatchingEvent = static_cast<TEventHandle<TEvStopBatchingGetRequests>*>(
                     new IEventHandle(SelfId(), SelfId(), new TEvStopBatchingGetRequests));
-            ApplyGroupInfo(std::exchange(Info, {}), std::exchange(StoragePoolCounters, {}));
-        }
-    }
-
-    void TBlobStorageGroupProxy::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        if (Info) {
-            std::unordered_map<ui32, TNodeLocation> map;
-            for (auto& info : ev->Get()->Nodes) {
-                map[info.NodeId] = std::move(info.Location);
-            }
-            NodeLayoutInfo = MakeIntrusive<TNodeLayoutInfo>(map[TlsActivationContext->ExecutorThread.ActorSystem->NodeId],
-                Info, map);
+            ApplyGroupInfo(std::exchange(Info, {}), std::exchange(NodeLayoutInfo, {}), std::exchange(StoragePoolCounters, {}));
+            CheckDeadlines();
         }
     }
 
     void TBlobStorageGroupProxy::PassAway() {
-        for (const TActorId actorId : ActiveRequests) {
+        for (const auto& [actorId, _] : ActiveRequests) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
         }
         if (Sessions) { // may be null if not properly configured yet
@@ -301,7 +296,7 @@ namespace NKikimr {
             bool limited = IsLimitedKeyless || !fullIfPossible;
             IsFullMonitoring = IsLimitedKeyless || fullIfPossible;
 
-            TString name = Sprintf("%09" PRIu32, GroupId);
+            TString name = Sprintf("%09" PRIu32, GroupId.GetRawId());
             TIntrusivePtr<::NMonitoring::TDynamicCounters> group = GetServiceCounters(
                     AppData()->Counters, "dsproxy")->GetSubgroup("blobstorageproxy", name);
             TIntrusivePtr<::NMonitoring::TDynamicCounters> percentileGroup = GetServiceCounters(
@@ -311,7 +306,7 @@ namespace NKikimr {
 
             Mon.Reset(new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, Info, NodeMon, limited));
             BSProxyCtx.Reset(new TBSProxyContext(group->GetSubgroup("subsystem", "memproxy")));
-            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId, Info, SelfId()));
+            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId.GetRawId(), Info, SelfId()));
         }
     }
 
@@ -320,5 +315,29 @@ namespace NKikimr {
                 << " Marker# DSP59");
         Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr));
     }
+
+#define SELECT_CONTROL_BY_DEVICE_TYPE(prefix, info) \
+([&](NPDisk::EDeviceType deviceType) -> i64 {       \
+    TInstant now = TActivationContext::Now();       \
+    switch (deviceType) {                           \
+    case NPDisk::DEVICE_TYPE_ROT:                   \
+        return Controls.prefix##HDD.Update(now);    \
+    case NPDisk::DEVICE_TYPE_SSD:                   \
+    case NPDisk::DEVICE_TYPE_NVME:                  \
+        return Controls.prefix##SSD.Update(now);    \
+    default:                                        \
+        return Controls.prefix.Update(now);         \
+    }                                               \
+})(info ? info->GetDeviceType() : NPDisk::DEVICE_TYPE_UNKNOWN)
+
+    TAccelerationParams TBlobStorageGroupProxy::GetAccelerationParams() {
+        return TAccelerationParams{
+            .SlowDiskThreshold = .001f * SELECT_CONTROL_BY_DEVICE_TYPE(SlowDiskThreshold, Info),
+            .PredictedDelayMultiplier = .001f * SELECT_CONTROL_BY_DEVICE_TYPE(PredictedDelayMultiplier, Info),
+            .MaxNumOfSlowDisks = static_cast<ui32>(SELECT_CONTROL_BY_DEVICE_TYPE(MaxNumOfSlowDisks, Info)),
+        };
+    }
+
+#undef SELECT_CONTROL_BY_DEVICE_TYPE
 
 } // NKikimr

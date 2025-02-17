@@ -1,7 +1,6 @@
 #include "http_client.h"
 
 #include <library/cpp/string_utils/url/url.h>
-#include <library/cpp/uri/http_url.h>
 
 #include <util/stream/output.h>
 #include <util/string/cast.h>
@@ -301,8 +300,14 @@ TKeepAliveHttpClient TSimpleHttpClient::CreateClient() const {
 void TSimpleHttpClient::PrepareClient(TKeepAliveHttpClient&) const {
 }
 
+TRedirectableHttpClient::TRedirectableHttpClient(const TOptions& options)
+    : TSimpleHttpClient(options)
+    , Opts(options)
+{
+}
+
 TRedirectableHttpClient::TRedirectableHttpClient(const TString& host, ui32 port, TDuration socketTimeout, TDuration connectTimeout)
-    : TSimpleHttpClient(host, port, socketTimeout, connectTimeout)
+    : TRedirectableHttpClient(TOptions().Host(host).Port(port).SocketTimeout(socketTimeout).ConnectTimeout(connectTimeout))
 {
 }
 
@@ -315,35 +320,36 @@ void TRedirectableHttpClient::PrepareClient(TKeepAliveHttpClient& cl) const {
 void TRedirectableHttpClient::ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output, const unsigned statusCode) const {
     for (auto i = input.Headers().Begin(), e = input.Headers().End(); i != e; ++i) {
         if (0 == TString::compare(i->Name(), TStringBuf("Location"))) {
-            TVector<TString> request_url_parts, request_body_parts;
+            if (Opts.MaxRedirectCount() == 0) {
+                ythrow THttpRequestException(statusCode) << "Exceeds MaxRedirectCount limit, code " << statusCode << " at " << Host << relativeUrl;
+            }
 
-            size_t splitted_index = 0;
-            for (auto& iter : StringSplitter(i->Value()).Split('/')) {
-                if (splitted_index < 3) {
-                    request_url_parts.push_back(TString(iter.Token()));
+            TStringBuf schemeHostPort = GetSchemeHostAndPort(i->Value());
+            TStringBuf scheme("http://");
+            TStringBuf host("unknown");
+            ui16 port = 0;
+            GetSchemeHostAndPort(schemeHostPort, scheme, host, port);
+            TStringBuf body = GetPathAndQuery(i->Value(), false);
+            if (port == 0) {
+                if (scheme.StartsWith("https")) {
+                    port = 443;
+                } else if (scheme.StartsWith("http")) {
+                    port = 80;
                 } else {
-                    request_body_parts.push_back(TString(iter.Token()));
-                }
-                ++splitted_index;
-            }
-
-            TString url = JoinSeq("/", request_url_parts);
-            ui16 port = 443;
-
-            THttpURL u;
-            if (THttpURL::ParsedOK == u.Parse(url)) {
-                const char* p = u.Get(THttpURL::FieldPort);
-                if (p) {
-                    port = FromString<ui16>(p);
-                    url = u.PrintS(THttpURL::FlagScheme | THttpURL::FlagHost);
+                    port = 80;
                 }
             }
 
-            TRedirectableHttpClient cl(url, port, TDuration::Seconds(60), TDuration::Seconds(60));
+            auto opts = Opts;
+            opts.Host(TString(scheme) + TString(host));
+            opts.Port(port);
+            opts.MaxRedirectCount(opts.MaxRedirectCount() - 1);
+
+            TRedirectableHttpClient cl(opts);
             if (HttpsVerification) {
                 cl.EnableVerificationForHttps();
             }
-            cl.DoGet(TString("/") + JoinSeq("/", request_body_parts), output);
+            cl.DoGet(body, output);
             return;
         }
     }

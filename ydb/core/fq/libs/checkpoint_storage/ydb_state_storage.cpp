@@ -4,9 +4,10 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 #include <util/stream/str.h>
 #include <util/string/join.h>
@@ -26,6 +27,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 const char* StatesTable = "states";
+const ui64 DeleteStateTimeoutMultiplier = 10;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -39,14 +41,14 @@ enum class EStateType {
 class TIncrementLogic {
 public:
 
-    void Apply(NYql::NDqProto::TComputeActorState& update) {
-        Sources = update.GetSources();      // Always snapshot - copy it;
-        Sinks = update.GetSinks();
+    void Apply(NYql::NDq::TComputeActorState& update) {
+        Sources = update.Sources;      // Always snapshot - copy it;
+        Sinks = update.Sinks;
         ui64 nodeNum = 0;
 
-        if (update.HasMiniKqlProgram()) {
-            const TString& blob = update.MutableMiniKqlProgram()->MutableData()->MutableStateData()->GetBlob();
-            ui64 version = update.MutableMiniKqlProgram()->MutableData()->MutableStateData()->GetVersion();
+        if (update.MiniKqlProgram) {
+            const TString& blob = update.MiniKqlProgram->Data.Blob;
+            ui64 version = update.MiniKqlProgram->Data.Version;
             if (LastVersion) {
                 Y_ENSURE(*LastVersion == version, "Version is different: " << *LastVersion << ", " << version);
             }
@@ -54,9 +56,9 @@ public:
             TStringBuf buf(blob);        
 
             while (!buf.empty()) {
-                auto nodeStateSize = NKikimr::NMiniKQL::ReadUi32(buf);
-                Y_ENSURE(buf.Size() >= nodeStateSize, "State/buf is corrupted");
-                TStringBuf nodeStateBuf(buf.Data(), nodeStateSize);
+                auto nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+                Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
+                TStringBuf nodeStateBuf(buf.data(), nodeStateSize);
                 buf.Skip(nodeStateSize);
 
                 NKikimr::NMiniKQL::TInputSerializer reader(nodeStateBuf);
@@ -67,7 +69,7 @@ public:
                 switch (type) {
                     case NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB:
                     {
-                        nodeState.SimpleBlobNodeState = TString(nodeStateBuf.Data(), nodeStateBuf.Size());
+                        nodeState.SimpleBlobNodeState = TString(nodeStateBuf.data(), nodeStateBuf.size());
                     }
                     break;
                     case NKikimr::NMiniKQL::EMkqlStateType::SNAPSHOT:
@@ -90,11 +92,11 @@ public:
         }
     }
 
-    NYql::NDqProto::TComputeActorState Build() {
+    NYql::NDq::TComputeActorState Build() {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
-        NYql::NDqProto::TComputeActorState state;
-        *state.MutableSources() = Sources;
-        *state.MutableSinks() = Sinks;
+        NYql::NDq::TComputeActorState state;
+        state.Sources = Sources;
+        state.Sinks = Sinks;
         TString result;                
         for (const auto& [nodeNum, nodeState] : NodeStates) {
             
@@ -104,27 +106,27 @@ public:
                 NYql::NUdf::TUnboxedValue saved =
                      NKikimr::NMiniKQL::TOutputSerializer::MakeSnapshotState(nodeState.Items, 0);
                 const TStringBuf savedBuf = saved.AsStringRef();
-                NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
-                result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+                NKikimr::NMiniKQL::WriteUi64(result, savedBuf.size());
+                result.AppendNoAlias(savedBuf.data(), savedBuf.size());
             }
         }
-        const auto& stateData = state.MutableMiniKqlProgram()->MutableData()->MutableStateData();
-        stateData->SetBlob(result);
+        auto& stateData = state.MiniKqlProgram.ConstructInPlace().Data;
+        stateData.Blob = result;
         Y_ENSURE(LastVersion, "LastVersion is empty");
-        stateData->SetVersion(*LastVersion);
+        stateData.Version = *LastVersion;
         return state;
     }
 
-    static EStateType GetStateType(const NYql::NDqProto::TComputeActorState& state) {
-        if (!state.HasMiniKqlProgram()) {
+    static EStateType GetStateType(const NYql::NDq::TComputeActorState& state) {
+        if (!state.MiniKqlProgram) {
             return EStateType::Snapshot;
         }
-        const TString& blob = state.GetMiniKqlProgram().GetData().GetStateData().GetBlob();
+        const TString& blob = state.MiniKqlProgram->Data.Blob;
         TStringBuf buf(blob);
         while (!buf.empty()) {
-            auto nodeStateSize = NKikimr::NMiniKQL::ReadUi32(buf);
-            Y_ENSURE(buf.Size() >= nodeStateSize, "State/buf is corrupted");
-            TStringBuf nodeStateBuf(buf.Data(), nodeStateSize);
+            auto nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+            Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
+            TStringBuf nodeStateBuf(buf.data(), nodeStateSize);
             if (NKikimr::NMiniKQL::TInputSerializer(nodeStateBuf).GetType() == NKikimr::NMiniKQL::EMkqlStateType::INCREMENT) {
                 return EStateType::Increment;
             }
@@ -141,8 +143,8 @@ private:
         TString SimpleBlobNodeState;
     };
     std::map<ui64, NodeState> NodeStates;
-    google::protobuf::RepeatedPtrField< ::NYql::NDqProto::TSourceState> Sources;
-    google::protobuf::RepeatedPtrField<NYql::NDqProto::TSinkState> Sinks;
+    std::list<NYql::NDq::TSourceState> Sources;
+    std::list<NYql::NDq::TSinkState> Sinks;
     TMaybe<ui64> LastVersion;
 };
 
@@ -163,7 +165,7 @@ struct TContext : public TThrRefBase {
         std::list<TString> Rows;
         EStateType Type = EStateType::Snapshot;
         std::list<TStateInfo> ListOfStatesForReading;     // ordered by desc
-        std::list<NYql::NDqProto::TComputeActorState> States;
+        std::list<NYql::NDq::TComputeActorState> States;
     };
 
     const NActors::TActorSystem* ActorSystem;
@@ -295,11 +297,11 @@ public:
 
     TFuture<TIssues> Init() override;
 
-    TFuture<TIssues> SaveState(
+    TFuture<TSaveStateResult> SaveState(
         ui64 taskId,
         const TString& graphId,
         const TCheckpointId& checkpointId,
-        const NYql::NDqProto::TComputeActorState& state) override;
+        const NYql::NDq::TComputeActorState& state) override;
 
     TFuture<TGetStateResult> GetState(
         const std::vector<ui64>& taskIds,
@@ -324,7 +326,7 @@ private:
     TFuture<TStatus> UpsertRow(
         const TContextPtr& context);
 
-    TExecDataQuerySettings DefaultExecDataQuerySettings();
+    TExecDataQuerySettings GetExecDataQuerySettings(ui64 multiplier = 1);
 
     TFuture<TStatus> SelectRowState(
         const TContextPtr& context);
@@ -332,10 +334,12 @@ private:
     TFuture<TStatus> ListStates(
         const TContextPtr& context);
 
-    std::list<TString> SerializeState(
-        const NYql::NDqProto::TComputeActorState& state);
+    size_t SerializeState(
+        const NYql::NDq::TComputeActorState& state,
+        std::list<TString>& outSerializedState);
     
     EStateType DeserializeState(
+        const TContextPtr& context,
         TContext::TaskInfo& taskInfo);
 
     TFuture<TStatus> SkipStatesInFuture(
@@ -344,7 +348,7 @@ private:
     TFuture<TStatus> ReadRows(
         const TContextPtr& context);
 
-    std::vector<NYql::NDqProto::TComputeActorState> ApplyIncrements(
+    std::vector<NYql::NDq::TComputeActorState> ApplyIncrements(
         const TContextPtr& context,
         NYql::TIssues& issues);
 
@@ -371,7 +375,7 @@ TFuture<TIssues> TStateStorage::Init() {
         //LOG_STREAMS_STORAGE_SERVICE_INFO("Creating directory: " << YdbConnection->TablePathPrefix);
         auto status = YdbConnection->SchemeClient.MakeDirectory(YdbConnection->TablePathPrefix).GetValueSync();
         if (!status.IsSuccess() && status.GetStatus() != EStatus::ALREADY_EXISTS) {
-            issues = status.GetIssues();
+            issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
 
             TStringStream ss;
             ss << "Failed to create path '" << YdbConnection->TablePathPrefix << "': " << status.GetStatus();
@@ -398,7 +402,7 @@ TFuture<TIssues> TStateStorage::Init() {
 
     auto status = CreateTable(YdbConnection, StatesTable, std::move(stateDesc)).GetValueSync();
     if (!IsTableCreated(status)) {
-        issues = status.GetIssues();
+        issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
 
         TStringStream ss;
         ss << "Failed to create " << StatesTable << " table: " << status.GetStatus();
@@ -411,55 +415,63 @@ TFuture<TIssues> TStateStorage::Init() {
     return MakeFuture(std::move(issues));
 }
 
-EStateType TStateStorage::DeserializeState(TContext::TaskInfo& taskInfo) {
+EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext::TaskInfo& taskInfo) {
     TString blob;
     for (auto it = taskInfo.Rows.begin(); it != taskInfo.Rows.end();) {
         blob += *it;
         it = taskInfo.Rows.erase(it);
     }
     taskInfo.States.push_front({});
-    NYql::NDqProto::TComputeActorState& state = taskInfo.States.front();
+    NYql::NDq::TComputeActorState& state = taskInfo.States.front();
+
+    LOG_STORAGE_DEBUG(context, "DeserializeState, task id " << taskInfo.TaskId <<  ", blob size " << blob.size());
+
     auto res = state.ParseFromString(blob);
     Y_ENSURE(res, "Parsing error");
     return TIncrementLogic::GetStateType(state);
 }
 
-std::list<TString> TStateStorage::SerializeState(const NYql::NDqProto::TComputeActorState& state) {
-    std::list<TString> result;
+size_t TStateStorage::SerializeState(
+    const NYql::NDq::TComputeActorState& state,
+    std::list<TString>& outSerializedState) {
+    outSerializedState.clear();
+
     TString serializedState;
     if (!state.SerializeToString(&serializedState)) {
-        return result;
+        return 0;
     }
 
     auto size = serializedState.size();
+    size_t result = size;
     size_t rowLimit = Config.GetStateStorageLimits().GetMaxRowSizeBytes();
     size_t offset = 0;
     while (size) {
         size_t chunkSize = (rowLimit && (size > rowLimit)) ? rowLimit : size;
-        result.push_back(serializedState.substr(offset, chunkSize));
+        outSerializedState.push_back(serializedState.substr(offset, chunkSize));
         offset += chunkSize;
         size -= chunkSize;
     }
     return result;
 }
 
-TFuture<TIssues> TStateStorage::SaveState(
+TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
     ui64 taskId,
     const TString& graphId,
     const TCheckpointId& checkpointId,
-    const NYql::NDqProto::TComputeActorState& state) {
-    
+    const NYql::NDq::TComputeActorState& state) {
+
     std::list<TString> serializedState;
     EStateType type = EStateType::Snapshot;
+    size_t size = 0;
 
     try {
         type = TIncrementLogic::GetStateType(state);
-        serializedState = SerializeState(state);
-        if (serializedState.empty()) {
-            return MakeFuture(NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}});
+        size = SerializeState(state, serializedState);
+        if (!size || serializedState.empty()) {
+            return MakeFuture(TSaveStateResult(0, NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}}));
         }
     } catch (...) {
-        return MakeFuture(NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}});
+        return MakeFuture(TSaveStateResult(0, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}));
     }
 
     auto context = MakeIntrusive<TContext>(
@@ -472,15 +484,14 @@ TFuture<TIssues> TStateStorage::SaveState(
         serializedState,
         type);
 
-    auto promise = NewPromise<TIssues>();
+    auto promise = NewPromise<TSaveStateResult>();
     auto future = UpsertRow(context);
 
-    context->Callback = [promise, context, thisPtr = TIntrusivePtr(this)] (TFuture<TStatus> upsertRowStatus) mutable {
-        
+    context->Callback = [promise, context, size, thisPtr = TIntrusivePtr(this)] (TFuture<TStatus> upsertRowStatus) mutable {
         TStatus status = upsertRowStatus.GetValue();
         if (!status.IsSuccess()) {
             context->Callback = nullptr;
-            promise.SetValue(StatusToIssues(status));
+            promise.SetValue(TSaveStateResult(0, StatusToIssues(status)));
             return;
         }
         auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
@@ -493,7 +504,7 @@ TFuture<TIssues> TStateStorage::SaveState(
             return;
         }
         context->Callback = nullptr;
-        promise.SetValue(StatusToIssues(status));
+        promise.SetValue(TSaveStateResult(size, StatusToIssues(status)));
     };
     future.Subscribe(context->Callback);
     return promise.GetFuture();
@@ -540,9 +551,9 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
         })
         .Apply([context, thisPtr = TIntrusivePtr(this)](const TFuture<TStatus>& result) {
             if (!result.GetValue().IsSuccess()) {
-                return IStateStorage::TGetStateResult{{}, result.GetValue().GetIssues()};
+                return IStateStorage::TGetStateResult{{}, NYdb::NAdapters::ToYqlIssues(result.GetValue().GetIssues())};
             }
-            NYql::TIssues issues = result.GetValue().GetIssues();
+            NYql::TIssues issues = NYdb::NAdapters::ToYqlIssues(result.GetValue().GetIssues());
 
             auto states = thisPtr->ApplyIncrements(context, issues);
             return IStateStorage::TGetStateResult{std::move(states), issues};
@@ -583,7 +594,7 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
                 query,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 params,
-                thisPtr->DefaultExecDataQuerySettings());
+                thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
                 [context] (const TFuture<TDataQueryResult>& future) {
@@ -648,7 +659,7 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                 query,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 params,
-                thisPtr->DefaultExecDataQuerySettings());
+                thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
                 [context] (const TFuture<TDataQueryResult>& future) {
@@ -668,33 +679,33 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                             auto cnt = parser.ColumnParser("cnt").GetUint64();
 
                             if (!taskId || !coordinatorGeneration || !seqNo) {
-                                return TStatus(EStatus::BAD_REQUEST, NYql::TIssues{NYql::TIssue{"Unexpected empty field"}});
+                                return TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Unexpected empty field"}});
                             }
                             const auto taskIt = std::find_if(context->Tasks.begin(), context->Tasks.end(), [&] (const auto& item) { return item.TaskId == *taskId; } );
                             if (taskIt == context->Tasks.end()) {
-                                return TStatus(EStatus::BAD_REQUEST, NYql::TIssues{NYql::TIssue{"Got unexpected task id"}});
+                                return TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Got unexpected task id"}});
                             }
 
                             auto& taskInfo = *taskIt;
                             TCheckpointId checkpointId(*coordinatorGeneration, *seqNo);
                             taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt});
-                            LOG_STORAGE_DEBUG(context, "taskId " << taskId <<  " checkpoint id: " << checkpointId << ", rows count: " << cnt);
+                            LOG_STORAGE_DEBUG(context, "taskId " << (taskId ? ToString(taskId.value()) : "(empty maybe)") <<  " checkpoint id: " << checkpointId << ", rows count: " << cnt);
                         }
                     }
                     catch (const std::exception& e) {
-                        return TStatus(EStatus::BAD_REQUEST, NYql::TIssues{NYql::TIssue{e.what()}});
+                        return TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{e.what()}});
                     }
                     return status;
             });
         });
 }
 
-TExecDataQuerySettings TStateStorage::DefaultExecDataQuerySettings() {
+TExecDataQuerySettings TStateStorage::GetExecDataQuerySettings(ui64 multiplier) {
     return TExecDataQuerySettings()
         .KeepInQueryCache(true)
-        .ClientTimeout(TDuration::Seconds(StorageConfig.GetClientTimeoutSec()))
-        .OperationTimeout(TDuration::Seconds(StorageConfig.GetOperationTimeoutSec()))
-        .CancelAfter(TDuration::Seconds(StorageConfig.GetCancelAfterSec()));
+        .ClientTimeout(TDuration::Seconds(StorageConfig.GetClientTimeoutSec() * multiplier))
+        .OperationTimeout(TDuration::Seconds(StorageConfig.GetOperationTimeoutSec() * multiplier))
+        .CancelAfter(TDuration::Seconds(StorageConfig.GetCancelAfterSec() * multiplier));
 }
 
 TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
@@ -715,14 +726,14 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
 
                 DELETE
                 FROM %s
-                WHERE graph_id = "%s";
-            )", prefix.c_str(), StatesTable, graphId.c_str());
+                WHERE graph_id = $graph_id;
+            )", prefix.c_str(), StatesTable);
 
             auto future = session.ExecuteDataQuery(
                 query,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 params,
-                thisPtr->DefaultExecDataQuerySettings());
+                thisPtr->GetExecDataQuerySettings(DeleteStateTimeoutMultiplier));
 
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
@@ -767,7 +778,7 @@ TFuture<TIssues> TStateStorage::DeleteCheckpoints(
                 query,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 params,
-                thisPtr->DefaultExecDataQuerySettings());
+                thisPtr->GetExecDataQuerySettings(DeleteStateTimeoutMultiplier));
 
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
@@ -790,7 +801,7 @@ TFuture<TStatus> TStateStorage::SelectRowState(const TContextPtr& context) {
                     return ProcessRowState(future.GetValue(), context);
                 }
                 catch (const std::exception& e) {
-                    return TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{e.what()}});
+                    return TStatus(EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{e.what()}});
                 }
             });
         });
@@ -835,7 +846,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
         query,
         TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
         params,
-        DefaultExecDataQuerySettings());
+        GetExecDataQuerySettings());
 }
 
 TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
@@ -880,7 +891,7 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
                 query,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 params,
-                thisPtr->DefaultExecDataQuerySettings());
+                thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
@@ -891,8 +902,7 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
 }
 
 TFuture<TStatus> TStateStorage::SkipStatesInFuture(const TContextPtr& context) {
-    LOG_STORAGE_DEBUG(context, "SkipStatesInFuture");
-
+    size_t eraseCount = 0;
     for (auto& taskInfo : context->Tasks) {
         auto it = taskInfo.ListOfStatesForReading.begin();
         while (it != taskInfo.ListOfStatesForReading.end())
@@ -902,15 +912,17 @@ TFuture<TStatus> TStateStorage::SkipStatesInFuture(const TContextPtr& context) {
             }
             if (it->CheckpointId < context->CheckpointId) {
                 // ListOfStatesForReading sorted by "time"
-                return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"Checkpoint is not found"}}});
+                return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Checkpoint is not found"}}});
             }
             it = taskInfo.ListOfStatesForReading.erase(it);
+            ++eraseCount;
         }
         if (taskInfo.ListOfStatesForReading.empty()) {
-            return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"Checkpoint is not found"}}});
+            return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Checkpoint is not found"}}});
         }
     }
-    return MakeFuture(TStatus{EStatus::SUCCESS,  NYql::TIssues{}});
+    LOG_STORAGE_DEBUG(context, "SkipStatesInFuture, skip " << eraseCount << " checkpoints");
+    return MakeFuture(TStatus{EStatus::SUCCESS, NYdb::NIssue::TIssues{}});
 }
 
 TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
@@ -929,12 +941,12 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
                 ++taskInfo.CurrentProcessingRow;
 
                 if (taskInfo.CurrentProcessingRow == taskInfo.ListOfStatesForReading.front().StateRowsCount) {
-                    auto type = thisPtr->DeserializeState(taskInfo);
+                    auto type = thisPtr->DeserializeState(context, taskInfo);
                     if (type != EStateType::Snapshot) {
                         taskInfo.ListOfStatesForReading.pop_front();
                         taskInfo.CurrentProcessingRow = 0;
                         if (taskInfo.ListOfStatesForReading.empty()) {
-                            promise.SetValue(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"Checkpoint is not found"}}});
+                            promise.SetValue(TStatus{EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Checkpoint is not found"}}});
                             context->Callback = nullptr;
                             return;
                         }
@@ -945,14 +957,14 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
                     }
                     else {
                         context->Callback = nullptr;
-                        promise.SetValue(TStatus{EStatus::SUCCESS,  NYql::TIssues{}});
+                        promise.SetValue(TStatus{EStatus::SUCCESS, NYdb::NIssue::TIssues{}});
                         return;
                     }
                 }
                 auto nextFuture = thisPtr->SelectRowState(context);
                 nextFuture.Subscribe(context->Callback);
             } catch (...) {
-                promise.SetValue(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}});
+                promise.SetValue(TStatus{EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{CurrentExceptionMessage()}}});
                 context->Callback = nullptr;
                 return;
             }
@@ -965,12 +977,12 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
     return promise.GetFuture();
 }
 
-std::vector<NYql::NDqProto::TComputeActorState> TStateStorage::ApplyIncrements(
+std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
     const TContextPtr& context,
     NYql::TIssues& issues) {
     LOG_STORAGE_DEBUG(context, "ApplyIncrements");
 
-    std::vector<NYql::NDqProto::TComputeActorState> states;
+    std::vector<NYql::NDq::TComputeActorState> states;
     try {
         for (auto& task : context->Tasks)
         {

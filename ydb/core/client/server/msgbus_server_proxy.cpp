@@ -13,8 +13,8 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -67,6 +67,7 @@ public:
         , Request(static_cast<TBusSchemeDescribe*>(msg->MsgContext.ReleaseMessage()))
     {
         TBase::SetSecurityToken(Request->Record.GetSecurityToken());
+        TBase::SetPeerName(msg->MsgContext.GetPeerName());
     }
 
     //STFUNC(StateWork)
@@ -146,8 +147,6 @@ TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status,
     return response.Release();
 }
 
-//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_request.cpp
-
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatTxRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp
 
@@ -174,11 +173,11 @@ void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
     DbOperationsCounters = new TMessageBusDbOpsCounters(AppData(ctx)->Counters);
 
     auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), SchemeCacheCounters);
-    SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
+    SchemeCache = ctx.Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
     PqMetaCache = CreatePersQueueMetaCacheV2Id();
 
     if (Server) {
-        Server->InitSession(ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+        Server->InitSession(ctx.ActorSystem(), ctx.SelfID);
     }
 
     Become(&TThis::StateFunc);

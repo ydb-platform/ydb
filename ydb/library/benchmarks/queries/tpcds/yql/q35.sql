@@ -5,21 +5,21 @@ $bla1 = (select ss_customer_sk customer_sk
           from {{store_sales}} as store_sales
           cross join {{date_dim}} as date_dim
           where ss_sold_date_sk = d_date_sk and
-                d_year = 2001 and
+                d_year = 2002 and
                 d_qoy < 4);
 $bla2 = (
     (select ws_bill_customer_sk customer_sk
             from {{web_sales}} as web_sales
             cross join {{date_dim}} as date_dim
             where ws_sold_date_sk = d_date_sk and
-                  d_year = 2001 and
+                  d_year = 2002 and
                   d_qoy < 4)
     union all
     (select cs_ship_customer_sk customer_sk
             from {{catalog_sales}} as catalog_sales
             cross join {{date_dim}} as date_dim
             where cs_sold_date_sk = d_date_sk and
-                  d_year = 2001 and
+                  d_year = 2002 and
                   d_qoy < 4)
 );
 
@@ -30,19 +30,19 @@ select
   customer_demographics.cd_marital_status,
   customer_demographics.cd_dep_count,
   count(*) cnt1,
-  avg(customer_demographics.cd_dep_count),
-  min(customer_demographics.cd_dep_count),
-  sum(customer_demographics.cd_dep_count),
+  min(customer_demographics.cd_dep_count) a1,
+  max(customer_demographics.cd_dep_count) x1,
+  avg(customer_demographics.cd_dep_count) s1,
   customer_demographics.cd_dep_employed_count,
   count(*) cnt2,
-  avg(customer_demographics.cd_dep_employed_count),
-  min(customer_demographics.cd_dep_employed_count),
-  sum(cd_dep_employed_count),
+  min(customer_demographics.cd_dep_employed_count) a2,
+  max(customer_demographics.cd_dep_employed_count) x2,
+  avg(customer_demographics.cd_dep_employed_count) s2,
   customer_demographics.cd_dep_college_count,
   count(*) cnt3,
-  avg(customer_demographics.cd_dep_college_count),
-  min(customer_demographics.cd_dep_college_count),
-  sum(customer_demographics.cd_dep_college_count)
+  min(customer_demographics.cd_dep_college_count) a3,
+  max(customer_demographics.cd_dep_college_count) x3,
+  avg(customer_demographics.cd_dep_college_count) s3
  from
   {{customer}} c 
   cross join {{customer_address}} ca 

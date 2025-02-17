@@ -3,8 +3,8 @@
 #include <library/cpp/threading/future/future.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NYql {
 
@@ -14,30 +14,56 @@ enum class EDatabaseType {
     DataStreams,
     ObjectStorage,
     PostgreSQL,
-    YT
+    YT,
+    MySQL,
+    Greenplum,
+    MsSQLServer,
+    Oracle,
+    Logging,
+    Solomon
 };
 
-inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourceKind dataSourceKind) {
+inline EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSourceKind) {
     switch (dataSourceKind) {
-        case NConnector::NApi::EDataSourceKind::POSTGRESQL:
+        case NYql::EGenericDataSourceKind::POSTGRESQL:
             return EDatabaseType::PostgreSQL;
-        case NConnector::NApi::EDataSourceKind::CLICKHOUSE:
+        case NYql::EGenericDataSourceKind::CLICKHOUSE:
             return EDatabaseType::ClickHouse;
-        case NConnector::NApi::EDataSourceKind::YDB:
+        case NYql::EGenericDataSourceKind::YDB:
             return EDatabaseType::Ydb;
+        case NYql::EGenericDataSourceKind::MYSQL:
+            return EDatabaseType::MySQL;
+        case NYql::EGenericDataSourceKind::GREENPLUM:
+            return EDatabaseType::Greenplum;
+        case NYql::EGenericDataSourceKind::MS_SQL_SERVER:
+          return EDatabaseType::MsSQLServer;
+        case NYql::EGenericDataSourceKind::ORACLE:
+          return EDatabaseType::Oracle;
+        case NYql::EGenericDataSourceKind::LOGGING:
+          return EDatabaseType::Logging;
         default:
-            ythrow yexception() << "Unknown data source kind: " << NConnector::NApi::EDataSourceKind_Name(dataSourceKind);
+            ythrow yexception() << "Unknown data source kind: " << NYql::EGenericDataSourceKind_Name(dataSourceKind);
     }
 }
 
-inline NConnector::NApi::EDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType databaseType) {
+inline NYql::EGenericDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType databaseType) {
     switch (databaseType) {
         case EDatabaseType::PostgreSQL:
-            return  NConnector::NApi::EDataSourceKind::POSTGRESQL;
+            return  NYql::EGenericDataSourceKind::POSTGRESQL;
         case EDatabaseType::ClickHouse:
-            return  NConnector::NApi::EDataSourceKind::CLICKHOUSE;
+            return  NYql::EGenericDataSourceKind::CLICKHOUSE;
         case EDatabaseType::Ydb:
-            return  NConnector::NApi::EDataSourceKind::YDB;
+            return  NYql::EGenericDataSourceKind::YDB;
+        case EDatabaseType::MySQL:
+            return NYql::EGenericDataSourceKind::MYSQL;
+        case EDatabaseType::Greenplum:
+            return  NYql::EGenericDataSourceKind::GREENPLUM;
+        case EDatabaseType::MsSQLServer:
+            return NYql::EGenericDataSourceKind::MS_SQL_SERVER;
+        case EDatabaseType::Oracle:
+            return NYql::EGenericDataSourceKind::ORACLE;
+        case EDatabaseType::Logging:
+            return NYql::EGenericDataSourceKind::LOGGING;
         default:
             ythrow yexception() << "Unknown database type: " << ToString(databaseType);
     }
@@ -68,7 +94,7 @@ struct TDatabaseAuth {
 
     // For some of the data sources accessible via generic provider it's possible to specify the connection protocol.
     // This setting may impact the throughput.
-    NConnector::NApi::EProtocol Protocol = NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED;
+    NYql::EGenericProtocol Protocol = NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED;
 
     bool operator==(const TDatabaseAuth& other) const {
         return std::tie(StructuredToken, AddBearerToToken, UseTls, Protocol) == std::tie(other.StructuredToken, other.AddBearerToToken, other.UseTls, Protocol);

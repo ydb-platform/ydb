@@ -5,8 +5,6 @@
 #endif
 #undef FLS_INL_H_
 
-#include <library/cpp/yt/memory/memory_tag.h>
-
 #include <library/cpp/yt/misc/tls.h>
 
 namespace NYT::NConcurrency {
@@ -21,7 +19,7 @@ using TFlsSlotDtor = void(*)(TFls::TCookie cookie);
 int AllocateFlsSlot(TFlsSlotDtor dtor);
 TFls* GetPerThreadFls();
 
-extern YT_THREAD_LOCAL(TFls*) CurrentFls;
+YT_DECLARE_THREAD_LOCAL(TFls*, CurrentFls);
 
 } // namespace NDetail
 
@@ -44,7 +42,7 @@ Y_FORCE_INLINE TFls::TCookie TFls::Get(int index) const
 
 inline TFls* GetCurrentFls()
 {
-    auto* fls = NDetail::CurrentFls;
+    auto* fls = NDetail::CurrentFls();
     if (Y_UNLIKELY(!fls)) {
         fls = NDetail::GetPerThreadFls();
     }
@@ -97,7 +95,6 @@ Y_FORCE_INLINE T* TFlsSlot<T>::GetOrCreate() const
 template <class T>
 T* TFlsSlot<T>::Create() const
 {
-    TMemoryTagGuard guard(NullMemoryTag);
     auto cookie = new T();
     GetCurrentFls()->Set(Index_, cookie);
     return static_cast<T*>(cookie);

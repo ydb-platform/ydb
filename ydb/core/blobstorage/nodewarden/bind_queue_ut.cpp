@@ -1,7 +1,7 @@
 #include "bind_queue.h"
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/core/defs.h>
 
-using namespace NActors;
 using namespace NKikimr;
 using namespace NKikimr::NStorage;
 

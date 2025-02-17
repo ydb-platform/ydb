@@ -15,48 +15,19 @@ template <class TSetElement, class THashCalcer>
 class TLayoutIdSet {
 private:
     ui64 Hash = 0;
-    std::set<TSetElement> Elements;
+    THashSet<TSetElement> Elements;
 public:
     TLayoutIdSet() = default;
     TLayoutIdSet(const TSetElement elem) {
         AddId(elem);
     }
 
-    typename std::set<TSetElement>::const_iterator begin() const {
-        return Elements.begin();
-    }
-
-    typename std::set<TSetElement>::const_iterator end() const {
-        return Elements.end();
-    }
-
     size_t Size() const {
         return Elements.size();
     }
 
-    std::vector<TSetElement> GetIdsVector() const {
-        return std::vector<TSetElement>(Elements.begin(), Elements.end());
-    }
-
-    const std::set<TSetElement>& GetIds() const {
-        return Elements;
-    }
-
-    std::set<TSetElement> GetIds(const ui32 count) const {
-        std::set<TSetElement> result;
-        ui32 idx = 0;
-        for (auto&& i : Elements) {
-            if (++idx > count) {
-                return result;
-            }
-            result.emplace(i);
-        }
-        return result;
-    }
-
-    std::vector<TSetElement> GetIdsVector(const ui32 count) const {
-        std::set<TSetElement> result = GetIds(count);
-        return std::vector<TSetElement>(result.begin(), result.end());
+    bool HasId(const TSetElement& id) const {
+        return Elements.contains(id);
     }
 
     bool AddId(const TSetElement& id) {
@@ -128,6 +99,13 @@ private:
     YDB_READONLY_DEF(std::vector<TTablesGroup>, Groups);
 public:
     TColumnTablesLayout(std::vector<TTablesGroup>&& groups);
+
+    void RemoveGroupsWithPathId(const TPathId& pathId) {
+        const auto pred = [&](const TTablesGroup& item) {
+            return item.GetTableIds().HasId(pathId);
+        };
+        Groups.erase(std::remove_if(Groups.begin(), Groups.end(), pred), Groups.end());
+    }
 
     static std::vector<ui64> ShardIdxToTabletId(const std::vector<TShardIdx>& shards, const TSchemeShard& ss);
 

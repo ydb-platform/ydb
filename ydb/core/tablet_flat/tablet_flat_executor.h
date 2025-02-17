@@ -27,6 +27,7 @@ class TTransactionContext;
 class TExecutor;
 struct TPageCollectionTxEnv;
 struct TSeat;
+class TExecutorCounters;
 
 class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
     friend class TExecutor;
@@ -103,6 +104,9 @@ struct IExecuting {
     virtual void LoanTable(ui32 tableId, const TString &partsInfo) = 0; // attach table parts to table (called on part destination)
     virtual void CleanupLoan(const TLogoBlobID &bundleId, ui64 from) = 0; // mark loan completion (called on part source)
     virtual void ConfirmLoan(const TLogoBlobID &bundleId, const TLogoBlobID &borrowId) = 0; // confirm loan update delivery (called on part destination)
+    virtual void EnableReadMissingReferences() noexcept = 0;
+    virtual void DisableReadMissingReferences() noexcept = 0;
+    virtual ui64 MissingReferencesSize() const noexcept = 0;
 };
 
 class TTxMemoryProviderBase : TNonCopyable {
@@ -351,7 +355,6 @@ public:
 
 struct TExecutorStats {
     bool IsActive = false;
-    bool IsFollower = false;
     bool IsAnyChannelYellowMove = false;
     bool IsAnyChannelYellowStop = false;
     ui64 TxInFly = 0;
@@ -363,6 +366,11 @@ struct TExecutorStats {
     TVector<ui32> YellowStopChannels;
 
     ui32 FollowersCount = 0;
+
+    ui32 FollowerId = 0;
+    bool IsFollower() const {
+        return FollowerId != 0;
+    }
 
     bool IsYellowMoveChannel(ui32 channel) const {
         auto it = std::lower_bound(YellowMoveChannels.begin(), YellowMoveChannels.end(), channel);
@@ -491,6 +499,7 @@ namespace NFlatExecutorSetup {
         virtual void SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext &ctx); // would be FAIL in default implementation
         virtual void CompletedLoansChanged(const TActorContext &ctx); // would be no-op in default implementation
         virtual void CompactionComplete(ui32 tableId, const TActorContext &ctx); // would be no-op in default implementation
+        virtual void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext& ctx);
 
         virtual void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
 
@@ -578,6 +587,7 @@ namespace NFlatExecutorSetup {
 
         // edge and ts of last full compaction
         virtual TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 tableId) const = 0;
+        virtual bool HasSchemaChanges(ui32 table) const = 0;
 
         // Forces full compaction of the specified table in the near future
         // Returns 0 if can't compact, otherwise compaction ID
@@ -613,6 +623,7 @@ namespace NFlatExecutorSetup {
 
         virtual const TExecutorStats& GetStats() const = 0;
         virtual NMetrics::TResourceMetrics* GetResourceMetrics() const = 0;
+        virtual TExecutorCounters* GetCounters() = 0;
 
         /* This stange looking functionallity probably should be dropped */
 
@@ -621,9 +632,12 @@ namespace NFlatExecutorSetup {
         // Returns current database scheme (executor must be active)
         virtual const NTable::TScheme& Scheme() const noexcept = 0;
 
+        virtual void SetPreloadTablesData(THashSet<ui32> tables) = 0;
+
+        virtual void CleanupData(ui64 dataCleanupGeneration) = 0;
+
         ui32 Generation() const { return Generation0; }
         ui32 Step() const { return Step0; }
-
     protected:
         //
         IExecutor()

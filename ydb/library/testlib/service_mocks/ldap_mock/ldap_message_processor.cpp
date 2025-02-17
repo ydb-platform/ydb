@@ -76,10 +76,6 @@ TLdapRequestProcessor::TLdapRequestProcessor(TAtomicSharedPtr<TLdapSocketWrapper
     : Socket(socket)
 {}
 
-void TLdapRequestProcessor::SslAccept() {
-    Socket->SslAccept();
-}
-
 unsigned char TLdapRequestProcessor::GetByte() {
     unsigned char res;
     GetNBytes(&res, 1);
@@ -137,7 +133,6 @@ int TLdapRequestProcessor::ExtractMessageId() {
 
 std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Process(const TLdapMockResponses& responses) {
     unsigned char protocolOp = GetByte();
-
     switch (protocolOp) {
         case EProtocolOp::BIND_OP_REQUEST: {
             return ProcessBindRequest(responses.BindResponses);
@@ -165,6 +160,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
 
     if (length == 0) {
         responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        Cerr << "LDAP_MOCK: ExtendedRequest, protocol error, length 1 is zero" << Endl;
         return {responseOpData};
     }
 
@@ -175,6 +171,8 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     EStatus status = EStatus::PROTOCOL_ERROR;
     if (oidValue == LDAP_EXOP_START_TLS) {
         status = EStatus::SUCCESS;
+    } else {
+        Cerr << "LDAP_MOCK: ExtendedRequest, protocol error, oidValue != LDAP_EXOP_START_TLS" << Endl;
     }
 
     responseOpData.Data = CreateExtendedResponse({.Status = status}, oidValue, "");
@@ -192,18 +190,21 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
 
     if (length == 0) {
         responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        Cerr << "LDAP_MOCK: BindRequest, protocol error, length 1 is zero" << Endl;
         return {responseOpData};
     }
 
     int version = GetInt();
     if (version > 127) {
         responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        Cerr << "LDAP_MOCK: BindRequest, protocol error, version > 127" << Endl;
         return {responseOpData};
     }
 
     unsigned char elementType = GetByte();
     if (elementType != EElementType::STRING) {
         responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        Cerr << "LDAP_MOCK: BindRequest, protocol error, login is not a string" << Endl;
         return {responseOpData};
     }
 
@@ -221,6 +222,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
 
     if (it == responses.end()) {
         responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        Cerr << "LDAP_MOCK: BindRequest, protocol error, unexpected request, not matched any of provided to mock" << Endl;
         return {responseOpData};
     }
 
@@ -236,14 +238,16 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
 
     size_t length = GetLength();
     if (length == 0) {
-        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR, .DiagnosticMsg = "length 1 is zero"});
+        Cerr << "LDAP_MOCK: SearchRequest, protocol error, length 1 is zero" << Endl;
         return {responseOpData};
     }
 
     // Extract BaseDn
     unsigned char elementType = GetByte();
     if (elementType != EElementType::STRING) {
-        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR, .DiagnosticMsg = "BaseDn is not a string type"});
+        Cerr << "LDAP_MOCK: SearchRequest, protocol error, BaseDn is not a string type" << Endl;
         return {responseOpData};
     }
 
@@ -252,12 +256,14 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     // Extract scope
     elementType = GetByte();
     if (elementType != EElementType::ENUMERATED) {
-        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR, .DiagnosticMsg = "Scope is not an enum type"});
+        Cerr << "LDAP_MOCK: SearchRequest, protocol error, Scope is not an enum type" << Endl;
         return {responseOpData};
     }
     length = GetLength();
     if (length == 0) {
-        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR, .DiagnosticMsg = "length 2 is zero"});
+        Cerr << "LDAP_MOCK: SearchRequest, protocol error, length 2 is zero" << Endl;
         return {responseOpData};
     }
     requestInfo.Scope = GetByte();
@@ -265,12 +271,14 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     // Extract derefAliases
     elementType = GetByte();
     if (elementType != EElementType::ENUMERATED) {
-        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR, .DiagnosticMsg = "DerefAliases is not en enum"});
+        Cerr << "LDAP_MOCK: SearchRequest, protocol error, DerefAliases is not en enum" << Endl;
         return {responseOpData};
     }
     length = GetLength();
     if (length == 0) {
-        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR, .DiagnosticMsg = "length 3 is zero"});
+        Cerr << "LDAP_MOCK: SearchRequest, protocol error, length 3 is zero" << Endl;
         return {responseOpData};
     }
     requestInfo.DerefAliases = GetByte();
@@ -286,12 +294,14 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     // Extract typesOnly
     elementType = GetByte();
     if (elementType != EElementType::BOOL) {
-        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR, .DiagnosticMsg = "TypesOnly is not bool"});
+        Cerr << "LDAP_MOCK: SearchRequest, protocol error, TypesOnly is not bool" << Endl;
         return {responseOpData};
     }
     length = GetLength();
     if (length == 0) {
-        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR, .DiagnosticMsg = "length 4 is zero"});
+        Cerr << "LDAP_MOCK: SearchRequest, protocol error, length 4 is zero" << Endl;
         return {responseOpData};
     }
     requestInfo.TypesOnly = GetByte();
@@ -301,7 +311,8 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     // Extract Attributes
     elementType = GetByte();
     if (elementType != EElementType::SEQUENCE) {
-        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR, .DiagnosticMsg = "Attributes is not a sequence"});
+        Cerr << "LDAP_MOCK: SearchRequest, protocol error, Attributes is not a sequence" << Endl;
         return {responseOpData};
     }
     length = GetLength();
@@ -309,7 +320,8 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     while (ReadBytes < limit) {
         elementType = GetByte();
         if (elementType != EElementType::STRING) {
-            responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+            responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR, .DiagnosticMsg = "Attribute is not a string"});
+        Cerr << "LDAP_MOCK: SearchRequest, protocol error, Attribute is not a string" << Endl;
             return {responseOpData};
         }
         requestInfo.Attributes.push_back(GetString());
@@ -321,7 +333,8 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     });
 
     if (it == responses.end()) {
-        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR, .DiagnosticMsg = "unexpected request, not matched any of provided to mock"});
+        Cerr << "LDAP_MOCK: SearchRequest, protocol error, unexpected request, not matched any of provided to mock" << Endl;
         return {responseOpData};
     }
 
@@ -352,7 +365,8 @@ TSearchRequestInfo::TSearchFilter TLdapRequestProcessor::ProcessFilter() {
             return filter;
         }
         case EFilterType::LDAP_FILTER_OR: {
-            FillFilter(EFilterType::LDAP_FILTER_OR, "or");
+            filter.Type = EFilterType::LDAP_FILTER_OR;
+            ProcessFilterOr(&filter, filterLength);
             return filter;
         }
         case EFilterType::LDAP_FILTER_NOT: {
@@ -385,7 +399,8 @@ TSearchRequestInfo::TSearchFilter TLdapRequestProcessor::ProcessFilter() {
             return filter;
         }
         case EFilterType::LDAP_FILTER_EXT: {
-            FillFilter(EFilterType::LDAP_FILTER_EXT, "ext");
+            filter.Type = EFilterType::LDAP_FILTER_EXT;
+            ProcessFilterExtensibleMatch(&filter, filterLength);
             return filter;
         }
     }
@@ -402,6 +417,47 @@ void TLdapRequestProcessor::ProcessFilterEquality(TSearchRequestInfo::TSearchFil
     elementType = GetByte();
     if (elementType == EElementType::STRING) {
         filter->Value = GetString();
+    }
+}
+
+void TLdapRequestProcessor::ProcessFilterExtensibleMatch(TSearchRequestInfo::TSearchFilter* filter, size_t lengthFilter) {
+    const size_t limit = ReadBytes + lengthFilter;
+    size_t lastCheckedField = 0;
+    unsigned char elementType = GetByte();
+    if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_OID) {
+        filter->MatchingRule = GetString();
+        lastCheckedField = 1;
+    }
+
+    if (lastCheckedField == 1 && ReadBytes < limit) {
+        elementType = GetByte();
+    }
+    if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_TYPE) {
+        filter->Attribute = GetString();
+        lastCheckedField = 2;
+    }
+
+    if (lastCheckedField == 2 && ReadBytes < limit) {
+        elementType = GetByte();
+    }
+    if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_VALUE) {
+        filter->Value = GetString();
+    }
+
+    if (ReadBytes < limit) {
+        elementType = GetByte();
+        if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_DNATTRS) {
+            size_t length = GetLength();
+            Y_UNUSED(length);
+            filter->DnAttributes = GetByte();
+        }
+    }
+}
+
+void TLdapRequestProcessor::ProcessFilterOr(TSearchRequestInfo::TSearchFilter* filter, size_t lengthFilter) {
+    const size_t limit = ReadBytes + lengthFilter;
+    while (ReadBytes < limit) {
+        filter->NestedFilters.push_back(std::make_shared<TSearchRequestInfo::TSearchFilter>(ProcessFilter()));
     }
 }
 

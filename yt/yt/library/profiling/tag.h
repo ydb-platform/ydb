@@ -4,7 +4,7 @@
 
 #include <util/generic/string.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 
@@ -20,7 +20,7 @@ constexpr int TypicalTagCount = 6;
 
 using TTagIdList = TCompactVector<TTagId, TypicalTagCount>;
 
-using TTag = std::pair<TString, TString>;
+using TTag = std::pair<std::string, std::string>;
 
 using TTagList = TCompactVector<TTag, TypicalTagCount>;
 

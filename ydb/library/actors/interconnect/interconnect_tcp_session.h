@@ -100,25 +100,23 @@ namespace NActors {
     };
 
     struct TReceiveContext: public TAtomicRefCount<TReceiveContext> {
-        /* All invokations to these fields should be thread-safe */
-
         ui64 ControlPacketSendTimer = 0;
         ui64 ControlPacketId = 0;
 
         // last processed packet by input session
-        std::atomic_uint64_t LastPacketSerialToConfirm = 0;
+        ui64 LastPacketSerialToConfirm = 0;
         static constexpr uint64_t LastPacketSerialToConfirmLockBit = uint64_t(1) << 63;
 
         // for hardened checks
-        TAtomic NumInputSessions = 0;
+        ui32 NumInputSessions = 0;
 
         NHPTimer::STime StartTime;
 
-        std::atomic<ui64> PingRTT_us = 0;
-        std::atomic<i64> ClockSkew_us = 0;
+        ui64 PingRTT_us = 0;
+        i64 ClockSkew_us = 0;
 
-        std::atomic<EUpdateState> UpdateState;
-        static_assert(std::atomic<EUpdateState>::is_always_lock_free);
+        bool UpdateInFlight = false;
+        bool NextUpdatePending = false;
 
         bool MainWriteBlocked = false;
         bool XdcWriteBlocked = false;
@@ -153,6 +151,7 @@ namespace NActors {
         std::array<TPerChannelContext, 16> ChannelArray;
         std::unordered_map<ui16, TPerChannelContext> ChannelMap;
         ui64 LastProcessedSerial = 0;
+        bool Terminated = false;
 
         TReceiveContext() {
             GetTimeFast(&StartTime);
@@ -160,28 +159,17 @@ namespace NActors {
 
         // returns false if sessions needs to be terminated
         bool AdvanceLastPacketSerialToConfirm(ui64 nextValue) {
-            for (;;) {
-                uint64_t value = LastPacketSerialToConfirm.load();
-                if (value & LastPacketSerialToConfirmLockBit) {
-                    return false;
-                }
-                Y_DEBUG_ABORT_UNLESS(value + 1 == nextValue);
-                if (LastPacketSerialToConfirm.compare_exchange_weak(value, nextValue)) {
-                    return true;
-                }
+            if (LastPacketSerialToConfirm & LastPacketSerialToConfirmLockBit) {
+                return false;
             }
+            Y_DEBUG_ABORT_UNLESS(LastPacketSerialToConfirm + 1 == nextValue);
+            LastPacketSerialToConfirm = nextValue;
+            return true;
         }
 
         ui64 LockLastPacketSerialToConfirm() {
-            for (;;) {
-                uint64_t value = LastPacketSerialToConfirm.load();
-                if (value & LastPacketSerialToConfirmLockBit) {
-                    return value & ~LastPacketSerialToConfirmLockBit;
-                }
-                if (LastPacketSerialToConfirm.compare_exchange_strong(value, value | LastPacketSerialToConfirmLockBit)) {
-                    return value;
-                }
-            }
+            LastPacketSerialToConfirm |= LastPacketSerialToConfirmLockBit;
+            return GetLastPacketSerialToConfirm();
         }
 
         void UnlockLastPacketSerialToConfirm() {
@@ -189,7 +177,7 @@ namespace NActors {
         }
 
         ui64 GetLastPacketSerialToConfirm() {
-            return LastPacketSerialToConfirm.load() & ~LastPacketSerialToConfirmLockBit;
+            return LastPacketSerialToConfirm & ~LastPacketSerialToConfirmLockBit;
         }
     };
 
@@ -445,7 +433,9 @@ namespace NActors {
         void Terminate(TDisconnectReason reason);
         void PassAway() override;
 
+        void Enqueue(STATEFN_SIG);
         void Forward(STATEFN_SIG);
+        void ForwardDelayed();
         void Subscribe(STATEFN_SIG);
         void Unsubscribe(STATEFN_SIG);
 
@@ -456,6 +446,7 @@ namespace NActors {
             TimeLimit.emplace(GetMaxCyclesPerEvent());
             STRICT_STFUNC_BODY(
                 fFunc(TEvInterconnect::EvForward, Forward)
+                cFunc(TEvInterconnect::EvForwardDelayed, ForwardDelayed)
                 cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
                 fFunc(TEvInterconnect::TEvConnectNode::EventType, Subscribe)
                 fFunc(TEvents::TEvSubscribe::EventType, Subscribe)
@@ -472,6 +463,7 @@ namespace NActors {
                 hFunc(TEvTerminate, Handle)
                 hFunc(TEvProcessPingRequest, Handle)
             )
+            UpdateUtilization();
         }
 
         void Handle(TEvUpdateFromInputSession::TPtr& ev);
@@ -497,7 +489,7 @@ namespace NActors {
             return 128 * 1024;
         }
 
-        void SendUpdateToWhiteboard(bool connected = true);
+        void SendUpdateToWhiteboard(bool connected = true, bool reschedule = true);
         ui32 CalculateQueueUtilization();
 
         void Handle(TEvPollerReady::TPtr& ev);
@@ -611,6 +603,12 @@ namespace NActors {
 
         std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers;
 
+        struct TDelayedEvent {
+            TAutoPtr<IEventHandle> Event;
+            NWilson::TSpan Span;
+        };
+        std::deque<TDelayedEvent> DelayedEvents;
+
         // time at which we want to send confirmation packet even if there was no outgoing data
         ui64 UnconfirmedBytes = 0;
         TMonotonic ForcePacketTimestamp = TMonotonic::Max();
@@ -641,6 +639,50 @@ namespace NActors {
         ui64 EqualizeCounter = 0;
 
         ui64 StarvingInRow = 0;
+
+        enum class EState {
+            Utilized = 0,
+            WaitingCpu = 1,
+            Idle = 2,
+        } State = EState::Idle;
+
+        double UtilizedPart = 0;
+        double WaitingCpuPart = 0;
+        double IdlePart = 0;
+        double Total = 0;
+        double Utilized = 0;
+        double Starving = 0;
+        NHPTimer::STime PartUpdateTimestamp = 0;
+
+        void UpdateState(std::optional<EState> newState = std::nullopt) {
+            if (!newState || *newState != State) {
+                const NHPTimer::STime timestamp = GetCycleCountFast();
+                const TDuration passed = CyclesToDuration(timestamp - std::exchange(PartUpdateTimestamp, timestamp));
+                const double seconds = passed.SecondsFloat();
+                const double factor = pow(0.8, seconds); // in 20 seconds we will get approx 1% of initial value
+                const double shift = 4 * (1 - factor);
+                UtilizedPart *= factor;
+                WaitingCpuPart *= factor;
+                IdlePart *= factor;
+                switch (State) {
+                    case EState::Utilized:   UtilizedPart   += shift; break;
+                    case EState::WaitingCpu: WaitingCpuPart += shift; break;
+                    case EState::Idle:       IdlePart       += shift; break;
+                }
+                Total = UtilizedPart + WaitingCpuPart + IdlePart;
+                if (Total) {
+                    Utilized = (UtilizedPart + WaitingCpuPart) / Total;
+                    Starving = WaitingCpuPart / Total;
+                } else {
+                    Utilized = Starving = 0;
+                }
+                if (newState) {
+                    State = *newState;
+                }
+            }
+        }
+
+        void UpdateUtilization();
     };
 
     class TInterconnectSessionKiller
@@ -661,15 +703,7 @@ namespace NActors {
         {
         }
 
-        void Bootstrap() {
-            auto sender = SelfId();
-            const auto eventFabric = [&sender](const TActorId& recp) -> IEventHandle* {
-                auto ev = new TEvSessionBufferSizeRequest();
-                return new IEventHandle(recp, sender, ev, IEventHandle::FlagTrackDelivery);
-            };
-            RepliesNumber = TlsActivationContext->ExecutorThread.ActorSystem->BroadcastToProxies(eventFabric);
-            Become(&TInterconnectSessionKiller::StateFunc);
-        }
+        void Bootstrap();
 
         STRICT_STFUNC(StateFunc,
             hFunc(TEvSessionBufferSizeResponse, ProcessResponse)

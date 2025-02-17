@@ -28,7 +28,7 @@
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-Удалите [созданного ранее](#consumer-add) читателя с именем `my-consumer` для топика `my-topic`:
+Удалите [созданного ранее](topic-consumer-add.md) читателя с именем `my-consumer` для топика `my-topic`:
 
 ```bash
 {{ ydb-cli }} -p quickstart topic consumer drop \

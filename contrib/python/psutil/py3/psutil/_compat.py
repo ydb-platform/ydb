@@ -23,7 +23,7 @@ __all__ = [
     # builtins
     "long", "range", "super", "unicode", "basestring",
     # literals
-    "u", "b",
+    "b",
     # collections module
     "lru_cache",
     # shutil module
@@ -47,9 +47,6 @@ if PY3:
     basestring = str
     range = range
 
-    def u(s):
-        return s
-
     def b(s):
         return s.encode("latin-1")
 
@@ -58,9 +55,6 @@ else:
     range = xrange
     unicode = unicode
     basestring = basestring
-
-    def u(s):
-        return unicode(s, "unicode_escape")
 
     def b(s):
         return s
@@ -186,7 +180,7 @@ else:
 
     @_instance_checking_exception(EnvironmentError)
     def PermissionError(inst):
-        return getattr(inst, 'errno', _SENTINEL) in (errno.EACCES, errno.EPERM)
+        return getattr(inst, 'errno', _SENTINEL) in {errno.EACCES, errno.EPERM}
 
     @_instance_checking_exception(EnvironmentError)
     def InterruptedError(inst):
@@ -231,7 +225,7 @@ except ImportError:
         "CacheInfo", ["hits", "misses", "maxsize", "currsize"]
     )
 
-    class _HashedSeq(list):
+    class _HashedSeq(list):  # noqa: FURB189
         __slots__ = ('hashvalue',)
 
         def __init__(self, tup, hash=hash):

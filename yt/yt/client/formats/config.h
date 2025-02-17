@@ -149,8 +149,7 @@ class TDsvFormatConfig
     : public TDsvFormatConfigBase
 {
 public:
-
-    TString TableIndexColumn;
+    std::string TableIndexColumn;
     bool SkipUnsupportedTypes = false;
 
     REGISTER_YSON_STRUCT(TDsvFormatConfig);
@@ -169,8 +168,8 @@ class TYamredDsvFormatConfig
 public:
     char YamrKeysSeparator;
 
-    std::vector<TString> KeyColumnNames;
-    std::vector<TString> SubkeyColumnNames;
+    std::vector<std::string> KeyColumnNames;
+    std::vector<std::string> SubkeyColumnNames;
 
     bool SkipUnsupportedTypesInValue = false;
 
@@ -193,14 +192,14 @@ class TSchemafulDsvFormatConfig
     : public TTableFormatConfigBase
 {
 public:
-    std::optional<std::vector<TString>> Columns;
+    std::optional<std::vector<std::string>> Columns;
 
     EMissingSchemafulDsvValueMode MissingValueMode;
     TString MissingValueSentinel;
 
     std::optional<bool> EnableColumnNamesHeader;
 
-    const std::vector<TString>& GetColumnsOrThrow() const;
+    const std::vector<std::string>& GetColumnsOrThrow() const;
 
     REGISTER_YSON_STRUCT(TSchemafulDsvFormatConfig);
 
@@ -382,7 +381,7 @@ public:
     int FieldWeightLimit;
     int StringWeightLimit;
     int MaxAllColumnNamesCount;
-    std::optional<std::vector<TString>> ColumnNames;
+    std::optional<std::vector<std::string>> ColumnNames;
     EWebJsonValueFormat ValueFormat;
 
     // Intentionally do not reveal following options to user.
@@ -413,6 +412,26 @@ public:
 };
 
 DEFINE_REFCOUNTED_TYPE(TSkiffFormatConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TYamlFormatConfig
+    : public NYTree::TYsonStruct
+{
+public:
+    //! Write explicit tag "!yt/uint64" for uint64 data type.
+    //! Use this option if you want to preserve information about
+    //! the original YT type (without it, numbers in range [0, 2^63-1]
+    //! will always be written as integers).
+    //! Option has no effect for parsing.
+    bool WriteUintTag;
+
+    REGISTER_YSON_STRUCT(TYamlFormatConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TYamlFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

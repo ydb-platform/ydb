@@ -1,8 +1,8 @@
 #include "dq_output_channel.h"
 #include "dq_transport.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/size_literals.h>
@@ -89,10 +89,6 @@ public:
     }
 
     void DoPush(NUdf::TUnboxedValue* values, ui32 width) {
-        ui64 rowsInMemory = PackedRowCount + ChunkRowCount;
-
-        LOG("Push request, rows in memory: " << rowsInMemory << ", bytesInMemory: " << (PackedDataSize + Packer.PackedSizeEstimate())
-            << ", finished: " << Finished);
         YQL_ENSURE(!IsFull());
 
         if (Finished) {
@@ -121,9 +117,9 @@ public:
             Data.emplace_back();
             Data.back().Buffer = FinishPackAndCheckSize();
             if (PushStats.CollectBasic()) {
-                PushStats.Bytes += Data.back().Buffer.size();
+                PushStats.Bytes += Data.back().Buffer.Size();
             }
-            PackedDataSize += Data.back().Buffer.size();
+            PackedDataSize += Data.back().Buffer.Size();
             PackedRowCount += ChunkRowCount;
             Data.back().RowCount = ChunkRowCount;
             ChunkRowCount = 0;
@@ -132,7 +128,7 @@ public:
 
         while (Storage && PackedDataSize && PackedDataSize + packerSize > MaxStoredBytes) {
             auto& head = Data.front();
-            size_t bufSize = head.Buffer.size();
+            size_t bufSize = head.Buffer.Size();
             YQL_ENSURE(PackedDataSize >= bufSize);
 
             TDqSerializedBatch data;
@@ -153,6 +149,7 @@ public:
             }
 
             Data.pop_front();
+            LOG("Data spilled. Total rows spilled: " << SpilledRowCount << ", bytesInMemory: " << (PackedDataSize + packerSize));
         }
 
         if (IsFull() || FirstStoredId < NextStoredId) {
@@ -177,8 +174,6 @@ public:
 
     [[nodiscard]]
     bool Pop(TDqSerializedBatch& data) override {
-        LOG("Pop request, rows in memory: " << GetValuesCount() << ", finished: " << Finished);
-
         if (!HasData()) {
             PushStats.TryPause();
             if (Finished) {
@@ -204,7 +199,7 @@ public:
         } else if (!Data.empty()) {
             auto& packed = Data.front();
             PackedRowCount -= packed.RowCount;
-            PackedDataSize -= packed.Buffer.size();
+            PackedDataSize -= packed.Buffer.Size();
             data.Proto.SetRows(packed.RowCount);
             data.SetPayload(std::move(packed.Buffer));
             Data.pop_front();
@@ -271,7 +266,7 @@ public:
         if (ChunkRowCount) {
             Data.emplace_back();
             Data.back().Buffer = FinishPackAndCheckSize();
-            PackedDataSize += Data.back().Buffer.size();
+            PackedDataSize += Data.back().Buffer.Size();
             PackedRowCount += ChunkRowCount;
             Data.back().RowCount = ChunkRowCount;
             ChunkRowCount = 0;
@@ -315,12 +310,12 @@ public:
         Finished = true;
     }
 
-    TRope FinishPackAndCheckSize() {
-        TRope result = Packer.Finish();
-        if (result.size() > ChunkSizeLimit) {
+    TChunkedBuffer FinishPackAndCheckSize() {
+        TChunkedBuffer result = Packer.Finish();
+        if (result.Size() > ChunkSizeLimit) {
             // TODO: may relax requirement if OOB transport is enabled
             ythrow TDqOutputChannelChunkSizeLimitExceeded() << "Row data size is too big: "
-                << result.size() << " bytes, exceeds limit of " << ChunkSizeLimit << " bytes";
+                << result.Size() << " bytes, exceeds limit of " << ChunkSizeLimit << " bytes";
         }
         return result;
     }
@@ -362,7 +357,7 @@ private:
     TLogFunc LogFunc;
 
     struct TSerializedBatch {
-        TRope Buffer;
+        TChunkedBuffer Buffer;
         ui64 RowCount = 0;
     };
     std::deque<TSerializedBatch> Data;

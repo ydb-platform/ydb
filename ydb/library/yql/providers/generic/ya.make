@@ -7,6 +7,3 @@ RECURSE(
     pushdown
 )
 
-RECURSE_FOR_TESTS(
-    style
-)

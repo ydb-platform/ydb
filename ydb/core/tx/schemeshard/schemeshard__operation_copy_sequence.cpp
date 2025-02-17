@@ -19,7 +19,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCopySequence TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -138,7 +138,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TCopySequence TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -239,7 +239,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -271,7 +271,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCopySequence TProposedCopySequence"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
     void UpdateSequenceDescription(NKikimrSchemeOp::TSequenceDescription& descr) {
@@ -551,7 +551,8 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath();
+                .IsCommonSensePath()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
                 if (parentPath->IsTable()) {
@@ -702,11 +703,10 @@ public:
         context.SS->ChangeTxState(db, OperationId, txState.State);
         context.OnComplete.ActivateTx(OperationId);
 
-        context.SS->PersistPath(db, dstPath->PathId);
         if (!acl.empty()) {
             dstPath->ApplyACL(acl);
-            context.SS->PersistACL(db, dstPath.Base());
         }
+        context.SS->PersistPath(db, dstPath->PathId);
 
         context.SS->Sequences[pathId] = sequenceInfo;
         context.SS->PersistSequence(db, pathId, *sequenceInfo);
@@ -731,8 +731,8 @@ public:
         context.SS->ClearDescribePathCaches(dstPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath->PathId);
 
-        domainInfo->IncPathsInside();
-        parentPath->IncAliveChildren();
+        domainInfo->IncPathsInside(context.SS);
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;

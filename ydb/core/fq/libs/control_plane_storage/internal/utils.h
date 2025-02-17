@@ -2,13 +2,13 @@
 
 #include <tuple>
 
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
-#include <ydb/core/fq/libs/exceptions/exceptions.h>
+#include <yql/essentials/utils/exceptions.h>
 
 namespace NFq {
 
@@ -41,7 +41,7 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
                               std::string_view statsStr,
                               TDuration executionTime);
 
-using StatsValuesList = std::vector<std::pair<TString, ui64>>;
+using StatsValuesList = std::vector<std::pair<TString, i64>>;
 
 StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto);
 
@@ -52,5 +52,7 @@ struct Statistics {
 };
 
 TStringBuilder& operator<<(TStringBuilder& builder, const Statistics& statistics);
+
+void AddTransientIssues(::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage>* protoIssues, NYql::TIssues&& issues);
 
 };

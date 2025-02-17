@@ -2,8 +2,8 @@
 
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
 #include <ydb/library/yql/dq/actors/dq.h>
 
@@ -49,7 +49,7 @@ public:
         , TaskId(taskId)
         , InputChannelsWithDisabledCheckpoints(std::move(inputChannelsWithDisabledCheckpoints))
         , MemoryQuota(std::move(memoryQuota))
-    { 
+    {
     }
 
     ~TLocalTaskRunnerActor()
@@ -83,9 +83,11 @@ public:
                 /*flags=*/0,
                 ev->Cookie);
         }
+        ActorElapsedTicks += NActors::TlsActivationContext->GetCurrentEventTicks();
     }
 
 private:
+
     void OnStatisticsRequest(TEvStatistics::TPtr& ev) {
 
         THashMap<ui32, const IDqAsyncOutputBuffer*> sinks;
@@ -98,7 +100,7 @@ private:
             inputTransforms[inputTransformId] = TaskRunner->GetInputTransform(inputTransformId)->second.Get();
         }
 
-        ev->Get()->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms));
+        ev->Get()->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms), ActorElapsedTicks);
         Send(
             ParentId,
             ev->Release().Release(),
@@ -143,6 +145,18 @@ private:
                 return false;
             }
         }
+        for (const auto transformId: InputTransforms) {
+            const auto t = TaskRunner->GetInputTransform(transformId);
+            if (t) {
+                auto [_, transform] = *t;
+                if (!transform->Empty()) {
+                    return false;
+                }
+                if (transform->IsPending()) {
+                    return false;
+                }
+            }
+        }
         return true;
     }
 
@@ -179,7 +193,7 @@ private:
         }
 
         auto watermarkInjectedToOutputs = false;
-        THolder<NDqProto::TMiniKqlProgramState> mkqlProgramState;
+        THolder<TMiniKqlProgramState> mkqlProgramState;
         if (res == ERunStatus::PendingInput || res == ERunStatus::Finished) {
             if (shouldHandleWatermark) {
                 const auto watermarkRequested = ev->Get()->WatermarkRequest->Watermark;
@@ -196,12 +210,12 @@ private:
             }
 
             if (ev->Get()->CheckpointRequest.Defined() && ReadyToCheckpoint()) {
-                mkqlProgramState = MakeHolder<NDqProto::TMiniKqlProgramState>();
+                mkqlProgramState = MakeHolder<TMiniKqlProgramState>();
                 try {
-                    mkqlProgramState->SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
-                    NDqProto::TStateData::TData& data = *mkqlProgramState->MutableData()->MutableStateData();
-                    data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
-                    data.SetBlob(TaskRunner->Save());
+                    mkqlProgramState->RuntimeVersion = NDqProto::RUNTIME_VERSION_YQL_1_0;
+                    TStateData& data = mkqlProgramState->Data;
+                    data.Version = TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion;
+                    data.Blob = TaskRunner->Save();
                     // inject barriers
                     // todo:(whcrc) barriers are injected even if source state save failed
                     for (const auto& channelId : ev->Get()->CheckpointRequest->ChannelIds) {
@@ -234,7 +248,7 @@ private:
                 inputTransforms[inputTransformId] = TaskRunner->GetInputTransform(inputTransformId)->second.Get();
             }
 
-            st->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms));
+            st->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms), ActorElapsedTicks);
             Send(ParentId, st.Release());
         }
 
@@ -399,13 +413,13 @@ private:
         const bool finished = sink->IsFinished();
         const bool changed = finished || size > 0 || hasCheckpoint;
 
-        Parent->SinkSend(ev->Get()->Index, std::move(batch), std::move(maybeCheckpoint), checkpointSize, size, finished, changed);
+        Parent->SinkSend(ev->Get()->Index, std::move(batch), std::move(maybeCheckpoint), size, checkpointSize, finished, changed);
     }
 
     void OnDqTask(TEvTaskRunnerCreate::TPtr& ev) {
         ParentId = ev->Sender;
         auto settings = NDq::TDqTaskSettings(&ev->Get()->Task);
-        TaskRunner = Factory(*Alloc.get(), settings, ev->Get()->StatsMode, [this](const TString& message) {
+        TaskRunner = Factory(Alloc, settings, ev->Get()->StatsMode, [this](const TString& message) {
             LOG_D(message);
         });
 
@@ -423,20 +437,28 @@ private:
 
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? TMaybe<ui64>(MemoryQuota->GetMkqlMemoryLimit()) : Nothing());
         if (MemoryQuota) {
-            MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
+            if (settings.GetEnableSpilling()) {
+                MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl(guard.GetMutex());
+            } else {
+                MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
+            }   
+        }
+
+        if (settings.GetEnableSpilling()) {
+            auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
+            auto errorCallback = ev->Get()->ExecCtx->GetErrorCallback();
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback, errorCallback));
         }
 
         TaskRunner->Prepare(settings, ev->Get()->MemoryLimits, *ev->Get()->ExecCtx);
-        
+
         THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> inputTransforms;
         for (auto i = 0; i != inputs.size(); ++i) {
             if (auto t = TaskRunner->GetInputTransform(i)) {
                 inputTransforms[i] = *t;
+                InputTransforms.emplace(i);
             }
         }
-
-        auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
-        TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback));
 
         auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
             TaskRunner->GetSecureParams(),
@@ -482,10 +504,12 @@ private:
     const TTxId TxId;
     const ui64 TaskId;
     THashSet<ui32> Inputs;
+    THashSet<ui32> InputTransforms;
     THashSet<ui32> Sources;
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
     THashSet<ui32> InputChannelsWithDisabledCheckpoints;
     THolder<TDqMemoryQuota> MemoryQuota;
+    ui64 ActorElapsedTicks = 0;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

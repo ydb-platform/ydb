@@ -433,6 +433,10 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
         TVector<TAcquireReadStepRequest> AcquireReadStepPending;
         bool AcquireReadStepFlushing = false;
         bool AcquireReadStepStarting = false;
+
+        // When true the state has been preserved by the state actor
+        // Any changes will not be migrated to newer generations
+        bool Preserved = false;
     };
 
 public:
@@ -574,6 +578,7 @@ private:
     TControlWrapper MinLeaderLeaseDurationUs;
     TControlWrapper VolatilePlanLeaseMs;
     TControlWrapper PlanAheadTimeShiftMs;
+    TControlWrapper MinPlanResolutionMs;
 
     TVolatileState VolatileState;
     TConfig Config;
@@ -650,7 +655,7 @@ private:
     TMediator& Mediator(TTabletId mediatorId, const TActorContext &ctx) {
         TMediator &mediator = Mediators[mediatorId];
         if (!mediator.QueueActor)
-            mediator.QueueActor = ctx.ExecutorThread.RegisterActor(CreateTxCoordinatorMediatorQueue(ctx.SelfID, TabletID(), mediatorId, Executor()->Generation()));
+            mediator.QueueActor = ctx.Register(CreateTxCoordinatorMediatorQueue(ctx.SelfID, TabletID(), mediatorId, Executor()->Generation()));
         return mediator;
     }
 
@@ -698,7 +703,7 @@ private:
     void SchedulePlanTick();
     void SchedulePlanTickExact(ui64 next);
     void SchedulePlanTickAligned(ui64 next);
-    ui64 AlignPlanStep(ui64 step);
+    ui64 AlignPlanStep(ui64 step, bool volatilePlan = false);
 
     void TryInitMonCounters(const TActorContext &ctx);
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;

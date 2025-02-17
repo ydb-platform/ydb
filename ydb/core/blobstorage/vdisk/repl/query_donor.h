@@ -68,10 +68,9 @@ namespace NKikimr {
             }
 
             if (action) {
-                const TActorId temp(actorId);
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " sending " << query->ToString()
-                    << " to " << temp);
-                Send(actorId, query.release());
+                    << " to " << actorId);
+                Send(actorId, query.release(), IEventHandle::FlagTrackDelivery);
             } else {
                 PassAway();
             }
@@ -109,13 +108,14 @@ namespace NKikimr {
 
         void PassAway() override {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " finished query");
-            Send(ParentId, new TEvents::TEvActorDied);
+            Send(ParentId, new TEvents::TEvGone);
             SendVDiskResponse(TActivationContext::AsActorContext(), Sender, Result.release(), Cookie, VCtx);
             TActorBootstrapped::PassAway();
         }
 
         STRICT_STFUNC(StateFunc,
             hFunc(TEvBlobStorage::TEvVGetResult, Handle);
+            cFunc(TEvents::TSystem::Undelivered, Step);
             cFunc(TEvents::TSystem::Poison, PassAway);
         )
     };

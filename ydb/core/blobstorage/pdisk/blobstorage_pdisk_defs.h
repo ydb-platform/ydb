@@ -2,7 +2,7 @@
 #include "defs.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/crypto/default.h>
-#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 
 #include "blobstorage_pdisk_signature.h"
 
@@ -37,8 +37,6 @@ namespace NKikimr {
         enum class EPDiskMetadataOutcome {
             OK, // metadata was successfully read/written
             ERROR, // I/O, locking or some other kind of error has occured
-            UNFORMATTED, // pdisk is not formatted properly
-            METADATA_UNSUPPORTED, // metadata record is unsupported in this PDisk format
             NO_METADATA, // no metadata record available
         };
 

@@ -1,11 +1,11 @@
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/bscontroller/indir.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
-#include <ydb/core/mind/bscontroller/vdisk_status_tracker.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -234,7 +234,7 @@ struct TEnvironmentSetup {
 
     void SetupStorage() {
         const TActorId proxyId = MakeBlobStorageProxyID(GroupId);
-        Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(GroupId), NodeId), NodeId);
+        Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(TGroupId::FromValue(GroupId)), NodeId), NodeId);
 
         class TMock : public TActor<TMock> {
         public:
@@ -243,7 +243,7 @@ struct TEnvironmentSetup {
             {}
 
             void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
-                Send(ev->Sender, new TEvNodeWardenStorageConfig(NKikimrBlobStorage::TStorageConfig(), nullptr));
+                Send(ev->Sender, new TEvNodeWardenStorageConfig(NKikimrBlobStorage::TStorageConfig(), nullptr, false));
             }
 
             STATEFN(StateFunc) {
@@ -714,6 +714,133 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         });
     }
 
+    Y_UNIT_TEST(MergeIntersectingBoxes) {
+        const ui32 numNodes = 50;
+        const ui32 numNodes1 = 20;
+        const ui32 numGroups1 = numNodes * 3;
+        const ui32 numGroups2 = numNodes1 * 4;
+        TEnvironmentSetup env(numNodes, 1);
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+                TFinalizer finalizer(env);
+                env.Prepare(dispatchName, setup, outActiveZone);
+
+                TVector<TEnvironmentSetup::TNodeRecord> nodes1, nodes2;
+                for (const auto& node : env.GetNodes()) {
+                    nodes1.push_back(node);
+                    if (nodes2.size() < numNodes1) {
+                        nodes2.push_back(node);
+                    }
+                }
+
+                TSet<ui32> nodeIds1, nodeIds2;
+                for (const auto& item : nodes1) {
+                    nodeIds1.insert(std::get<2>(item));
+                }
+                for (const auto& item : nodes2) {
+                    nodeIds2.insert(std::get<2>(item));
+                }
+
+                NKikimrBlobStorage::TConfigRequest request;
+                env.DefineBox(1, "first box", {
+                        {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
+                        {"/dev/disk2", NKikimrBlobStorage::ROT, true,  false, 0},
+                        {"/dev/disk3", NKikimrBlobStorage::SSD, false, false, 0},
+                    }, nodes1, request);
+                env.DefineStoragePool(1, 1, "first storage pool", numGroups1, NKikimrBlobStorage::ROT, {}, request);
+
+                NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+                UNIT_ASSERT(response.GetSuccess());
+
+                request.Clear();
+                env.DefineBox(2, "second box", {
+                        {"/dev/disk4", NKikimrBlobStorage::ROT, false, false, 0},
+                        {"/dev/disk5", NKikimrBlobStorage::ROT, true,  false, 0},
+                        {"/dev/disk6", NKikimrBlobStorage::SSD, false, false, 0},
+                    }, nodes2, request);
+                env.DefineStoragePool(2, 1, "second storage pool", numGroups2, NKikimrBlobStorage::ROT, {}, request);
+
+                response = env.Invoke(request);
+                UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+                ////////////////////////////////////////////////////////////////////////////////////////////////////////
+                // merge boxes
+
+                request.Clear();
+                auto& cmd = *request.AddCommand()->MutableMergeBoxes();
+                cmd.SetOriginBoxId(2);
+                cmd.SetOriginBoxGeneration(1);
+                cmd.SetTargetBoxId(1);
+                cmd.SetTargetBoxGeneration(1);
+                auto& item = *cmd.AddStoragePoolIdMap();
+                item.SetOriginStoragePoolId(1);
+                item.SetTargetStoragePoolId(2);
+
+                response = env.Invoke(request);
+                UNIT_ASSERT(response.GetSuccess());
+
+                ////////////////////////////////////////////////////////////////////////////////////////////////////////
+                // validate result
+
+                request.Clear();
+                request.AddCommand()->MutableReadBox();
+                request.AddCommand()->MutableReadHostConfig();
+                request.AddCommand()->MutableQueryBaseConfig();
+                response = env.Invoke(request);
+                UNIT_ASSERT(response.GetSuccess());
+
+                THashMap<std::tuple<TString, i32>, ui32> nodeMap;
+                for (const auto& node : env.GetNodes()) {
+                    nodeMap.emplace(std::make_tuple(std::get<0>(node), std::get<1>(node)), std::get<2>(node));
+                }
+
+                // check box nodes
+                using TDrives = std::set<TString>;
+                THashMap<ui64, TDrives> hostConfigs;
+                for (const auto& hostConfig : response.GetStatus(1).GetHostConfig()) {
+                    std::set<TString>& paths = hostConfigs[hostConfig.GetHostConfigId()];
+                    for (const auto& drive : hostConfig.GetDrive()) {
+                        const auto [it, inserted] = paths.insert(drive.GetPath());
+                        UNIT_ASSERT(inserted);
+                    }
+                }
+                const auto& boxes = response.GetStatus(0).GetBox();
+                UNIT_ASSERT_VALUES_EQUAL(boxes.size(), 1);
+                const auto& box = boxes.at(0);
+                UNIT_ASSERT_VALUES_EQUAL(box.HostSize(), numNodes);
+                for (const auto& item : box.GetHost()) {
+                    UNIT_ASSERT(hostConfigs.contains(item.GetHostConfigId()));
+                    const auto& hostConfig = hostConfigs[item.GetHostConfigId()];
+                    const auto& key = item.GetKey();
+                    const auto keyTuple = std::make_tuple(key.GetFqdn(), key.GetIcPort());
+                    UNIT_ASSERT(nodeMap.contains(keyTuple));
+                    const ui32 nodeId = nodeMap[keyTuple];
+                    if (nodeIds2.contains(nodeId)) { // 6 drives
+                        UNIT_ASSERT_EQUAL(hostConfig, (TDrives{"/dev/disk1", "/dev/disk2", "/dev/disk3", "/dev/disk4", "/dev/disk5", "/dev/disk6"}));
+                    } else { // 3 drives
+                        UNIT_ASSERT_EQUAL(hostConfig, (TDrives{"/dev/disk1", "/dev/disk2", "/dev/disk3"}));
+                    }
+                }
+
+                // validate base config
+                ui32 num1 = 0, num2 = 0;
+                {
+                    const auto& baseConfig = response.GetStatus(2).GetBaseConfig();
+                    for (const auto& pdisk : baseConfig.GetPDisk()) {
+                        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetBoxId(), 1);
+                    }
+                    for (const auto& group : baseConfig.GetGroup()) {
+                        UNIT_ASSERT_VALUES_EQUAL(group.GetBoxId(), 1);
+                        const ui64 storagePoolId = group.GetStoragePoolId();
+                        UNIT_ASSERT(storagePoolId == 1 || storagePoolId == 2);
+                        ++(storagePoolId == 1 ? num1 : num2);
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(num1, numGroups1);
+                    UNIT_ASSERT_VALUES_EQUAL(num2, numGroups2);
+                }
+
+        });
+    }
+
     Y_UNIT_TEST(MoveGroups) {
         const ui32 numNodes = 50;
         const ui32 numGroups1 = 100;
@@ -1104,29 +1231,5 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 }
             }
         }
-    }
-
-    Y_UNIT_TEST(VDiskStatusTracker) {
-        using E = NKikimrBlobStorage::EVDiskStatus;
-        TInstant base = TInstant::Zero();
-        TVDiskStatusTracker tracker(TDuration::Seconds(60));
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(0)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(75)), std::nullopt);
-        tracker.Update(E::INIT_PENDING, base + TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(15)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(75)), E::INIT_PENDING);
-        tracker.Update(E::REPLICATING, base + TDuration::Seconds(20));
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(15)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(75)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(85)), E::REPLICATING);
-        tracker.Update(E::READY, base + TDuration::Seconds(30));
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(15)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(75)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(85)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(95)), E::READY);
-        tracker.Update(E::ERROR, base + TDuration::Seconds(40));
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(75)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(85)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(95)), std::nullopt);
     }
 }

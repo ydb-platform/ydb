@@ -1,0 +1,20 @@
+--- a/lib/fuzzer/standalone/StandaloneFuzzTargetMain.c
++++ b/lib/fuzzer/standalone/StandaloneFuzzTargetMain.c
+@@ -19,11 +19,16 @@
+ #include <stdlib.h>
+ 
+ extern int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size);
+-__attribute__((weak)) extern int LLVMFuzzerInitialize(int *argc, char ***argv);
++#ifndef _MSC_VER
++__attribute__((weak))
++extern int LLVMFuzzerInitialize(int *argc, char ***argv);
++#endif
+ int main(int argc, char **argv) {
+   fprintf(stderr, "StandaloneFuzzTargetMain: running %d inputs\n", argc - 1);
++#ifndef _MSC_VER
+   if (LLVMFuzzerInitialize)
+     LLVMFuzzerInitialize(&argc, &argv);
++#endif
+   for (int i = 1; i < argc; i++) {
+     fprintf(stderr, "Running: %s\n", argv[i]);
+     FILE *f = fopen(argv[i], "r");

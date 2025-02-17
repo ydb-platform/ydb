@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_ast.h>
 
 #include <util/generic/maybe.h>
 

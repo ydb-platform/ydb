@@ -3,8 +3,6 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
-#include <library/cpp/pop_count/popcount.h>
-
 #include <util/generic/bitops.h>
 
 namespace NKikimr {
@@ -233,7 +231,8 @@ namespace NKikimr {
             TVectorType m = handoff[handoffNodeId].ToVector(); // map of handoff replicas on this node
             TVectorType mainVec = main.ToVector();
             TVectorType toMove = m - mainVec;   // what we can send to main replicas
-            TVectorType toDel = m & mainVec;    // what we can delete
+            TVectorType deleted = GetVDiskHandoffDeletedVec(top, vdisk, id);
+            TVectorType toDel = m & mainVec & ~deleted;  // not deleted, what we can to delete
             return TPairOfVectors(toMove, toDel);
         }
     }
@@ -338,20 +337,29 @@ namespace NKikimr {
 
     // Make a copy of ingress w/o local bits
     TIngress TIngress::CopyWithoutLocal(TBlobStorageGroupType gtype) const {
+        return ReplaceLocal(gtype, NMatrix::TVectorType(0, gtype.TotalPartCount()));
+    }
+
+    TIngress TIngress::ReplaceLocal(TBlobStorageGroupType gtype, NMatrix::TVectorType parts) const {
         switch (IngressMode(gtype)) {
             case EMode::GENERIC: {
                 TIngress res;
                 res.Data = Data;
 
                 SETUP_VECTORS(res.Data, gtype);
-                for (ui32 i = 0; i < totalParts; i++)
-                    local.Clear(i);
+                for (ui32 i = 0; i < totalParts; i++) {
+                    if (parts.Get(i)) {
+                        local.Set(i);
+                    } else {
+                        local.Clear(i);
+                    }
+                }
 
                 return res;
             }
             case EMode::MIRROR3OF4: {
                 const ui64 mask = ((static_cast<ui64>(1) << gtype.TotalPartCount()) - 1) << (62 - gtype.TotalPartCount());
-                return TIngress(Data & ~mask);
+                return TIngress((Data & ~mask) | static_cast<ui64>(parts.Raw()) << (62 - 8));
             }
         }
     }

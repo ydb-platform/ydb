@@ -722,7 +722,7 @@ sys_displayhook(PyObject *module, PyObject *o)
     if (o == Py_None) {
         Py_RETURN_NONE;
     }
-    if (PyObject_SetAttr(builtins, &_Py_ID(_), Py_None) != 0)
+    if (PyObject_SetAttr(builtins, _Py_LATIN1_CHR('_'), Py_None) != 0)
         return NULL;
     outf = _PySys_GetAttr(tstate, &_Py_ID(stdout));
     if (outf == NULL || outf == Py_None) {
@@ -744,10 +744,9 @@ sys_displayhook(PyObject *module, PyObject *o)
             return NULL;
         }
     }
-    _Py_DECLARE_STR(newline, "\n");
-    if (PyFile_WriteObject(&_Py_STR(newline), outf, Py_PRINT_RAW) != 0)
+    if (PyFile_WriteObject(_Py_LATIN1_CHR('\n'), outf, Py_PRINT_RAW) != 0)
         return NULL;
-    if (PyObject_SetAttr(builtins, &_Py_ID(_), o) != 0)
+    if (PyObject_SetAttr(builtins, _Py_LATIN1_CHR('_'), o) != 0)
         return NULL;
     Py_RETURN_NONE;
 }
@@ -927,8 +926,9 @@ sys_intern_impl(PyObject *module, PyObject *s)
 /*[clinic end generated code: output=be680c24f5c9e5d6 input=849483c006924e2f]*/
 {
     if (PyUnicode_CheckExact(s)) {
+        PyInterpreterState *interp = _PyInterpreterState_GET();
         Py_INCREF(s);
-        PyUnicode_InternInPlace(&s);
+        _PyUnicode_InternMortal(interp, &s);
         return s;
     }
     else {
@@ -1439,31 +1439,33 @@ get_hash_info(PyThreadState *tstate)
     int field = 0;
     PyHash_FuncDef *hashfunc;
     hash_info = PyStructSequence_New(&Hash_InfoType);
-    if (hash_info == NULL)
-        return NULL;
-    hashfunc = PyHash_GetFuncDef();
-    PyStructSequence_SET_ITEM(hash_info, field++,
-                              PyLong_FromLong(8*sizeof(Py_hash_t)));
-    PyStructSequence_SET_ITEM(hash_info, field++,
-                              PyLong_FromSsize_t(_PyHASH_MODULUS));
-    PyStructSequence_SET_ITEM(hash_info, field++,
-                              PyLong_FromLong(_PyHASH_INF));
-    PyStructSequence_SET_ITEM(hash_info, field++,
-                              PyLong_FromLong(0));  // This is no longer used
-    PyStructSequence_SET_ITEM(hash_info, field++,
-                              PyLong_FromLong(_PyHASH_IMAG));
-    PyStructSequence_SET_ITEM(hash_info, field++,
-                              PyUnicode_FromString(hashfunc->name));
-    PyStructSequence_SET_ITEM(hash_info, field++,
-                              PyLong_FromLong(hashfunc->hash_bits));
-    PyStructSequence_SET_ITEM(hash_info, field++,
-                              PyLong_FromLong(hashfunc->seed_bits));
-    PyStructSequence_SET_ITEM(hash_info, field++,
-                              PyLong_FromLong(Py_HASH_CUTOFF));
-    if (_PyErr_Occurred(tstate)) {
-        Py_CLEAR(hash_info);
+    if (hash_info == NULL) {
         return NULL;
     }
+    hashfunc = PyHash_GetFuncDef();
+
+#define SET_HASH_INFO_ITEM(CALL)                             \
+    do {                                                     \
+        PyObject *item = (CALL);                             \
+        if (item == NULL) {                                  \
+            Py_CLEAR(hash_info);                             \
+            return NULL;                                     \
+        }                                                    \
+        PyStructSequence_SET_ITEM(hash_info, field++, item); \
+    } while(0)
+
+    SET_HASH_INFO_ITEM(PyLong_FromLong(8 * sizeof(Py_hash_t)));
+    SET_HASH_INFO_ITEM(PyLong_FromSsize_t(_PyHASH_MODULUS));
+    SET_HASH_INFO_ITEM(PyLong_FromLong(_PyHASH_INF));
+    SET_HASH_INFO_ITEM(PyLong_FromLong(0));  // This is no longer used
+    SET_HASH_INFO_ITEM(PyLong_FromLong(_PyHASH_IMAG));
+    SET_HASH_INFO_ITEM(PyUnicode_FromString(hashfunc->name));
+    SET_HASH_INFO_ITEM(PyLong_FromLong(hashfunc->hash_bits));
+    SET_HASH_INFO_ITEM(PyLong_FromLong(hashfunc->seed_bits));
+    SET_HASH_INFO_ITEM(PyLong_FromLong(Py_HASH_CUTOFF));
+
+#undef SET_HASH_INFO_ITEM
+
     return hash_info;
 }
 /*[clinic input]
@@ -1586,6 +1588,9 @@ sys_getwindowsversion_impl(PyObject *module)
     if (version && PyObject_TypeCheck(version, &WindowsVersionType)) {
         return version;
     }
+    if (!PyErr_ExceptionMatches(PyExc_AttributeError)) {
+        return NULL;
+    }
     Py_XDECREF(version);
     PyErr_Clear();
 
@@ -1597,15 +1602,24 @@ sys_getwindowsversion_impl(PyObject *module)
     if (version == NULL)
         return NULL;
 
-    PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.dwMajorVersion));
-    PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.dwMinorVersion));
-    PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.dwBuildNumber));
-    PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.dwPlatformId));
-    PyStructSequence_SET_ITEM(version, pos++, PyUnicode_FromWideChar(ver.szCSDVersion, -1));
-    PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.wServicePackMajor));
-    PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.wServicePackMinor));
-    PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.wSuiteMask));
-    PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.wProductType));
+#define SET_VERSION_INFO(CALL)                               \
+    do {                                                     \
+        PyObject *item = (CALL);                             \
+        if (item == NULL) {                                  \
+            goto error;                                      \
+        }                                                    \
+        PyStructSequence_SET_ITEM(version, pos++, item);     \
+    } while(0)
+
+    SET_VERSION_INFO(PyLong_FromLong(ver.dwMajorVersion));
+    SET_VERSION_INFO(PyLong_FromLong(ver.dwMinorVersion));
+    SET_VERSION_INFO(PyLong_FromLong(ver.dwBuildNumber));
+    SET_VERSION_INFO(PyLong_FromLong(ver.dwPlatformId));
+    SET_VERSION_INFO(PyUnicode_FromWideChar(ver.szCSDVersion, -1));
+    SET_VERSION_INFO(PyLong_FromLong(ver.wServicePackMajor));
+    SET_VERSION_INFO(PyLong_FromLong(ver.wServicePackMinor));
+    SET_VERSION_INFO(PyLong_FromLong(ver.wSuiteMask));
+    SET_VERSION_INFO(PyLong_FromLong(ver.wProductType));
 
     // GetVersion will lie if we are running in a compatibility mode.
     // We need to read the version info from a system file resource
@@ -1613,6 +1627,10 @@ sys_getwindowsversion_impl(PyObject *module)
     // just return whatever GetVersion said.
     PyObject *realVersion = _sys_getwindowsversion_from_kernel32();
     if (!realVersion) {
+        if (!PyErr_ExceptionMatches(PyExc_WindowsError)) {
+            return NULL;
+        }
+
         PyErr_Clear();
         realVersion = Py_BuildValue("(kkk)",
             ver.dwMajorVersion,
@@ -1621,21 +1639,19 @@ sys_getwindowsversion_impl(PyObject *module)
         );
     }
 
-    if (realVersion) {
-        PyStructSequence_SET_ITEM(version, pos++, realVersion);
-    }
+    SET_VERSION_INFO(realVersion);
 
-    if (PyErr_Occurred()) {
-        Py_DECREF(version);
-        return NULL;
-    }
+#undef SET_VERSION_INFO
 
     if (PyObject_SetAttrString(module, "_cached_windows_version", version) < 0) {
-        Py_DECREF(version);
-        return NULL;
+        goto error;
     }
 
     return version;
+
+error:
+    Py_DECREF(version);
+    return NULL;
 }
 
 #pragma warning(pop)
@@ -1902,14 +1918,22 @@ sys_getallocatedblocks_impl(PyObject *module)
 /*[clinic input]
 sys.getunicodeinternedsize -> Py_ssize_t
 
+    *
+    _only_immortal: bool = False
+
 Return the number of elements of the unicode interned dictionary
 [clinic start generated code]*/
 
 static Py_ssize_t
-sys_getunicodeinternedsize_impl(PyObject *module)
-/*[clinic end generated code: output=ad0e4c9738ed4129 input=726298eaa063347a]*/
+sys_getunicodeinternedsize_impl(PyObject *module, int _only_immortal)
+/*[clinic end generated code: output=29a6377a94a14f70 input=0330b3408dd5bcc6]*/
 {
-    return _PyUnicode_InternedSize();
+    if (_only_immortal) {
+        return _PyUnicode_InternedSize_Immortal();
+    }
+    else {
+        return _PyUnicode_InternedSize();
+    }
 }
 
 /*[clinic input]
@@ -2629,6 +2653,7 @@ PySys_ResetWarnOptions(void)
 static int
 _PySys_AddWarnOptionWithError(PyThreadState *tstate, PyObject *option)
 {
+    assert(tstate != NULL);
     PyObject *warnoptions = get_warnoptions(tstate);
     if (warnoptions == NULL) {
         return -1;
@@ -2643,11 +2668,11 @@ void
 PySys_AddWarnOptionUnicode(PyObject *option)
 {
     PyThreadState *tstate = _PyThreadState_GET();
+    _Py_EnsureTstateNotNULL(tstate);
+    assert(!_PyErr_Occurred(tstate));
     if (_PySys_AddWarnOptionWithError(tstate, option) < 0) {
         /* No return value, therefore clear error state if possible */
-        if (tstate) {
-            _PyErr_Clear(tstate);
-        }
+        _PyErr_Clear(tstate);
     }
 }
 

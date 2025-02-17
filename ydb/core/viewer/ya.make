@@ -1,63 +1,108 @@
+RECURSE(
+    json
+    yaml
+)
+
 RECURSE_FOR_TESTS(
     ut
+    tests
 )
 
 LIBRARY()
 
+IF(NOT OS_WINDOWS)
+IF(BUILD_TYPE == RELEASE OR BUILD_TYPE == RELWITHDEBINFO)
+    CXXFLAGS(-Oz)
+ENDIF()
+ENDIF()
+
 SRCS(
     browse_db.h
-    browse_pq.h
+    browse_events.h
     browse.h
+    browse_pq.h
     counters_hosts.h
-    json_acl.h
-    json_autocomplete.h
-    json_blobindexstat.h
-    json_browse.h
-    json_bscontrollerinfo.h
-    json_bsgroupinfo.h
-    json_cluster.h
-    json_compute.h
-    json_config.h
-    json_content.h
-    json_counters.h
-    json_describe.h
-    json_local_rpc.h
-    json_getblob.h
-    json_graph.h
+    healthcheck_record.h
+    json_handlers.cpp
+    json_handlers.h
+    json_handlers_browse.cpp
+    json_handlers_operation.cpp
+    json_handlers_query.cpp
+    json_handlers_pdisk.cpp
+    json_handlers_scheme.cpp
+    json_handlers_storage.cpp
     json_handlers_vdisk.cpp
     json_handlers_viewer.cpp
-    json_healthcheck.h
-    json_hiveinfo.h
-    json_hotkeys.h
-    json_labeledcounters.h
-    json_metainfo.h
-    json_netinfo.h
-    json_nodeinfo.h
-    json_nodelist.h
-    json_nodes.h
-    json_pdiskinfo.h
-    json_query.h
-    json_render.h
-    json_storage.h
-    json_sysinfo.h
-    json_tabletcounters.h
-    json_tabletinfo.h
-    json_tenants.h
-    json_tenantinfo.h
-    json_topicinfo.h
-    json_pqconsumerinfo.h
+    json_handlers_pq.cpp
+    json_local_rpc.h
+    json_pipe_req.cpp
+    json_pipe_req.h
+    json_storage_base.h
     json_vdisk_req.h
-    json_vdiskinfo.h
-    json_vdiskstat.h
+    json_wb_req.cpp
     json_wb_req.h
-    json_whoami.h
     log.h
+    operation_cancel.h
+    operation_forget.h
+    operation_get.h
+    operation_list.h
+    pdisk_info.h
+    pdisk_restart.h
+    pdisk_status.h
     query_autocomplete_helper.h
+    scheme_directory.h
+    storage_groups.h
+    vdisk_blobindexstat.h
+    vdisk_evict.h
+    vdisk_getblob.h
+    vdisk_vdiskstat.h
+    viewer_acl.h
+    viewer_autocomplete.h
+    viewer_browse.h
+    viewer_bscontrollerinfo.h
+    viewer_bsgroupinfo.h
+    viewer_capabilities.h
+    viewer_check_access.h
+    viewer_cluster.h
+    viewer_compute.h
+    viewer_config.h
+    viewer_content.h
+    viewer_counters.h
+    viewer_describe_consumer.h
+    viewer_describe.h
+    viewer_describe_topic.h
+    viewer_feature_flags.h
+    viewer_graph.h
+    viewer_healthcheck.h
+    viewer_helper.h
+    viewer_hiveinfo.h
+    viewer_hivestats.h
+    viewer_hotkeys.h
+    viewer_labeled_counters.h
+    viewer_metainfo.h
+    viewer_netinfo.h
+    viewer_nodeinfo.h
+    viewer_nodelist.h
+    viewer_nodes.h
+    viewer_pdiskinfo.h
+    viewer_pqconsumerinfo.h
+    viewer_query.h
+    viewer_query_old.h
+    viewer_render.h
     viewer_request.cpp
     viewer_request.h
-    viewer.cpp
+    viewer_storage.h
+    viewer_storage_usage.h
+    viewer_sysinfo.h
+    viewer_tabletcounters.h
+    viewer_tabletinfo.h
+    viewer_tenantinfo.h
+    viewer_tenants.h
+    viewer_topicinfo.h
+    viewer_vdiskinfo.h
+    viewer_whoami.h
     viewer.h
-    viewer_probes.cpp
+    viewer.cpp
     wb_aggregate.cpp
     wb_aggregate.h
     wb_filter.cpp
@@ -65,194 +110,397 @@ SRCS(
     wb_group.h
     wb_merge.cpp
     wb_merge.h
+    wb_req.h
 )
 
 IF (NOT EXPORT_CMAKE)
     # GENERATED MONITORING RESOURCES START
     RESOURCE(
         monitoring/asset-manifest.json monitoring/asset-manifest.json
+        monitoring/css.worker.js monitoring/css.worker.js
+        monitoring/css.worker.js.LICENSE.txt monitoring/css.worker.js.LICENSE.txt
+        monitoring/editor.worker.js monitoring/editor.worker.js
+        monitoring/html.worker.js monitoring/html.worker.js
         monitoring/index.html monitoring/index.html
-        monitoring/static/css/4983.caf0c2a0.chunk.css monitoring/static/css/4983.caf0c2a0.chunk.css
-        monitoring/static/css/7539.157f7e9f.chunk.css monitoring/static/css/7539.157f7e9f.chunk.css
-        monitoring/static/css/main.eab8584b.css monitoring/static/css/main.eab8584b.css
+        monitoring/json.worker.js monitoring/json.worker.js
+        monitoring/json.worker.js.LICENSE.txt monitoring/json.worker.js.LICENSE.txt
+        monitoring/static/css/2512.19e3e12f.chunk.css monitoring/static/css/2512.19e3e12f.chunk.css
+        monitoring/static/css/371.01f04f12.chunk.css monitoring/static/css/371.01f04f12.chunk.css
+        monitoring/static/css/3779.66c0ef83.chunk.css monitoring/static/css/3779.66c0ef83.chunk.css
+        monitoring/static/css/3812.440ff245.chunk.css monitoring/static/css/3812.440ff245.chunk.css
+        monitoring/static/css/3940.0971684f.chunk.css monitoring/static/css/3940.0971684f.chunk.css
+        monitoring/static/css/4187.cac9847e.chunk.css monitoring/static/css/4187.cac9847e.chunk.css
+        monitoring/static/css/535.c6fb8cd9.chunk.css monitoring/static/css/535.c6fb8cd9.chunk.css
+        monitoring/static/css/5438.615bd68a.chunk.css monitoring/static/css/5438.615bd68a.chunk.css
+        monitoring/static/css/6030.fd13e90a.chunk.css monitoring/static/css/6030.fd13e90a.chunk.css
+        monitoring/static/css/684.90fbb646.chunk.css monitoring/static/css/684.90fbb646.chunk.css
+        monitoring/static/css/8593.95df9723.chunk.css monitoring/static/css/8593.95df9723.chunk.css
+        monitoring/static/css/9796.828f7385.chunk.css monitoring/static/css/9796.828f7385.chunk.css
+        monitoring/static/css/985.8e5e0423.chunk.css monitoring/static/css/985.8e5e0423.chunk.css
+        monitoring/static/css/99.7cffb936.chunk.css monitoring/static/css/99.7cffb936.chunk.css
+        monitoring/static/css/main.c06e6faa.css monitoring/static/css/main.c06e6faa.css
         monitoring/static/favicon.png monitoring/static/favicon.png
-        monitoring/static/js/1155.4fce1854.chunk.js monitoring/static/js/1155.4fce1854.chunk.js
-        monitoring/static/js/1155.4fce1854.chunk.js.LICENSE.txt monitoring/static/js/1155.4fce1854.chunk.js.LICENSE.txt
-        monitoring/static/js/1478.7e1423b2.chunk.js monitoring/static/js/1478.7e1423b2.chunk.js
-        monitoring/static/js/1478.7e1423b2.chunk.js.LICENSE.txt monitoring/static/js/1478.7e1423b2.chunk.js.LICENSE.txt
-        monitoring/static/js/1747.b4331799.chunk.js monitoring/static/js/1747.b4331799.chunk.js
-        monitoring/static/js/1747.b4331799.chunk.js.LICENSE.txt monitoring/static/js/1747.b4331799.chunk.js.LICENSE.txt
-        monitoring/static/js/185.3f659c11.chunk.js monitoring/static/js/185.3f659c11.chunk.js
-        monitoring/static/js/185.3f659c11.chunk.js.LICENSE.txt monitoring/static/js/185.3f659c11.chunk.js.LICENSE.txt
-        monitoring/static/js/1956.23e162d0.chunk.js monitoring/static/js/1956.23e162d0.chunk.js
-        monitoring/static/js/1956.23e162d0.chunk.js.LICENSE.txt monitoring/static/js/1956.23e162d0.chunk.js.LICENSE.txt
-        monitoring/static/js/2104.4f22ecac.chunk.js monitoring/static/js/2104.4f22ecac.chunk.js
-        monitoring/static/js/2104.4f22ecac.chunk.js.LICENSE.txt monitoring/static/js/2104.4f22ecac.chunk.js.LICENSE.txt
-        monitoring/static/js/2118.fe3bd07f.chunk.js monitoring/static/js/2118.fe3bd07f.chunk.js
-        monitoring/static/js/2118.fe3bd07f.chunk.js.LICENSE.txt monitoring/static/js/2118.fe3bd07f.chunk.js.LICENSE.txt
-        monitoring/static/js/2141.26c930aa.chunk.js monitoring/static/js/2141.26c930aa.chunk.js
-        monitoring/static/js/2141.26c930aa.chunk.js.LICENSE.txt monitoring/static/js/2141.26c930aa.chunk.js.LICENSE.txt
-        monitoring/static/js/2190.27f354f5.chunk.js monitoring/static/js/2190.27f354f5.chunk.js
-        monitoring/static/js/2190.27f354f5.chunk.js.LICENSE.txt monitoring/static/js/2190.27f354f5.chunk.js.LICENSE.txt
-        monitoring/static/js/2194.38bafdfc.chunk.js monitoring/static/js/2194.38bafdfc.chunk.js
-        monitoring/static/js/2194.38bafdfc.chunk.js.LICENSE.txt monitoring/static/js/2194.38bafdfc.chunk.js.LICENSE.txt
-        monitoring/static/js/2322.29255c22.chunk.js monitoring/static/js/2322.29255c22.chunk.js
-        monitoring/static/js/2322.29255c22.chunk.js.LICENSE.txt monitoring/static/js/2322.29255c22.chunk.js.LICENSE.txt
-        monitoring/static/js/2403.d86e3324.chunk.js monitoring/static/js/2403.d86e3324.chunk.js
-        monitoring/static/js/2403.d86e3324.chunk.js.LICENSE.txt monitoring/static/js/2403.d86e3324.chunk.js.LICENSE.txt
-        monitoring/static/js/2435.092e8d7f.chunk.js monitoring/static/js/2435.092e8d7f.chunk.js
-        monitoring/static/js/2492.64b7d727.chunk.js monitoring/static/js/2492.64b7d727.chunk.js
-        monitoring/static/js/2492.64b7d727.chunk.js.LICENSE.txt monitoring/static/js/2492.64b7d727.chunk.js.LICENSE.txt
-        monitoring/static/js/2521.21bdfab9.chunk.js monitoring/static/js/2521.21bdfab9.chunk.js
-        monitoring/static/js/2521.21bdfab9.chunk.js.LICENSE.txt monitoring/static/js/2521.21bdfab9.chunk.js.LICENSE.txt
-        monitoring/static/js/2532.30bb087d.chunk.js monitoring/static/js/2532.30bb087d.chunk.js
-        monitoring/static/js/2532.30bb087d.chunk.js.LICENSE.txt monitoring/static/js/2532.30bb087d.chunk.js.LICENSE.txt
-        monitoring/static/js/2553.9c696b27.chunk.js monitoring/static/js/2553.9c696b27.chunk.js
-        monitoring/static/js/2553.9c696b27.chunk.js.LICENSE.txt monitoring/static/js/2553.9c696b27.chunk.js.LICENSE.txt
-        monitoring/static/js/2840.b69eb597.chunk.js monitoring/static/js/2840.b69eb597.chunk.js
-        monitoring/static/js/2840.b69eb597.chunk.js.LICENSE.txt monitoring/static/js/2840.b69eb597.chunk.js.LICENSE.txt
-        monitoring/static/js/2876.afe7e47f.chunk.js monitoring/static/js/2876.afe7e47f.chunk.js
-        monitoring/static/js/2876.afe7e47f.chunk.js.LICENSE.txt monitoring/static/js/2876.afe7e47f.chunk.js.LICENSE.txt
-        monitoring/static/js/2931.e56f5c86.chunk.js monitoring/static/js/2931.e56f5c86.chunk.js
-        monitoring/static/js/2931.e56f5c86.chunk.js.LICENSE.txt monitoring/static/js/2931.e56f5c86.chunk.js.LICENSE.txt
-        monitoring/static/js/2962.66e01691.chunk.js monitoring/static/js/2962.66e01691.chunk.js
-        monitoring/static/js/2962.66e01691.chunk.js.LICENSE.txt monitoring/static/js/2962.66e01691.chunk.js.LICENSE.txt
-        monitoring/static/js/2994.e6c77407.chunk.js monitoring/static/js/2994.e6c77407.chunk.js
-        monitoring/static/js/2994.e6c77407.chunk.js.LICENSE.txt monitoring/static/js/2994.e6c77407.chunk.js.LICENSE.txt
-        monitoring/static/js/3074.bbb8aaef.chunk.js monitoring/static/js/3074.bbb8aaef.chunk.js
-        monitoring/static/js/3074.bbb8aaef.chunk.js.LICENSE.txt monitoring/static/js/3074.bbb8aaef.chunk.js.LICENSE.txt
-        monitoring/static/js/3358.c4b77137.chunk.js monitoring/static/js/3358.c4b77137.chunk.js
-        monitoring/static/js/3358.c4b77137.chunk.js.LICENSE.txt monitoring/static/js/3358.c4b77137.chunk.js.LICENSE.txt
-        monitoring/static/js/337.b6fc715e.chunk.js monitoring/static/js/337.b6fc715e.chunk.js
-        monitoring/static/js/337.b6fc715e.chunk.js.LICENSE.txt monitoring/static/js/337.b6fc715e.chunk.js.LICENSE.txt
-        monitoring/static/js/3457.b193afe6.chunk.js monitoring/static/js/3457.b193afe6.chunk.js
-        monitoring/static/js/3498.c7d39060.chunk.js monitoring/static/js/3498.c7d39060.chunk.js
-        monitoring/static/js/3498.c7d39060.chunk.js.LICENSE.txt monitoring/static/js/3498.c7d39060.chunk.js.LICENSE.txt
-        monitoring/static/js/358.d6300019.chunk.js monitoring/static/js/358.d6300019.chunk.js
-        monitoring/static/js/358.d6300019.chunk.js.LICENSE.txt monitoring/static/js/358.d6300019.chunk.js.LICENSE.txt
-        monitoring/static/js/3621.9b6c61ab.chunk.js monitoring/static/js/3621.9b6c61ab.chunk.js
-        monitoring/static/js/3621.9b6c61ab.chunk.js.LICENSE.txt monitoring/static/js/3621.9b6c61ab.chunk.js.LICENSE.txt
-        monitoring/static/js/3644.aeda46ca.chunk.js monitoring/static/js/3644.aeda46ca.chunk.js
-        monitoring/static/js/3644.aeda46ca.chunk.js.LICENSE.txt monitoring/static/js/3644.aeda46ca.chunk.js.LICENSE.txt
-        monitoring/static/js/3771.764124c3.chunk.js monitoring/static/js/3771.764124c3.chunk.js
-        monitoring/static/js/3771.764124c3.chunk.js.LICENSE.txt monitoring/static/js/3771.764124c3.chunk.js.LICENSE.txt
-        monitoring/static/js/4046.5dac72a9.chunk.js monitoring/static/js/4046.5dac72a9.chunk.js
-        monitoring/static/js/4046.5dac72a9.chunk.js.LICENSE.txt monitoring/static/js/4046.5dac72a9.chunk.js.LICENSE.txt
-        monitoring/static/js/4123.64882a16.chunk.js monitoring/static/js/4123.64882a16.chunk.js
-        monitoring/static/js/4123.64882a16.chunk.js.LICENSE.txt monitoring/static/js/4123.64882a16.chunk.js.LICENSE.txt
-        monitoring/static/js/425.c6ae8758.chunk.js monitoring/static/js/425.c6ae8758.chunk.js
-        monitoring/static/js/425.c6ae8758.chunk.js.LICENSE.txt monitoring/static/js/425.c6ae8758.chunk.js.LICENSE.txt
-        monitoring/static/js/4345.b734ab51.chunk.js monitoring/static/js/4345.b734ab51.chunk.js
-        monitoring/static/js/4345.b734ab51.chunk.js.LICENSE.txt monitoring/static/js/4345.b734ab51.chunk.js.LICENSE.txt
-        monitoring/static/js/4388.edb51304.chunk.js monitoring/static/js/4388.edb51304.chunk.js
-        monitoring/static/js/4388.edb51304.chunk.js.LICENSE.txt monitoring/static/js/4388.edb51304.chunk.js.LICENSE.txt
-        monitoring/static/js/451.3b449e79.chunk.js monitoring/static/js/451.3b449e79.chunk.js
-        monitoring/static/js/451.3b449e79.chunk.js.LICENSE.txt monitoring/static/js/451.3b449e79.chunk.js.LICENSE.txt
-        monitoring/static/js/4550.2e04d705.chunk.js monitoring/static/js/4550.2e04d705.chunk.js
-        monitoring/static/js/4550.2e04d705.chunk.js.LICENSE.txt monitoring/static/js/4550.2e04d705.chunk.js.LICENSE.txt
-        monitoring/static/js/4635.ffa9b6b7.chunk.js monitoring/static/js/4635.ffa9b6b7.chunk.js
-        monitoring/static/js/4635.ffa9b6b7.chunk.js.LICENSE.txt monitoring/static/js/4635.ffa9b6b7.chunk.js.LICENSE.txt
-        monitoring/static/js/4789.41de1f87.chunk.js monitoring/static/js/4789.41de1f87.chunk.js
-        monitoring/static/js/4789.41de1f87.chunk.js.LICENSE.txt monitoring/static/js/4789.41de1f87.chunk.js.LICENSE.txt
-        monitoring/static/js/4812.73af8448.chunk.js monitoring/static/js/4812.73af8448.chunk.js
-        monitoring/static/js/4812.73af8448.chunk.js.LICENSE.txt monitoring/static/js/4812.73af8448.chunk.js.LICENSE.txt
-        monitoring/static/js/5107.e893787e.chunk.js monitoring/static/js/5107.e893787e.chunk.js
-        monitoring/static/js/5107.e893787e.chunk.js.LICENSE.txt monitoring/static/js/5107.e893787e.chunk.js.LICENSE.txt
-        monitoring/static/js/5168.6fb23f08.chunk.js monitoring/static/js/5168.6fb23f08.chunk.js
-        monitoring/static/js/5168.6fb23f08.chunk.js.LICENSE.txt monitoring/static/js/5168.6fb23f08.chunk.js.LICENSE.txt
-        monitoring/static/js/5311.a500a1ea.chunk.js monitoring/static/js/5311.a500a1ea.chunk.js
-        monitoring/static/js/5311.a500a1ea.chunk.js.LICENSE.txt monitoring/static/js/5311.a500a1ea.chunk.js.LICENSE.txt
-        monitoring/static/js/5378.86805fba.chunk.js monitoring/static/js/5378.86805fba.chunk.js
-        monitoring/static/js/5378.86805fba.chunk.js.LICENSE.txt monitoring/static/js/5378.86805fba.chunk.js.LICENSE.txt
-        monitoring/static/js/5661.c83a4eb0.chunk.js monitoring/static/js/5661.c83a4eb0.chunk.js
-        monitoring/static/js/5661.c83a4eb0.chunk.js.LICENSE.txt monitoring/static/js/5661.c83a4eb0.chunk.js.LICENSE.txt
-        monitoring/static/js/5790.eda45e33.chunk.js monitoring/static/js/5790.eda45e33.chunk.js
-        monitoring/static/js/5790.eda45e33.chunk.js.LICENSE.txt monitoring/static/js/5790.eda45e33.chunk.js.LICENSE.txt
-        monitoring/static/js/5868.be04313a.chunk.js monitoring/static/js/5868.be04313a.chunk.js
-        monitoring/static/js/5868.be04313a.chunk.js.LICENSE.txt monitoring/static/js/5868.be04313a.chunk.js.LICENSE.txt
-        monitoring/static/js/598.243fd68d.chunk.js monitoring/static/js/598.243fd68d.chunk.js
-        monitoring/static/js/599.c58caf58.chunk.js monitoring/static/js/599.c58caf58.chunk.js
-        monitoring/static/js/6044.2de9962d.chunk.js monitoring/static/js/6044.2de9962d.chunk.js
-        monitoring/static/js/6044.2de9962d.chunk.js.LICENSE.txt monitoring/static/js/6044.2de9962d.chunk.js.LICENSE.txt
-        monitoring/static/js/6142.b2452554.chunk.js monitoring/static/js/6142.b2452554.chunk.js
-        monitoring/static/js/6142.b2452554.chunk.js.LICENSE.txt monitoring/static/js/6142.b2452554.chunk.js.LICENSE.txt
-        monitoring/static/js/619.93f30f25.chunk.js monitoring/static/js/619.93f30f25.chunk.js
-        monitoring/static/js/619.93f30f25.chunk.js.LICENSE.txt monitoring/static/js/619.93f30f25.chunk.js.LICENSE.txt
-        monitoring/static/js/6230.8e64216a.chunk.js monitoring/static/js/6230.8e64216a.chunk.js
-        monitoring/static/js/6230.8e64216a.chunk.js.LICENSE.txt monitoring/static/js/6230.8e64216a.chunk.js.LICENSE.txt
-        monitoring/static/js/6289.51f8741e.chunk.js monitoring/static/js/6289.51f8741e.chunk.js
-        monitoring/static/js/6289.51f8741e.chunk.js.LICENSE.txt monitoring/static/js/6289.51f8741e.chunk.js.LICENSE.txt
-        monitoring/static/js/6300.b0cf51a4.chunk.js monitoring/static/js/6300.b0cf51a4.chunk.js
-        monitoring/static/js/6300.b0cf51a4.chunk.js.LICENSE.txt monitoring/static/js/6300.b0cf51a4.chunk.js.LICENSE.txt
-        monitoring/static/js/6321.44989ff0.chunk.js monitoring/static/js/6321.44989ff0.chunk.js
-        monitoring/static/js/6321.44989ff0.chunk.js.LICENSE.txt monitoring/static/js/6321.44989ff0.chunk.js.LICENSE.txt
-        monitoring/static/js/6329.a83ab1f8.chunk.js monitoring/static/js/6329.a83ab1f8.chunk.js
-        monitoring/static/js/6329.a83ab1f8.chunk.js.LICENSE.txt monitoring/static/js/6329.a83ab1f8.chunk.js.LICENSE.txt
-        monitoring/static/js/6390.32571915.chunk.js monitoring/static/js/6390.32571915.chunk.js
-        monitoring/static/js/6390.32571915.chunk.js.LICENSE.txt monitoring/static/js/6390.32571915.chunk.js.LICENSE.txt
-        monitoring/static/js/6619.9e1de7a6.chunk.js monitoring/static/js/6619.9e1de7a6.chunk.js
-        monitoring/static/js/6619.9e1de7a6.chunk.js.LICENSE.txt monitoring/static/js/6619.9e1de7a6.chunk.js.LICENSE.txt
-        monitoring/static/js/6692.9322b59d.chunk.js monitoring/static/js/6692.9322b59d.chunk.js
-        monitoring/static/js/6692.9322b59d.chunk.js.LICENSE.txt monitoring/static/js/6692.9322b59d.chunk.js.LICENSE.txt
-        monitoring/static/js/6795.5a0da658.chunk.js monitoring/static/js/6795.5a0da658.chunk.js
-        monitoring/static/js/6795.5a0da658.chunk.js.LICENSE.txt monitoring/static/js/6795.5a0da658.chunk.js.LICENSE.txt
-        monitoring/static/js/6876.867b698c.chunk.js monitoring/static/js/6876.867b698c.chunk.js
-        monitoring/static/js/6898.5580b941.chunk.js monitoring/static/js/6898.5580b941.chunk.js
-        monitoring/static/js/6898.5580b941.chunk.js.LICENSE.txt monitoring/static/js/6898.5580b941.chunk.js.LICENSE.txt
-        monitoring/static/js/7409.4408962b.chunk.js monitoring/static/js/7409.4408962b.chunk.js
-        monitoring/static/js/7520.d631f383.chunk.js monitoring/static/js/7520.d631f383.chunk.js
-        monitoring/static/js/7520.d631f383.chunk.js.LICENSE.txt monitoring/static/js/7520.d631f383.chunk.js.LICENSE.txt
-        monitoring/static/js/7529.cb72fb82.chunk.js monitoring/static/js/7529.cb72fb82.chunk.js
-        monitoring/static/js/7529.cb72fb82.chunk.js.LICENSE.txt monitoring/static/js/7529.cb72fb82.chunk.js.LICENSE.txt
-        monitoring/static/js/7539.05a90213.chunk.js monitoring/static/js/7539.05a90213.chunk.js
-        monitoring/static/js/7543.9bf9dc54.chunk.js monitoring/static/js/7543.9bf9dc54.chunk.js
-        monitoring/static/js/7543.9bf9dc54.chunk.js.LICENSE.txt monitoring/static/js/7543.9bf9dc54.chunk.js.LICENSE.txt
-        monitoring/static/js/7554.23b49cda.chunk.js monitoring/static/js/7554.23b49cda.chunk.js
-        monitoring/static/js/7554.23b49cda.chunk.js.LICENSE.txt monitoring/static/js/7554.23b49cda.chunk.js.LICENSE.txt
-        monitoring/static/js/7645.ba8540ee.chunk.js monitoring/static/js/7645.ba8540ee.chunk.js
-        monitoring/static/js/785.d2eae69c.chunk.js monitoring/static/js/785.d2eae69c.chunk.js
-        monitoring/static/js/785.d2eae69c.chunk.js.LICENSE.txt monitoring/static/js/785.d2eae69c.chunk.js.LICENSE.txt
-        monitoring/static/js/8065.31ab70e1.chunk.js monitoring/static/js/8065.31ab70e1.chunk.js
-        monitoring/static/js/8065.31ab70e1.chunk.js.LICENSE.txt monitoring/static/js/8065.31ab70e1.chunk.js.LICENSE.txt
-        monitoring/static/js/8450.baf3a89d.chunk.js monitoring/static/js/8450.baf3a89d.chunk.js
-        monitoring/static/js/8450.baf3a89d.chunk.js.LICENSE.txt monitoring/static/js/8450.baf3a89d.chunk.js.LICENSE.txt
-        monitoring/static/js/86.ad271bdc.chunk.js monitoring/static/js/86.ad271bdc.chunk.js
-        monitoring/static/js/86.ad271bdc.chunk.js.LICENSE.txt monitoring/static/js/86.ad271bdc.chunk.js.LICENSE.txt
-        monitoring/static/js/8622.49f3054c.chunk.js monitoring/static/js/8622.49f3054c.chunk.js
-        monitoring/static/js/8791.b209de42.chunk.js monitoring/static/js/8791.b209de42.chunk.js
-        monitoring/static/js/8791.b209de42.chunk.js.LICENSE.txt monitoring/static/js/8791.b209de42.chunk.js.LICENSE.txt
-        monitoring/static/js/8797.f8f0ce13.chunk.js monitoring/static/js/8797.f8f0ce13.chunk.js
-        monitoring/static/js/8797.f8f0ce13.chunk.js.LICENSE.txt monitoring/static/js/8797.f8f0ce13.chunk.js.LICENSE.txt
-        monitoring/static/js/8905.b8a9fd91.chunk.js monitoring/static/js/8905.b8a9fd91.chunk.js
-        monitoring/static/js/8905.b8a9fd91.chunk.js.LICENSE.txt monitoring/static/js/8905.b8a9fd91.chunk.js.LICENSE.txt
-        monitoring/static/js/9173.dfde586d.chunk.js monitoring/static/js/9173.dfde586d.chunk.js
-        monitoring/static/js/9173.dfde586d.chunk.js.LICENSE.txt monitoring/static/js/9173.dfde586d.chunk.js.LICENSE.txt
-        monitoring/static/js/919.53e04507.chunk.js monitoring/static/js/919.53e04507.chunk.js
-        monitoring/static/js/919.53e04507.chunk.js.LICENSE.txt monitoring/static/js/919.53e04507.chunk.js.LICENSE.txt
-        monitoring/static/js/924.382f18b1.chunk.js monitoring/static/js/924.382f18b1.chunk.js
-        monitoring/static/js/924.382f18b1.chunk.js.LICENSE.txt monitoring/static/js/924.382f18b1.chunk.js.LICENSE.txt
-        monitoring/static/js/9319.40f9e46a.chunk.js monitoring/static/js/9319.40f9e46a.chunk.js
-        monitoring/static/js/9319.40f9e46a.chunk.js.LICENSE.txt monitoring/static/js/9319.40f9e46a.chunk.js.LICENSE.txt
-        monitoring/static/js/9371.0327dbd7.chunk.js monitoring/static/js/9371.0327dbd7.chunk.js
-        monitoring/static/js/9371.0327dbd7.chunk.js.LICENSE.txt monitoring/static/js/9371.0327dbd7.chunk.js.LICENSE.txt
-        monitoring/static/js/9433.7ce648d0.chunk.js monitoring/static/js/9433.7ce648d0.chunk.js
-        monitoring/static/js/9433.7ce648d0.chunk.js.LICENSE.txt monitoring/static/js/9433.7ce648d0.chunk.js.LICENSE.txt
-        monitoring/static/js/9526.10bb1684.chunk.js monitoring/static/js/9526.10bb1684.chunk.js
-        monitoring/static/js/9526.10bb1684.chunk.js.LICENSE.txt monitoring/static/js/9526.10bb1684.chunk.js.LICENSE.txt
-        monitoring/static/js/9621.48073631.chunk.js monitoring/static/js/9621.48073631.chunk.js
-        monitoring/static/js/9621.48073631.chunk.js.LICENSE.txt monitoring/static/js/9621.48073631.chunk.js.LICENSE.txt
-        monitoring/static/js/9876.49756d3b.chunk.js monitoring/static/js/9876.49756d3b.chunk.js
-        monitoring/static/js/9876.49756d3b.chunk.js.LICENSE.txt monitoring/static/js/9876.49756d3b.chunk.js.LICENSE.txt
-        monitoring/static/js/9923.270f0a19.chunk.js monitoring/static/js/9923.270f0a19.chunk.js
-        monitoring/static/js/9923.270f0a19.chunk.js.LICENSE.txt monitoring/static/js/9923.270f0a19.chunk.js.LICENSE.txt
-        monitoring/static/js/main.f3726f74.js monitoring/static/js/main.f3726f74.js
-        monitoring/static/js/main.f3726f74.js.LICENSE.txt monitoring/static/js/main.f3726f74.js.LICENSE.txt
+        monitoring/static/js/1053.f976b474.chunk.js monitoring/static/js/1053.f976b474.chunk.js
+        monitoring/static/js/108.d2d9c180.chunk.js monitoring/static/js/108.d2d9c180.chunk.js
+        monitoring/static/js/1088.40c16ea2.chunk.js monitoring/static/js/1088.40c16ea2.chunk.js
+        monitoring/static/js/1094.b5bb2475.chunk.js monitoring/static/js/1094.b5bb2475.chunk.js
+        monitoring/static/js/1094.b5bb2475.chunk.js.LICENSE.txt monitoring/static/js/1094.b5bb2475.chunk.js.LICENSE.txt
+        monitoring/static/js/110.2c798565.chunk.js monitoring/static/js/110.2c798565.chunk.js
+        monitoring/static/js/110.2c798565.chunk.js.LICENSE.txt monitoring/static/js/110.2c798565.chunk.js.LICENSE.txt
+        monitoring/static/js/118.112f7e2f.chunk.js monitoring/static/js/118.112f7e2f.chunk.js
+        monitoring/static/js/118.112f7e2f.chunk.js.LICENSE.txt monitoring/static/js/118.112f7e2f.chunk.js.LICENSE.txt
+        monitoring/static/js/1187.c5435886.chunk.js monitoring/static/js/1187.c5435886.chunk.js
+        monitoring/static/js/1237.328d0241.chunk.js monitoring/static/js/1237.328d0241.chunk.js
+        monitoring/static/js/1278.d5c24e15.chunk.js monitoring/static/js/1278.d5c24e15.chunk.js
+        monitoring/static/js/1278.d5c24e15.chunk.js.LICENSE.txt monitoring/static/js/1278.d5c24e15.chunk.js.LICENSE.txt
+        monitoring/static/js/1299.aaedb42e.chunk.js monitoring/static/js/1299.aaedb42e.chunk.js
+        monitoring/static/js/132.cf00f1e7.chunk.js monitoring/static/js/132.cf00f1e7.chunk.js
+        monitoring/static/js/132.cf00f1e7.chunk.js.LICENSE.txt monitoring/static/js/132.cf00f1e7.chunk.js.LICENSE.txt
+        monitoring/static/js/1321.401aa9b8.chunk.js monitoring/static/js/1321.401aa9b8.chunk.js
+        monitoring/static/js/1321.401aa9b8.chunk.js.LICENSE.txt monitoring/static/js/1321.401aa9b8.chunk.js.LICENSE.txt
+        monitoring/static/js/1329.de2ec2cf.chunk.js monitoring/static/js/1329.de2ec2cf.chunk.js
+        monitoring/static/js/1414.4cfda0bc.chunk.js monitoring/static/js/1414.4cfda0bc.chunk.js
+        monitoring/static/js/1414.4cfda0bc.chunk.js.LICENSE.txt monitoring/static/js/1414.4cfda0bc.chunk.js.LICENSE.txt
+        monitoring/static/js/1486.8a488ae4.chunk.js monitoring/static/js/1486.8a488ae4.chunk.js
+        monitoring/static/js/1496.18b1eb19.chunk.js monitoring/static/js/1496.18b1eb19.chunk.js
+        monitoring/static/js/1606.0041ed7d.chunk.js monitoring/static/js/1606.0041ed7d.chunk.js
+        monitoring/static/js/1606.0041ed7d.chunk.js.LICENSE.txt monitoring/static/js/1606.0041ed7d.chunk.js.LICENSE.txt
+        monitoring/static/js/1627.80c94ebf.chunk.js monitoring/static/js/1627.80c94ebf.chunk.js
+        monitoring/static/js/1657.d6f0b340.chunk.js monitoring/static/js/1657.d6f0b340.chunk.js
+        monitoring/static/js/1696.6120f4a8.chunk.js monitoring/static/js/1696.6120f4a8.chunk.js
+        monitoring/static/js/1747.f01c9fd8.chunk.js monitoring/static/js/1747.f01c9fd8.chunk.js
+        monitoring/static/js/1756.b612458a.chunk.js monitoring/static/js/1756.b612458a.chunk.js
+        monitoring/static/js/1836.f49bfd4f.chunk.js monitoring/static/js/1836.f49bfd4f.chunk.js
+        monitoring/static/js/1865.72c933c8.chunk.js monitoring/static/js/1865.72c933c8.chunk.js
+        monitoring/static/js/1917.e3ac9c6d.chunk.js monitoring/static/js/1917.e3ac9c6d.chunk.js
+        monitoring/static/js/1956.c11f9b8a.chunk.js monitoring/static/js/1956.c11f9b8a.chunk.js
+        monitoring/static/js/1975.e3066826.chunk.js monitoring/static/js/1975.e3066826.chunk.js
+        monitoring/static/js/2016.397296b7.chunk.js monitoring/static/js/2016.397296b7.chunk.js
+        monitoring/static/js/2016.397296b7.chunk.js.LICENSE.txt monitoring/static/js/2016.397296b7.chunk.js.LICENSE.txt
+        monitoring/static/js/2042.81e83eeb.chunk.js monitoring/static/js/2042.81e83eeb.chunk.js
+        monitoring/static/js/2042.81e83eeb.chunk.js.LICENSE.txt monitoring/static/js/2042.81e83eeb.chunk.js.LICENSE.txt
+        monitoring/static/js/2053.b4294b46.chunk.js monitoring/static/js/2053.b4294b46.chunk.js
+        monitoring/static/js/2161.865bcd48.chunk.js monitoring/static/js/2161.865bcd48.chunk.js
+        monitoring/static/js/2162.cca3e026.chunk.js monitoring/static/js/2162.cca3e026.chunk.js
+        monitoring/static/js/2162.cca3e026.chunk.js.LICENSE.txt monitoring/static/js/2162.cca3e026.chunk.js.LICENSE.txt
+        monitoring/static/js/2166.e382ccb1.chunk.js monitoring/static/js/2166.e382ccb1.chunk.js
+        monitoring/static/js/2182.1e53f745.chunk.js monitoring/static/js/2182.1e53f745.chunk.js
+        monitoring/static/js/2182.1e53f745.chunk.js.LICENSE.txt monitoring/static/js/2182.1e53f745.chunk.js.LICENSE.txt
+        monitoring/static/js/221.b740df48.chunk.js monitoring/static/js/221.b740df48.chunk.js
+        monitoring/static/js/225.cf362439.chunk.js monitoring/static/js/225.cf362439.chunk.js
+        monitoring/static/js/225.cf362439.chunk.js.LICENSE.txt monitoring/static/js/225.cf362439.chunk.js.LICENSE.txt
+        monitoring/static/js/2286.e992ffd4.chunk.js monitoring/static/js/2286.e992ffd4.chunk.js
+        monitoring/static/js/2308.9e3a980c.chunk.js monitoring/static/js/2308.9e3a980c.chunk.js
+        monitoring/static/js/2350.a7af0a2e.chunk.js monitoring/static/js/2350.a7af0a2e.chunk.js
+        monitoring/static/js/2350.a7af0a2e.chunk.js.LICENSE.txt monitoring/static/js/2350.a7af0a2e.chunk.js.LICENSE.txt
+        monitoring/static/js/2372.880a31f6.chunk.js monitoring/static/js/2372.880a31f6.chunk.js
+        monitoring/static/js/2372.880a31f6.chunk.js.LICENSE.txt monitoring/static/js/2372.880a31f6.chunk.js.LICENSE.txt
+        monitoring/static/js/246.13bb9db2.chunk.js monitoring/static/js/246.13bb9db2.chunk.js
+        monitoring/static/js/246.13bb9db2.chunk.js.LICENSE.txt monitoring/static/js/246.13bb9db2.chunk.js.LICENSE.txt
+        monitoring/static/js/2466.b8b05e16.chunk.js monitoring/static/js/2466.b8b05e16.chunk.js
+        monitoring/static/js/2512.732a0e0c.chunk.js monitoring/static/js/2512.732a0e0c.chunk.js
+        monitoring/static/js/2518.ac97d255.chunk.js monitoring/static/js/2518.ac97d255.chunk.js
+        monitoring/static/js/2518.ac97d255.chunk.js.LICENSE.txt monitoring/static/js/2518.ac97d255.chunk.js.LICENSE.txt
+        monitoring/static/js/2568.5bec7af3.chunk.js monitoring/static/js/2568.5bec7af3.chunk.js
+        monitoring/static/js/2612.55127fa0.chunk.js monitoring/static/js/2612.55127fa0.chunk.js
+        monitoring/static/js/2626.a5b0d58c.chunk.js monitoring/static/js/2626.a5b0d58c.chunk.js
+        monitoring/static/js/2726.e753cb7c.chunk.js monitoring/static/js/2726.e753cb7c.chunk.js
+        monitoring/static/js/2726.e753cb7c.chunk.js.LICENSE.txt monitoring/static/js/2726.e753cb7c.chunk.js.LICENSE.txt
+        monitoring/static/js/2742.d5c8fae8.chunk.js monitoring/static/js/2742.d5c8fae8.chunk.js
+        monitoring/static/js/2742.d5c8fae8.chunk.js.LICENSE.txt monitoring/static/js/2742.d5c8fae8.chunk.js.LICENSE.txt
+        monitoring/static/js/2775.9105769d.chunk.js monitoring/static/js/2775.9105769d.chunk.js
+        monitoring/static/js/2776.0f5e87f5.chunk.js monitoring/static/js/2776.0f5e87f5.chunk.js
+        monitoring/static/js/2854.48cc58dc.chunk.js monitoring/static/js/2854.48cc58dc.chunk.js
+        monitoring/static/js/2854.48cc58dc.chunk.js.LICENSE.txt monitoring/static/js/2854.48cc58dc.chunk.js.LICENSE.txt
+        monitoring/static/js/290.b4f1e118.chunk.js monitoring/static/js/290.b4f1e118.chunk.js
+        monitoring/static/js/2984.df749ebe.chunk.js monitoring/static/js/2984.df749ebe.chunk.js
+        monitoring/static/js/2994.6c6016a8.chunk.js monitoring/static/js/2994.6c6016a8.chunk.js
+        monitoring/static/js/2994.6c6016a8.chunk.js.LICENSE.txt monitoring/static/js/2994.6c6016a8.chunk.js.LICENSE.txt
+        monitoring/static/js/30.69969059.chunk.js monitoring/static/js/30.69969059.chunk.js
+        monitoring/static/js/30.69969059.chunk.js.LICENSE.txt monitoring/static/js/30.69969059.chunk.js.LICENSE.txt
+        monitoring/static/js/3008.c8aa656b.chunk.js monitoring/static/js/3008.c8aa656b.chunk.js
+        monitoring/static/js/3033.06c03554.chunk.js monitoring/static/js/3033.06c03554.chunk.js
+        monitoring/static/js/3048.692b5966.chunk.js monitoring/static/js/3048.692b5966.chunk.js
+        monitoring/static/js/3048.692b5966.chunk.js.LICENSE.txt monitoring/static/js/3048.692b5966.chunk.js.LICENSE.txt
+        monitoring/static/js/310.b23bf6b2.chunk.js monitoring/static/js/310.b23bf6b2.chunk.js
+        monitoring/static/js/3121.74e9e7dc.chunk.js monitoring/static/js/3121.74e9e7dc.chunk.js
+        monitoring/static/js/3158.3f2d4e5f.chunk.js monitoring/static/js/3158.3f2d4e5f.chunk.js
+        monitoring/static/js/3158.3f2d4e5f.chunk.js.LICENSE.txt monitoring/static/js/3158.3f2d4e5f.chunk.js.LICENSE.txt
+        monitoring/static/js/3238.a9505f7f.chunk.js monitoring/static/js/3238.a9505f7f.chunk.js
+        monitoring/static/js/3321.3370cf83.chunk.js monitoring/static/js/3321.3370cf83.chunk.js
+        monitoring/static/js/3333.eb9ec516.chunk.js monitoring/static/js/3333.eb9ec516.chunk.js
+        monitoring/static/js/3338.83fe4e63.chunk.js monitoring/static/js/3338.83fe4e63.chunk.js
+        monitoring/static/js/3338.83fe4e63.chunk.js.LICENSE.txt monitoring/static/js/3338.83fe4e63.chunk.js.LICENSE.txt
+        monitoring/static/js/3410.6391755f.chunk.js monitoring/static/js/3410.6391755f.chunk.js
+        monitoring/static/js/3478.480dafa6.chunk.js monitoring/static/js/3478.480dafa6.chunk.js
+        monitoring/static/js/3478.480dafa6.chunk.js.LICENSE.txt monitoring/static/js/3478.480dafa6.chunk.js.LICENSE.txt
+        monitoring/static/js/3510.0740f36d.chunk.js monitoring/static/js/3510.0740f36d.chunk.js
+        monitoring/static/js/3521.775b3981.chunk.js monitoring/static/js/3521.775b3981.chunk.js
+        monitoring/static/js/3534.3f09429a.chunk.js monitoring/static/js/3534.3f09429a.chunk.js
+        monitoring/static/js/3534.3f09429a.chunk.js.LICENSE.txt monitoring/static/js/3534.3f09429a.chunk.js.LICENSE.txt
+        monitoring/static/js/3638.ee3efb24.chunk.js monitoring/static/js/3638.ee3efb24.chunk.js
+        monitoring/static/js/3638.ee3efb24.chunk.js.LICENSE.txt monitoring/static/js/3638.ee3efb24.chunk.js.LICENSE.txt
+        monitoring/static/js/3648.3a72999a.chunk.js monitoring/static/js/3648.3a72999a.chunk.js
+        monitoring/static/js/3648.3a72999a.chunk.js.LICENSE.txt monitoring/static/js/3648.3a72999a.chunk.js.LICENSE.txt
+        monitoring/static/js/3653.06b5272c.chunk.js monitoring/static/js/3653.06b5272c.chunk.js
+        monitoring/static/js/3672.12436dd6.chunk.js monitoring/static/js/3672.12436dd6.chunk.js
+        monitoring/static/js/3679.e293221d.chunk.js monitoring/static/js/3679.e293221d.chunk.js
+        monitoring/static/js/3702.778880f9.chunk.js monitoring/static/js/3702.778880f9.chunk.js
+        monitoring/static/js/3702.778880f9.chunk.js.LICENSE.txt monitoring/static/js/3702.778880f9.chunk.js.LICENSE.txt
+        monitoring/static/js/371.adb771f2.chunk.js monitoring/static/js/371.adb771f2.chunk.js
+        monitoring/static/js/3756.9a440b73.chunk.js monitoring/static/js/3756.9a440b73.chunk.js
+        monitoring/static/js/3761.dd957fd1.chunk.js monitoring/static/js/3761.dd957fd1.chunk.js
+        monitoring/static/js/3769.860e8d58.chunk.js monitoring/static/js/3769.860e8d58.chunk.js
+        monitoring/static/js/3779.9f31a4d0.chunk.js monitoring/static/js/3779.9f31a4d0.chunk.js
+        monitoring/static/js/3812.325f3251.chunk.js monitoring/static/js/3812.325f3251.chunk.js
+        monitoring/static/js/3822.00ab6aaa.chunk.js monitoring/static/js/3822.00ab6aaa.chunk.js
+        monitoring/static/js/3822.00ab6aaa.chunk.js.LICENSE.txt monitoring/static/js/3822.00ab6aaa.chunk.js.LICENSE.txt
+        monitoring/static/js/3872.a25d87b5.chunk.js monitoring/static/js/3872.a25d87b5.chunk.js
+        monitoring/static/js/3879.17f211ad.chunk.js monitoring/static/js/3879.17f211ad.chunk.js
+        monitoring/static/js/3902.973b73c6.chunk.js monitoring/static/js/3902.973b73c6.chunk.js
+        monitoring/static/js/3940.f5079e40.chunk.js monitoring/static/js/3940.f5079e40.chunk.js
+        monitoring/static/js/3952.ce1b4fad.chunk.js monitoring/static/js/3952.ce1b4fad.chunk.js
+        monitoring/static/js/3977.4c33ec16.chunk.js monitoring/static/js/3977.4c33ec16.chunk.js
+        monitoring/static/js/3977.4c33ec16.chunk.js.LICENSE.txt monitoring/static/js/3977.4c33ec16.chunk.js.LICENSE.txt
+        monitoring/static/js/4024.021c61dd.chunk.js monitoring/static/js/4024.021c61dd.chunk.js
+        monitoring/static/js/4096.33f702a0.chunk.js monitoring/static/js/4096.33f702a0.chunk.js
+        monitoring/static/js/4130.e9433987.chunk.js monitoring/static/js/4130.e9433987.chunk.js
+        monitoring/static/js/4169.f2243012.chunk.js monitoring/static/js/4169.f2243012.chunk.js
+        monitoring/static/js/4180.1de6c8ba.chunk.js monitoring/static/js/4180.1de6c8ba.chunk.js
+        monitoring/static/js/4187.ab11fc96.chunk.js monitoring/static/js/4187.ab11fc96.chunk.js
+        monitoring/static/js/4324.c69948f7.chunk.js monitoring/static/js/4324.c69948f7.chunk.js
+        monitoring/static/js/4349.9c8d20fd.chunk.js monitoring/static/js/4349.9c8d20fd.chunk.js
+        monitoring/static/js/4401.f46d19f6.chunk.js monitoring/static/js/4401.f46d19f6.chunk.js
+        monitoring/static/js/4441.2b4963cf.chunk.js monitoring/static/js/4441.2b4963cf.chunk.js
+        monitoring/static/js/4534.b98f1389.chunk.js monitoring/static/js/4534.b98f1389.chunk.js
+        monitoring/static/js/4534.b98f1389.chunk.js.LICENSE.txt monitoring/static/js/4534.b98f1389.chunk.js.LICENSE.txt
+        monitoring/static/js/4542.18433910.chunk.js monitoring/static/js/4542.18433910.chunk.js
+        monitoring/static/js/4542.18433910.chunk.js.LICENSE.txt monitoring/static/js/4542.18433910.chunk.js.LICENSE.txt
+        monitoring/static/js/4582.5bf174ff.chunk.js monitoring/static/js/4582.5bf174ff.chunk.js
+        monitoring/static/js/4582.5bf174ff.chunk.js.LICENSE.txt monitoring/static/js/4582.5bf174ff.chunk.js.LICENSE.txt
+        monitoring/static/js/4601.39745c4e.chunk.js monitoring/static/js/4601.39745c4e.chunk.js
+        monitoring/static/js/4652.9a5d2242.chunk.js monitoring/static/js/4652.9a5d2242.chunk.js
+        monitoring/static/js/4662.1c10232d.chunk.js monitoring/static/js/4662.1c10232d.chunk.js
+        monitoring/static/js/4662.1c10232d.chunk.js.LICENSE.txt monitoring/static/js/4662.1c10232d.chunk.js.LICENSE.txt
+        monitoring/static/js/4678.4e2f4af4.chunk.js monitoring/static/js/4678.4e2f4af4.chunk.js
+        monitoring/static/js/4678.4e2f4af4.chunk.js.LICENSE.txt monitoring/static/js/4678.4e2f4af4.chunk.js.LICENSE.txt
+        monitoring/static/js/47.54dd12ac.chunk.js monitoring/static/js/47.54dd12ac.chunk.js
+        monitoring/static/js/4730.78e66e9a.chunk.js monitoring/static/js/4730.78e66e9a.chunk.js
+        monitoring/static/js/4818.6beda30c.chunk.js monitoring/static/js/4818.6beda30c.chunk.js
+        monitoring/static/js/4818.6beda30c.chunk.js.LICENSE.txt monitoring/static/js/4818.6beda30c.chunk.js.LICENSE.txt
+        monitoring/static/js/4847.63c73f0a.chunk.js monitoring/static/js/4847.63c73f0a.chunk.js
+        monitoring/static/js/4870.1916a88d.chunk.js monitoring/static/js/4870.1916a88d.chunk.js
+        monitoring/static/js/4870.1916a88d.chunk.js.LICENSE.txt monitoring/static/js/4870.1916a88d.chunk.js.LICENSE.txt
+        monitoring/static/js/4872.2eea7e0a.chunk.js monitoring/static/js/4872.2eea7e0a.chunk.js
+        monitoring/static/js/4872.2eea7e0a.chunk.js.LICENSE.txt monitoring/static/js/4872.2eea7e0a.chunk.js.LICENSE.txt
+        monitoring/static/js/4891.c441be74.chunk.js monitoring/static/js/4891.c441be74.chunk.js
+        monitoring/static/js/5027.9e6325ef.chunk.js monitoring/static/js/5027.9e6325ef.chunk.js
+        monitoring/static/js/5047.ebc9f1b2.chunk.js monitoring/static/js/5047.ebc9f1b2.chunk.js
+        monitoring/static/js/5050.ffa3921f.chunk.js monitoring/static/js/5050.ffa3921f.chunk.js
+        monitoring/static/js/5050.ffa3921f.chunk.js.LICENSE.txt monitoring/static/js/5050.ffa3921f.chunk.js.LICENSE.txt
+        monitoring/static/js/513.46a664ad.chunk.js monitoring/static/js/513.46a664ad.chunk.js
+        monitoring/static/js/5161.20e37d15.chunk.js monitoring/static/js/5161.20e37d15.chunk.js
+        monitoring/static/js/523.17013d4e.chunk.js monitoring/static/js/523.17013d4e.chunk.js
+        monitoring/static/js/5252.991dcab8.chunk.js monitoring/static/js/5252.991dcab8.chunk.js
+        monitoring/static/js/5252.991dcab8.chunk.js.LICENSE.txt monitoring/static/js/5252.991dcab8.chunk.js.LICENSE.txt
+        monitoring/static/js/535.ee345954.chunk.js monitoring/static/js/535.ee345954.chunk.js
+        monitoring/static/js/5382.3a2e6ac6.chunk.js monitoring/static/js/5382.3a2e6ac6.chunk.js
+        monitoring/static/js/5382.3a2e6ac6.chunk.js.LICENSE.txt monitoring/static/js/5382.3a2e6ac6.chunk.js.LICENSE.txt
+        monitoring/static/js/5401.dfb63825.chunk.js monitoring/static/js/5401.dfb63825.chunk.js
+        monitoring/static/js/5418.00d0c5d1.chunk.js monitoring/static/js/5418.00d0c5d1.chunk.js
+        monitoring/static/js/5438.179dc201.chunk.js monitoring/static/js/5438.179dc201.chunk.js
+        monitoring/static/js/5453.921caa82.chunk.js monitoring/static/js/5453.921caa82.chunk.js
+        monitoring/static/js/5454.e8f64f1a.chunk.js monitoring/static/js/5454.e8f64f1a.chunk.js
+        monitoring/static/js/5454.e8f64f1a.chunk.js.LICENSE.txt monitoring/static/js/5454.e8f64f1a.chunk.js.LICENSE.txt
+        monitoring/static/js/5475.20ce4f75.chunk.js monitoring/static/js/5475.20ce4f75.chunk.js
+        monitoring/static/js/5542.7c13d444.chunk.js monitoring/static/js/5542.7c13d444.chunk.js
+        monitoring/static/js/5542.7c13d444.chunk.js.LICENSE.txt monitoring/static/js/5542.7c13d444.chunk.js.LICENSE.txt
+        monitoring/static/js/5579.a2c9515c.chunk.js monitoring/static/js/5579.a2c9515c.chunk.js
+        monitoring/static/js/5634.0a0bddae.chunk.js monitoring/static/js/5634.0a0bddae.chunk.js
+        monitoring/static/js/5636.da9c4c85.chunk.js monitoring/static/js/5636.da9c4c85.chunk.js
+        monitoring/static/js/5636.da9c4c85.chunk.js.LICENSE.txt monitoring/static/js/5636.da9c4c85.chunk.js.LICENSE.txt
+        monitoring/static/js/5647.0920ef73.chunk.js monitoring/static/js/5647.0920ef73.chunk.js
+        monitoring/static/js/5685.c0a21a10.chunk.js monitoring/static/js/5685.c0a21a10.chunk.js
+        monitoring/static/js/5759.52418ea5.chunk.js monitoring/static/js/5759.52418ea5.chunk.js
+        monitoring/static/js/5816.144b5755.chunk.js monitoring/static/js/5816.144b5755.chunk.js
+        monitoring/static/js/5819.0ae2eb3d.chunk.js monitoring/static/js/5819.0ae2eb3d.chunk.js
+        monitoring/static/js/5853.0c5ec1d1.chunk.js monitoring/static/js/5853.0c5ec1d1.chunk.js
+        monitoring/static/js/5866.14d27c8c.chunk.js monitoring/static/js/5866.14d27c8c.chunk.js
+        monitoring/static/js/5866.14d27c8c.chunk.js.LICENSE.txt monitoring/static/js/5866.14d27c8c.chunk.js.LICENSE.txt
+        monitoring/static/js/5875.f8a190bf.chunk.js monitoring/static/js/5875.f8a190bf.chunk.js
+        monitoring/static/js/5888.4fa64369.chunk.js monitoring/static/js/5888.4fa64369.chunk.js
+        monitoring/static/js/5888.4fa64369.chunk.js.LICENSE.txt monitoring/static/js/5888.4fa64369.chunk.js.LICENSE.txt
+        monitoring/static/js/5924.53ba4f49.chunk.js monitoring/static/js/5924.53ba4f49.chunk.js
+        monitoring/static/js/5950.28656717.chunk.js monitoring/static/js/5950.28656717.chunk.js
+        monitoring/static/js/5953.cb95c45e.chunk.js monitoring/static/js/5953.cb95c45e.chunk.js
+        monitoring/static/js/5988.38ef363d.chunk.js monitoring/static/js/5988.38ef363d.chunk.js
+        monitoring/static/js/5988.38ef363d.chunk.js.LICENSE.txt monitoring/static/js/5988.38ef363d.chunk.js.LICENSE.txt
+        monitoring/static/js/60.85d957cd.chunk.js monitoring/static/js/60.85d957cd.chunk.js
+        monitoring/static/js/6012.aac08e72.chunk.js monitoring/static/js/6012.aac08e72.chunk.js
+        monitoring/static/js/6012.aac08e72.chunk.js.LICENSE.txt monitoring/static/js/6012.aac08e72.chunk.js.LICENSE.txt
+        monitoring/static/js/6030.95d317e6.chunk.js monitoring/static/js/6030.95d317e6.chunk.js
+        monitoring/static/js/6047.328b41a5.chunk.js monitoring/static/js/6047.328b41a5.chunk.js
+        monitoring/static/js/6114.c74edf11.chunk.js monitoring/static/js/6114.c74edf11.chunk.js
+        monitoring/static/js/6210.69d6a30a.chunk.js monitoring/static/js/6210.69d6a30a.chunk.js
+        monitoring/static/js/6210.69d6a30a.chunk.js.LICENSE.txt monitoring/static/js/6210.69d6a30a.chunk.js.LICENSE.txt
+        monitoring/static/js/6214.a9a481a7.chunk.js monitoring/static/js/6214.a9a481a7.chunk.js
+        monitoring/static/js/6214.a9a481a7.chunk.js.LICENSE.txt monitoring/static/js/6214.a9a481a7.chunk.js.LICENSE.txt
+        monitoring/static/js/6261.78de43a8.chunk.js monitoring/static/js/6261.78de43a8.chunk.js
+        monitoring/static/js/6262.44dba84f.chunk.js monitoring/static/js/6262.44dba84f.chunk.js
+        monitoring/static/js/6262.44dba84f.chunk.js.LICENSE.txt monitoring/static/js/6262.44dba84f.chunk.js.LICENSE.txt
+        monitoring/static/js/628.70d08de9.chunk.js monitoring/static/js/628.70d08de9.chunk.js
+        monitoring/static/js/6324.de01edfb.chunk.js monitoring/static/js/6324.de01edfb.chunk.js
+        monitoring/static/js/6342.a2819c87.chunk.js monitoring/static/js/6342.a2819c87.chunk.js
+        monitoring/static/js/6342.a2819c87.chunk.js.LICENSE.txt monitoring/static/js/6342.a2819c87.chunk.js.LICENSE.txt
+        monitoring/static/js/6358.2997762b.chunk.js monitoring/static/js/6358.2997762b.chunk.js
+        monitoring/static/js/6374.be0c5879.chunk.js monitoring/static/js/6374.be0c5879.chunk.js
+        monitoring/static/js/6374.be0c5879.chunk.js.LICENSE.txt monitoring/static/js/6374.be0c5879.chunk.js.LICENSE.txt
+        monitoring/static/js/6397.b8cf6fae.chunk.js monitoring/static/js/6397.b8cf6fae.chunk.js
+        monitoring/static/js/6405.b0dd94a9.chunk.js monitoring/static/js/6405.b0dd94a9.chunk.js
+        monitoring/static/js/6447.2c0d9bda.chunk.js monitoring/static/js/6447.2c0d9bda.chunk.js
+        monitoring/static/js/6447.2c0d9bda.chunk.js.LICENSE.txt monitoring/static/js/6447.2c0d9bda.chunk.js.LICENSE.txt
+        monitoring/static/js/654.863ea445.chunk.js monitoring/static/js/654.863ea445.chunk.js
+        monitoring/static/js/654.863ea445.chunk.js.LICENSE.txt monitoring/static/js/654.863ea445.chunk.js.LICENSE.txt
+        monitoring/static/js/6541.a39e9d6a.chunk.js monitoring/static/js/6541.a39e9d6a.chunk.js
+        monitoring/static/js/6554.6dfab136.chunk.js monitoring/static/js/6554.6dfab136.chunk.js
+        monitoring/static/js/6554.6dfab136.chunk.js.LICENSE.txt monitoring/static/js/6554.6dfab136.chunk.js.LICENSE.txt
+        monitoring/static/js/6625.a8d44d36.chunk.js monitoring/static/js/6625.a8d44d36.chunk.js
+        monitoring/static/js/6658.b22172da.chunk.js monitoring/static/js/6658.b22172da.chunk.js
+        monitoring/static/js/6658.b22172da.chunk.js.LICENSE.txt monitoring/static/js/6658.b22172da.chunk.js.LICENSE.txt
+        monitoring/static/js/6664.b4dbf019.chunk.js monitoring/static/js/6664.b4dbf019.chunk.js
+        monitoring/static/js/6786.28af14f6.chunk.js monitoring/static/js/6786.28af14f6.chunk.js
+        monitoring/static/js/6820.73ff230e.chunk.js monitoring/static/js/6820.73ff230e.chunk.js
+        monitoring/static/js/6820.73ff230e.chunk.js.LICENSE.txt monitoring/static/js/6820.73ff230e.chunk.js.LICENSE.txt
+        monitoring/static/js/6833.584b7806.chunk.js monitoring/static/js/6833.584b7806.chunk.js
+        monitoring/static/js/684.7c31509b.chunk.js monitoring/static/js/684.7c31509b.chunk.js
+        monitoring/static/js/6879.2965a366.chunk.js monitoring/static/js/6879.2965a366.chunk.js
+        monitoring/static/js/6881.7e6434c9.chunk.js monitoring/static/js/6881.7e6434c9.chunk.js
+        monitoring/static/js/6990.70257b9b.chunk.js monitoring/static/js/6990.70257b9b.chunk.js
+        monitoring/static/js/710.87e9f2e0.chunk.js monitoring/static/js/710.87e9f2e0.chunk.js
+        monitoring/static/js/7118.ce0cd05f.chunk.js monitoring/static/js/7118.ce0cd05f.chunk.js
+        monitoring/static/js/7118.ce0cd05f.chunk.js.LICENSE.txt monitoring/static/js/7118.ce0cd05f.chunk.js.LICENSE.txt
+        monitoring/static/js/7148.ef54cd41.chunk.js monitoring/static/js/7148.ef54cd41.chunk.js
+        monitoring/static/js/7148.ef54cd41.chunk.js.LICENSE.txt monitoring/static/js/7148.ef54cd41.chunk.js.LICENSE.txt
+        monitoring/static/js/7206.6b7278f5.chunk.js monitoring/static/js/7206.6b7278f5.chunk.js
+        monitoring/static/js/7206.6b7278f5.chunk.js.LICENSE.txt monitoring/static/js/7206.6b7278f5.chunk.js.LICENSE.txt
+        monitoring/static/js/7240.a674bc94.chunk.js monitoring/static/js/7240.a674bc94.chunk.js
+        monitoring/static/js/730.a22f6f5f.chunk.js monitoring/static/js/730.a22f6f5f.chunk.js
+        monitoring/static/js/7329.514640a4.chunk.js monitoring/static/js/7329.514640a4.chunk.js
+        monitoring/static/js/734.3fe325e9.chunk.js monitoring/static/js/734.3fe325e9.chunk.js
+        monitoring/static/js/734.3fe325e9.chunk.js.LICENSE.txt monitoring/static/js/734.3fe325e9.chunk.js.LICENSE.txt
+        monitoring/static/js/7341.6e678529.chunk.js monitoring/static/js/7341.6e678529.chunk.js
+        monitoring/static/js/7341.6e678529.chunk.js.LICENSE.txt monitoring/static/js/7341.6e678529.chunk.js.LICENSE.txt
+        monitoring/static/js/7348.eac33db2.chunk.js monitoring/static/js/7348.eac33db2.chunk.js
+        monitoring/static/js/7357.a518ad9e.chunk.js monitoring/static/js/7357.a518ad9e.chunk.js
+        monitoring/static/js/7380.38a8eedf.chunk.js monitoring/static/js/7380.38a8eedf.chunk.js
+        monitoring/static/js/7420.d0c66c34.chunk.js monitoring/static/js/7420.d0c66c34.chunk.js
+        monitoring/static/js/7548.fd5d2b6c.chunk.js monitoring/static/js/7548.fd5d2b6c.chunk.js
+        monitoring/static/js/7574.8ac9803d.chunk.js monitoring/static/js/7574.8ac9803d.chunk.js
+        monitoring/static/js/7574.8ac9803d.chunk.js.LICENSE.txt monitoring/static/js/7574.8ac9803d.chunk.js.LICENSE.txt
+        monitoring/static/js/7579.079e5569.chunk.js monitoring/static/js/7579.079e5569.chunk.js
+        monitoring/static/js/7605.cdc8f605.chunk.js monitoring/static/js/7605.cdc8f605.chunk.js
+        monitoring/static/js/7614.00d00ded.chunk.js monitoring/static/js/7614.00d00ded.chunk.js
+        monitoring/static/js/7638.5489d672.chunk.js monitoring/static/js/7638.5489d672.chunk.js
+        monitoring/static/js/7638.5489d672.chunk.js.LICENSE.txt monitoring/static/js/7638.5489d672.chunk.js.LICENSE.txt
+        monitoring/static/js/7642.39707d60.chunk.js monitoring/static/js/7642.39707d60.chunk.js
+        monitoring/static/js/7642.39707d60.chunk.js.LICENSE.txt monitoring/static/js/7642.39707d60.chunk.js.LICENSE.txt
+        monitoring/static/js/7692.af7181c9.chunk.js monitoring/static/js/7692.af7181c9.chunk.js
+        monitoring/static/js/7692.af7181c9.chunk.js.LICENSE.txt monitoring/static/js/7692.af7181c9.chunk.js.LICENSE.txt
+        monitoring/static/js/7697.44af783d.chunk.js monitoring/static/js/7697.44af783d.chunk.js
+        monitoring/static/js/7718.f897f8ca.chunk.js monitoring/static/js/7718.f897f8ca.chunk.js
+        monitoring/static/js/7718.f897f8ca.chunk.js.LICENSE.txt monitoring/static/js/7718.f897f8ca.chunk.js.LICENSE.txt
+        monitoring/static/js/7748.3ec14243.chunk.js monitoring/static/js/7748.3ec14243.chunk.js
+        monitoring/static/js/7878.1f9512c4.chunk.js monitoring/static/js/7878.1f9512c4.chunk.js
+        monitoring/static/js/7946.3b4cf6fd.chunk.js monitoring/static/js/7946.3b4cf6fd.chunk.js
+        monitoring/static/js/7946.3b4cf6fd.chunk.js.LICENSE.txt monitoring/static/js/7946.3b4cf6fd.chunk.js.LICENSE.txt
+        monitoring/static/js/7962.43ffbad7.chunk.js monitoring/static/js/7962.43ffbad7.chunk.js
+        monitoring/static/js/7970.80caf61d.chunk.js monitoring/static/js/7970.80caf61d.chunk.js
+        monitoring/static/js/8008.da36f479.chunk.js monitoring/static/js/8008.da36f479.chunk.js
+        monitoring/static/js/8014.eb9f97f2.chunk.js monitoring/static/js/8014.eb9f97f2.chunk.js
+        monitoring/static/js/8014.eb9f97f2.chunk.js.LICENSE.txt monitoring/static/js/8014.eb9f97f2.chunk.js.LICENSE.txt
+        monitoring/static/js/8053.71be175a.chunk.js monitoring/static/js/8053.71be175a.chunk.js
+        monitoring/static/js/8081.5fafc7dc.chunk.js monitoring/static/js/8081.5fafc7dc.chunk.js
+        monitoring/static/js/8103.00c9e9c1.chunk.js monitoring/static/js/8103.00c9e9c1.chunk.js
+        monitoring/static/js/811.a0c1e1ce.chunk.js monitoring/static/js/811.a0c1e1ce.chunk.js
+        monitoring/static/js/8119.196e82ef.chunk.js monitoring/static/js/8119.196e82ef.chunk.js
+        monitoring/static/js/8234.7512920e.chunk.js monitoring/static/js/8234.7512920e.chunk.js
+        monitoring/static/js/8234.7512920e.chunk.js.LICENSE.txt monitoring/static/js/8234.7512920e.chunk.js.LICENSE.txt
+        monitoring/static/js/8256.a2ce240a.chunk.js monitoring/static/js/8256.a2ce240a.chunk.js
+        monitoring/static/js/8452.551c16c8.chunk.js monitoring/static/js/8452.551c16c8.chunk.js
+        monitoring/static/js/8517.cf981031.chunk.js monitoring/static/js/8517.cf981031.chunk.js
+        monitoring/static/js/8534.f7aec532.chunk.js monitoring/static/js/8534.f7aec532.chunk.js
+        monitoring/static/js/856.78147a4f.chunk.js monitoring/static/js/856.78147a4f.chunk.js
+        monitoring/static/js/8633.da605a09.chunk.js monitoring/static/js/8633.da605a09.chunk.js
+        monitoring/static/js/8704.87492da1.chunk.js monitoring/static/js/8704.87492da1.chunk.js
+        monitoring/static/js/8706.755fcb81.chunk.js monitoring/static/js/8706.755fcb81.chunk.js
+        monitoring/static/js/8821.96eeccd6.chunk.js monitoring/static/js/8821.96eeccd6.chunk.js
+        monitoring/static/js/8821.96eeccd6.chunk.js.LICENSE.txt monitoring/static/js/8821.96eeccd6.chunk.js.LICENSE.txt
+        monitoring/static/js/8840.5eb376ca.chunk.js monitoring/static/js/8840.5eb376ca.chunk.js
+        monitoring/static/js/8868.a9031705.chunk.js monitoring/static/js/8868.a9031705.chunk.js
+        monitoring/static/js/8890.9f3d8f08.chunk.js monitoring/static/js/8890.9f3d8f08.chunk.js
+        monitoring/static/js/8979.0c0acc31.chunk.js monitoring/static/js/8979.0c0acc31.chunk.js
+        monitoring/static/js/8986.de287636.chunk.js monitoring/static/js/8986.de287636.chunk.js
+        monitoring/static/js/8986.de287636.chunk.js.LICENSE.txt monitoring/static/js/8986.de287636.chunk.js.LICENSE.txt
+        monitoring/static/js/9010.4bfaf5fa.chunk.js monitoring/static/js/9010.4bfaf5fa.chunk.js
+        monitoring/static/js/9010.4bfaf5fa.chunk.js.LICENSE.txt monitoring/static/js/9010.4bfaf5fa.chunk.js.LICENSE.txt
+        monitoring/static/js/902.a1b90b1b.chunk.js monitoring/static/js/902.a1b90b1b.chunk.js
+        monitoring/static/js/902.a1b90b1b.chunk.js.LICENSE.txt monitoring/static/js/902.a1b90b1b.chunk.js.LICENSE.txt
+        monitoring/static/js/9025.6ae28867.chunk.js monitoring/static/js/9025.6ae28867.chunk.js
+        monitoring/static/js/9067.254af4a9.chunk.js monitoring/static/js/9067.254af4a9.chunk.js
+        monitoring/static/js/9174.ae7682da.chunk.js monitoring/static/js/9174.ae7682da.chunk.js
+        monitoring/static/js/9176.3f08336f.chunk.js monitoring/static/js/9176.3f08336f.chunk.js
+        monitoring/static/js/9176.3f08336f.chunk.js.LICENSE.txt monitoring/static/js/9176.3f08336f.chunk.js.LICENSE.txt
+        monitoring/static/js/921.0402e36c.chunk.js monitoring/static/js/921.0402e36c.chunk.js
+        monitoring/static/js/9220.a9f48eb9.chunk.js monitoring/static/js/9220.a9f48eb9.chunk.js
+        monitoring/static/js/9222.a1913f85.chunk.js monitoring/static/js/9222.a1913f85.chunk.js
+        monitoring/static/js/9243.cb95c73b.chunk.js monitoring/static/js/9243.cb95c73b.chunk.js
+        monitoring/static/js/9300.277e4f3f.chunk.js monitoring/static/js/9300.277e4f3f.chunk.js
+        monitoring/static/js/9312.5eb8d4b1.chunk.js monitoring/static/js/9312.5eb8d4b1.chunk.js
+        monitoring/static/js/9312.5eb8d4b1.chunk.js.LICENSE.txt monitoring/static/js/9312.5eb8d4b1.chunk.js.LICENSE.txt
+        monitoring/static/js/9394.ca56f408.chunk.js monitoring/static/js/9394.ca56f408.chunk.js
+        monitoring/static/js/9394.ca56f408.chunk.js.LICENSE.txt monitoring/static/js/9394.ca56f408.chunk.js.LICENSE.txt
+        monitoring/static/js/9433.4cf14d1c.chunk.js monitoring/static/js/9433.4cf14d1c.chunk.js
+        monitoring/static/js/9466.0afe6e6e.chunk.js monitoring/static/js/9466.0afe6e6e.chunk.js
+        monitoring/static/js/949.12b4714d.chunk.js monitoring/static/js/949.12b4714d.chunk.js
+        monitoring/static/js/9507.14872b99.chunk.js monitoring/static/js/9507.14872b99.chunk.js
+        monitoring/static/js/9518.3fffdd45.chunk.js monitoring/static/js/9518.3fffdd45.chunk.js
+        monitoring/static/js/9523.ac019963.chunk.js monitoring/static/js/9523.ac019963.chunk.js
+        monitoring/static/js/957.08a1c505.chunk.js monitoring/static/js/957.08a1c505.chunk.js
+        monitoring/static/js/957.08a1c505.chunk.js.LICENSE.txt monitoring/static/js/957.08a1c505.chunk.js.LICENSE.txt
+        monitoring/static/js/9582.c09a3623.chunk.js monitoring/static/js/9582.c09a3623.chunk.js
+        monitoring/static/js/9582.c09a3623.chunk.js.LICENSE.txt monitoring/static/js/9582.c09a3623.chunk.js.LICENSE.txt
+        monitoring/static/js/9606.fc9247cb.chunk.js monitoring/static/js/9606.fc9247cb.chunk.js
+        monitoring/static/js/9697.bed5988b.chunk.js monitoring/static/js/9697.bed5988b.chunk.js
+        monitoring/static/js/9707.72e68790.chunk.js monitoring/static/js/9707.72e68790.chunk.js
+        monitoring/static/js/9725.a94823a0.chunk.js monitoring/static/js/9725.a94823a0.chunk.js
+        monitoring/static/js/9728.7cc957e4.chunk.js monitoring/static/js/9728.7cc957e4.chunk.js
+        monitoring/static/js/9728.7cc957e4.chunk.js.LICENSE.txt monitoring/static/js/9728.7cc957e4.chunk.js.LICENSE.txt
+        monitoring/static/js/9748.e711e962.chunk.js monitoring/static/js/9748.e711e962.chunk.js
+        monitoring/static/js/9748.e711e962.chunk.js.LICENSE.txt monitoring/static/js/9748.e711e962.chunk.js.LICENSE.txt
+        monitoring/static/js/9778.52ad76ce.chunk.js monitoring/static/js/9778.52ad76ce.chunk.js
+        monitoring/static/js/9778.52ad76ce.chunk.js.LICENSE.txt monitoring/static/js/9778.52ad76ce.chunk.js.LICENSE.txt
+        monitoring/static/js/9796.7afb9492.chunk.js monitoring/static/js/9796.7afb9492.chunk.js
+        monitoring/static/js/9801.b9143d43.chunk.js monitoring/static/js/9801.b9143d43.chunk.js
+        monitoring/static/js/9842.b8ba19ad.chunk.js monitoring/static/js/9842.b8ba19ad.chunk.js
+        monitoring/static/js/9842.b8ba19ad.chunk.js.LICENSE.txt monitoring/static/js/9842.b8ba19ad.chunk.js.LICENSE.txt
+        monitoring/static/js/985.86fef64d.chunk.js monitoring/static/js/985.86fef64d.chunk.js
+        monitoring/static/js/985.86fef64d.chunk.js.LICENSE.txt monitoring/static/js/985.86fef64d.chunk.js.LICENSE.txt
+        monitoring/static/js/9872.65a6fae7.chunk.js monitoring/static/js/9872.65a6fae7.chunk.js
+        monitoring/static/js/9872.65a6fae7.chunk.js.LICENSE.txt monitoring/static/js/9872.65a6fae7.chunk.js.LICENSE.txt
+        monitoring/static/js/9882.b983931a.chunk.js monitoring/static/js/9882.b983931a.chunk.js
+        monitoring/static/js/99.dd803d0d.chunk.js monitoring/static/js/99.dd803d0d.chunk.js
+        monitoring/static/js/9908.4bd3acb1.chunk.js monitoring/static/js/9908.4bd3acb1.chunk.js
+        monitoring/static/js/9922.367b63b0.chunk.js monitoring/static/js/9922.367b63b0.chunk.js
+        monitoring/static/js/main.390bccbb.js monitoring/static/js/main.390bccbb.js
+        monitoring/static/js/main.390bccbb.js.LICENSE.txt monitoring/static/js/main.390bccbb.js.LICENSE.txt
         monitoring/static/media/403.271ae19f0d1101a2c67a904146bbd4d3.svg monitoring/static/media/403.271ae19f0d1101a2c67a904146bbd4d3.svg
         monitoring/static/media/403.6367e52f9464706633f52a2488a41958.svg monitoring/static/media/403.6367e52f9464706633f52a2488a41958.svg
-        monitoring/static/media/codicon.56dba998166ea5a0ca7f.ttf monitoring/static/media/codicon.56dba998166ea5a0ca7f.ttf
+        monitoring/static/media/codicon.f6283f7ccaed1249d9eb.ttf monitoring/static/media/codicon.f6283f7ccaed1249d9eb.ttf
         monitoring/static/media/error.9bbd075178a739dcc30f2a7a3e2a3249.svg monitoring/static/media/error.9bbd075178a739dcc30f2a7a3e2a3249.svg
         monitoring/static/media/error.ca9e31d5d3dc34da07e11a00f7af0842.svg monitoring/static/media/error.ca9e31d5d3dc34da07e11a00f7af0842.svg
         monitoring/static/media/thumbsUp.d4a03fbaa64ce85a0045bf8ba77f8e2b.svg monitoring/static/media/thumbsUp.d4a03fbaa64ce85a0045bf8ba77f8e2b.svg
+        monitoring/ts.worker.js monitoring/ts.worker.js
+        monitoring/ts.worker.js.LICENSE.txt monitoring/ts.worker.js.LICENSE.txt
     )
     # GENERATED MONITORING RESOURCES END
 ENDIF()
@@ -302,53 +550,14 @@ RESOURCE(
     content/v2/vdisk.js viewer/v2/vdisk.js
     content/v2/viewer.css viewer/v2/viewer.css
     content/v2/viewer.js viewer/v2/viewer.js
-    content/api/css/print.css viewer/api/css/print.css
-    content/api/css/reset.css viewer/api/css/reset.css
-    content/api/css/screen.css viewer/api/css/screen.css
-    content/api/css/style.css viewer/api/css/style.css
-    content/api/css/typography.css viewer/api/css/typography.css
-    content/api/fonts/DroidSans-Bold.ttf viewer/api/fonts/DroidSans-Bold.ttf
-    content/api/fonts/DroidSans.ttf viewer/api/fonts/DroidSans.ttf
-    content/api/images/collapse.gif viewer/api/images/collapse.gif
-    content/api/images/expand.gif viewer/api/images/expand.gif
-    content/api/images/explorer_icons.png viewer/api/images/explorer_icons.png
-    content/api/images/favicon-16x16.png viewer/api/images/favicon-16x16.png
-    content/api/images/favicon-32x32.png viewer/api/images/favicon-32x32.png
-    content/api/images/favicon.ico viewer/api/images/favicon.ico
-    content/api/images/logo_small.png viewer/api/images/logo_small.png
-    content/api/images/throbber.gif viewer/api/images/throbber.gif
+    content/api/favicon-16x16.png viewer/api/favicon-16x16.png
+    content/api/favicon-32x32.png viewer/api/favicon-32x32.png
+    content/api/index.css viewer/api/index.css
     content/api/index.html viewer/api/index.html
-    content/api/lang/ca.js viewer/api/lang/ca.js
-    content/api/lang/en.js viewer/api/lang/en.js
-    content/api/lang/es.js viewer/api/lang/es.js
-    content/api/lang/fr.js viewer/api/lang/fr.js
-    content/api/lang/geo.js viewer/api/lang/geo.js
-    content/api/lang/it.js viewer/api/lang/it.js
-    content/api/lang/ja.js viewer/api/lang/ja.js
-    content/api/lang/ko-kr.js viewer/api/lang/ko-kr.js
-    content/api/lang/pl.js viewer/api/lang/pl.js
-    content/api/lang/pt.js viewer/api/lang/pt.js
-    content/api/lang/ru.js viewer/api/lang/ru.js
-    content/api/lang/tr.js viewer/api/lang/tr.js
-    content/api/lang/translator.js viewer/api/lang/translator.js
-    content/api/lang/zh-cn.js viewer/api/lang/zh-cn.js
-    content/api/lib/backbone-min.js viewer/api/lib/backbone-min.js
-    content/api/lib/es5-shim.js viewer/api/lib/es5-shim.js
-    content/api/lib/handlebars-4.0.5.js viewer/api/lib/handlebars-4.0.5.js
-    content/api/lib/highlight.9.1.0.pack.js viewer/api/lib/highlight.9.1.0.pack.js
-    content/api/lib/highlight.9.1.0.pack_extended.js viewer/api/lib/highlight.9.1.0.pack_extended.js
-    content/api/lib/jquery-1.8.0.min.js viewer/api/lib/jquery-1.8.0.min.js
-    content/api/lib/jquery.ba-bbq.min.js viewer/api/lib/jquery.ba-bbq.min.js
-    content/api/lib/jquery.slideto.min.js viewer/api/lib/jquery.slideto.min.js
-    content/api/lib/jquery.wiggle.min.js viewer/api/lib/jquery.wiggle.min.js
-    content/api/lib/js-yaml.min.js viewer/api/lib/js-yaml.min.js
-    content/api/lib/jsoneditor.min.js viewer/api/lib/jsoneditor.min.js
-    content/api/lib/lodash.min.js viewer/api/lib/lodash.min.js
-    content/api/lib/marked.js viewer/api/lib/marked.js
-    content/api/lib/object-assign-pollyfill.js viewer/api/lib/object-assign-pollyfill.js
-    content/api/lib/sanitize-html.min.js viewer/api/lib/sanitize-html.min.js
-    content/api/lib/swagger-oauth.js viewer/api/lib/swagger-oauth.js
-    content/api/swagger-ui.min.js viewer/api/swagger-ui.min.js
+    content/api/swagger-initializer.js viewer/api/swagger-initializer.js
+    content/api/swagger-ui-bundle.js viewer/api/swagger-ui-bundle.js
+    content/api/swagger-ui.css viewer/api/swagger-ui.css
+    content/api/swagger-ui-standalone-preset.js viewer/api/swagger-ui-standalone-preset.js
 )
 
 PEERDIR(
@@ -366,20 +575,27 @@ PEERDIR(
     ydb/core/grpc_services
     ydb/core/grpc_services/local_rpc
     ydb/core/health_check
+    ydb/core/mon
     ydb/core/node_whiteboard
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/sys_view/common
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
     ydb/core/util
     ydb/core/viewer/json
+    ydb/core/viewer/yaml
     ydb/core/viewer/protos
     ydb/library/persqueue/topic_parser
+    ydb/library/yaml_config
     ydb/public/api/protos
     ydb/public/lib/deprecated/kicli
     ydb/public/lib/json_value
+    ydb/public/lib/ydb_cli/common
     ydb/public/api/grpc
-    ydb/public/sdk/cpp/client/ydb_types
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/types
+    contrib/libs/yaml-cpp
 )
 
 YQL_LAST_ABI_VERSION()

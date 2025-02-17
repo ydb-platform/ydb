@@ -7,8 +7,9 @@
 #include <ydb/core/pgproxy/pg_proxy_events.h>
 #include <ydb/core/pgproxy/pg_proxy_types.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -33,6 +34,7 @@ protected:
     bool NeedMeta_ = false;
     std::size_t RowsSelected_ = 0;
     TResponseEventPtr Response_;
+    std::vector<int16_t> ResponseFormat_;
 
     TPgwireKqpProxy(const TActorId owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, TRequestEventPtr&& ev)
         : Owner_(owner)
@@ -208,7 +210,7 @@ protected:
     static void FillError(const NKikimrKqp::TEvQueryResponse& record, typename TResponseEventPtr::element_type& response) {
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-        NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), std::move(issues));
+        NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), NYdb::NAdapters::ToSdkIssues(std::move(issues)));
         TString message(TStringBuilder() << status);
         response.ErrorFields.push_back({'E', "ERROR"});
         response.ErrorFields.push_back({'M', message});
@@ -230,14 +232,14 @@ protected:
             std::optional<NYdb::TPgType> pgType = GetPgTypeFromYdbType(column.Type);
             if (pgType.has_value()) {
                 response->DataFields.push_back({
-                    .Name = column.Name,
+                    .Name = TString{column.Name},
                     .DataType = pgType->Oid,
                     .DataTypeSize = pgType->Typlen,
                     .DataTypeModifier = pgType->Typmod,
                 });
             } else {
                 response->DataFields.push_back({
-                    .Name = column.Name
+                    .Name = TString{column.Name}
                 });
             }
         }
@@ -262,7 +264,7 @@ protected:
             FillMeta(resultSet, response.get());
             NeedMeta_ = false;
         }
-        FillResultSet(resultSet, response.get()->DataRows);
+        FillResultSet(resultSet, response.get()->DataRows, ResponseFormat_);
         response->CommandCompleted = false;
         response->ReadyForQuery = false;
 
@@ -272,15 +274,14 @@ protected:
         TBase::Send(EventRequest_->Sender, response.release(), 0, EventRequest_->Cookie);
 
         BLOG_D(this->SelfId() << " Send stream data ack to " << ev->Sender);
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetFreeSpace(std::numeric_limits<i64>::max());
         TBase::Send(ev->Sender, resp.Release());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         BLOG_D("Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
-        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
+        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record;
         if (record.GetResponse().HasExtraInfo()) {
             const auto& extraInfo = record.GetResponse().GetExtraInfo();
             if (extraInfo.HasPgInfo() && extraInfo.GetPgInfo().HasCommandTag()) {
@@ -398,7 +399,7 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         BLOG_D("Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
-        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
+        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record;
         try {
             if (record.HasYdbStatus()) {
                 if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
@@ -463,6 +464,7 @@ public:
     }
 
     void Bootstrap() {
+        ResponseFormat_ = Portal_.BindData.ResultsFormat;
         auto event = ConvertQueryToRequest(Portal_.QueryData.Query);
         if (event) {
             for (unsigned int paramNum = 0; paramNum < Portal_.BindData.ParametersValue.size(); ++paramNum) {

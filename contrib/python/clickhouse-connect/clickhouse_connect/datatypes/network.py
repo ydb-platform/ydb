@@ -3,7 +3,7 @@ from ipaddress import IPv4Address, IPv6Address
 from typing import Union, MutableSequence, Sequence
 
 from clickhouse_connect.datatypes.base import ClickHouseType
-from clickhouse_connect.driver.common import write_array, int_size
+from clickhouse_connect.driver.common import write_array, int_size, first_value
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.query import QueryContext
 from clickhouse_connect.driver.types import ByteSource
@@ -29,7 +29,7 @@ class IPv4(ClickHouseType):
         return data_conv.read_ipv4_col(source, num_rows)
 
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
-        first = self._first_value(column)
+        first = first_value(column, self.nullable)
         if isinstance(first, str):
             fixed = 24, 16, 8, 0
             # pylint: disable=consider-using-generator
@@ -39,7 +39,7 @@ class IPv4(ClickHouseType):
                 column = [x._ip if x else 0 for x in column]
             else:
                 column = [x._ip for x in column]
-        write_array(self._array_type, column, dest)
+        write_array(self._array_type, column, dest, ctx.column_name)
 
     def _active_null(self, ctx: QueryContext):
         fmt = self.read_format(ctx)
@@ -103,7 +103,7 @@ class IPv6(ClickHouseType):
 
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
         v = V6_NULL
-        first = self._first_value(column)
+        first = first_value(column, self.nullable)
         v4mask = IPV4_V6_MASK
         af6 = socket.AF_INET6
         tov6 = socket.inet_pton

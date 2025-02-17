@@ -84,8 +84,23 @@ DEFINE_REFCOUNTED_TYPE(TRetryingRemoteDynamicStoreReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicatedTableOptions
+class TReplicationCollocationOptions
     : public NYTree::TYsonStruct
+{
+public:
+    std::optional<std::vector<TString>> PreferredSyncReplicaClusters;
+
+    REGISTER_YSON_STRUCT(TReplicationCollocationOptions);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TReplicationCollocationOptions)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TReplicatedTableOptions
+    : public TReplicationCollocationOptions
 {
 public:
     bool EnableReplicatedTableTracker;
@@ -101,8 +116,6 @@ public:
 
     bool EnablePreloadStateCheck;
     TDuration IncompletePreloadGracePeriod;
-
-    std::optional<std::vector<TString>> PreferredSyncReplicaClusters;
 
     std::tuple<int, int> GetEffectiveMinMaxReplicaCount(int replicaCount) const;
 

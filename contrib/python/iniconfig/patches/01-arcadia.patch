@@ -1,0 +1,21 @@
+--- contrib/python/iniconfig/iniconfig/__init__.py	(index)
++++ contrib/python/iniconfig/iniconfig/__init__.py	(working tree)
+@@ -114,8 +114,16 @@ class IniConfig:
+     ) -> None:
+         self.path = os.fspath(path)
+         if data is None:
+-            with open(self.path, encoding=encoding) as fp:
+-                data = fp.read()
++            if os.path.basename(self.path).startswith('pkg:'):
++                import pkgutil
++
++                basename = os.path.basename(self.path)
++                _, package, resource = basename.split(':')
++                content = pkgutil.get_data(package, resource)
++                data = content.decode('utf-8')
++            else:
++                with open(self.path, encoding=encoding) as fp:
++                    data = fp.read()
+ 
+         tokens = _parse.parse_lines(self.path, data.splitlines(True))
+ 

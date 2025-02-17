@@ -7,8 +7,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -43,18 +43,18 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     IEventBase* MakeRequest() override {
         switch (OperationId.GetKind()) {
         case TOperationId::EXPORT:
-            return new TEvExport::TEvCancelExportRequest(TxId, DatabaseName, RawOperationId);
+            return new TEvExport::TEvCancelExportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::IMPORT:
-            return new TEvImport::TEvCancelImportRequest(TxId, DatabaseName, RawOperationId);
+            return new TEvImport::TEvCancelImportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::BUILD_INDEX:
-            return new TEvIndexBuilder::TEvCancelRequest(TxId, DatabaseName, RawOperationId);
+            return new TEvIndexBuilder::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
     }
 
     bool NeedAllocateTxId() const {
-        const Ydb::TOperationId::EKind kind = OperationId.GetKind();
+        const TOperationId::EKind kind = OperationId.GetKind();
         return kind == TOperationId::EXPORT
             || kind == TOperationId::IMPORT
             || kind == TOperationId::BUILD_INDEX;
@@ -141,7 +141,7 @@ public:
     }
 
     void SendCancelScriptExecutionOperation() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvCancelScriptExecutionOperation(DatabaseName, OperationId));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvCancelScriptExecutionOperation(GetDatabaseName(), OperationId));
     }
 
 private:
@@ -151,6 +151,11 @@ private:
 
 void DoCancelOperationRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TCancelOperationRPC(p.release()));
+}
+
+template<>
+IActor* TEvCancelOperationRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return new TCancelOperationRPC(msg);
 }
 
 } // namespace NGRpcService

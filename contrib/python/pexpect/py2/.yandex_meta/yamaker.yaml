@@ -1,0 +1,3 @@
+mark_as_py3_sources:
+  - pexpect/_async*.py
+  - pexpect/socket_pexpect.py

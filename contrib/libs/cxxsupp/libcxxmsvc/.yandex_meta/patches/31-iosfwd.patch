@@ -1,0 +1,12 @@
+diff --git a/include/iosfwd b/include/iosfwd
+index 263a667..63850f2 100644
+--- a/include/iosfwd
++++ b/include/iosfwd
+@@ -251,6 +251,7 @@ typedef basic_string<char, char_traits<char>, allocator<char> > string;
+ #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ typedef basic_string<wchar_t, char_traits<wchar_t>, allocator<wchar_t> > wstring;
+ #endif
++typedef basic_string<char16_t, char_traits<char16_t>, allocator<char16_t> > u16string;
+ 
+ template <class _CharT, class _Traits, class _Allocator>
+     class _LIBCPP_PREFERRED_NAME(string) _LIBCPP_IF_WIDE_CHARACTERS(_LIBCPP_PREFERRED_NAME(wstring)) basic_string;

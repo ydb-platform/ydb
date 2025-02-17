@@ -1,4 +1,4 @@
-YQL_UDF_YDB(knn)
+YQL_UDF_YDB(knn_udf)
 
 YQL_ABI_VERSION(
     2
@@ -12,6 +12,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/dot_product
+    library/cpp/l1_distance
+    library/cpp/l2_distance
 )
 
 

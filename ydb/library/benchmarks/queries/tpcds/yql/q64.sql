@@ -1,5 +1,6 @@
 {% include 'header.sql.jinja' %}
 
+-- TODO this commit should be reverted upon proper fix for https://github.com/ydb-platform/ydb/issues/7565
 -- NB: Subquerys
 $cs_ui =
  (select catalog_sales.cs_item_sk cs_item_sk
@@ -31,17 +32,17 @@ $cross_sales =
      ,sum(ss_list_price) s2
      ,sum(ss_coupon_amt) s3
   FROM   {{store_sales}} as store_sales
+        cross join {{customer_demographics}} cd1
+        cross join {{household_demographics}} hd1
         cross join {{store_returns}} as store_returns
         cross join $cs_ui cs_ui
         cross join {{date_dim}} d1
-        cross join {{date_dim}} d2
-        cross join {{date_dim}} d3
         cross join {{store}} as store
         cross join {{customer}} as customer
-        cross join {{customer_demographics}} cd1
+        cross join {{date_dim}} d2
+        cross join {{date_dim}} d3
         cross join {{customer_demographics}} cd2
         cross join {{promotion}} as promotion
-        cross join {{household_demographics}} hd1
         cross join {{household_demographics}} hd2
         cross join {{customer_address}} ad1
         cross join {{customer_address}} ad2
@@ -67,9 +68,9 @@ $cross_sales =
          hd1.hd_income_band_sk = ib1.ib_income_band_sk and
          hd2.hd_income_band_sk = ib2.ib_income_band_sk and
          cd1.cd_marital_status <> cd2.cd_marital_status and
-         i_color in ('azure','gainsboro','misty','blush','hot','lemon') and
-         i_current_price between 80 and 80 + 10 and
-         i_current_price between 80 + 1 and 80 + 15
+         i_color in ('purple','burlywood','indian','spring','floral','medium') and
+         i_current_price between 64 and 64 + 10 and
+         i_current_price between 64 + 1 and 64 + 15
 group by item.i_product_name
        ,item.i_item_sk
        ,store.s_store_name
@@ -119,6 +120,7 @@ order by cs1.product_name
        ,cs1.store_name
        ,cs2.cnt
        ,s11
-       ,s21;
+       ,s21
+       ,s22;
 
 -- end query 1 in stream 0 using template query64.tpl

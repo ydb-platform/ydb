@@ -1,6 +1,6 @@
 #include "interface/arrow_reader.h"
 #include <util/thread/pool.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <parquet/arrow/reader.h>
 #include <arrow/io/api.h>

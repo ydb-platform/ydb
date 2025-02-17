@@ -1,5 +1,7 @@
 #include "store.h"
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NKikimr::NSchemeShard {
 
 TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::ILayoutPolicy::Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const {
@@ -130,11 +132,16 @@ bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescrip
         return false;
     }
 
+    if (descriptionProto.SchemaPresetsSize() > 1) {
+        errors.AddError("trying to create an OLAP store with multiple schema presets (not supported yet)");
+        return false;
+    }
+
     Name = descriptionProto.GetName();
     StorageConfig = descriptionProto.GetStorageConfig();
     // Make it easier by having data channel count always specified internally
     if (!StorageConfig.HasDataChannelCount()) {
-        StorageConfig.SetDataChannelCount(1);
+        StorageConfig.SetDataChannelCount(64);
     }
 
     size_t protoIndex = 0;
@@ -151,7 +158,7 @@ bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescrip
         preset.SetProtoIndex(protoIndex++);
 
         TOlapSchemaUpdate schemaDiff;
-        if (!schemaDiff.Parse(presetProto.GetSchema(), errors)) {
+        if (!schemaDiff.Parse(presetProto.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
             return false;
         }
 

@@ -12,7 +12,6 @@
 #include <yt/yt/core/http/public.h>
 
 #include <yt/yt/core/ytree/ypath_detail.h>
-#include <yt/yt/core/ytree/yson_struct.h>
 
 #include <yt/yt/library/profiling/producer.h>
 #include <yt/yt/library/profiling/sensor.h>
@@ -20,82 +19,6 @@
 #include <library/cpp/monlib/encode/format.h>
 
 namespace NYT::NProfiling {
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TShardConfig
-    : public NYTree::TYsonStruct
-{
-    std::vector<TString> Filter;
-
-    std::optional<TDuration> GridStep;
-
-    REGISTER_YSON_STRUCT(TShardConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TShardConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TSolomonExporterConfig
-    : public NYTree::TYsonStruct
-{
-    TDuration GridStep;
-
-    TDuration LingerTimeout;
-
-    int WindowSize;
-
-    int ThreadPoolSize;
-    int EncodingThreadPoolSize;
-
-    bool ConvertCountersToRateForSolomon;
-    bool RenameConvertedCounters;
-
-    bool ExportSummary;
-    bool ExportSummaryAsMax;
-    bool ExportSummaryAsAvg;
-
-    bool MarkAggregates;
-
-    bool StripSensorsNamePrefix;
-
-    bool EnableCoreProfilingCompatibility;
-
-    bool EnableSelfProfiling;
-
-    bool ReportBuildInfo;
-
-    bool ReportKernelVersion;
-
-    bool ReportRestart;
-
-    TDuration ResponseCacheTtl;
-
-    TDuration ReadDelay;
-
-    std::optional<TString> Host;
-
-    THashMap<TString, TString> InstanceTags;
-
-    THashMap<TString, TShardConfigPtr> Shards;
-
-    TDuration UpdateSensorServiceTreePeriod;
-
-    int ProducerCollectionBatchSize;
-
-    TShardConfigPtr MatchShard(const TString& sensorName);
-
-    ESummaryPolicy GetSummaryPolicy() const;
-
-    REGISTER_YSON_STRUCT(TSolomonExporterConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TSolomonExporterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -107,19 +30,19 @@ public:
         TSolomonExporterConfigPtr config,
         TSolomonRegistryPtr registry = nullptr);
 
-    void Register(const TString& prefix, const NYT::NHttp::IServerPtr& server);
-    void Register(const TString& prefix, const NYT::NHttp::IRequestPathMatcherPtr& handlers);
+    void Register(const std::string& prefix, const NYT::NHttp::IServerPtr& server);
+    void Register(const std::string& prefix, const NYT::NHttp::IRequestPathMatcherPtr& handlers);
 
     //! Attempts to read registered sensors in JSON format.
     //! Returns null if exporter is not ready.
-    std::optional<TString> ReadJson(const TReadOptions& options = {}, std::optional<TString> shard = {});
+    std::optional<std::string> ReadJson(const TReadOptions& options = {}, std::optional<std::string> shard = {});
 
-    std::optional<TString> ReadSpack(const TReadOptions& options = {}, std::optional<TString> shard = {});
+    std::optional<std::string> ReadSpack(const TReadOptions& options = {}, std::optional<std::string> shard = {});
 
     bool ReadSensors(
         ::NMonitoring::IMetricEncoderPtr encoder,
         const TReadOptions& options,
-        std::optional<TString> shard);
+        std::optional<std::string> shard);
 
     void AttachRemoteProcess(TCallback<TFuture<TSharedRef>()> dumpSensors);
 
@@ -130,6 +53,8 @@ public:
     void Stop();
 
     NYTree::IYPathServicePtr GetSensorService();
+
+    const TSolomonRegistryPtr& GetRegistry() const;
 
 private:
     const TSolomonExporterConfigPtr Config_;
@@ -148,11 +73,11 @@ private:
 
     TSpinLock StatusLock_;
     std::optional<TInstant> LastFetch_;
-    THashMap<TString, std::optional<TInstant>> LastShardFetch_;
+    THashMap<std::string, std::optional<TInstant>> LastShardFetch_;
 
     struct TCacheKey
     {
-        std::optional<TString> Shard;
+        std::optional<std::string> Shard;
         ::NMonitoring::EFormat Format;
         ::NMonitoring::ECompression Compression;
 
@@ -190,19 +115,19 @@ private:
     void DoCollect();
     void TransferSensors();
 
-    void HandleIndex(const TString& prefix, const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
+    void HandleIndex(const std::string& prefix, const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
     void HandleStatus(const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
 
     void HandleDebugSensors(const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
     void HandleDebugTags(const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
 
     void HandleShard(
-        const std::optional<TString>& name,
+        const std::optional<std::string>& name,
         const NHttp::IRequestPtr& req,
         const NHttp::IResponseWriterPtr& rsp);
 
     void DoHandleShard(
-        const std::optional<TString>& name,
+        const std::optional<std::string>& name,
         const NHttp::IRequestPtr& req,
         const NHttp::IResponseWriterPtr& rsp);
 
@@ -212,7 +137,7 @@ private:
 
     void CleanResponseCache();
 
-    bool FilterDefaultGrid(const TString& sensorName);
+    bool FilterDefaultGrid(const std::string& sensorName);
 
     static void ValidateSummaryPolicy(ESummaryPolicy policy);
 
@@ -221,6 +146,7 @@ private:
 };
 
 DEFINE_REFCOUNTED_TYPE(TSolomonExporter)
+YT_DEFINE_TYPEID(TSolomonExporter)
 
 ////////////////////////////////////////////////////////////////////////////////
 

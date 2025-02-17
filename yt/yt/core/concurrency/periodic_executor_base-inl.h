@@ -145,7 +145,7 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::ScheduleOutOfBand()
 template <CInvocationTimePolicy TInvocationTimePolicy>
 void TPeriodicExecutorBase<TInvocationTimePolicy>::PostDelayedCallback(TInstant deadline)
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     TDelayedExecutor::CancelAndClear(Cookie_);
     Cookie_ = TDelayedExecutor::Submit(
         BIND_NO_PROPAGATE(&TThis::OnTimer, MakeWeak(this)),
@@ -158,14 +158,14 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::PostCallback()
 {
     GuardedInvoke(
         Invoker_,
-        [weakThis = MakeWeak(this)] {
-            if (auto strongThis = weakThis.Lock()) {
-                strongThis->RunCallback();
+        [this, weakThis = MakeWeak(this)] {
+            if (auto this_ = weakThis.Lock()) {
+                RunCallback();
             }
         },
-        [weakThis = MakeWeak(this)] {
-            if (auto strongThis = weakThis.Lock()) {
-                strongThis->OnCallbackCancelled();
+        [this, weakThis = MakeWeak(this)] {
+            if (auto this_ = weakThis.Lock()) {
+                OnCallbackCancelled();
             }
         });
 }

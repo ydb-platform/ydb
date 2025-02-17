@@ -5,7 +5,6 @@ TEST_SRCS(
     test_query_cache.py
 )
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 DEPENDS(
@@ -17,7 +16,5 @@ PEERDIR(
     ydb/tests/oss/ydb_sdk_import
     ydb/public/sdk/python
 )
-
-REQUIREMENTS(ram:11)
 
 END()

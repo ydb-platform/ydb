@@ -207,7 +207,7 @@ public:
 
             Slave_->Write(parts, end - parts);
 
-            //grow buffer only on full flushes
+            // grow buffer only on full flushes
             OnBufferExhausted();
             Reset();
 
@@ -344,7 +344,7 @@ namespace {
         TBuffer B_;
         ui64 N_;
     };
-}
+} // namespace
 
 TBufferedOutputBase::TBufferedOutputBase(IOutputStream* slave)
     : Impl_(new TAdaptiveImpl(slave))

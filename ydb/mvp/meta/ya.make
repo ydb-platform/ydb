@@ -1,15 +1,13 @@
-LIBRARY()
-
-OWNER(
-    alexnick
-    xenoxeno
-    tarasov-egor
-    g:kikimr
+RECURSE_FOR_TESTS(
+    ut
 )
+
+LIBRARY()
 
 SRCS(
     meta.cpp
-    meta.h
+    meta_cache.cpp
+    meta_cache.h
     meta_cloud.h
     meta_cluster.h
     meta_clusters.h
@@ -25,13 +23,14 @@ SRCS(
 PEERDIR(
     ydb/mvp/core
     ydb/public/api/client/yc_private/resourcemanager/v1
-    ydb/library/yql/public/udf
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql/pg_dummy
-    ydb/library/yql/providers/result/expr_nodes
-    ydb/library/yql/core/expr_nodes
+    yql/essentials/public/udf
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
+    yql/essentials/providers/result/expr_nodes
+    yql/essentials/core/expr_nodes
     ydb/library/aclib/protos
     library/cpp/protobuf/json
+    library/cpp/getopt
 )
 
 YQL_LAST_ABI_VERSION()

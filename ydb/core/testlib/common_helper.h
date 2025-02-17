@@ -1,6 +1,6 @@
 #pragma once
 #include "test_client.h"
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 #include <library/cpp/yson/writer.h>
 
 namespace NKikimr::NKqp {
@@ -54,6 +54,10 @@ public:
 };
 
 class THelper {
+private:
+    inline static const TString DefaultAuthToken = "root@builtin";
+    YDB_ACCESSOR(TString, AuthToken, DefaultAuthToken);
+
 protected:
     void WaitForSchemeOperation(TActorId sender, ui64 txId);
     void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& writer) const;
@@ -71,6 +75,10 @@ public:
 
     void SetUseQueryService(bool use = true) {
         UseQueryService = use;
+    }
+
+    void ResetAuthToken() {
+        AuthToken = DefaultAuthToken;
     }
 
     void DropTable(const TString& tablePath);

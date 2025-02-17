@@ -1,10 +1,5 @@
 UNITTEST_FOR(ydb/mvp/oidc_proxy)
 
-OWNER(
-    molotkov-and
-    g:kikimr
-)
-
 SIZE(SMALL)
 
 SRCS(

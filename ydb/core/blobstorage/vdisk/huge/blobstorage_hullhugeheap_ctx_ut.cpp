@@ -26,7 +26,6 @@ namespace NKikimr {
                     Contexts.GetVCtx(),
                     ChunkSize,
                     AppendBlockSize,
-                    AppendBlockSize,
                     cfg.MinHugeBlobInBytes,
                     cfg.MilestoneHugeBlobInBytes,
                     cfg.MaxLogoBlobDataSize,
@@ -35,8 +34,6 @@ namespace NKikimr {
                     logFunc);
 
             return std::make_shared<THugeBlobCtx>(
-                    ChunkSize,
-                    AppendBlockSize,
                     repairedHuge->Heap->BuildHugeSlotsMap(),
                     true);
         }

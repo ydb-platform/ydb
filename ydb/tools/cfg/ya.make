@@ -2,7 +2,7 @@ RECURSE(
     bin
 )
 
-PY23_LIBRARY()
+PY3_LIBRARY()
 
 PY_SRCS(
     __init__.py
@@ -16,12 +16,6 @@ PY_SRCS(
     validation.py
 )
 
-IF (PYTHON2)
-    PEERDIR(
-        contrib/deprecated/python/enum34
-    )
-ENDIF()
-
 PEERDIR(
     contrib/python/protobuf
     contrib/python/PyYAML
@@ -29,7 +23,9 @@ PEERDIR(
     contrib/python/requests
     contrib/python/six
     ydb/tools/cfg/walle
+    ydb/tools/cfg/k8s_api
     library/cpp/resource
+    library/python/resource
     ydb/core/protos
 )
 

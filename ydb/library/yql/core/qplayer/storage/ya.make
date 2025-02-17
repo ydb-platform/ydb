@@ -1,5 +1,0 @@
-RECURSE(
-    interface
-    memory
-)
-

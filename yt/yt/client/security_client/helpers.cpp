@@ -10,7 +10,7 @@ using namespace NYPath;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYPath GetUserPath(const TString& name)
+TYPath GetUserPath(const std::string& name)
 {
     return "//sys/users/" + ToYPathLiteral(name);
 }

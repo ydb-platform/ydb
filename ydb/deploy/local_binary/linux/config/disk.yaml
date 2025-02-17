@@ -6,3 +6,6 @@ grpc_config:
   port: 2136
 monitoring_config:
   monitoring_port: 8765
+pqconfig:
+  check_acl: false
+  require_credentials_in_new_protocol: false

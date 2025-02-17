@@ -7,12 +7,13 @@ Some backward-compatible usability improvements have been made.
 .. [1] http://docs.python.org/library/itertools.html#recipes
 
 """
+
 import math
 import operator
 
 from collections import deque
 from collections.abc import Sized
-from functools import partial, reduce
+from functools import lru_cache, partial
 from itertools import (
     chain,
     combinations,
@@ -41,8 +42,10 @@ __all__ = [
     'factor',
     'flatten',
     'grouper',
+    'is_prime',
     'iter_except',
     'iter_index',
+    'loops',
     'matmul',
     'ncycles',
     'nth',
@@ -74,6 +77,7 @@ __all__ = [
     'totient',
     'transpose',
     'triplewise',
+    'unique',
     'unique_everseen',
     'unique_justseen',
 ]
@@ -198,7 +202,7 @@ def nth(iterable, n, default=None):
     return next(islice(iterable, n, None), default)
 
 
-def all_equal(iterable):
+def all_equal(iterable, key=None):
     """
     Returns ``True`` if all the elements are equal to each other.
 
@@ -207,9 +211,21 @@ def all_equal(iterable):
         >>> all_equal('aaab')
         False
 
+    A function that accepts a single argument and returns a transformed version
+    of each input item can be specified with *key*:
+
+        >>> all_equal('AaaA', key=str.casefold)
+        True
+        >>> all_equal([1, 2, 3], key=lambda x: x < 10)
+        True
+
     """
-    g = groupby(iterable)
-    return next(g, True) and not next(g, False)
+    iterator = groupby(iterable, key)
+    for first in iterator:
+        for second in iterator:
+            return False
+        return True
+    return True
 
 
 def quantify(iterable, pred=bool):
@@ -410,16 +426,11 @@ def roundrobin(*iterables):
     iterables is small).
 
     """
-    # Recipe credited to George Sakkis
-    pending = len(iterables)
-    nexts = cycle(iter(it).__next__ for it in iterables)
-    while pending:
-        try:
-            for next in nexts:
-                yield next()
-        except StopIteration:
-            pending -= 1
-            nexts = cycle(islice(nexts, pending))
+    # Algorithm credited to George Sakkis
+    iterators = map(iter, iterables)
+    for num_active in range(len(iterables), 0, -1):
+        iterators = cycle(islice(iterators, num_active))
+        yield from map(next, iterators)
 
 
 def partition(pred, iterable):
@@ -458,16 +469,14 @@ def powerset(iterable):
 
     :func:`powerset` will operate on iterables that aren't :class:`set`
     instances, so repeated elements in the input will produce repeated elements
-    in the output. Use :func:`unique_everseen` on the input to avoid generating
-    duplicates:
+    in the output.
 
         >>> seq = [1, 1, 0]
         >>> list(powerset(seq))
         [(), (1,), (1,), (0,), (1, 1), (1, 0), (1, 0), (1, 1, 0)]
-        >>> from more_itertools import unique_everseen
-        >>> list(powerset(unique_everseen(seq)))
-        [(), (1,), (0,), (1, 0)]
 
+    For a variant that efficiently yields actual :class:`set` instances, see
+    :func:`powerset_of_sets`.
     """
     s = list(iterable)
     return chain.from_iterable(combinations(s, r) for r in range(len(s) + 1))
@@ -531,6 +540,25 @@ def unique_justseen(iterable, key=None):
         return map(operator.itemgetter(0), groupby(iterable))
 
     return map(next, map(operator.itemgetter(1), groupby(iterable, key)))
+
+
+def unique(iterable, key=None, reverse=False):
+    """Yields unique elements in sorted order.
+
+    >>> list(unique([[1, 2], [3, 4], [1, 2]]))
+    [[1, 2], [3, 4]]
+
+    *key* and *reverse* are passed to :func:`sorted`.
+
+    >>> list(unique('ABBcCAD', str.casefold))
+    ['A', 'B', 'c', 'D']
+    >>> list(unique('ABBcCAD', str.casefold, reverse=True))
+    ['D', 'c', 'B', 'A']
+
+    The elements in *iterable* need not be hashable, but they must be
+    comparable for sorting to work.
+    """
+    return unique_justseen(sorted(iterable, key=key, reverse=reverse), key=key)
 
 
 def iter_except(func, exception, first=None):
@@ -774,8 +802,30 @@ def triplewise(iterable):
     [('A', 'B', 'C'), ('B', 'C', 'D'), ('C', 'D', 'E')]
 
     """
-    for (a, _), (b, c) in pairwise(pairwise(iterable)):
-        yield a, b, c
+    # This deviates from the itertools documentation reciple - see
+    # https://github.com/more-itertools/more-itertools/issues/889
+    t1, t2, t3 = tee(iterable, 3)
+    next(t3, None)
+    next(t3, None)
+    next(t2, None)
+    return zip(t1, t2, t3)
+
+
+def _sliding_window_islice(iterable, n):
+    # Fast path for small, non-zero values of n.
+    iterators = tee(iterable, n)
+    for i, iterator in enumerate(iterators):
+        next(islice(iterator, i, i), None)
+    return zip(*iterators)
+
+
+def _sliding_window_deque(iterable, n):
+    # Normal path for other values of n.
+    it = iter(iterable)
+    window = deque(islice(it, n - 1), maxlen=n)
+    for x in it:
+        window.append(x)
+        yield tuple(window)
 
 
 def sliding_window(iterable, n):
@@ -791,11 +841,16 @@ def sliding_window(iterable, n):
 
     For a variant with more features, see :func:`windowed`.
     """
-    it = iter(iterable)
-    window = deque(islice(it, n - 1), maxlen=n)
-    for x in it:
-        window.append(x)
-        yield tuple(window)
+    if n > 20:
+        return _sliding_window_deque(iterable, n)
+    elif n > 2:
+        return _sliding_window_islice(iterable, n)
+    elif n == 2:
+        return pairwise(iterable)
+    elif n == 1:
+        return zip(iterable)
+    else:
+        raise ValueError(f'n should be at least one, not {n}')
 
 
 def subslices(iterable):
@@ -819,16 +874,16 @@ def polynomial_from_roots(roots):
     >>> polynomial_from_roots(roots)  # x^3 - 4 * x^2 - 17 * x + 60
     [1, -4, -17, 60]
     """
-    factors = zip(repeat(1), map(operator.neg, roots))
-    return list(reduce(convolve, factors, [1]))
+    poly = [1]
+    for root in roots:
+        poly = list(convolve(poly, (1, -root)))
+    return poly
 
 
 def iter_index(iterable, value, start=0, stop=None):
     """Yield the index of each place in *iterable* that *value* occurs,
     beginning with index *start* and ending before index *stop*.
 
-    See :func:`locate` for a more general means of finding the indexes
-    associated with particular values.
 
     >>> list(iter_index('AABCADEAF', 'A'))
     [0, 1, 4, 7]
@@ -836,6 +891,19 @@ def iter_index(iterable, value, start=0, stop=None):
     [1, 4, 7]
     >>> list(iter_index('AABCADEAF', 'A', 1, 7))  # stop index is not inclusive
     [1, 4]
+
+    The behavior for non-scalar *values* matches the built-in Python types.
+
+    >>> list(iter_index('ABCDABCD', 'AB'))
+    [0, 4]
+    >>> list(iter_index([0, 1, 2, 3, 0, 1, 2, 3], [0, 1]))
+    []
+    >>> list(iter_index([[0, 1], [2, 3], [0, 1], [2, 3]], [0, 1]))
+    [0, 2]
+
+    See :func:`locate` for a more general means of finding the indexes
+    associated with particular values.
+
     """
     seq_index = getattr(iterable, 'index', None)
     if seq_index is None:
@@ -941,20 +1009,56 @@ def matmul(m1, m2):
     return batched(starmap(_sumprod, product(m1, transpose(m2))), n)
 
 
+def _factor_pollard(n):
+    # Return a factor of n using Pollard's rho algorithm
+    gcd = math.gcd
+    for b in range(1, n - 2):
+        x = y = 2
+        d = 1
+        while d == 1:
+            x = (x * x + b) % n
+            y = (y * y + b) % n
+            y = (y * y + b) % n
+            d = gcd(x - y, n)
+        if d != n:
+            return d
+    raise ValueError('prime or under 5')
+
+
+_primes_below_211 = tuple(sieve(211))
+
+
 def factor(n):
     """Yield the prime factors of n.
 
     >>> list(factor(360))
     [2, 2, 2, 3, 3, 5]
+
+    Finds small factors with trial division.  Larger factors are
+    either verified as prime with ``is_prime`` or split into
+    smaller factors with Pollard's rho algorithm.
     """
-    for prime in sieve(math.isqrt(n) + 1):
+
+    # Corner case reduction
+    if n < 2:
+        return
+
+    # Trial division reduction
+    for prime in _primes_below_211:
         while not n % prime:
             yield prime
             n //= prime
-            if n == 1:
-                return
-    if n > 1:
-        yield n
+
+    # Pollard's rho reduction
+    primes = []
+    todo = [n] if n > 1 else []
+    for n in todo:
+        if n < 211**2 or is_prime(n):
+            primes.append(n)
+        else:
+            fact = _factor_pollard(n)
+            todo += (fact, n // fact)
+    yield from sorted(primes)
 
 
 def polynomial_eval(coefficients, x):
@@ -1006,7 +1110,90 @@ def totient(n):
     >>> totient(12)
     4
     """
-    for p in unique_justseen(factor(n)):
-        n = n // p * (p - 1)
-
+    for prime in set(factor(n)):
+        n -= n // prime
     return n
+
+
+# Miller–Rabin primality test: https://oeis.org/A014233
+_perfect_tests = [
+    (2047, (2,)),
+    (9080191, (31, 73)),
+    (4759123141, (2, 7, 61)),
+    (1122004669633, (2, 13, 23, 1662803)),
+    (2152302898747, (2, 3, 5, 7, 11)),
+    (3474749660383, (2, 3, 5, 7, 11, 13)),
+    (18446744073709551616, (2, 325, 9375, 28178, 450775, 9780504, 1795265022)),
+    (
+        3317044064679887385961981,
+        (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41),
+    ),
+]
+
+
+@lru_cache
+def _shift_to_odd(n):
+    'Return s, d such that 2**s * d == n'
+    s = ((n - 1) ^ n).bit_length() - 1
+    d = n >> s
+    assert (1 << s) * d == n and d & 1 and s >= 0
+    return s, d
+
+
+def _strong_probable_prime(n, base):
+    assert (n > 2) and (n & 1) and (2 <= base < n)
+
+    s, d = _shift_to_odd(n - 1)
+
+    x = pow(base, d, n)
+    if x == 1 or x == n - 1:
+        return True
+
+    for _ in range(s - 1):
+        x = x * x % n
+        if x == n - 1:
+            return True
+
+    return False
+
+
+def is_prime(n):
+    """Return ``True`` if *n* is prime and ``False`` otherwise.
+
+    >>> is_prime(37)
+    True
+    >>> is_prime(3 * 13)
+    False
+    >>> is_prime(18_446_744_073_709_551_557)
+    True
+
+    This function uses the Miller-Rabin primality test, which can return false
+    positives for very large inputs. For values of *n* below 10**24
+    there are no false positives. For larger values, there is less than
+    a 1 in 2**128 false positive rate. Multiple tests can further reduce the
+    chance of a false positive.
+    """
+    if n < 17:
+        return n in {2, 3, 5, 7, 11, 13}
+    if not (n & 1 and n % 3 and n % 5 and n % 7 and n % 11 and n % 13):
+        return False
+    for limit, bases in _perfect_tests:
+        if n < limit:
+            break
+    else:
+        bases = [randrange(2, n - 1) for i in range(64)]
+    return all(_strong_probable_prime(n, base) for base in bases)
+
+
+def loops(n):
+    """Returns an iterable with *n* elements for efficient looping.
+    Like ``range(n)`` but doesn't create integers.
+
+    >>> i = 0
+    >>> for _ in loops(5):
+    ...     i += 1
+    >>> i
+    5
+
+    """
+    return repeat(None, n)

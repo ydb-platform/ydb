@@ -56,7 +56,6 @@ private:
 
     TString GetRequestPathPart(TStringBuf path, size_t partIdx) const;
     TString ExtractQueueNameFromPath(const TStringBuf path);
-    TString ExtractAccountNameFromPath(const TStringBuf path);
 
     ui64 CalculateRequestSizeInBytes(const THttpInput& input, const ui64 contentLength) const;
     void ExtractQueueAndAccountNames(const TStringBuf path);
@@ -94,6 +93,9 @@ private:
     void SetupSendMessageBatch(TSendMessageBatchRequest* const req);
     void SetupPurgeQueue(TPurgeQueueRequest* const req);
     void SetupSetQueueAttributes(TSetQueueAttributesRequest* const req);
+    void SetupListQueueTags(TListQueueTagsRequest* const req);
+    void SetupTagQueue(TTagQueueRequest* const req);
+    void SetupUntagQueue(TUntagQueueRequest* const req);
 
     void ExtractSourceAddressFromSocket();
 

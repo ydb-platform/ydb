@@ -6,7 +6,8 @@ import os
 import sys
 import socket
 import time
-from typing import Dict, Any, Optional
+from collections import deque
+from typing import Dict, Any, Optional, Tuple, Callable
 
 import certifi
 import lz4.frame
@@ -20,7 +21,7 @@ from clickhouse_connect import common
 
 logger = logging.getLogger(__name__)
 
-# We disable this warning.  Verify must explicitly set to false, so we assume the user knows what they're doing
+# We disable this warning.  Verify must be explicitly set to false, so we assume the user knows what they're doing
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Increase this number just to be safe when ClickHouse is returning progress headers
@@ -118,13 +119,13 @@ def get_pool_manager(keep_interval: int = DEFAULT_KEEP_INTERVAL,
     return manager
 
 
-def check_conn_reset(manager: PoolManager):
+def check_conn_expiration(manager: PoolManager):
     reset_seconds = common.get_setting('max_connection_age')
     if reset_seconds:
         last_reset = all_managers.get(manager, 0)
         now = int(time.time())
         if last_reset < now - reset_seconds:
-            logger.debug('connection reset')
+            logger.debug('connection expiration')
             manager.clear()
             all_managers[manager] = now
 
@@ -192,34 +193,66 @@ class ResponseSource:
     def __init__(self, response: HTTPResponse, chunk_size: int = 1024 * 1024):
         self.response = response
         compression = response.headers.get('content-encoding')
+        decompress:Optional[Callable] = None
         if compression == 'zstd':
             zstd_decom = zstandard.ZstdDecompressor().decompressobj()
 
-            def decompress():
-                while True:
-                    chunk = response.read(chunk_size, decode_content=False)
-                    if not chunk:
-                        break
-                    yield zstd_decom.decompress(chunk)
+            def zstd_decompress(c: deque) -> Tuple[bytes, int]:
+                chunk = c.popleft()
+                return zstd_decom.decompress(chunk), len(chunk)
 
-            self.gen = decompress()
+            decompress = zstd_decompress
         elif compression == 'lz4':
             lz4_decom = lz4.frame.LZ4FrameDecompressor()
 
-            def decompress():
-                while lz4_decom.needs_input:
-                    data = self.response.read(chunk_size, decode_content=False)
-                    if lz4_decom.unused_data:
-                        data = lz4_decom.unused_data + data
-                    if not data:
-                        return
-                    chunk = lz4_decom.decompress(data)
-                    if chunk:
-                        yield chunk
+            def lz_decompress(c: deque) -> Tuple[Optional[bytes], int]:
+                read_amt = 0
+                data = c.popleft()
+                read_amt += len(data)
+                if lz4_decom.unused_data:
+                    read_amt += len(lz4_decom.unused_data)
+                    data = lz4_decom.unused_data + data
+                block = lz4_decom.decompress(data)
+                if lz4_decom.unused_data:
+                    read_amt -= len(lz4_decom.unused_data)
+                return block, read_amt
 
-            self.gen = decompress()
-        else:
-            self.gen = response.stream(amt=chunk_size, decode_content=True)
+            decompress = lz_decompress
+
+        buffer_size = common.get_setting('http_buffer_size')
+
+        def buffered():
+            chunks = deque()
+            done = False
+            current_size = 0
+            read_gen = response.stream(chunk_size, decompress is None)
+            while True:
+                while not done:
+                    try:
+                        chunk = next(read_gen, None) # Always try to read at least one chunk if there are any left
+                    except Exception: # pylint: disable=broad-except
+                        # By swallowing an unexpected exception reading the stream, we will let consumers decide how to
+                        # handle the unexpected end of stream
+                        pass
+                    if not chunk:
+                        done = True
+                        break
+                    chunks.append(chunk)
+                    current_size += len(chunk)
+                    if current_size > buffer_size:
+                        break
+                if len(chunks) == 0:
+                    return
+                if decompress:
+                    chunk, used = decompress(chunks)
+                    current_size -= used
+                else:
+                    chunk = chunks.popleft()
+                    current_size -= len(chunk)
+                if chunk:
+                    yield chunk
+
+        self.gen = buffered()
 
     def close(self):
         self.response.drain_conn()

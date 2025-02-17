@@ -22,6 +22,7 @@ import pytest  # type: ignore
 from google.auth import _helpers
 from google.auth import crypt
 from google.auth import exceptions
+from google.auth import iam
 from google.auth import jwt
 from google.auth import transport
 from google.auth.credentials import DEFAULT_UNIVERSE_DOMAIN
@@ -67,6 +68,23 @@ class TestCredentials(object):
             cls.TOKEN_URI,
             universe_domain=universe_domain,
         )
+
+    def test_get_cred_info(self):
+        credentials = self.make_credentials()
+        assert not credentials.get_cred_info()
+
+        credentials._cred_file_path = "/path/to/file"
+        assert credentials.get_cred_info() == {
+            "credential_source": "/path/to/file",
+            "credential_type": "service account credentials",
+            "principal": "service-account@example.com",
+        }
+
+    def test__make_copy_get_cred_info(self):
+        credentials = self.make_credentials()
+        credentials._cred_file_path = "/path/to/file"
+        cred_copy = credentials._make_copy()
+        assert cred_copy._cred_file_path == "/path/to/file"
 
     def test_constructor_no_universe_domain(self):
         credentials = service_account.Credentials(
@@ -772,10 +790,36 @@ class TestIDTokenCredentials(object):
         )
         request = mock.Mock()
         credentials.refresh(request)
-        req, signer_email, target_audience, access_token = call_iam_generate_id_token_endpoint.call_args[
+        req, iam_endpoint, signer_email, target_audience, access_token, universe_domain = call_iam_generate_id_token_endpoint.call_args[
             0
         ]
         assert req == request
+        assert iam_endpoint == iam._IAM_IDTOKEN_ENDPOINT
+        assert signer_email == "service-account@example.com"
+        assert target_audience == "https://example.com"
+        decoded_access_token = jwt.decode(access_token, verify=False)
+        assert decoded_access_token["scope"] == "https://www.googleapis.com/auth/iam"
+
+    @mock.patch(
+        "google.oauth2._client.call_iam_generate_id_token_endpoint", autospec=True
+    )
+    def test_refresh_iam_flow_non_gdu(self, call_iam_generate_id_token_endpoint):
+        credentials = self.make_credentials(universe_domain="fake-universe")
+        token = "id_token"
+        call_iam_generate_id_token_endpoint.return_value = (
+            token,
+            _helpers.utcnow() + datetime.timedelta(seconds=500),
+        )
+        request = mock.Mock()
+        credentials.refresh(request)
+        req, iam_endpoint, signer_email, target_audience, access_token, universe_domain = call_iam_generate_id_token_endpoint.call_args[
+            0
+        ]
+        assert req == request
+        assert (
+            iam_endpoint
+            == "https://iamcredentials.fake-universe/v1/projects/-/serviceAccounts/{}:generateIdToken"
+        )
         assert signer_email == "service-account@example.com"
         assert target_audience == "https://example.com"
         decoded_access_token = jwt.decode(access_token, verify=False)

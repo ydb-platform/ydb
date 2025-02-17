@@ -1,0 +1,838 @@
+--
+-- Legal Notice
+--
+-- This document and associated source code (the "Work") is a part of a
+-- benchmark specification maintained by the TPC.
+--
+-- The TPC reserves all right, title, and interest to the Work as provided
+-- under U.S. and international laws, including without limitation all patent
+-- and trademark rights therein.
+--
+-- No Warranty
+--
+-- 1.1 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE INFORMATION
+--     CONTAINED HEREIN IS PROVIDED "AS IS" AND WITH ALL FAULTS, AND THE
+--     AUTHORS AND DEVELOPERS OF THE WORK HEREBY DISCLAIM ALL OTHER
+--     WARRANTIES AND CONDITIONS, EITHER EXPRESS, IMPLIED OR STATUTORY,
+--     INCLUDING, BUT NOT LIMITED TO, ANY (IF ANY) IMPLIED WARRANTIES,
+--     DUTIES OR CONDITIONS OF MERCHANTABILITY, OF FITNESS FOR A PARTICULAR
+--     PURPOSE, OF ACCURACY OR COMPLETENESS OF RESPONSES, OF RESULTS, OF
+--     WORKMANLIKE EFFORT, OF LACK OF VIRUSES, AND OF LACK OF NEGLIGENCE.
+--     ALSO, THERE IS NO WARRANTY OR CONDITION OF TITLE, QUIET ENJOYMENT,
+--     QUIET POSSESSION, CORRESPONDENCE TO DESCRIPTION OR NON-INFRINGEMENT
+--     WITH REGARD TO THE WORK.
+-- 1.2 IN NO EVENT WILL ANY AUTHOR OR DEVELOPER OF THE WORK BE LIABLE TO
+--     ANY OTHER PARTY FOR ANY DAMAGES, INCLUDING BUT NOT LIMITED TO THE
+--     COST OF PROCURING SUBSTITUTE GOODS OR SERVICES, LOST PROFITS, LOSS
+--     OF USE, LOSS OF DATA, OR ANY INCIDENTAL, CONSEQUENTIAL, DIRECT,
+--     INDIRECT, OR SPECIAL DAMAGES WHETHER UNDER CONTRACT, TORT, WARRANTY,
+--     OR OTHERWISE, ARISING IN ANY WAY OUT OF THIS OR ANY OTHER AGREEMENT
+--     RELATING TO THE WORK, WHETHER OR NOT SUCH AUTHOR OR DEVELOPER HAD
+--     ADVANCE NOTICE OF THE POSSIBILITY OF SUCH DAMAGES.
+--
+-- Contributors:
+-- Gradient Systems
+--
+--
+--
+--
+-- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+-- Include general definitions
+-- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+#include "names.dst";
+#include "calendar.dst";
+#include "fips.dst";
+#include "streets.dst";
+#include "english.dst";
+#include "cities.dst";
+#include "items.dst";
+#include "scaling.dst";
+
+-- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+-- Begin TPCDS-specific distribution definitions
+-- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+------
+-- gender
+------
+create gender;
+set types = (varchar);
+set weights = 1; 
+add ("M": 50);
+add ("F": 50);
+
+------
+-- marital_status
+------
+create marital_status;
+set types = (varchar);
+set weights = 1; 
+add ("M": 1);
+add ("S": 1);
+add ("D": 1);
+add ("W": 1);
+add ("U": 1);
+
+------
+-- education
+-- values            weights
+-- -----------------------
+--    1. level    1. uniform
+--                2. good credit distribution
+--                3. low credit distribution
+--                4. high risk credit distribution
+------
+create education;
+set types = (varchar);
+set weights = 4; 
+add ("Primary": 1, 650, 250, 100);
+add ("Secondary": 1, 3250, 1250, 500);
+add ("College": 1, 650, 250, 100);
+add ("2 yr Degree": 1, 975, 375, 150);
+add ("4 yr Degree": 1, 650, 250, 100);
+add ("Advanced Degree": 1, 325, 125, 50);
+add ("Unknown": 1, 10, 10, 10);
+
+------
+-- purchase_band
+------
+create purchase_band;
+set types = (int);
+set weights = 1; 
+add (500: 7);
+add (1000: 7);
+add (1500: 7);
+add (2000: 7);
+add (2500: 7);
+add (3000: 7);
+add (3500: 7);
+add (4000: 5);
+add (4500: 5);
+add (5000: 5);
+add (5500: 5);
+add (6000: 5);
+add (6500: 5);
+add (7000: 5);
+add (7500: 1);
+add (8000: 1);
+add (8500: 1);
+add (9000: 1);
+add (9500: 1);
+add (10000: 1);
+
+------
+-- buy_potential
+------
+create buy_potential;
+set types = (varchar);
+set weights = 1; 
+add ("0-500": 17);
+add ("501-1000": 17);
+add ("1001-5000": 35);
+add ("5001-10000": 22);
+add (">10000": 5);
+add ("Unknown": 4);
+
+------
+-- credit_rating
+------
+create credit_rating;
+set types = (varchar);
+set weights = 1; 
+add ("Good": 65);
+add ("Low Risk": 25);
+add ("High Risk": 10);
+add ("Unknown": 4);
+
+------
+-- income_band
+------
+create income_band;
+set types = (int, int);
+set weights = 1; 
+add (0, 10000: 7);
+add (10001, 20000: 7);
+add (20001, 30000: 7);
+add (30001, 40000: 7);
+add (40001, 50000: 7);
+add (50001, 60000: 7);
+add (60001, 70000: 7);
+add (70001, 80000: 7);
+add (80001, 90000: 7);
+add (90001, 100000: 7);
+add (100001, 110000: 7);
+add (110001, 120000: 7);
+add (120001, 130000: 8);
+add (130001, 140000: 8);
+add (140001, 150000: 8);
+add (150001, 160000: 8);
+add (160001, 170000: 8);
+add (170001, 180000: 8);
+add (180001, 190000: 8);
+add (190001, 200000: 8);
+
+
+------
+-- dependent_count
+------
+create dependent_count;
+set types = (int);
+set weights = 1; 
+add (0: 25);
+add (1: 25);
+add (2: 10);
+add (3: 10);
+add (4: 8);
+add (5: 8);
+add (6: 5);
+add (7: 5);
+add (8: 2);
+add (9: 2);
+
+------
+-- vehicle_count
+------
+create vehicle_count;
+set types = (int);
+set weights = 1; 
+add (0: 17);
+add (1: 17);
+add (2: 35);
+add (3: 22);
+add (4: 5);
+add (-1: 4);
+
+------
+-- promo_purpose
+------
+create promo_purpose;
+set types = (varchar);
+set weights = 1; 
+
+add ("Unknown": 4);
+
+------
+-- return_reasons
+------
+create return_reasons;
+set types = (varchar);
+set weights = 1; 
+add ("Package was damaged": 1, 0, 0, 0, 0, 0);
+add ("Stopped working": 1, 0, 0, 0, 0, 0);
+add ("Did not get it on time": 1, 0, 0, 0, 0, 0);
+add ("Not the product that was ordred": 1, 0, 0, 0, 0, 0);
+add ("Parts missing": 1, 0, 0, 0, 0, 0);
+add ("Does not work with a product that I have": 1, 0, 0, 0, 0, 0);
+add ("Gift exchange": 1, 0, 0, 0, 0, 0);
+add ("Did not like the color": 1, 0, 0, 0, 0, 0);
+add ("Did not like the model": 1, 0, 0, 0, 0, 0);
+add ("Did not like the make": 1, 0, 0, 0, 0, 0);
+add ("Did not like the warranty": 1, 0, 0, 0, 0, 0);
+add ("No service location in my area": 1, 0, 0, 0, 0, 0);
+add ("Found a better price in a store": 1, 0, 0, 0, 0, 0);
+add ("Found a better extended warranty in a store": 1, 0, 0, 0, 0, 0);
+add ("Not working any more": 1, 0, 0, 0, 0, 0);
+add ("Did not fit": 1, 0, 0, 0, 0, 0);
+add ("Wrong size": 1, 0, 0, 0, 0, 0);
+add ("Lost my job": 1, 0, 0, 0, 0, 0);
+add ("unauthoized purchase": 1, 0, 0, 0, 0, 0);
+add ("duplicate purchase": 1, 0, 0, 0, 0, 0);
+add ("its is a boy": 1, 0, 0, 0, 0, 0);
+add ("it is a girl": 1, 0, 0, 0, 0, 0);
+add ("reason 23": 1, 0, 0, 0, 0, 0);
+add ("reason 24": 1, 0, 0, 0, 0, 0);
+add ("reason 25": 1, 0, 0, 0, 0, 0);
+add ("reason 26": 1, 0, 0, 0, 0, 0);
+add ("reason 27": 1, 0, 0, 0, 0, 0);
+add ("reason 28": 1, 0, 0, 0, 0, 0);
+add ("reason 29": 1, 0, 0, 0, 0, 0);
+add ("reason 31": 1, 0, 0, 0, 0, 0);
+add ("reason 31": 1, 0, 0, 0, 0, 0);
+add ("reason 32": 1, 0, 0, 0, 0, 0);
+add ("reason 33": 1, 0, 0, 0, 0, 0);
+add ("reason 34": 1, 0, 0, 0, 0, 0);
+add ("reason 35": 1, 0, 0, 0, 0, 0);
+add ("reason 36": 1, 1, 0, 0, 0, 0);
+add ("reason 37": 1, 1, 0, 0, 0, 0);
+add ("reason 38": 1, 1, 0, 0, 0, 0);
+add ("reason 39": 1, 1, 0, 0, 0, 0);
+add ("reason 40": 1, 1, 0, 0, 0, 0);
+add ("reason 41": 1, 1, 0, 0, 0, 0);
+add ("reason 42": 1, 1, 0, 0, 0, 0);
+add ("reason 43": 1, 1, 0, 0, 0, 0);
+add ("reason 44": 1, 1, 0, 0, 0, 0);
+add ("reason 45": 1, 1, 0, 0, 0, 0);
+add ("reason 46": 1, 1, 1, 0, 0, 0);
+add ("reason 47": 1, 1, 1, 0, 0, 0);
+add ("reason 48": 1, 1, 1, 0, 0, 0);
+add ("reason 49": 1, 1, 1, 0, 0, 0);
+add ("reason 50": 1, 1, 1, 0, 0, 0);
+add ("reason 51": 1, 1, 1, 0, 0, 0);
+add ("reason 52": 1, 1, 1, 0, 0, 0);
+add ("reason 53": 1, 1, 1, 0, 0, 0);
+add ("reason 54": 1, 1, 1, 0, 0, 0);
+add ("reason 55": 1, 1, 1, 0, 0, 0);
+add ("reason 56": 1, 1, 1, 1, 0, 0);
+add ("reason 57": 1, 1, 1, 1, 0, 0);
+add ("reason 58": 1, 1, 1, 1, 0, 0);
+add ("reason 59": 1, 1, 1, 1, 0, 0);
+add ("reason 60": 1, 1, 1, 1, 0, 0);
+add ("reason 61": 1, 1, 1, 1, 0, 0);
+add ("reason 62": 1, 1, 1, 1, 0, 0);
+add ("reason 63": 1, 1, 1, 1, 0, 0);
+add ("reason 64": 1, 1, 1, 1, 0, 0);
+add ("reason 65": 1, 1, 1, 1, 0, 0);
+add ("reason 66": 1, 1, 1, 1, 1, 0);
+add ("reason 67": 1, 1, 1, 1, 1, 0);
+add ("reason 68": 1, 1, 1, 1, 1, 0);
+add ("reason 69": 1, 1, 1, 1, 1, 0);
+add ("reason 70": 1, 1, 1, 1, 1, 0);
+add ("reason 71": 1, 1, 1, 1, 1, 1);
+add ("reason 72": 1, 1, 1, 1, 1, 1);
+add ("reason 73": 1, 1, 1, 1, 1, 1);
+add ("reason 74": 1, 1, 1, 1, 1, 1);
+add ("reason 75": 1, 1, 1, 1, 1, 1);
+
+------
+-- store_type
+-- values            weights
+-- -----------------------
+--    1. min_staff    1. uniform
+--    2. max_staff
+--    3. min_revenue
+--    4. max_revenue
+--    5. min_sqft
+--    6. max_sqft
+------
+create store_type;
+set types = (varchar, int, int, int, int, int, int);
+set weights = 1; 
+
+add ("Big Box", 200, 300, 5000000, 10000000, 10000, 20000: 1);
+
+------
+-- geography_class
+------
+create geography_class;
+set types = (varchar);
+set weights = 1; 
+
+add ("Unknown": 4);
+------
+-- divisions
+------
+create divisions;
+set types = (varchar);
+set weights = 1; 
+
+add ("Unknown": 4);
+------
+-- stores
+------
+create stores;
+set types = (varchar);
+set weights = 1; 
+
+add ("Unknown": 4);
+------
+-- hours
+-- values            weights
+-- -----------------------
+--    1. hour        1. uniform
+--    2.    AM/PH    2. store shopping (skewed);
+--    3.    shift    3. catalog/web shopping (skewed);
+--    4.    sub-shift
+--    5.    meal
+------
+create hours;
+set types = (int, varchar, varchar, varchar, varchar);
+set weights = 3; 
+add (0, "AM", "third", "night", "": 1, 0, 1);
+add (1, "AM", "third", "night", "": 1, 0, 2);
+add (2, "AM", "third", "night", "": 1, 0, 2);
+add (3, "AM", "third", "night", "": 1, 0, 2);
+add (4, "AM", "third", "night", "": 1, 0, 3);
+add (5, "AM", "third", "night", "": 1, 0, 3);
+add (6, "AM", "third", "morning", "breakfast": 1, 0, 3);
+add (7, "AM", "first", "morning", "breakfast": 1, 0, 4);
+add (8, "AM", "first", "morning", "breakfast": 1, 4, 4);
+add (9, "AM", "first", "morning", "breakfast": 1, 8, 5);
+add (10, "AM", "first", "morning", "": 1, 12, 5);
+add (11, "AM", "first", "morning", "": 1, 7, 5);
+add (12, "PM", "first", "afternoon", "lunch": 1, 8, 7);
+add (13, "PM", "first", "afternoon", "lunch": 1, 9, 5);
+add (14, "PM", "first", "afternoon", "lunch": 1, 12, 3);
+add (15, "PM", "second", "afternoon", "": 1, 4, 4);
+add (16, "PM", "second", "afternoon", "": 1, 4, 5);
+add (17, "PM", "second", "evening", "dinner": 1, 12, 6);
+add (18, "PM", "second", "evening", "dinner": 1, 8, 7);
+add (19, "PM", "second", "evening", "dinner": 1, 8, 8);
+add (20, "PM", "second", "evening", "": 1, 4, 7);
+add (21, "PM", "second", "evening", "": 1, 0, 5);
+add (22, "PM", "second", "evening", "": 1, 0, 3);
+add (23, "PM", "third", "evening", "": 1, 0, 1);
+
+------
+-- call_centers
+-- values            weights
+-- -----------------------
+--    1. name        1. uniform
+--                2. sales percentage
+------
+create call_centers;
+set types = (varchar);
+set weights = 2; 
+add ("New England": 1, 8);
+add ("NY Metro": 1, 16);
+add ("Mid Atlantic": 1, 10);
+add ("Southeastern": 1, 8);
+add ("North Midwest": 1, 6);
+add ("Central Midwest": 1, 7);
+add ("South Midwest": 1, 8);
+add ("Pacific Northwest": 1, 9);
+add ("California": 1, 17);
+add ("Southwest": 1, 7);
+add ("Hawaii/Alaska": 1, 3);
+add ("Other": 1, 1);
+
+------
+-- call_center_hours
+-- values            weights
+-- -----------------------
+--    1. hours    1. weighted
+--                2. minimum second (for time join)
+--                3. maximum second (for time join)
+------
+create call_center_hours;
+set types = (varchar);
+set weights = 3;
+add ("8AM-4PM": 10, 28800, 57599);
+add ("8AM-12AM": 2, 28800, 86399);
+add ("8AM-8AM": 1, 0, 86399);
+
+------
+-- call_center_class
+-- values            weights
+-- -----------------------
+--    1. class    1. uniform
+------
+create call_center_class;
+set types = (varchar);
+set weights = 1;
+add ("small": 1);
+add ("medium": 1);
+add ("large": 1);
+
+------
+-- salutations
+-- values            weights
+-- -----------------------
+--    1. title        1. gender neutral
+--                    2. male
+--                    3. female
+------
+create salutations;
+set types = (varchar);
+set weights = 3;
+add ("Mr.": 10, 10, 0);
+add ("Mrs.": 10, 0, 10);
+add ("Ms.": 10, 0, 10);
+add ("Miss": 10, 0, 10);
+add ("Sir": 10, 10, 0);
+add ("Dr.": 10, 10, 10);
+
+------
+-- ship_mode_code
+-- values            weights
+-- -----------------------
+--    1. code        1. uniform
+------
+create ship_mode_code;
+set types = (varchar);
+set weights = 1;
+add ("AIR": 1);
+add ("SURFACE": 1);
+add ("SEA": 1);
+add ("BIKE": 1);
+add ("HAND CARRY": 1);
+add ("MESSENGER": 1);
+add ("COURIER": 1);
+
+------
+-- ship_mode_type
+-- values            weights
+-- -----------------------
+--    1. type        1. uniform
+------
+create ship_mode_type;
+set types = (varchar);
+set weights = 1;
+add ("REGULAR": 1);
+add ("EXPRESS": 1);
+add ("NEXT DAY": 1);
+add ("OVERNIGHT": 1);
+add ("TWO DAY": 1);
+add ("LIBRARY": 1);
+
+------
+-- ship_mode_carrier
+-- values            weights
+-- -----------------------
+--    1. carrier        1. uniform
+------
+create ship_mode_carrier;
+set types = (varchar);
+set weights = 1;
+add ("UPS": 1);
+add ("FEDEX": 1);
+add ("AIRBORNE": 1);
+add ("USPS": 1);
+add ("DHL": 1);
+add ("TBS": 1);
+add ("ZHOU": 1);
+add ("ZOUROS": 1);
+add ("MSC": 1);
+add ("LATVIAN": 1);
+add ("ALLIANCE": 1);
+add ("ORIENTAL": 1);
+add ("BARIAN": 1);
+add ("BOXBUNDLES": 1);
+add ("GREAT EASTERN": 1);
+add ("DIAMOND": 1);
+add ("RUPEKSA": 1);
+add ("GERMA": 1);
+add ("HARMSTORF": 1);
+add ("PRIVATECARRIER", 1);
+
+
+------
+-- web_page_use
+-- values            weights
+-- -----------------------
+--    1. type        1. uniform
+------
+create web_page_use;
+set types = (varchar);
+set weights = 1;
+add ("general": 1);
+add ("order": 1);
+add ("welcome": 1);
+add ("ad": 1);
+add ("feedback": 1);
+add ("protected": 1);
+add ("dynamic": 1);
+
+------
+-- web_page_type
+-- values            weights
+-- -----------------------
+--    1. content type        1. skewed
+------
+create web_page_type;
+set types = (varchar);
+set weights = 1;
+add ("html": 30);
+add ("htm": 20);
+add ("pdf": 10);
+add ("gif": 5);
+add ("jpg": 5);
+add ("php": 3);
+add ("asp": 3);
+add ("ppt": 3);
+add ("xls": 3);
+add ("dat": 3);
+add ("doc": 3);
+add ("wp": 3);
+add ("dbf": 3);
+add ("csv": 3);
+add ("jms": 3);
+
+------
+-- catalog_page_type
+-- values            weights
+-- -----------------------
+--    1. content type        1. distribution freq
+--                        2. sales volume
+------
+create catalog_page_type;
+set types = (varchar);
+set weights = 2;
+add ("bi-annual": 1, 50);
+add ("quarterly": 4, 25);
+add ("monthly": 12, 25);
+
+------
+-- location_type
+-- values            weights
+-- -----------------------
+--    1. location type    1. uniform
+--                        2. distribution freq
+------
+create location_type;
+set types = (varchar);
+set weights = 2;
+add ("single family": 1, 50);
+add ("condo": 1, 25);
+add ("apartment": 1, 25);
+
+------
+-- top_domains
+-- values            weights
+-- -----------------------
+--    1. domain suffix    1. uniform
+------
+create top_domains;
+set types = (varchar);
+set weights = 1;
+add ("com": 1);
+add ("org": 1);
+add ("edu": 1);
+
+------
+-- coutries
+-- values            weights
+-- -----------------------
+--    1. country    1. uniform
+------
+create countries;
+set types = (varchar);
+set weights = 1;
+add ("AFGHANISTAN":1);
+add ("ALAND ISLANDS":1);
+add ("ALBANIA":1);
+add ("ALGERIA":1);
+add ("AMERICAN SAMOA":1);
+add ("ANDORRA":1);
+add ("ANGOLA":1);
+add ("ANGUILLA":1);
+add ("ANTARCTICA":1);
+add ("ANTIGUA AND BARBUDA":1);
+add ("ARGENTINA":1);
+add ("ARMENIA":1);
+add ("ARUBA":1);
+add ("AUSTRALIA":1);
+add ("AUSTRIA":1);
+add ("AZERBAIJAN":1);
+add ("BAHAMAS":1);
+add ("BAHRAIN":1);
+add ("BANGLADESH":1);
+add ("BARBADOS":1);
+add ("BELARUS":1);
+add ("BELGIUM":1);
+add ("BELIZE":1);
+add ("BENIN":1);
+add ("BERMUDA":1);
+add ("BHUTAN":1);
+add ("BOLIVIA":1);
+-- add ("BOSNIA AND HERZEGOVINA":1);
+add ("BOTSWANA":1);
+add ("BOUVET ISLAND":1);
+add ("BRAZIL":1);
+-- add ("BRITISH INDIAN OCEAN TERRITORY":1);
+add ("BRUNEI DARUSSALAM":1);
+add ("BULGARIA":1);
+add ("BURKINA FASO":1);
+add ("BURUNDI":1);
+add ("CAMBODIA":1);
+add ("CAMEROON":1);
+add ("CANADA":1);
+add ("CAPE VERDE":1);
+add ("CAYMAN ISLANDS":1);
+-- add("CENTRAL AFRICAN REPUBLIC":1);
+add ("CHILE":1);
+add ("CHINA":1);
+add ("CHRISTMAS ISLAND":1);
+--add ("COCOS (KEELING) ISLANDS":1);
+add ("COMOROS":1);
+--add ("CONGO, THE DEMOCRATIC REPUBLIC OF THE":1);
+add ("add ("COOK ISLANDS":1);
+add ("COSTA RICA":1);
+add ("CÔTE D'IVOIRE":1);
+add ("CROATIA":1);
+add ("CUBA":1);
+add ("CYPRUS":1);
+add ("CZECH REPUBLIC":1);
+add ("DENMARK":1);
+add ("DJIBOUTI":1);
+add ("DOMINICA":1);
+add ("ECUADOR":1);
+add ("EGYPT":1);
+add ("EL SALVADOR":1);
+add ("EQUATORIAL GUINEA":1);
+add ("ERITREA":1);
+add ("ESTONIA":1);
+add ("ETHIOPIA":1);
+--add ("FALKLAND ISLANDS (MALVINAS)":1);
+add ("FAROE ISLANDS":1);
+add ("FIJI":1);
+add ("FINLAND":1);
+add ("FRANCE":1);
+add ("FRENCH GUIANA":1);
+add ("FRENCH POLYNESIA":1);
+--add ("FRENCH SOUTHERN TERRITORIES":1);
+add ("GABON":1);
+add ("GAMBIA":1);
+add ("GEORGIA":1);
+add ("GERMANY":1);
+add ("GHANA":1);
+add ("GIBRALTAR":1);
+add ("GREECE":1);
+add ("GREENLAND":1);
+add ("GRENADA":1);
+add ("GUADELOUPE":1);
+add ("GUAM":1);
+add ("GUATEMALA":1);
+add ("GUERNSEY":1);
+add ("GUINEA":1);
+add ("GUINEA-BISSAU":1);
+add ("GUYANA":1);
+add ("HAITI":1);
+--add ("HEARD ISLAND AND MCDONALD ISLANDS":1);
+--add ("HOLY SEE (VATICAN CITY STATE)":1);
+add ("HONDURAS":1);
+add ("HONG KONG":1);
+add ("HUNGARY":1);
+add ("ICELAND":1);
+add ("INDIA":1);
+add ("INDONESIA":1);
+--add ("IRAN, ISLAMIC REPUBLIC OF":1);
+add ("IRAQ":1);
+add ("IRELAND":1);
+add ("ISLE OF MAN":1);
+add ("ISRAEL":1);
+add ("ITALY":1);
+add ("JAMAICA":1);
+add ("JAPAN":1);
+add ("JERSEY":1);
+add ("JORDAN":1);
+add ("KAZAKHSTAN":1);
+add ("KENYA":1);
+add ("KIRIBATI":1);
+--add ("KOREA, DEMOCRATIC PEOPLE'S REPUBLIC OF":1);
+add ("KOREA, REPUBLIC OF":1);
+add ("KUWAIT":1);
+add ("KYRGYZSTAN":1);
+--add ("LAO PEOPLE'S DEMOCRATIC REPUBLIC":1);
+add ("LATVIA":1);
+add ("LEBANON":1);
+add ("LESOTHO":1);
+add ("LIBERIA":1);
+--add ("LIBYAN ARAB JAMAHIRIYA":1);
+add ("LIECHTENSTEIN":1);
+add ("LITHUANIA":1);
+add ("LUXEMBOURG":1);
+add ("MACAO":1);
+--add ("MACEDONIA, THE FORMER YUGOSLAV REPUBLIC OF":1);
+add ("MADAGASCAR":1);
+add ("MALAWI":1);
+add ("MALAYSIA":1);
+add ("MALDIVES":1);
+add ("MALI":1);
+add ("MALTA":1);
+add ("MARSHALL ISLANDS":1);
+add ("MARTINIQUE":1);
+add ("MAURITANIA":1);
+add ("MAURITIUS":1);
+add ("MAYOTTE":1);
+add ("MEXICO":1);
+--add ("MICRONESIA, FEDERATED STATES OF":1);
+add ("MOLDOVA, REPUBLIC OF":1);
+add ("MONACO":1);
+add ("MONGOLIA":1);
+add ("MONTENEGRO":1);
+add ("MONTSERRAT":1);
+add ("MOROCCO":1);
+add ("MOZAMBIQUE":1);
+add ("MYANMAR":1);
+add ("NAMIBIA":1);
+add ("NAURU":1);
+add ("NEPAL":1);
+add ("NETHERLANDS":1);
+add ("NETHERLANDS ANTILLES":1);
+add ("NEW CALEDONIA":1);
+add ("NEW ZEALAND":1);
+add ("NICARAGUA":1);
+add ("NIGER":1);
+add ("NIGERIA":1);
+add ("NIUE":1);
+add ("NORFOLK ISLAND":1);
+--add ("NORTHERN MARIANA ISLANDS":1);
+add ("NORWAY":1);
+add ("OMAN":1);
+add ("PAKISTAN":1);
+add ("PALAU":1);
+--add ("PALESTINIAN TERRITORY, OCCUPIED":1);
+add ("PANAMA":1);
+add ("PAPUA NEW GUINEA":1);
+add ("PARAGUAY":1);
+add ("PERU":1);
+add ("PHILIPPINES":1);
+add ("PITCAIRN":1);
+add ("POLAND":1);
+add ("PORTUGAL":1);
+add ("PUERTO RICO":1);
+add ("QATAR":1);
+add ("RÉUNION":1);
+add ("ROMANIA":1);
+add ("RUSSIAN FEDERATION":1);
+add ("RWANDA":1);
+add ("SAINT HELENA":1);
+--add ("SAINT KITTS AND NEVIS":1);
+add ("SAINT LUCIA":1);
+--add ("SAINT PIERRE AND MIQUELON":1);
+--add ("SAINT VINCENT AND THE GRENADINES":1);
+add ("SAMOA":1);
+add ("SAN MARINO":1);
+--add ("SAO TOME AND PRINCIPE":1);
+add ("SAUDI ARABIA":1);
+add ("SENEGAL":1);
+add ("SERBIA":1);
+add ("SEYCHELLES":1);
+add ("SIERRA LEONE":1);
+add ("SINGAPORE":1);
+add ("SLOVAKIA":1);
+add ("SLOVENIA":1);
+add ("SOLOMON ISLANDS":1);
+add ("SOMALIA":1);
+add ("SOUTH AFRICA":1);
+--add ("SOUTH GEORGIA AND THE SOUTH SANDWICH ISLANDS":1);
+add ("SPAIN":1);
+add ("SRI LANKA":1);
+add ("SUDAN":1);
+add ("SURINAME":1);
+--add ("SVALBARD AND JAN MAYEN":1);
+add ("SWAZILAND":1);
+add ("SWEDEN":1);
+add ("SWITZERLAND":1);
+add ("SYRIAN ARAB REPUBLIC":1);
+--add ("TAIWAN, PROVINCE OF CHINA":1);
+add ("TAJIKISTAN":1);
+--add ("TANZANIA, UNITED REPUBLIC OF":1);
+add ("THAILAND":1);
+add ("TIMOR-LESTE":1);
+add ("TOGO":1);
+add ("TOKELAU":1);
+add ("TONGA":1);
+add ("TRINIDAD AND TOBAGO":1);
+add ("TUNISIA":1);
+add ("TURKEY":1);
+add ("TURKMENISTAN":1);
+--add ("TURKS AND CAICOS ISLANDS":1);
+add ("TUVALU":1);
+add ("UGANDA":1);
+add ("UKRAINE":1);
+add ("UNITED ARAB EMIRATES":1);
+add ("UNITED KINGDOM":1);
+add ("UNITED STATES":1);
+--add ("UNITED STATES MINOR OUTLYING ISLANDS":1);
+add ("URUGUAY":1);
+add ("UZBEKISTAN":1);
+add ("VANUATU":1);
+add ("VENEZUELA":1);
+add ("VIET NAM":1);
+--add ("VIRGIN ISLANDS, BRITISH":1);
+add ("VIRGIN ISLANDS, U.S.":1);
+add ("WALLIS AND FUTUNA":1);
+add ("WESTERN SAHARA":1);
+add ("YEMEN":1);
+add ("ZAMBIA":1);
+add ("ZIMBABWE":1);

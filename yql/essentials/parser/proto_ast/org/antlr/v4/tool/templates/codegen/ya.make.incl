@@ -1,0 +1,13 @@
+SET(STG_INCLUDES
+   contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h
+
+   util/generic/ptr.h
+   util/generic/string.h
+   util/generic/vector.h
+   util/stream/output.h
+   util/stream/str.h
+
+   google/protobuf/message.h
+
+   yql/essentials/parser/proto_ast/antlr4/proto_ast_antlr4.h
+)

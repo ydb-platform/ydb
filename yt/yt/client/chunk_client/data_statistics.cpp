@@ -68,7 +68,7 @@ TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs)
     return lhs;
 }
 
-TDataStatistics operator +  (const TDataStatistics& lhs, const TDataStatistics& rhs)
+TDataStatistics operator + (const TDataStatistics& lhs, const TDataStatistics& rhs)
 {
     auto result = lhs;
     result += rhs;
@@ -165,11 +165,6 @@ void FormatValue(TStringBuilderBase* builder, const TDataStatistics* statistics,
     }
 }
 
-TString ToString(const TDataStatistics& statistics)
-{
-    return ToStringViaBuilder(statistics);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NProto
@@ -211,16 +206,11 @@ TDuration TCodecStatistics::GetTotalDuration() const
 
 void FormatValue(TStringBuilderBase* builder, const TCodecStatistics& statistics, TStringBuf /* spec */)
 {
-    FormatKeyValueRange(builder, statistics.CodecToDuration(), TDefaultFormatter());
+    ::NYT::FormatKeyValueRange(builder, statistics.CodecToDuration(), TDefaultFormatter());
     if (statistics.ValueDictionaryCompressionDuration() != TDuration::Zero()) {
         builder->AppendFormat(", ValueDictionaryCompressionDuration: %v",
             statistics.ValueDictionaryCompressionDuration());
     }
-}
-
-TString ToString(const TCodecStatistics& statistics)
-{
-    return ToStringViaBuilder(statistics);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

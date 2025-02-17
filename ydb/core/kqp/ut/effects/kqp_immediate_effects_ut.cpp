@@ -1,5 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -58,7 +58,6 @@ namespace {
 Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     Y_UNIT_TEST(Upsert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -115,7 +114,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpsertDuplicates) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -149,7 +147,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpsertExistingKey) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -196,7 +193,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(Replace) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -253,7 +249,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ReplaceDuplicates) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -287,7 +282,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ReplaceExistingKey) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -334,7 +328,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(Insert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -391,7 +384,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(InsertDuplicates) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -411,15 +403,14 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
                 SELECT * FROM TestImmediateEffects;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("Duplicated keys found.");
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
+                return issue.GetMessage().contains("Duplicated keys found.");
             }));
         }
     }
 
     Y_UNIT_TEST(InsertExistingKey) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -438,15 +429,14 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
                 SELECT * FROM TestImmediateEffects;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("Conflict with existing key.");
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
+                return issue.GetMessage().contains("Conflict with existing key.");
             }));
         }
     }
 
     Y_UNIT_TEST(UpdateOn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -499,7 +489,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(Delete) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -548,7 +537,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpdateAfterUpsert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -578,7 +566,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(DeleteAfterUpsert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -617,7 +604,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpdateAfterInsert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -647,7 +633,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(DeleteAfterInsert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -687,7 +672,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpsertAfterInsert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -713,7 +697,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpsertAfterInsertWithIndex) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -789,7 +772,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(DeleteOnAfterInsertWithIndex) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -851,7 +833,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(MultipleEffectsWithIndex) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -892,7 +873,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(InsertConflictTxAborted) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -933,7 +913,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpsertConflictInteractiveTxAborted) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -942,7 +921,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx;
+        std::optional<TTransaction> tx;
         {
             auto result = session1.ExecuteDataQuery(R"(
                 --!syntax_v1
@@ -1006,7 +985,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(MultiShardUpsertAfterRead) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1014,7 +992,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session);
 
-        TMaybe<TTransaction> tx;
+        std::optional<TTransaction> tx;
         {
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
@@ -1039,7 +1017,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(TxWithReadAtTheEnd) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1083,7 +1060,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(InteractiveTxWithReadAtTheEnd) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1094,7 +1070,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
-        TMaybe<TTransaction> tx;
+        std::optional<TTransaction> tx;
         {
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
@@ -1146,7 +1122,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(TxWithWriteAtTheEnd) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1189,7 +1164,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(InteractiveTxWithWriteAtTheEnd) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1200,7 +1174,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
-        TMaybe<TTransaction> tx;
+        std::optional<TTransaction> tx;
         {
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
@@ -1251,7 +1225,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UnobservedUncommittedChangeConflict) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1259,7 +1232,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session);
 
-        TMaybe<TTransaction> tx1;
+        std::optional<TTransaction> tx1;
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         {
             auto result = session1.ExecuteDataQuery(R"(
@@ -1273,7 +1246,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             UNIT_ASSERT(tx1);
         }
 
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx2;
         auto session2 = db.CreateSession().GetValueSync().GetSession();
         {
             auto result = session2.ExecuteDataQuery(R"(
@@ -1330,7 +1303,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(AlreadyBrokenImmediateEffects) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1338,7 +1310,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session);
 
-        TMaybe<TTransaction> tx1;
+        std::optional<TTransaction> tx1;
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         {
             auto result = session1.ExecuteDataQuery(R"(
@@ -1354,7 +1326,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             UNIT_ASSERT(tx1);
         }
 
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx2;
         auto session2 = db.CreateSession().GetValueSync().GetSession();
         {
             // This just establishes a snapshot that is before tx1 commit
@@ -1418,7 +1390,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(WriteThenReadWithCommit) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1429,7 +1400,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
 
         auto session1 = db.CreateSession().GetValueSync().GetSession();
-        TMaybe<TTransaction> tx1;
+        std::optional<TTransaction> tx1;
         {
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
@@ -1469,7 +1440,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ConflictingKeyR1WR2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1478,8 +1448,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1527,7 +1497,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ConflictingKeyR1RWR2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1536,8 +1505,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1589,7 +1558,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ConflictingKeyR1WRR2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1598,8 +1566,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1651,7 +1619,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ConflictingKeyW1RR2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1660,8 +1627,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1709,7 +1676,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ConflictingKeyW1WR2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1718,8 +1684,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1765,7 +1731,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ConflictingKeyW1RWR2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1774,8 +1739,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1822,7 +1787,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ConflictingKeyW1WRR2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1831,8 +1795,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1879,7 +1843,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ConflictingKeyRW1RR2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1888,8 +1851,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1 + write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1941,7 +1904,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ConflictingKeyRW1WR2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1950,8 +1912,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1 + write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1998,7 +1960,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ConflictingKeyRW1RWR2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2007,8 +1968,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1 + write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -2056,7 +2017,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ConflictingKeyRW1WRR2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2065,8 +2025,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1 + write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -2117,7 +2077,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ForceImmediateEffectsExecution) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig).SetEnableForceImmediateEffectsExecution(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2125,7 +2084,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session);
 
-        TMaybe<TTransaction> tx;
+        std::optional<TTransaction> tx;
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
 

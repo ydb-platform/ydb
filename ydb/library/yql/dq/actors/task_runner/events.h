@@ -5,13 +5,13 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/event_pb.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_memory_quota.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
@@ -28,12 +28,12 @@ struct TTaskRunnerEvents {
 
         EvOutputChannelDataRequest,
         EvOutputChannelData,
-        
+
         EvInputChannelData,
         EvInputChannelDataAck,
-        
+
         // EvContinueRun -> TaskRunner->Run() -> TEvTaskRunFinished
-        EvContinueRun, 
+        EvContinueRun,
         EvRunFinished,
 
         EvSourceDataAck,
@@ -222,7 +222,7 @@ struct TEvTaskRunFinished
         const TTaskRunnerActorSensors& sensors = {},
         const TDqMemoryQuota::TProfileStats& profileStats = {},
         ui64 mkqlMemoryLimit = 0,
-        THolder<NDqProto::TMiniKqlProgramState>&& programState = nullptr,
+        THolder<TMiniKqlProgramState>&& programState = nullptr,
         bool watermarkInjectedToOutputs = false,
         bool checkpointRequestedFromTaskRunner = false,
         TDuration computeTime = TDuration::Zero())
@@ -245,7 +245,7 @@ struct TEvTaskRunFinished
     THashMap<ui32, i64> SourcesFreeSpace;
     TDqMemoryQuota::TProfileStats ProfileStats;
     ui64 MkqlMemoryLimit = 0;
-    THolder<NDqProto::TMiniKqlProgramState> ProgramState;
+    THolder<TMiniKqlProgramState> ProgramState;
     bool WatermarkInjectedToOutputs = false;
     bool CheckpointRequestedFromTaskRunner = false;
     TDuration ComputeTime;

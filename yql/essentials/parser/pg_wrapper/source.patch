@@ -1,0 +1,71 @@
+--- src/backend/Makefile.orig	2024-06-18 17:23:43.106798000 +0300
++++ src/backend/Makefile	2024-07-02 18:19:19.003583000 +0300
+@@ -23,6 +23,8 @@
+ 	statistics storage tcop tsearch utils $(top_builddir)/src/timezone \
+ 	jit
+ 
++SUBDIRS := $(filter-out main,$(SUBDIRS))
++
+ include $(srcdir)/common.mk
+ 
+ # As of 1/2010:
+@@ -56,14 +58,14 @@
+ 
+ ##########################################################################
+ 
+-all: submake-libpgport submake-catalog-headers submake-utils-headers postgres $(POSTGRES_IMP)
++all: submake-libpgport submake-catalog-headers submake-utils-headers postgres.a $(POSTGRES_IMP)
+ 
+ ifneq ($(PORTNAME), cygwin)
+ ifneq ($(PORTNAME), win32)
+ ifneq ($(PORTNAME), aix)
+ 
+-postgres: $(OBJS)
+-	$(CC) $(CFLAGS) $(call expand_subsys,$^) $(LDFLAGS) $(LDFLAGS_EX) $(export_dynamic) $(LIBS) -o $@
++postgres.a: $(OBJS)
++	$(AR) $(AROPT) $@ $(call expand_subsys,$^)
+ 
+ endif
+ endif
+@@ -284,7 +286,7 @@
+ ##########################################################################
+ 
+ clean:
+-	rm -f $(LOCALOBJS) postgres$(X) $(POSTGRES_IMP)
++	rm -f $(LOCALOBJS) postgres$(X) postgres.a $(POSTGRES_IMP)
+ ifeq ($(PORTNAME), cygwin)
+ 	rm -f postgres.dll libpostgres.a
+ endif
+--- src/common/Makefile.orig	2024-07-02 23:36:19.378859000 +0300
++++ src/common/Makefile	2024-07-02 23:38:39.066137000 +0300
+@@ -116,7 +116,7 @@
+ GEN_KEYWORDLIST = $(PERL) -I $(TOOLSDIR) $(TOOLSDIR)/gen_keywordlist.pl
+ GEN_KEYWORDLIST_DEPS = $(TOOLSDIR)/gen_keywordlist.pl $(TOOLSDIR)/PerfectHash.pm
+ 
+-all: libpgcommon.a libpgcommon_shlib.a libpgcommon_srv.a
++all: libpgcommon_srv.a
+ 
+ distprep: kwlist_d.h
+ 
+--- src/port/Makefile.orig      2024-07-03 01:34:30.900355000 +0300
++++ src/port/Makefile   2024-07-03 01:35:00.060786000 +0300
+@@ -67,7 +67,7 @@
+ OBJS_SHLIB = $(OBJS:%.o=%_shlib.o)
+ OBJS_SRV = $(OBJS:%.o=%_srv.o)
+
+-all: libpgport.a libpgport_shlib.a libpgport_srv.a
++all: libpgport_srv.a
+
+ # libpgport is needed by some contrib
+ install: all installdirs
+--- src/timezone/Makefile.orig	2024-07-03 17:54:39.334522000 +0300
++++ src/timezone/Makefile	2024-07-03 17:54:52.022243000 +0300
+@@ -40,7 +40,7 @@
+ include $(top_srcdir)/src/backend/common.mk
+ 
+ ifeq (,$(with_system_tzdata))
+-all: zic
++all:
+ endif
+ 
+ # We could do this test in the action section:

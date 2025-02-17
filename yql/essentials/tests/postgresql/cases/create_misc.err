@@ -1,0 +1,579 @@
+Registering pre-existing tables
+	tenk1
+	equipment_r
+	tenk2
+	hobbies_r
+<sql-statement>
+--
+-- CREATE_MISC
+--
+-- CLASS POPULATION
+--	(any resemblance to real life is purely coincidental)
+--
+INSERT INTO tenk2 SELECT * FROM tenk1;
+</sql-statement>
+<sql-statement>
+CREATE TABLE onek2 AS SELECT * FROM onek;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE onek2 AS SELECT * FROM onek;
+	^
+<sql-statement>
+INSERT INTO fast_emp4000 SELECT * FROM slow_emp4000;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.fast_emp4000
+    
+<sql-statement>
+SELECT *
+   INTO TABLE Bprime
+   FROM tenk1
+   WHERE unique2 < 1000;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: not supported intoClause
+    	SELECT *
+	^
+<sql-statement>
+INSERT INTO hobbies_r (name, person)
+   SELECT 'posthacking', p.name
+   FROM person* p
+   WHERE p.name = 'mike' or p.name = 'jeff';
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.person
+    
+<sql-statement>
+INSERT INTO hobbies_r (name, person)
+   SELECT 'basketball', p.name
+   FROM person p
+   WHERE p.name = 'joe' or p.name = 'sally';
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.person
+    
+<sql-statement>
+INSERT INTO hobbies_r (name) VALUES ('skywalking');
+</sql-statement>
+<sql-statement>
+INSERT INTO equipment_r (name, hobby) VALUES ('advil', 'posthacking');
+</sql-statement>
+<sql-statement>
+INSERT INTO equipment_r (name, hobby) VALUES ('peet''s coffee', 'posthacking');
+</sql-statement>
+<sql-statement>
+INSERT INTO equipment_r (name, hobby) VALUES ('hightops', 'basketball');
+</sql-statement>
+<sql-statement>
+INSERT INTO equipment_r (name, hobby) VALUES ('guts', 'skywalking');
+</sql-statement>
+<sql-statement>
+INSERT INTO city VALUES
+('Podunk', '(1,2),(3,4)', '100,127,1000'),
+('Gotham', '(1000,34),(1100,334)', '123456,127,-1000,6789');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.city
+    
+<sql-statement>
+TABLE city;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.city
+    
+<sql-statement>
+SELECT *
+   INTO TABLE ramp
+   FROM road
+   WHERE name ~ '.*Ramp';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: not supported intoClause
+    	SELECT *
+	^
+<sql-statement>
+INSERT INTO ihighway
+   SELECT *
+   FROM road
+   WHERE name ~ 'I- .*';
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.road
+    
+<sql-statement>
+INSERT INTO shighway
+   SELECT *
+   FROM road
+   WHERE name ~ 'State Hwy.*';
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.road
+    
+<sql-statement>
+UPDATE shighway
+   SET surface = 'asphalt';
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO a_star (class, a) VALUES ('a', 1);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.a_star
+    
+<sql-statement>
+INSERT INTO a_star (class, a) VALUES ('a', 2);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.a_star
+    
+<sql-statement>
+INSERT INTO a_star (class) VALUES ('a');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.a_star
+    
+<sql-statement>
+INSERT INTO b_star (class, a, b) VALUES ('b', 3, 'mumble'::text);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.b_star
+    
+<sql-statement>
+INSERT INTO b_star (class, a) VALUES ('b', 4);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.b_star
+    
+<sql-statement>
+INSERT INTO b_star (class, b) VALUES ('b', 'bumble'::text);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.b_star
+    
+<sql-statement>
+INSERT INTO b_star (class) VALUES ('b');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.b_star
+    
+<sql-statement>
+INSERT INTO c_star (class, a, c) VALUES ('c', 5, 'hi mom'::name);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.c_star
+    
+<sql-statement>
+INSERT INTO c_star (class, a) VALUES ('c', 6);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.c_star
+    
+<sql-statement>
+INSERT INTO c_star (class, c) VALUES ('c', 'hi paul'::name);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.c_star
+    
+<sql-statement>
+INSERT INTO c_star (class) VALUES ('c');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.c_star
+    
+<sql-statement>
+INSERT INTO d_star (class, a, b, c, d)
+   VALUES ('d', 7, 'grumble'::text, 'hi sunita'::name, '0.0'::float8);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, a, b, c)
+   VALUES ('d', 8, 'stumble'::text, 'hi koko'::name);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, a, b, d)
+   VALUES ('d', 9, 'rumble'::text, '1.1'::float8);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, a, c, d)
+   VALUES ('d', 10, 'hi kristin'::name, '10.01'::float8);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, b, c, d)
+   VALUES ('d', 'crumble'::text, 'hi boris'::name, '100.001'::float8);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, a, b)
+   VALUES ('d', 11, 'fumble'::text);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, a, c)
+   VALUES ('d', 12, 'hi avi'::name);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, a, d)
+   VALUES ('d', 13, '1000.0001'::float8);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, b, c)
+   VALUES ('d', 'tumble'::text, 'hi andrew'::name);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, b, d)
+   VALUES ('d', 'humble'::text, '10000.00001'::float8);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, c, d)
+   VALUES ('d', 'hi ginger'::name, '100000.000001'::float8);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, a) VALUES ('d', 14);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, b) VALUES ('d', 'jumble'::text);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, c) VALUES ('d', 'hi jolly'::name);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class, d) VALUES ('d', '1000000.0000001'::float8);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO d_star (class) VALUES ('d');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.d_star
+    
+<sql-statement>
+INSERT INTO e_star (class, a, c, e)
+   VALUES ('e', 15, 'hi carol'::name, '-1'::int2);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.e_star
+    
+<sql-statement>
+INSERT INTO e_star (class, a, c)
+   VALUES ('e', 16, 'hi bob'::name);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.e_star
+    
+<sql-statement>
+INSERT INTO e_star (class, a, e)
+   VALUES ('e', 17, '-2'::int2);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.e_star
+    
+<sql-statement>
+INSERT INTO e_star (class, c, e)
+   VALUES ('e', 'hi michelle'::name, '-3'::int2);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.e_star
+    
+<sql-statement>
+INSERT INTO e_star (class, a)
+   VALUES ('e', 18);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.e_star
+    
+<sql-statement>
+INSERT INTO e_star (class, c)
+   VALUES ('e', 'hi elisa'::name);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.e_star
+    
+<sql-statement>
+INSERT INTO e_star (class, e)
+   VALUES ('e', '-4'::int2);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.e_star
+    
+<sql-statement>
+INSERT INTO f_star (class, a, c, e, f)
+   VALUES ('f', 19, 'hi claire'::name, '-5'::int2, '(1,3),(2,4)'::polygon);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, a, c, e)
+   VALUES ('f', 20, 'hi mike'::name, '-6'::int2);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, a, c, f)
+   VALUES ('f', 21, 'hi marcel'::name, '(11,44),(22,55),(33,66)'::polygon);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, a, e, f)
+   VALUES ('f', 22, '-7'::int2, '(111,555),(222,666),(333,777),(444,888)'::polygon);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, c, e, f)
+   VALUES ('f', 'hi keith'::name, '-8'::int2,
+	   '(1111,3333),(2222,4444)'::polygon);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, a, c)
+   VALUES ('f', 24, 'hi marc'::name);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, a, e)
+   VALUES ('f', 25, '-9'::int2);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, a, f)
+   VALUES ('f', 26, '(11111,33333),(22222,44444)'::polygon);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, c, e)
+   VALUES ('f', 'hi allison'::name, '-10'::int2);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, c, f)
+   VALUES ('f', 'hi jeff'::name,
+           '(111111,333333),(222222,444444)'::polygon);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, e, f)
+   VALUES ('f', '-11'::int2, '(1111111,3333333),(2222222,4444444)'::polygon);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, a) VALUES ('f', 27);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, c) VALUES ('f', 'hi carl'::name);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, e) VALUES ('f', '-12'::int2);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class, f)
+   VALUES ('f', '(11111111,33333333),(22222222,44444444)'::polygon);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+INSERT INTO f_star (class) VALUES ('f');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.f_star
+    
+<sql-statement>
+-- Analyze the X_star tables for better plan stability in later tests
+ANALYZE a_star;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	-- Analyze the X_star tables for better plan stability in later tests
+	^
+<sql-statement>
+ANALYZE b_star;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	ANALYZE b_star;
+	^
+<sql-statement>
+ANALYZE c_star;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	ANALYZE c_star;
+	^
+<sql-statement>
+ANALYZE d_star;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	ANALYZE d_star;
+	^
+<sql-statement>
+ANALYZE e_star;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	ANALYZE e_star;
+	^
+<sql-statement>
+ANALYZE f_star;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	ANALYZE f_star;
+	^
+<sql-statement>
+--
+-- for internal portal (cursor) tests
+--
+CREATE TABLE iportaltest (
+	i		int4,
+	d		float4,
+	p		polygon
+);
+</sql-statement>
+<sql-statement>
+INSERT INTO iportaltest (i, d, p)
+   VALUES (1, 3.567, '(3.0,1.0),(4.0,2.0)'::polygon);
+</sql-statement>
+<sql-statement>
+INSERT INTO iportaltest (i, d, p)
+   VALUES (2, 89.05, '(4.0,2.0),(3.0,1.0)'::polygon);
+</sql-statement>

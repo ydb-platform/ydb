@@ -3,7 +3,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/tx/tiering/cleaner_task.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -17,7 +16,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropColumnTable TDropParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -70,7 +69,7 @@ public:
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
-                    columnShardTxBody,
+                    columnShardTxBody, seqNo,
                     context.SS->SelectProcessingParams(txState->TargetPathId));
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
@@ -95,7 +94,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropColumnTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -132,8 +131,8 @@ public:
         context.SS->PersistDropStep(db, pathId, step, OperationId);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
-        parentDir->DecAliveChildren();
+        domainInfo->DecPathsInside(context.SS);
+        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
 
         context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
@@ -184,7 +183,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropColumnTable TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -259,7 +258,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropColumnTable TProposedDeleteParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
     bool Finish(TOperationContext& context) {
@@ -267,14 +266,21 @@ private:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
+        NIceDb::TNiceDb db(context.GetDB());
+
         bool isStandalone = false;
         {
             Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState->TargetPathId));
             auto tableInfo = context.SS->ColumnTables.GetVerified(txState->TargetPathId);
             isStandalone = tableInfo->IsStandalone();
+
+            for (const auto& tier : tableInfo->GetUsedTiers()) {
+                auto tierPath = TPath::Resolve(tier, context.SS);
+                AFL_VERIFY(tierPath.IsResolved())("path", tier);
+                context.SS->PersistRemoveExternalDataSourceReference(db, tierPath->PathId, txState->TargetPathId);
+            }
         }
 
-        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistColumnTableRemove(db, txState->TargetPathId);
 
         if (isStandalone) {
@@ -296,11 +302,6 @@ public:
              TEvPrivate::TEvOperationPlan::EventType});
     }
 
-    bool HandleReply(NBackgroundTasks::TEvAddTaskResult::TPtr& ev, TOperationContext& context) override {
-        Y_ABORT_UNLESS(ev->Get()->IsSuccess());
-        return Finish(context);
-    }
-
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -311,23 +312,7 @@ public:
             DebugHint() << " ProgressState"
             << ", at schemeshard: " << ssId);
 
-        if (!NBackgroundTasks::TServiceOperator::IsEnabled()) {
-            return Finish(context);
-        }
-        NSchemeShard::TPath path = NSchemeShard::TPath::Init(txState->TargetPathId, context.SS);
-        auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
-        const TString& tieringId = tableInfo->Description.GetTtlSettings().GetUseTiering();
-        if (!tieringId) {
-            return Finish(context);
-        }
-
-        {
-            NBackgroundTasks::TTask task(std::make_shared<NColumnShard::NTiers::TTaskCleanerActivity>(
-                tieringId, txState->TargetPathId.LocalPathId), nullptr);
-            task.SetId(OperationId.SerializeToString());
-            context.SS->SelfId().Send(NBackgroundTasks::MakeServiceId(context.SS->SelfId().NodeId()), new NBackgroundTasks::TEvAddTask(std::move(task)));
-            return false;
-        }
+        return Finish(context);
     }
 };
 

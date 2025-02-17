@@ -1,4 +1,8 @@
 #include "node_warden_impl.h"
+#include "node_warden.h"
+#include <util/system/fs.h>
+#include <ydb/library/yaml_config/yaml_config.h>
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -18,29 +22,6 @@ void TNodeWarden::EstablishPipe() {
     STLOG(PRI_DEBUG, BS_NODE, NW21, "EstablishPipe", (AvailDomainId, AvailDomainId),
         (PipeClientId, PipeClientId), (ControllerId, controllerId));
 
-    SendRegisterNode();
-    SendInitialGroupRequests();
-    SendScrubRequests();
-}
-
-void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
-    TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-    if (msg->Status != NKikimrProto::OK) {
-        STLOG(PRI_ERROR, BS_NODE, NW71, "TEvTabletPipe::TEvClientConnected", (Status, msg->Status),
-            (ClientId, msg->ClientId), (ServerId, msg->ServerId), (TabletId, msg->TabletId),
-            (PipeClientId, PipeClientId));
-        OnPipeError();
-    }
-}
-
-void TNodeWarden::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
-    TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-    STLOG(PRI_ERROR, BS_NODE, NW42, "Handle(TEvTabletPipe::TEvClientDestroyed)", (ClientId, msg->ClientId),
-        (ServerId, msg->ServerId), (TabletId, msg->TabletId), (PipeClientId, PipeClientId));
-    OnPipeError();
-}
-
-void TNodeWarden::OnPipeError() {
     for (auto& [key, pdisk] : LocalPDisks) {
         if (pdisk.PDiskMetrics) {
             PDisksWithUnreportedMetrics.PushBack(&pdisk);
@@ -52,6 +33,34 @@ void TNodeWarden::OnPipeError() {
             VDisksWithUnreportedMetrics.PushBack(&vdisk);
         }
     }
+
+    SendRegisterNode();
+    SendInitialGroupRequests();
+    SendScrubRequests();
+    SendDiskMetrics(true);
+}
+
+void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
+    TEvTabletPipe::TEvClientConnected *msg = ev->Get();
+    if (msg->Status != NKikimrProto::OK) {
+        STLOG(PRI_ERROR, BS_NODE, NW71, "TEvTabletPipe::TEvClientConnected", (Status, msg->Status),
+            (ClientId, msg->ClientId), (ServerId, msg->ServerId), (TabletId, msg->TabletId),
+            (PipeClientId, PipeClientId));
+        OnPipeError();
+    } else {
+        STLOG(PRI_DEBUG, BS_NODE, NW05, "TEvTabletPipe::TEvClientConnected OK", (ClientId, msg->ClientId),
+            (ServerId, msg->ServerId), (TabletId, msg->TabletId), (PipeClientId, PipeClientId));
+    }
+}
+
+void TNodeWarden::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
+    TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
+    STLOG(PRI_ERROR, BS_NODE, NW42, "Handle(TEvTabletPipe::TEvClientDestroyed)", (ClientId, msg->ClientId),
+        (ServerId, msg->ServerId), (TabletId, msg->TabletId), (PipeClientId, PipeClientId));
+    OnPipeError();
+}
+
+void TNodeWarden::OnPipeError() {
     for (const auto& [cookie, callback] : ConfigInFlight) {
         callback(nullptr);
     }
@@ -77,6 +86,26 @@ void TNodeWarden::SendRegisterNode() {
         WorkingLocalDrives);
     FillInVDiskStatus(ev->Record.MutableVDiskStatus(), true);
     ev->Record.SetDeclarativePDiskManagement(true);
+
+    for (const auto& [key, pdisk] : LocalPDisks) {
+        if (pdisk.ShredGenerationIssued) {
+            auto *item = ev->Record.AddShredStatus();
+            item->SetPDiskId(key.PDiskId);
+            if (pdisk.Record.HasPDiskGuid()) {
+                item->SetPDiskGuid(pdisk.Record.GetPDiskGuid());
+            }
+            std::visit(TOverloaded{
+                [item](const std::monostate&) { item->SetShredInProgress(true); },
+                [item](const ui64& generation) { item->SetShredGenerationFinished(generation); },
+                [item](const TString& aborted) { item->SetShredAborted(aborted); }
+            }, pdisk.ShredState);
+        }
+    }
+
+    if (!Cfg->ConfigStorePath.empty() && YamlConfig) {
+        ev->Record.SetConfigVersion(YamlConfig->GetConfigVersion());
+        ev->Record.SetConfigHash(NKikimr::NYaml::GetConfigHash(YamlConfig->GetYAML()));
+    }
 
     SendToController(std::move(ev));
 }

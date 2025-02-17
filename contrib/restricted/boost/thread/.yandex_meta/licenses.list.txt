@@ -1,0 +1,371 @@
+====================BSL-1.0====================
+### License
+
+Distributed under the [Boost Software License, Version 1.0](http://boost.org/LICENSE_1_0.txt).
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0. (See accompanying
+//  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Vicente J. Botet Escriba 2008-2009,2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Vicente J. Botet Escriba 2013-2014. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Vicente J. Botet Escriba 2013-2017. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Vicente J. Botet Escriba 2014-2015. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Vicente J. Botet Escriba 2014. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See accompanying 
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Use, modification and distribution are subject to the
+// Boost Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2005-7 Anthony Williams
+//  (C) Copyright 2005 John Maddock
+//  (C) Copyright 2011-2013 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2005-7 Anthony Williams
+//  (C) Copyright 2007 David Deakins
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2005-8 Anthony Williams
+//  (C) Copyright 2012 Vicente J. Botet Escriba
+//  (C) Copyright 2017 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2006-7 Anthony Williams
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2006-8 Anthony Williams
+//  (C) Copyright 2011-2012,2017-2018 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2006-8 Anthony Williams
+//  (C) Copyright 2012 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2007 Anthony Williams
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2007-8 Anthony Williams
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2008 Anthony Williams 
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2008-10 Anthony Williams
+//  (C) Copyright 2011-2012,2015 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2008-10 Anthony Williams
+//  (C) Copyright 2011-2015 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2013 Andrey Semashev
+//  (C) Copyright 2013 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2013,2014 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2018 Andrey Semashev
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2005-7 Anthony Williams
+// (C) Copyright 2011-2012 Vicente J. Botet Escriba
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2007 Anthony Williams
+// (C) Copyright 2007 David Deakins
+// (C) Copyright 2011-2018 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2007-10 Anthony Williams
+// (C) Copyright 2011-2012 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2007-2010 Anthony Williams
+// (C) Copyright 2011-2012 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2007-8 Anthony Williams
+// (C) Copyright 2011,2012,2015 Vicente J. Botet Escriba
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2007-9 Anthony Williams
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2008-2009,2012 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2009-2012 Anthony Williams
+// (C) Copyright 2012 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2009-2012 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2010 Just Software Solutions Ltd http://www.justsoftwaresolutions.co.uk
+// (C) Copyright 2012 Vicente J. Botet Escriba
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2012 Vicente Botet
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2012 Vicente J. Botet Escriba
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2013 Ruslan Baratov
+// Copyright (C) 2014 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2013,2015 Vicente J. Botet Escriba
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2014 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// (C) Copyright Aaron W. LaFramboise, Roland Schwarz, Michael Glassford 2004.
+// (C) Copyright 2007 Roland Schwarz
+// (C) Copyright 2007 Anthony Williams
+// (C) Copyright 2007 David Deakins
+// Use, modification and distribution are subject to the
+// Boost Software License, Version 1.0. (See accompanying file
+
+
+====================COPYRIGHT====================
+// (C) Copyright Michael Glassford 2004.
+// Use, modification and distribution are subject to the
+// Boost Software License, Version 1.0. (See accompanying file
+
+
+====================COPYRIGHT====================
+// (C) Copyright Vicente J. Botet Escriba 2008-2009,2012. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Vicente J. Botet Escriba 2013-2014. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Vicente J. Botet Escriba 2013-2017. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Vicente J. Botet Escriba 2014-2015. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Vicente J. Botet Escriba 2014. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2001-2003
+// Mac Murrett
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2001-2003
+// William E. Kempf
+// (C) Copyright 2008-9 Anthony Williams
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2001-2003
+// William E. Kempf
+// Copyright (C) 2007-9 Anthony Williams
+// (C) Copyright 2011-2012 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2001-2003
+// William E. Kempf
+// Copyright (C) 2011-2013 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2002-2003
+// David Moore, William E. Kempf
+// Copyright (C) 2007-8 Anthony Williams
+// (C) Copyright 2013 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2007 Anthony Williams
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2011 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2012 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2012-2013 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2013 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2013,2014 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2013-2014 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2014 Ian Forbed
+// Copyright (C) 2014-2015 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2014 Ian Forbed
+// Copyright (C) 2014-2017 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2015 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2017
+// Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+// Copyright 2006 Roland Schwarz.
+// (C) Copyright 2007 Anthony Williams
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright 2023 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright Howard Hinnant 2007-2010.
+// Copyright Vicente J. Botet Escriba 2012.
+
+
+====================NCSA AND MIT====================
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.

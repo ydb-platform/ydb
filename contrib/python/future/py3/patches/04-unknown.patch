@@ -1,0 +1,11 @@
+--- contrib/python/future/py3/future/backports/socket.py	(index)
++++ contrib/python/future/py3/future/backports/socket.py	(working tree)
+@@ -94,7 +94,7 @@ class socket(_socket.socket):
+ 
+     """A subclass of _socket.socket adding the makefile() method."""
+ 
+-    __slots__ = ["__weakref__", "_io_refs", "_closed"]
++    __slots__ = ["_io_refs", "_closed"]
+ 
+     def __init__(self, family=AF_INET, type=SOCK_STREAM, proto=0, fileno=None):
+         if fileno is None:

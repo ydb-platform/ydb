@@ -758,15 +758,30 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         const auto& info = ev->Get()->Info;
 
         if (!info) {
+            Y_ABORT_UNLESS(!GroupInfo);
             SBP_LOG_E("Publish on unconfigured SchemeBoard");
             Become(&TThis::StateCalm);
             return;
         }
 
+        THashSet<TActorId> neededReplicas;
+
         GroupInfo = info;
         for (auto& replica : info->SelectAllReplicas()) {
-            IActor* replicaPopulator = new TReplicaPopulator(SelfId(), replica, Owner, Generation);
-            ReplicaToReplicaPopulator.emplace(replica, Register(replicaPopulator, TMailboxType::ReadAsFilled));
+            neededReplicas.insert(replica);
+            if (!ReplicaToReplicaPopulator.contains(replica)) {
+                IActor* replicaPopulator = new TReplicaPopulator(SelfId(), replica, Owner, Generation);
+                ReplicaToReplicaPopulator.emplace(replica, Register(replicaPopulator, TMailboxType::ReadAsFilled));
+            }
+        }
+
+        for (auto it = ReplicaToReplicaPopulator.begin(); it != ReplicaToReplicaPopulator.end(); ) {
+            if (neededReplicas.contains(it->first)) {
+                ++it;
+            } else {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, it->second, SelfId(), nullptr, 0));
+                ReplicaToReplicaPopulator.erase(it++);
+            }
         }
 
         Become(&TThis::StateWork);
@@ -844,6 +859,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         for (const auto& x : ReplicaToReplicaPopulator) {
             Send(x.second, new TEvents::TEvPoisonPill());
         }
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(), SelfId(),
+            nullptr, 0));
 
         TMonitorableActor::PassAway();
     }
@@ -878,7 +895,7 @@ public:
         TMonitorableActor::Bootstrap();
 
         const TActorId proxy = MakeStateStorageProxyID();
-        Send(proxy, new TEvStateStorage::TEvListSchemeBoard(), IEventHandle::FlagTrackDelivery);
+        Send(proxy, new TEvStateStorage::TEvListSchemeBoard(true), IEventHandle::FlagTrackDelivery);
         Become(&TThis::StateResolve);
     }
 
@@ -898,6 +915,8 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvListSchemeBoardResult, Handle);
+
             hFunc(NInternalEvents::TEvRequestDescribe, Handle);
             hFunc(NInternalEvents::TEvRequestUpdate, Handle);
 

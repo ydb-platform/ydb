@@ -2,15 +2,12 @@
 
 LIBRARY()
 
-LICENSE(
-    BSD-3-Clause AND
-    LicenseRef-scancode-unknown-license-reference
-)
+LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.20)
+VERSION(1.21)
 
-ORIGINAL_SOURCE(https://github.com/cubicdaiya/dtl/archive/v1.20.tar.gz)
+ORIGINAL_SOURCE(https://github.com/cubicdaiya/dtl/archive/v1.21.tar.gz)
 
 END()

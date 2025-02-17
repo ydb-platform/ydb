@@ -12,6 +12,8 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <yt/yt/core/ytree/ypath_client.h>
+
 namespace NYT::NRpc {
 
 using namespace NConcurrency;
@@ -21,6 +23,7 @@ using namespace NRpc::NProto;
 using namespace NTracing;
 
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -54,7 +57,7 @@ TServiceContextBase::TServiceContextBase(
     , Logger(std::move(logger))
     , LogLevel_(logLevel)
 {
-    YT_VERIFY(ParseRequestHeader(RequestMessage_, RequestHeader_.get()));
+    YT_VERIFY(TryParseRequestHeader(RequestMessage_, RequestHeader_.get()));
     Initialize();
 }
 
@@ -67,6 +70,10 @@ void TServiceContextBase::Initialize()
 
     RequestId_ = FromProto<TRequestId>(RequestHeader_->request_id());
     RealmId_ = FromProto<TRealmId>(RequestHeader_->realm_id());
+    MutationId_ = FromProto<TMutationId>(RequestHeader_->mutation_id());
+    ServiceName_ = FromProto<std::string>(RequestHeader_->service());
+    MethodName_ = FromProto<std::string>(RequestHeader_->method());
+
     AuthenticationIdentity_.User = RequestHeader_->has_user() ? RequestHeader_->user() : RootUserName;
     AuthenticationIdentity_.UserTag = RequestHeader_->has_user_tag() ? RequestHeader_->user_tag() : AuthenticationIdentity_.User;
 
@@ -111,7 +118,9 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
             responseMessage.End());
 
         if (header.has_codec()) {
-            YT_VERIFY(TryEnumCast(header.codec(), &ResponseCodec_));
+            auto codec = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
+            YT_VERIFY(codec);
+            ResponseCodec_ = *codec;
             SetResponseBodySerializedWithCompression();
         }
         if (header.has_format()) {
@@ -132,7 +141,7 @@ void TServiceContextBase::ReplyEpilogue()
         LoggingEnabled_ &&
         TDispatcher::Get()->ShouldAlertOnMissingRequestInfo())
     {
-        static const auto& Logger = RpcServerLogger;
+        static constexpr auto& Logger = RpcServerLogger;
         YT_LOG_ALERT("Missing request info (RequestId: %v, Method: %v.%v)",
             RequestId_,
             RequestHeader_->service(),
@@ -170,7 +179,7 @@ void TServiceContextBase::SetComplete()
 
 TFuture<TSharedRefArray> TServiceContextBase::GetAsyncResponseMessage() const
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     auto guard  = Guard(ResponseLock_);
 
@@ -197,18 +206,16 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
     ToProto(header.mutable_request_id(), RequestId_);
     ToProto(header.mutable_error(), Error_);
 
+    ToProto(header.mutable_service(), GetService());
+    ToProto(header.mutable_method(), GetMethod());
+
     if (RequestHeader_->has_response_format()) {
         header.set_format(RequestHeader_->response_format());
     }
 
     // COMPAT(danilalexeev): legacy RPC codecs.
     if (IsResponseBodySerializedWithCompression()) {
-        if (RequestHeader_->has_response_codec()) {
-            header.set_codec(static_cast<int>(ResponseCodec_));
-        } else {
-            ResponseBody_ = PushEnvelope(ResponseBody_, ResponseCodec_);
-            ResponseAttachments_ = DecompressAttachments(ResponseAttachments_, ResponseCodec_);
-        }
+        header.set_codec(ToProto(ResponseCodec_));
     }
 
     auto message = Error_.IsOK()
@@ -218,7 +225,7 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
             ResponseAttachments_)
         : CreateErrorResponseMessage(header);
 
-    auto responseMessageError = CheckBusMessageLimits(ResponseMessage_);
+    auto responseMessageError = CheckBusMessageLimits(message);
     if (!responseMessageError.IsOK()) {
         return CreateErrorResponseMessage(responseMessageError);
     }
@@ -228,7 +235,7 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
 
 bool TServiceContextBase::IsReplied() const
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
     return Replied_.load();
 }
 
@@ -326,7 +333,7 @@ const IAttributeDictionary& TServiceContextBase::GetEndpointAttributes() const
     return EmptyAttributes();
 }
 
-const TString& TServiceContextBase::GetEndpointDescription() const
+const std::string& TServiceContextBase::GetEndpointDescription() const
 {
     static const TString EmptyEndpointDescription;
     return EmptyEndpointDescription;
@@ -371,6 +378,9 @@ std::optional<TDuration> TServiceContextBase::GetExecutionDuration() const
     return std::nullopt;
 }
 
+void TServiceContextBase::RecordThrottling(TDuration /*throttleDuration*/)
+{ }
+
 TTraceContextPtr TServiceContextBase::GetTraceContext() const
 {
     return nullptr;
@@ -391,14 +401,14 @@ TMutationId TServiceContextBase::GetMutationId() const
     return FromProto<TMutationId>(RequestHeader_->mutation_id());
 }
 
-std::string TServiceContextBase::GetService() const
+const std::string& TServiceContextBase::GetService() const
 {
-    return FromProto<std::string>(RequestHeader_->service());
+    return ServiceName_;
 }
 
-std::string TServiceContextBase::GetMethod() const
+const std::string& TServiceContextBase::GetMethod() const
 {
-    return FromProto<std::string>(RequestHeader_->method());
+    return MethodName_;
 }
 
 TRealmId TServiceContextBase::GetRealmId() const
@@ -528,7 +538,7 @@ const NYTree::IAttributeDictionary& TServiceContextWrapper::GetEndpointAttribute
     return UnderlyingContext_->GetEndpointAttributes();
 }
 
-const TString& TServiceContextWrapper::GetEndpointDescription() const
+const std::string& TServiceContextWrapper::GetEndpointDescription() const
 {
     return UnderlyingContext_->GetEndpointDescription();
 }
@@ -578,6 +588,11 @@ std::optional<TDuration> TServiceContextWrapper::GetExecutionDuration() const
     return UnderlyingContext_->GetExecutionDuration();
 }
 
+void TServiceContextWrapper::RecordThrottling(TDuration throttleDuration)
+{
+    return UnderlyingContext_->RecordThrottling(throttleDuration);
+}
+
 TTraceContextPtr TServiceContextWrapper::GetTraceContext() const
 {
     return UnderlyingContext_->GetTraceContext();
@@ -598,12 +613,12 @@ TMutationId TServiceContextWrapper::GetMutationId() const
     return UnderlyingContext_->GetMutationId();
 }
 
-std::string TServiceContextWrapper::GetService() const
+const std::string& TServiceContextWrapper::GetService() const
 {
     return UnderlyingContext_->GetService();
 }
 
-std::string TServiceContextWrapper::GetMethod() const
+const std::string& TServiceContextWrapper::GetMethod() const
 {
     return UnderlyingContext_->GetMethod();
 }
@@ -878,16 +893,14 @@ IServicePtr TServerBase::GetServiceOrThrow(const TServiceId& serviceId) const
     if (serviceMapIt == RealmIdToServiceMap_.end()) {
         if (realmId) {
             // TODO(gritukan): Stop wrapping error one day.
-            auto innerError = TError(EErrorCode::NoSuchRealm, "Request realm is unknown")
+            auto innerError = TError(NRpc::EErrorCode::NoSuchRealm, "Request realm is unknown")
                 << TErrorAttribute("service", serviceName)
                 << TErrorAttribute("realm_id", realmId);
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::NoSuchService,
+            THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
                 "Service is not registered")
                 << innerError;
         } else {
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::NoSuchService,
+            THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
                 "Service is not registered")
                 << TErrorAttribute("service", serviceName)
                 << TErrorAttribute("realm_id", realmId);
@@ -896,8 +909,7 @@ IServicePtr TServerBase::GetServiceOrThrow(const TServiceId& serviceId) const
     auto& serviceMap = serviceMapIt->second;
     auto serviceIt = serviceMap.find(serviceName);
     if (serviceIt == serviceMap.end()) {
-        THROW_ERROR_EXCEPTION(
-            EErrorCode::NoSuchService,
+        THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
             "Service is not registered")
             << TErrorAttribute("service", serviceName)
             << TErrorAttribute("realm_id", realmId);
@@ -908,17 +920,23 @@ IServicePtr TServerBase::GetServiceOrThrow(const TServiceId& serviceId) const
 
 void TServerBase::ApplyConfig()
 {
-    VERIFY_SPINLOCK_AFFINITY(ServicesLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(ServicesLock_);
 
     auto newAppliedConfig = New<TServerConfig>();
-    newAppliedConfig->EnableErrorCodeCounting = DynamicConfig_->EnableErrorCodeCounting.value_or(StaticConfig_->EnableErrorCodeCounting);
+    newAppliedConfig->EnableErrorCodeCounter = DynamicConfig_->EnableErrorCodeCounter.value_or(StaticConfig_->EnableErrorCodeCounter);
     newAppliedConfig->EnablePerUserProfiling = DynamicConfig_->EnablePerUserProfiling.value_or(StaticConfig_->EnablePerUserProfiling);
-    newAppliedConfig->HistogramTimerProfiling = DynamicConfig_->HistogramTimerProfiling.value_or(StaticConfig_->HistogramTimerProfiling);
+    newAppliedConfig->TimeHistogram = DynamicConfig_->TimeHistogram.value_or(StaticConfig_->TimeHistogram);
     newAppliedConfig->TracingMode = DynamicConfig_->TracingMode.value_or(StaticConfig_->TracingMode);
     newAppliedConfig->Services = StaticConfig_->Services;
 
     for (const auto& [name, node] : DynamicConfig_->Services) {
-        newAppliedConfig->Services[name] = node;
+        auto it = newAppliedConfig->Services.find(name);
+        if (it != newAppliedConfig->Services.end()) {
+            const auto& [_, staticConfigNode] = *it;
+            newAppliedConfig->Services[name] = NYTree::PatchNode(staticConfigNode, node);
+        } else {
+            newAppliedConfig->Services[name] = node;
+        }
     }
 
     AppliedConfig_ = newAppliedConfig;
@@ -973,7 +991,7 @@ TFuture<void> TServerBase::Stop(bool graceful)
     YT_LOG_INFO("Stopping RPC server (Graceful: %v)",
         graceful);
 
-    return DoStop(graceful).Apply(BIND([this, this_ = MakeStrong(this)] () {
+    return DoStop(graceful).Apply(BIND([this, this_ = MakeStrong(this)] {
         YT_LOG_INFO("RPC server stopped");
     }));
 }

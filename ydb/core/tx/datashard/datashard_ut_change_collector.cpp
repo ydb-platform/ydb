@@ -3,7 +3,7 @@
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 namespace NKikimr {
@@ -79,7 +79,7 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
     const auto details = GetChangeRecordDetails(runtime, sender, tabletId);
     UNIT_ASSERT_VALUES_EQUAL(records.size(), details.size());
 
-    THashMap<TPathId, TVector<NChangeExchange::IChangeRecord::TPtr>> result;
+    THashMap<TPathId, TVector<TChangeRecord>> result;
     for (size_t i = 0; i < records.size(); ++i) {
         const auto& record = records.at(i);
         const auto& detail = details.at(i);
@@ -88,11 +88,11 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
         const auto& pathId = std::get<4>(record);
         auto it = result.find(pathId);
         if (it == result.end()) {
-            it = result.emplace(pathId, TVector<NChangeExchange::IChangeRecord::TPtr>()).first;
+            it = result.emplace(pathId, TVector<TChangeRecord>()).first;
         }
 
         it->second.push_back(
-            TChangeRecordBuilder(std::get<1>(detail))
+            *TChangeRecordBuilder(std::get<1>(detail))
                 .WithOrder(std::get<0>(record))
                 .WithGroup(std::get<1>(record))
                 .WithStep(std::get<2>(record))
@@ -276,7 +276,7 @@ private:
                     inserter(name, cell.AsValue<ui32>());
                 } else if constexpr (std::is_same_v<T, TUuidHolder>) {
                     TStringStream ss;
-                    NUuid::UuidBytesToString(cell.Data(), ss);
+                    NUuid::UuidBytesToString(TString(cell.Data(), cell.Size()), ss);
                     inserter(name, TUuidHolder(ss.Str()));
                 }
             }
@@ -358,8 +358,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
 
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecordBase<SK>::Parse(actual.at(i)->GetBody(), tagToName));
-                UNIT_ASSERT_VALUES_EQUAL(actual.at(i)->template Get<TChangeRecord>()->GetSchemaVersion(), entry.TableId.SchemaVersion);
+                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecordBase<SK>::Parse(actual.at(i).GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(actual.at(i).GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
     }
@@ -669,7 +669,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     template <typename SK = ui32>
-    void Run(const NFake::TCaches& cacheParams, const TString& path,
+    void Run(const NSharedCache::TSharedCacheConfig& sharedCacheConfig, const TString& path,
             const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
@@ -686,14 +686,15 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             .SetDomainName(domainName)
             .SetUseRealThreads(false)
             .SetEnableDataColumnForIndexTable(true)
-            .SetCacheParams(cacheParams)
             .SetEnableUuidAsPrimaryKey(true);
+        serverSettings.AppConfig->MutableSharedCacheConfig()->CopyFrom(sharedCacheConfig);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
         const TActorId sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_INFO);
         InitRoot(server, sender);
 
         // prevent change sending
@@ -743,7 +744,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         THashMap<TPathId, TString> streamPathIdToName;
         for (const auto& stream : entry.CdcStreams) {
             const auto& name = stream.GetName();
-            const auto pathId = PathIdFromPathId(stream.GetPathId());
+            const auto pathId = TPathId::FromProto(stream.GetPathId());
             streamPathIdToName.emplace(pathId, name);
         }
 
@@ -762,20 +763,22 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecordBase<SK>::Parse(actual.at(i)->GetBody(), tagToName));
-                UNIT_ASSERT_VALUES_EQUAL(actual.at(i)->Get<TChangeRecord>()->GetSchemaVersion(), entry.TableId.SchemaVersion);
+                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecordBase<SK>::Parse(actual.at(i).GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(actual.at(i).GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
     }
 
-    NFake::TCaches DefaultCacheParams() {
-        return {};
+    const NSharedCache::TSharedCacheConfig DefaultCacheParams() {
+        NSharedCache::TSharedCacheConfig config;
+        config.SetMemoryLimit(32_MB);
+        return config;
     }
 
-    NFake::TCaches TinyCacheParams() {
-        auto params = DefaultCacheParams();
-        params.Shared = 1; // byte
-        return params;
+    const NSharedCache::TSharedCacheConfig TinyCacheParams() {
+        NSharedCache::TSharedCacheConfig config;
+        config.SetMemoryLimit(0);
+        return config;
     }
 
     template <typename SK = ui32>
@@ -851,8 +854,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(InsertSingleUuidRow) {
-        Run<TUuidHolder>("/Root/path", UuidTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (Uuid(\"65df1ec1-a97d-47b2-ae56-3c023da6ee8c\"), 10);", {
-            {"keys_stream", {TStructRecordBase<TUuidHolder>(NTable::ERowOp::Upsert, {{"key", TUuidHolder("65df1ec1-a97d-47b2-ae56-3c023da6ee8c")}})}},
+        Run<TUuidHolder>("/Root/path", UuidTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (Uuid(\"65df1ec1-0000-47b2-ae56-3c023da6ee8c\"), 10);", {
+            {"keys_stream", {TStructRecordBase<TUuidHolder>(NTable::ERowOp::Upsert, {{"key", TUuidHolder("65df1ec1-0000-47b2-ae56-3c023da6ee8c")}})}},
         });
     }
 

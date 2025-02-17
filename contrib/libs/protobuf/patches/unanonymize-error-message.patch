@@ -1,0 +1,20 @@
+--- a/src/google/protobuf/message_lite.cc	(index)
++++ b/src/google/protobuf/message_lite.cc	(working tree)
+@@ -98,6 +98,8 @@ void ByteSizeConsistencyError(size_t byte_size_before_serialization,
+   ABSL_LOG(FATAL) << "This shouldn't be called if all the sizes are equal.";
+ }
+ 
++} // anonymous namespace
++
+ TProtoStringType InitializationErrorMessage(absl::string_view action,
+                                        const MessageLite& message) {
+   return absl::StrCat("Can't ", action, " message of type \"",
+@@ -106,6 +108,8 @@ TProtoStringType InitializationErrorMessage(absl::string_view action,
+                       message.InitializationErrorString());
+ }
+ 
++namespace {
++
+ inline absl::string_view as_string_view(const void* data, int size) {
+   return absl::string_view(static_cast<const char*>(data), size);
+ }

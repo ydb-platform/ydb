@@ -1,6 +1,6 @@
 #include "config.h"
 
-#include <yt/yt/client/table_client/helpers.h>
+#include "helpers.h"
 
 #include <yt/yt/client/tablet_client/config.h>
 #include <yt/yt/client/tablet_client/helpers.h>
@@ -10,9 +10,9 @@
 
 #include <yt/yt/core/ytree/convert.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/library/quantile_digest/config.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT::NTableClient {
 
@@ -20,12 +20,14 @@ using namespace NChunkClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TRetentionConfigPtr& obj)
+void FormatValue(TStringBuilderBase* builder, const TRetentionConfigPtr& obj, TStringBuf spec)
 {
-    static const TString NullPtrName("<nullptr>");
-    return obj
-        ? NYson::ConvertToYsonString(obj, NYson::EYsonFormat::Text).ToString()
-        : NullPtrName;
+    static const TStringBuf NullPtrName("<nullptr>");
+    if (!obj) {
+        FormatValue(builder, NullPtrName, spec);
+        return;
+    }
+    FormatValue(builder, NYson::ConvertToYsonString(obj, NYson::EYsonFormat::Text), spec);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -167,6 +169,9 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("key_prefix_filter", &TThis::KeyPrefixFilter)
         .DefaultNew();
+
+    registrar.Parameter("enable_large_columnar_statistics", &TThis::EnableLargeColumnarStatistics)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -189,7 +194,7 @@ void TKeyFilterWriterConfig::Register(TRegistrar registrar)
         .Optional();
 
     registrar.Parameter("false_positive_rate", &TThis::FalsePositiveRate)
-        .InRange(0, 1.0 / (1ll << 62))
+        .InRange(1.0 / (1ll << 62), 1)
         .Default()
         .Optional();
 
@@ -236,7 +241,7 @@ void TKeyPrefixFilterWriterConfig::Register(TRegistrar registrar)
     });
 }
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void TDictionaryCompressionConfig::Register(TRegistrar registrar)
 {
@@ -308,7 +313,7 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
     });
 }
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void TDictionaryCompressionSessionConfig::Register(TRegistrar registrar)
 {
@@ -320,7 +325,7 @@ void TDictionaryCompressionSessionConfig::Register(TRegistrar registrar)
         .Default(64_MB);
 }
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void TBatchHunkReaderConfig::Register(TRegistrar registrar)
 {
@@ -457,11 +462,22 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("enable_segment_meta_in_blocks", &TThis::EnableSegmentMetaInBlocks)
         .Default(false);
+    registrar.Parameter("enable_column_meta_in_chunk_meta", &TThis::EnableColumnMetaInChunkMeta)
+        .Default(true);
+    registrar.Parameter("consider_min_row_range_data_weight", &TThis::ConsiderMinRowRangeDataWeight)
+        .Default(true);
 
     registrar.Parameter("schema_modification", &TThis::SchemaModification)
         .Default(ETableSchemaModification::None);
+    registrar.Parameter("versioned_write_options", &TThis::VersionedWriteOptions)
+        .Default();
     registrar.Parameter("max_heavy_columns", &TThis::MaxHeavyColumns)
         .Default(0);
+
+    registrar.Parameter("block_size", &TThis::BlockSize)
+        .Default();
+    registrar.Parameter("buffer_size", &TThis::BufferSize)
+        .Default();
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->ValidateUniqueKeys && !config->ValidateSorted) {
@@ -500,6 +516,9 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         if (config->ChunkFormat) {
             ValidateTableChunkFormatAndOptimizeFor(*config->ChunkFormat, config->OptimizeFor);
         }
+
+        THROW_ERROR_EXCEPTION_IF(!config->EnableColumnMetaInChunkMeta && !config->EnableSegmentMetaInBlocks,
+            "At least one of \"enable_column_meta_in_chunk_meta\" or \"enable_segment_meta_in_blocks\" must be true");
     });
 }
 
@@ -525,6 +544,18 @@ void TVersionedRowDigestConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("t_digest", &TThis::TDigest)
         .DefaultNew();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TSchemalessBufferedDynamicTableWriterConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("max_batch_size", &TThis::MaxBatchSize)
+        .Default(1000);
+    registrar.Parameter("flush_period", &TThis::FlushPeriod)
+        .Default(TDuration::Seconds(5));
+    registrar.Parameter("retry_backoff", &TThis::RetryBackoff)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

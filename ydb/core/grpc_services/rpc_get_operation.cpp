@@ -18,8 +18,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -56,11 +56,11 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
     IEventBase* MakeRequest() override {
         switch (OperationId_.GetKind()) {
         case TOperationId::EXPORT:
-            return new NSchemeShard::TEvExport::TEvGetExportRequest(DatabaseName, RawOperationId_);
+            return new NSchemeShard::TEvExport::TEvGetExportRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::IMPORT:
-            return new NSchemeShard::TEvImport::TEvGetImportRequest(DatabaseName, RawOperationId_);
+            return new NSchemeShard::TEvImport::TEvGetImportRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::BUILD_INDEX:
-            return new NSchemeShard::TEvIndexBuilder::TEvGetRequest(DatabaseName, RawOperationId_);
+            return new NSchemeShard::TEvIndexBuilder::TEvGetRequest(GetDatabaseName(), RawOperationId_);
         default:
             Y_ABORT("unreachable");
         }
@@ -164,7 +164,7 @@ private:
 
         IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, tid);
         Y_ABORT_UNLESS(pipeActor);
-        PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
+        PipeActorId_ = ctx.Register(pipeActor);
 
         auto request = MakeHolder<NConsole::TEvConsole::TEvGetOperationRequest>();
         request->Record.MutableRequest()->set_id(GetProtoRequest()->id());
@@ -191,7 +191,7 @@ private:
 
         IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, schemeShardTabletId);
         Y_ABORT_UNLESS(pipeActor);
-        PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
+        PipeActorId_ = ctx.Register(pipeActor);
 
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
@@ -199,7 +199,7 @@ private:
     }
 
     void SendGetScriptExecutionOperation() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(DatabaseName, OperationId_));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(GetDatabaseName(), OperationId_));
     }
 
     void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) {

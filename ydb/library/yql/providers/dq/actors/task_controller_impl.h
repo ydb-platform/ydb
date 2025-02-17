@@ -10,10 +10,10 @@
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -295,9 +295,19 @@ private:
                     } else if (name == "EgressRows" && taskLevelCounter) {
                         publicCounterName = "query.sink_output_records";
                         isDeriv = true;
+                    } else if (name == "IngressFilteredBytes" && taskLevelCounter) {
+                        publicCounterName = "query.input_filtered_bytes";
+                        isDeriv = true;
+                    } else if (name == "IngressFilteredRows" && taskLevelCounter) {
+                        publicCounterName = "query.source_input_filtered_records";
+                        isDeriv = true;
+                    } else if (name == "IngressQueuedBytes" && taskLevelCounter) {
+                        publicCounterName = "query.input_queued_bytes";
+                    } else if (name == "IngressQueuedRows" && taskLevelCounter) {
+                        publicCounterName = "query.source_input_queued_records";
                     } else if (name == "Tasks") {
                         publicCounterName = "query.running_tasks";
-                        isDeriv = true;
+                        isDeriv = false;
                     } else if (name == "MultiHop_LateThrownEventsCount") {
                         publicCounterName = "query.late_events";
                         isDeriv = true;
@@ -351,9 +361,12 @@ private:
         ui64 taskId = s.GetTaskId();
         ui64 stageId = Stages.Value(taskId, s.GetStageId());
 
+#define SET_COUNTER(name) \
+        TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, #name), stats.Get ## name ()); \
+
 #define ADD_COUNTER(name) \
         if (stats.Get ## name()) { \
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, #name), stats.Get ## name ()); \
+            SET_COUNTER(name); \
         }
 
         std::map<TString, TString> commonLabels = {
@@ -380,10 +393,22 @@ private:
         ADD_COUNTER(ResultRows)
         ADD_COUNTER(ResultBytes)
 
+        ADD_COUNTER(IngressFilteredBytes)
+        ADD_COUNTER(IngressFilteredRows)
+        SET_COUNTER(IngressQueuedBytes)
+        SET_COUNTER(IngressQueuedRows)
+
         ADD_COUNTER(StartTimeMs)
         ADD_COUNTER(FinishTimeMs)
         ADD_COUNTER(WaitInputTimeUs)
         ADD_COUNTER(WaitOutputTimeUs)
+
+        ADD_COUNTER(SpillingComputeWriteBytes)
+        ADD_COUNTER(SpillingChannelWriteBytes)
+        ADD_COUNTER(SpillingComputeReadTimeUs)
+        ADD_COUNTER(SpillingComputeWriteTimeUs)
+        ADD_COUNTER(SpillingChannelReadTimeUs)
+        ADD_COUNTER(SpillingChannelWriteTimeUs)
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
@@ -600,7 +625,7 @@ private:
 
 public:
     void OnQueryResult(TEvQueryResponse::TPtr& ev) {
-        YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
+        YQL_ENSURE(!ev->Get()->Record.SampleSize());
         FinalStat().FlushCounters(ev->Get()->Record);
         if (!Issues.Empty()) {
             IssuesToMessage(Issues.ToIssues(), ev->Get()->Record.MutableIssues());

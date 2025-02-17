@@ -9,7 +9,7 @@
 
 namespace NYT::NConcurrency {
 
-static const auto& Logger = ConcurrencyLogger;
+static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -21,9 +21,9 @@ TThreadPoolBase::TThreadPoolBase(TString threadNamePrefix)
         /*priority*/ 100))
 { }
 
-void TThreadPoolBase::Configure(int threadCount)
+void TThreadPoolBase::SetThreadCount(int threadCount)
 {
-    DoConfigure(std::clamp(threadCount, 1, MaxThreadCount));
+    DoSetThreadCount(std::clamp(threadCount, 1, MaxThreadCount));
 }
 
 void TThreadPoolBase::Shutdown()
@@ -62,22 +62,15 @@ void TThreadPoolBase::DoStart()
 
 void TThreadPoolBase::DoShutdown()
 {
-    GetFinalizerInvoker()->Invoke(MakeFinalizerCallback());
-}
-
-TClosure TThreadPoolBase::MakeFinalizerCallback()
-{
     decltype(Threads_) threads;
     {
         auto guard = Guard(SpinLock_);
         std::swap(threads, Threads_);
     }
 
-    return BIND_NO_PROPAGATE([threads = std::move(threads)] () {
-        for (const auto& thread : threads) {
-            thread->Stop();
-        }
-    });
+    for (const auto& thread : threads) {
+        thread->Stop();
+    }
 }
 
 int TThreadPoolBase::GetThreadCount()
@@ -86,7 +79,7 @@ int TThreadPoolBase::GetThreadCount()
     return std::ssize(Threads_);
 }
 
-void TThreadPoolBase::DoConfigure(int threadCount)
+void TThreadPoolBase::DoSetThreadCount(int threadCount)
 {
     ThreadCount_.store(threadCount);
     if (StartFlag_.load()) {

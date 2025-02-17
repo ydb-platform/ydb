@@ -15,13 +15,13 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTabletInfoCache
+class TTabletInfoOwnerCache
 {
 public:
-    explicit TTabletInfoCache(NLogging::TLogger logger);
+    explicit TTabletInfoOwnerCache(NLogging::TLogger logger);
 
-    TTabletInfoPtr Find(TTabletId tabletId);
-    TTabletInfoPtr Insert(const TTabletInfoPtr& tabletInfo);
+    void Insert(TTabletId tabletId, TWeakPtr<TTableMountInfo> tableInfo);
+    std::vector<TWeakPtr<TTableMountInfo>> GetOwners(TTabletId tabletId);
     void Clear();
 
 private:
@@ -30,7 +30,7 @@ private:
     std::atomic<NProfiling::TCpuInstant> ExpiredEntriesSweepDeadline_ = 0;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, MapLock_);
-    THashMap<TTabletId, TWeakPtr<TTabletInfo>> Map_;
+    THashMap<TTabletId, std::vector<TWeakPtr<TTableMountInfo>>> Map_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, GCLock_);
     std::queue<TTabletId> GCQueue_;
@@ -38,9 +38,11 @@ private:
 
     void SweepExpiredEntries();
     void ProcessNextGCQueueEntry();
+
+    void DropExpiredOwners(std::vector<TWeakPtr<TTableMountInfo>>* owners);
 };
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TTableMountCacheBase
     : public ITableMountCache
@@ -53,9 +55,8 @@ public:
         NProfiling::TProfiler profiler = {});
 
     TFuture<TTableMountInfoPtr> GetTableInfo(const NYPath::TYPath& path) override;
-    TTabletInfoPtr FindTabletInfo(TTabletId tabletId) override;
-    void InvalidateTablet(TTabletInfoPtr tabletInfo) override;
-    std::pair<std::optional<TErrorCode>, TTabletInfoPtr> InvalidateOnError(
+    void InvalidateTablet(TTabletId tabletId) override;
+    TInvalidationResult InvalidateOnError(
         const TError& error,
         bool forceRetry) override;
 
@@ -66,13 +67,20 @@ public:
 protected:
     const NLogging::TLogger Logger;
 
-    TTabletInfoCache TabletInfoCache_;
+    TTabletInfoOwnerCache TabletInfoOwnerCache_;
 
     virtual void InvalidateTable(const TTableMountInfoPtr& tableInfo) = 0;
+
+    virtual void RegisterCell(NYTree::INodePtr cellDescriptor);
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
     TTableMountCacheConfigPtr Config_;
+
+    TTabletInfoPtr FindTabletInfo(TTabletId tabletId);
+
+    std::optional<TInvalidationResult> TryHandleServantNotActiveError(
+        const TError& error);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

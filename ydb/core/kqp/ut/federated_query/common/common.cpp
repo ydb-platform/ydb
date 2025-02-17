@@ -3,6 +3,16 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp::NFederatedQueryTest {
+    TString GetSymbolsString(char start, char end, const TString& skip) {
+        TStringBuilder result;
+        for (char symbol = start; symbol <= end; ++symbol) {
+            if (skip.Contains(symbol)) {
+                continue;
+            }
+            result << symbol;
+        }
+        return result;
+    }
 
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
         NYdb::NOperation::TOperationClient client(ydbDriver);
@@ -20,15 +30,17 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         bool initializeHttpGateway,
         NYql::NConnector::IClient::TPtr connectorClient,
         NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver,
-        std::optional<NKikimrConfig::TAppConfig> appConfig)
+        std::optional<NKikimrConfig::TAppConfig> appConfig,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+        const TString& domainRoot)
     {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableScriptExecutionOperations(true);
+        featureFlags.SetEnableExternalSourceSchemaInference(true);
         if (!appConfig) {
             appConfig.emplace();
         }
-        appConfig->MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
         auto settings = TKikimrSettings();
 
@@ -46,16 +58,21 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig->GetQueryServiceConfig().GetGeneric(),
             appConfig->GetQueryServiceConfig().GetYt(),
             nullptr,
+            appConfig->GetQueryServiceConfig().GetSolomon(),
+            nullptr,
             nullptr);
 
         settings
             .SetFeatureFlags(featureFlags)
             .SetFederatedQuerySetupFactory(federatedQuerySetupFactory)
-            .SetKqpSettings({});
+            .SetKqpSettings({})
+            .SetS3ActorsFactory(std::move(s3ActorsFactory))
+            .SetWithSampleTables(false)
+            .SetDomainRoot(domainRoot);
 
         settings = settings.SetAppConfig(appConfig.value());
 
         return std::make_shared<TKikimrRunner>(settings);
     }
 
-}
+} // namespace NKikimr::NKqp::NFederatedQueryTest

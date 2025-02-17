@@ -5,15 +5,12 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(5)
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(
-        cpu:4
         ram:32
     )
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -25,9 +22,9 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/public/lib/idx_test
     ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
-    ydb/library/yql/sql/pg_dummy
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

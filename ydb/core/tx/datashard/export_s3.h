@@ -31,9 +31,10 @@ public:
 
         switch (CodecFromTask(Task)) {
         case ECompressionCodec::None:
-            return CreateS3ExportBufferRaw(Columns, maxRows, maxBytes);
+            return CreateS3ExportBufferRaw(Columns, maxRows, maxBytes, Task.GetEnableChecksums());
         case ECompressionCodec::Zstd:
-            return CreateS3ExportBufferZstd(Task.GetCompression().GetLevel(), Columns, maxRows, maxBytes, minBytes);
+            return CreateS3ExportBufferZstd(Task.GetCompression().GetLevel(), Columns, maxRows,
+                maxBytes, minBytes, Task.GetEnableChecksums());
         case ECompressionCodec::Invalid:
             Y_ABORT("unreachable");
         }

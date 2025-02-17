@@ -4,26 +4,27 @@ items:
 - name: Начало работы
   href: quickstart.md
 - name: Концепции
+  href: concepts/index.md
   include:
     mode: link
     path: concepts/toc_p.yaml
 - name: Для DevOps
+  href: devops/index.md
   include:
     mode: link
     path: devops/toc_p.yaml
-- name: Для DBA
-  include:
-    mode: link
-    path: dba/toc_p.yaml
 - name: Для разработчиков
+  href: dev/index.md
   include:
     mode: link
     path: dev/toc_p.yaml
 - name: Для инженеров безопасности
+  href: security/index.md
   include:
     mode: link
     path: security/toc_p.yaml
 - name: Для контрибьюторов
+  href: contributor/index.md
   include:
     mode: link
     path: contributor/toc_p.yaml
@@ -31,16 +32,27 @@ items:
   include:
     mode: link
     path: reference/toc_p.yaml
+- name: Рецепты
+  href: recipes/index.md
+  include:
+    mode: link
+    path: recipes/toc_p.yaml
+- name: Диагностика проблем
+  href: troubleshooting/index.md
+  include:
+    mode: link
+    path: troubleshooting/toc_p.yaml
 - name: Вопросы и ответы
+  href: faq/index.md
   include:
     mode: link
     path: faq/toc_p.yaml
 - name: Загрузки
+  href: downloads/index.md
+- name: Публичные материалы
   include:
     mode: link
-    path: downloads/toc_p.yaml
-- name: Публичные материалы
-  href: public-talks.md
+    path: public-materials/toc_p.yaml
 - name: Список изменений
   include:
     mode: link

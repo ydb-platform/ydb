@@ -1,0 +1,78 @@
+name: Regression-whitelist-run
+
+on:
+  schedule:
+    - cron: "0 23 * * *"  # At 01:00 every day
+  workflow_dispatch:
+
+jobs:
+  main:
+    name: Build and run tests
+    runs-on: [ self-hosted, "${{ inputs.runner_label || 'auto-provisioned' }}", "${{ format('build-preset-{0}', inputs.build_preset || 'relwithdebinfo') }}" ]
+    timeout-minutes: 600
+    strategy:
+      fail-fast: false # do not stop wf if the tests in one of the configurations failed
+      matrix:
+        branch: [main]  #  branches to test
+        build_preset: [relwithdebinfo, release-asan, release-msan, release-tsan] # list of build presets to run in each brunch
+        include:
+          - build_preset: relwithdebinfo
+            threads_count: 52
+            timeout: 300
+            build_target: "ydb/tests/sql/ ydb/tests/stress"
+            test_size: small,medium,large
+            test_type: unittest,py3test,py2test,pytest
+          - build_preset: release-asan
+            threads_count: 20
+            timeout: 480
+            build_target: "ydb/tests/sql/ ydb/tests/stress"
+            test_size: small,medium,large
+            test_type: unittest,py3test,py2test,pytest
+          - build_preset: release-msan
+            threads_count: 20
+            timeout: 480
+            build_target: "ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init"
+            test_size: small,medium,large
+            test_type: unittest,py3test,py2test,pytest
+          - build_preset: release-tsan
+            threads_count: 10
+            timeout: 600
+            build_target: "ydb/tests/sql/ ydb/tests/stress"
+            test_size: small,medium
+            test_type: unittest,py3test,py2test,pytest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ matrix.branch }}
+    
+    - name: Setup ssh key for slice 
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.SLICE_QA_SSH_PRIVATE_KEY }}
+
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+
+    - name: Build and test
+      timeout-minutes:  ${{ matrix.timeout }}
+      uses: ./.github/actions/build_and_test_ya
+      with:
+        build_preset: ${{ matrix.build_preset }}
+        increment: false
+        build_target: ${{ matrix.build_target }}
+        run_build: true
+        run_tests: true
+        test_retry_count: 3
+        test_size: ${{ matrix.test_size }}
+        test_type: ${{ matrix.test_type }}
+        test_threads: ${{ matrix.threads_count }}
+        put_build_results_to_cache: false
+        additional_ya_make_args: -DDEBUGINFO_LINES_ONLY  # we don't need full symbols in CI checks
+        secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',
+          secrets.TESTMO_TOKEN2, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
+        vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","TESTMO_URL":"{3}","TESTMO_PROJECT_ID":"{4}"}}',
+          vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.TESTMO_URL, vars.TESTMO_PROJECT_ID ) }}

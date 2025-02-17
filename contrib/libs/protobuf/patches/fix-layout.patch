@@ -1,0 +1,10 @@
+--- a/src/google/protobuf/arena.cc	(index)
++++ b/src/google/protobuf/arena.cc	(working tree)
+@@ -39,6 +39,7 @@
+ #include <typeinfo>
+ 
+ #include "absl/base/attributes.h"
++#include "absl/container/internal/btree.h"
+ #include "absl/synchronization/mutex.h"
+ #include "google/protobuf/arena_allocation_policy.h"
+ #include "google/protobuf/arenaz_sampler.h"

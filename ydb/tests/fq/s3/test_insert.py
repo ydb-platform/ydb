@@ -13,6 +13,9 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.tests.fq.s3.s3_helpers as s3_helpers
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_all
 
+from moto import __version__ as moto_version
+from packaging.version import Version
+
 
 class TestS3(object):
     def create_bucket_and_upload_file(self, filename, s3, kikimr):
@@ -25,10 +28,7 @@ class TestS3(object):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_insert(self, kikimr, s3, client, format, dataset_name, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("insert_bucket")
@@ -76,10 +76,7 @@ class TestS3(object):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_big_json_list_insert(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("big_data_bucket")
@@ -87,10 +84,7 @@ class TestS3(object):
         bucket.objects.all().delete()
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         taxi = '''VendorID'''
@@ -100,22 +94,28 @@ class TestS3(object):
 
         connection_response = client.create_storage_connection(unique_prefix + "big_data_bucket", "big_data_bucket")
 
-        vendorID = ydb.Column(name="VendorID", type=ydb.Type(
-            optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))))
+        vendorID = ydb.Column(
+            name="VendorID",
+            type=ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))),
+        )
         storage_source_binding_name = unique_prefix + "taxi_src_csv_with_names"
-        client.create_object_storage_binding(name=storage_source_binding_name,
-                                             path="src/",
-                                             format="csv_with_names",
-                                             connection_id=connection_response.result.connection_id,
-                                             columns=[vendorID])
+        client.create_object_storage_binding(
+            name=storage_source_binding_name,
+            path="src/",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[vendorID],
+        )
 
         storage_sink_binding_name = unique_prefix + "taxi_dst_json_list_zstd"
-        client.create_object_storage_binding(name=storage_sink_binding_name,
-                                             path="dst/",
-                                             format="json_list",
-                                             compression="zstd",
-                                             connection_id=connection_response.result.connection_id,
-                                             columns=[vendorID])
+        client.create_object_storage_binding(
+            name=storage_sink_binding_name,
+            path="dst/",
+            format="json_list",
+            compression="zstd",
+            connection_id=connection_response.result.connection_id,
+            columns=[vendorID],
+        )
 
         client.create_storage_connection("ibucket", "insert_bucket")
 
@@ -154,10 +154,7 @@ class TestS3(object):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_insert_csv_delimiter(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("insert_bucket")
@@ -177,7 +174,9 @@ class TestS3(object):
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        prefix = ""  # client.describe_query(query_id).result.query.meta.last_job_id.split("-")[0]  # cut _<query_id> part
+        prefix = (
+            ""  # client.describe_query(query_id).result.query.meta.last_job_id.split("-")[0]  # cut _<query_id> part
+        )
 
         sql = f'''
             select data from `{storage_connection_name}`.`csv_delim_out/{prefix}*` with (format=raw, schema(
@@ -202,10 +201,7 @@ class TestS3(object):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_append(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("append_bucket")
@@ -262,10 +258,7 @@ class TestS3(object):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_part_split(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("split_bucket")
@@ -307,10 +300,7 @@ class TestS3(object):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_part_merge(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("merge_bucket")
@@ -376,10 +366,7 @@ class TestS3(object):
         if format == "json_list":
             pytest.skip("json_list does not work with partitioned_by. YQ-1335")
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("binding_bucket")
@@ -393,15 +380,15 @@ class TestS3(object):
         dataType = ydb.Column(name="data", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DOUBLE))
 
         storage_binding_name = unique_prefix + "bbinding"
-        client.create_object_storage_binding(name=storage_binding_name,
-                                             path=format + "/",
-                                             format=format,
-                                             connection_id=connection_response.result.connection_id,
-                                             columns=[fooType, barType, dataType],
-                                             partitioned_by=["foo", "bar"],
-                                             format_setting={
-                                                 "file_pattern": "*{json,csv}"
-                                             })
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path=format + "/",
+            format=format,
+            connection_id=connection_response.result.connection_id,
+            columns=[fooType, barType, dataType],
+            partitioned_by=["foo", "bar"],
+            format_setting={"file_pattern": "*{json,csv}"},
+        )
 
         sql = f'''
             insert into bindings.`{storage_binding_name}`
@@ -447,14 +434,12 @@ class TestS3(object):
         if format == "parquet":
             pytest.skip("Transient errors do not work for arrow reader - YQ-1335")
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("error_bucket")
-        bucket.create(ACL='')
+        acl = '' if Version(moto_version) < Version("4.0.5") else 'public-write'
+        bucket.create(ACL=acl)
         bucket.objects.all().delete()
 
         kikimr.control_plane.wait_bootstrap(1)
@@ -464,7 +449,9 @@ class TestS3(object):
         sql = R'''
             insert into `{1}`.`{0}/` with (format={0})
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
-            '''.format(format, storage_connection_name)
+            '''.format(
+            format, storage_connection_name
+        )
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -474,33 +461,45 @@ class TestS3(object):
                 foo Int NOT NULL,
                 bar String NOT NULL
             ))
-            '''.format(format, storage_connection_name)
+            '''.format(
+            format, storage_connection_name
+        )
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        start_at = time.time()
-        while True:
-            result = client.describe_query(query_id).result
-            assert result.query.meta.status in [fq.QueryMeta.STARTING,
-                                                fq.QueryMeta.RUNNING], "Query is not RUNNING anymore"
-            issues = result.query.transient_issue
-            if "500 Internal Server Error" in str(issues):
-                break
-            assert time.time() - start_at < 20, "Timeout waiting for transient issue in " + str(issues)
-            time.sleep(0.5)
+        if Version(moto_version) < Version("4.0.5"):
+            start_at = time.time()
+            while True:
+                result = client.describe_query(query_id).result
+                assert result.query.meta.status in [
+                    fq.QueryMeta.STARTING,
+                    fq.QueryMeta.RUNNING,
+                ], "Query is not RUNNING anymore"
+                issues = result.query.transient_issue
+                if "500 Internal Server Error" in str(issues):
+                    break
+                assert time.time() - start_at < 20, "Timeout waiting for transient issue in " + str(issues)
+                time.sleep(0.5)
+        else:
+            # Available since moto version 4.0.5+
+            client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+            msg = client.describe_query(query_id).result.query.issue
+            assert 'HTTP error code: 403' in str(msg)
+            assert 'Query failed with code EXTERNAL_ERROR' in str(msg)
+
         client.abort_query(query_id)
         client.wait_query(query_id)
 
     @yq_all
     def test_insert_empty_object(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("empty_file", s3, kikimr)
-        connection_id = client.create_storage_connection(unique_prefix + "empty_file_connection", "fbucket").result.connection_id
+        connection_id = client.create_storage_connection(
+            unique_prefix + "empty_file_connection", "fbucket"
+        ).result.connection_id
         col = ydb.Column(name="data", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         binding_name = unique_prefix + "empty_file_binding"
-        client.create_object_storage_binding(name=binding_name,
-                                             path="empty_file_path/",
-                                             format="raw",
-                                             connection_id=connection_id,
-                                             columns=[col])
+        client.create_object_storage_binding(
+            name=binding_name, path="empty_file_path/", format="raw", connection_id=connection_id, columns=[col]
+        )
 
         sql = f'''
             INSERT INTO bindings.`{binding_name}`
@@ -510,8 +509,9 @@ class TestS3(object):
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        read_query_id = client.create_query("simple", f"SELECT * FROM bindings.`{binding_name}`",
-                                            type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        read_query_id = client.create_query(
+            "simple", f"SELECT * FROM bindings.`{binding_name}`", type=fq.QueryContent.QueryType.ANALYTICS
+        ).result.query_id
         client.wait_query_status(read_query_id, fq.QueryMeta.COMPLETED)
 
         data = client.get_result_data(read_query_id)
@@ -522,3 +522,28 @@ class TestS3(object):
         assert result_set.columns[0].type.type_id == ydb.Type.STRING
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].text_value == ""
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_insert_without_format_error(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("insert_bucket")
+        bucket.create(ACL='public-read-write')
+        bucket.objects.all().delete()
+
+        storage_connection_name = unique_prefix + "ibucket"
+        client.create_storage_connection(storage_connection_name, "insert_bucket")
+
+        sql = f'''
+            insert into `{storage_connection_name}`.`/test/`
+            select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+
+        assert "Missing format - please use WITH FORMAT when writing into S3" in issues, "Incorrect Issues: " + issues

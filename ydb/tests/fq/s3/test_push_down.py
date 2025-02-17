@@ -16,10 +16,7 @@ class TestS3PushDown:
     @staticmethod
     def create_s3_client(s3):
         resource = boto3.resource(
-            's3',
-            endpoint_url=s3.s3_url,
-            aws_access_key_id='key',
-            aws_secret_access_key='secret_key'
+            's3', endpoint_url=s3.s3_url, aws_access_key_id='key', aws_secret_access_key='secret_key'
         )
 
         bucket = resource.Bucket(BUCKET_NAME)

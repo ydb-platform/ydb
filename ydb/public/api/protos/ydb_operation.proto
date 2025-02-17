@@ -3,6 +3,7 @@ option cc_enable_arenas = true;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
@@ -103,7 +104,7 @@ message Operation {
     // not created in the first place, as in SYNC operation mode).
     string id = 1;
 
-    // true - this operation has beed finished (doesn't matter successful or not),
+    // true - this operation has been completed (doesn't matter successful or not),
     // so Status field has status code, and Result field can contains result data.
     // false - this operation still running. You can repeat request using operation Id.
     bool ready = 2;
@@ -120,4 +121,13 @@ message Operation {
     // For completed operations, it shows the final cost of the operation.
     // For operations in progress, it might indicate the current cost of the operation (if supported).
     CostInfo cost_info = 7;
+
+    // The time at which this operation was created (if supported).
+    google.protobuf.Timestamp create_time = 8;
+
+    // The time at which this operation was completed, doesn't matter successful or not (if supported).
+    google.protobuf.Timestamp end_time = 9;
+
+    // User SID (Security ID) of the user who created this operation (if supported).
+    string created_by = 10;
 }

@@ -5,7 +5,7 @@ import subprocess
 
 import jinja2
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
@@ -13,7 +13,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.log import make_log
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings, GenericSettings
 
-from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner, DefaultTimeout
 from ydb.library.yql.providers.generic.connector.tests.utils.run.result import Result
 
 LOGGER = make_logger(__name__)
@@ -22,14 +22,16 @@ LOGGER = make_logger(__name__)
 class SchemeRenderer:
     template_: Final = '''
 
-{% macro create_data_source(kind, data_source, host, port, login, password, protocol, database, schema) -%}
+{% macro create_data_source(kind, data_source, host, port, login, password, protocol, database, schema, service_name) -%}
 
 CREATE OBJECT {{data_source}}_local_password (TYPE SECRET) WITH (value = "{{password}}");
 
 CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     SOURCE_TYPE="{{kind}}",
     LOCATION="{{host}}:{{port}}",
+    {% if database %}
     DATABASE_NAME="{{database}}",
+    {% endif %}
     AUTH_METHOD="BASIC",
     LOGIN="{{login}}",
     PASSWORD_SECRET_NAME="{{data_source}}_local_password",
@@ -41,11 +43,18 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     {% if kind == POSTGRESQL and schema %}
         ,SCHEMA="{{schema}}"
     {% endif %}
+
+    {% if kind == ORACLE and service_name %}
+        ,SERVICE_NAME="{{service_name}}"
+    {% endif %}
 );
 
 {%- endmacro -%}
 
 {% set CLICKHOUSE = 'ClickHouse' %}
+{% set MS_SQL_SERVER = 'MsSQLServer' %}
+{% set MYSQL = 'MySQL' %}
+{% set ORACLE = 'Oracle' %}
 {% set POSTGRESQL = 'PostgreSQL' %}
 {% set YDB = 'Ydb' %}
 
@@ -54,10 +63,10 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
 
 {% for cluster in generic_settings.clickhouse_clusters %}
 
-{% if cluster.protocol == EProtocol.NATIVE %}
+{% if cluster.protocol == EGenericProtocol.NATIVE %}
 {% set CLICKHOUSE_PORT = settings.clickhouse.native_port_internal %}
 {% set CLICKHOUSE_PROTOCOL = NATIVE %}
-{% elif cluster.protocol == EProtocol.HTTP %}
+{% elif cluster.protocol == EGenericProtocol.HTTP %}
 {% set CLICKHOUSE_PORT = settings.clickhouse.http_port_internal %}
 {% set CLICKHOUSE_PROTOCOL = HTTP %}
 {% endif %}
@@ -71,7 +80,52 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     settings.clickhouse.password,
     CLICKHOUSE_PROTOCOL,
     cluster.database,
+    NONE,
     NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.ms_sql_server_clusters %}
+{{ create_data_source(
+    MS_SQL_SERVER,
+    settings.ms_sql_server.cluster_name,
+    settings.ms_sql_server.host_internal,
+    settings.ms_sql_server.port_internal,
+    settings.ms_sql_server.username,
+    settings.ms_sql_server.password,
+    NONE,
+    cluster.database,
+    NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.mysql_clusters %}
+{{ create_data_source(
+    MYSQL,
+    settings.mysql.cluster_name,
+    settings.mysql.host_internal,
+    settings.mysql.port_internal,
+    settings.mysql.username,
+    settings.mysql.password,
+    NONE,
+    cluster.database,
+    NONE,
+    NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.oracle_clusters %}
+{{ create_data_source(
+    ORACLE,
+    settings.oracle.cluster_name,
+    settings.oracle.host_internal,
+    settings.oracle.port_internal,
+    settings.oracle.username,
+    settings.oracle.password,
+    NONE,
+    NONE,
+    NONE,
+    cluster.service_name)
 }}
 {% endfor %}
 
@@ -85,7 +139,8 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     settings.postgresql.password,
     NATIVE,
     cluster.database,
-    cluster.schema)
+    cluster.schema,
+    NONE)
 }}
 {% endfor %}
 
@@ -99,6 +154,7 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     settings.ydb.password,
     NONE,
     cluster.database,
+    NONE,
     NONE)
 }}
 {% endfor %}
@@ -109,7 +165,7 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
         self.template = jinja2.Environment(loader=jinja2.BaseLoader, undefined=jinja2.DebugUndefined).from_string(
             self.template_
         )
-        self.template.globals['EProtocol'] = EProtocol
+        self.template.globals['EGenericProtocol'] = EGenericProtocol
 
     def render(self, file_path: Path, settings: Settings, generic_settings: GenericSettings) -> None:
         content = self.template.render(dict(settings=settings, generic_settings=generic_settings))
@@ -123,6 +179,10 @@ class AppConfigRenderer:
 FeatureFlags {
   EnableExternalDataSources: true
   EnableScriptExecutionOperations: true
+}
+
+TableServiceConfig {
+    CompileTimeoutMs: 600000
 }
 
 QueryServiceConfig {
@@ -165,11 +225,14 @@ class KqpRunner(Runner):
         self,
         kqprun_path: Path,
         settings: Settings,
+        udf_dir: Path,
     ):
         self.scheme_renderer = SchemeRenderer()
         self.app_conf_renderer = AppConfigRenderer()
         self.kqprun_path = kqprun_path
         self.settings = settings
+
+        self.udf_dir = udf_dir
 
     def run(self, test_name: str, script: str, generic_settings: GenericSettings) -> Result:
         LOGGER.debug(script)
@@ -191,7 +254,7 @@ class KqpRunner(Runner):
         result_path = artifacts.make_path(test_name=test_name, artifact_name='result.json')
 
         # For debug add option --trace-opt to args
-        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full'
+        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full-json --udfs-dir={self.udf_dir} '
 
         output = None
         data_out = None
@@ -200,7 +263,7 @@ class KqpRunner(Runner):
         returncode = 0
 
         try:
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=60)
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=DefaultTimeout)
         except subprocess.CalledProcessError as e:
             LOGGER.error(
                 'Execution failed:\n\nSTDOUT: %s\n\nSTDERR: %s\n\n',
@@ -213,7 +276,7 @@ class KqpRunner(Runner):
         else:
             # Parse output
             with open(result_path, 'r') as f:
-                result = json.loads(f.read().encode('ascii'), strict=False)
+                result = json.loads(f.read().encode('utf-8'), strict=False)
 
             # Kqprun's data output is missing type information (everything is a string),
             # so we have to recover schema and transform the results to make them comparable with the inputs

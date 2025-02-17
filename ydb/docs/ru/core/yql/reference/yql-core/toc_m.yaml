@@ -1,2 +1,0 @@
-items:
-- include: { mode: merge, path: yql-product/toc_product.yaml }

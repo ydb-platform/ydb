@@ -8,8 +8,8 @@
 
 #include <ydb/core/protos/console_config.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <google/protobuf/text_format.h>
 #include <library/cpp/yson/writer.h>
 
@@ -50,6 +50,7 @@ public:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request_);
         SetDatabase(ev, *Request_);
+        ev->Record.MutableRequest()->SetClientAddress(Request_->GetPeerName());
 
         if (traceId) {
             ev->Record.SetTraceId(traceId.GetRef());
@@ -74,7 +75,7 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
         AddServerHintsIfAny(record);
 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {

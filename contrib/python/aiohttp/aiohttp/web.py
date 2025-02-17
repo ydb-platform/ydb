@@ -1,9 +1,13 @@
 import asyncio
 import logging
+import os
 import socket
 import sys
+import warnings
 from argparse import ArgumentParser
 from collections.abc import Iterable
+from contextlib import suppress
+from functools import partial
 from importlib import import_module
 from typing import (
     Any,
@@ -17,10 +21,12 @@ from typing import (
     Union,
     cast,
 )
+from weakref import WeakSet
 
 from .abc import AbstractAccessLogger
-from .helpers import all_tasks
+from .helpers import AppKey as AppKey
 from .log import access_logger
+from .typedefs import PathLike
 from .web_app import Application as Application, CleanupError as CleanupError
 from .web_exceptions import (
     HTTPAccepted as HTTPAccepted,
@@ -42,6 +48,7 @@ from .web_exceptions import (
     HTTPLengthRequired as HTTPLengthRequired,
     HTTPMethodNotAllowed as HTTPMethodNotAllowed,
     HTTPMisdirectedRequest as HTTPMisdirectedRequest,
+    HTTPMove as HTTPMove,
     HTTPMovedPermanently as HTTPMovedPermanently,
     HTTPMultipleChoices as HTTPMultipleChoices,
     HTTPNetworkAuthenticationRequired as HTTPNetworkAuthenticationRequired,
@@ -80,6 +87,7 @@ from .web_exceptions import (
     HTTPUseProxy as HTTPUseProxy,
     HTTPVariantAlsoNegotiates as HTTPVariantAlsoNegotiates,
     HTTPVersionNotSupported as HTTPVersionNotSupported,
+    NotAppKeyWarning as NotAppKeyWarning,
 )
 from .web_fileresponse import FileResponse as FileResponse
 from .web_log import AccessLogger
@@ -136,6 +144,7 @@ from .web_urldispatcher import (
     AbstractRoute as AbstractRoute,
     DynamicResource as DynamicResource,
     PlainResource as PlainResource,
+    PrefixedSubAppResource as PrefixedSubAppResource,
     Resource as Resource,
     ResourceRoute as ResourceRoute,
     StaticResource as StaticResource,
@@ -151,9 +160,11 @@ from .web_ws import (
 
 __all__ = (
     # web_app
+    "AppKey",
     "Application",
     "CleanupError",
     # web_exceptions
+    "NotAppKeyWarning",
     "HTTPAccepted",
     "HTTPBadGateway",
     "HTTPBadRequest",
@@ -173,6 +184,7 @@ __all__ = (
     "HTTPLengthRequired",
     "HTTPMethodNotAllowed",
     "HTTPMisdirectedRequest",
+    "HTTPMove",
     "HTTPMovedPermanently",
     "HTTPMultipleChoices",
     "HTTPNetworkAuthenticationRequired",
@@ -261,6 +273,7 @@ __all__ = (
     "AbstractRoute",
     "DynamicResource",
     "PlainResource",
+    "PrefixedSubAppResource",
     "Resource",
     "ResourceRoute",
     "StaticResource",
@@ -281,6 +294,9 @@ try:
 except ImportError:  # pragma: no cover
     SSLContext = Any  # type: ignore[misc,assignment]
 
+# Only display warning when using -Wdefault, -We, -X dev or similar.
+warnings.filterwarnings("ignore", category=NotAppKeyWarning, append=True)
+
 HostSequence = TypingIterable[str]
 
 
@@ -289,12 +305,12 @@ async def _run_app(
     *,
     host: Optional[Union[str, HostSequence]] = None,
     port: Optional[int] = None,
-    path: Optional[str] = None,
-    sock: Optional[socket.socket] = None,
+    path: Union[PathLike, TypingIterable[PathLike], None] = None,
+    sock: Optional[Union[socket.socket, TypingIterable[socket.socket]]] = None,
     shutdown_timeout: float = 60.0,
     keepalive_timeout: float = 75.0,
     ssl_context: Optional[SSLContext] = None,
-    print: Callable[..., None] = print,
+    print: Optional[Callable[..., None]] = print,
     backlog: int = 128,
     access_log_class: Type[AbstractAccessLogger] = AccessLogger,
     access_log_format: str = AccessLogger.LOG_FORMAT,
@@ -302,10 +318,28 @@ async def _run_app(
     handle_signals: bool = True,
     reuse_address: Optional[bool] = None,
     reuse_port: Optional[bool] = None,
+    handler_cancellation: bool = False,
 ) -> None:
-    # A internal functio to actually do all dirty job for application running
+    async def wait(
+        starting_tasks: "WeakSet[asyncio.Task[object]]", shutdown_timeout: float
+    ) -> None:
+        # Wait for pending tasks for a given time limit.
+        t = asyncio.current_task()
+        assert t is not None
+        starting_tasks.add(t)
+        with suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(_wait(starting_tasks), timeout=shutdown_timeout)
+
+    async def _wait(exclude: "WeakSet[asyncio.Task[object]]") -> None:
+        t = asyncio.current_task()
+        assert t is not None
+        exclude.add(t)
+        while tasks := asyncio.all_tasks().difference(exclude):
+            await asyncio.wait(tasks)
+
+    # An internal function to actually do all dirty job for application running
     if asyncio.iscoroutine(app):
-        app = await app  # type: ignore[misc]
+        app = await app
 
     app = cast(Application, app)
 
@@ -316,11 +350,19 @@ async def _run_app(
         access_log_format=access_log_format,
         access_log=access_log,
         keepalive_timeout=keepalive_timeout,
+        shutdown_timeout=shutdown_timeout,
+        handler_cancellation=handler_cancellation,
     )
 
     await runner.setup()
+    # On shutdown we want to avoid waiting on tasks which run forever.
+    # It's very likely that all tasks which run forever will have been created by
+    # the time we have completed the application startup (in runner.setup()),
+    # so we just record all running tasks here and exclude them later.
+    starting_tasks: "WeakSet[asyncio.Task[object]]" = WeakSet(asyncio.all_tasks())
+    runner.shutdown_callback = partial(wait, starting_tasks, shutdown_timeout)
 
-    sites = []  # type: List[BaseSite]
+    sites: List[BaseSite] = []
 
     try:
         if host is not None:
@@ -330,7 +372,6 @@ async def _run_app(
                         runner,
                         host,
                         port,
-                        shutdown_timeout=shutdown_timeout,
                         ssl_context=ssl_context,
                         backlog=backlog,
                         reuse_address=reuse_address,
@@ -344,7 +385,6 @@ async def _run_app(
                             runner,
                             h,
                             port,
-                            shutdown_timeout=shutdown_timeout,
                             ssl_context=ssl_context,
                             backlog=backlog,
                             reuse_address=reuse_address,
@@ -356,7 +396,6 @@ async def _run_app(
                 TCPSite(
                     runner,
                     port=port,
-                    shutdown_timeout=shutdown_timeout,
                     ssl_context=ssl_context,
                     backlog=backlog,
                     reuse_address=reuse_address,
@@ -365,12 +404,11 @@ async def _run_app(
             )
 
         if path is not None:
-            if isinstance(path, (str, bytes, bytearray, memoryview)):
+            if isinstance(path, (str, os.PathLike)):
                 sites.append(
                     UnixSite(
                         runner,
                         path,
-                        shutdown_timeout=shutdown_timeout,
                         ssl_context=ssl_context,
                         backlog=backlog,
                     )
@@ -381,7 +419,6 @@ async def _run_app(
                         UnixSite(
                             runner,
                             p,
-                            shutdown_timeout=shutdown_timeout,
                             ssl_context=ssl_context,
                             backlog=backlog,
                         )
@@ -393,7 +430,6 @@ async def _run_app(
                     SockSite(
                         runner,
                         sock,
-                        shutdown_timeout=shutdown_timeout,
                         ssl_context=ssl_context,
                         backlog=backlog,
                     )
@@ -404,7 +440,6 @@ async def _run_app(
                         SockSite(
                             runner,
                             s,
-                            shutdown_timeout=shutdown_timeout,
                             ssl_context=ssl_context,
                             backlog=backlog,
                         )
@@ -420,15 +455,8 @@ async def _run_app(
             )
 
         # sleep forever by 1 hour intervals,
-        # on Windows before Python 3.8 wake up every 1 second to handle
-        # Ctrl+C smoothly
-        if sys.platform == "win32" and sys.version_info < (3, 8):
-            delay = 1
-        else:
-            delay = 3600
-
         while True:
-            await asyncio.sleep(delay)
+            await asyncio.sleep(3600)
     finally:
         await runner.cleanup()
 
@@ -462,12 +490,12 @@ def run_app(
     *,
     host: Optional[Union[str, HostSequence]] = None,
     port: Optional[int] = None,
-    path: Optional[str] = None,
-    sock: Optional[socket.socket] = None,
+    path: Union[PathLike, TypingIterable[PathLike], None] = None,
+    sock: Optional[Union[socket.socket, TypingIterable[socket.socket]]] = None,
     shutdown_timeout: float = 60.0,
     keepalive_timeout: float = 75.0,
     ssl_context: Optional[SSLContext] = None,
-    print: Callable[..., None] = print,
+    print: Optional[Callable[..., None]] = print,
     backlog: int = 128,
     access_log_class: Type[AbstractAccessLogger] = AccessLogger,
     access_log_format: str = AccessLogger.LOG_FORMAT,
@@ -475,6 +503,7 @@ def run_app(
     handle_signals: bool = True,
     reuse_address: Optional[bool] = None,
     reuse_port: Optional[bool] = None,
+    handler_cancellation: bool = False,
     loop: Optional[asyncio.AbstractEventLoop] = None,
 ) -> None:
     """Run an app locally"""
@@ -506,6 +535,7 @@ def run_app(
             handle_signals=handle_signals,
             reuse_address=reuse_address,
             reuse_port=reuse_port,
+            handler_cancellation=handler_cancellation,
         )
     )
 
@@ -516,7 +546,7 @@ def run_app(
         pass
     finally:
         _cancel_tasks({main_task}, loop)
-        _cancel_tasks(all_tasks(loop), loop)
+        _cancel_tasks(asyncio.all_tasks(loop), loop)
         loop.run_until_complete(loop.shutdown_asyncgens())
         loop.close()
 

@@ -42,7 +42,8 @@ message ImportFromS3Settings {
            The object name begins with 'source_prefix'.
            This prefix is followed by:
              * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
-             * '/scheme.pb' - object with information about scheme, indexes, etc.
+             * '/scheme.pb' - object with information about scheme, indexes, etc;
+             * '/permissions.pb' - object with information about ACL and owner.
         */
         string source_prefix = 1 [(required) = true];
 
@@ -67,6 +68,13 @@ message ImportFromS3Settings {
     // details: https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html
     // it is especially useful for custom s3 implementations
     bool disable_virtual_addressing = 10;
+
+    // Prevent importing of ACL and owner. If true, objects are created with empty ACL
+    // and their owner will be the user who started the import.
+    bool no_acl = 11;
+
+    // Skip checksum validation during import
+    bool skip_checksum_validation = 12;
 }
 
 message ImportFromS3Result {
@@ -105,8 +113,8 @@ message ImportDataRequest {
     // - sorted by primary key;
     // - all keys must be from the same partition;
     // - table has no global secondary indexes;
-    // - size of serialized data is limited to 8 MB.
-    bytes data = 3 [(length).le = 8388608];
+    // - size of serialized data is limited to 16 MB.
+    bytes data = 3 [(length).le = 16777216];
     oneof format {
         // Result of `ydb tools dump`
         YdbDumpFormat ydb_dump = 4;

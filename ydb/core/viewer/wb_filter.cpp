@@ -1,7 +1,6 @@
 #include "wb_filter.h"
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 template <>
 i32 TFieldProtoValueExtractor<i32>::ExtractValue(const Reflection& reflection, const Message& element) const {
@@ -96,5 +95,4 @@ TMessageValue TFieldProtoValueExtractor<TMessageValue>::ExtractValue(const Refle
     return result;
 }
 
-}
 }

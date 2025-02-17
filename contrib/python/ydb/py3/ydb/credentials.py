@@ -44,6 +44,9 @@ class Credentials(abc.ABC):
                 return token
         return ""
 
+    def _update_driver_config(self, driver_config):
+        pass
+
 
 class OneToManyValue(object):
     def __init__(self):
@@ -184,10 +187,22 @@ def _wrap_static_credentials_response(rpc_state, response):
 class StaticCredentials(AbstractExpiringTokenCredentials):
     def __init__(self, driver_config, user, password="", tracer=None):
         super(StaticCredentials, self).__init__(tracer)
-        self.driver_config = driver_config
+
+        from .driver import DriverConfig
+
+        if driver_config is not None:
+            self.driver_config = DriverConfig(
+                endpoint=driver_config.endpoint,
+                database=driver_config.database,
+                root_certificates=driver_config.root_certificates,
+            )
         self.user = user
         self.password = password
         self.request_timeout = 10
+
+    @classmethod
+    def from_user_password(cls, user: str, password: str, tracer=None):
+        return cls(None, user, password, tracer)
 
     def _make_token_request(self):
         conn = connection.Connection.ready_factory(self.driver_config.endpoint, self.driver_config)
@@ -203,6 +218,15 @@ class StaticCredentials(AbstractExpiringTokenCredentials):
         finally:
             conn.close()
         return {"expires_in": 30 * 60, "access_token": result.token}
+
+    def _update_driver_config(self, driver_config):
+        from .driver import DriverConfig
+
+        self.driver_config = DriverConfig(
+            endpoint=driver_config.endpoint,
+            database=driver_config.database,
+            root_certificates=driver_config.root_certificates,
+        )
 
 
 class AnonymousCredentials(Credentials):

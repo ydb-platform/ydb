@@ -26,9 +26,10 @@ from .topic_writer import (
 from .. import (
     _apis,
     issues,
-    check_retriable_error,
-    RetrySettings,
 )
+from .._errors import check_retriable_error
+from .._topic_common import common as topic_common
+from ..retries import RetrySettings
 from .._grpc.grpcwrapper.ydb_topic_public_types import PublicCodec
 from .._grpc.grpcwrapper.ydb_topic import (
     UpdateTokenRequest,
@@ -231,8 +232,14 @@ class WriterAsyncIOReconnector:
         self._new_messages = asyncio.Queue()
         self._stop_reason = self._loop.create_future()
         self._background_tasks = [
-            asyncio.create_task(self._connection_loop(), name="connection_loop"),
-            asyncio.create_task(self._encode_loop(), name="encode_loop"),
+            topic_common.wrap_set_name_for_asyncio_task(
+                asyncio.create_task(self._connection_loop()),
+                task_name="connection_loop",
+            ),
+            topic_common.wrap_set_name_for_asyncio_task(
+                asyncio.create_task(self._encode_loop()),
+                task_name="encode_loop",
+            ),
         ]
 
         self._state_changed = asyncio.Event()
@@ -300,7 +307,7 @@ class WriterAsyncIOReconnector:
 
     def _prepare_internal_messages(self, messages: List[PublicMessage]) -> List[InternalMessage]:
         if self._settings.auto_created_at:
-            now = datetime.datetime.now()
+            now = datetime.datetime.now(datetime.timezone.utc)
         else:
             now = None
 
@@ -366,8 +373,14 @@ class WriterAsyncIOReconnector:
 
                 self._stream_connected.set()
 
-                send_loop = asyncio.create_task(self._send_loop(stream_writer), name="writer send loop")
-                receive_loop = asyncio.create_task(self._read_loop(stream_writer), name="writer receive loop")
+                send_loop = topic_common.wrap_set_name_for_asyncio_task(
+                    asyncio.create_task(self._send_loop(stream_writer)),
+                    task_name="writer send loop",
+                )
+                receive_loop = topic_common.wrap_set_name_for_asyncio_task(
+                    asyncio.create_task(self._read_loop(stream_writer)),
+                    task_name="writer receive loop",
+                )
 
                 tasks = [send_loop, receive_loop]
                 done, _ = await asyncio.wait([send_loop, receive_loop], return_when=asyncio.FIRST_COMPLETED)
@@ -414,7 +427,7 @@ class WriterAsyncIOReconnector:
 
         for message in messages:
             encoded_data_futures = eventloop.run_in_executor(
-                self._encode_executor, encoder_function, message.get_bytes()
+                self._encode_executor, encoder_function, message.get_data_bytes()
             )
             encode_waiters.append(encoded_data_futures)
 
@@ -480,7 +493,7 @@ class WriterAsyncIOReconnector:
             f = self._codec_functions[codec]
 
             for m in test_messages:
-                encoded = f(m.get_bytes())
+                encoded = f(m.get_data_bytes())
                 s += len(encoded)
 
             return s
@@ -537,7 +550,11 @@ class WriterAsyncIOReconnector:
                 m = await self._new_messages.get()  # type: InternalMessage
                 if m.seq_no > last_seq_no:
                     writer.write([m])
-        except Exception as e:
+        except asyncio.CancelledError:
+            # the loop task cancelled be parent code, for example for reconnection
+            # no need to stop all work.
+            raise
+        except BaseException as e:
             self._stop(e)
             raise
 
@@ -649,7 +666,10 @@ class WriterAsyncIOStream:
 
         if self._update_token_interval is not None:
             self._update_token_event.set()
-            self._update_token_task = asyncio.create_task(self._update_token_loop(), name="update_token_loop")
+            self._update_token_task = topic_common.wrap_set_name_for_asyncio_task(
+                asyncio.create_task(self._update_token_loop()),
+                task_name="update_token_loop",
+            )
 
     @staticmethod
     def _ensure_ok(message: WriterMessagesFromServerToClient):
@@ -666,7 +686,10 @@ class WriterAsyncIOStream:
     async def _update_token_loop(self):
         while True:
             await asyncio.sleep(self._update_token_interval)
-            await self._update_token(token=self._get_token_function())
+            token = self._get_token_function()
+            if asyncio.iscoroutine(token):
+                token = await token
+            await self._update_token(token=token)
 
     async def _update_token(self, token: str):
         await self._update_token_event.wait()

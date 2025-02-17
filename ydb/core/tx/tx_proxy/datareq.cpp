@@ -24,9 +24,9 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/base/row_version.h>
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -177,7 +177,7 @@ struct TReadTableRequest : public TThrRefBase {
         , RequestVersion(tx.HasApiVersion() ? tx.GetApiVersion() : (ui32)NKikimrTxUserProxy::TReadTableTransaction::UNSPECIFIED)
     {
         for (auto &col : tx.GetColumns()) {
-            Columns.emplace_back(col, 0, NScheme::TTypeInfo(0));
+            Columns.emplace_back(col, 0, NScheme::TTypeInfo());
         }
 
         if (tx.HasSnapshotStep() && tx.HasSnapshotTxId()) {
@@ -288,7 +288,7 @@ private:
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvProxyDataReqOngoingTransactionWatchdog : public TEventSimple<TEvProxyDataReqOngoingTransactionWatchdog, EvProxyDataReqOngoingTransactionsWatchdog> {};
+        struct TEvProxyDataReqOngoingTransactionsWatchdog : public TEventLocal<TEvProxyDataReqOngoingTransactionsWatchdog, EvProxyDataReqOngoingTransactionsWatchdog> {};
 
         struct TEvReattachToShard : public TEventLocal<TEvReattachToShard, EvReattachToShard> {
             const ui64 TabletId;
@@ -1306,7 +1306,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
     }
 
     WallClockAccepted = Now();
-    ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionWatchdog());
+    ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionsWatchdog());
 
     // Schedule execution timeout
     {
@@ -1382,7 +1382,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
                 settings.LlvmRuntime = true;
             }
             if (ctx.LoggerSettings()->Satisfies(NLog::PRI_DEBUG, NKikimrServices::MINIKQL_ENGINE, TxId)) {
-                auto actorSystem = ctx.ExecutorThread.ActorSystem;
+                auto actorSystem = ctx.ActorSystem();
                 auto txId = TxId;
                 settings.BacktraceWriter = [txId, actorSystem](const char* operation, ui32 line, const TBackTrace* backtrace) {
                     LOG_DEBUG_SAMPLED_BY(*actorSystem, NKikimrServices::MINIKQL_ENGINE, txId,
@@ -1566,6 +1566,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
             toExpand = toInclusive ? EParseRangeKeyExp::NONE : EParseRangeKeyExp::TO_NULL;
         }
     }
+
     if (!ParseRangeKey(ReadTableRequest->Range.GetFrom(), keyTypes,
                        ReadTableRequest->FromValues, fromExpand)
         || !ParseRangeKey(ReadTableRequest->Range.GetTo(), keyTypes,
@@ -2941,7 +2942,7 @@ void TDataReq::HandleWatchdog(const TActorContext &ctx) {
     LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_INFO, NKikimrServices::TX_PROXY, TxId,
               "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
               << " Transactions still running for " << fromStart);
-    ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionWatchdog());
+    ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionsWatchdog());
 }
 
 void TDataReq::SendStreamClearanceResponse(ui64 shard, bool cleared, const TActorContext &ctx)
@@ -3026,7 +3027,7 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
         auto& value = proto.GetValue();
         auto& type = proto.GetType();
         TString errStr;
-        bool res = NMiniKQL::CellsFromTuple(&type, value, keyType, true, key, errStr, memoryOwner);
+        bool res = NMiniKQL::CellsFromTuple(&type, value, keyType, {}, true, key, errStr, memoryOwner);
         if (!res) {
             UnresolvedKeys.push_back("Failed to parse range key tuple: " + errStr);
             return false;

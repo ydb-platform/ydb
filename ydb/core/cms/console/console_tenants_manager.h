@@ -17,10 +17,12 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -32,7 +34,7 @@ using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
-using NSchemeShard::TEvSchemeShard;
+namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
 using NTenantSlotBroker::TEvTenantSlotBroker;
 using NTenantSlotBroker::TSlotDescription;
 using ::NMonitoring::TDynamicCounterPtr;
@@ -529,11 +531,16 @@ public:
         bool IsExternalHive;
         bool IsExternalSysViewProcessor;
         bool IsExternalStatisticsAggregator;
+        bool IsExternalBackupController;
+        bool IsGraphShardEnabled = false;
         bool AreResourcesShared;
         THashSet<TTenant::TPtr> HostedTenants;
 
         TMaybe<Ydb::Cms::SchemaOperationQuotas> SchemaOperationQuotas;
         TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
+        TMaybe<Ydb::Cms::ScaleRecommenderPolicies> ScaleRecommenderPolicies;
+        bool ScaleRecommenderPoliciesConfirmed;
+        TActorId ScaleRecommenderPoliciesWorker;
         TString CreateIdempotencyKey;
         TString AlterIdempotencyKey;
     };
@@ -749,8 +756,8 @@ public:
     TTenant::TPtr FindComputationalUnitKindUsage(const TString &kind);
     TTenant::TPtr FindComputationalUnitKindUsage(const TString &kind, const TString &zone);
 
-    TTenant::TPtr GetTenant(const TString &name);
-    TTenant::TPtr GetTenant(const TDomainId &domainId);
+    TTenant::TPtr GetTenant(const TString &name) const;
+    TTenant::TPtr GetTenant(const TDomainId &domainId) const;
     void AddTenant(TTenant::TPtr tenant);
     void RemoveTenant(TTenant::TPtr tenant);
     void RemoveTenantFailed(TTenant::TPtr tenant,
@@ -796,6 +803,7 @@ public:
     void RequestTenantSlotsState(TTenant::TPtr tenant, const TActorContext &ctx);
     void RequestTenantSlotsStats(const TActorContext &ctx);
     void RetryResourcesRequests(const TActorContext &ctx);
+    void CongifureScaleRecommender(TTenant::TPtr tenant, const TActorContext &ctx);
 
     void FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status);
     void FillTenantAllocatedSlots(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status,
@@ -911,6 +919,10 @@ public:
                                 const Ydb::Cms::DatabaseQuotas &quotas,
                                 TTransactionContext &txc,
                                 const TActorContext &ctx);
+    void DbUpdateScaleRecommenderPolicies(TTenant::TPtr tenant,
+                                          const Ydb::Cms::ScaleRecommenderPolicies &policies,
+                                          TTransactionContext &txc,
+                                          const TActorContext &ctx);
 
     void Handle(TEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvCreateTenantRequest::TPtr &ev, const TActorContext &ctx);
@@ -994,6 +1006,13 @@ public:
 
     void Bootstrap(const TActorContext &ctx);
     void Detach();
+    bool HasTenant(const TString& path) const {
+        return Tenants.contains(path);
+    }
+
+    TString GetDomainName() const {
+        return Domain->Name;
+    }
 
 private:
     TConsole &Self;

@@ -1,0 +1,175 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 013a24bcf69d213aa5b670e96cefb293
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2016-2023 Antony Polukhin
+        // Copyright (c) 2022 Denis Mikhailov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pfr/config.hpp [1:2]
+        include/pfr/detail/config.hpp [1:2]
+        include/pfr/detail/possible_reflectable.hpp [1:1]
+        include/pfr/traits.hpp [1:1]
+        include/pfr/traits_fwd.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20208a12a24113d213ef2620af9718e0
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2017-2018 Alexandr Poltavsky, Antony Polukhin.
+        // Copyright (c) 2019-2023 Antony Polukhin.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pfr/detail/core14_loophole.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49b55ffa50d2d0bf215b217c881c2a59
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2016-2023 Antony Polukhin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pfr.hpp [1:1]
+        include/pfr/config.hpp [1:2]
+        include/pfr/core.hpp [1:1]
+        include/pfr/detail/cast_to_layout_compatible.hpp [1:1]
+        include/pfr/detail/config.hpp [1:2]
+        include/pfr/detail/core.hpp [1:1]
+        include/pfr/detail/core14_classic.hpp [1:1]
+        include/pfr/detail/core17.hpp [1:1]
+        include/pfr/detail/core17_generated.hpp [1:2]
+        include/pfr/detail/detectors.hpp [1:1]
+        include/pfr/detail/fields_count.hpp [1:1]
+        include/pfr/detail/for_each_field_impl.hpp [1:1]
+        include/pfr/detail/functional.hpp [1:1]
+        include/pfr/detail/io.hpp [1:1]
+        include/pfr/detail/make_flat_tuple_of_references.hpp [1:1]
+        include/pfr/detail/rvalue_t.hpp [1:1]
+        include/pfr/detail/sequence_tuple.hpp [1:1]
+        include/pfr/detail/size_array.hpp [1:1]
+        include/pfr/detail/size_t_.hpp [1:1]
+        include/pfr/detail/stdtuple.hpp [1:1]
+        include/pfr/functions_for.hpp [1:1]
+        include/pfr/functors.hpp [1:1]
+        include/pfr/io.hpp [1:1]
+        include/pfr/io_fields.hpp [1:1]
+        include/pfr/ops.hpp [1:1]
+        include/pfr/ops_fields.hpp [1:1]
+        include/pfr/tuple_size.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 60d9eff87e707c77ff4602948f77f181
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2023 Bela Schaum, X-Ryl669, Denis Mikhailov.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pfr/core_name.hpp [1:1]
+        include/pfr/detail/core_name.hpp [1:1]
+        include/pfr/detail/core_name14_disabled.hpp [1:1]
+        include/pfr/detail/core_name20_static.hpp [1:1]
+        include/pfr/detail/fake_object.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 716f9f766f4e0604fa46f4898e32926f
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2018 Adam Butcher, Antony Polukhin
+        // Copyright (c) 2019-2023 Antony Polukhin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pfr/detail/tie_from_structure_tuple.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8fe3f5af6c8f891a7f4de986affc64da
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2017-2018 Alexandr Poltavsky, Antony Polukhin.
+        // Copyright (c) 2019-2023 Antony Polukhin.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pfr/detail/core14_loophole.hpp [1:2]
+        include/pfr/detail/make_integer_sequence.hpp [1:2]
+        include/pfr/detail/offset_based_getter.hpp [1:2]
+        include/pfr/detail/tie_from_structure_tuple.hpp [1:2]
+        include/pfr/detail/unsafe_declval.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a67e7cb38d73abfa31951d9ff2a5e8a6
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2018 Sergei Fedorov
+        // Copyright (c) 2019-2023 Antony Polukhin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pfr/detail/make_integer_sequence.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d4789aa7348ae6274f4c886ad65933c1
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2017-2018 Chris Beck
+        // Copyright (c) 2019-2023 Antony Polukhin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pfr/detail/offset_based_getter.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f4e5cb6186c2395de18518cf73771274
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2016-2023 Antony Polukhin
+        // Copyright (c) 2023 Denis Mikhailov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pfr/detail/core17_generated.hpp [1:2]
+        include/pfr/detail/stdarray.hpp [1:1]

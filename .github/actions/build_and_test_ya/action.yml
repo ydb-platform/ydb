@@ -14,23 +14,21 @@ inputs:
     type: boolean
     default: true
     description: "run tests"
-  run_tests_if_build_fails:
-    default: "true"
-    description: "run tests if build fails"
   test_threads:
     type: string
     default: 28
     description: "Test threads count"
   link_threads:
     type: string
-    default: 8
+    default: 12
     description: "link threads count"
   test_size:
     type: string
     default: "small,medium,large"
   test_type:
     type: string
-    default: "unittest,py3test,py2test,pytest"
+    default: ""
+    description: "run only specific test types (or all by default)"
   increment:
     type: boolean
     required: true
@@ -41,6 +39,12 @@ inputs:
   put_build_results_to_cache:
     type: boolean
     default: true
+  additional_ya_make_args:
+    type: string
+    default: ""
+  test_retry_count:
+    default: ""
+    description: "how many times to retry failed tests"
   secs:
     type: string
     default: ""
@@ -53,19 +57,6 @@ defaults:
 runs:
   using: "composite"
   steps:
-    - name: comment-build-start
-      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
-      shell: bash
-      env:
-        BUILD_PRESET: ${{ inputs.build_preset }}
-        GITHUB_TOKEN: ${{ github.token }}
-      run: |
-        jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
-        # tricky: we are searching job with name that contains build_preset
-        check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
-        
-        echo "Pre-commit [check]($check_url) for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
-    
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
       with:
@@ -76,63 +67,24 @@ runs:
         folder_prefix: ya-
         build_preset: ${{ inputs.build_preset }}
 
-    - name: Build
-      uses: ./.github/actions/build_ya
+    - name: Run build and tests
       id: build
-      if: ${{ inputs.run_build == 'true' }}
+      uses: ./.github/actions/test_ya
       with:
         build_target: ${{ inputs.build_target }}
         build_preset: ${{ inputs.build_preset }}
-        bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
-        bazel_remote_username: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
-        bazel_remote_password: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
-        link_threads: ${{ inputs.link_threads }}
-
-    - name: Generate ya.make with affected test suites list
-      if: inputs.run_tests == 'true' && inputs.increment == 'true'
-      uses: ./.github/actions/graph_compare
- 
-    - name: Check if there's a list of tests to run
-      id: test_run_choice
-      shell: bash
-      run: |
-        if [ -f ya.make ];then
-          echo "target='.'" >> $GITHUB_OUTPUT
-          echo "Listed test targets: "
-          cat ya.make
-        else
-          echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Run tests
-      uses: ./.github/actions/test_ya
-      if: ${{ inputs.run_tests == 'true' &&  (steps.build.outputs.success == 'true' || inputs.run_tests_if_build_fails == 'true') }}
-      with:
-        build_target: ${{ steps.test_run_choice.outputs.target }}
-        build_preset: ${{ inputs.build_preset }}
         test_size: ${{ inputs.test_size }}
-        testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN }}
+        test_type: ${{ inputs.test_type }}
+        run_tests: ${{ inputs.run_tests }}
+        increment: ${{ inputs.increment }}
+        testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN2 }}
         testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
         testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
         link_threads: ${{ inputs.link_threads }}
+        additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}
-        
-    - name: Notify about failed build
-      if: ${{ steps.build.outputs.success != 'true' && inputs.run_tests == 'true' && inputs.run_tests_if_build_fails == 'false' }}
-      shell: bash
-      run: |
-        echo 'Build failed. See the [build log](${{ steps.build.outputs.log_url }}).' >> $GITHUB_STEP_SUMMARY
-        
-        if [[ "$GITHUB_EVENT_NAME" =~ ^pull_request ]]; then
-          echo "Tests run skipped." | .github/scripts/tests/comment-pr.py --fail
-        fi
-        
-        exit 1
-    
-    - name: comment-if-cancel
-      shell: bash
-      if: cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
-      env:
-        BUILD_PRESET: ${{ inputs.build_preset }}
-        GITHUB_TOKEN: ${{ github.token }}
-      run:  echo "Check cancelled" | .github/scripts/tests/comment-pr.py --color black
+        bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
+        bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
+        bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
+        put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
+        test_retry_count: ${{ inputs.test_retry_count }}

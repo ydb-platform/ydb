@@ -49,14 +49,20 @@ NTable::EReady TDataShardUserDb::SelectRow(
 }
 
 ui64 CalculateKeyBytes(const TArrayRef<const TRawTypeValue> key) {
-    return std::accumulate(key.begin(), key.end(), 0, [](ui64 bytes, const TRawTypeValue& value) { return bytes + value.IsEmpty() ? 1 : value.Size(); });
+    ui64 bytes = 0ull;
+    for (const TRawTypeValue& value : key)
+        bytes += value.IsEmpty() ? 1ull : value.Size();
+    return bytes;
 };
 
 ui64 CalculateValueBytes(const TArrayRef<const NIceDb::TUpdateOp> ops) {
-    return std::accumulate(ops.begin(), ops.end(), 0, [](ui64 bytes, const NIceDb::TUpdateOp& op) { return bytes + op.Value.IsEmpty() ? 1 : op.Value.Size(); });
+    ui64 bytes = 0ull;
+    for (const NIceDb::TUpdateOp& op : ops)
+        bytes += op.Value.IsEmpty() ? 1ull : op.Value.Size();
+    return bytes;
 };
 
-void TDataShardUserDb::UpdateRow(
+void TDataShardUserDb::UpsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops)
@@ -84,7 +90,7 @@ void TDataShardUserDb::UpdateRow(
         }
 
         auto addExtendedOp = [&scheme, &tableInfo, &extendedOps](const ui64 columnTag, const ui64& columnValue) {
-            const NScheme::TTypeInfo vtype = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
+            const NScheme::TTypeId vtype = scheme.GetColumnInfo(tableInfo, columnTag)->PType.GetTypeId();
             const char* ptr = static_cast<const char*>(static_cast<const void*>(&columnValue));
             TRawTypeValue rawTypeValue(ptr, sizeof(ui64), vtype);
             NIceDb::TUpdateOp extOp(columnTag, NTable::ECellOp::Set, rawTypeValue);
@@ -102,11 +108,11 @@ void TDataShardUserDb::UpdateRow(
         if (specUpdates.ColIdUpdateNo != Max<ui32>()) {
             addExtendedOp(specUpdates.ColIdUpdateNo, specUpdates.UpdateNo);
         }
-        UpdateRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps);
+        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps);
 
         IncreaseUpdateCounters(key, extendedOps);
     } else {
-        UpdateRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
+        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
 
         IncreaseUpdateCounters(key, ops);
     }
@@ -120,7 +126,7 @@ void TDataShardUserDb::ReplaceRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected ReplaceRow for an unknown table");
 
-    UpdateRowInt(NTable::ERowOp::Reset, tableId, localTableId, key, ops);
+    UpsertRowInt(NTable::ERowOp::Reset, tableId, localTableId, key, ops);
 
     IncreaseUpdateCounters(key, ops);
 }
@@ -133,9 +139,26 @@ void TDataShardUserDb::InsertRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected InsertRow for an unknown table");
 
-    EnsureMissingRow(tableId, key);
+    if (RowExists(tableId, key))
+        throw TUniqueConstrainException();
 
-    UpdateRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
+    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
+
+    IncreaseUpdateCounters(key, ops);
+}
+
+void TDataShardUserDb::UpdateRow(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops)
+{
+    auto localTableId = Self.GetLocalTableId(tableId);
+    Y_ABORT_UNLESS(localTableId != 0, "Unexpected UpdateRow for an unknown table");
+
+    if (!RowExists(tableId, key))
+        return;
+
+    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
 
     IncreaseUpdateCounters(key, ops);
 }
@@ -147,7 +170,7 @@ void TDataShardUserDb::EraseRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
-    UpdateRowInt(NTable::ERowOp::Erase, tableId, localTableId, key, {});
+    UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, key, {});
 
     ui64 keyBytes = CalculateKeyBytes(key);
     
@@ -166,7 +189,7 @@ void TDataShardUserDb::IncreaseUpdateCounters(
     Counters.UpdateRowBytes += keyBytes + valueBytes;
 }
 
-void TDataShardUserDb::UpdateRowInt(
+void TDataShardUserDb::UpsertRowInt(
     NTable::ERowOp rowOp,
     const TTableId& tableId,
     ui64 localTableId,
@@ -210,7 +233,7 @@ void TDataShardUserDb::UpdateRowInt(
     Self.GetKeyAccessSampler()->AddSample(tableId, keyCells);
 }
 
-void TDataShardUserDb::EnsureMissingRow (
+bool TDataShardUserDb::RowExists (
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key) 
 {
@@ -221,12 +244,10 @@ void TDataShardUserDb::EnsureMissingRow (
             throw TNotReadyTabletException();
         }
         case NTable::EReady::Data: {
-            if (rowState == NTable::ERowOp::Upsert)
-                throw TUniqueConstrainException();
-            break;
+            return true;
         }
         case NTable::EReady::Gone: {
-            break;
+            return false;
         }
     }
 }
@@ -300,6 +321,11 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId, const
     Y_VERIFY_S(localTid, "Unexpected failure to find table " << tableId << " in datashard " << Self.TabletID());
 
     if (!Db.HasOpenTx(localTid, lockId)) {
+        if (Db.HasRemovedTx(localTid, lockId)) {
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Committing removed changes lockId# " << lockId << " tid# " << localTid << " shard# " << Self.TabletID());
+            Self.IncCounter(COUNTER_REMOVED_COMMITTED_TXS);
+        }
         return;
     }
 
@@ -308,6 +334,9 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId, const
             auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId);
             if (info && info->State != EVolatileTxState::Aborting) {
                 if (VolatileDependencies.insert(txId).second && !VolatileTxId) {
+                    if (GlobalTxId == 0) {
+                        throw TNeedGlobalTxId();
+                    }
                     SetVolatileTxId(GlobalTxId);
                 }
             }
@@ -538,6 +567,9 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
     } else if (auto* cached = Self.GetConflictsCache().GetTableCache(localTableId).FindUncommittedWrites(keyCells)) {
         for (ui64 txId : *cached) {
             BreakWriteConflict(txId);
+            if (NeedGlobalTxId) {
+                throw TNeedGlobalTxId();
+            }
         }
         return;
     } else {
@@ -555,6 +587,10 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
         nullptr, txObserver
     );
 
+    if (NeedGlobalTxId) {
+        throw TNeedGlobalTxId();
+    }
+
     if (res.Ready == NTable::EReady::Page) {
         if (mustFindConflicts || LockTxId) {
             // We must gather all conflicts
@@ -564,6 +600,9 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
         // Upgrade to volatile ordered commit and ignore the page fault
         if (!VolatileCommitOrdered) {
             if (!VolatileTxId) {
+                if (GlobalTxId == 0) {
+                    throw TNeedGlobalTxId();
+                }
                 SetVolatileTxId(GlobalTxId);
             }
             VolatileCommitOrdered = true;
@@ -608,6 +647,10 @@ void TDataShardUserDb::BreakWriteConflict(ui64 txId) {
                 // it into a real volatile transaction, it works as usual in
                 // every sense, only persistent commit order is affected by
                 // a dependency below.
+                if (GlobalTxId == 0) {
+                    NeedGlobalTxId = true;
+                    return;
+                }
                 SetVolatileTxId(GlobalTxId);
             }
             VolatileDependencies.insert(info->TxId);

@@ -12,16 +12,13 @@ from util.datetime.base cimport TInstant
 from util.system.types cimport ui32
 from util.generic.vector cimport TVector
 
+from libcpp.utility cimport move
 from libcpp.string cimport string
 
 from cython.operator cimport address, dereference as deref
 
 import datetime as dt
 import sys
-
-
-cdef extern from "<utility>" namespace "std" nogil:
-    cdef IHistogramCollectorPtr&& move(IHistogramCollectorPtr t)
 
 
 def get_or_raise(kwargs, key):
@@ -266,6 +263,9 @@ cdef class MetricRegistry:
 
     def reset(self):
         self.__wrapped.Get().Reset()
+
+    def clear(self):
+        self.__wrapped.Get().Clear()
 
     def accept(self, time, Encoder encoder):
         cdef IMetricConsumer* ptr = <IMetricConsumer*>encoder.native()

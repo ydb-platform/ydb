@@ -20,6 +20,7 @@ cdef extern from "library/cpp/monlib/metrics/metric_registry.h" namespace "NMoni
         THistogram* HistogramRate(const TLabels&, IHistogramCollectorPtr collector) except +
 
         void Reset() except +
+        void Clear() except +
 
         void Accept(TInstant time, IMetricConsumer* consumer) except +
         void Append(TInstant time, IMetricConsumer* consumer) except +

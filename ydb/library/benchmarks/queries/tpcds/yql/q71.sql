@@ -11,8 +11,8 @@ select item.i_brand_id brand_id, item.i_brand brand,time_dim.t_hour,time_dim.t_m
                  from {{web_sales}} as web_sales
                  cross join {{date_dim}} as date_dim
                  where d_date_sk = ws_sold_date_sk
-                   and d_moy=12
-                   and d_year=2000
+                   and d_moy=11
+                   and d_year=1999
                  union all
                  select cs_ext_sales_price as ext_price,
                         cs_sold_date_sk as sold_date_sk,
@@ -21,8 +21,8 @@ select item.i_brand_id brand_id, item.i_brand brand,time_dim.t_hour,time_dim.t_m
                  from {{catalog_sales}} as catalog_sales
                  cross join {{date_dim}} as date_dim
                  where d_date_sk = cs_sold_date_sk
-                   and d_moy=12
-                   and d_year=2000
+                   and d_moy=11
+                   and d_year=1999
                  union all
                  select ss_ext_sales_price as ext_price,
                         ss_sold_date_sk as sold_date_sk,
@@ -31,8 +31,8 @@ select item.i_brand_id brand_id, item.i_brand brand,time_dim.t_hour,time_dim.t_m
                  from {{store_sales}} as store_sales
                  cross join {{date_dim}} as date_dim
                  where d_date_sk = ss_sold_date_sk
-                   and d_moy=12
-                   and d_year=2000
+                   and d_moy=11
+                   and d_year=1999
                  ) tmp cross join {{time_dim}} as time_dim
  where
    sold_item_sk = item.i_item_sk

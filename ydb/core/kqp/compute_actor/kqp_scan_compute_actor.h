@@ -2,17 +2,19 @@
 #include "kqp_scan_events.h"
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
-#include <ydb/library/yql/dq/actors/compute/dq_sync_compute_actor_base.h>
+#include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
-class TKqpScanComputeActor: public NYql::NDq::TDqSyncComputeActorBase<TKqpScanComputeActor> {
+class TKqpScanComputeActor: public TSchedulableComputeActorBase<TKqpScanComputeActor> {
 private:
-    using TBase = NYql::NDq::TDqSyncComputeActorBase<TKqpScanComputeActor>;
+    using TBase = TSchedulableComputeActorBase<TKqpScanComputeActor>;
+
     NMiniKQL::TKqpScanComputeContext ComputeCtx;
     NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta Meta;
+
     using TBase::TaskRunner;
     using TBase::MemoryLimits;
     using TBase::GetStatsMode;
@@ -20,20 +22,56 @@ private:
     using TBase::GetTask;
     using TBase::RuntimeSettings;
     using TBase::ContinueExecute;
+
     std::set<NActors::TActorId> Fetchers;
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
+
+    struct TLockHash {
+        size_t operator()(const NKikimrDataEvents::TLock& lock) {
+            return MultiHash(
+                lock.GetLockId(),
+                lock.GetDataShard(),
+                lock.GetSchemeShard(),
+                lock.GetPathId(),
+                lock.GetGeneration(),
+                lock.GetCounter(),
+                lock.GetHasWrites());
+        }
+    };
+
+    struct TLockEqual {
+        bool operator()(const NKikimrDataEvents::TLock& lhs, const NKikimrDataEvents::TLock& rhs) {
+            return lhs.GetLockId() == rhs.GetLockId()
+                && lhs.GetDataShard() == rhs.GetDataShard()
+                && lhs.GetSchemeShard() == rhs.GetSchemeShard()
+                && lhs.GetPathId() == rhs.GetPathId()
+                && lhs.GetGeneration() == rhs.GetGeneration()
+                && lhs.GetCounter() == rhs.GetCounter()
+                && lhs.GetHasWrites() == rhs.GetHasWrites();
+        }
+    };
+
+    using TLocksHashSet = THashSet<NKikimrDataEvents::TLock, TLockHash, TLockEqual>;
+
+    TLocksHashSet Locks;
+    TLocksHashSet BrokenLocks;
+
     ui64 CalcMkqlMemoryLimit() override {
         return TBase::CalcMkqlMemoryLimit() + ComputeCtx.GetTableScans().size() * MemoryLimits.ChannelBufferSize;
     }
+
+    using EBlockTrackingMode = NKikimrConfig::TTableServiceConfig::EBlockTrackingMode;
+    const EBlockTrackingMode BlockTrackingMode;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;
     }
 
-    TKqpScanComputeActor(const TActorId& executerId, ui64 txId,
+    TKqpScanComputeActor(TComputeActorSchedulingOptions, const TActorId& executerId, ui64 txId,
         NYql::NDqProto::TDqTask* task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
-        TIntrusivePtr<NActors::TProtoArenaHolder> arena);
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode);
 
     STFUNC(StateFunc) {
         try {
@@ -46,10 +84,7 @@ public:
                     BaseStateFuncBody(ev);
             }
         } catch (const TMemoryLimitExceededException& e) {
-            const TString sInfo = TStringBuilder() << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
-                << ", host: " << HostName() << ", canAllocateExtraMemory: " << CanAllocateExtraMemory;
-            CA_LOG_E("ERROR:" + sInfo);
-            InternalError(NYql::NDqProto::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, sInfo);
+            TBase::OnMemoryLimitExceptionHandler();
         } catch (const yexception& e) {
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, NYql::TIssuesIds::DEFAULT_ERROR, e.what());
         }
@@ -64,6 +99,8 @@ public:
     void AcquireRateQuota();
 
     void FillExtraStats(NYql::NDqProto::TDqComputeActorStats* dst, bool last);
+
+    TMaybe<google::protobuf::Any> ExtraData() override;
 
     void HandleEvWakeup(EEvWakeupTag tag);
 

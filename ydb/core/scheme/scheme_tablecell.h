@@ -10,29 +10,75 @@
 #include <util/system/unaligned_mem.h>
 #include <util/memory/pool.h>
 
+#include <bit>
+#include <deque>
 #include <type_traits>
 
 namespace NKikimr {
 
-#pragma pack(push,4)
+static_assert(std::endian::native == std::endian::little, "TCell expects little endian architecture for data packing");
+
 // Represents one element in a tuple
 // Doesn't own the memory buffer that stores the actual value
-// Small values (<= 8 bytes) are stored inline
+// Small values (<= 14 bytes) are stored inline
 struct TCell {
     template<typename T>
     using TStdLayout = std::enable_if_t<std::is_standard_layout<T>::value, T>;
 
+public:
+    // 14 bytes ensures parity with TUnboxedValuePod
+    static constexpr size_t MaxInlineSize() { return 14; }
+    static constexpr bool CanInline(size_t size) { return size <= MaxInlineSize(); }
+
 private:
-    ui32 DataSize_ : 30;
-    ui32 IsInline_ : 1;
-    ui32 IsNull_   : 1;
-    union {
-        i64 IntVal;
-        const char* Ptr;
-        double DoubleVal;
-        float FloatVal;
-        char Bytes[8];
+    // NotInline (low bit):
+    //   0: IsInline() returns true
+    //   1: IsInline() returns false
+    // NotRefValue (high bit):
+    //   0: data is TRefValue
+    //   1: data is TInlineValue
+    // Null values are IsInline() with a nullptr data pointer and zero size
+    // TCell filled with zeroes is always a null value
+    // This bit arrangment allows methods to check a single flag
+    enum EKind : ui8 {
+        // Both bits 0: null value
+        KindNull = 0,
+        // Low bit 1: ref value
+        KindRefValue = 1,
+        // High bit 1: inline value
+        KindInlineValue = 2,
     };
+
+    struct TRefValue {
+        const char* Ptr;
+        ui64 Size : 62;
+        ui64 Kind : 2;
+    };
+
+    struct TInlineValue {
+        char Data[15];
+        ui8 Size : 6;
+        ui8 Kind : 2;
+    };
+
+private:
+    union {
+        char Raw[16];
+        TRefValue Ref;
+        TInlineValue Inline;
+    };
+
+    constexpr ui8 GetKind() const noexcept {
+        return ui8(Raw[15]) >> 6;
+    }
+
+    constexpr bool IsRefValue() const noexcept {
+        return (GetKind() & 2) == 0;
+    }
+
+    constexpr bool HasInlineFlag() const noexcept {
+        return (GetKind() & 1) == 0;
+    }
 
 public:
     TCell()
@@ -40,33 +86,42 @@ public:
     {}
 
     TCell(TArrayRef<const char> ref)
-        : TCell(ref.begin(), ui32(ref.size()))
-    {
-        Y_ABORT_UNLESS(ref.size() < Max<ui32>(), " Too large blob size for TCell");
-    }
+        : TCell(ref.data(), ref.size())
+    {}
 
-    TCell(const char* ptr, ui32 size)
-        : DataSize_(size)
-        , IsInline_(0)
-        , IsNull_(ptr == nullptr)
-        , Ptr(ptr)
-    {
-        Y_DEBUG_ABORT_UNLESS(ptr || size == 0);
-
-        if (CanInline(size)) {
-            IsInline_ = 1;
-            IntVal = 0;
-
+    TCell(const char* ptr, size_t size) {
+        if (!ptr) {
+            Y_DEBUG_ABORT_UNLESS(size == 0);
+            // All zeroes represents the null value
+            ::memset(Raw, 0, 16);
+        } else if (CanInline(size)) {
+            // We use switch with constant size memcpy for better codegen
             switch (size) {
-                case 8: memcpy(&IntVal, ptr, 8); break;
-                case 7: memcpy(&IntVal, ptr, 7); break;
-                case 6: memcpy(&IntVal, ptr, 6); break;
-                case 5: memcpy(&IntVal, ptr, 5); break;
-                case 4: memcpy(&IntVal, ptr, 4); break;
-                case 3: memcpy(&IntVal, ptr, 3); break;
-                case 2: memcpy(&IntVal, ptr, 2); break;
-                case 1: memcpy(&IntVal, ptr, 1); break;
+                case 15: ::memcpy(Inline.Data, ptr, 15); break;
+                case 14: ::memcpy(Inline.Data, ptr, 14); break;
+                case 13: ::memcpy(Inline.Data, ptr, 13); break;
+                case 12: ::memcpy(Inline.Data, ptr, 12); break;
+                case 11: ::memcpy(Inline.Data, ptr, 11); break;
+                case 10: ::memcpy(Inline.Data, ptr, 10); break;
+                case 9: ::memcpy(Inline.Data, ptr, 9); break;
+                case 8: ::memcpy(Inline.Data, ptr, 8); break;
+                case 7: ::memcpy(Inline.Data, ptr, 7); break;
+                case 6: ::memcpy(Inline.Data, ptr, 6); break;
+                case 5: ::memcpy(Inline.Data, ptr, 5); break;
+                case 4: ::memcpy(Inline.Data, ptr, 4); break;
+                case 3: ::memcpy(Inline.Data, ptr, 3); break;
+                case 2: ::memcpy(Inline.Data, ptr, 2); break;
+                case 1: ::memcpy(Inline.Data, ptr, 1); break;
+                case 0: break;
+                default: Y_ABORT("unreachable");
             }
+            Inline.Size = size;
+            Inline.Kind = KindInlineValue;
+        } else {
+            Y_DEBUG_ABORT_UNLESS(size <= Max<ui32>());
+            Ref.Ptr = ptr;
+            Ref.Size = size;
+            Ref.Kind = KindRefValue;
         }
     }
 
@@ -74,14 +129,30 @@ public:
         : TCell((const char*)v->Data(), v->Size())
     {}
 
-    explicit operator bool() const
-    {
+    constexpr explicit operator bool() const {
         return !IsNull();
     }
 
-    bool IsInline() const       { return IsInline_; }
-    bool IsNull() const         { return IsNull_; }
-    ui32 Size() const           { return DataSize_; }
+    constexpr bool IsNull() const {
+        return GetKind() == KindNull;
+    }
+
+    constexpr bool IsInline() const {
+        return HasInlineFlag();
+    }
+
+    constexpr const char* InlineData() const {
+        Y_DEBUG_ABORT_UNLESS(IsInline());
+        return Raw;
+    }
+
+    constexpr const char* Data() const {
+        return IsRefValue() ? Ref.Ptr : Inline.Data;
+    }
+
+    constexpr ui32 Size() const {
+        return IsRefValue() ? Ref.Size : Inline.Size;
+    }
 
     TArrayRef<const char> AsRef() const noexcept
     {
@@ -103,7 +174,7 @@ public:
 
     template <typename T, typename = TStdLayout<T>>
     bool ToValue(T& value, TString& err) const noexcept {
-        if (sizeof(T) != Size()) {
+        if (Y_UNLIKELY(sizeof(T) != Size())) {
             err = Sprintf("ToValue<T>() type size %" PRISZT " doesn't match TCell size %" PRIu32, sizeof(T), Size());
             return false;
         }
@@ -126,51 +197,71 @@ public:
     static inline TCell Make(const T& val) noexcept {
         auto *ptr = static_cast<const char*>(static_cast<const void*>(&val));
 
-        return TCell{ ptr, sizeof(val) };
+        return TCell(ptr, sizeof(val));
     }
 
-#if 1
-    // Optimization to store small values (<= 8 bytes) inplace
-    static constexpr bool CanInline(ui32 sz) { return sz <= 8; }
-    static constexpr size_t MaxInlineSize() { return 8; }
-    const char* InlineData() const                  { Y_DEBUG_ABORT_UNLESS(IsInline_); return IsNull_ ? nullptr : (char*)&IntVal; }
-    const char* Data() const                        { return IsNull_ ? nullptr : (IsInline_ ? (char*)&IntVal : Ptr); }
-#else
-    // Non-inlinable version for perf comparisons
-    static bool CanInline(ui32)                     { return false; }
-    const char* InlineData() const                  { Y_DEBUG_ABORT_UNLESS(!IsInline_); return Ptr; }
-    const char* Data() const                        { Y_DEBUG_ABORT_UNLESS(!IsInline_); return Ptr; }
-#endif
-
-    void CopyDataInto(char * dst) const {
-        if (IsInline_) {
-            switch (DataSize_) {
-                case 8: memcpy(dst, &IntVal, 8); break;
-                case 7: memcpy(dst, &IntVal, 7); break;
-                case 6: memcpy(dst, &IntVal, 6); break;
-                case 5: memcpy(dst, &IntVal, 5); break;
-                case 4: memcpy(dst, &IntVal, 4); break;
-                case 3: memcpy(dst, &IntVal, 3); break;
-                case 2: memcpy(dst, &IntVal, 2); break;
-                case 1: memcpy(dst, &IntVal, 1); break;
+    void CopyDataInto(char* dst) const {
+        if (IsRefValue()) {
+            if (Ref.Size > 0) {
+                ::memcpy(dst, Ref.Ptr, Ref.Size);
             }
-            return;
-        }
-
-        if (Ptr) {
-            memcpy(dst, Ptr, DataSize_);
+        } else {
+            // We use switch with constant size memcpy for better codegen
+            switch (Inline.Size) {
+                case 15: ::memcpy(dst, Inline.Data, 15); break;
+                case 14: ::memcpy(dst, Inline.Data, 14); break;
+                case 13: ::memcpy(dst, Inline.Data, 13); break;
+                case 12: ::memcpy(dst, Inline.Data, 12); break;
+                case 11: ::memcpy(dst, Inline.Data, 11); break;
+                case 10: ::memcpy(dst, Inline.Data, 10); break;
+                case 9: ::memcpy(dst, Inline.Data, 9); break;
+                case 8: ::memcpy(dst, Inline.Data, 8); break;
+                case 7: ::memcpy(dst, Inline.Data, 7); break;
+                case 6: ::memcpy(dst, Inline.Data, 6); break;
+                case 5: ::memcpy(dst, Inline.Data, 5); break;
+                case 4: ::memcpy(dst, Inline.Data, 4); break;
+                case 3: ::memcpy(dst, Inline.Data, 3); break;
+                case 2: ::memcpy(dst, Inline.Data, 2); break;
+                case 1: ::memcpy(dst, Inline.Data, 1); break;
+                case 0: break;
+                default: Y_ABORT("unreachable");
+            }
         }
     }
 };
 
-#pragma pack(pop)
-
-static_assert(sizeof(TCell) == 12, "TCell must be 12 bytes");
+static_assert(sizeof(TCell) == 16, "TCell must be 16 bytes");
 using TCellsRef = TConstArrayRef<const TCell>;
 
+inline size_t EstimateSize(TCellsRef cells) {
+    size_t cellsSize = cells.size();
+
+    size_t size = sizeof(TCell) * cellsSize;
+    for (auto& cell : cells) {
+        if (!cell.IsNull() && !cell.IsInline()) {
+            const size_t cellSize = cell.Size();
+            size += AlignUp(cellSize, size_t(4));
+        }
+    }
+
+    return size;
+}
+
+struct TCellVectorsHash {
+    using is_transparent = void;
+
+    size_t operator()(TConstArrayRef<TCell> key) const;
+};
+
+struct TCellVectorsEquals {
+    using is_transparent = void;
+
+    bool operator()(TConstArrayRef<TCell> a, TConstArrayRef<TCell> b) const;
+};
+
 inline int CompareCellsAsByteString(const TCell& a, const TCell& b, bool isDescending) {
-    const char* pa = (const char*)a.Data();
-    const char* pb = (const char*)b.Data();
+    const char* pa = a.Data();
+    const char* pb = b.Data();
     size_t sza = a.Size();
     size_t szb = b.Size();
     int cmp = memcmp(pa, pb, sza < szb ? sza : szb);
@@ -181,7 +272,7 @@ inline int CompareCellsAsByteString(const TCell& a, const TCell& b, bool isDesce
 
 // NULL is considered equal to another NULL and less than non-NULL
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
-inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoOrder type) {
+inline int CompareTypedCells(const TCell& a, const TCell& b, const NScheme::TTypeInfoOrder& type) {
     using TPair = std::pair<ui64, ui64>;
     if (a.IsNull())
         return b.IsNull() ? 0 : -1;
@@ -200,6 +291,14 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
         return va == vb ? 0 : ((va < vb) != type.IsDescending() ? -1 : 1);   \
     }
 
+#define LARGER_TYPE_SWITCH(typeEnum, castType)      \
+    case NKikimr::NScheme::NTypeIds::typeEnum:      \
+    {                                               \
+        castType va = ReadUnaligned<castType>((const castType*)a.Data()); \
+        castType vb = ReadUnaligned<castType>((const castType*)b.Data()); \
+        return va == vb ? 0 : ((va < vb) != type.IsDescending() ? -1 : 1);   \
+    }
+
     SIMPLE_TYPE_SWITCH(Int8,   i8);
     SIMPLE_TYPE_SWITCH(Int16,  i16);
     SIMPLE_TYPE_SWITCH(Uint16, ui16);
@@ -211,7 +310,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
     SIMPLE_TYPE_SWITCH(Bool,   ui8);
     SIMPLE_TYPE_SWITCH(Double, double);
     SIMPLE_TYPE_SWITCH(Float,  float);
-    SIMPLE_TYPE_SWITCH(PairUi64Ui64,  TPair);
+    LARGER_TYPE_SWITCH(PairUi64Ui64, TPair);
     SIMPLE_TYPE_SWITCH(Date,   ui16);
     SIMPLE_TYPE_SWITCH(Datetime,  ui32);
     SIMPLE_TYPE_SWITCH(Timestamp, ui64);
@@ -222,6 +321,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
     SIMPLE_TYPE_SWITCH(Interval64, i64);
 
 #undef SIMPLE_TYPE_SWITCH
+#undef LARGER_TYPE_SWITCH
 
     case NKikimr::NScheme::NTypeIds::String:
     case NKikimr::NScheme::NTypeIds::String4k:
@@ -256,7 +356,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
 
     case NKikimr::NScheme::NTypeIds::Pg:
     {
-        auto typeDesc = type.GetTypeDesc();
+        auto typeDesc = type.GetPgTypeDesc();
         Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
         int result = NPg::PgNativeBinaryCompare(a.Data(), a.Size(), b.Data(), b.Size(), typeDesc);
         return type.IsDescending() ? -result : result;
@@ -357,7 +457,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
     }
 
     if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
-        auto typeDesc = info.GetTypeDesc();
+        auto typeDesc = info.GetPgTypeDesc();
         Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
     }
@@ -393,24 +493,28 @@ private:
 
     class TData : public TAtomicRefCount<TData> {
     public:
-        TData() = default;
+        const size_t DataSize;
 
-        void operator delete(void* mem) noexcept;
+        explicit TData(size_t size)
+            : DataSize(size)
+        {}
+
+        void operator delete(TData* data, std::destroying_delete_t) noexcept;
     };
 
     struct TInit {
         TCellVec Cells;
         TIntrusivePtr<TData> Data;
-        size_t DataSize;
     };
 
     TOwnedCellVec(TInit init) noexcept
         : TCellVec(std::move(init.Cells))
         , Data(std::move(init.Data))
-        , DataSize_(init.DataSize)
     { }
 
     static TInit Allocate(TCellVec cells);
+
+    static TInit AllocateFromSerialized(std::string_view data);
 
     TCellVec& CellVec() {
         return static_cast<TCellVec&>(*this);
@@ -419,7 +523,6 @@ private:
 public:
     TOwnedCellVec() noexcept
         : TCellVec()
-        , DataSize_(0)
     { }
 
     explicit TOwnedCellVec(TCellVec cells)
@@ -430,25 +533,25 @@ public:
         return TOwnedCellVec(Allocate(cells));
     }
 
+    static TOwnedCellVec FromSerialized(std::string_view data) {
+        return TOwnedCellVec(AllocateFromSerialized(data));
+    }
+
     TOwnedCellVec(const TOwnedCellVec& rhs) noexcept
         : TCellVec(rhs)
         , Data(rhs.Data)
-        , DataSize_(rhs.DataSize_)
     { }
 
     TOwnedCellVec(TOwnedCellVec&& rhs) noexcept
         : TCellVec(rhs)
         , Data(std::move(rhs.Data))
-        , DataSize_(rhs.DataSize_)
     {
         rhs.CellVec() = { };
-        rhs.DataSize_ = 0;
     }
 
     TOwnedCellVec& operator=(const TOwnedCellVec& rhs) noexcept {
         if (Y_LIKELY(this != &rhs)) {
             Data = rhs.Data;
-            DataSize_ = rhs.DataSize_;
             CellVec() = rhs;
         }
 
@@ -458,22 +561,19 @@ public:
     TOwnedCellVec& operator=(TOwnedCellVec&& rhs) noexcept {
         if (Y_LIKELY(this != &rhs)) {
             Data = std::move(rhs.Data);
-            DataSize_ = rhs.DataSize_;
             CellVec() = rhs;
             rhs.CellVec() = { };
-            rhs.DataSize_ = 0;
         }
 
         return *this;
     }
 
     size_t DataSize() const {
-        return DataSize_;
+        return Data ? Data->DataSize : 0;
     }
 
 private:
     TIntrusivePtr<TData> Data;
-    size_t DataSize_;
 };
 
 static_assert(std::is_nothrow_destructible_v<TOwnedCellVec>, "Expected TOwnedCellVec to be nothrow destructible");
@@ -485,66 +585,107 @@ static_assert(std::is_nothrow_default_constructible_v<TOwnedCellVec>, "Expected 
 // When loading from a buffer the cells will point to the buffer contents
 class TSerializedCellVec {
 public:
-    explicit TSerializedCellVec(TConstArrayRef<TCell> cells);
-
-    explicit TSerializedCellVec(const TString& buf)
-    {
-        Parse(buf);
-    }
-
     TSerializedCellVec() = default;
 
-    TSerializedCellVec(const TSerializedCellVec &other)
-        : Buf(other.Buf)
-        , Cells(other.Cells)
+    explicit TSerializedCellVec(TConstArrayRef<TCell> cells);
+
+    explicit TSerializedCellVec(TString&& buf)
+        : Buf(std::move(buf))
     {
-        Y_ABORT_UNLESS(Buf.data() == other.Buf.data(), "Buffer must be shared");
+        Y_ABORT_UNLESS(DoTryParse());
     }
 
-    TSerializedCellVec(TSerializedCellVec &&other)
+    explicit TSerializedCellVec(const TString& buf)
+        : Buf(buf)
+    {
+        Y_ABORT_UNLESS(DoTryParse());
+    }
+
+    TSerializedCellVec(TSerializedCellVec&& other)
     {
         *this = std::move(other);
     }
 
-    TSerializedCellVec &operator=(const TSerializedCellVec &other)
+    TSerializedCellVec(const TSerializedCellVec& other)
+    {
+        *this = other;
+    }
+
+    TSerializedCellVec& operator=(TSerializedCellVec&& other)
     {
         if (this == &other)
             return *this;
 
-        TSerializedCellVec tmp(other);
-        *this = std::move(tmp);
+        const char* prevPtr = other.Buf.data();
+        Buf = std::move(other.Buf);
+        if (Buf.data() != prevPtr) {
+            // Data address changed, e.g. when TString is a small std::string
+            Y_ABORT_UNLESS(DoTryParse(), "Failed to re-parse TSerializedCellVec");
+            other.Cells.clear();
+        } else {
+            // Data address unchanged, reuse parsed Cells
+            Cells = std::move(other.Cells);
+        }
         return *this;
     }
 
-    TSerializedCellVec &operator=(TSerializedCellVec &&other)
+    TSerializedCellVec& operator=(const TSerializedCellVec& other)
     {
         if (this == &other)
             return *this;
 
-        const char* otherPtr = other.Buf.data();
-        Buf = std::move(other.Buf);
-        Y_ABORT_UNLESS(Buf.data() == otherPtr, "Buffer address must not change");
-        Cells = std::move(other.Cells);
+        Buf = other.Buf;
+        if (Buf.data() != other.Buf.data()) {
+            // Data address changed, e.g. when TString is std::string
+            Y_ABORT_UNLESS(DoTryParse(), "Failed to re-parse TSerializedCellVec");
+        } else {
+            // Data address unchanged, reuse parsed Cells
+            Cells = other.Cells;
+        }
         return *this;
+    }
+
+    static bool TryParse(TString&& data, TSerializedCellVec& vec) {
+        vec.Buf = std::move(data);
+        return vec.DoTryParse();
     }
 
     static bool TryParse(const TString& data, TSerializedCellVec& vec) {
-        return vec.DoTryParse(data);
+        vec.Buf = data;
+        return vec.DoTryParse();
     }
 
-    void Parse(const TString &buf) {
-        Y_ABORT_UNLESS(DoTryParse(buf));
+    void Parse(TString&& buf) {
+        Buf = std::move(buf);
+        Y_ABORT_UNLESS(DoTryParse());
+    }
+
+    void Parse(const TString& buf) {
+        Buf = buf;
+        Y_ABORT_UNLESS(DoTryParse());
     }
 
     TConstArrayRef<TCell> GetCells() const {
         return Cells;
     }
 
+    explicit operator bool() const
+    {
+        return !Cells.empty();
+    }
+
+    // read headers, assuming the buf is correct and append additional cells at the end
+    static bool UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec);
+
     static void Serialize(TString& res, TConstArrayRef<TCell> cells);
 
     static TString Serialize(TConstArrayRef<TCell> cells);
 
-    const TString &GetBuffer() const { return Buf; }
+    static size_t SerializedSize(TConstArrayRef<TCell> cells);
+
+    static TCell ExtractCell(std::string_view data, size_t pos);
+
+    const TString& GetBuffer() const { return Buf; }
 
     TString ReleaseBuffer() {
         Cells.clear();
@@ -552,7 +693,7 @@ public:
     }
 
 private:
-    bool DoTryParse(const TString& data);
+    bool DoTryParse();
 
 private:
     TString Buf;
@@ -563,14 +704,21 @@ private:
 // When loading from a buffer the cells will point to the buffer contents
 class TSerializedCellMatrix {
 public:
+    TSerializedCellMatrix() = default;
+
     explicit TSerializedCellMatrix(TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount);
 
-    explicit TSerializedCellMatrix(const TString& buf)
+    explicit TSerializedCellMatrix(TString&& buf)
+        : Buf(std::move(buf))
     {
-        Parse(buf);
+        Y_ABORT_UNLESS(DoTryParse());
     }
 
-    TSerializedCellMatrix() = default;
+    explicit TSerializedCellMatrix(const TString& buf)
+        : Buf(buf)
+    {
+        Y_ABORT_UNLESS(DoTryParse());
+    }
 
     TSerializedCellMatrix(const TSerializedCellMatrix& other)
         : Buf(other.Buf)
@@ -586,36 +734,64 @@ public:
         *this = std::move(other);
     }
 
-    TSerializedCellMatrix& operator=(const TSerializedCellMatrix& other)
-    {
-        if (this == &other)
-            return *this;
-
-        TSerializedCellMatrix tmp(other);
-        *this = std::move(tmp);
-        return *this;
-    }
-
     TSerializedCellMatrix& operator=(TSerializedCellMatrix&& other)
     {
         if (this == &other)
             return *this;
 
-        const char* otherPtr = other.Buf.data();
+        const char* prevPtr = other.Buf.data();
         Buf = std::move(other.Buf);
-        Y_ABORT_UNLESS(Buf.data() == otherPtr, "Buffer address must not change");
-        Cells = std::move(other.Cells);
-        RowCount = std::move(other.RowCount);
-        ColCount = std::move(other.ColCount);
+        if (Buf.data() != prevPtr) {
+            // Data address changed, e.g. when TString is a small std::string
+            Y_ABORT_UNLESS(DoTryParse(), "Failed to re-parse TSerializedCellMatrix");
+            other.Cells.clear();
+        } else {
+            // Data address unchanged, reuse parsed cells
+            Cells = std::move(other.Cells);
+            RowCount = other.RowCount;
+            ColCount = other.ColCount;
+        }
+        other.RowCount = 0;
+        other.ColCount = 0;
         return *this;
     }
 
+    TSerializedCellMatrix& operator=(const TSerializedCellMatrix& other)
+    {
+        if (this == &other)
+            return *this;
+
+        Buf = other.Buf;
+        if (Buf.data() != other.Buf.data()) {
+            // Data address changed, e.g. when TString is std::string
+            Y_ABORT_UNLESS(DoTryParse(), "Failed to re-parse TSerializedCellMatrix");
+        } else {
+            // Data address unchanged, reuse parsed cells
+            Cells = other.Cells;
+            RowCount = other.RowCount;
+            ColCount = other.ColCount;
+        }
+        return *this;
+    }
+
+    static bool TryParse(TString&& data, TSerializedCellMatrix& vec) {
+        vec.Buf = std::move(data);
+        return vec.DoTryParse();
+    }
+
     static bool TryParse(const TString& data, TSerializedCellMatrix& vec) {
-        return vec.DoTryParse(data);
+        vec.Buf = data;
+        return vec.DoTryParse();
+    }
+
+    void Parse(TString&& buf) {
+        Buf = std::move(buf);
+        Y_ABORT_UNLESS(DoTryParse());
     }
 
     void Parse(const TString& buf) {
-        Y_ABORT_UNLESS(DoTryParse(buf));
+        Buf = buf;
+        Y_ABORT_UNLESS(DoTryParse());
     }
 
     TConstArrayRef<TCell> GetCells() const { return Cells; }
@@ -643,7 +819,7 @@ public:
     }
 
 private:
-    bool DoTryParse(const TString& data);
+    bool DoTryParse();
 
 private:
     TString Buf;
@@ -735,5 +911,8 @@ private:
 void DbgPrintValue(TString&, const TCell&, NScheme::TTypeInfo typeInfo);
 TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry& typeRegistry);
 TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry);
+
+size_t GetCellMatrixHeaderSize();
+size_t GetCellHeaderSize();
 
 }

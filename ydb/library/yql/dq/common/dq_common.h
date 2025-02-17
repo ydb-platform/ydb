@@ -11,6 +11,9 @@ using TTxId = std::variant<ui64, TString>;
 
 using TLogFunc = std::function<void(const TString& message)>;
 
+using TWakeUpCallback = std::function<void()>;
+using TErrorCallback = std::function<void(const TString& error)>;
+
 template <ui32 TEventSpaceBegin, ui32 TEventSpaceDiff = 0>
 struct TBaseDqResManEvents {
     enum {
@@ -87,6 +90,34 @@ enum class EHashJoinMode {
     Dict        /* "dict" */,
     Grace       /* "grace" */,
     GraceAndSelf /* "graceandself" */,
+};
+
+enum class EEnabledSpillingNodes : ui64 {
+    None        = 0ULL      /* "None" */,
+    GraceJoin   = 1ULL      /* "GraceJoin" */,
+    Aggregation = 2ULL      /* "Aggregation" */,
+    All         = ~0ULL     /* "All" */,
+};
+
+class TSpillingSettings {
+public:
+    TSpillingSettings() = default;
+    explicit TSpillingSettings(ui64 mask) : Mask(mask) {};
+
+    operator bool() const {
+        return Mask;
+    }
+
+    bool IsGraceJoinSpillingEnabled() const {
+        return Mask & ui64(EEnabledSpillingNodes::GraceJoin);
+    }
+
+    bool IsAggregationSpillingEnabled() const {
+        return Mask & ui64(EEnabledSpillingNodes::Aggregation);
+    }
+
+private:
+    const ui64 Mask = 0;
 };
 
 } // namespace NYql::NDq

@@ -41,14 +41,14 @@ Y_UNIT_TEST_SUITE(TComputeActorAsyncInputHelperTest) {
             }
 
             // Checkpointing.
-            void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TSourceState& state) override {
+            void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override {
                 Y_UNUSED(checkpoint);
                 Y_UNUSED(state);
             }
             void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
                 Y_UNUSED(checkpoint);
             }
-            void LoadState(const NDqProto::TSourceState& state) override {
+            void LoadState(const TSourceState& state) override {
                 Y_UNUSED(state);
             }
 
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TComputeActorAsyncInputHelperTest) {
         TDummyAsyncInputHelper helper("MyPrefix", 13, NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED);
         helper.AsyncInput = &input;
         TDqComputeActorMetrics metrics{NMonitoring::TDynamicCounterPtr{}};
-        TDqComputeActorWatermarks watermarks(NActors::TActorIdentity{NActors::TActorId{}}, TTxId{}, 7);
+        TDqComputeActorWatermarks watermarks("");
         auto result = helper.PollAsyncInput(metrics, watermarks, 20);
         UNIT_ASSERT(result && EResumeSource::CAPollAsync == *result);
     }

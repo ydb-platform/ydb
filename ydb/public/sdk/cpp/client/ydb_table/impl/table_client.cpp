@@ -1,6 +1,6 @@
 #include "table_client.h"
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 namespace NTable {
 
@@ -525,6 +525,14 @@ TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const TString& sess
         request.set_include_partition_stats(true);
     }
 
+    if (settings.WithSetVal_) {
+        request.set_include_set_val(true);
+    }
+
+    if (settings.WithShardNodesInfo_) {
+        request.set_include_shard_nodes_info(true);
+    }
+
     auto promise = NewPromise<TDescribeTableResult>();
 
     auto extractor = [promise, settings]
@@ -642,12 +650,12 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
     return promise.GetFuture();
 }
 
-TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSession& session, const TTransaction& tx,
+TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSession& session, const TString& txId,
     const TCommitTxSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::CommitTransactionRequest>(settings);
     request.set_session_id(session.GetId());
-    request.set_tx_id(tx.GetId());
+    request.set_tx_id(txId);
     request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
 
     auto promise = NewPromise<TCommitTransactionResult>();
@@ -680,12 +688,12 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
     return promise.GetFuture();
 }
 
-TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, const TTransaction& tx,
+TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, const TString& txId,
     const TRollbackTxSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::RollbackTransactionRequest>(settings);
     request.set_session_id(session.GetId());
-    request.set_tx_id(tx.GetId());
+    request.set_tx_id(txId);
 
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RollbackTransactionRequest, Ydb::Table::RollbackTransactionResponse>(
         std::move(request),
@@ -784,6 +792,13 @@ NThreading::TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TReadTableStrea
 
     if (settings.BatchLimitRows_) {
         request.set_batch_limit_rows(*settings.BatchLimitRows_);
+    }
+
+    if (settings.ReturnNotNullAsOptional_) {
+        request.set_return_not_null_data_as_optional(
+            settings.ReturnNotNullAsOptional_.GetRef()
+            ? Ydb::FeatureFlag::ENABLED
+            : Ydb::FeatureFlag::DISABLED);
     }
 
     auto promise = NewPromise<std::pair<TPlainStatus, TReadTableStreamProcessorPtr>>();
@@ -1118,6 +1133,9 @@ void TTableClient::TImpl::SetTxSettings(const TTxSettings& txSettings, Ydb::Tabl
             break;
         case TTxSettings::TS_SNAPSHOT_RO:
             proto->mutable_snapshot_read_only();
+            break;
+        case TTxSettings::TS_SNAPSHOT_RW:
+            proto->mutable_snapshot_read_write();
             break;
         default:
             throw TContractViolation("Unexpected transaction mode.");

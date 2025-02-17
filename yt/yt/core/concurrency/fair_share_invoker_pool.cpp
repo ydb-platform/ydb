@@ -14,6 +14,8 @@
 
 #include <yt/yt/library/ytprof/api/api.h>
 
+#include <library/cpp/yt/misc/port.h>
+
 #include <library/cpp/yt/memory/weak_ptr.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
@@ -29,15 +31,7 @@ using namespace NYTProf;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit YT_THREAD_LOCAL(TCpuProfilerTagGuard) FairShareInvokerPoolProfilerTagGuard;
-
-////////////////////////////////////////////////////////////////////////////////
-
-#if defined(_unix_)
-    #define NO_UNIQUE_ADDRESS [[no_unique_address]]
-#else
-    #define NO_UNIQUE_ADDRESS
-#endif
+YT_DEFINE_THREAD_LOCAL(TCpuProfilerTagGuard, FairShareInvokerPoolProfilerTagGuard);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -161,7 +155,7 @@ public:
     static TObject Create(
         const TString& /*poolName*/,
         std::vector<TString> /*bucketNames*/,
-        IRegistryImplPtr /*registry*/)
+        IRegistryPtr /*registry*/)
     {
         return {};
     }
@@ -212,7 +206,7 @@ public:
     static TObject Create(
         const TString& poolName,
         std::vector<TString> bucketNames,
-        IRegistryImplPtr registry)
+        IRegistryPtr registry)
     {
         return New<TFairShareInvokerPoolProfiler>(poolName, std::move(bucketNames), std::move(registry));
     }
@@ -247,7 +241,7 @@ private:
     TFairShareInvokerPoolProfiler(
         const TString& poolName,
         std::vector<TString> bucketNames,
-        IRegistryImplPtr registry)
+        IRegistryPtr registry)
     {
         Counters_.reserve(std::ssize(bucketNames));
         BucketProfilerTags_.reserve(std::ssize(bucketNames));
@@ -258,7 +252,7 @@ private:
         }
     }
 
-    TCountersPtr CreateCounters(const TTagSet& tagSet, const IRegistryImplPtr& registry) {
+    TCountersPtr CreateCounters(const TTagSet& tagSet, const IRegistryPtr& registry) {
         auto profiler = TProfiler(registry, "/fair_share_invoker_pool").WithTags(tagSet).WithHot();
 
         auto counters = std::make_unique<TCounters>();
@@ -296,12 +290,12 @@ private:
             counters->WaitTimer.Record(waitTime);
         }
 
-        GetTlsRef(FairShareInvokerPoolProfilerTagGuard) = TCpuProfilerTagGuard(BucketProfilerTags_[index]);
+        FairShareInvokerPoolProfilerTagGuard() = TCpuProfilerTagGuard(BucketProfilerTags_[index]);
     }
 
     void ProfileExecutionFinish(int index, TDuration execTime, TDuration totalTime)
     {
-        GetTlsRef(FairShareInvokerPoolProfilerTagGuard) = TCpuProfilerTagGuard{};
+        FairShareInvokerPoolProfilerTagGuard() = TCpuProfilerTagGuard{};
 
         auto& counters = Counters_[index];
         if (counters) {
@@ -330,7 +324,7 @@ public:
         TDuration actionTimeRelevancyHalflife,
         const TString& poolName = "",
         std::vector<TString> bucketNames = {},
-        IRegistryImplPtr registry = nullptr)
+        IRegistryPtr registry = nullptr)
         : UnderlyingInvoker_(std::move(underlyingInvoker))
         , Queue_(callbackQueueFactory(invokerCount))
         , Profiler_(TPoolProfiler::Create(poolName, std::move(bucketNames), std::move(registry)))
@@ -475,7 +469,7 @@ private:
         i64 DequeuedActionCount_ = 0;
         i64 ExecutedActionCount_ = 0;
 
-        NO_UNIQUE_ADDRESS THandle ProfilerHandle_;
+        YT_ATTRIBUTE_NO_UNIQUE_ADDRESS THandle ProfilerHandle_;
 
         TDuration GetTotalTimeEstimate(TInstant now) const
         {
@@ -502,7 +496,7 @@ private:
 
     IFairShareCallbackQueuePtr Queue_;
 
-    NO_UNIQUE_ADDRESS TPoolProfilerObject Profiler_;
+    YT_ATTRIBUTE_NO_UNIQUE_ADDRESS TPoolProfilerObject Profiler_;
 
     class TCpuTimeAccounter
     {
@@ -539,7 +533,7 @@ private:
     };
 
     class TInvoker
-        : public TInvokerWrapper
+        : public TInvokerWrapper<false>
     {
     public:
         TInvoker(IInvokerPtr underlyingInvoker_, int index, TWeakPtr<TFairShareInvokerPool> parent)
@@ -552,6 +546,15 @@ private:
         {
             if (auto strongParent = Parent_.Lock()) {
                 strongParent->Enqueue(std::move(callback), Index_);
+            }
+        }
+
+        void Invoke(TMutableRange<TClosure> callbacks) override
+        {
+            if (auto strongParent = Parent_.Lock()) {
+                for (auto& callback : callbacks) {
+                    strongParent->Enqueue(std::move(callback), Index_);
+                }
             }
         }
 
@@ -636,7 +639,7 @@ TDiagnosableInvokerPoolPtr CreateProfiledFairShareInvokerPool(
     TDuration actionTimeRelevancyHalflife,
     const TString& poolName,
     std::vector<TString> bucketNames,
-    IRegistryImplPtr registry)
+    IRegistryPtr registry)
 {
     YT_VERIFY(0 < std::ssize(bucketNames) && std::ssize(bucketNames) < 100);
 

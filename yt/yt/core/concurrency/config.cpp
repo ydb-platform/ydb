@@ -2,6 +2,8 @@
 
 namespace NYT::NConcurrency {
 
+using namespace NYTree;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TPeriodicExecutorOptions TPeriodicExecutorOptions::WithJitter(TDuration period)
@@ -112,6 +114,59 @@ void TPrefetchingThrottlerConfig::Register(TRegistrar registrar)
                 << TErrorAttribute("min_prefetch_amount", config->MinPrefetchAmount)
                 << TErrorAttribute("max_prefetch_amount", config->MaxPrefetchAmount);
         }
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+void ValidateFiberStackPoolSizes(const THashMap<EExecutionStackKind, int>& poolSizes)
+{
+    for (auto [stackKind, poolSize] : poolSizes) {
+        if (poolSize < 0) {
+            THROW_ERROR_EXCEPTION("Pool size of %Qlv stack it not positive",
+                stackKind);
+        }
+    }
+}
+
+} // namespace
+
+TFiberManagerConfigPtr TFiberManagerConfig::ApplyDynamic(const TFiberManagerDynamicConfigPtr& dynamicConfig) const
+{
+    auto result = New<TFiberManagerConfig>();
+    for (auto [key, value] : dynamicConfig->FiberStackPoolSizes) {
+        result->FiberStackPoolSizes[key] = value;
+    }
+    UpdateYsonStructField(result->MaxIdleFibers, dynamicConfig->MaxIdleFibers);
+    result->Postprocess();
+    return result;
+}
+
+void TFiberManagerConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("fiber_stack_pool_sizes", &TThis::FiberStackPoolSizes)
+        .Default();
+    registrar.Parameter("max_idle_fibers", &TThis::MaxIdleFibers)
+        .Default(NConcurrency::DefaultMaxIdleFibers);
+
+    registrar.Postprocessor([] (TThis* config) {
+        ValidateFiberStackPoolSizes(config->FiberStackPoolSizes);
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TFiberManagerDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("fiber_stack_pool_sizes", &TThis::FiberStackPoolSizes)
+        .Default();
+    registrar.Parameter("max_idle_fibers", &TThis::MaxIdleFibers)
+        .Default();
+
+    registrar.Postprocessor([] (TThis* config) {
+        ValidateFiberStackPoolSizes(config->FiberStackPoolSizes);
     });
 }
 

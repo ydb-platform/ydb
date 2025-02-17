@@ -16,6 +16,11 @@ TKeyBound TTabletInfo::GetLowerKeyBound() const
     return TKeyBound::FromRow() >= PivotKey;
 }
 
+TTabletInfoPtr TTabletInfo::Clone() const
+{
+    return New<TTabletInfo>(*this);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 bool TTableMountInfo::IsSorted() const
@@ -61,7 +66,14 @@ bool TTableMountInfo::IsChaosReplica() const
 TTabletInfoPtr TTableMountInfo::GetTabletByIndexOrThrow(int tabletIndex) const
 {
     if (tabletIndex < 0 || tabletIndex >= std::ssize(Tablets)) {
-        THROW_ERROR_EXCEPTION(EErrorCode::NoSuchTablet,
+        if (Tablets.empty()) {
+            THROW_ERROR_EXCEPTION(NTabletClient::EErrorCode::NoSuchTablet,
+                "Invalid tablet index for table %v: tablets list is empty, got %v",
+                Path,
+                tabletIndex);
+        }
+
+        THROW_ERROR_EXCEPTION(NTabletClient::EErrorCode::NoSuchTablet,
             "Invalid tablet index for table %v: expected in range [0,%v], got %v",
             Path,
             Tablets.size() - 1,
@@ -114,7 +126,7 @@ int TTableMountInfo::GetRandomMountedTabletIndex() const
     ValidateTabletOwner();
 
     if (MountedTablets.empty()) {
-        THROW_ERROR_EXCEPTION(EErrorCode::TabletNotMounted,
+        THROW_ERROR_EXCEPTION(NTabletClient::EErrorCode::TabletNotMounted,
             "Table %v has no mounted tablets",
             Path);
     }
@@ -174,6 +186,11 @@ void TTableMountInfo::ValidateReplicationLog() const
     if (!IsReplicationLog()) {
         THROW_ERROR_EXCEPTION("Table %v is not replication log", Path);
     }
+}
+
+TTableMountInfoPtr TTableMountInfo::Clone() const
+{
+    return New<TTableMountInfo>(*this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

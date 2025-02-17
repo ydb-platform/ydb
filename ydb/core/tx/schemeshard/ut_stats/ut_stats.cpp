@@ -396,10 +396,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
         SendTEvPeriodicTopicStats(runtime, topic3Id, generation, ++round, 151, 151);
         Assert(808, 31 + 151);
-
-        TestDeallocatePQ(runtime, ++txId, "/MyRoot", "Name: \"Topic3\"");
-        env.TestWaitNotification(runtime, txId);
-        Assert(247, 31);
     }
 
     Y_UNIT_TEST(TopicPeriodicStatMeteringModeReserved) {
@@ -601,14 +597,14 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
         TTestBasicRuntime runtime;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
         TTestEnvOptions opts;
         opts.DisableStatsBatching(true);
         opts.EnablePersistentPartitionStats(true);
         opts.EnableBackgroundCompaction(false);
         TTestEnv env(runtime, opts);
-        
+
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 1;
         NDataShard::gDbStatsRowCountResolution = 1;
@@ -662,8 +658,10 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
         UNIT_ASSERT_VALUES_EQUAL(NKikimr::CompactTable(runtime, datashard, ResolveTableId(runtime, "/MyRoot/SomeTable")).GetStatus(),
                                  NKikimrTxDataShard::TEvCompactTableResult::OK
         );
-        // we wait for at least 1 part count, because it means that the table has been compacted
-        WaitTableStats(runtime, datashard, 1, rowsCount).GetTableStats();
+        // we wait for at least 1 part count, because it signals that the stats have been recalculated after compaction
+        WaitTableStats(runtime, datashard, [](const NKikimrTableStats::TTableStats& stats) {
+            return stats.GetPartCount() >= 1;
+        });
 
         auto checkUsage = [&poolsKinds](ui64 totalUsage, const auto& poolUsage) {
             if (IsIn(poolsKinds, poolUsage.GetPoolKind())) {

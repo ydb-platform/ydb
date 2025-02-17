@@ -10,8 +10,12 @@
                             [
                                 "column0";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "FloatVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -38,13 +42,10 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
+                                    "ListType";
                                     [
-                                        "ListType";
-                                        [
-                                            "DataType";
-                                            "Float"
-                                        ]
+                                        "DataType";
+                                        "Float"
                                     ]
                                 ]
                             ]
@@ -54,13 +55,11 @@
                 "Data" = [
                     [
                         [
-                            [
-                                "1.2";
-                                "2.3";
-                                "3.4";
-                                "4.5";
-                                "5.6"
-                            ]
+                            "1.2";
+                            "2.3";
+                            "3.4";
+                            "4.5";
+                            "5.6"
                         ]
                     ]
                 ]
@@ -78,10 +77,37 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "TaggedType";
+                                    "BitVector";
                                     [
                                         "DataType";
-                                        "Bool"
+                                        "String"
                                     ]
                                 ]
                             ]
@@ -90,9 +116,97 @@
                 ];
                 "Data" = [
                     [
+                        "@\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
                         [
-                            %true
+                            [
+                                "column0";
+                                [
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
                         ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "@\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "@\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "@\0\n"
                     ]
                 ]
             }

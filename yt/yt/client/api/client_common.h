@@ -2,15 +2,17 @@
 
 #include "public.h"
 
+#include <yt/yt/library/codegen_api/execution_backend.h>
+
 #include <yt/yt/client/hydra/public.h>
 
 #include <yt/yt/client/misc/workload.h>
 
+#include <yt/yt/client/table_client/versioned_io_options.h>
+
 #include <yt/yt/client/tablet_client/public.h>
 
 #include <yt/yt/core/rpc/public.h>
-
-#include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NApi {
 
@@ -22,11 +24,6 @@ struct TMutatingOptions
     bool Retry = false;
 
     NRpc::TMutationId GetOrGenerateMutationId() const;
-};
-
-struct TTimeoutOptions
-{
-    std::optional<TDuration> Timeout;
 };
 
 struct TMultiplexingBandOptions
@@ -140,25 +137,27 @@ struct TSelectRowsOptionsBase
     : public TTabletReadOptions
     , public TSuppressableAccessTrackingOptions
 {
+    //! Expected schemas for tables in a query (used for replica fallback in replicated tables).
+    using TExpectedTableSchemas = THashMap<NYPath::TYPath, NTableClient::TTableSchemaPtr>;
+    TExpectedTableSchemas ExpectedTableSchemas;
+    //! Add |$timestamp:columnName| to result if ReadMode is latest_timestamp.
+    NTableClient::TVersionedReadOptions VersionedReadOptions;
     //! Limits range expanding.
-    ui64 RangeExpansionLimit = 200000;
+    ui64 RangeExpansionLimit = 200'000;
+    //! Limits parallel subqueries by row count.
+    i64 MinRowCountPerSubquery = 100'000;
+    //! Path in Cypress with UDFs.
+    std::optional<NYPath::TYPath> UdfRegistryPath;
     //! Limits maximum parallel subqueries.
     int MaxSubqueries = std::numeric_limits<int>::max();
-    //! Path in Cypress with UDFs.
-    std::optional<TString> UdfRegistryPath;
+    //! Query language syntax version.
+    int SyntaxVersion = 1;
     //! If |true| then logging is more verbose.
     bool VerboseLogging = false;
     // COMPAT(lukyan)
     //! Use fixed and rewritten range inference.
     bool NewRangeInference = true;
-    //! Query language syntax version.
-    int SyntaxVersion = 1;
 };
-
-DEFINE_ENUM(EExecutionBackend,
-    (Native)
-    (WebAssembly)
-);
 
 struct TSelectRowsOptions
     : public TSelectRowsOptionsBase
@@ -167,16 +166,8 @@ struct TSelectRowsOptions
     std::optional<i64> InputRowLimit;
     //! If null then connection defaults are used.
     std::optional<i64> OutputRowLimit;
-    //! Allow queries without any condition on key columns.
-    bool AllowFullScan = true;
-    //! Allow queries with join condition which implies foreign query with IN operator.
-    bool AllowJoinWithoutIndex = false;
     //! Execution pool.
     std::optional<TString> ExecutionPool;
-    //! If |true| then incomplete result would lead to a failure.
-    bool FailOnIncompleteResult = true;
-    //! Enables generated code caching.
-    bool EnableCodeCache = true;
     //! Used to prioritize requests.
     TUserWorkloadDescriptor WorkloadDescriptor;
     //! Memory limit per execution node.
@@ -186,14 +177,24 @@ struct TSelectRowsOptions
     //! YSON map with placeholder values for parameterized queries.
     NYson::TYsonString PlaceholderValues;
     //! Native or WebAssembly execution backend.
-    std::optional<EExecutionBackend> ExecutionBackend;
+    std::optional<NCodegen::EExecutionBackend> ExecutionBackend;
+    //! Explicitly allow or forbid the usage of row cache.
+    std::optional<bool> UseLookupCache;
+    //! Allow queries without any condition on key columns.
+    bool AllowFullScan = true;
+    //! Allow queries with join condition which implies foreign query with IN operator.
+    bool AllowJoinWithoutIndex = false;
+    //! If |true| then incomplete result would lead to a failure.
+    bool FailOnIncompleteResult = true;
+    //! Enables generated code caching.
+    bool EnableCodeCache = true;
     //! Enables canonical SQL behaviour for relational operators, i.e. null </=/> value -> null.
     bool UseCanonicalNullRelations = false;
     //! Merge versioned rows from different stores when reading.
     bool MergeVersionedRows = true;
-    //! Expected schemas for tables in a query (used for replica fallback in replicated tables).
-    using TExpectedTableSchemas = THashMap<NYPath::TYPath, NTableClient::TTableSchemaPtr>;
-    TExpectedTableSchemas ExpectedTableSchemas;
+    //! For internal use only.
+    //! Use original table schema in result rowset.
+    bool UseOriginalTableSchema = false;
 };
 
 struct TFallbackReplicaOptions

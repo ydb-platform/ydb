@@ -38,22 +38,21 @@ namespace NKikimr {
         };
 
         // All slot types
-        using TAllSlotsInfo = TVector<TSlotInfo>;
+        using TAllSlotsInfo = std::vector<TSlotInfo>;
         // Type to address TAllSlotsInfo
         using TIndex = ui16;
         // Size in AppendBlockSize -> index in TAllSlotsInfo
-        using TSearchTable = TVector<TIndex>;
-        // Idx that indicates there is no record for it in TAllSlotsInfo
-        static constexpr TIndex NoOpIdx = Max<TIndex>();
+        using TSearchTable = std::vector<TIndex>;
 
-
-        THugeSlotsMap(ui32 appendBlockSize, TAllSlotsInfo &&slotsInfo, TSearchTable &&searchTable);
+        THugeSlotsMap(ui32 appendBlockSize, ui32 minHugeBlobInBlocks, TAllSlotsInfo &&slotsInfo, TSearchTable &&searchTable);
         const TSlotInfo *GetSlotInfo(ui32 size) const;
+        ui32 AlignByBlockSize(ui32 size) const;
         void Output(IOutputStream &str) const;
         TString ToString() const;
 
     private:
         const ui32 AppendBlockSize;
+        const ui32 MinHugeBlobInBlocks;
         TAllSlotsInfo AllSlotsInfo;
         TSearchTable SearchTable;
     };
@@ -63,20 +62,16 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class THugeBlobCtx {
     public:
-        // this value is multiply of AppendBlockSize and is calculated from Config->MinHugeBlobSize
-        const ui32 MinREALHugeBlobInBytes;
         const std::shared_ptr<const THugeSlotsMap> HugeSlotsMap;
         const bool AddHeader;
 
         // check whether this NEW blob is huge one; userPartSize doesn't include any metadata stored along with blob
-        bool IsHugeBlob(TBlobStorageGroupType gtype, const TLogoBlobID& fullId) const;
+        bool IsHugeBlob(TBlobStorageGroupType gtype, const TLogoBlobID& fullId, ui32 minHugeBlobInBytes) const;
 
-        THugeBlobCtx(ui32 minHugeBlobInBytes, ui32 appendBlockSize, const std::shared_ptr<const THugeSlotsMap> &hugeSlotsMap, bool addHeader)
-            : MinREALHugeBlobInBytes(minHugeBlobInBytes / appendBlockSize * appendBlockSize + 1)
-            , HugeSlotsMap(hugeSlotsMap)
+        THugeBlobCtx(const std::shared_ptr<const THugeSlotsMap> &hugeSlotsMap, bool addHeader)
+            : HugeSlotsMap(hugeSlotsMap)
             , AddHeader(addHeader)
         {
-            Y_ABORT_UNLESS(MinREALHugeBlobInBytes >= appendBlockSize);
         }
     };
 

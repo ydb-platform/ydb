@@ -9,7 +9,10 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TString& userSID)
+//NOTE: EmptyValue couldn't be an empty string as AUDIT_PART() skips parts with an empty values
+static const TString EmptyValue = "{none}";
+
+void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TString& userSID, const TString& sanitizedToken)
 {
     static const TString GrpcConnComponentName = "grpc-conn";
 
@@ -18,6 +21,7 @@ void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TS
 
         AUDIT_PART("remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName()))
         AUDIT_PART("subject", userSID)
+        AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
         AUDIT_PART("database", database)
         AUDIT_PART("operation", ctx->GetRequestName())
     );
@@ -35,9 +39,6 @@ void AuditLog(ui32 status, const TAuditLogParts& parts)
 {
     static const TString GrpcProxyComponentName = "grpc-proxy";
 
-    //NOTE: EmptyValue couldn't be an empty string as AUDIT_PART() skips parts with an empty values
-    static const TString EmptyValue = "{none}";
-
     AUDIT_LOG(
         AUDIT_PART("component", GrpcProxyComponentName)
 
@@ -54,6 +55,19 @@ void AuditLog(ui32 status, const TAuditLogParts& parts)
     );
 }
 
-}
+void AuditLogConnectDbAccessDenied(const IRequestProxyCtx* ctx, const TString& database, const TString& userSID, const TString& sanitizedToken)
+{
+    if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {
+        AuditLog(Ydb::StatusIds::UNAUTHORIZED, {
+            {"remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName())},
+            {"subject", userSID},
+            {"sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue)},
+            {"database", database},
+            {"operation", ctx->GetRequestName()},
+            {"reason", "No permission to connect to the database"},
+        });
+    }
 }
 
+}
+}

@@ -34,7 +34,7 @@ namespace NKikimr {
                 CalculateStat(Result);
                 SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, HullCtx->VCtx);
             }
-            ctx.Send(ParentId, new TEvents::TEvActorDied);
+            ctx.Send(ParentId, new TEvents::TEvGone);
             TThis::Die(ctx);
         }
 

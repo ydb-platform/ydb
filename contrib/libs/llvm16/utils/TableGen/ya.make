@@ -2,6 +2,8 @@
 
 PROGRAM(llvm-tblgen)
 
+VERSION(16.0.0)
+
 LICENSE(Apache-2.0 WITH LLVM-exception)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)

@@ -1,6 +1,12 @@
 #pragma once
 
-#include "defs.h"
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/random/random.h>
+#include <util/string/builder.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
+#include <library/cpp/time_provider/monotonic.h>
 
 namespace NKikimr::NStorage {
 
@@ -26,6 +32,10 @@ namespace NKikimr::NStorage {
 #endif
 
     public:
+        bool Empty() const {
+            return BindQueue.empty();
+        }
+
         void Disable(ui32 nodeId) {
 #ifndef NDEBUG
             Y_ABORT_UNLESS(Enabled.contains(nodeId));

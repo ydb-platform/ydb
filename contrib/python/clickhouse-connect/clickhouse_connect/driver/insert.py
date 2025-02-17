@@ -2,12 +2,12 @@ import logging
 from math import log
 from typing import Iterable, Sequence, Optional, Any, Dict, NamedTuple, Generator, Union, TYPE_CHECKING
 
-from clickhouse_connect.driver.query import quote_identifier
+from clickhouse_connect.driver.binding import quote_identifier
 
 from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.context import BaseQueryContext
 from clickhouse_connect.driver.options import np, pd, pd_time_test
-from clickhouse_connect.driver.exceptions import ProgrammingError
+from clickhouse_connect.driver.exceptions import ProgrammingError, DataError
 
 if TYPE_CHECKING:
     from clickhouse_connect.datatypes.base import ClickHouseType
@@ -117,7 +117,8 @@ class InsertContext(BaseQueryContext):
                 sample = [data[j][i] for j in range(0, self.row_count, sample_freq)]
                 d_size = d_type.data_size(sample)
             row_size += d_size
-        return 1 << (21 - int(log(row_size, 2)))
+        shift_size = (21 - int(log(row_size, 2)))
+        return 1 if shift_size < 0 else 1 << (21 - int(log(row_size, 2)))
 
     def next_block(self) -> Generator[InsertBlock, None, None]:
         while True:
@@ -164,8 +165,8 @@ class InsertContext(BaseQueryContext):
                     #  https://github.com/pandas-dev/pandas/issues/29024
                     df_col = df_col.replace({pd.NaT: None}).replace({np.nan: None})
                 elif 'Float' in ch_type.base_type:
-                    #  This seems to be the only way to convert any null looking things to nan
-                    df_col = df_col.astype(ch_type.np_type)
+                    data.append([None if pd.isnull(x) else x for x in df_col])
+                    continue
                 else:
                     df_col = df_col.replace({np.nan: None})
             data.append(df_col.to_numpy(copy=False))
@@ -197,3 +198,6 @@ class InsertContext(BaseQueryContext):
                 data[ix] = data[ix].tolist()
         self.column_oriented = True
         return data
+
+    def data_error(self, error_message: str) -> DataError:
+        return DataError(f"Failed to write column '{self.column_name}': {error_message}")

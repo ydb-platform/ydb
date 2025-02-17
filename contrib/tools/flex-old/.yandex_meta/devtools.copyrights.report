@@ -1,0 +1,84 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b1bca0fe8b5ab65c8a62bde6dad180e
+BELONGS ya.make
+    License text:
+           Copyright (C) 1984, 1989, 1990, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+           Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        parse.c [5:6]
+        parse.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c2936cc0453639e0a55b4d9f729353c
+BELONGS ya.make
+    License text:
+        // Copyright (c) 1993 The Regents of the University of California.
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        FlexLexer.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 84f23a847b3da4fe6204ea627e11265b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1990 The Regents of the University of California.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ccl.c [4:5]
+        dfa.c [4:5]
+        ecs.c [4:5]
+        flexdef.h [4:5]
+        gen.c [4:5]
+        main.c [4:5]
+        main.c [30:32]
+        misc.c [4:5]
+        nfa.c [4:5]
+        parse.c [128:129]
+        scan.c [1251:1252]
+        sym.c [4:5]
+        tblcmp.c [4:5]
+        yylex.c [4:5]

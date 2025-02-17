@@ -128,18 +128,17 @@ public:
     TInvokerQueue(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
         const NProfiling::TTagSet& counterTagSet,
-        NProfiling::IRegistryImplPtr registry = nullptr);
+        NProfiling::IRegistryPtr registry = nullptr);
 
     TInvokerQueue(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
         const std::vector<NProfiling::TTagSet>& counterTagSets,
         const std::vector<NYTProf::TProfilerTagPtr>& profilerTags,
-        NProfiling::IRegistryImplPtr registry = nullptr);
+        NProfiling::IRegistryPtr registry = nullptr);
 
     void SetThreadId(NThreading::TThreadId threadId);
 
     void Invoke(TClosure callback) override;
-
     void Invoke(TMutableRange<TClosure> callbacks) override;
 
     void Invoke(
@@ -167,10 +166,21 @@ public:
     bool CheckAffinity(const IInvokerPtr& invoker) const override;
     bool IsSerialized() const override;
 
-    void Shutdown();
+    // NB(arkady-e1ppa): Trying to call graceful shutdown
+    // concurrently with someone calling Invoke
+    // may end up making shutdown not graceful
+    // as double-checking in Invoke would drain
+    // the queue. If want a truly graceful
+    // Shutdown (e.g. until you run out of callbacks)
+    // just drain the queue without shutting it down.
+    void Shutdown(bool graceful = false);
 
-    void DrainProducer();
-    void DrainConsumer();
+    // NB(arkady-e1ppa): Calling shutdown is not
+    // enough to prevent leaks of callbacks
+    // as there might be some callbacks left in
+    // local queue of MPSC queue if shutdown
+    // was not graceful.
+    void OnConsumerFinished();
 
     bool BeginExecute(TEnqueuedAction* action, typename TQueueImpl::TConsumerToken* token = nullptr);
     void EndExecute(TEnqueuedAction* action);
@@ -182,7 +192,7 @@ public:
 
     IInvoker* GetProfilingTagSettingInvoker(int profilingTag);
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) override;
+    DECLARE_SIGNAL_OVERRIDE(TWaitTimeObserver::TSignature, WaitTimeObserved);
 
 private:
     const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_;
@@ -191,6 +201,8 @@ private:
 
     NThreading::TThreadId ThreadId_ = NThreading::InvalidThreadId;
     std::atomic<bool> Running_ = true;
+    std::atomic<bool> Stopping_ = false;
+    std::atomic<bool> Graceful_ = false;
 
     struct TCounters
     {
@@ -208,10 +220,11 @@ private:
 
     std::vector<IInvokerPtr> ProfilingTagSettingInvokers_;
 
-    std::atomic<bool> IsWaitTimeObserverSet_;
-    TWaitTimeObserver WaitTimeObserver_;
+    TCallbackList<TWaitTimeObserver::TSignature> WaitTimeObserved_;
 
-    TCountersPtr CreateCounters(const NProfiling::TTagSet& tagSet, NProfiling::IRegistryImplPtr registry);
+    TCountersPtr CreateCounters(const NProfiling::TTagSet& tagSet, NProfiling::IRegistryPtr registry);
+
+    void TryDrainProducer(bool force = false);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

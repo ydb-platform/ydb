@@ -2,6 +2,7 @@
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <library/cpp/json/json_writer.h>
 #include <google/protobuf/text_format.h>
 
@@ -10,7 +11,7 @@ static struct STLOG_PARAM_T {} STLOG_PARAM;
 
 namespace NKikimr::NStLog {
 
-    static constexpr bool OutputLogJson = false;
+    extern bool OutputLogJson;
 
     void ProtobufToJson(const NProtoBuf::Message& m, NJson::TJsonWriter& json);
 
@@ -50,10 +51,10 @@ namespace NKikimr::NStLog {
 #define STLOG_PARAMS_15(KV, ...) STLOG_PARAMS_1(KV) STLOG_EXPAND(STLOG_PARAMS_14(__VA_ARGS__))
 #define STLOG_PARAMS_16(KV, ...) STLOG_PARAMS_1(KV) STLOG_EXPAND(STLOG_PARAMS_15(__VA_ARGS__))
 
-#define STLOG_STREAM(NAME, JSON_OVERRIDE, MARKER, TEXT, ...) \
+#define STLOG_STREAM(NAME, MARKER, TEXT, ...) \
     struct MARKER {}; \
     TStringStream NAME; \
-    if constexpr (JSON_OVERRIDE ? JSON_OVERRIDE > 0 : ::NKikimr::NStLog::OutputLogJson) { \
+    if (::NKikimr::NStLog::OutputLogJson) { \
         NJson::TJsonWriter __json(&NAME, false); \
         ::NKikimr::NStLog::TMessage<MARKER>(__FILE__, __LINE__, #MARKER)STLOG_PARAMS(__VA_ARGS__).WriteToJson(__json) << TEXT; \
     } else { \
@@ -65,32 +66,19 @@ namespace NKikimr::NStLog {
         auto& ctx = (CTX); \
         const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
         const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
-        if (IS_LOG_PRIORITY_ENABLED(priority, component)) { \
-            STLOG_STREAM(__stream, 0, __VA_ARGS__); \
-            ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str()); \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(ctx, priority, component, 0ull)) { \
+            STLOG_STREAM(__stream, __VA_ARGS__); \
+            ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str(), ::NKikimr::NStLog::OutputLogJson); \
         }; \
     } while (false)
 
 #define STLOG(...) if (TActivationContext *ctxp = TlsActivationContext; !ctxp); else STLOGX(*ctxp, __VA_ARGS__)
 
-#define STLOGJX(CTX, PRIO, COMP, ...) \
-    do { \
-        auto& ctx = (CTX); \
-        const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
-        const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
-        if (IS_LOG_PRIORITY_ENABLED(priority, component)) { \
-            STLOG_STREAM(__stream, 1, __VA_ARGS__); \
-            ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str()); \
-        }; \
-    } while (false)
-
-#define STLOGJ(...) if (TActivationContext *ctxp = TlsActivationContext; !ctxp); else STLOGJX(*ctxp, __VA_ARGS__)
-
 #define STLOG_DEBUG_FAIL(COMP, ...) \
     do { \
         if (TActivationContext *ctxp = TlsActivationContext) { \
             const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
-            STLOG_STREAM(__stream, 0, __VA_ARGS__); \
+            STLOG_STREAM(__stream, __VA_ARGS__); \
             const TString message = __stream.Str(); \
             Y_VERIFY_DEBUG_S(false, message); \
             LOG_LOG_S(*ctxp, NLog::PRI_CRIT, component, message); \
@@ -111,8 +99,13 @@ namespace NKikimr::NStLog {
     template<typename T, typename Y> struct TIsIterable<std::deque<T, Y>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<std::list<T, Y>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<std::vector<T, Y>> { static constexpr bool value = true; };
+    template<typename T, typename Y> struct TIsIterable<TVector<T, Y>> { static constexpr bool value = true; };
+    template<typename T, typename X, typename Y, typename Z> struct TIsIterable<THashSet<T, X, Y, Z>> { static constexpr bool value = true; };
     template<typename T> struct TIsIterable<NProtoBuf::RepeatedField<T>> { static constexpr bool value = true; };
     template<typename T> struct TIsIterable<NProtoBuf::RepeatedPtrField<T>> { static constexpr bool value = true; };
+
+    template<typename T> struct TIsIdWrapper { static constexpr bool value = false; };
+    template<typename TType, typename TTag> struct TIsIdWrapper<TIdWrapper<TType, TTag>> { static constexpr bool value = true; };
 
     template<typename Base, typename T>
     class TBoundParam : public Base {
@@ -219,6 +212,8 @@ namespace NKikimr::NStLog {
                     OutputParam(json, *begin);
                 }
                 json.CloseArray();
+            } else if constexpr (TIsIdWrapper<Tx>::value){
+                json.Write(value.GetRawId());
             } else if constexpr (std::is_constructible_v<NJson::TJsonValue, Tx>) {
                 json.Write(value);
             } else {
@@ -322,14 +317,14 @@ namespace NKikimr::NStLog {
             ~TJsonWriter() {
                 Json.OpenMap();
                 if (Self->Header()) {
-                    Json.WriteKey("Marker");
+                    Json.WriteKey("marker");
                     Json.Write(Self->Marker);
-                    Json.WriteKey("File");
+                    Json.WriteKey("file");
                     Json.Write(Self->GetFileName());
-                    Json.WriteKey("Line");
+                    Json.WriteKey("line");
                     Json.Write(Self->Line);
                 }
-                Json.WriteKey("Text");
+                Json.WriteKey("message");
                 Json.Write(Stream.Str());
                 Self->WriteParamsToJson(Json);
                 Json.CloseMap();
@@ -361,7 +356,7 @@ namespace NKikimr::NStLog {
         void WriteParamsToJson(NJson::TJsonWriter& json) const {
             WriteParams<0>(&json);
         }
-        
+
         template<size_t Index, typename = std::enable_if_t<Index != NumParams>>
         void WriteParams(IOutputStream *s) const {
             std::get<Index>(Params).WriteToStream(*s << " ");

@@ -3,8 +3,8 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_runtime_version.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_runtime_version.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -17,26 +17,22 @@ TType* GetRowType(const TProgramBuilder& builder, const TArrayRef<TKqpTableColum
         TType* type = nullptr;
         switch (column.Type) {
             case NUdf::TDataType<NUdf::TDecimal>::Id: {
-                type = TDataDecimalType::Create(
-                    NScheme::DECIMAL_PRECISION,
-                    NScheme::DECIMAL_SCALE,
-                    builder.GetTypeEnvironment()
-                );
+                const NScheme::TDecimalType& decimal = column.TypeInfo.GetDecimalType();
+                type = TDataDecimalType::Create(decimal.GetPrecision(), decimal.GetScale(), builder.GetTypeEnvironment());
+                if (!column.NotNull)
+                    type = TOptionalType::Create(type, builder.GetTypeEnvironment());
                 break;
             }
             case NKikimr::NScheme::NTypeIds::Pg: {
-                Y_ABORT_UNLESS(column.TypeDesc, "No pg type description");
-                type = TPgType::Create(NPg::PgTypeIdFromTypeDesc(column.TypeDesc), builder.GetTypeEnvironment());
+                type = TPgType::Create(NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()), builder.GetTypeEnvironment());
                 break;
             }
             default: {
                 type = TDataType::Create(column.Type, builder.GetTypeEnvironment());
+                if (!column.NotNull)
+                    type = TOptionalType::Create(type, builder.GetTypeEnvironment());
                 break;
             }
-        }
-
-        if (!column.NotNull && column.Type != NKikimr::NScheme::NTypeIds::Pg) {
-            type = TOptionalType::Create(type, builder.GetTypeEnvironment());
         }
 
         rowTypeBuilder.Add(column.Name, type);
@@ -160,7 +156,7 @@ EJoinKind GetIndexLookupJoinKind(const TString& joinKind) {
 }
 
 bool RightJoinSideAllowed(const TString& joinType) {
-    return joinType != "LeftOnly";
+    return joinType != "LeftOnly" && joinType != "LeftSemi";
 }
 
 bool RightJoinSideOptional(const TString& joinType) {

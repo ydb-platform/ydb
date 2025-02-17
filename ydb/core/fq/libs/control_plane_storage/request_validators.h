@@ -5,7 +5,7 @@
 #include <ydb/core/external_sources/object_storage.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <library/cpp/scheme/scheme.h>
@@ -121,7 +121,7 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQ
         case FederatedQuery::BindingSetting::kObjectStorage:
             const FederatedQuery::ObjectStorageBinding objectStorage = setting.object_storage();
             for (const auto& subset: objectStorage.subset()) {
-                issues.AddIssues(NKikimr::NExternalSource::Validate(subset.schema(), subset, pathsLimit));
+                issues.AddIssues(NKikimr::NExternalSource::Validate(subset.schema(), subset, pathsLimit, subset.path_pattern()));
             }
             break;
         }

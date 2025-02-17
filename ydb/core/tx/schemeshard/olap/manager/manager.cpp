@@ -3,38 +3,14 @@
 namespace NKikimr::NSchemeShard {
 
 void TTablesStorage::OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
-    const TString& tieringId = object->Description.GetTtlSettings().GetUseTiering();
-    if (!!tieringId) {
-        PathsByTieringId[tieringId].emplace(pathId);
-    }
     for (auto&& s : object->GetColumnShards()) {
-        TablesByShard[s].AddId(pathId);
+        AFL_VERIFY(TablesByShard[s].AddId(pathId));
     }
 }
 
 void TTablesStorage::OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
-    const TString& tieringId = object->Description.GetTtlSettings().GetUseTiering();
-    if (!!tieringId) {
-        auto it = PathsByTieringId.find(tieringId);
-        if (PathsByTieringId.end() == it) {
-            return;
-        }
-        it->second.erase(pathId);
-        if (it->second.empty()) {
-            PathsByTieringId.erase(it);
-        }
-    }
     for (auto&& s : object->GetColumnShards()) {
         TablesByShard[s].RemoveId(pathId);
-    }
-}
-
-const std::set<NKikimr::TPathId>& TTablesStorage::GetTablesWithTiering(const TString& tieringId) const {
-    auto it = PathsByTieringId.find(tieringId);
-    if (it != PathsByTieringId.end()) {
-        return it->second;
-    } else {
-        return Default<std::set<TPathId>>();
     }
 }
 
@@ -52,6 +28,12 @@ TTablesStorage::TTableExtractedGuard TTablesStorage::TakeVerified(const TPathId&
 
 TTablesStorage::TTableExtractedGuard TTablesStorage::TakeAlterVerified(const TPathId& id) {
     return TTableExtractedGuard(*this, id, ExtractPtr(id), true);
+}
+
+ TColumnTableInfo::TPtr TTablesStorage::GetVerifiedPtr(const TPathId& id) const {
+    auto it = Tables.find(id);
+    Y_ABORT_UNLESS(it != Tables.end());
+    return it->second;
 }
 
 TTablesStorage::TTableReadGuard TTablesStorage::GetVerified(const TPathId& id) const {
@@ -72,13 +54,14 @@ TTablesStorage::TTableCreatedGuard TTablesStorage::BuildNew(const TPathId& id) {
     return TTableCreatedGuard(*this, id);
 }
 
-size_t TTablesStorage::Drop(const TPathId& id) {
+bool TTablesStorage::Drop(const TPathId& id) {
     auto it = Tables.find(id);
     if (it == Tables.end()) {
-        return 0;
+        return false;
     } else {
         OnRemoveObject(id, it->second);
-        return Tables.erase(id);
+        Tables.erase(it);
+        return true;
     }
 }
 
@@ -114,7 +97,9 @@ void TTablesStorage::TTableExtractedGuard::UseAlterDataVerified() {
     TColumnTableInfo::TPtr alterInfo = Object->AlterData;
     Y_ABORT_UNLESS(alterInfo);
     alterInfo->AlterBody.Clear();
+    auto stats = Object->Stats;
     Object = alterInfo;
+    Object->Stats = stats;
 }
 
 std::unordered_set<TPathId> TTablesStorage::GetAllPathIds() const {

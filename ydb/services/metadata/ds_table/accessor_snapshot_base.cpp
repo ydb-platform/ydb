@@ -34,6 +34,7 @@ void TDSAccessorBase::Handle(NRequest::TEvRequestResult<NRequest::TDialogYQLRequ
         Y_ABORT_UNLESS(it != CurrentExistence.end());
         Y_ABORT_UNLESS(it->second);
         if (it->second == 1) {
+            Y_ABORT_UNLESS((int)replyIdx < qResult.result_sets().size());
             *qResultFull.add_result_sets() = std::move(qResult.result_sets()[replyIdx]);
             ++replyIdx;
         } else {
@@ -87,7 +88,7 @@ void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvResult::TPtr& 
         }
     }
     if (!hasExists) {
-        OnNewEnrichedSnapshot(SnapshotConstructor->CreateEmpty(RequestedActuality));
+        OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult(), SnapshotConstructor->CreateEmpty(RequestedActuality));
     } else {
         StartSnapshotsFetchingImpl();
     }

@@ -44,7 +44,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
         try {
             runtime.ResetScheduledCount();
 
-            THolder<TEvPersQueue::TEvUpdateConfig> request(new TEvPersQueue::TEvUpdateConfig());
+            auto request = MakeHolder<TEvPersQueue::TEvUpdateConfigBuilder>();
             for (ui32 i = 0; i < parameters.partitions; ++i) {
                 request->Record.MutableTabletConfig()->AddPartitionIds(i);
             }
@@ -176,7 +176,8 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset,
                     }
                 }
             }
-            UNIT_ASSERT((expectedOffset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == expectedOffset);
+            UNIT_ASSERT_C((expectedOffset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == expectedOffset,
+                    "expectedOffset=" << expectedOffset << " resp.HasOffset()=" << resp.HasOffset() << " resp.GetOffset()=" << resp.GetOffset());
             if (writeTime > 0) {
                 UNIT_ASSERT(resp.HasWriteTimestampEstimateMS());
                 UNIT_ASSERT(resp.GetWriteTimestampEstimateMS() >= writeTime);
@@ -189,12 +190,14 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset,
 }
 
 void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map, const ui64 ssId,
-                       TTestContext& context, const bool requireAuth, bool kill) {
-    PQBalancerPrepare(topic, map, ssId, *context.Runtime, context.BalancerTabletId, context.Edge, requireAuth, kill);
+                       TTestContext& context, const bool requireAuth, bool kill, const THashSet<TString>& xtraConsumers) {
+    PQBalancerPrepare(topic, map, ssId, *context.Runtime, context.BalancerTabletId, context.Edge, requireAuth, kill,
+                      xtraConsumers);
 }
 
 void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map, const ui64 ssId,
-                       TTestActorRuntime& runtime, ui64 balancerTabletId, TActorId edge, const bool requireAuth, bool kill) {
+                       TTestActorRuntime& runtime, ui64 balancerTabletId, TActorId edge, const bool requireAuth, bool kill,
+                       const THashSet<TString>& xtraConsumers) {
     TAutoPtr<IEventHandle> handle;
     static int version = 0;
     ++version;
@@ -209,11 +212,15 @@ void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::p
                 part->SetPartition(p.first);
                 part->SetGroup(p.second.second);
                 part->SetTabletId(p.second.first);
+                part->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Active);
 
                 auto tablet = request->Record.AddTablets();
                 tablet->SetTabletId(p.second.first);
                 tablet->SetOwner(1);
                 tablet->SetIdx(p.second.first);
+
+                auto* pp = request->Record.MutableTabletConfig()->AddPartitions();
+                pp->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Active);
             }
             request->Record.SetTxId(12345);
             request->Record.SetPathId(1);
@@ -222,6 +229,9 @@ void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::p
             request->Record.SetPath("/Root/" + topic);
             request->Record.SetSchemeShardId(ssId);
             request->Record.MutableTabletConfig()->AddReadRules("client");
+            for (const auto& c : xtraConsumers) {
+                request->Record.MutableTabletConfig()->AddReadRules(c);
+            };
             request->Record.MutableTabletConfig()->SetRequireAuthWrite(requireAuth);
             request->Record.MutableTabletConfig()->SetRequireAuthRead(requireAuth);
 
@@ -288,6 +298,46 @@ void PQTabletRestart(TTestActorRuntime& runtime, ui64 tabletId, TActorId edge) {
     TDispatchOptions rebootOptions;
     rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
     runtime.DispatchEvents(rebootOptions);
+}
+
+THashSet<TString> GetTabletKeys(TTestContext& tc)
+{
+    return GetTabletKeys(*tc.Runtime, tc.TabletId, tc.Edge);
+}
+
+THashSet<TString> GetTabletKeys(TTestActorRuntime& runtime,
+                                ui64 tabletId,
+                                const TActorId& edge)
+{
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    auto* cmd = request->Record.AddCmdReadRange();
+    auto* range = cmd->MutableRange();
+    range->SetFrom(TString(1, '\x00'));
+    range->SetIncludeFrom(false);
+    range->SetTo(TString(1, '\xFF'));
+    range->SetIncludeTo(false);
+
+    runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.HasStatus());
+    UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    THashSet<TString> keys;
+
+    for (size_t i = 0; i < response->Record.ReadRangeResultSize(); ++i) {
+        const auto &result = response->Record.GetReadRangeResult(i);
+        UNIT_ASSERT(result.HasStatus());
+        UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrProto::OK);
+        for (size_t j = 0; j < result.PairSize(); ++j) {
+            const auto& pair = result.GetPair(j);
+            keys.insert(pair.GetKey());
+        }
+    }
+
+    return keys;
 }
 
 TActorId SetOwner(const ui32 partition, TTestContext& tc, const TString& owner, bool force) {
@@ -368,9 +418,8 @@ void WaitPartition(const TString &session, TTestContext& tc, ui32 partition, con
                 UNIT_ASSERT_EQUAL(result->Record.GetSession(), sessionToRelease);
                 UNIT_ASSERT(ok);
 
-                THolder<TEvPersQueue::TEvPartitionReleased> request;
+                auto request = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
 
-                request.Reset(new TEvPersQueue::TEvPartitionReleased);
                 auto& req = request->Record;
                 req.SetSession(sessionToRelease);
                 req.SetPartition(partition);
@@ -381,9 +430,9 @@ void WaitPartition(const TString &session, TTestContext& tc, ui32 partition, con
                 tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries(), pipe);
             }
         } catch (NActors::TSchedulingLimitReachedException) {
-            UNIT_ASSERT(i < 2 || !ok);
+            UNIT_ASSERT_C(i < 2 || !ok, "TSchedulingLimitReachedException i=" << i << " ok=" << ok);
         } catch (NActors::TEmptyEventQueueException) {
-            UNIT_ASSERT(i < 2 || !ok);
+            UNIT_ASSERT_C(i < 2 || !ok, "TEmptyEventQueueException i=" << i << " ok=" << ok);
         }
     }
 }
@@ -718,11 +767,14 @@ void CmdSetOffset(const ui32 partition, const TString& user, ui64 offset, bool e
 
 
 TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc) {
-
     TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
     TActorId tabletPipe = tc.Runtime->ConnectToPipe(tc.TabletId, tc.Edge, 0, GetPipeConfigWithRetries());
-
     TAutoPtr<IEventHandle> handle;
+    {
+        auto predicate = [&](const auto& ev) { return ev.TabletId == tc.TabletId; };
+        auto ev = tc.Runtime->GrabEdgeEventIf<TEvTabletPipe::TEvClientConnected>(handle, predicate);
+        UNIT_ASSERT(ev);
+    }
     TEvPersQueue::TEvResponse *result;
     THolder<TEvPersQueue::TEvRequest> request;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
@@ -913,7 +965,7 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
         UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
         auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
 
-        UNIT_ASSERT_EQUAL(res.ResultSize(), settings.ResCount);
+        UNIT_ASSERT_VALUES_EQUAL(res.ResultSize(), settings.ResCount);
         ui64 off = settings.Offset;
 
         for (ui32 i = 0; i < settings.ResCount; ++i) {
@@ -923,10 +975,10 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
                     UNIT_ASSERT_EQUAL((ui64)r.GetOffset(), off);
                 }
                 UNIT_ASSERT(r.GetSourceId().size() == 9 && r.GetSourceId().StartsWith("sourceid"));
-                UNIT_ASSERT_EQUAL(ui32(r.GetData()[0]), off);
-                UNIT_ASSERT_EQUAL(ui32((unsigned char)r.GetData().back()), r.GetSeqNo() % 256);
+                UNIT_ASSERT_VALUES_EQUAL(ui32(r.GetData()[0]), off);
+                UNIT_ASSERT_VALUES_EQUAL(ui32((unsigned char)r.GetData().back()), r.GetSeqNo() % 256);
                 ++off;
-            } else {
+            } else if (settings.Offsets.size() > i) {
                 UNIT_ASSERT(settings.Offsets[i] == (i64)r.GetOffset());
             }
         }
@@ -951,47 +1003,55 @@ void CmdRead(
     );
 }
 
-void CmdRead(const TPQCmdReadSettings& settings, TTestContext& tc) {
-    TAutoPtr<IEventHandle> handle;
-    TEvPersQueue::TEvResponse *result;
+void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)
+{
     THolder<TEvPersQueue::TEvRequest> request;
 
+    tc.Runtime->ResetScheduledCount();
+    request.Reset(new TEvPersQueue::TEvRequest);
+    auto req = request->Record.MutablePartitionRequest();
+    req->SetPartition(settings.Partition);
+    auto read = req->MutableCmdRead();
+    read->SetOffset(settings.Offset);
+    read->SetSessionId(settings.Session);
+    read->SetClientId(settings.User);
+    read->SetCount(settings.Count);
+    read->SetBytes(settings.Size);
+    if (settings.MaxTimeLagMs > 0) {
+        read->SetMaxTimeLagMs(settings.MaxTimeLagMs);
+    }
+    if (settings.ReadTimestampMs > 0) {
+        read->SetReadTimestampMs(settings.ReadTimestampMs);
+    }
+    if (settings.DirectReadId > 0) {
+        read->SetDirectReadId(settings.DirectReadId);
+    }
+    if (settings.PartitionSessionId > 0) {
+        read->SetPartitionSessionId(settings.PartitionSessionId);
+    }
+    if (settings.Pipe) {
+        ActorIdToProto(settings.Pipe, req->MutablePipeClient());
+    }
+
+    req->SetCookie(123);
+
+    Cerr << "Send read request: " << request->Record.DebugString() << " via pipe: " << tc.Edge.ToString() << Endl;
+
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+}
+
+bool EndCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)
+{
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+    return CheckCmdReadResult(settings, result);
+}
+
+void CmdRead(const TPQCmdReadSettings& settings, TTestContext& tc) {
     for (ui32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
-            tc.Runtime->ResetScheduledCount();
-            request.Reset(new TEvPersQueue::TEvRequest);
-            auto req = request->Record.MutablePartitionRequest();
-            req->SetPartition(settings.Partition);
-            auto read = req->MutableCmdRead();
-            read->SetOffset(settings.Offset);
-            read->SetSessionId(settings.Session);
-            read->SetClientId(settings.User);
-            read->SetCount(settings.Count);
-            read->SetBytes(settings.Size);
-            if (settings.MaxTimeLagMs > 0) {
-                read->SetMaxTimeLagMs(settings.MaxTimeLagMs);
-            }
-            if (settings.ReadTimestampMs > 0) {
-                read->SetReadTimestampMs(settings.ReadTimestampMs);
-            }
-            if (settings.DirectReadId > 0) {
-                read->SetDirectReadId(settings.DirectReadId);
-            }
-            if (settings.PartitionSessionId > 0) {
-                read->SetPartitionSessionId(settings.PartitionSessionId);
-            }
-            if (settings.Pipe) {
-                ActorIdToProto(settings.Pipe, req->MutablePipeClient());
-            }
-
-            req->SetCookie(123);
-
-            Cerr << "Send read request: " << request->Record.DebugString() << " via pipe: " << tc.Edge.ToString() << Endl;
-
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
-
-            auto checkRes = CheckCmdReadResult(settings, result);
+            BeginCmdRead(settings, tc);
+            auto checkRes = EndCmdRead(settings, tc);
             if (!checkRes) {
                 tc.Runtime->DispatchEvents();   // Dispatch events so that initialization can make progress
                 retriesLeft = 3;

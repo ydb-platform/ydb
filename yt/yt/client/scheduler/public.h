@@ -8,6 +8,20 @@ namespace NYT::NScheduler {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NProto {
+
+class TSpecPatch;
+
+} // namespace NProto
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DEFINE_STRONG_TYPEDEF(TJobTraceId, TGuid);
+
+extern const TJobTraceId NullJobTraceId;
+
+////////////////////////////////////////////////////////////////////////////////
+
 using NJobTrackerClient::TJobId;
 using NJobTrackerClient::TOperationId;
 
@@ -60,6 +74,10 @@ YT_DEFINE_ERROR_ENUM(
     ((WatcherHandlerFailed)                   (217))
     ((MasterDisconnected)                     (218))
     ((NoSuchJobShell)                         (219))
+    ((JobResourceLimitsRestrictionsViolated)  (220))
+    ((CannotUseBothAclAndAco)                 (221))
+    ((GangOperationsAllowedOnlyInFifoPools)   (222))
+    ((OperationLaunchedInNonexistentPool)     (223))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,
@@ -101,8 +119,7 @@ DEFINE_ENUM(EAbortReason,
     ((JobOnUnexpectedNode)             ( 21))
     ((ShallowMergeFailed)              ( 22))
     ((InconsistentJobState)            ( 23))
-    // COMPAT(pogorelov)
-    ((JobStatisticsWaitTimeout)        ( 24))
+    ((AllocationFinished)              ( 24))
     ((OperationFailed)                 ( 25))
     ((JobRevivalDisabled)              ( 26))
     ((BannedInTentativeTree)           ( 27))
@@ -128,13 +145,14 @@ DEFINE_ENUM(EAbortReason,
     ((JobMemoryThrashing)              ( 47))
     ((InterruptionUnsupported)         ( 48))
     ((Abandoned)                       ( 49))
-    // TODO(ignat): is it actually a scheduling type of abortion?
-    ((JobSettlementTimedOut)           ( 50))
     ((NonexistentPoolTree)             ( 51))
     ((WrongSchedulingSegmentModule)    ( 52))
     ((UnresolvedNodeId)                ( 53))
     ((RootVolumePreparationFailed)     ( 54))
     ((InterruptionFailed)              ( 55))
+    ((OperationIncarnationChanged)     ( 56))
+    ((AddressResolveFailed)            ( 57))
+    ((UnexpectedNodeJobPhase)          ( 58))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))
@@ -146,7 +164,9 @@ DEFINE_ENUM(EAbortReason,
     ((SchedulingLast)                  (199))
 );
 
-DEFINE_ENUM(EInterruptReason,
+DEFINE_ENUM_UNKNOWN_VALUE(EAbortReason, Unknown);
+
+DEFINE_ENUM(EInterruptionReason,
     ((None)               (0))
     ((Preemption)         (1))
     ((UserRequest)        (2))
@@ -154,6 +174,8 @@ DEFINE_ENUM(EInterruptReason,
     ((Unknown)            (4))
     ((JobsDisabledOnNode) (5))
 );
+
+DEFINE_ENUM_UNKNOWN_VALUE(EInterruptionReason, Unknown);
 
 DEFINE_ENUM(EAutoMergeMode,
     (Disabled)
@@ -163,6 +185,9 @@ DEFINE_ENUM(EAutoMergeMode,
 );
 
 DECLARE_REFCOUNTED_CLASS(TOperationCache)
+
+DECLARE_REFCOUNTED_CLASS(TSpecPatch);
+using TSpecPatchList = std::vector<TSpecPatchPtr>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

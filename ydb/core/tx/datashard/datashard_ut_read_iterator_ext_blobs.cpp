@@ -76,12 +76,17 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         TTestActorRuntime* Runtime;
 
         TNode(bool useExternalBlobs, int externalBlobColumns = 1) : ServerSettings(Pm.GetPort(2134)) {
+            
+            TServerSettings::TControls controls;
+            controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1);
+
             ServerSettings.SetDomainName("Root")
                 .SetUseRealThreads(false)
                 .AddStoragePool("ssd")
                 .AddStoragePool("hdd")
                 .AddStoragePool("ext")
-                .SetEnableUuidAsPrimaryKey(true);
+                .SetEnableUuidAsPrimaryKey(true)
+                .SetControls(controls);
 
             Server = new TServer(ServerSettings);
             

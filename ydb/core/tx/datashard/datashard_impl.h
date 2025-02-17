@@ -1752,6 +1752,11 @@ public:
         return value != 0;
     }
 
+    bool GetUseNewPrecharge() const {
+        ui64 value = ReadIteratorKeysExtBlobsPrecharge;
+        return value != 0;
+    }
+
     template <typename T>
     void ReleaseCache(T& tx) {
         ReleaseTxCache(tx.GetTxCacheUsage());
@@ -2805,6 +2810,8 @@ private:
     TControlWrapper MinLeaderLeaseDurationUs;
 
     TControlWrapper ChangeRecordDebugPrint;
+
+    TControlWrapper ReadIteratorKeysExtBlobsPrecharge;
 
     // Set of InRS keys to remove from local DB.
     THashSet<TReadSetKey> InRSToRemove;

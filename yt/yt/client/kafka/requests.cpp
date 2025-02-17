@@ -757,4 +757,57 @@ void TRspProduce::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TReqListOffsetsTopicPartition::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
+{
+    PartitionIndex = reader->ReadInt32();
+    Timestamp = reader->ReadInt64(); // TODO: use timestamp?
+    MaxNumOffsets = reader->ReadInt32();
+}
+
+void TReqListOffsetsTopic::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
+{
+    Name = reader->ReadString();
+    Partitions.resize(reader->ReadInt32());
+    for (auto& partition : Partitions) {
+        partition.Deserialize(reader, apiVersion);
+    }
+}
+
+void TReqListOffsets::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
+{
+    ReplicaId = reader->ReadInt32();
+    Topics.resize(reader->ReadInt32());
+    for (auto& topic : Topics) {
+        topic.Deserialize(reader, apiVersion);
+    }
+}
+
+void TRspListOffsetsTopicPartition::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
+{
+    writer->WriteInt32(PartitionIndex);
+    writer->WriteErrorCode(ErrorCode);
+    writer->WriteInt64(Offset);
+}
+
+void TRspListOffsetsTopic::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
+{
+    writer->WriteString(Name);
+    writer->WriteInt32(Partitions.size());
+    for (const auto& partition : Partitions) {
+        partition.Serialize(writer, apiVersion);
+    }
+}
+
+void TRspListOffsets::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
+{
+    writer->WriteInt32(Topics.size());
+    for (const auto& topic : Topics) {
+        topic.Serialize(writer, apiVersion);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
 } // namespace NYT::NKafka

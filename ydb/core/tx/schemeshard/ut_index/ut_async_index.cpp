@@ -548,4 +548,32 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
             });
         });
     }
+
+    Y_UNIT_TEST(Decimal) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"_(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Decimal(35,9)" }
+              Columns { Name: "indexed" Type: "Decimal(35,9)" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndex"
+              KeyColumnNames: ["indexed"]
+              Type: EIndexTypeGlobalAsync
+            }
+        )_");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"), {
+      NLs::PathExist,
+      NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+      NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+      NLs::IndexKeys({"indexed"}),
+        });
+    }    
 }

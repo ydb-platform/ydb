@@ -21,6 +21,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TVector<ui64> ExportsToResume;
     TVector<ui64> ImportsToResume;
     THashMap<TPathId, TVector<TPathId>> CdcStreamScansToResume;
+    TVector<TPathId> RestoreTablesToUnmark;
     bool Broken = false;
 
     explicit TTxInit(TSelf *self)
@@ -307,7 +308,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, bool> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -323,7 +324,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::IsBackup>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsTemporary>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>("")
+            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::IsRestore>(false)
         );
     }
 
@@ -376,7 +378,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(protoType, typeData));
             typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, &protoType);
         } else {
-            typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
+            // Decimal column was created before SchemaTable::ColTypeData was filled with decimal params
+            // So, it's default
+            if (typeId == NScheme::NTypeIds::Decimal) {
+                typeInfoMod.TypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType::Default());
+            } else {
+                typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
+            }
         }
 
         return std::make_tuple(pathId,
@@ -1831,6 +1839,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);
+                tableInfo->IsRestore = std::get<12>(rec);
 
                 Self->Tables[pathId] = tableInfo;
                 Self->IncrementPathDbRefCount(pathId);
@@ -3883,6 +3892,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                              << ", read records: " << history.size()
                              << ", at schemeshard: " << Self->TabletID());
 
+            RestoreTablesToUnmark.clear();
+
             for (auto& rec: history) {
                 auto pathId = std::get<0>(rec);
                 auto txId = std::get<1>(rec);
@@ -3929,6 +3940,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     break;
                 case TTableInfo::TBackupRestoreResult::EKind::Restore:
                     tableInfo->RestoreHistory[txId] = std::move(info);
+                    if (tableInfo->IsRestore) {
+                        RestoreTablesToUnmark.push_back(pathId);
+                    }
                     break;
                 }
 
@@ -4928,6 +4942,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .CdcStreamScans = std::move(cdcStreamScansToResume),
             .TablesToClean = std::move(TablesToClean),
             .BlockStoreVolumesToClean = std::move(BlockStoreVolumesToClean),
+            .RestoreTablesToUnmark = std::move(RestoreTablesToUnmark),
         });
     }
 };

@@ -578,6 +578,7 @@ private:
     TControlWrapper MinLeaderLeaseDurationUs;
     TControlWrapper VolatilePlanLeaseMs;
     TControlWrapper PlanAheadTimeShiftMs;
+    TControlWrapper MinPlanResolutionMs;
 
     TVolatileState VolatileState;
     TConfig Config;
@@ -702,7 +703,7 @@ private:
     void SchedulePlanTick();
     void SchedulePlanTickExact(ui64 next);
     void SchedulePlanTickAligned(ui64 next);
-    ui64 AlignPlanStep(ui64 step);
+    ui64 AlignPlanStep(ui64 step, bool volatilePlan = false);
 
     void TryInitMonCounters(const TActorContext &ctx);
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;

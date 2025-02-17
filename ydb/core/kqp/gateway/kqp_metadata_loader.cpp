@@ -122,14 +122,7 @@ void IndexProtoToMetadata(const TIndexProto& indexes, NYql::TKikimrTableMetadata
 }
 
 TString GetTypeName(const NScheme::TTypeInfoMod& typeInfoMod) {
-    TString typeName;
-    if (typeInfoMod.TypeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
-        YQL_ENSURE(NScheme::TryGetTypeName(typeInfoMod.TypeInfo.GetTypeId(), typeName));
-    } else {
-        YQL_ENSURE(typeInfoMod.TypeInfo.GetTypeDesc(), "no pg type descriptor");
-        typeName = NPg::PgTypeNameFromTypeDesc(typeInfoMod.TypeInfo.GetTypeDesc(), typeInfoMod.TypeMod);
-    }
-    return typeName;
+    return NScheme::TypeName(typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
 }
 
 TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,

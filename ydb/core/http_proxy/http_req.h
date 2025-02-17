@@ -58,6 +58,7 @@ struct THttpResponseData {
     TString ErrorText{"OK"};
     TString YmqStatusCode;
     ui32 YmqHttpCode;
+    bool YmqIsFifo = false;
 
     TString DumpBody(MimeTypes contentType);
 };
@@ -83,6 +84,7 @@ struct THttpRequestContext {
     TString FolderId;   // not in context
     TString CloudId;    // not in context
     TString StreamName; // not in context
+    TString ResourceId;
     TString SourceAddress;
     TString MethodName; // used once
     TString ApiVersion; // used once

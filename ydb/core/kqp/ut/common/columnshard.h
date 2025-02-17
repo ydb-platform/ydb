@@ -17,13 +17,13 @@ namespace NKqp {
     class TTestHelper {
     public:
         class TColumnSchema {
-            using TTypeDesc = void*;
             YDB_ACCESSOR_DEF(TString, Name);
-            YDB_ACCESSOR_DEF(NScheme::TTypeId, Type);
-            YDB_ACCESSOR_DEF(TTypeDesc, TypeDesc);
+            YDB_ACCESSOR_DEF(NScheme::TTypeInfo, TypeInfo);
             YDB_FLAG_ACCESSOR(Nullable, true);
         public:
             TString BuildQuery() const;
+
+            TColumnSchema& SetType(const NScheme::TTypeInfo& typeInfo);
         };
 
         using TUpdatesBuilder = NColumnShard::TTableUpdatesBuilder;
@@ -48,7 +48,7 @@ namespace NKqp {
         private:
             virtual TString GetObjectType() const = 0;
             TString BuildColumnsStr(const TVector<TColumnSchema>& clumns) const;
-            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeId typeId, void*const typeDesc, bool nullable) const;
+            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeInfo& typeInfo, bool nullable) const;
         };
 
         class TColumnTable : public TColumnTableBase {
@@ -79,7 +79,7 @@ namespace NKqp {
         void ResetTiering(const TString& tableName);
         void BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
         void BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
-        void ReadData(const TString& query, const TString& expected, const NYdb::EStatus opStatus = NYdb::EStatus::SUCCESS);
+        void ReadData(const TString& query, const TString& expected, const NYdb::EStatus opStatus = NYdb::EStatus::SUCCESS) const;
         void RebootTablets(const TString& tableName);
         void WaitTabletDeletionInHive(ui64 tabletId, TDuration duration);
     };

@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/kqp/ut/federated_query/common
     ydb/library/yql/providers/s3/actors
     ydb/library/yql/sql/pg_dummy
+    ydb/library/testlib/s3_recipe_helper
     ydb/public/sdk/cpp/client/ydb_types/operation
 )
 

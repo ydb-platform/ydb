@@ -493,17 +493,13 @@ bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TCol
     for (auto& column: baseTableDescr.GetColumns()) {
         auto& columnName = column.GetName();
         auto typeName = NMiniKQL::AdaptLegacyYqlType(column.GetType());
-        const NScheme::IType* type = typeRegistry->GetType(typeName);
-        if (!type) {
-            auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-            if (!typeDesc) {
-                explain += TStringBuilder() << "Type '" << column.GetType() << "' specified for column '" << columnName << "' is not supported by storage";
-                return false;
-            }
-            columnTypes[columnName] = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
-        } else {
-            columnTypes[columnName] = NScheme::TTypeInfo(type->GetTypeId());
+
+        NScheme::TTypeInfo typeInfo;
+        if (!GetTypeInfo(typeRegistry->GetType(typeName), column.GetTypeInfo(), typeName, columnName, typeInfo, explain)) {
+            return false; 
         }
+
+        columnTypes[columnName] = typeInfo;
     }
 
     return true;
@@ -527,31 +523,6 @@ bool IsCompatibleKeyTypes(
 {
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
     Y_ABORT_UNLESS(typeRegistry);
-
-    for (const auto& item: baseTableColumnTypes) {
-        auto& columnName = item.first;
-        auto typeId = item.second.GetTypeId();
-
-        if (typeId == NScheme::NTypeIds::Pg) {
-            if (!item.second.GetTypeDesc()) {
-                explain += TStringBuilder() << "unknown pg type for column '" << columnName << "'";
-                return false;
-            }
-
-        } else {
-            auto typeSP = typeRegistry->GetType(typeId);
-            if (!typeSP) {
-                explain += TStringBuilder() << "unknown typeId '" << typeId << "' for column '" << columnName << "'";
-                return false;
-            }
-
-            if (!NScheme::NTypeIds::IsYqlType(typeId)) {
-                explain += TStringBuilder() << "Type '" << typeId << "' specified for column '" << columnName << "' is no longer supported";
-                return false;
-            }
-        }
-    }
-
 
     for (auto& keyName: implTableColumns.Keys) {
         Y_ABORT_UNLESS(baseTableColumnTypes.contains(keyName));

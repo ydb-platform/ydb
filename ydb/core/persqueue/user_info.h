@@ -269,12 +269,12 @@ struct TUserInfo: public TUserInfoBase {
 
     }
 
-    void UpdateReadOffset(const i64 offset, TInstant writeTimestamp, TInstant createTimestamp, TInstant now) {
+    void UpdateReadOffset(const i64 offset, TInstant writeTimestamp, TInstant createTimestamp, TInstant now, bool force = false) {
         ReadOffset = offset;
         ReadWriteTimestamp = writeTimestamp;
         ReadCreateTimestamp = createTimestamp;
         WriteLagMs.Update((ReadWriteTimestamp - ReadCreateTimestamp).MilliSeconds(), ReadWriteTimestamp);
-        if (Subscriptions > 0) {
+        if (Subscriptions > 0 || force) {
             ReadTimestamp = now;
         }
     }

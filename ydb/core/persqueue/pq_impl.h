@@ -274,7 +274,7 @@ private:
     // транзакции
     //
     THashMap<ui64, TDistributedTransaction> Txs;
-    TQueue<std::pair<ui64, ui64>> TxQueue;
+    TDeque<std::pair<ui64, ui64>> TxQueue;
     ui64 PlanStep = 0;
     ui64 PlanTxId = 0;
     ui64 ExecStep = 0;
@@ -284,9 +284,18 @@ private:
     TDeque<std::pair<TActorId, std::unique_ptr<TEvTxProcessing::TEvPlanStep>>> EvPlanStepQueue;
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
     THashSet<ui64> DeleteTxs;
-    THashSet<ui64> ChangedTxs;
+    TSet<std::pair<ui64, ui64>> ChangedTxs;
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
+
+    // PLANNED -> CALCULATING -> CALCULATED -> WAIT_RS -> EXECUTING -> EXECUTED
+    THashMap<TDistributedTransaction::EState, TDeque<ui64>> TxsOrder;
+
+    void PushTxInQueue(TDistributedTransaction& tx, TDistributedTransaction::EState state);
+    void ChangeTxState(TDistributedTransaction& tx, TDistributedTransaction::EState newState);
+    bool TryChangeTxState(TDistributedTransaction& tx, TDistributedTransaction::EState newState);
+    bool CanExecute(const TDistributedTransaction& tx);
+
     bool WriteTxsInProgress = false;
 
     struct TReplyToActor;
@@ -334,6 +343,8 @@ private:
 
     void CheckTxState(const TActorContext& ctx,
                       TDistributedTransaction& tx);
+    void TryExecuteTxs(const TActorContext& ctx,
+                       TDistributedTransaction& tx);
 
     void WriteTx(TDistributedTransaction& tx, NKikimrPQ::TTransaction::EState state);
     void DeleteTx(TDistributedTransaction& tx);
@@ -430,6 +441,10 @@ private:
     void DeleteExpiredTransactions(const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
+    void SetTxCounters();
+    void SetTxCompleteLagCounter();
+    void SetTxInFlyCounter();
+
     bool CanProcessProposeTransactionQueue() const;
     bool CanProcessPlanStepQueue() const;
     bool CanProcessWriteTxs() const;
@@ -515,6 +530,8 @@ private:
     void BeginInitTransactions();
     void EndInitTransactions();
 
+    void InitTxsOrder();
+
     void EndReadConfig(const TActorContext& ctx);
 
     void AddCmdReadTransactionRange(TEvKeyValue::TEvRequest& request,
@@ -533,6 +550,11 @@ private:
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
 
     void UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const;
+
+    void ResendEvReadSetToReceivers(const TActorContext& ctx);
+    void ResendEvReadSetToReceiversForState(const TActorContext& ctx, NKikimrPQ::TTransaction::EState state);
+
+    void DeleteSupportivePartitions(const TActorContext& ctx);
 };
 
 

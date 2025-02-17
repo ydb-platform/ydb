@@ -36,7 +36,7 @@ void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWr
             NEvWrite::TWriteData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
                 owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR)),
                 schema, applyToSnapshot, owner.Counters.GetCSCounters().WritingCounters);
-    NConveyor::TCompServiceOperator::SendTaskToExecute(task);
+    NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
 
     Status = EOperationStatus::Started;
 }

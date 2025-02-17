@@ -374,6 +374,11 @@
                 "ColumnId": 12,
                 "ColumnName": "OwnerActorId",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "IsRestore",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -391,7 +396,8 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3759,6 +3765,11 @@
                 "ColumnId": 13,
                 "ColumnName": "OwnerActorId",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "IsRestore",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -3777,7 +3788,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,

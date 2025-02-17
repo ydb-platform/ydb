@@ -101,7 +101,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         ui64 keyBytes = 0;
         TVector<TRawTypeValue> key;
         for (size_t ki : xrange(tableInfo.KeyColumnTypes.size())) {
-            const auto& kt = tableInfo.KeyColumnTypes[ki];
+            const NScheme::TTypeId kt = tableInfo.KeyColumnTypes[ki].GetTypeId();
             const TCell& cell = keyCells.GetCells()[ki];
             keyBytes += cell.Size();
             key.emplace_back(TRawTypeValue(cell.AsRef(), kt));

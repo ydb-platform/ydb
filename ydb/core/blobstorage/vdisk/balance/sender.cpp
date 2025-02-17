@@ -87,7 +87,7 @@ namespace {
 
             for (ui8 partIdx = localParts.FirstPosition(); partIdx < localParts.GetSize(); partIdx = localParts.NextPosition(partIdx)) {
                 TRope result;
-                diskBlob.GetPart(partIdx, &result);
+                result = diskBlob.GetPart(partIdx, &result);
                 readSize += result.size();
                 Result[i].PartsData.emplace_back(std::move(result));
             }

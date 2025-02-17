@@ -13,7 +13,7 @@
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 
-namespace NActors { //just a comment
+namespace NActors {
     class TActorSystem;
     class TMailboxTable;
     class TMailbox;

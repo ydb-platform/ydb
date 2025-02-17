@@ -340,7 +340,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         if (SchemeResult) {
             OnSchemeResult(txc, ctx);
         } else if (SchemeQueryResult) {
-            OnSchemeQueryPreparation(txc);
+            OnSchemeQueryPreparation(txc, ctx);
         } else if (AllocateResult) {
             OnAllocateResult(txc, ctx);
         } else if (ModifyResult) {
@@ -886,7 +886,7 @@ private:
         }
     }
 
-    void OnSchemeQueryPreparation(TTransactionContext& txc) {
+    void OnSchemeQueryPreparation(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(SchemeQueryResult);
         const auto& message = *SchemeQueryResult.Get()->Get();
         const TString error = std::holds_alternative<TString>(message.Result) ? std::get<TString>(message.Result) : "";
@@ -929,6 +929,8 @@ private:
             if (AllWaiting(itemStates)) {
                 // Cancel the import, or we will end up waiting indefinitely.
                 return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
+            } else if (AllDoneOrWaiting(itemStates)) {
+                RetryViewsCreation(importInfo, db, ctx);
             }
             return;
         }

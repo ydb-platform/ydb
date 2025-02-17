@@ -41,7 +41,7 @@ struct TDatabaseConfigIdentity {
     TString Database;
 };
 
-using TKnownIdentityTypes = std::variant<
+using TIdentityTypes = std::variant<
       std::monostate
     , TMainConfigIdentity
     , TStorageConfigIdentity
@@ -73,7 +73,6 @@ using TAsyncFetchConfigResult = NThreading::TFuture<TFetchConfigResult>;
 
 class TConfigClient {
 public:
-
     explicit TConfigClient(const TDriver& driver, const TCommonClientSettings& settings = {});
 
     ~TConfigClient();

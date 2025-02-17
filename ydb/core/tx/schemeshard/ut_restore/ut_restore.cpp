@@ -5093,6 +5093,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
 
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
                 if (createsViews) {
                     runtime.GetAppData().FeatureFlags.SetEnableViews(true);
                 }
@@ -5354,5 +5355,93 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             )"
         );
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleChangefeed) {
+        THashMap<TString, TTypedScheme> schemes;
+
+        const auto changefeedName = "update_changefeed";
+
+        schemes.emplace("", R"(
+            columns { 
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )");
+
+        const auto changefeedDesc = Sprintf(R"(
+            name: "%s"
+            mode: MODE_UPDATES
+            format: FORMAT_JSON
+            state: STATE_ENABLED
+        )", changefeedName);
+
+        const auto topicDesc = R"(
+            partitioning_settings {
+            min_active_partitions: 1
+            max_active_partitions: 1
+            auto_partitioning_settings {
+                strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+                partition_write_speed {
+                stabilization_window {
+                    seconds: 300
+                }
+                up_utilization_percent: 80
+                down_utilization_percent: 20
+                }
+            }
+            }
+            partitions {
+            active: true
+            }
+            retention_period {
+            seconds: 86400
+            }
+            partition_write_speed_bytes_per_second: 1048576
+            partition_write_burst_bytes: 1048576
+            attributes {
+            key: "__max_partition_message_groups_seqno_stored"
+            value: "6000000"
+            }
+            attributes {
+            key: "_allow_unauthenticated_read"
+            value: "true"
+            }
+            attributes {
+            key: "_allow_unauthenticated_write"
+            value: "true"
+            }
+            attributes {
+            key: "_message_group_seqno_retention_period_ms"
+            value: "1382400000"
+            }
+            consumers {
+            name: "my_consumer"
+            read_from {
+            }
+            attributes {
+                key: "_service_type"
+                value: "data-streams"
+            }
+            }
+        )";
+        
+        NAttr::TAttributes attr;
+        attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
+
+        schemes.emplace("/update_feed", 
+            TTypedScheme {
+                EPathTypeCdcStream,
+                changefeedDesc,
+                std::move(attr)
+            }
+        );
+
+        ShouldSucceed(schemes);
     }
 }

@@ -554,7 +554,7 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         const auto& item = importInfo->Items.at(itemIdx);
 
-        Y_ABORT_UNLESS(item.State == EState::Transferring);
+        Y_ABORT_UNLESS(item.State == EState::Transferring || item.State == EState::CreateChangefeed);
         Y_ABORT_UNLESS(item.DstPathId);
 
         if (!Self->PathsById.contains(item.DstPathId)) {
@@ -619,6 +619,7 @@ private:
             }
 
             switch (importInfo->Items.at(i).State) {
+            case EState::CreateChangefeed:
             case EState::Transferring:
                 CancelTransferring(importInfo, i);
                 break;
@@ -752,10 +753,13 @@ private:
                 case EState::CreateSchemeObject:
                 case EState::Transferring:
                 case EState::BuildIndexes:
+                case EState::CreateChangefeed:
                     if (item.WaitTxId == InvalidTxId) {
                         if (!IsCreatedByQuery(item) || item.PreparedCreationQuery) {
+                            Cerr << "AllocateTxIdCreateChfg: " << IsCreatedByQuery(item) << " " << item.PreparedCreationQuery << Endl;
                             AllocateTxId(importInfo, itemIdx);
                         } else {
+                            Cerr << "NoAllocateTxIdCreateChfg SchemeQueryExecutor: " << IsCreatedByQuery(item) << " " << item.PreparedCreationQuery << Endl;
                             const auto database = GetDatabase(*Self);
                             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                                 Self->SelfId(), importInfo->Id, itemIdx, item.CreationQuery, database
@@ -763,6 +767,7 @@ private:
                             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
                         }
                     } else {
+                        Cerr << "SubscribeTxCreateChfg: " << IsCreatedByQuery(item) << " " << item.PreparedCreationQuery << Endl;
                         SubscribeTx(importInfo, itemIdx);
                     }
                     break;
@@ -777,6 +782,7 @@ private:
                 TTxId txId = InvalidTxId;
 
                 switch (item.State) {
+                case EState::CreateChangefeed: 
                 case EState::Transferring:
                     if (!CancelTransferring(importInfo, itemIdx)) {
                         txId = GetActiveRestoreTxId(importInfo, itemIdx);
@@ -798,6 +804,7 @@ private:
                     Self->PersistImportItemState(db, importInfo, itemIdx);
 
                     switch (item.State) {
+                    case EState::CreateChangefeed:
                     case EState::Transferring:
                         CancelTransferring(importInfo, itemIdx);
                         break;
@@ -1061,7 +1068,7 @@ private:
             )) {
                 if (record.GetPathCreateTxId()) {
                     txId = TTxId(record.GetPathCreateTxId());
-                } else if (item.State == EState::Transferring) {
+                } else if (item.State == EState::Transferring || item.State == EState::CreateChangefeed) {
                     txId = GetActiveRestoreTxId(importInfo, itemIdx);
                 }
             }
@@ -1076,7 +1083,7 @@ private:
         item.WaitTxId = txId;
         Self->PersistImportItemState(db, importInfo, itemIdx);
 
-        if (importInfo->State != EState::Waiting && item.State == EState::Transferring) {
+        if (importInfo->State != EState::Waiting && (item.State == EState::Transferring || item.State == EState::CreateChangefeed)) {
             CancelTransferring(importInfo, itemIdx);
             return;
         }

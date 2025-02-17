@@ -1,11 +1,17 @@
 import os
 import re
+import requests
 
-def parse_requirements(file_path):
+GITHUB_API_URL = "https://api.github.com"
+GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
+
+def parse_requirements(file_path, github_token):
     requirements = []
     current_req = None
+    current_section = ""
+    current_subsection = ""
 
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         lines = file.readlines()
 
     for line in lines:
@@ -18,6 +24,25 @@ def parse_requirements(file_path):
         subsection_match = re.match(r"^###\s(.+)", line)
         if subsection_match:
             current_subsection = subsection_match.group(1)
+            continue
+
+        # Identify a GitHub issue
+        issue_match = re.match(r"- #(\d+)", line)
+        if issue_match:
+            issue_number = issue_match.group(1)
+            issue_data = fetch_github_issue(issue_number, github_token)
+            if issue_data:
+                if current_req:
+                    requirements.append(current_req)
+                issue_id = issue_data.get('node_id')
+                sub_issues = fetch_sub_issues_by_id(issue_id, github_token) if issue_id else []
+                current_req = {
+                    'id': f"ISSUE-{issue_number}",
+                    'description': issue_data['title'],  # Title of the issue
+                    'cases': sub_issues,  # Sub-issues as cases
+                    'section': current_section,
+                    'subsection': current_subsection
+                }
             continue
 
         # Identify a new requirement
@@ -67,18 +92,90 @@ def parse_requirements(file_path):
                 'description': issue_desc,
                 'bage': f"[![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/{issue_id})](https://github.com/ydb-platform/ydb/issues/{issue_id})" })
 
+
     if current_req:
         requirements.append(current_req)
 
     return requirements
 
+def fetch_github_issue(issue_number, github_token):
+    headers = {"Authorization": f"token {github_token}"}
+    response = requests.get(f"{GITHUB_API_URL}/repos/ydb-platform/ydb/issues/{issue_number}", headers=headers)
+    
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f"Failed to fetch issue #{issue_number}: {response.status_code} {response.text}")
+        return None
+
+def fetch_sub_issues_by_id(issue_id, github_token):
+    query = """
+    query($issueId: ID!, $after: String) {
+      node(id: $issueId) {
+        ... on Issue {
+          subIssues(first: 100, after: $after) {
+            nodes {
+              title
+              number
+              url
+              id
+            }
+            pageInfo { 
+              hasNextPage 
+              endCursor 
+            }
+          }
+        }
+      }
+    }
+    """
+    
+    variables = {
+        "issueId": issue_id,
+        "after": None
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "GraphQL-Features": "sub_issues"
+    }
+    
+    sub_issues = []
+    
+    while True:
+        response = requests.post(GITHUB_GRAPHQL_URL, json={"query": query, "variables": variables}, headers=headers)
+        
+        if response.status_code == 200:
+            data = response.json()
+            sub_issues_data = data['data']['node']['subIssues']
+            nodes = sub_issues_data['nodes']
+            for node in nodes:
+                sub_issues.append({
+                    'case_id': f"#{node['number']}",
+                    'name': node['title'],
+                    'description': 'Sub-Issue',
+                    'path': node['url'],
+                    'issue': node['number'],
+                    'status': "Pending",
+                    'bage': f"[![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/{node['number']})](https://github.com/ydb-platform/ydb/issues/{node['number']})"
+                })
+            
+            if not sub_issues_data['pageInfo']['hasNextPage']:
+                break
+            variables['after'] = sub_issues_data['pageInfo']['endCursor']
+        else:
+            print(f"GraphQL query failed: {response.status_code} {response.text}")
+            break
+    
+    return sub_issues
+
 def generate_traceability_matrix(requirements, output_path):
-    with open(output_path, 'w') as file:
+    with open(output_path, 'w', encoding='utf-8') as file:
         file.write("# Traceability Matrix\n\n")
         section = ''
         subsection = ''
         for req in requirements:
-            if section != req['section']:            
+            if section != req['section']:
                 file.write(f"## {req['section']}\n\n")
                 section = req['section']
             if subsection != req['subsection']:
@@ -86,8 +183,7 @@ def generate_traceability_matrix(requirements, output_path):
                 subsection = req['subsection']
             file.write(f"#### {req['id']}\n")
             file.write(f"Description: {req['description']}\n\n")
-
-            if req['issues']:
+            if req.get('issues'):
                 file.write("Issues:\n")
                 for issue in req['issues']:
                     file.write(f"- {issue['id']}: {issue['description']}\n")
@@ -95,30 +191,31 @@ def generate_traceability_matrix(requirements, output_path):
 
             file.write("| Case ID | Name | Description | Issues | Test Case Status |\n")
             file.write("|---------|------|-------------|--------|------------------|\n")
-
-            for case in req['cases']:
-                if case['issues'] or req['issues']:
-                    issues_list = ','.join([f"{issue['bage']}" for issue in case['issues']]) +  ','.join([f"{issue['bage']}" for issue in req['issues']])
-             
-                else:
-                    issues_list = ""
-                file.write(f"| {case['case_id']} | {case['name']} | {case['description']} | {issues_list} | {case['status']} |\n")
             
+            for case in req['cases']:
+                issues_list = ""
+                if case.get('bage'):
+                    issues_list = case['bage']
+                if case.get('issues'):
+                    issues_list = issues_list +  ','.join([f"{issue['bage']}" for issue in case['issues']]) 
+                if req.get('issues'):
+                    issues_list = issues_list +  ','.join([f"{issue['bage']}" for issue in req['issues']] or req['issues'])
+                file.write(f"| {case['case_id']} | {case['name']} | {case['description']} | {issues_list} | {case['status']} |\n")
             file.write("\n")
 
-def collect_requirements_from_directory(directory):
+def collect_requirements_from_directory(directory, github_token):
     requirements = []
     for root, _, files in os.walk(directory):
         for file in files:
             if file.startswith('req') and file.endswith('.md'):
                 file_path = os.path.join(root, file)
-                requirements.extend(parse_requirements(file_path))
+                requirements.extend(parse_requirements(file_path, github_token))
     return requirements
 
-def process_and_generate_matrices(base_directory):
+def process_and_generate_matrices(base_directory, github_token):
     for root, subdirs, files in os.walk(base_directory):
         # Collect requirements from the current directory and its direct subdirectories
-        requirements = collect_requirements_from_directory(root)
+        requirements = collect_requirements_from_directory(root, github_token)
 
         if requirements:
             output_file = os.path.join(root, 'traceability_matrix.md')
@@ -126,5 +223,6 @@ def process_and_generate_matrices(base_directory):
             print(f"Generated traceability matrix in {output_file}")
 
 if __name__ == "__main__":
+    GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # You need to set this environment variable with your GitHub token
     current_directory = os.path.dirname(os.path.abspath(__file__))
-    process_and_generate_matrices(current_directory)
+    process_and_generate_matrices(current_directory, GITHUB_TOKEN)

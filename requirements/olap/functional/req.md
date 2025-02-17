@@ -48,6 +48,8 @@ This document outlines the detailed functional and non-functional requirements f
     - Case 3.1: [LogBench Operations](path/to/test/23) - Validate reading, aggregating, and processing JSON types through LogBench tests, focused on smaller datasets.
     - Case 3.2: [TPC-H S1 Execution](path/to/test/24) - Confirm successful execution and performance of TPC-H S1 queries.
 
+- #13527
+
 ### INSERT INTO, UPSERT, and REPLACE Operations
 
 - **REQ-INS-001**: Support INSERT INTO, UPSERT, and REPLACE for data modifications with expected behaviors.

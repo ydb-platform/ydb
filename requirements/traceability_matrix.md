@@ -47,6 +47,20 @@ Description: Provide robust and efficient data reading capabilities.
 | REQ-READ-001-3.1 | LogBench Operations | Validate reading, aggregating, and processing JSON types through LogBench tests, focused on smaller datasets. |  | Pending |
 | REQ-READ-001-3.2 | TPC-H S1 Execution | Confirm successful execution and performance of TPC-H S1 queries. |  | Pending |
 
+#### ISSUE-13527
+Description: Test Suite: cs/read-write
+
+| Case ID | Name | Description | Issues | Test Case Status |
+|---------|------|-------------|--------|------------------|
+| #13528 | Test cs read-write. Check all column types work | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13528)](https://github.com/ydb-platform/ydb/issues/13528) | Pending |
+| #13529 | Test cs read-write. Quota exhaustion | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13529)](https://github.com/ydb-platform/ydb/issues/13529) | Pending |
+| #13530 | Test cs read-write. Log scenario (write in the end) | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13530)](https://github.com/ydb-platform/ydb/issues/13530) | Pending |
+| #13531 | Test cs read-write. Log scenario (random writes) | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13531)](https://github.com/ydb-platform/ydb/issues/13531) | Pending |
+| #13532 | Test cs read-write. Log scenario (sparsed + many columns) | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13532)](https://github.com/ydb-platform/ydb/issues/13532) | Pending |
+| #13652 | Test cs writes. Written duplicates doesn't provoke disk exhaustion | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13652)](https://github.com/ydb-platform/ydb/issues/13652) | Pending |
+| #13653 | Data deletion doesn't lead to disk exhaustion | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13653)](https://github.com/ydb-platform/ydb/issues/13653) | Pending |
+| #13848 | Test CS RW load. Write, modify, read TBs | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13848)](https://github.com/ydb-platform/ydb/issues/13848) | Pending |
+
 ### INSERT INTO, UPSERT, and REPLACE Operations
 #### REQ-INS-001
 Description: Support INSERT INTO, UPSERT, and REPLACE for data modifications with expected behaviors.
@@ -85,6 +99,25 @@ Description: Allow and manage federated query execution.
 | REQ-FEDQ-001-10.2 | Federated Source Data Insertions | Validate data insertions deriving from federated sources. |  | Pending |
 
 ## Non-functional Requirements
+
+### TTL
+#### ISSUE-13526
+Description: Test Suite: cs/tiering+ttl
+
+| Case ID | Name | Description | Issues | Test Case Status |
+|---------|------|-------------|--------|------------------|
+| #13468 | Test tiering. Functional. Data deleted by DELETE statement are deleted from S3 | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13468)](https://github.com/ydb-platform/ydb/issues/13468) | Pending |
+| #13467 | Test tiering. Functional. When configuring DELETE tier, data evaporates from S3 | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13467)](https://github.com/ydb-platform/ydb/issues/13467) | Pending |
+| #13466 | Test tiering. Functional. Check data migration when altering tiering settings | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13466)](https://github.com/ydb-platform/ydb/issues/13466) | Pending |
+| #13465 | Test tiering. Functional. Check data correctness | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13465)](https://github.com/ydb-platform/ydb/issues/13465) | Pending |
+| #13542 | Test tiering. Functional. Check data availability and correctness while changing ttl settings | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13542)](https://github.com/ydb-platform/ydb/issues/13542) | Pending |
+| #13543 | Test. sys reflects data distribution across tiers while modifying data | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13543)](https://github.com/ydb-platform/ydb/issues/13543) | Pending |
+| #13544 | Test tiering. Stress. Ustable network connection | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13544)](https://github.com/ydb-platform/ydb/issues/13544) | Pending |
+| #13545 | Test tiering. Stability. Temporary unavailable s3 | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13545)](https://github.com/ydb-platform/ydb/issues/13545) | Pending |
+| #13546 | Test tiering. Stability. Writing when blobstorage is full | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13546)](https://github.com/ydb-platform/ydb/issues/13546) | Pending |
+| #13619 | Test tiering. Add column works for offloaded data | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13619)](https://github.com/ydb-platform/ydb/issues/13619) | Pending |
+| #13620 | Test teiring. Drop Column works well for offloaded data | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13620)](https://github.com/ydb-platform/ydb/issues/13620) | Pending |
+| #13621 | Test tiering. Alter column works well for offloaded data | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13621)](https://github.com/ydb-platform/ydb/issues/13621) | Pending |
 
 ### Performance
 #### REQ-PERF-001

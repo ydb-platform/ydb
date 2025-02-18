@@ -1,8 +1,8 @@
 # Traceability Matrix
 
 ### TTL
-#### ISSUE-13526
-Description: Test Suite: cs/tiering+ttl
+#### [ISSUE-13526](https://github.com/ydb-platform/ydb/issues/13526): Test Suite: cs/tiering+ttl
+![TO%20DO](https://img.shields.io/badge/TO%20DO-4%2F12:33%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|

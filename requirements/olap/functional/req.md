@@ -33,6 +33,12 @@ This document outlines the detailed functional and non-functional requirements f
 - #13527
 - #14639
 
+### Other
+- #13952
+- #13956
+- #13959
+- #14601
+
 ### INSERT INTO, UPSERT, and REPLACE Operations
 
 - **REQ-INS-001**: Support INSERT INTO, UPSERT, and REPLACE for data modifications with expected behaviors.

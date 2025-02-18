@@ -3,8 +3,8 @@
 ## Functional Requirements
 
 ### Bulk Upsert Data Insertion
-#### REQ-BULK-001
-Description: The system should support data insertion using `bulk_upsert` across all data types and transports.
+#### REQ-BULK-001: The system should support data insertion using `bulk_upsert` across all data types and transports.
+**Description**: Enable the insertion of all data types (e.g., Int32, Uint64, String) using transports like arrow and BoxedValue, ensuring data visibility and integrity.
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
@@ -21,12 +21,12 @@ Description: The system should support data insertion using `bulk_upsert` across
 | REQ-BULK-001-1.11 | Metric Visibility in UI | Validate that operational metrics are visible and accurate in the user interface. |  | Pending |
 
 ### INSERT INTO, UPSERT, and REPLACE Operations
-#### ISSUE-14668
-Description: Test suite: CS/(INSERT INTO/UPSERT/REPLACE) support
+#### [ISSUE-14668](https://github.com/ydb-platform/ydb/issues/14668): Test suite: CS/(INSERT INTO/UPSERT/REPLACE) support
+![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F9:0%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
-| #14669 | It is possible to record data types in all columns, including PK and data |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14669)](https://github.com/ydb-platform/ydb/issues/14669) | Pending |
+| #14669 | It is possible to write data types in all columns, including PK and data |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14669)](https://github.com/ydb-platform/ydb/issues/14669) | Pending |
 | #14670 | If the data already exists in the table, INSERT INTO returns an error, REPLACE/UPSERT overwrites it |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14670)](https://github.com/ydb-platform/ydb/issues/14670) | Pending |
 | #14671 | If there is no data in the table, INSERT INTO inserts the data, REPLACE does nothing, UPSERT inserts the data |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14671)](https://github.com/ydb-platform/ydb/issues/14671) | Pending |
 | #14672 | It is possible to write 1 million (? batch size) strings in a single call |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14672)](https://github.com/ydb-platform/ydb/issues/14672) | Pending |
@@ -37,16 +37,16 @@ Description: Test suite: CS/(INSERT INTO/UPSERT/REPLACE) support
 | #14678 | If the cluster is stopped during INSERT INTO execution, an error is returned to the user. Alternatively, INSERT is expected to be retried until the server is restarted |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14678)](https://github.com/ydb-platform/ydb/issues/14678) | Pending |
 
 ### Data Reading Operations
-#### ISSUE-14680
-Description: Test Suite: Reading data
+#### [ISSUE-14680](https://github.com/ydb-platform/ydb/issues/14680): Test Suite: Reading data
+![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F2:0%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
 | #14679 | LogBench - working with reads, aggregation, JSON types. The test is successful on a small amount of data |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14679)](https://github.com/ydb-platform/ydb/issues/14679) | Pending |
 | #14681 | TPCH S100 is successful |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14681)](https://github.com/ydb-platform/ydb/issues/14681) | Pending |
 
-#### ISSUE-13527
-Description: Test Suite: cs/read-write
+#### [ISSUE-13527](https://github.com/ydb-platform/ydb/issues/13527): Test Suite: cs/read-write
+![TO%20DO](https://img.shields.io/badge/TO%20DO-1%2F8:12%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
@@ -59,8 +59,8 @@ Description: Test Suite: cs/read-write
 | #13653 | Data deletion doesn't lead to disk exhaustion | Писать данные до того, как упрёмся в квоту. После этого удялять данные большими кусками.  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13653)](https://github.com/ydb-platform/ydb/issues/13653) | Pending |
 | #13848 | Test CS RW load. Write, modify, read TBs | Проверка записи/модификации/чтения на больших объёмах данных (единицы-десятки. TB) | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13848)](https://github.com/ydb-platform/ydb/issues/13848) | Pending |
 
-#### ISSUE-14639
-Description: Test suite: cs/write data
+#### [ISSUE-14639](https://github.com/ydb-platform/ydb/issues/14639): Test suite: cs/write data
+![TO%20DO](https://img.shields.io/badge/TO%20DO-2%2F8:25%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
@@ -73,9 +73,44 @@ Description: Test suite: cs/write data
 | #14647 | If the cluster is stopped during bulk_upsert execution, an error is returned to the user |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14647)](https://github.com/ydb-platform/ydb/issues/14647) | Pending |
 | #14648 | When inserting a large amount of data ALTER TABLE ADD COLUMN, bulk_upsert should complete successfully |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14648)](https://github.com/ydb-platform/ydb/issues/14648) | Pending |
 
+### Other
+#### [ISSUE-13952](https://github.com/ydb-platform/ydb/issues/13952): Test Suite: cs/introspection
+![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
+
+**Description**: статистики по таблицам для UI, доступность информации через .sys
+
+| Case ID | Name | Description | Issues | Test Case Status |
+|---------|------|-------------|--------|------------------|
+| #13955 | TBD |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13955)](https://github.com/ydb-platform/ydb/issues/13955) | Pending |
+
+#### [ISSUE-13956](https://github.com/ydb-platform/ydb/issues/13956): Test suite: cs/schema
+![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
+
+**Description**: взаимодействие со ским-шардом, создание/удаление таблиц/сторов, представление/оптимизиация хранения схем, актуализация данных
+
+| Case ID | Name | Description | Issues | Test Case Status |
+|---------|------|-------------|--------|------------------|
+| #13957 | TBD |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13957)](https://github.com/ydb-platform/ydb/issues/13957) | Pending |
+
+#### [ISSUE-13959](https://github.com/ydb-platform/ydb/issues/13959): Test suite: cs/indexes
+![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
+
+**Description**: индексы/статистики
+
+| Case ID | Name | Description | Issues | Test Case Status |
+|---------|------|-------------|--------|------------------|
+| #13960 | TBD |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13960)](https://github.com/ydb-platform/ydb/issues/13960) | Pending |
+
+#### [ISSUE-14601](https://github.com/ydb-platform/ydb/issues/14601): Test Suite: Workload Manager
+![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
+
+| Case ID | Name | Description | Issues | Test Case Status |
+|---------|------|-------------|--------|------------------|
+| #14602 | Test WM. Classifiers move queires to right resource pool |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14602)](https://github.com/ydb-platform/ydb/issues/14602) | Pending |
+
 ### INSERT INTO, UPSERT, and REPLACE Operations
-#### REQ-INS-001
-Description: Support INSERT INTO, UPSERT, and REPLACE for data modifications with expected behaviors.
+#### REQ-INS-001: Support INSERT INTO, UPSERT, and REPLACE for data modifications with expected behaviors.
+**Description**: Ensure data can be inserted or updated with proper handling of duplicates and expected transactional behaviors.
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
@@ -92,8 +127,8 @@ Description: Support INSERT INTO, UPSERT, and REPLACE for data modifications wit
 | REQ-INS-001-2.11 | Data Representation in GUI | Ensure data volumes are reflected accurately in reports and dashboards. |  | Pending |
 
 ### Data Reading Operations
-#### REQ-READ-001
-Description: Provide robust and efficient data reading capabilities.
+#### REQ-READ-001: Provide robust and efficient data reading capabilities.
+**Description**: Execute and validate operations concerning reading data, including aggregation and supported data types.
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
@@ -102,8 +137,8 @@ Description: Provide robust and efficient data reading capabilities.
 
 ## Federated Queries Support
 
-#### REQ-FEDQ-001
-Description: Allow and manage federated query execution.
+#### REQ-FEDQ-001: Allow and manage federated query execution.
+**Description**: Enable and validate operations involving federated query execution, taking advantage of diverse data sources.
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
@@ -113,8 +148,10 @@ Description: Allow and manage federated query execution.
 ## 
 
 ### Compression
-#### ISSUE-13626
-Description: Test Suite: cs/compression
+#### [ISSUE-13626](https://github.com/ydb-platform/ydb/issues/13626): Test Suite: cs/compression
+![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F11:0%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
+
+**Description**: Сжатие (в широком смысле, напр., dictionary encoding), sparse, column_family
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
@@ -131,8 +168,8 @@ Description: Test Suite: cs/compression
 | #13651 | Test cs column family. Write highly randomized data | Выполняем запись сильнорандомизированных данных (после сжатия размер должен вырасти), проверяем, что запись и чтение выполняется  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13651)](https://github.com/ydb-platform/ydb/issues/13651) | Pending |
 
 ### TTL
-#### ISSUE-13526
-Description: Test Suite: cs/tiering+ttl
+#### [ISSUE-13526](https://github.com/ydb-platform/ydb/issues/13526): Test Suite: cs/tiering+ttl
+![TO%20DO](https://img.shields.io/badge/TO%20DO-4%2F12:33%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|

@@ -36,12 +36,31 @@ def parse_requirements(file_path, github_token):
                     requirements.append(current_req)
                 issue_id = issue_data.get('node_id')
                 sub_issues = fetch_sub_issues_by_id(issue_id, github_token) if issue_id else []
+                if issue_data.get('sub_issues_summary'):
+                    percent_completed = issue_data['sub_issues_summary']['percent_completed']
+                    total = issue_data['sub_issues_summary']['total']
+                    completed = issue_data['sub_issues_summary']['completed']
+                    if issue_data['sub_issues_summary']['percent_completed'] == 100:
+                        status = 'DONE'
+                        color = f'purplergb(249%2C%20239%2C%20254%2C1)'
+                    elif 0 > issue_data['sub_issues_summary']['percent_completed'] < 100 :
+                        status = 'PROGRESS'
+                        color = f'purplergb(254%2C%20248%2C%20202%2C1)'
+                    else:
+                        status = 'TO%20DO'
+                        color = f'purplergb(224%2C%20250%2C%20227%2C1)'
+                    issue_data['badge'] = f"![{status}](https://img.shields.io/badge/{status}-{completed}%2F{total}:{percent_completed}%25-{color}?style=for-the-badge&logo=database&labelColor=grey)"
                 current_req = {
                     'id': f"ISSUE-{issue_number}",
-                    'description': issue_data['title'],  # Title of the issue
+                    'title': issue_data['title'],  # Title of the issue
+                    'description': issue_data['body'],
+                    'url': issue_data['html_url'],
+                    'body': issue_data['body'],
                     'cases': sub_issues,  # Sub-issues as cases
                     'section': current_section,
-                    'subsection': current_subsection
+                    'subsection': current_subsection,
+                    'sub_issues_summary': issue_data.get('sub_issues_summary'),
+                    'badge': issue_data.get('badge')
                 }
             continue
 
@@ -52,13 +71,18 @@ def parse_requirements(file_path, github_token):
                 requirements.append(current_req)
             current_req = {
                 'id': req_match.group(1),
-                'description': req_match.group(2),
+                'title': req_match.group(2),
                 'cases': [],
                 'issues': [],
                 'section': current_section,
                 'subsection': current_subsection
             }
-        
+        # Identify requirement description
+        #  - **Description**: 
+        req_description_match = re.match(r"\s+- \*\*Description\*\*: (.+)", line)
+        if req_description_match:
+            current_req['description'] = req_description_match.group(1)
+
         # Identify requirement issues
         issue_match = re.match(r"\s+- ISSUE:(.+):(.+)", line)
         if issue_match and current_req:
@@ -154,7 +178,7 @@ def fetch_sub_issues_by_id(issue_id, github_token):
                 sub_issues.append({
                     'case_id': f"#{node['number']}",
                     'name': node['title'],
-                    'description': node['body'],
+                    'description': node['body'].split('\n')[0],
                     'path': node['url'],
                     'issue': node['number'],
                     'status': "Pending",
@@ -182,8 +206,15 @@ def generate_traceability_matrix(requirements, output_path):
             if subsection != req['subsection']:
                 file.write(f"### {req['subsection']}\n")
                 subsection = req['subsection']
-            file.write(f"#### {req['id']}\n")
-            file.write(f"Description: {req['description']}\n\n")
+            
+            if req.get('url'):
+                file.write(f"#### [{req['id']}]({req['url']}): {req['title']}\n")
+            else:
+                file.write(f"#### {req['id']}: {req['title']}\n")
+            if req.get('badge'):
+                 file.write(f"{req['badge']}\n\n")
+            if req['description']:
+                file.write(f"**Description**: {req['description']}\n\n")
             if req.get('issues'):
                 file.write("Issues:\n")
                 for issue in req['issues']:
@@ -198,9 +229,9 @@ def generate_traceability_matrix(requirements, output_path):
                 if case.get('bage'):
                     issues_list = case['bage']
                 if case.get('issues'):
-                    issues_list = issues_list +  ','.join([f"{issue['bage']}" for issue in case['issues']]) 
+                    issues_list = issues_list + ','.join([f"{issue['bage']}" for issue in case['issues']]) 
                 if req.get('issues'):
-                    issues_list = issues_list +  ','.join([f"{issue['bage']}" for issue in req['issues']] or req['issues'])
+                    issues_list = issues_list + ','.join([f"{issue['bage']}" for issue in req['issues']] or req['issues'])
                 file.write(f"| {case['case_id']} | {case['name']} | {case['description']} | {issues_list} | {case['status']} |\n")
             file.write("\n")
 

@@ -17,7 +17,7 @@
 Миграция на автоматическую конфигурацию может быть осуществлена в случае выполнения всех следующих условий:
 
 1. Кластер {{ydb-short-name}} [обновлён](../../../maintenance/upgrade.md) до версии v25.1 и выше.
-2. Кластер {{ydb-short-name}} перешёл на [динамическую конфигурацию](../../configuration-management/index.md#dynamic-config). Либо посредством миграции согласно [{#T}](migration-to-dynconfig.md), либо изначально был с ней [развёрнут](../initial-deployment.md).
+2. Кластер {{ydb-short-name}} перешёл на [конфигурацию v2](../../../configuration-management/index.md). Либо посредством миграции согласно [{#T}](migration-to-v2.md), либо изначально был с ней [развёрнут](../initial-deployment.md).
 3. И статическая группа и State Storage сконфигурированы вручную. Эти компоненты связаны, так что конфигурирование одного из них автоматически, а второго вручную не поддерживается.
 
 ## Процедура миграции
@@ -27,7 +27,7 @@
 1. Получить текущую конфигурацию кластера:
 
   ```bash
-  ydb -e grpc://<node.ydb.tech>:2135 admin config fetch > config.yaml
+  ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
   ```
 
   Файл `config.yaml` должен совпадать с конфигурационными файлами, разложенными по нодам кластера, за исключением поля `metadata.version`, которое должно быть больше на единицу по сравнению с версией на узлах кластера.
@@ -46,9 +46,7 @@
 7. Выполнить следующую команду с изменённым конфигурационным файлом:
 
 ```bash
-ydb -e grpc://<node.ydb.tech>:2135 admin storage replace -f config.yaml
+ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
 ```
 
-8. Выложить новый конфигурационный файл на ноды кластера.
-
-В результате проделанных действий кластер будет переведён в режим автоматического управление конфигурацией [State Storage](../../../../reference/configuration/index.md#domains-state) и [статической группой](../../../../reference/configuration/index.md#blob_storage_config). Техниченски, оно осуществляется с помощью механизма [распределённой конфигурации](../../../../concepts/glossary.md#distributed-configuration). Для внесения дальнейших изменений в конфигурацию необходимо использовать те же команды `ydb admin config fetch` и `ydb admin config replace`, а не обновлять локальные файлы на узлах кластера.
+В результате проделанных действий кластер будет переведён в режим автоматического управление конфигурацией [State Storage](../../../../reference/configuration/index.md#domains-state) и [статической группой](../../../../reference/configuration/index.md#blob_storage_config). Технически, оно осуществляется с помощью механизма [распределённой конфигурации](../../../../concepts/glossary.md#distributed-configuration). Взаимодействие с конфигурацией осуществляется все так же в рамках конфигурации v2, используя [команды YDB CLI](../update-config.md).

@@ -166,16 +166,16 @@ public:
         AddVersion(pathId, snapshot, ttlVersion);
     }
 
-    const NOlap::TTiering* GetTableTtl(const ui64 pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
+    std::optional<NOlap::TTiering> GetTableTtl(const ui64 pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
         auto findTable = Ttl.FindPtr(pathId);
         if (!findTable) {
-            return nullptr;
+            return std::nullopt;
         }
         const auto findTtl = findTable->upper_bound(snapshot);
-        if (findTtl == findTable->begin() || !std::prev(findTtl)->second) {
-            return nullptr;
+        if (findTtl == findTable->begin()) {
+            return std::nullopt;
         }
-        return &*std::prev(findTtl)->second;
+        return std::prev(findTtl)->second;
     }
 
     ui64 GetMemoryUsage() const {
@@ -223,14 +223,14 @@ public:
             if (info.IsDropped(snapshot)) {
                 continue;
             }
-            if (const auto& tableTtl = Ttl.GetTableTtl(pathId, snapshot)) {
-                ttl.emplace(pathId, *tableTtl);
+            if (auto tableTtl = Ttl.GetTableTtl(pathId, snapshot)) {
+                ttl.emplace(pathId, std::move(tableTtl));
             }
         }
         return ttl;
     }
 
-    const NOlap::TTiering* GetTableTtl(const ui64 pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
+    std::optional<NOlap::TTiering> GetTableTtl(const ui64 pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
         return Ttl.GetTableTtl(pathId, snapshot);
     }
 

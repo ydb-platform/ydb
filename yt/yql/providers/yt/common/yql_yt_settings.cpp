@@ -524,6 +524,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MaxColumnGroups);
     REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
     REGISTER_SETTING(*this, JobBlockInput);
+    REGISTER_SETTING(*this, JobBlockTableContent);
     REGISTER_SETTING(*this, JobBlockOutput).Parser([](const TString& v) { return FromString<EBlockOutputMode>(v); });
     REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
     REGISTER_SETTING(*this, CompactForDistinct);

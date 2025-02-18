@@ -7,6 +7,7 @@
 
 #include <yt/cpp/mapreduce/interface/config.h>
 
+#include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
@@ -42,21 +43,22 @@ TMaybe<TErrorResponse> GetErrorResponse(const TString& hostName, const TString& 
 
     TErrorResponse errorResponse(static_cast<int>(httpCode), requestId);
 
-    auto logAndSetError = [&] (const TString& rawError) {
+    auto logAndSetError = [&] (int code, const TString& rawError) {
         YT_LOG_ERROR("RSP %v - HTTP %v - %v",
             requestId,
             httpCode,
             rawError.data());
-        errorResponse.SetRawError(rawError);
+        errorResponse.SetError(TYtError(code, rawError));
     };
+
 
     switch (httpCode) {
         case NHttp::EStatusCode::TooManyRequests:
-            logAndSetError("request rate limit exceeded");
+            logAndSetError(NClusterErrorCodes::NSecurityClient::RequestQueueSizeLimitExceeded, "request rate limit exceeded");
             break;
 
         case NHttp::EStatusCode::InternalServerError:
-            logAndSetError("internal error in proxy " + hostName);
+            logAndSetError(NClusterErrorCodes::NRpc::Unavailable, "internal error in proxy " + hostName);
             break;
 
         default: {
@@ -79,6 +81,9 @@ TMaybe<TErrorResponse> GetErrorResponse(const TString& hostName, const TString& 
                 errorResponse.ParseFromJsonError(*errorHeader);
                 if (errorResponse.IsOk()) {
                     return Nothing();
+                }
+                if (httpCode == NHttp::EStatusCode::ServiceUnavailable) {
+                    ExtendGenericError(errorResponse, NClusterErrorCodes::NBus::TransportError, "transport error");
                 }
                 return errorResponse;
             }

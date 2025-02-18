@@ -213,8 +213,6 @@ int TCommandConfigReplace::Run(TConfig& config) {
         settings.AllowUnknownFields();
     }
 
-    // TODO absent database
-
     auto status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
 
     if (status.IsUnimplementedError()) {

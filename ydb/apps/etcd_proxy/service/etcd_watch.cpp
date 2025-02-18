@@ -163,7 +163,11 @@ private:
         MakeSimplePredicate(Key, RangeEnd, where, params);
 
         std::ostringstream sql;
-        sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from `verhaal` where " << revName << " <= `modified` and " << where.str() << " order by `modified` asc;" << std::endl;
+        sql << "select * from (select max_by(TableRow(), `modified`) from `verhaal` where " << revName << " > `modified` and " << where.str() << " group by `key`) flatten columns" << std::endl;
+        sql << "union all" << std::endl;
+        sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from `verhaal` where " << revName << " <= `modified` and " << where.str() << std::endl;
+        sql << "order by `modified` asc;" << std::endl;
+        std::cout << std::endl << sql.str() << std::endl;
 
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
@@ -193,8 +197,8 @@ private:
             while (!buff.second.empty() && buff.second.front().NewData.Modified <= data.Modified)
                 buff.second.pop();
 
-            if ((EWatchKind::OnChanges == Kind || (data.Version ? EWatchKind::OnUpdates : EWatchKind::OnDeletions) == Kind) &&
-                (!WithPrevious || buff.first))
+            if ((EWatchKind::OnChanges == Kind || (data.Version ? EWatchKind::OnUpdates : EWatchKind::OnDeletions) == Kind)
+                && data.Modified >= FromRevision && (!WithPrevious || buff.first))
                 changes.emplace_back(std::move(key), WithPrevious && buff.first ? std::move(*buff.first) : TData(), TData(data));
 
             buff.first = std::move(data);

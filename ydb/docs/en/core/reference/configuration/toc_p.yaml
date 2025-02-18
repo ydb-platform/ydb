@@ -1,3 +1,7 @@
 items:
 - name: TLS
   href: tls.md
+- name: Authentication
+  href: auth.md
+- name: Security
+  href: security.md

@@ -253,6 +253,12 @@ An **external table** is a piece of metadata that describes a particular dataset
 
 A **secret** is a sensitive piece of metadata that requires special handling. For example, secrets can be used in [external data source](#external-data-source) definitions and represent things like passwords and tokens.
 
+### Authentication token {#auth-token}
+
+An **Authentication token** or **auth token** is a token that {{ ydb-short-name }} uses for [authentication](../security/authentication.md).
+
+{{ ydb-short-name }} supports different [authentication modes](../security/authentication.md) and token types.
+
 ### Scheme object {#scheme-object}
 
 A database schema consists of **scheme objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [folders](#folder), and so on.

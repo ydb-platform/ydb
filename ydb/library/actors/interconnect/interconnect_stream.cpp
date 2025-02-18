@@ -112,6 +112,8 @@ namespace NInterconnect {
     TStreamSocket::TStreamSocket(SOCKET fd)
         : TSocket(fd)
     {
+        const int enable = 1;
+        setsockopt(Descriptor, SOL_SOCKET, SO_ZEROCOPY, &enable, sizeof(enable));
     }
 
     ssize_t

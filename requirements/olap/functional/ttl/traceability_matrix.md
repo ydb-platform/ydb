@@ -2,7 +2,7 @@
 
 ### TTL
 #### [ISSUE-13526](https://github.com/ydb-platform/ydb/issues/13526): Test Suite: cs/tiering+ttl
-[![PROGRESS](https://img.shields.io/badge/PROGRESS-4%2F12:33%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13526-test-suite-cstiering+ttl)
+[![PROGRESS](https://img.shields.io/badge/PROGRESS-4%2F12:33%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13526-test-suite-cstieringttl)
 
 | Case ID | Name | Description | Issues |  Status |
 |---------|------|-------------|--------|:--------|
@@ -18,4 +18,17 @@
 | #13619 | Test tiering. Add column works for offloaded data | Во время вытеснения данных в S3 производится смена схемы таблицы, добавляются новые поля. Ожидаемое поведение - система на всей глубине хранения отображает новые поля | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13619)](https://github.com/ydb-platform/ydb/issues/13619) | Pending |
 | #13620 | Test teiring. Drop Column works well for offloaded data | Во время вытеснения данных в S3 производится смена схемы таблицы, удаляются существующие not null поля. Ожидаемое поведение - система на всей глубине хранения выполняет запросы  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13620)](https://github.com/ydb-platform/ydb/issues/13620) | Pending |
 | #13621 | Test tiering. Alter column works well for offloaded data |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13621)](https://github.com/ydb-platform/ydb/issues/13621) | Pending |
+
+#### [ISSUE-14685](https://github.com/ydb-platform/ydb/issues/14685): Test Suite: CS/TTL deletion
+[![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F7:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14685-test-suite-csttl-deletion)
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| #14686 | Data is deleted according to the specified TTL |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14686)](https://github.com/ydb-platform/ydb/issues/14686) | Pending |
+| #14687 | Data is deleted starting with the oldest records |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14687)](https://github.com/ydb-platform/ydb/issues/14687) | Pending |
+| #14688 | If a valid TTL is specified, the data is deleted |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14688)](https://github.com/ydb-platform/ydb/issues/14688) | Pending |
+| #14689 | The invalid TTL is handled correctly |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14689)](https://github.com/ydb-platform/ydb/issues/14689) | Pending |
+| #14690 | You can change the previously specified TTL, deletion will occur according to the new TTL |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14690)](https://github.com/ydb-platform/ydb/issues/14690) | Pending |
+| #14691 | Columns with types Timestamp, Datetime, Date can be specified as TTL (only the first column of PK) |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14691)](https://github.com/ydb-platform/ydb/issues/14691) | Pending |
+| #14692 | TTL deletes data at a sufficient rate (must exceed the insertion rate) |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14692)](https://github.com/ydb-platform/ydb/issues/14692) | Pending |
 

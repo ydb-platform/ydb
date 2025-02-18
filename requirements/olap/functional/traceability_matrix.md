@@ -3,22 +3,19 @@
 ## Functional Requirements
 
 ### Bulk Upsert Data Insertion
-#### REQ-BULK-001: The system should support data insertion using `bulk_upsert` across all data types and transports.
-**Description**: Enable the insertion of all data types (e.g., Int32, Uint64, String) using transports like arrow and BoxedValue, ensuring data visibility and integrity.
+#### [ISSUE-14639](https://github.com/ydb-platform/ydb/issues/14639): Test suite: cs/write data
+[![PROGRESS](https://img.shields.io/badge/PROGRESS-2%2F8:25%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14639-test-suite-cswrite-data)
 
 | Case ID | Name | Description | Issues |  Status |
 |---------|------|-------------|--------|:--------|
-| REQ-BULK-001-1.1 | All Data Types Support via Arrow | Verify bulk insertion of all data types using arrow transport. Status: Pending |  | Pending |
-| REQ-BULK-001-1.2 | All Data Types Support via BoxedValue | Verify bulk insertion using BoxedValue transport. Status: Pending |  | Pending |
-| REQ-BULK-001-1.3 | Data Visibility Post-Insertion | Ensure latest values are visible post-insertion. |  | Pending |
-| REQ-BULK-001-1.4 | Handling Duplicate Keys in Batch | Confirm the system records the last occurrence for duplicate keys in a batch. |  | Pending |
-| REQ-BULK-001-1.5 | JDBC and Python DBApi Integration | Validate insertion through both JDBC and Python DBApi interfaces. |  | Pending |
-| REQ-BULK-001-1.6 | Data Integrity Violation Prevention | Test bulk upsert with integrity issues (e.g., invalid UINT value of -1) to ensure no problematic data is applied. |  | Pending |
-| REQ-BULK-001-1.7 | Parallel Execution in Threads | Verify that parallel executions do not result in errors when multiple threads perform bulk upserts. |  | Pending |
-| REQ-BULK-001-1.8 | Insertion Speed Comparison | Compare performance of bulk upsert versus INSERT INTO for 100,000 rows. |  | Pending |
-| REQ-BULK-001-1.9 | Server Failure Handling | Confirm appropriate error handling and retry behavior during cluster shutdown and restart scenarios. |  | Pending |
-| REQ-BULK-001-1.10 | ALTER TABLE ADD COLUMN Operation | Ensure bulk upsert completion when a table schema is altered mid-operation. |  | Pending |
-| REQ-BULK-001-1.11 | Metric Visibility in UI | Validate that operational metrics are visible and accurate in the user interface. |  | Pending |
+| #14640 | You can write all kinds of data via bulk_upsert with all kinds of transport: arrow, BoxedValue |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14640)](https://github.com/ydb-platform/ydb/issues/14640) | Pending |
+| #14642 | After a successful bulk_upsert write, the latest data values are visible | There can be multiple entries in bulk_upsert with the same key. We expect that only the last record is written. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14642)](https://github.com/ydb-platform/ydb/issues/14642) | Pending |
+| #14643 | If there are multiple identical keys within a single bulk_upsert data bundle, the last one is written | Test bulk upsert into the table with overlapping keys. Data are inserted by overlapping chunks | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14643)](https://github.com/ydb-platform/ydb/issues/14643) | Pending |
+| #14644 | Writing data to bulk_upsert with data integrity violation works correctly |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14644)](https://github.com/ydb-platform/ydb/issues/14644) | Pending |
+| #14645 | When bulk_upsert is executed in parallel, the data is written to one table without errors | Test bulk upsert into the table with overlapping keys. Data are inserted by overlapping chunks | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14645)](https://github.com/ydb-platform/ydb/issues/14645) | Pending |
+| #14646 | Writing milliards of rows via bulk_upsert is faster than a similar number of rows using INSERT INTO |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14646)](https://github.com/ydb-platform/ydb/issues/14646) | Pending |
+| #14647 | If the cluster is stopped during bulk_upsert execution, an error is returned to the user |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14647)](https://github.com/ydb-platform/ydb/issues/14647) | Pending |
+| #14648 | When inserting a large amount of data ALTER TABLE ADD COLUMN, bulk_upsert should complete successfully |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14648)](https://github.com/ydb-platform/ydb/issues/14648) | Pending |
 
 ### INSERT INTO, UPSERT, and REPLACE Operations
 #### [ISSUE-14668](https://github.com/ydb-platform/ydb/issues/14668): Test suite: CS/(INSERT INTO/UPSERT/REPLACE) support
@@ -73,6 +70,18 @@
 | #14647 | If the cluster is stopped during bulk_upsert execution, an error is returned to the user |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14647)](https://github.com/ydb-platform/ydb/issues/14647) | Pending |
 | #14648 | When inserting a large amount of data ALTER TABLE ADD COLUMN, bulk_upsert should complete successfully |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14648)](https://github.com/ydb-platform/ydb/issues/14648) | Pending |
 
+#### [ISSUE-14693](https://github.com/ydb-platform/ydb/issues/14693): Test Suite: Deletion by command
+[![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F6:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14693-test-suite-deletion-by-command)
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| #14694 | Data can be deleted by explicit row identifiers |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14694)](https://github.com/ydb-platform/ydb/issues/14694) | Pending |
+| #14695 | Data can be deleted by key range, including the range of 99% of the data (on TPC-H 1000 class queries) |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14695)](https://github.com/ydb-platform/ydb/issues/14695) | Pending |
+| #14696 | If the disks are full, the data can be cleared and the system restored to operation |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14696)](https://github.com/ydb-platform/ydb/issues/14696) | Pending |
+| #14697 |  Data can be deleted by a query of the form DELETE FROM T WHERE ID IN (SELECT ID FROM T) |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14697)](https://github.com/ydb-platform/ydb/issues/14697) | Pending |
+| #14698 | You can delete a record that does not exist |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14698)](https://github.com/ydb-platform/ydb/issues/14698) | Pending |
+| #14699 | When data is deleted in a transaction, the data remains in place when the transaction is rolled back |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14699)](https://github.com/ydb-platform/ydb/issues/14699) | Pending |
+
 ### Other
 #### [ISSUE-13952](https://github.com/ydb-platform/ydb/issues/13952): Test Suite: cs/introspection
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13952-test-suite-csintrospection)
@@ -108,42 +117,23 @@
 |---------|------|-------------|--------|:--------|
 | #14602 | Test WM. Classifiers move queires to right resource pool |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14602)](https://github.com/ydb-platform/ydb/issues/14602) | Pending |
 
-### INSERT INTO, UPSERT, and REPLACE Operations
-#### REQ-INS-001: Support INSERT INTO, UPSERT, and REPLACE for data modifications with expected behaviors.
-**Description**: Ensure data can be inserted or updated with proper handling of duplicates and expected transactional behaviors.
+#### [ISSUE-14682](https://github.com/ydb-platform/ydb/issues/14682): Test Suite: CS/Pushdown предикатов
+[![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F2:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14682-test-suite-cspushdown-предикатов)
 
 | Case ID | Name | Description | Issues |  Status |
 |---------|------|-------------|--------|:--------|
-| REQ-INS-001-2.1 | Data Type Support in All Columns | Verify data types, including PK fields, are supported in all columns. |  | Pending |
-| REQ-INS-001-2.2 | Handling Existing Data with INSERT INTO | Confirm errors are appropriately thrown when inserting existing data. |  | Pending |
-| REQ-INS-001-2.3 | UPSERT and REPLACE Operations | Validate that UPSERT updates and REPLACE correctly overwrites existing data. |  | Pending |
-| REQ-INS-001-2.4 | Handling New Data with INSERT INTO | Validate new data insertion behavior. |  | Pending |
-| REQ-INS-001-2.5 | Large Dataset Insertion | Test the system's capability to handle inserting 1 million rows in a single operation. |  | Pending |
-| REQ-INS-001-2.6 | Transaction Rollback Effects | Validate data visibility and integrity after transaction rollbacks. |  | Pending |
-| REQ-INS-001-2.7 | Concurrent Transactions | Ensure that inserts in concurrent transactions to the same key are properly managed, with one completing while another rolls back. |  | Pending |
-| REQ-INS-001-2.8 | Parallel Insertion in Multiple Threads | Verify that parallel data insertion operations across threads execute without conflicts or errors. |  | Pending |
-| REQ-INS-001-2.9 | Data Integrity Violation for INSERT INTO | Ensure that inserting data with violation does not succeed, similar to bulk upsert. |  | Pending |
-| REQ-INS-001-2.10 | Cluster Failure During INSERT INTO | Confirm error messages and retry logic during cluster interruptions are handled consistently. |  | Pending |
-| REQ-INS-001-2.11 | Data Representation in GUI | Ensure data volumes are reflected accurately in reports and dashboards. |  | Pending |
-
-### Data Reading Operations
-#### REQ-READ-001: Provide robust and efficient data reading capabilities.
-**Description**: Execute and validate operations concerning reading data, including aggregation and supported data types.
-
-| Case ID | Name | Description | Issues |  Status |
-|---------|------|-------------|--------|:--------|
-| REQ-READ-001-3.1 | LogBench Operations | Validate reading, aggregating, and processing JSON types through LogBench tests, focused on smaller datasets. |  | Pending |
-| REQ-READ-001-3.2 | TPC-H S1 Execution | Confirm successful execution and performance of TPC-H S1 queries. |  | Pending |
+| #14683 | При выполнении запросов происходит pushdown нужных типов данных-вычислений (проверяется, что pushdown был выполнен). В векторном варианте |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14683)](https://github.com/ydb-platform/ydb/issues/14683) | Pending |
+| #14684 | When queries are executed, a pushdown of the desired data-calculus types is performed (check that the pushdown has been executed). In the scalar variant |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14684)](https://github.com/ydb-platform/ydb/issues/14684) | Pending |
 
 ## Federated Queries Support
 
-#### REQ-FEDQ-001: Allow and manage federated query execution.
-**Description**: Enable and validate operations involving federated query execution, taking advantage of diverse data sources.
+#### [ISSUE-14700](https://github.com/ydb-platform/ydb/issues/14700): Test Suite: Federated Queries
+[![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F2:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14700-test-suite-federated-queries)
 
 | Case ID | Name | Description | Issues |  Status |
 |---------|------|-------------|--------|:--------|
-| REQ-FEDQ-001-10.1 | Cross-Source Federated Queries | Test execution of queries spanning multiple federated data sources. |  | Pending |
-| REQ-FEDQ-001-10.2 | Federated Source Data Insertions | Validate data insertions deriving from federated sources. |  | Pending |
+| #14701 | federated source cross-requests |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14701)](https://github.com/ydb-platform/ydb/issues/14701) | Pending |
+| #14702 | inserts from a federated source |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14702)](https://github.com/ydb-platform/ydb/issues/14702) | Pending |
 
 ## 
 
@@ -169,7 +159,7 @@
 
 ### TTL
 #### [ISSUE-13526](https://github.com/ydb-platform/ydb/issues/13526): Test Suite: cs/tiering+ttl
-[![PROGRESS](https://img.shields.io/badge/PROGRESS-4%2F12:33%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13526-test-suite-cstiering+ttl)
+[![PROGRESS](https://img.shields.io/badge/PROGRESS-4%2F12:33%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13526-test-suite-cstieringttl)
 
 | Case ID | Name | Description | Issues |  Status |
 |---------|------|-------------|--------|:--------|
@@ -185,4 +175,17 @@
 | #13619 | Test tiering. Add column works for offloaded data | Во время вытеснения данных в S3 производится смена схемы таблицы, добавляются новые поля. Ожидаемое поведение - система на всей глубине хранения отображает новые поля | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13619)](https://github.com/ydb-platform/ydb/issues/13619) | Pending |
 | #13620 | Test teiring. Drop Column works well for offloaded data | Во время вытеснения данных в S3 производится смена схемы таблицы, удаляются существующие not null поля. Ожидаемое поведение - система на всей глубине хранения выполняет запросы  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13620)](https://github.com/ydb-platform/ydb/issues/13620) | Pending |
 | #13621 | Test tiering. Alter column works well for offloaded data |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13621)](https://github.com/ydb-platform/ydb/issues/13621) | Pending |
+
+#### [ISSUE-14685](https://github.com/ydb-platform/ydb/issues/14685): Test Suite: CS/TTL deletion
+[![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F7:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14685-test-suite-csttl-deletion)
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| #14686 | Data is deleted according to the specified TTL |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14686)](https://github.com/ydb-platform/ydb/issues/14686) | Pending |
+| #14687 | Data is deleted starting with the oldest records |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14687)](https://github.com/ydb-platform/ydb/issues/14687) | Pending |
+| #14688 | If a valid TTL is specified, the data is deleted |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14688)](https://github.com/ydb-platform/ydb/issues/14688) | Pending |
+| #14689 | The invalid TTL is handled correctly |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14689)](https://github.com/ydb-platform/ydb/issues/14689) | Pending |
+| #14690 | You can change the previously specified TTL, deletion will occur according to the new TTL |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14690)](https://github.com/ydb-platform/ydb/issues/14690) | Pending |
+| #14691 | Columns with types Timestamp, Datetime, Date can be specified as TTL (only the first column of PK) |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14691)](https://github.com/ydb-platform/ydb/issues/14691) | Pending |
+| #14692 | TTL deletes data at a sufficient rate (must exceed the insertion rate) |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14692)](https://github.com/ydb-platform/ydb/issues/14692) | Pending |
 

@@ -195,7 +195,7 @@ def fetch_sub_issues_by_id(issue_id, github_token):
     return sub_issues
 
 def to_anchor(s):
-    return '#' + re.sub(r'[\s/:()]+', '-', s.lower().replace('/', '')).strip('-')
+    return '#' + re.sub(r'[\s/:()]+', '-', s.lower().replace('/', '').replace('+', '')).strip('-')
 
 
 def generate_traceability_matrix(requirements, output_path):

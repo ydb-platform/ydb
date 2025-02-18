@@ -44,8 +44,8 @@ ENDIF()
         ydb/library/yql/dq/opt
         yql/essentials/core/dq_integration/transform
         ydb/library/yql/dq/transform
-        yql/essentials/minikql/comp_nodes/llvm14
-        yql/essentials/minikql/invoke_builtins/llvm14
+        yql/essentials/minikql/comp_nodes/llvm16
+        yql/essentials/minikql/invoke_builtins/llvm16
         ydb/library/yql/providers/clickhouse/actors
         ydb/library/yql/providers/clickhouse/provider
         yql/essentials/providers/common/comp_nodes
@@ -81,7 +81,7 @@ ENDIF()
         yql/essentials/core/url_lister
         yql/essentials/core/pg_ext
         ydb/library/yql/providers/yt/actors
-        yt/yql/providers/yt/comp_nodes/dq/llvm14
+        yt/yql/providers/yt/comp_nodes/dq/llvm16
         ydb/library/yql/providers/yt/dq_task_preprocessor
         yt/yql/providers/yt/gateway/file
         yt/yql/providers/yt/gateway/native
@@ -89,7 +89,7 @@ ENDIF()
         yt/yql/providers/yt/mkql_dq
         yt/yql/providers/yt/provider
         yt/yql/providers/yt/codec/codegen
-        yt/yql/providers/yt/comp_nodes/llvm14
+        yt/yql/providers/yt/comp_nodes/llvm16
         yt/yql/providers/yt/lib/yt_download
         yt/yql/providers/yt/lib/yt_url_lister
         yt/yql/providers/yt/lib/config_clusters

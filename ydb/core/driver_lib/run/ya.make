@@ -149,9 +149,9 @@ PEERDIR(
     ydb/library/folder_service/proto
     ydb/library/pdisk_io
     ydb/library/security
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/comp_nodes/llvm16
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/s3/actors
     yql/essentials/public/udf/service/exception_policy

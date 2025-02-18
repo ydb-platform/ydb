@@ -321,11 +321,7 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
 
     if (isTtlModified) {
         if (PrimaryIndex) {
-            if (auto findTtl = GetTableTtl(pathId)) {
-                PrimaryIndex->OnTieringModified(findTtl, pathId);
-            } else {
-                PrimaryIndex->OnTieringModified({}, pathId);
-            }
+            PrimaryIndex->OnTieringModified(GetTableTtl(pathId), pathId);
         }
     }
     Schema::SaveTableVersionInfo(db, pathId, version, versionInfo);

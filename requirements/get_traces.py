@@ -42,13 +42,13 @@ def parse_requirements(file_path, github_token):
                     completed = issue_data['sub_issues_summary']['completed']
                     if issue_data['sub_issues_summary']['percent_completed'] == 100:
                         status = 'DONE'
-                        color = f'purplergb(249%2C%20239%2C%20254%2C1)'
+                        color = f'rgb(249%2C%20239%2C%20254%2C1)'
                     elif 0 < issue_data['sub_issues_summary']['percent_completed'] < 100 :
                         status = 'PROGRESS'
-                        color = f'purplergb(254%2C%20248%2C%20202%2C1)'
+                        color = f'rgb(254%2C%20248%2C%20202%2C1)'
                     else:
                         status = 'TO%20DO'
-                        color = f'purplergb(224%2C%20250%2C%20227%2C1)'
+                        color = f'rgb(224%2C%20250%2C%20227%2C1)'
                     issue_data['badge'] = f"![{status}](https://img.shields.io/badge/{status}-{completed}%2F{total}:{percent_completed}%25-{color}?style=for-the-badge&logo=database&labelColor=grey)"
                 current_req = {
                     'id': f"ISSUE-{issue_number}",

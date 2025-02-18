@@ -5016,36 +5016,20 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         }
     }
 
-    void TestImportChangefeed() {
+    Y_UNIT_TEST(Changefeed) {
         TestImportChangefeeds(1, AddedScheme);
     }
 
-    void TestImportChangefeeds() {
+    Y_UNIT_TEST(Changefeeds) {
         TestImportChangefeeds(3, AddedScheme);
     }
 
-    void TestImportChangefeedWithTablePermissions() {
+    Y_UNIT_TEST(ChangefeedWithTablePermissions) {
         TestImportChangefeeds(1, AddedSchemeWithPermissions);
     }
 
-    void TestImportChangefeedsWithTablePermissions() {
-        TestImportChangefeeds(3, AddedSchemeWithPermissions);
-    }
-
-    Y_UNIT_TEST(Changefeed) {
-        TestImportChangefeed();
-    }
-
-    Y_UNIT_TEST(Changefeeds) {
-        TestImportChangefeeds();
-    }
-
-    Y_UNIT_TEST(ChangefeedWithTablePermissions) {
-        TestImportChangefeedWithTablePermissions();
-    }
-
     Y_UNIT_TEST(ChangefeedsWithTablePermissions) {
-        TestImportChangefeedsWithTablePermissions();
+        TestImportChangefeeds(3, AddedSchemeWithPermissions);
     }
 }
 
@@ -5416,51 +5400,51 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
 
         const auto topicDesc = R"(
             partitioning_settings {
-            min_active_partitions: 1
-            max_active_partitions: 1
-            auto_partitioning_settings {
-                strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
-                partition_write_speed {
-                stabilization_window {
-                    seconds: 300
+                min_active_partitions: 1
+                max_active_partitions: 1
+                auto_partitioning_settings {
+                    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+                    partition_write_speed {
+                        stabilization_window {
+                            seconds: 300
+                        }
+                        up_utilization_percent: 80
+                        down_utilization_percent: 20
+                    }
                 }
-                up_utilization_percent: 80
-                down_utilization_percent: 20
-                }
-            }
             }
             partitions {
-            active: true
+                active: true
             }
             retention_period {
-            seconds: 86400
+                seconds: 86400
             }
             partition_write_speed_bytes_per_second: 1048576
             partition_write_burst_bytes: 1048576
             attributes {
-            key: "__max_partition_message_groups_seqno_stored"
-            value: "6000000"
+                key: "__max_partition_message_groups_seqno_stored"
+                value: "6000000"
             }
             attributes {
-            key: "_allow_unauthenticated_read"
-            value: "true"
+                key: "_allow_unauthenticated_read"
+                value: "true"
             }
             attributes {
-            key: "_allow_unauthenticated_write"
-            value: "true"
+                key: "_allow_unauthenticated_write"
+                value: "true"
             }
             attributes {
-            key: "_message_group_seqno_retention_period_ms"
-            value: "1382400000"
+                key: "_message_group_seqno_retention_period_ms"
+                value: "1382400000"
             }
             consumers {
-            name: "my_consumer"
-            read_from {
-            }
-            attributes {
-                key: "_service_type"
-                value: "data-streams"
-            }
+                name: "my_consumer"
+                read_from {
+                }
+                attributes {
+                    key: "_service_type"
+                    value: "data-streams"
+                }
             }
         )";
         

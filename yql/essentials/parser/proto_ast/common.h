@@ -65,5 +65,24 @@ namespace NProtoAST {
         IOutputStream& Err;
         TString Name;
     };
-
 } // namespace NProtoAST
+
+namespace NSQLTranslation {
+    class IParser {
+    public:
+        virtual ~IParser() = default;
+
+        virtual google::protobuf::Message* Parse(
+            const TString& query, const TString& queryName, NProtoAST::IErrorCollector& err,
+            google::protobuf::Arena* arena) = 0;
+    };
+
+    class IParserFactory : public TThrRefBase {
+    public:
+        virtual ~IParserFactory() = default;
+
+        virtual std::unique_ptr<IParser> MakeParser() const = 0;
+    };
+
+    using TParserFactoryPtr = TIntrusivePtr<IParserFactory>;
+} // namespace NSQLTranslation

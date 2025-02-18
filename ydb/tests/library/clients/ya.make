@@ -8,6 +8,7 @@ PY_SRCS(
     kikimr_monitoring.py
     kikimr_scheme_client.py
     kikimr_config_client.py
+    kikimr_dynconfig_client.py
 )
 
 PEERDIR(

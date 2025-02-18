@@ -863,6 +863,11 @@ void TConfigsManager::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev, cons
     }
 }
 
+void TConfigsManager::Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &ev, const TActorContext &ctx)
+{
+    ctx.Send(ev->Forward(MakeConfigsDispatcherID(SelfId().NodeId())));
+}
+
 void TConfigsManager::Handle(TEvConsole::TEvGetAllMetadataRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxGetYamlMetadata(ev), ctx);

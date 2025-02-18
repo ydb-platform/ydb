@@ -1,5 +1,8 @@
 #include "accessor.h"
 
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
+
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/permutations.h>
@@ -100,6 +103,20 @@ IChunkedArray::TFullChunkedArrayAddress IChunkedArray::GetArray(
     }
     AFL_VERIFY(!chunkCurrent || chunkCurrent->GetSize() - idx <= 1)("idx", idx)("size", chunkCurrent->GetSize());
     return TFullChunkedArrayAddress(chainForTemporarySave.back(), std::move(addressChain));
+}
+
+std::shared_ptr<IChunkedArray> IChunkedArray::DoApplyFilter(const TColumnFilter& filter) const {
+    auto arr = GetChunkedArray();
+    const arrow::FieldVector fields = { std::make_shared<arrow::Field>("applied", GetDataType()) };
+    auto schema = std::make_shared<arrow::Schema>(fields);
+    auto table = arrow::Table::Make(schema, { arr }, GetRecordsCount());
+    AFL_VERIFY(table->num_columns() == 1);
+    AFL_VERIFY(filter.Apply(table));
+    if (table->column(0)->num_chunks() == 1) {
+        return std::make_shared<TTrivialArray>(table->column(0)->chunk(0));
+    } else {
+        return std::make_shared<TTrivialChunkedArray>(table->column(0));
+    }
 }
 
 TString IChunkedArray::TReader::DebugString(const ui32 position) const {

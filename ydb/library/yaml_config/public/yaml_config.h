@@ -276,6 +276,11 @@ bool IsStorageConfig(const TString& config);
 bool IsDatabaseConfig(const TString& config);
 
 /**
+ * Checks whether string is static config or not
+ */
+bool IsStaticConfig(const TString& config);
+
+/**
  * Strips metadata from config
  */
 TString StripMetadata(const TString& config);

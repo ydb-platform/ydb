@@ -53,6 +53,9 @@ std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>&
     if (!tableExt) {
         return nullptr;
     }
+    if (tableExt->num_rows() == 0) {
+        return MakeEmptyBatch(tableExt->schema(), 0);
+    }
     std::shared_ptr<arrow::Table> res = TStatusValidator::GetValid(tableExt->CombineChunks());
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(tableExt->num_columns());

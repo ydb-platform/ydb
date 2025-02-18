@@ -12987,10 +12987,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockDecimalMul"] = &BlockDecimalBinaryWrapper;
         Functions["BlockDecimalMod"] = &BlockDecimalBinaryWrapper;
         Functions["BlockDecimalDiv"] = &BlockDecimalBinaryWrapper;
+        Functions["BlockStorage"] = &BlockStorageWrapper;
 
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
-
-        Functions["BlockMapJoinCore"] = &BlockMapJoinCoreWrapper;
 
         ExtFunctions["AsScalar"] = &AsScalarWrapper;
         ExtFunctions["WideToBlocks"] = &WideToBlocksWrapper;
@@ -12998,6 +12997,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["BlockCombineHashed"] = &BlockCombineHashedWrapper;
         ExtFunctions["BlockMergeFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
         ExtFunctions["BlockMergeManyFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
+        ExtFunctions["BlockMapJoinIndex"] = &BlockMapJoinIndexWrapper;
+        ExtFunctions["BlockMapJoinCore"] = &BlockMapJoinCoreWrapper;
 
         ExtFunctions["SqlRename"] = &SqlRenameWrapper;
         ExtFunctions["OrderedSqlRename"] = &SqlRenameWrapper;

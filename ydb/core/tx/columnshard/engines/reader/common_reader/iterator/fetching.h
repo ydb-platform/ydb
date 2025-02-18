@@ -315,4 +315,17 @@ public:
     TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId);
 };
 
+class TProgramStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    const NArrow::NSSA::TResourceProcessorStep Step;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TProgramStep(const NArrow::NSSA::TResourceProcessorStep& step)
+        : TBase("EARLY_FILTER_STEP")
+        , Step(step) {
+    }
+};
+
 }   // namespace NKikimr::NOlap::NReader::NCommon

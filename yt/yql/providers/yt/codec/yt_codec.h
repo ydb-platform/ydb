@@ -133,6 +133,10 @@ public:
         UseBlockOutput_ = true;
     }
 
+    void SetIsTableContent() {
+        IsTableContent_ = true;
+    }
+
     void SetTableOffsets(const TVector<ui64>& offsets);
 
     void Clear();
@@ -148,6 +152,7 @@ public:
     bool UseSkiff_ = false;
     bool UseBlockInput_ = false;
     bool UseBlockOutput_ = false;
+    bool IsTableContent_ = false;
     TString OptLLVM_;
     TSystemFields SystemFields_;
 

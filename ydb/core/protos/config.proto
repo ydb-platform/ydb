@@ -1763,6 +1763,7 @@ message THiveConfig {
     optional uint64 ScaleInWindowSize = 82 [default = 5]; // buckets
     optional double TargetTrackingCPUMargin = 83 [default = 0.1]; // percent
     optional double DryRunTargetTrackingCPU = 84; // percent
+    optional uint64 NodeRestartsForPenalty = 85 [default = 3];
 }
 
 message TBlobCacheConfig {
@@ -2125,7 +2126,8 @@ message TKafkaProxyConfig {
     }
 
     optional TProxy Proxy = 7;
-    optional bool MeteringV2Enabled = 10 [default = false];
+    optional bool MeteringV2Enabled = 10 [default = true];
+    optional bool AuthViaApiKey = 11 [default = true];
 }
 
 message TAwsCompatibilityConfig {
@@ -2238,6 +2240,7 @@ message TAppConfig {
     optional string ConfigStorePath = 104;
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
     optional bool ConfigLoadedFromStore = 106;
+    optional string StartupConfigYaml = 107;
 }
 
 message TYdbVersion {

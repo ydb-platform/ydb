@@ -17,6 +17,15 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
+    std::shared_ptr<IChunkedArray> GetPathAccessor(const std::string_view path) const {
+        auto idx = Stats.GetKeyIndexOptional(path);
+        if (!idx) {
+            return nullptr;
+        } else {
+            return Records->GetColumnVerified(*idx);
+        }
+    }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("stats", Stats.DebugJson());

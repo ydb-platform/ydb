@@ -522,6 +522,28 @@ private:
         Send(Self->SelfId(), CreateChangefeedPropose(Self, txId, item));
     }
 
+    bool CancelCreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        const auto& item = importInfo->Items.at(itemIdx);
+
+        if (item.WaitTxId == InvalidTxId) {
+            if (item.SubState == ESubState::Proposed) {
+                importInfo->State = EState::Cancellation;
+            }
+
+            return false;
+        }
+
+        importInfo->State = EState::Cancellation;
+
+        LOG_I("TImport::TTxProgress: cancel restore's tx"
+            << ": info# " << importInfo->ToString()
+            << ", item# " << item.ToString(itemIdx));
+
+        Send(Self->SelfId(), CancelRestorePropose(importInfo, item.WaitTxId), 0, importInfo->Id);
+        return true;
+    }
+
     void AllocateTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
@@ -554,7 +576,7 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         const auto& item = importInfo->Items.at(itemIdx);
 
-        Y_ABORT_UNLESS(item.State == EState::Transferring || item.State == EState::CreateChangefeed);
+        Y_ABORT_UNLESS(item.State == EState::Transferring);
         Y_ABORT_UNLESS(item.DstPathId);
 
         if (!Self->PathsById.contains(item.DstPathId)) {
@@ -582,6 +604,25 @@ private:
         }
 
         return TTxId(ui64((*infoPtr)->Id));
+    }
+
+    TTxId GetActiveCreateChangefeedTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        const auto& item = importInfo->Items.at(itemIdx);
+
+        Y_ABORT_UNLESS(item.State == EState::CreateChangefeed);
+        Y_ABORT_UNLESS(item.DstPathId);
+
+        if (!Self->PathsById.contains(item.DstPathId)) {
+            return InvalidTxId;
+        }
+
+        auto path = Self->PathsById.at(item.DstPathId);
+        if (path->PathState != NKikimrSchemeOp::EPathStateAlter) {
+            return InvalidTxId;
+        }
+
+        return path->LastTxId;
     }
 
     static TString MakeIndexBuildUid(TImportInfo::TPtr importInfo, ui32 itemIdx) {
@@ -620,6 +661,8 @@ private:
 
             switch (importInfo->Items.at(i).State) {
             case EState::CreateChangefeed:
+                CancelCreateChangefeed(importInfo, i);
+                break;
             case EState::Transferring:
                 CancelTransferring(importInfo, i);
                 break;
@@ -782,7 +825,12 @@ private:
                 TTxId txId = InvalidTxId;
 
                 switch (item.State) {
-                case EState::CreateChangefeed: 
+                case EState::CreateChangefeed:
+                    if (!CancelCreateChangefeed(importInfo, itemIdx)) {
+                        txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
+                    }
+                    break;
+
                 case EState::Transferring:
                     if (!CancelTransferring(importInfo, itemIdx)) {
                         txId = GetActiveRestoreTxId(importInfo, itemIdx);
@@ -805,6 +853,9 @@ private:
 
                     switch (item.State) {
                     case EState::CreateChangefeed:
+                        CancelCreateChangefeed(importInfo, itemIdx);
+                        break;
+
                     case EState::Transferring:
                         CancelTransferring(importInfo, itemIdx);
                         break;
@@ -1068,8 +1119,10 @@ private:
             )) {
                 if (record.GetPathCreateTxId()) {
                     txId = TTxId(record.GetPathCreateTxId());
-                } else if (item.State == EState::Transferring || item.State == EState::CreateChangefeed) {
+                } else if (item.State == EState::Transferring) {
                     txId = GetActiveRestoreTxId(importInfo, itemIdx);
+                } else if (item.State == EState::CreateChangefeed) {
+                    txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
                 }
             }
 
@@ -1083,8 +1136,13 @@ private:
         item.WaitTxId = txId;
         Self->PersistImportItemState(db, importInfo, itemIdx);
 
-        if (importInfo->State != EState::Waiting && (item.State == EState::Transferring || item.State == EState::CreateChangefeed)) {
+        if (importInfo->State != EState::Waiting && item.State == EState::Transferring) {
             CancelTransferring(importInfo, itemIdx);
+            return;
+        }
+
+        if (importInfo->State != EState::Waiting && item.State == EState::CreateChangefeed) {
+            CancelCreateChangefeed(importInfo, itemIdx);
             return;
         }
 

@@ -37,6 +37,7 @@
 #include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/split.h>
+#include <util/system/env.h>
 
 #include <algorithm>
 #include <functional>
@@ -589,12 +590,15 @@ namespace NTypeAnnImpl {
         }
 
         auto failureKind = input->Child(0)->Content();
+        Y_ABORT_UNLESS(!TryGetEnv("YQL_DETERMINISTIC_MODE") || failureKind != "crash");
         if (failureKind == "expr") {
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
         } else if (failureKind == "type") {
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
         } else if (failureKind == "constraint") {
             input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String)));
+        } else if (failureKind == "exception") {
+            ythrow yexception() << "FailMe exception";
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()), TStringBuilder() << "Unknown failure kind: " << failureKind));
             return IGraphTransformer::TStatus::Error;

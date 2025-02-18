@@ -18,9 +18,11 @@ class TTableWorkerRegistar: public TActorBootstrapped<TTableWorkerRegistar> {
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
+                LOG_W("Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Retry.");
                 return Retry();
             }
 
+            LOG_E("Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Stop.");
             return; // TODO: hard error
         }
 

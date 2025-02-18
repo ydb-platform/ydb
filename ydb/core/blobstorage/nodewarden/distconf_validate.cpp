@@ -179,7 +179,7 @@ namespace NKikimr::NStorage {
             } else if (!pdisk.HasPDiskID()) {
                 return "PDiskID field missing";
             } else if (!pdisk.HasPath()) {
-                return config.DebugString() + "Path field missing";
+                return "Path field missing";
             } else if (!pdisk.HasPDiskGuid()) {
                 return "PDiskGuid field missing";
             } else if (!pdisk.HasPDiskCategory()) {

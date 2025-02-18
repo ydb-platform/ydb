@@ -17,7 +17,7 @@ public:
         , Ready_(true)
     { }
 
-    TImpl(TStatus&& status, Ydb::Operations::Operation&& operation)
+    TImpl(TStatus&& status, NYdbProtos::Operations::Operation&& operation)
         : Id_(operation.id(), true /* allowEmpty */)
         , Status_(std::move(status))
         , Ready_(operation.ready())
@@ -51,7 +51,7 @@ public:
         return CreatedBy_;
     }
 
-    const Ydb::Operations::Operation& GetProto() const {
+    const NYdbProtos::Operations::Operation& GetProto() const {
         return Operation_;
     }
 
@@ -62,14 +62,14 @@ private:
     const TInstant CreateTime_;
     const TInstant EndTime_;
     const std::string CreatedBy_;
-    const Ydb::Operations::Operation Operation_;
+    const NYdbProtos::Operations::Operation Operation_;
 };
 
 TOperation::TOperation(TStatus&& status)
     : Impl_(std::make_shared<TImpl>(std::move(status)))
 { }
 
-TOperation::TOperation(TStatus&& status, Ydb::Operations::Operation&& operation)
+TOperation::TOperation(TStatus&& status, NYdbProtos::Operations::Operation&& operation)
     : Impl_(std::make_shared<TImpl>(std::move(status), std::move(operation)))
 { }
 
@@ -117,7 +117,7 @@ std::string TOperation::ToJsonString() const {
     return json;
 }
 
-const Ydb::Operations::Operation& TOperation::GetProto() const {
+const NYdbProtos::Operations::Operation& TOperation::GetProto() const {
     return Impl_->GetProto();
 }
 

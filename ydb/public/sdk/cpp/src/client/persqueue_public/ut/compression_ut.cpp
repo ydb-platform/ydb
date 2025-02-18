@@ -25,38 +25,38 @@ Y_UNIT_TEST_SUITE(Compression) {
 
     void AlterTopic(TPersQueueYdbSdkTestSetup& setup) {
         std::shared_ptr<grpc::Channel> channel;
-        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> stub;
+        std::unique_ptr<NYdbProtos::PersQueue::V1::PersQueueService::Stub> stub;
 
         {
             channel = grpc::CreateChannel("localhost:" + ToString(setup.GetGrpcPort()), grpc::InsecureChannelCredentials());
-            stub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
+            stub = NYdbProtos::PersQueue::V1::PersQueueService::NewStub(channel);
         }
 
-        Ydb::PersQueue::V1::AlterTopicRequest request;
+        NYdbProtos::PersQueue::V1::AlterTopicRequest request;
         request.set_path(TStringBuilder() << "/Root/PQ/rt3.dc1--" << setup.GetTestTopic());
         auto props = request.mutable_settings();
         props->set_partitions_count(1);
-        props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+        props->set_supported_format(NYdbProtos::PersQueue::V1::TopicSettings::FORMAT_BASE);
         props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-        props->add_supported_codecs(Ydb::PersQueue::V1::CODEC_RAW);
-        props->add_supported_codecs(Ydb::PersQueue::V1::CODEC_GZIP);
-        props->add_supported_codecs(Ydb::PersQueue::V1::CODEC_ZSTD);
+        props->add_supported_codecs(NYdbProtos::PersQueue::V1::CODEC_RAW);
+        props->add_supported_codecs(NYdbProtos::PersQueue::V1::CODEC_GZIP);
+        props->add_supported_codecs(NYdbProtos::PersQueue::V1::CODEC_ZSTD);
         auto rr = props->add_read_rules();
         rr->set_consumer_name(setup.GetTestConsumer());
-        rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-        rr->add_supported_codecs(Ydb::PersQueue::V1::CODEC_RAW);
-        rr->add_supported_codecs(Ydb::PersQueue::V1::CODEC_GZIP);
-        rr->add_supported_codecs(Ydb::PersQueue::V1::CODEC_ZSTD);
+        rr->set_supported_format(NYdbProtos::PersQueue::V1::TopicSettings::Format(1));
+        rr->add_supported_codecs(NYdbProtos::PersQueue::V1::CODEC_RAW);
+        rr->add_supported_codecs(NYdbProtos::PersQueue::V1::CODEC_GZIP);
+        rr->add_supported_codecs(NYdbProtos::PersQueue::V1::CODEC_ZSTD);
         rr->set_version(1);
 
-        Ydb::PersQueue::V1::AlterTopicResponse response;
+        NYdbProtos::PersQueue::V1::AlterTopicResponse response;
         grpc::ClientContext rcontext;
         auto status = stub->AlterTopic(&rcontext, request, &response);
         UNIT_ASSERT(status.ok());
-        Ydb::PersQueue::V1::AlterTopicResult result;
+        NYdbProtos::PersQueue::V1::AlterTopicResult result;
         response.operation().result().UnpackTo(&result);
         Cerr << "Alter topic response: " << response << "\nAlter result: " << result << "\n";
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), NYdbProtos::StatusIds::SUCCESS);
     }
 
     void Write(TPersQueueYdbSdkTestSetup& setup, const TVector<TString>& messages, ECodec codec) {

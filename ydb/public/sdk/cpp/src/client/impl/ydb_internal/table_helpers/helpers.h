@@ -7,23 +7,23 @@
 
 namespace NYdb::inline V3 {
 
-inline Ydb::Table::QueryStatsCollection::Mode GetStatsCollectionMode(std::optional<NTable::ECollectQueryStatsMode> mode) {
+inline NYdbProtos::Table::QueryStatsCollection::Mode GetStatsCollectionMode(std::optional<NTable::ECollectQueryStatsMode> mode) {
     if (mode.has_value()) {
         switch (*mode) {
             case NTable::ECollectQueryStatsMode::None:
-                return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+                return NYdbProtos::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
             case NTable::ECollectQueryStatsMode::Basic:
-                return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+                return NYdbProtos::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
             case NTable::ECollectQueryStatsMode::Full:
-                return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
+                return NYdbProtos::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
             case NTable::ECollectQueryStatsMode::Profile:
-                return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
+                return NYdbProtos::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
             default:
                 break;
         }
     }
 
-    return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED;
+    return NYdbProtos::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED;
 }
 
 } // namespace NYdb

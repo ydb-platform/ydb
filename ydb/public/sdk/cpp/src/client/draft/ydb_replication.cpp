@@ -16,20 +16,20 @@
 namespace NYdb::inline V3 {
 namespace NReplication {
 
-TConnectionParams::TConnectionParams(const Ydb::Replication::ConnectionParams& params) {
+TConnectionParams::TConnectionParams(const NYdbProtos::Replication::ConnectionParams& params) {
     DiscoveryEndpoint(params.endpoint());
     Database(params.database());
     SslCredentials(params.enable_ssl());
 
     switch (params.credentials_case()) {
-    case Ydb::Replication::ConnectionParams::kStaticCredentials:
+    case NYdbProtos::Replication::ConnectionParams::kStaticCredentials:
         Credentials_ = TStaticCredentials{
             .User = params.static_credentials().user(),
             .PasswordSecretName = params.static_credentials().password_secret_name(),
         };
         break;
 
-    case Ydb::Replication::ConnectionParams::kOauth:
+    case NYdbProtos::Replication::ConnectionParams::kOauth:
         Credentials_ = TOAuthCredentials{
             .TokenSecretName = params.oauth().token_secret_name(),
         };
@@ -68,7 +68,7 @@ static TDuration DurationToDuration(const google::protobuf::Duration& value) {
     return TDuration::MilliSeconds(google::protobuf::util::TimeUtil::DurationToMilliseconds(value));
 }
 
-TGlobalConsistency::TGlobalConsistency(const Ydb::Replication::ConsistencyLevelGlobal& proto)
+TGlobalConsistency::TGlobalConsistency(const NYdbProtos::Replication::ConsistencyLevelGlobal& proto)
     : CommitInterval_(DurationToDuration(proto.commit_interval()))
 {
 }
@@ -77,7 +77,7 @@ const TDuration& TGlobalConsistency::GetCommitInterval() const {
     return CommitInterval_;
 }
 
-TStats::TStats(const Ydb::Replication::DescribeReplicationResult_Stats& stats)
+TStats::TStats(const NYdbProtos::Replication::DescribeReplicationResult_Stats& stats)
     : Lag_(stats.has_lag() ? std::make_optional(DurationToDuration(stats.lag())) : std::nullopt)
     , InitialScanProgress_(stats.has_initial_scan_progress() ? std::make_optional(stats.initial_scan_progress()) : std::nullopt)
 {
@@ -119,13 +119,13 @@ const NYdb::NIssue::TIssues& TErrorState::GetIssues() const {
     return Impl_->Issues;
 }
 
-NYdb::NIssue::TIssues IssuesFromMessage(const ::google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& message) {
+NYdb::NIssue::TIssues IssuesFromMessage(const ::google::protobuf::RepeatedPtrField<NYdbProtos::Issue::IssueMessage>& message) {
     NYdb::NIssue::TIssues issues;
     NYdb::NIssue::IssuesFromMessage(message, issues);
     return issues;
 }
 
-TReplicationDescription::TReplicationDescription(const Ydb::Replication::DescribeReplicationResult& desc)
+TReplicationDescription::TReplicationDescription(const NYdbProtos::Replication::DescribeReplicationResult& desc)
     : ConnectionParams_(desc.connection_params())
 {
     Items_.reserve(desc.items_size());
@@ -141,7 +141,7 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
     }
 
     switch (desc.consistency_level_case()) {
-    case Ydb::Replication::DescribeReplicationResult::kGlobalConsistency:
+    case NYdbProtos::Replication::DescribeReplicationResult::kGlobalConsistency:
         ConsistencyLevel_ = TGlobalConsistency(desc.global_consistency());
         break;
 
@@ -150,15 +150,15 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
     }
 
     switch (desc.state_case()) {
-    case Ydb::Replication::DescribeReplicationResult::kRunning:
+    case NYdbProtos::Replication::DescribeReplicationResult::kRunning:
         State_ = TRunningState(desc.running().stats());
         break;
 
-    case Ydb::Replication::DescribeReplicationResult::kError:
+    case NYdbProtos::Replication::DescribeReplicationResult::kError:
         State_ = TErrorState(IssuesFromMessage(desc.error().issues()));
         break;
 
-    case Ydb::Replication::DescribeReplicationResult::kDone:
+    case NYdbProtos::Replication::DescribeReplicationResult::kDone:
         State_ = TDoneState();
         break;
 
@@ -200,10 +200,10 @@ const TDoneState& TReplicationDescription::GetDoneState() const {
     return std::get<TDoneState>(State_);
 }
 
-TDescribeReplicationResult::TDescribeReplicationResult(TStatus&& status, Ydb::Replication::DescribeReplicationResult&& desc)
+TDescribeReplicationResult::TDescribeReplicationResult(TStatus&& status, NYdbProtos::Replication::DescribeReplicationResult&& desc)
     : NScheme::TDescribePathResult(std::move(status), desc.self())
     , ReplicationDescription_(desc)
-    , Proto_(std::make_unique<Ydb::Replication::DescribeReplicationResult>())
+    , Proto_(std::make_unique<NYdbProtos::Replication::DescribeReplicationResult>())
 {
     *Proto_ = std::move(desc);
 }
@@ -212,7 +212,7 @@ const TReplicationDescription& TDescribeReplicationResult::GetReplicationDescrip
     return ReplicationDescription_;
 }
 
-const Ydb::Replication::DescribeReplicationResult& TDescribeReplicationResult::GetProto() const {
+const NYdbProtos::Replication::DescribeReplicationResult& TDescribeReplicationResult::GetProto() const {
     return *Proto_;
 }
 
@@ -224,7 +224,7 @@ public:
     }
 
     TAsyncDescribeReplicationResult DescribeReplication(const std::string& path, const TDescribeReplicationSettings& settings) {
-        using namespace Ydb::Replication;
+        using namespace NYdbProtos::Replication;
 
         auto request = MakeOperationRequest<DescribeReplicationRequest>(settings);
         request.set_path(TStringType{path});
@@ -267,7 +267,7 @@ TAsyncDescribeReplicationResult TReplicationClient::DescribeReplication(const st
 
 } // NReplication
 
-const Ydb::Replication::DescribeReplicationResult& TProtoAccessor::GetProto(const NReplication::TDescribeReplicationResult& result) {
+const NYdbProtos::Replication::DescribeReplicationResult& TProtoAccessor::GetProto(const NReplication::TDescribeReplicationResult& result) {
     return result.GetProto();
 }
 

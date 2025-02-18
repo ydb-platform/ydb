@@ -881,25 +881,25 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NYdbGrpc::T
 
                 if constexpr (UseMigrationProtocol) {
                     switch (ServerMessage->response_case()) {
-                    case Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::kInitResponse:
+                    case NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::kInitResponse:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_init_response()), deferred);
                         break;
-                    case Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::kDataBatch:
+                    case NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::kDataBatch:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_data_batch()), deferred);
                         break;
-                    case Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::kAssigned:
+                    case NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::kAssigned:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_assigned()), deferred);
                         break;
-                    case Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::kRelease:
+                    case NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::kRelease:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_release()), deferred);
                         break;
-                    case Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::kCommitted:
+                    case NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::kCommitted:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_committed()), deferred);
                         break;
-                    case Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::kPartitionStatus:
+                    case NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::kPartitionStatus:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_partition_status()), deferred);
                         break;
-                    case Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::RESPONSE_NOT_SET:
+                    case NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::RESPONSE_NOT_SET:
                         errorStatus = TPlainStatus::Internal("Unexpected response from server");
                         break;
                     }
@@ -960,7 +960,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NYdbGrpc::T
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
-    Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::InitResponse&& msg,
+    NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::InitResponse&& msg,
     TDeferredActions<true>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
     Y_UNUSED(deferred);
@@ -976,7 +976,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
-    Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch&& msg,
+    NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch&& msg,
     TDeferredActions<true>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
     if (Closing || Aborting) {
@@ -1002,9 +1002,9 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         ui64 firstOffset = std::numeric_limits<ui64>::max();
         ui64 currentOffset = std::numeric_limits<ui64>::max();
         ui64 desiredOffset = partitionStream->GetFirstNotReadOffset();
-        for (const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch& batch : partitionData.batches()) {
+        for (const NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch& batch : partitionData.batches()) {
             // Validate messages.
-            for (const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& messageData : batch.message_data()) {
+            for (const NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& messageData : batch.message_data()) {
                 // Check offsets continuity.
                 if (messageData.offset() != desiredOffset) {
                     bool res = partitionStream->AddToCommitRanges(desiredOffset, messageData.offset(), GetRangesMode());
@@ -1064,7 +1064,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
-    Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::Assigned&& msg,
+    NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::Assigned&& msg,
     TDeferredActions<true>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1107,7 +1107,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
-    Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::Release&& msg,
+    NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::Release&& msg,
     TDeferredActions<true>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1142,14 +1142,14 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
-    Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::Committed&& msg,
+    NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::Committed&& msg,
     TDeferredActions<true>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Committed response: " << msg);
 
     std::map<ui64, TIntrusivePtr<TPartitionStreamImpl<true>>> partitionStreams;
-    for (const Ydb::PersQueue::V1::CommitCookie& cookieProto : msg.cookies()) {
+    for (const NYdbProtos::PersQueue::V1::CommitCookie& cookieProto : msg.cookies()) {
         typename TPartitionCookieMapping::TCookie::TPtr cookie = CookieMapping.RetrieveCommittedCookie(cookieProto);
         if (cookie) {
             cookie->PartitionStream->UpdateMaxCommittedOffset(cookie->OffsetRange.second);
@@ -1187,7 +1187,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
-    Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::PartitionStatus&& msg,
+    NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::PartitionStatus&& msg,
     TDeferredActions<true>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1212,7 +1212,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
-    Ydb::Topic::StreamReadMessage::InitResponse&& msg,
+    NYdbProtos::Topic::StreamReadMessage::InitResponse&& msg,
     TDeferredActions<false>& deferred) {
 
     Y_ABORT_UNLESS(Lock.IsLocked());
@@ -1229,7 +1229,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
-    Ydb::Topic::StreamReadMessage::ReadResponse&& msg,
+    NYdbProtos::Topic::StreamReadMessage::ReadResponse&& msg,
     TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1313,7 +1313,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
-    Ydb::Topic::StreamReadMessage::StartPartitionSessionRequest&& msg,
+    NYdbProtos::Topic::StreamReadMessage::StartPartitionSessionRequest&& msg,
     TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1352,7 +1352,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
-    Ydb::Topic::StreamReadMessage::UpdatePartitionSession&& msg,
+    NYdbProtos::Topic::StreamReadMessage::UpdatePartitionSession&& msg,
     TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
     Y_UNUSED(deferred);
@@ -1367,7 +1367,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
-    Ydb::Topic::StreamReadMessage::StopPartitionSessionRequest&& msg,
+    NYdbProtos::Topic::StreamReadMessage::StopPartitionSessionRequest&& msg,
     TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1398,7 +1398,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
-    Ydb::Topic::StreamReadMessage::EndPartitionSession&& msg,
+    NYdbProtos::Topic::StreamReadMessage::EndPartitionSession&& msg,
     TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1435,7 +1435,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
-    Ydb::Topic::StreamReadMessage::CommitOffsetResponse&& msg,
+    NYdbProtos::Topic::StreamReadMessage::CommitOffsetResponse&& msg,
     TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1461,7 +1461,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
-    Ydb::Topic::StreamReadMessage::PartitionSessionStatusResponse&& msg,
+    NYdbProtos::Topic::StreamReadMessage::PartitionSessionStatusResponse&& msg,
     TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1486,7 +1486,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
-    Ydb::Topic::UpdateTokenResponse&& msg,
+    NYdbProtos::Topic::UpdateTokenResponse&& msg,
     TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
     // TODO
@@ -1789,7 +1789,7 @@ typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMa
 }
 
 template<bool UseMigrationProtocol>
-typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::RetrieveCommittedCookie(const Ydb::PersQueue::V1::CommitCookie& cookieProto) {
+typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::RetrieveCommittedCookie(const NYdbProtos::PersQueue::V1::CommitCookie& cookieProto) {
     typename TCookie::TPtr cookieInfo;
     auto cookieIt = Cookies.find(typename TCookie::TKey(cookieProto.assign_id(), cookieProto.partition_cookie()));
     if (cookieIt != Cookies.end()) {
@@ -2490,7 +2490,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::BuildBatchesMeta() {
 
         if constexpr (UseMigrationProtocol) {
             meta->Fields.reserve(batch.extra_fields_size());
-            for (const Ydb::PersQueue::V1::KeyValue& kv : batch.extra_fields()) {
+            for (const NYdbProtos::PersQueue::V1::KeyValue& kv : batch.extra_fields()) {
                 meta->Fields.emplace(kv.key(), kv.value());
             }
         } else {
@@ -2809,18 +2809,18 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
             try {
                 if constexpr (UseMigrationProtocol) {
                     if (parent->DoDecompress
-                        && data.codec() != Ydb::PersQueue::V1::CODEC_RAW
-                        && data.codec() != Ydb::PersQueue::V1::CODEC_UNSPECIFIED
+                        && data.codec() != NYdbProtos::PersQueue::V1::CODEC_RAW
+                        && data.codec() != NYdbProtos::PersQueue::V1::CODEC_UNSPECIFIED
                     ) {
                         const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(data.codec()));
                         std::string decompressed = codecImpl->Decompress(data.data());
                         data.set_data(TStringType{decompressed});
-                        data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
+                        data.set_codec(NYdbProtos::PersQueue::V1::CODEC_RAW);
                     }
                 } else {
                     if (parent->DoDecompress
-                        && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_RAW
-                        && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_UNSPECIFIED
+                        && static_cast<NYdbProtos::Topic::Codec>(batch.codec()) != NYdbProtos::Topic::CODEC_RAW
+                        && static_cast<NYdbProtos::Topic::Codec>(batch.codec()) != NYdbProtos::Topic::CODEC_UNSPECIFIED
                     ) {
                         const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
                         std::string decompressed = codecImpl->Decompress(data.data());

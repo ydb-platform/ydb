@@ -36,13 +36,13 @@ bool operator!=(const TColumn& col1, const TColumn& col2) {
 
 class TResultSet::TImpl {
 public:
-    TImpl(const Ydb::ResultSet& proto)
+    TImpl(const NYdbProtos::ResultSet& proto)
         : ProtoResultSet_(proto)
     {
         Init();
     }
 
-    TImpl(Ydb::ResultSet&& proto)
+    TImpl(NYdbProtos::ResultSet&& proto)
         : ProtoResultSet_(std::move(proto))
     {
         Init();
@@ -56,16 +56,16 @@ public:
     }
 
 public:
-    const Ydb::ResultSet ProtoResultSet_;
+    const NYdbProtos::ResultSet ProtoResultSet_;
     std::vector<TColumn> ColumnsMeta_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TResultSet::TResultSet(const Ydb::ResultSet& proto)
+TResultSet::TResultSet(const NYdbProtos::ResultSet& proto)
     : Impl_(new TResultSet::TImpl(proto)) {}
 
-TResultSet::TResultSet(Ydb::ResultSet&& proto)
+TResultSet::TResultSet(NYdbProtos::ResultSet&& proto)
     : Impl_(new TResultSet::TImpl(std::move(proto))) {}
 
 size_t TResultSet::ColumnsCount() const {
@@ -84,7 +84,7 @@ const std::vector<TColumn>& TResultSet::GetColumnsMeta() const {
     return Impl_->ColumnsMeta_;
 }
 
-const Ydb::ResultSet& TResultSet::GetProto() const {
+const NYdbProtos::ResultSet& TResultSet::GetProto() const {
     return Impl_->ProtoResultSet_;
 }
 

@@ -1,8 +1,9 @@
 #pragma once
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
-namespace Ydb {
+YDB_PROTOS_NAMESPACE {
 namespace Monitoring {
     class SelfCheckResult;
 }
@@ -35,7 +36,7 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 class TSelfCheckResult : public TStatus {
     friend class NYdb::V3::TProtoAccessor;
 public:
-    TSelfCheckResult(TStatus&& status, Ydb::Monitoring::SelfCheckResult&& result);
+    TSelfCheckResult(TStatus&& status, NYdbProtos::Monitoring::SelfCheckResult&& result);
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;

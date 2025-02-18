@@ -1,8 +1,10 @@
 #pragma once
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
-namespace Ydb::Cms {
+YDB_PROTOS_NAMESPACE {
+namespace Cms {
     class CreateDatabaseRequest;
     class ListDatabasesResult;
     class GetDatabaseStatusResult;
@@ -19,7 +21,8 @@ namespace Ydb::Cms {
     class ScaleRecommenderPolicies;
     class ScaleRecommenderPolicies_ScaleRecommenderPolicy;
     class ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy;
-} // namespace Ydb::Cms
+} // namespace Cms
+}
 
 namespace NYdb::inline V3::NCms {
 
@@ -27,7 +30,7 @@ struct TListDatabasesSettings : public TOperationRequestSettings<TListDatabasesS
 
 class TListDatabasesResult : public TStatus {
 public:
-    TListDatabasesResult(TStatus&& status, const Ydb::Cms::ListDatabasesResult& proto);
+    TListDatabasesResult(TStatus&& status, const NYdbProtos::Cms::ListDatabasesResult& proto);
     const std::vector<std::string>& GetPaths() const;
 private:
     std::vector<std::string> Paths_;
@@ -48,7 +51,7 @@ enum class EState {
 
 struct TStorageUnits {
     TStorageUnits() = default;
-    TStorageUnits(const Ydb::Cms::StorageUnits& proto);
+    TStorageUnits(const NYdbProtos::Cms::StorageUnits& proto);
 
     std::string UnitKind;
     std::uint64_t Count;
@@ -56,7 +59,7 @@ struct TStorageUnits {
 
 struct TComputationalUnits {
     TComputationalUnits() = default;
-    TComputationalUnits(const Ydb::Cms::ComputationalUnits& proto);
+    TComputationalUnits(const NYdbProtos::Cms::ComputationalUnits& proto);
 
     std::string UnitKind;
     std::string AvailabilityZone;
@@ -65,7 +68,7 @@ struct TComputationalUnits {
 
 struct TAllocatedComputationalUnit {
     TAllocatedComputationalUnit() = default;
-    TAllocatedComputationalUnit(const Ydb::Cms::AllocatedComputationalUnit& proto);
+    TAllocatedComputationalUnit(const NYdbProtos::Cms::AllocatedComputationalUnit& proto);
 
     std::string Host;
     std::uint32_t Port;
@@ -74,7 +77,7 @@ struct TAllocatedComputationalUnit {
 
 struct TResources {
     TResources() = default;
-    TResources(const Ydb::Cms::Resources& proto);
+    TResources(const NYdbProtos::Cms::Resources& proto);
 
     std::vector<TStorageUnits> StorageUnits;
     std::vector<TComputationalUnits> ComputationalUnits;
@@ -86,7 +89,7 @@ struct TSharedResources : public TResources {
 
 struct TServerlessResources {
     TServerlessResources() = default;
-    TServerlessResources(const Ydb::Cms::ServerlessResources& proto);
+    TServerlessResources(const NYdbProtos::Cms::ServerlessResources& proto);
 
     std::string SharedDatabasePath;
 };
@@ -94,14 +97,14 @@ struct TServerlessResources {
 struct TSchemaOperationQuotas {
     struct TLeakyBucket {
         TLeakyBucket() = default;
-        TLeakyBucket(const Ydb::Cms::SchemaOperationQuotas_LeakyBucket& proto);
+        TLeakyBucket(const NYdbProtos::Cms::SchemaOperationQuotas_LeakyBucket& proto);
 
         double BucketSize = 1;
         std::uint64_t BucketSeconds = 2;
     };
 
     TSchemaOperationQuotas() = default;
-    TSchemaOperationQuotas(const Ydb::Cms::SchemaOperationQuotas& proto);
+    TSchemaOperationQuotas(const NYdbProtos::Cms::SchemaOperationQuotas& proto);
 
     std::vector<TLeakyBucket> LeakyBucketQuotas;
 };
@@ -109,7 +112,7 @@ struct TSchemaOperationQuotas {
 struct TDatabaseQuotas {
     struct TStorageQuotas {
         TStorageQuotas() = default;
-        TStorageQuotas(const Ydb::Cms::DatabaseQuotas_StorageQuotas& proto);
+        TStorageQuotas(const NYdbProtos::Cms::DatabaseQuotas_StorageQuotas& proto);
 
         std::string UnitKind;
         std::uint64_t DataSizeHardQuota;
@@ -117,7 +120,7 @@ struct TDatabaseQuotas {
     };
 
     TDatabaseQuotas() = default;
-    TDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& proto);
+    TDatabaseQuotas(const NYdbProtos::Cms::DatabaseQuotas& proto);
 
     std::uint64_t DataSizeHardQuota;
     std::uint64_t DataSizeSoftQuota;
@@ -131,21 +134,21 @@ struct TTargetTrackingPolicy {
     using TAverageCpuUtilizationPercent = std::uint32_t;
 
     TTargetTrackingPolicy() = default;
-    TTargetTrackingPolicy(const Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy& proto);
+    TTargetTrackingPolicy(const NYdbProtos::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy& proto);
 
     std::variant<std::monostate, TAverageCpuUtilizationPercent> Target;
 };
 
 struct TScaleRecommenderPolicy {
     TScaleRecommenderPolicy() = default;
-    TScaleRecommenderPolicy(const Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy& proto);
+    TScaleRecommenderPolicy(const NYdbProtos::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy& proto);
 
     std::variant<std::monostate, TTargetTrackingPolicy> Policy;
 };
 
 struct TScaleRecommenderPolicies {
     TScaleRecommenderPolicies() = default;
-    TScaleRecommenderPolicies(const Ydb::Cms::ScaleRecommenderPolicies& proto);
+    TScaleRecommenderPolicies(const NYdbProtos::Cms::ScaleRecommenderPolicies& proto);
 
     std::vector<TScaleRecommenderPolicy> Policies;
 };
@@ -154,7 +157,7 @@ using TResourcesKind = std::variant<std::monostate, TResources, TSharedResources
 
 class TGetDatabaseStatusResult : public TStatus {
 public:
-    TGetDatabaseStatusResult(TStatus&& status, const Ydb::Cms::GetDatabaseStatusResult& proto);
+    TGetDatabaseStatusResult(TStatus&& status, const NYdbProtos::Cms::GetDatabaseStatusResult& proto);
 
     const std::string& GetPath() const;
     EState GetState() const;
@@ -167,7 +170,7 @@ public:
     const TScaleRecommenderPolicies& GetScaleRecommenderPolicies() const;
 
     // Fills CreateDatabaseRequest proto from this database status
-    void SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const;
+    void SerializeTo(NYdbProtos::Cms::CreateDatabaseRequest& request) const;
 
 private:
     std::string Path_;
@@ -185,10 +188,10 @@ using TAsyncGetDatabaseStatusResult = NThreading::TFuture<TGetDatabaseStatusResu
 
 struct TCreateDatabaseSettings : public TOperationRequestSettings<TCreateDatabaseSettings> {
     TCreateDatabaseSettings() = default;
-    explicit TCreateDatabaseSettings(const Ydb::Cms::CreateDatabaseRequest& request);
+    explicit TCreateDatabaseSettings(const NYdbProtos::Cms::CreateDatabaseRequest& request);
 
     // Fills CreateDatabaseRequest proto from this settings
-    void SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const;
+    void SerializeTo(NYdbProtos::Cms::CreateDatabaseRequest& request) const;
 
     FLUENT_SETTING(TResourcesKind, ResourcesKind);
     FLUENT_SETTING(TSchemaOperationQuotas, SchemaOperationQuotas);

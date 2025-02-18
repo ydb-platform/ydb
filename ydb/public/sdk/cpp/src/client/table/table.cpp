@@ -47,23 +47,23 @@ class TStorageSettings::TImpl {
 public:
     TImpl() { }
 
-    explicit TImpl(const Ydb::Table::StorageSettings& proto)
+    explicit TImpl(const NYdbProtos::Table::StorageSettings& proto)
         : Proto_(proto)
     { }
 
 public:
-    const Ydb::Table::StorageSettings Proto_;
+    const NYdbProtos::Table::StorageSettings Proto_;
 };
 
 TStorageSettings::TStorageSettings()
     : Impl_(std::make_shared<TImpl>())
 { }
 
-TStorageSettings::TStorageSettings(const Ydb::Table::StorageSettings& proto)
+TStorageSettings::TStorageSettings(const NYdbProtos::Table::StorageSettings& proto)
     : Impl_(std::make_shared<TImpl>(proto))
 { }
 
-const Ydb::Table::StorageSettings& TStorageSettings::GetProto() const {
+const NYdbProtos::Table::StorageSettings& TStorageSettings::GetProto() const {
     return Impl_->Proto_;
 }
 
@@ -93,9 +93,9 @@ std::optional<std::string> TStorageSettings::GetExternal() const {
 
 std::optional<bool> TStorageSettings::GetStoreExternalBlobs() const {
     switch (GetProto().store_external_blobs()) {
-        case Ydb::FeatureFlag::ENABLED:
+        case NYdbProtos::FeatureFlag::ENABLED:
             return true;
-        case Ydb::FeatureFlag::DISABLED:
+        case NYdbProtos::FeatureFlag::DISABLED:
             return false;
         default:
             return { };
@@ -106,19 +106,19 @@ std::optional<bool> TStorageSettings::GetStoreExternalBlobs() const {
 
 class TColumnFamilyDescription::TImpl {
 public:
-    explicit TImpl(const Ydb::Table::ColumnFamily& desc)
+    explicit TImpl(const NYdbProtos::Table::ColumnFamily& desc)
         : Proto_(desc)
     { }
 
 public:
-    const Ydb::Table::ColumnFamily Proto_;
+    const NYdbProtos::Table::ColumnFamily Proto_;
 };
 
-TColumnFamilyDescription::TColumnFamilyDescription(const Ydb::Table::ColumnFamily& desc)
+TColumnFamilyDescription::TColumnFamilyDescription(const NYdbProtos::Table::ColumnFamily& desc)
     : Impl_(std::make_shared<TImpl>(desc))
 { }
 
-const Ydb::Table::ColumnFamily& TColumnFamilyDescription::GetProto() const {
+const NYdbProtos::Table::ColumnFamily& TColumnFamilyDescription::GetProto() const {
     return Impl_->Proto_;
 }
 
@@ -136,9 +136,9 @@ std::optional<std::string> TColumnFamilyDescription::GetData() const {
 
 std::optional<EColumnFamilyCompression> TColumnFamilyDescription::GetCompression() const {
     switch (GetProto().compression()) {
-        case Ydb::Table::ColumnFamily::COMPRESSION_NONE:
+        case NYdbProtos::Table::ColumnFamily::COMPRESSION_NONE:
             return EColumnFamilyCompression::None;
-        case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
+        case NYdbProtos::Table::ColumnFamily::COMPRESSION_LZ4:
             return EColumnFamilyCompression::LZ4;
         default:
             return { };
@@ -147,19 +147,19 @@ std::optional<EColumnFamilyCompression> TColumnFamilyDescription::GetCompression
 
 std::optional<bool> TColumnFamilyDescription::GetKeepInMemory() const {
     switch (GetProto().keep_in_memory()) {
-        case Ydb::FeatureFlag::ENABLED:
+        case NYdbProtos::FeatureFlag::ENABLED:
             return true;
-        case Ydb::FeatureFlag::DISABLED:
+        case NYdbProtos::FeatureFlag::DISABLED:
             return false;
         default:
             return { };
     }
 }
 
-TBuildIndexOperation::TBuildIndexOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
+TBuildIndexOperation::TBuildIndexOperation(TStatus &&status, NYdbProtos::Operations::Operation &&operation)
     : TOperation(std::move(status), std::move(operation))
 {
-    Ydb::Table::IndexBuildMetadata metadata;
+    NYdbProtos::Table::IndexBuildMetadata metadata;
     GetProto().metadata().UnpackTo(&metadata);
     Metadata_.State = static_cast<EBuildIndexState>(metadata.state());
     Metadata_.Progress = metadata.progress();
@@ -178,31 +178,31 @@ class TPartitioningSettings::TImpl {
 public:
     TImpl() { }
 
-    explicit TImpl(const Ydb::Table::PartitioningSettings& proto)
+    explicit TImpl(const NYdbProtos::Table::PartitioningSettings& proto)
         : Proto_(proto)
     { }
 
 public:
-    const Ydb::Table::PartitioningSettings Proto_;
+    const NYdbProtos::Table::PartitioningSettings Proto_;
 };
 
 TPartitioningSettings::TPartitioningSettings()
     : Impl_(std::make_shared<TImpl>())
 { }
 
-TPartitioningSettings::TPartitioningSettings(const Ydb::Table::PartitioningSettings& proto)
+TPartitioningSettings::TPartitioningSettings(const NYdbProtos::Table::PartitioningSettings& proto)
     : Impl_(std::make_shared<TImpl>(proto))
 { }
 
-const Ydb::Table::PartitioningSettings& TPartitioningSettings::GetProto() const {
+const NYdbProtos::Table::PartitioningSettings& TPartitioningSettings::GetProto() const {
     return Impl_->Proto_;
 }
 
 std::optional<bool> TPartitioningSettings::GetPartitioningBySize() const {
     switch (GetProto().partitioning_by_size()) {
-    case Ydb::FeatureFlag::ENABLED:
+    case NYdbProtos::FeatureFlag::ENABLED:
         return true;
-    case Ydb::FeatureFlag::DISABLED:
+    case NYdbProtos::FeatureFlag::DISABLED:
         return false;
     default:
         return { };
@@ -211,9 +211,9 @@ std::optional<bool> TPartitioningSettings::GetPartitioningBySize() const {
 
 std::optional<bool> TPartitioningSettings::GetPartitioningByLoad() const {
     switch (GetProto().partitioning_by_load()) {
-    case Ydb::FeatureFlag::ENABLED:
+    case NYdbProtos::FeatureFlag::ENABLED:
         return true;
-    case Ydb::FeatureFlag::DISABLED:
+    case NYdbProtos::FeatureFlag::DISABLED:
         return false;
     default:
         return { };
@@ -248,13 +248,13 @@ static TInstant ProtobufTimestampToTInstant(const google::protobuf::Timestamp& t
     return TInstant::MicroSeconds(lastModificationUs);
 }
 
-static void SerializeTo(const TRenameIndex& rename, Ydb::Table::RenameIndexItem& proto) {
+static void SerializeTo(const TRenameIndex& rename, NYdbProtos::Table::RenameIndexItem& proto) {
     proto.set_source_name(TStringType{rename.SourceName_});
     proto.set_destination_name(TStringType{rename.DestinationName_});
     proto.set_replace_destination(rename.ReplaceDestination_);
 }
 
-TExplicitPartitions TExplicitPartitions::FromProto(const Ydb::Table::ExplicitPartitions& proto) {
+TExplicitPartitions TExplicitPartitions::FromProto(const NYdbProtos::Table::ExplicitPartitions& proto) {
     TExplicitPartitions out;
     for (const auto& splitPoint : proto.split_points()) {
         TValue value(TType(splitPoint.type()), splitPoint.value());
@@ -263,7 +263,7 @@ TExplicitPartitions TExplicitPartitions::FromProto(const Ydb::Table::ExplicitPar
     return out;
 }
 
-void TExplicitPartitions::SerializeTo(Ydb::Table::ExplicitPartitions& proto) const {
+void TExplicitPartitions::SerializeTo(NYdbProtos::Table::ExplicitPartitions& proto) const {
     for (const auto& splitPoint : SplitPoints_) {
         auto* boundary = proto.add_split_points();
         boundary->mutable_type()->CopyFrom(TProtoAccessor::GetProto(splitPoint.GetType()));
@@ -294,7 +294,7 @@ class TTableDescription::TImpl {
             }
             std::optional<TSequenceDescription> sequenceDescription;
             switch (col.default_value_case()) {
-                case Ydb::Table::ColumnMeta::kFromSequence: {
+                case NYdbProtos::Table::ColumnMeta::kFromSequence: {
                     if (col.from_sequence().name() == "_serial_column_" + col.name()) {
                         TSequenceDescription currentSequenceDescription;
                         if (col.from_sequence().has_set_val()) {
@@ -318,7 +318,7 @@ class TTableDescription::TImpl {
             Indexes_.emplace_back(TProtoAccessor::FromProto(index));
         }
 
-        if constexpr (std::is_same_v<TProto, Ydb::Table::DescribeTableResult>) {
+        if constexpr (std::is_same_v<TProto, NYdbProtos::Table::DescribeTableResult>) {
             // changefeeds
             Changefeeds_.reserve(proto.changefeeds_size());
             for (const auto& changefeed : proto.changefeeds()) {
@@ -332,7 +332,7 @@ class TTableDescription::TImpl {
         }
 
         if (proto.store_type()) {
-            StoreType_ = (proto.store_type() == Ydb::Table::STORE_TYPE_COLUMN) ? EStoreType::Column : EStoreType::Row;
+            StoreType_ = (proto.store_type() == NYdbProtos::Table::STORE_TYPE_COLUMN) ? EStoreType::Column : EStoreType::Row;
         }
 
         // column families
@@ -348,10 +348,10 @@ class TTableDescription::TImpl {
 
         // key bloom filter
         switch (proto.key_bloom_filter()) {
-        case Ydb::FeatureFlag::ENABLED:
+        case NYdbProtos::FeatureFlag::ENABLED:
             KeyBloomFilter_ = true;
             break;
-        case Ydb::FeatureFlag::DISABLED:
+        case NYdbProtos::FeatureFlag::DISABLED:
             KeyBloomFilter_ = false;
             break;
         default:
@@ -362,12 +362,12 @@ class TTableDescription::TImpl {
         if (proto.has_read_replicas_settings()) {
             const auto settings = proto.read_replicas_settings();
             switch (settings.settings_case()) {
-            case Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount:
+            case NYdbProtos::Table::ReadReplicasSettings::kPerAzReadReplicasCount:
                 ReadReplicasSettings_ = TReadReplicasSettings(
                     TReadReplicasSettings::EMode::PerAz,
                     settings.per_az_read_replicas_count());
                 break;
-            case Ydb::Table::ReadReplicasSettings::kAnyAzReadReplicasCount:
+            case NYdbProtos::Table::ReadReplicasSettings::kAnyAzReadReplicasCount:
                 ReadReplicasSettings_ = TReadReplicasSettings(
                     TReadReplicasSettings::EMode::AnyAz,
                     settings.any_az_read_replicas_count());
@@ -379,7 +379,7 @@ class TTableDescription::TImpl {
     }
 
 public:
-    TImpl(Ydb::Table::DescribeTableResult&& desc, const TDescribeTableSettings& describeSettings)
+    TImpl(NYdbProtos::Table::DescribeTableResult&& desc, const TDescribeTableSettings& describeSettings)
         : TImpl(desc)
     {
         Proto_ = std::move(desc);
@@ -421,7 +421,7 @@ public:
 
     struct TCreateTableRequestTag {}; // to avoid delegation cycle
 
-    TImpl(const Ydb::Table::CreateTableRequest& request, TCreateTableRequestTag)
+    TImpl(const NYdbProtos::Table::CreateTableRequest& request, TCreateTableRequestTag)
         : TImpl(request)
     {
         if (!request.compaction_policy().empty()) {
@@ -429,11 +429,11 @@ public:
         }
 
         switch (request.partitions_case()) {
-            case Ydb::Table::CreateTableRequest::kUniformPartitions:
+            case NYdbProtos::Table::CreateTableRequest::kUniformPartitions:
                 SetUniformPartitions(request.uniform_partitions());
                 break;
 
-            case Ydb::Table::CreateTableRequest::kPartitionAtKeys: {
+            case NYdbProtos::Table::CreateTableRequest::kPartitionAtKeys: {
                 SetPartitionAtKeys(TExplicitPartitions::FromProto(request.partition_at_keys()));
                 break;
             }
@@ -445,11 +445,11 @@ public:
 
     TImpl() = default;
 
-    const Ydb::Table::DescribeTableResult& GetProto() const {
+    const NYdbProtos::Table::DescribeTableResult& GetProto() const {
         return Proto_;
     }
 
-    void AddColumn(const std::string& name, const Ydb::Type& type, const std::string& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription) {
+    void AddColumn(const std::string& name, const NYdbProtos::Type& type, const std::string& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription) {
         Columns_.emplace_back(name, type, family, notNull, std::move(sequenceDescription));
     }
 
@@ -632,7 +632,7 @@ public:
     }
 
 private:
-    Ydb::Table::DescribeTableResult Proto_;
+    NYdbProtos::Table::DescribeTableResult Proto_;
     TStorageSettings StorageSettings_;
     std::vector<std::string> PrimaryKey_;
     std::vector<TTableColumn> Columns_;
@@ -663,13 +663,13 @@ TTableDescription::TTableDescription()
 {
 }
 
-TTableDescription::TTableDescription(Ydb::Table::DescribeTableResult&& desc,
+TTableDescription::TTableDescription(NYdbProtos::Table::DescribeTableResult&& desc,
     const TDescribeTableSettings& describeSettings)
     : Impl_(new TImpl(std::move(desc), describeSettings))
 {
 }
 
-TTableDescription::TTableDescription(const Ydb::Table::CreateTableRequest& request)
+TTableDescription::TTableDescription(const NYdbProtos::Table::CreateTableRequest& request)
     : Impl_(new TImpl(request, TImpl::TCreateTableRequestTag()))
 {
 }
@@ -729,7 +729,7 @@ const std::vector<TKeyRange>& TTableDescription::GetKeyRanges() const {
     return Impl_->GetKeyRanges();
 }
 
-void TTableDescription::AddColumn(const std::string& name, const Ydb::Type& type, const std::string& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription) {
+void TTableDescription::AddColumn(const std::string& name, const NYdbProtos::Type& type, const std::string& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription) {
     Impl_->AddColumn(name, type, family, notNull, std::move(sequenceDescription));
 }
 
@@ -893,11 +893,11 @@ std::optional<TReadReplicasSettings> TTableDescription::GetReadReplicasSettings(
     return Impl_->GetReadReplicasSettings();
 }
 
-const Ydb::Table::DescribeTableResult& TTableDescription::GetProto() const {
+const NYdbProtos::Table::DescribeTableResult& TTableDescription::GetProto() const {
     return Impl_->GetProto();
 }
 
-void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) const {
+void TTableDescription::SerializeTo(NYdbProtos::Table::CreateTableRequest& request) const {
     for (const auto& column : Impl_->GetColumns()) {
         auto& protoColumn = *request.add_columns();
         protoColumn.set_name(TStringType{column.Name});
@@ -930,7 +930,7 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
     }
 
     if (Impl_->GetStoreType() == EStoreType::Column) {
-        request.set_store_type(Ydb::Table::StoreType::STORE_TYPE_COLUMN);
+        request.set_store_type(NYdbProtos::Table::StoreType::STORE_TYPE_COLUMN);
     }
 
     if (Impl_->HasStorageSettings()) {
@@ -966,9 +966,9 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
     if (auto keyBloomFilter = Impl_->GetKeyBloomFilter()) {
         if (keyBloomFilter.value()) {
-            request.set_key_bloom_filter(Ydb::FeatureFlag::ENABLED);
+            request.set_key_bloom_filter(NYdbProtos::FeatureFlag::ENABLED);
         } else {
-            request.set_key_bloom_filter(Ydb::FeatureFlag::DISABLED);
+            request.set_key_bloom_filter(NYdbProtos::FeatureFlag::DISABLED);
         }
     }
 
@@ -990,7 +990,7 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
 class TStorageSettingsBuilder::TImpl {
 public:
-    Ydb::Table::StorageSettings Proto;
+    NYdbProtos::Table::StorageSettings Proto;
 };
 
 TStorageSettingsBuilder::TStorageSettingsBuilder()
@@ -1016,7 +1016,7 @@ TStorageSettingsBuilder& TStorageSettingsBuilder::SetExternal(const std::string&
 
 TStorageSettingsBuilder& TStorageSettingsBuilder::SetStoreExternalBlobs(bool enabled) {
     Impl_->Proto.set_store_external_blobs(
-        enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+        enabled ? NYdbProtos::FeatureFlag::ENABLED : NYdbProtos::FeatureFlag::DISABLED);
     return *this;
 }
 
@@ -1028,7 +1028,7 @@ TStorageSettings TStorageSettingsBuilder::Build() const {
 
 class TPartitioningSettingsBuilder::TImpl {
 public:
-    Ydb::Table::PartitioningSettings Proto;
+    NYdbProtos::Table::PartitioningSettings Proto;
 };
 
 TPartitioningSettingsBuilder::TPartitioningSettingsBuilder()
@@ -1039,13 +1039,13 @@ TPartitioningSettingsBuilder::~TPartitioningSettingsBuilder() { }
 
 TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitioningBySize(bool enabled) {
     Impl_->Proto.set_partitioning_by_size(
-        enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+        enabled ? NYdbProtos::FeatureFlag::ENABLED : NYdbProtos::FeatureFlag::DISABLED);
     return *this;
 }
 
 TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitioningByLoad(bool enabled) {
     Impl_->Proto.set_partitioning_by_load(
-        enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+        enabled ? NYdbProtos::FeatureFlag::ENABLED : NYdbProtos::FeatureFlag::DISABLED);
     return *this;
 }
 
@@ -1072,7 +1072,7 @@ TPartitioningSettings TPartitioningSettingsBuilder::Build() const {
 
 class TColumnFamilyBuilder::TImpl {
 public:
-    Ydb::Table::ColumnFamily Proto;
+    NYdbProtos::Table::ColumnFamily Proto;
 };
 
 TColumnFamilyBuilder::TColumnFamilyBuilder(const std::string& name)
@@ -1091,17 +1091,17 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetData(const std::string& media) {
 TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompression compression) {
     switch (compression) {
         case EColumnFamilyCompression::None:
-            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
+            Impl_->Proto.set_compression(NYdbProtos::Table::ColumnFamily::COMPRESSION_NONE);
             break;
         case EColumnFamilyCompression::LZ4:
-            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+            Impl_->Proto.set_compression(NYdbProtos::Table::ColumnFamily::COMPRESSION_LZ4);
             break;
     }
     return *this;
 }
 
 TColumnFamilyBuilder& TColumnFamilyBuilder::SetKeepInMemory(bool enabled) {
-    Impl_->Proto.set_keep_in_memory(enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+    Impl_->Proto.set_keep_in_memory(enabled ? NYdbProtos::FeatureFlag::ENABLED : NYdbProtos::FeatureFlag::DISABLED);
     return *this;
 }
 
@@ -1514,7 +1514,7 @@ TAsyncScanQueryPartIterator TTableClient::StreamExecuteScanQuery(const std::stri
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void ConvertCreateTableSettingsToProto(const TCreateTableSettings& settings, Ydb::Table::TableProfile* proto) {
+static void ConvertCreateTableSettingsToProto(const TCreateTableSettings& settings, NYdbProtos::Table::TableProfile* proto) {
     if (settings.PresetName_) {
         proto->set_preset_name(TStringType{settings.PresetName_.value()});
     }
@@ -1530,7 +1530,7 @@ static void ConvertCreateTableSettingsToProto(const TCreateTableSettings& settin
             proto->mutable_partitioning_policy()->set_preset_name(TStringType{policy.PresetName_.value()});
         }
         if (policy.AutoPartitioning_) {
-            proto->mutable_partitioning_policy()->set_auto_partitioning(static_cast<Ydb::Table::PartitioningPolicy_AutoPartitioningPolicy>(policy.AutoPartitioning_.value()));
+            proto->mutable_partitioning_policy()->set_auto_partitioning(static_cast<NYdbProtos::Table::PartitioningPolicy_AutoPartitioningPolicy>(policy.AutoPartitioning_.value()));
         }
         if (policy.UniformPartitions_) {
             proto->mutable_partitioning_policy()->set_uniform_partitions(policy.UniformPartitions_.value());
@@ -1575,14 +1575,14 @@ static void ConvertCreateTableSettingsToProto(const TCreateTableSettings& settin
             if (familyPolicy.KeepInMemory_) {
                 familyProto->set_keep_in_memory(
                     familyPolicy.KeepInMemory_.value()
-                    ? Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED
-                    : Ydb::FeatureFlag_Status::FeatureFlag_Status_DISABLED
+                    ? NYdbProtos::FeatureFlag_Status::FeatureFlag_Status_ENABLED
+                    : NYdbProtos::FeatureFlag_Status::FeatureFlag_Status_DISABLED
                 );
             }
             if (familyPolicy.Compressed_) {
                 familyProto->set_compression(familyPolicy.Compressed_.value()
-                    ? Ydb::Table::ColumnFamilyPolicy::COMPRESSED
-                    : Ydb::Table::ColumnFamilyPolicy::UNCOMPRESSED);
+                    ? NYdbProtos::Table::ColumnFamilyPolicy::COMPRESSED
+                    : NYdbProtos::Table::ColumnFamilyPolicy::UNCOMPRESSED);
             }
         }
     }
@@ -1597,15 +1597,15 @@ static void ConvertCreateTableSettingsToProto(const TCreateTableSettings& settin
         if (policy.CreatePerAvailabilityZone_) {
             proto->mutable_replication_policy()->set_create_per_availability_zone(
                 policy.CreatePerAvailabilityZone_.value()
-                ? Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED
-                : Ydb::FeatureFlag_Status::FeatureFlag_Status_DISABLED
+                ? NYdbProtos::FeatureFlag_Status::FeatureFlag_Status_ENABLED
+                : NYdbProtos::FeatureFlag_Status::FeatureFlag_Status_DISABLED
             );
         }
         if (policy.AllowPromotion_) {
             proto->mutable_replication_policy()->set_allow_promotion(
                 policy.AllowPromotion_.value()
-                ? Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED
-                : Ydb::FeatureFlag_Status::FeatureFlag_Status_DISABLED
+                ? NYdbProtos::FeatureFlag_Status::FeatureFlag_Status_ENABLED
+                : NYdbProtos::FeatureFlag_Status::FeatureFlag_Status_DISABLED
             );
         }
     }
@@ -1636,7 +1636,7 @@ TSession::TSession(std::shared_ptr<TTableClient::TImpl> client, std::shared_ptr<
 TFuture<TStatus> TSession::CreateTable(const std::string& path, TTableDescription&& tableDesc,
         const TCreateTableSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Table::CreateTableRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::CreateTableRequest>(settings);
     request.set_session_id(TStringType{SessionImpl_->GetId()});
     request.set_path(TStringType{path});
 
@@ -1659,10 +1659,10 @@ TFuture<TStatus> TSession::DropTable(const std::string& path, const TDropTableSe
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
 
-static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
+static NYdbProtos::Table::AlterTableRequest MakeAlterTableProtoRequest(
     const std::string& path, const TAlterTableSettings& settings, const std::string& sessionId)
 {
-    auto request = MakeOperationRequest<Ydb::Table::AlterTableRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::AlterTableRequest>(settings);
     request.set_session_id(TStringType{sessionId});
     request.set_path(TStringType{path});
 
@@ -1740,7 +1740,7 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
 
     if (settings.SetKeyBloomFilter_.has_value()) {
         request.set_set_key_bloom_filter(
-            settings.SetKeyBloomFilter_.value() ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+            settings.SetKeyBloomFilter_.value() ? NYdbProtos::FeatureFlag::ENABLED : NYdbProtos::FeatureFlag::DISABLED);
     }
 
     if (settings.SetReadReplicasSettings_.has_value()) {
@@ -1783,7 +1783,7 @@ TAsyncOperation TSession::AlterTableLong(const std::string& path, const TAlterTa
 }
 
 TAsyncStatus TSession::RenameTables(const std::vector<TRenameItem>& renameItems, const TRenameTablesSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::RenameTablesRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::RenameTablesRequest>(settings);
     request.set_session_id(TStringType{SessionImpl_->GetId()});
 
     for (const auto& item: renameItems) {
@@ -1801,7 +1801,7 @@ TAsyncStatus TSession::RenameTables(const std::vector<TRenameItem>& renameItems,
 }
 
 TAsyncStatus TSession::CopyTables(const std::vector<TCopyItem>& copyItems, const TCopyTablesSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::CopyTablesRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::CopyTablesRequest>(settings);
     request.set_session_id(TStringType{SessionImpl_->GetId()});
 
     for (const auto& item: copyItems) {
@@ -1862,7 +1862,7 @@ TAsyncDataQueryResult TSession::ExecuteDataQuery(const std::string& query, const
             nullptr,
             settings);
     } else {
-        using TProtoParamsType = const ::google::protobuf::Map<TStringType, Ydb::TypedValue>;
+        using TProtoParamsType = const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>;
         return Client_->ExecuteDataQuery<TProtoParamsType&>(
             *this,
             query,
@@ -2027,7 +2027,7 @@ TDataQuery::TDataQuery(const TSession& session, const std::string& text, const s
 {}
 
 TDataQuery::TDataQuery(const TSession& session, const std::string& text, const std::string& id,
-    const ::google::protobuf::Map<TStringType, Ydb::Type>& types)
+    const ::google::protobuf::Map<TStringType, NYdbProtos::Type>& types)
     : Impl_(new TImpl(session, text, session.Client_->Settings_.KeepDataQueryText_, id,
                       session.Client_->Settings_.AllowRequestMigration_, types))
 {}
@@ -2075,7 +2075,7 @@ TAsyncDataQueryResult TDataQuery::Execute(const TTxControl& txControl, const TPa
             settings,
             false);
     } else {
-        using TProtoParamsType = const ::google::protobuf::Map<TStringType, Ydb::TypedValue>;
+        using TProtoParamsType = const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>;
         return Impl_->Session_.Client_->ExecuteDataQuery<TProtoParamsType&>(
             Impl_->Session_,
             *this,
@@ -2153,7 +2153,7 @@ const std::string& TExplainQueryResult::GetDiagnostics() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDescribeTableResult::TDescribeTableResult(TStatus&& status, Ydb::Table::DescribeTableResult&& desc,
+TDescribeTableResult::TDescribeTableResult(TStatus&& status, NYdbProtos::Table::DescribeTableResult&& desc,
     const TDescribeTableSettings& describeSettings)
     : NScheme::TDescribePathResult(std::move(status), desc.self())
     , TableDescription_(std::move(desc), describeSettings)
@@ -2324,11 +2324,11 @@ TIndexDescription::TIndexDescription(
 )   : TIndexDescription(name, EIndexType::GlobalSync, indexColumns, dataColumns, globalIndexSettings)
 {}
 
-TIndexDescription::TIndexDescription(const Ydb::Table::TableIndex& tableIndex)
+TIndexDescription::TIndexDescription(const NYdbProtos::Table::TableIndex& tableIndex)
     : TIndexDescription(FromProto(tableIndex))
 {}
 
-TIndexDescription::TIndexDescription(const Ydb::Table::TableIndexDescription& tableIndexDesc)
+TIndexDescription::TIndexDescription(const NYdbProtos::Table::TableIndexDescription& tableIndexDesc)
     : TIndexDescription(FromProto(tableIndexDesc))
 {}
 
@@ -2356,12 +2356,12 @@ uint64_t TIndexDescription::GetSizeBytes() const {
     return SizeBytes_;
 }
 
-TGlobalIndexSettings TGlobalIndexSettings::FromProto(const Ydb::Table::GlobalIndexSettings& proto) {
-    auto partitionsFromProto = [](const Ydb::Table::GlobalIndexSettings& proto) -> TUniformOrExplicitPartitions {
+TGlobalIndexSettings TGlobalIndexSettings::FromProto(const NYdbProtos::Table::GlobalIndexSettings& proto) {
+    auto partitionsFromProto = [](const NYdbProtos::Table::GlobalIndexSettings& proto) -> TUniformOrExplicitPartitions {
         switch (proto.partitions_case()) {
-        case Ydb::Table::GlobalIndexSettings::kUniformPartitions:
+        case NYdbProtos::Table::GlobalIndexSettings::kUniformPartitions:
             return proto.uniform_partitions();
-        case Ydb::Table::GlobalIndexSettings::kPartitionAtKeys:
+        case NYdbProtos::Table::GlobalIndexSettings::kPartitionAtKeys:
             return TExplicitPartitions::FromProto(proto.partition_at_keys());
         default:
             return {};
@@ -2374,7 +2374,7 @@ TGlobalIndexSettings TGlobalIndexSettings::FromProto(const Ydb::Table::GlobalInd
     };
 }
 
-void TGlobalIndexSettings::SerializeTo(Ydb::Table::GlobalIndexSettings& settings) const {
+void TGlobalIndexSettings::SerializeTo(NYdbProtos::Table::GlobalIndexSettings& settings) const {
     *settings.mutable_partitioning_settings() = PartitioningSettings.GetProto();
 
     auto variantVisitor = [&settings](auto&& partitions) {
@@ -2388,18 +2388,18 @@ void TGlobalIndexSettings::SerializeTo(Ydb::Table::GlobalIndexSettings& settings
     std::visit(std::move(variantVisitor), Partitions);
 }
 
-TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorIndexSettings& proto) {
+TVectorIndexSettings TVectorIndexSettings::FromProto(const NYdbProtos::Table::VectorIndexSettings& proto) {
     auto covertMetric = [&] {
         switch (proto.metric()) {
-        case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
+        case NYdbProtos::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
             return EMetric::InnerProduct;
-        case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
+        case NYdbProtos::Table::VectorIndexSettings::SIMILARITY_COSINE:
             return EMetric::CosineSimilarity;
-        case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
+        case NYdbProtos::Table::VectorIndexSettings::DISTANCE_COSINE:
             return EMetric::CosineDistance;
-        case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
+        case NYdbProtos::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
             return EMetric::Manhattan;
-        case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
+        case NYdbProtos::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
             return EMetric::Euclidean;
         default:
             return EMetric::Unspecified;
@@ -2408,13 +2408,13 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorInd
 
     auto convertVectorType = [&] {
         switch (proto.vector_type()) {
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
+        case NYdbProtos::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
             return EVectorType::Float;
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
+        case NYdbProtos::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
             return EVectorType::Uint8;
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
+        case NYdbProtos::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
             return EVectorType::Int8;
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
+        case NYdbProtos::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
             return EVectorType::Bit;
         default:
             return EVectorType::Unspecified;
@@ -2428,36 +2428,36 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorInd
     };
 }
 
-void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings) const {
+void TVectorIndexSettings::SerializeTo(NYdbProtos::Table::VectorIndexSettings& settings) const {
     auto convertMetric = [&] {
         switch (Metric) {
         case EMetric::InnerProduct:
-            return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
+            return NYdbProtos::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
         case EMetric::CosineSimilarity:
-            return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
+            return NYdbProtos::Table::VectorIndexSettings::SIMILARITY_COSINE;
         case EMetric::CosineDistance:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
+            return NYdbProtos::Table::VectorIndexSettings::DISTANCE_COSINE;
         case EMetric::Manhattan:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
+            return NYdbProtos::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
         case EMetric::Euclidean:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+            return NYdbProtos::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
         case EMetric::Unspecified:
-            return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
+            return NYdbProtos::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
         }
     };
 
     auto convertVectorType = [&] {
         switch (VectorType) {
         case EVectorType::Float:
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+            return NYdbProtos::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
         case EVectorType::Uint8:
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+            return NYdbProtos::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         case EVectorType::Int8:
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
+            return NYdbProtos::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
         case EVectorType::Bit:
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
+            return NYdbProtos::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
         case EVectorType::Unspecified:
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
+            return NYdbProtos::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
         }
     };
 
@@ -2470,7 +2470,7 @@ void TVectorIndexSettings::Out(IOutputStream& o) const {
     o << *this;
 }
 
-TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeSettings& proto) {
+TKMeansTreeSettings TKMeansTreeSettings::FromProto(const NYdbProtos::Table::KMeansTreeSettings& proto) {
     return {
         .Settings = TVectorIndexSettings::FromProto(proto.settings()),
         .Clusters = proto.clusters(),
@@ -2478,7 +2478,7 @@ TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeS
     };
 }
 
-void TKMeansTreeSettings::SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const {
+void TKMeansTreeSettings::SerializeTo(NYdbProtos::Table::KMeansTreeSettings& settings) const {
     Settings.SerializeTo(*settings.mutable_settings());
     settings.set_clusters(Clusters);
     settings.set_levels(Levels);
@@ -2527,14 +2527,14 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     }
 
     auto result = TIndexDescription(proto.name(), type, indexColumns, dataColumns, globalIndexSettings, specializedIndexSettings);
-    if constexpr (std::is_same_v<TProto, Ydb::Table::TableIndexDescription>) {
+    if constexpr (std::is_same_v<TProto, NYdbProtos::Table::TableIndexDescription>) {
         result.SizeBytes_ = proto.size_bytes();
     }
 
     return result;
 }
 
-void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
+void TIndexDescription::SerializeTo(NYdbProtos::Table::TableIndex& proto) const {
     proto.set_name(TStringType{IndexName_});
     for (const auto& indexCol : IndexColumns_) {
         proto.add_index_columns(TStringType{indexCol});
@@ -2624,11 +2624,11 @@ TChangefeedDescription::TChangefeedDescription(const std::string& name, EChangef
     , Format_(format)
 {}
 
-TChangefeedDescription::TChangefeedDescription(const Ydb::Table::Changefeed& proto)
+TChangefeedDescription::TChangefeedDescription(const NYdbProtos::Table::Changefeed& proto)
     : TChangefeedDescription(FromProto(proto))
 {}
 
-TChangefeedDescription::TChangefeedDescription(const Ydb::Table::ChangefeedDescription& proto)
+TChangefeedDescription::TChangefeedDescription(const NYdbProtos::Table::ChangefeedDescription& proto)
     : TChangefeedDescription(FromProto(proto))
 {}
 
@@ -2748,19 +2748,19 @@ template <typename TProto>
 TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     EChangefeedMode mode;
     switch (proto.mode()) {
-    case Ydb::Table::ChangefeedMode::MODE_KEYS_ONLY:
+    case NYdbProtos::Table::ChangefeedMode::MODE_KEYS_ONLY:
         mode = EChangefeedMode::KeysOnly;
         break;
-    case Ydb::Table::ChangefeedMode::MODE_UPDATES:
+    case NYdbProtos::Table::ChangefeedMode::MODE_UPDATES:
         mode = EChangefeedMode::Updates;
         break;
-    case Ydb::Table::ChangefeedMode::MODE_NEW_IMAGE:
+    case NYdbProtos::Table::ChangefeedMode::MODE_NEW_IMAGE:
         mode = EChangefeedMode::NewImage;
         break;
-    case Ydb::Table::ChangefeedMode::MODE_OLD_IMAGE:
+    case NYdbProtos::Table::ChangefeedMode::MODE_OLD_IMAGE:
         mode = EChangefeedMode::OldImage;
         break;
-    case Ydb::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES:
+    case NYdbProtos::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES:
         mode = EChangefeedMode::NewAndOldImages;
         break;
     default:
@@ -2770,13 +2770,13 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
 
     EChangefeedFormat format;
     switch (proto.format()) {
-    case Ydb::Table::ChangefeedFormat::FORMAT_JSON:
+    case NYdbProtos::Table::ChangefeedFormat::FORMAT_JSON:
         format = EChangefeedFormat::Json;
         break;
-    case Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON:
+    case NYdbProtos::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON:
         format = EChangefeedFormat::DynamoDBStreamsJson;
         break;
-    case Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON:
+    case NYdbProtos::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON:
         format = EChangefeedFormat::DebeziumJson;
         break;
     default:
@@ -2796,15 +2796,15 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
         ret.WithAwsRegion(proto.aws_region());
     }
 
-    if constexpr (std::is_same_v<TProto, Ydb::Table::ChangefeedDescription>) {
+    if constexpr (std::is_same_v<TProto, NYdbProtos::Table::ChangefeedDescription>) {
         switch (proto.state()) {
-        case Ydb::Table::ChangefeedDescription::STATE_ENABLED:
+        case NYdbProtos::Table::ChangefeedDescription::STATE_ENABLED:
             ret.State_= EChangefeedState::Enabled;
             break;
-        case Ydb::Table::ChangefeedDescription::STATE_DISABLED:
+        case NYdbProtos::Table::ChangefeedDescription::STATE_DISABLED:
             ret.State_ = EChangefeedState::Disabled;
             break;
-        case Ydb::Table::ChangefeedDescription::STATE_INITIAL_SCAN:
+        case NYdbProtos::Table::ChangefeedDescription::STATE_INITIAL_SCAN:
             ret.State_ = EChangefeedState::InitialScan;
             break;
         default:
@@ -2835,19 +2835,19 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:
-        proto.set_mode(Ydb::Table::ChangefeedMode::MODE_KEYS_ONLY);
+        proto.set_mode(NYdbProtos::Table::ChangefeedMode::MODE_KEYS_ONLY);
         break;
     case EChangefeedMode::Updates:
-        proto.set_mode(Ydb::Table::ChangefeedMode::MODE_UPDATES);
+        proto.set_mode(NYdbProtos::Table::ChangefeedMode::MODE_UPDATES);
         break;
     case EChangefeedMode::NewImage:
-        proto.set_mode(Ydb::Table::ChangefeedMode::MODE_NEW_IMAGE);
+        proto.set_mode(NYdbProtos::Table::ChangefeedMode::MODE_NEW_IMAGE);
         break;
     case EChangefeedMode::OldImage:
-        proto.set_mode(Ydb::Table::ChangefeedMode::MODE_OLD_IMAGE);
+        proto.set_mode(NYdbProtos::Table::ChangefeedMode::MODE_OLD_IMAGE);
         break;
     case EChangefeedMode::NewAndOldImages:
-        proto.set_mode(Ydb::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES);
+        proto.set_mode(NYdbProtos::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES);
         break;
     case EChangefeedMode::Unknown:
         break;
@@ -2855,13 +2855,13 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
 
     switch (Format_) {
     case EChangefeedFormat::Json:
-        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        proto.set_format(NYdbProtos::Table::ChangefeedFormat::FORMAT_JSON);
         break;
     case EChangefeedFormat::DynamoDBStreamsJson:
-        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
+        proto.set_format(NYdbProtos::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
         break;
     case EChangefeedFormat::DebeziumJson:
-        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
+        proto.set_format(NYdbProtos::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
         break;
     case EChangefeedFormat::Unknown:
         break;
@@ -2876,7 +2876,7 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     }
 }
 
-void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
+void TChangefeedDescription::SerializeTo(NYdbProtos::Table::Changefeed& proto) const {
     SerializeCommonFields(proto);
     proto.set_initial_scan(InitialScan_);
 
@@ -2885,18 +2885,18 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
     }
 }
 
-void TChangefeedDescription::SerializeTo(Ydb::Table::ChangefeedDescription& proto) const {
+void TChangefeedDescription::SerializeTo(NYdbProtos::Table::ChangefeedDescription& proto) const {
     SerializeCommonFields(proto);
 
     switch (State_) {
     case EChangefeedState::Enabled:
-        proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_ENABLED);
+        proto.set_state(NYdbProtos::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_ENABLED);
         break;
     case EChangefeedState::Disabled:
-        proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_DISABLED);
+        proto.set_state(NYdbProtos::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_DISABLED);
         break;
     case EChangefeedState::InitialScan:
-        proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_INITIAL_SCAN);
+        proto.set_state(NYdbProtos::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_INITIAL_SCAN);
         break;
     case EChangefeedState::Unknown:
         break;
@@ -2955,39 +2955,39 @@ TTtlTierSettings::TTtlTierSettings(const TExpression& expression, const TAction&
     , Action_(action)
 { }
 
-std::optional<TTtlTierSettings> TTtlTierSettings::FromProto(const Ydb::Table::TtlTier& tier) {
+std::optional<TTtlTierSettings> TTtlTierSettings::FromProto(const NYdbProtos::Table::TtlTier& tier) {
     std::optional<TExpression> expression;
     switch (tier.expression_case()) {
-    case Ydb::Table::TtlTier::kDateTypeColumn:
+    case NYdbProtos::Table::TtlTier::kDateTypeColumn:
         expression = TDateTypeColumnModeSettings(
             tier.date_type_column().column_name(), TDuration::Seconds(tier.date_type_column().expire_after_seconds()));
         break;
-    case Ydb::Table::TtlTier::kValueSinceUnixEpoch:
+    case NYdbProtos::Table::TtlTier::kValueSinceUnixEpoch:
         expression = TValueSinceUnixEpochModeSettings(tier.value_since_unix_epoch().column_name(),
             TProtoAccessor::FromProto(tier.value_since_unix_epoch().column_unit()),
             TDuration::Seconds(tier.value_since_unix_epoch().expire_after_seconds()));
         break;
-    case Ydb::Table::TtlTier::EXPRESSION_NOT_SET:
+    case NYdbProtos::Table::TtlTier::EXPRESSION_NOT_SET:
         return std::nullopt;
     }
 
     TAction action;
 
     switch (tier.action_case()) {
-    case Ydb::Table::TtlTier::kDelete:
+    case NYdbProtos::Table::TtlTier::kDelete:
         action = TTtlDeleteAction();
         break;
-    case Ydb::Table::TtlTier::kEvictToExternalStorage:
+    case NYdbProtos::Table::TtlTier::kEvictToExternalStorage:
         action = TTtlEvictToExternalStorageAction(tier.evict_to_external_storage().storage());
         break;
-    case Ydb::Table::TtlTier::ACTION_NOT_SET:
+    case NYdbProtos::Table::TtlTier::ACTION_NOT_SET:
         return std::nullopt;
     }
 
     return TTtlTierSettings(std::move(*expression), std::move(action));
 }
 
-void TTtlTierSettings::SerializeTo(Ydb::Table::TtlTier& proto) const {
+void TTtlTierSettings::SerializeTo(NYdbProtos::Table::TtlTier& proto) const {
     std::visit(TOverloaded{
             [&proto](const TDateTypeColumnModeSettings& expr) { expr.SerializeTo(*proto.mutable_date_type_column()); },
             [&proto](const TValueSinceUnixEpochModeSettings& expr) { expr.SerializeTo(*proto.mutable_value_since_unix_epoch()); },
@@ -3014,7 +3014,7 @@ TDateTypeColumnModeSettings::TDateTypeColumnModeSettings(const std::string& colu
     , ApplyAfter_(applyAfter)
 {}
 
-void TDateTypeColumnModeSettings::SerializeTo(Ydb::Table::DateTypeColumnModeSettings& proto) const {
+void TDateTypeColumnModeSettings::SerializeTo(NYdbProtos::Table::DateTypeColumnModeSettings& proto) const {
     proto.set_column_name(TStringType{ColumnName_});
     proto.set_expire_after_seconds(ApplyAfter_.Seconds());
 }
@@ -3033,7 +3033,7 @@ TValueSinceUnixEpochModeSettings::TValueSinceUnixEpochModeSettings(const std::st
     , ApplyAfter_(applyAfter)
 {}
 
-void TValueSinceUnixEpochModeSettings::SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettings& proto) const {
+void TValueSinceUnixEpochModeSettings::SerializeTo(NYdbProtos::Table::ValueSinceUnixEpochModeSettings& proto) const {
     proto.set_column_name(TStringType{ColumnName_});
     proto.set_column_unit(TProtoAccessor::GetProto(ColumnUnit_));
     proto.set_expire_after_seconds(ApplyAfter_.Seconds());
@@ -3095,7 +3095,7 @@ TTtlEvictToExternalStorageAction::TTtlEvictToExternalStorageAction(const std::st
     : Storage_(storageName)
 {}
 
-void TTtlEvictToExternalStorageAction::SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const {
+void TTtlEvictToExternalStorageAction::SerializeTo(NYdbProtos::Table::EvictionToExternalStorageSettings& proto) const {
     proto.set_storage(Storage_);
 }
 
@@ -3111,7 +3111,7 @@ TTtlSettings::TTtlSettings(const std::string& columnName, const TDuration& expir
     : TTtlSettings({TTtlTierSettings(TDateTypeColumnModeSettings(columnName, expireAfter), TTtlDeleteAction())})
 {}
 
-TTtlSettings::TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds)
+TTtlSettings::TTtlSettings(const NYdbProtos::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds)
     : TTtlSettings(mode.column_name(), TDuration::Seconds(mode.expire_after_seconds()))
 {
     RunInterval_ = TDuration::Seconds(runIntervalSeconds);
@@ -3125,7 +3125,7 @@ TTtlSettings::TTtlSettings(const std::string& columnName, EUnit columnUnit, cons
     : TTtlSettings({TTtlTierSettings(TValueSinceUnixEpochModeSettings(columnName, columnUnit, expireAfter), TTtlDeleteAction())})
 {}
 
-TTtlSettings::TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds)
+TTtlSettings::TTtlSettings(const NYdbProtos::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds)
     : TTtlSettings(mode.column_name(), TProtoAccessor::FromProto(mode.column_unit()), TDuration::Seconds(mode.expire_after_seconds()))
 {
     RunInterval_ = TDuration::Seconds(runIntervalSeconds);
@@ -3135,13 +3135,13 @@ const TValueSinceUnixEpochModeSettings& TTtlSettings::GetValueSinceUnixEpoch() c
     return std::get<TValueSinceUnixEpochModeSettings>(Tiers_.front().GetExpression());
 }
 
-std::optional<TTtlSettings> TTtlSettings::FromProto(const Ydb::Table::TtlSettings& proto) {
+std::optional<TTtlSettings> TTtlSettings::FromProto(const NYdbProtos::Table::TtlSettings& proto) {
     switch(proto.mode_case()) {
-    case Ydb::Table::TtlSettings::kDateTypeColumn:
+    case NYdbProtos::Table::TtlSettings::kDateTypeColumn:
         return TTtlSettings(proto.date_type_column(), proto.run_interval_seconds());
-    case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
+    case NYdbProtos::Table::TtlSettings::kValueSinceUnixEpoch:
         return TTtlSettings(proto.value_since_unix_epoch(), proto.run_interval_seconds());
-    case Ydb::Table::TtlSettings::kTieredTtl: {
+    case NYdbProtos::Table::TtlSettings::kTieredTtl: {
         std::vector<TTtlTierSettings> tiers;
         for (const auto& tier : proto.tiered_ttl().tiers()) {
             if (auto deserialized = TTtlTierSettings::FromProto(tier)) {
@@ -3154,12 +3154,12 @@ std::optional<TTtlSettings> TTtlSettings::FromProto(const Ydb::Table::TtlSetting
         settings.SetRunInterval(TDuration::Seconds(proto.run_interval_seconds()));
         return settings;
     }
-    case Ydb::Table::TtlSettings::MODE_NOT_SET:
+    case NYdbProtos::Table::TtlSettings::MODE_NOT_SET:
         return std::nullopt;
     }
 }
 
-void TTtlSettings::SerializeTo(Ydb::Table::TtlSettings& proto) const {
+void TTtlSettings::SerializeTo(NYdbProtos::Table::TtlSettings& proto) const {
     if (Tiers_.size() == 1 && std::holds_alternative<TTtlDeleteAction>(Tiers_.back().GetAction())) {
         // serialize DELETE-only TTL to legacy format for backwards-compatibility
         std::visit(TOverloaded{
@@ -3319,28 +3319,28 @@ TReadRowsResult::TReadRowsResult(TStatus&& status, TResultSet&& resultSet)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TExternalDataSourceDescription::TImpl {
-    Ydb::Table::DescribeExternalDataSourceResult Proto_;
+    NYdbProtos::Table::DescribeExternalDataSourceResult Proto_;
 
 public:
-    TImpl(Ydb::Table::DescribeExternalDataSourceResult&& description)
+    TImpl(NYdbProtos::Table::DescribeExternalDataSourceResult&& description)
         : Proto_(std::move(description))
     {}
 
-    const Ydb::Table::DescribeExternalDataSourceResult& GetProto() const {
+    const NYdbProtos::Table::DescribeExternalDataSourceResult& GetProto() const {
         return Proto_;
     }
 };
 
-TExternalDataSourceDescription::TExternalDataSourceDescription(Ydb::Table::DescribeExternalDataSourceResult&& description)
+TExternalDataSourceDescription::TExternalDataSourceDescription(NYdbProtos::Table::DescribeExternalDataSourceResult&& description)
     : Impl_(std::make_shared<TImpl>(std::move(description)))
 {
 }
 
-const Ydb::Table::DescribeExternalDataSourceResult& TExternalDataSourceDescription::GetProto() const {
+const NYdbProtos::Table::DescribeExternalDataSourceResult& TExternalDataSourceDescription::GetProto() const {
     return Impl_->GetProto();
 }
 
-TDescribeExternalDataSourceResult::TDescribeExternalDataSourceResult(TStatus&& status, Ydb::Table::DescribeExternalDataSourceResult&& description)
+TDescribeExternalDataSourceResult::TDescribeExternalDataSourceResult(TStatus&& status, NYdbProtos::Table::DescribeExternalDataSourceResult&& description)
     : NScheme::TDescribePathResult(std::move(status), description.self())
     , ExternalDataSourceDescription_(std::move(description))
 {}
@@ -3353,28 +3353,28 @@ TExternalDataSourceDescription TDescribeExternalDataSourceResult::GetExternalDat
 ////////////////////////////////////////////////////////////////////////////////
 
 class TExternalTableDescription::TImpl {
-    Ydb::Table::DescribeExternalTableResult Proto_;
+    NYdbProtos::Table::DescribeExternalTableResult Proto_;
 
 public:
-    TImpl(Ydb::Table::DescribeExternalTableResult&& description)
+    TImpl(NYdbProtos::Table::DescribeExternalTableResult&& description)
         : Proto_(std::move(description))
     {}
 
-    const Ydb::Table::DescribeExternalTableResult& GetProto() const {
+    const NYdbProtos::Table::DescribeExternalTableResult& GetProto() const {
         return Proto_;
     }
 };
 
-TExternalTableDescription::TExternalTableDescription(Ydb::Table::DescribeExternalTableResult&& description)
+TExternalTableDescription::TExternalTableDescription(NYdbProtos::Table::DescribeExternalTableResult&& description)
     : Impl_(std::make_shared<TImpl>(std::move(description)))
 {
 }
 
-const Ydb::Table::DescribeExternalTableResult& TExternalTableDescription::GetProto() const {
+const NYdbProtos::Table::DescribeExternalTableResult& TExternalTableDescription::GetProto() const {
     return Impl_->GetProto();
 }
 
-TDescribeExternalTableResult::TDescribeExternalTableResult(TStatus&& status, Ydb::Table::DescribeExternalTableResult&& description)
+TDescribeExternalTableResult::TDescribeExternalTableResult(TStatus&& status, NYdbProtos::Table::DescribeExternalTableResult&& description)
     : NScheme::TDescribePathResult(std::move(status), description.self())
     , ExternalTableDescription_(std::move(description))
 {}

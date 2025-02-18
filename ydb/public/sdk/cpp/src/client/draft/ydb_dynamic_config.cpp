@@ -14,53 +14,53 @@ public:
     }
 
     TAsyncStatus SetConfig(const std::string& config, bool dryRun, bool allowUnknownFields, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::SetConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::SetConfigRequest>(settings);
         request.set_config(TStringType{config});
         request.set_dry_run(dryRun);
         request.set_allow_unknown_fields(allowUnknownFields);
 
-        return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::SetConfigRequest, Ydb::DynamicConfig::SetConfigResponse>(
+        return RunSimple<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::SetConfigRequest, NYdbProtos::DynamicConfig::SetConfigResponse>(
             std::move(request),
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncSetConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncSetConfig,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus ReplaceConfig(const std::string& config, bool dryRun, bool allowUnknownFields, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::ReplaceConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::ReplaceConfigRequest>(settings);
         request.set_config(TStringType{config});
         request.set_dry_run(dryRun);
         request.set_allow_unknown_fields(allowUnknownFields);
 
-        return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::ReplaceConfigRequest, Ydb::DynamicConfig::ReplaceConfigResponse>(
+        return RunSimple<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::ReplaceConfigRequest, NYdbProtos::DynamicConfig::ReplaceConfigResponse>(
             std::move(request),
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncReplaceConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncReplaceConfig,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus DropConfig(const std::string& cluster, uint64_t version, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::DropConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::DropConfigRequest>(settings);
 
         request.mutable_identity()->set_cluster(TStringType{cluster});
         request.mutable_identity()->set_version(version);
 
-        return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::DropConfigRequest, Ydb::DynamicConfig::DropConfigResponse>(
+        return RunSimple<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::DropConfigRequest, NYdbProtos::DynamicConfig::DropConfigResponse>(
             std::move(request),
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncDropConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncDropConfig,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus AddVolatileConfig(const std::string& config, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::AddVolatileConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::AddVolatileConfigRequest>(settings);
         request.set_config(TStringType{config});
 
-        return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::AddVolatileConfigRequest, Ydb::DynamicConfig::AddVolatileConfigResponse>(
+        return RunSimple<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::AddVolatileConfigRequest, NYdbProtos::DynamicConfig::AddVolatileConfigResponse>(
             std::move(request),
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncAddVolatileConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncAddVolatileConfig,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus RemoveVolatileConfig(const std::string& cluster, uint64_t version, const std::vector<uint64_t>& ids, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::RemoveVolatileConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::RemoveVolatileConfigRequest>(settings);
 
         request.mutable_identity()->set_cluster(TStringType{cluster});
         request.mutable_identity()->set_version(version);
@@ -69,27 +69,27 @@ public:
             request.mutable_ids()->add_ids(id);
         }
 
-        return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::RemoveVolatileConfigRequest, Ydb::DynamicConfig::RemoveVolatileConfigResponse>(
+        return RunSimple<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::RemoveVolatileConfigRequest, NYdbProtos::DynamicConfig::RemoveVolatileConfigResponse>(
             std::move(request),
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncRemoveVolatileConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncRemoveVolatileConfig,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus RemoveAllVolatileConfigs(const std::string& cluster, uint64_t version, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::RemoveVolatileConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::RemoveVolatileConfigRequest>(settings);
 
         request.mutable_identity()->set_cluster(TStringType{cluster});
         request.mutable_identity()->set_version(version);
         request.set_all(true);
 
-        return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::RemoveVolatileConfigRequest, Ydb::DynamicConfig::RemoveVolatileConfigResponse>(
+        return RunSimple<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::RemoveVolatileConfigRequest, NYdbProtos::DynamicConfig::RemoveVolatileConfigResponse>(
             std::move(request),
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncRemoveVolatileConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncRemoveVolatileConfig,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus ForceRemoveVolatileConfig(const std::vector<uint64_t>& ids, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::RemoveVolatileConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::RemoveVolatileConfigRequest>(settings);
 
         for (auto& id: ids) {
             request.mutable_ids()->add_ids(id);
@@ -97,34 +97,34 @@ public:
 
         request.set_force(true);
 
-        return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::RemoveVolatileConfigRequest, Ydb::DynamicConfig::RemoveVolatileConfigResponse>(
+        return RunSimple<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::RemoveVolatileConfigRequest, NYdbProtos::DynamicConfig::RemoveVolatileConfigResponse>(
             std::move(request),
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncRemoveVolatileConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncRemoveVolatileConfig,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus ForceRemoveAllVolatileConfigs(const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::RemoveVolatileConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::RemoveVolatileConfigRequest>(settings);
 
         request.set_all(true);
         request.set_force(true);
 
-        return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::RemoveVolatileConfigRequest, Ydb::DynamicConfig::RemoveVolatileConfigResponse>(
+        return RunSimple<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::RemoveVolatileConfigRequest, NYdbProtos::DynamicConfig::RemoveVolatileConfigResponse>(
             std::move(request),
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncRemoveVolatileConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncRemoveVolatileConfig,
             TRpcRequestSettings::Make(settings));
     }
 
 
     TAsyncGetNodeLabelsResult GetNodeLabels(uint64_t nodeId, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::GetNodeLabelsRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::GetNodeLabelsRequest>(settings);
         request.set_node_id(nodeId);
 
         auto promise = NThreading::NewPromise<TGetNodeLabelsResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::map<std::string, std::string> labels;
-                if (Ydb::DynamicConfig::GetNodeLabelsResult result; any && any->UnpackTo(&result)) {
+                if (NYdbProtos::DynamicConfig::GetNodeLabelsResult result; any && any->UnpackTo(&result)) {
                     for (auto& label : result.labels()) {
                         labels[label.label()] = label.value();
                     }
@@ -134,10 +134,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::GetNodeLabelsRequest, Ydb::DynamicConfig::GetNodeLabelsResponse>(
+        Connections_->RunDeferred<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::GetNodeLabelsRequest, NYdbProtos::DynamicConfig::GetNodeLabelsResponse>(
             std::move(request),
             extractor,
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncGetNodeLabels,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncGetNodeLabels,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -146,7 +146,7 @@ public:
     }
 
     TAsyncGetConfigResult GetConfig(const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::GetConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::GetConfigRequest>(settings);
 
         auto promise = NThreading::NewPromise<TGetConfigResult>();
 
@@ -155,7 +155,7 @@ public:
                 uint64_t version = 0;
                 std::string config;
                 std::map<uint64_t, std::string> volatileConfigs;
-                if (Ydb::DynamicConfig::GetConfigResult result; any && any->UnpackTo(&result)) {
+                if (NYdbProtos::DynamicConfig::GetConfigResult result; any && any->UnpackTo(&result)) {
                     // only if they are present
                     if (result.identity_size() && result.config_size()) {
                         clusterName = result.identity(0).cluster();
@@ -171,10 +171,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::GetConfigRequest, Ydb::DynamicConfig::GetConfigResponse>(
+        Connections_->RunDeferred<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::GetConfigRequest, NYdbProtos::DynamicConfig::GetConfigResponse>(
             std::move(request),
             extractor,
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncGetConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncGetConfig,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -183,14 +183,14 @@ public:
     }
 
     TAsyncGetMetadataResult GetMetadata(const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::GetMetadataRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::GetMetadataRequest>(settings);
 
         auto promise = NThreading::NewPromise<TGetMetadataResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::string metadata;
                 std::map<uint64_t, std::string> volatileConfigs;
-                if (Ydb::DynamicConfig::GetMetadataResult result; any && any->UnpackTo(&result)) {
+                if (NYdbProtos::DynamicConfig::GetMetadataResult result; any && any->UnpackTo(&result)) {
                     metadata = result.metadata();
                     for (const auto& config : result.volatile_configs()) {
                         volatileConfigs.emplace(config.id(), config.metadata());
@@ -201,10 +201,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::GetMetadataRequest, Ydb::DynamicConfig::GetMetadataResponse>(
+        Connections_->RunDeferred<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::GetMetadataRequest, NYdbProtos::DynamicConfig::GetMetadataResponse>(
             std::move(request),
             extractor,
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncGetMetadata,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncGetMetadata,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -213,7 +213,7 @@ public:
     }
 
     TAsyncResolveConfigResult ResolveConfig(const std::string& config, const std::map<uint64_t, std::string>& volatileConfigs, const std::map<std::string, std::string>& labels, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::ResolveConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::ResolveConfigRequest>(settings);
         request.set_config(TStringType{config});
         for (auto& [id, volatileConfig] : volatileConfigs) {
             auto* proto = request.add_volatile_configs();
@@ -230,7 +230,7 @@ public:
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::string config;
-                if (Ydb::DynamicConfig::ResolveConfigResult result; any && any->UnpackTo(&result)) {
+                if (NYdbProtos::DynamicConfig::ResolveConfigResult result; any && any->UnpackTo(&result)) {
                     config = result.config();
                 }
 
@@ -238,10 +238,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::ResolveConfigRequest, Ydb::DynamicConfig::ResolveConfigResponse>(
+        Connections_->RunDeferred<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::ResolveConfigRequest, NYdbProtos::DynamicConfig::ResolveConfigResponse>(
             std::move(request),
             extractor,
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncResolveConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncResolveConfig,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -250,7 +250,7 @@ public:
     }
 
     TAsyncResolveConfigResult ResolveConfig(const std::string& config, const std::map<uint64_t, std::string>& volatileConfigs, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::ResolveAllConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::ResolveAllConfigRequest>(settings);
         request.set_config(TStringType{config});
         for (auto& [id, volatileConfig] : volatileConfigs) {
             auto* proto = request.add_volatile_configs();
@@ -262,7 +262,7 @@ public:
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::string config;
-                if (Ydb::DynamicConfig::ResolveAllConfigResult result; any && any->UnpackTo(&result)) {
+                if (NYdbProtos::DynamicConfig::ResolveAllConfigResult result; any && any->UnpackTo(&result)) {
                     config = result.config();
                 }
 
@@ -270,10 +270,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::ResolveAllConfigRequest, Ydb::DynamicConfig::ResolveAllConfigResponse>(
+        Connections_->RunDeferred<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::ResolveAllConfigRequest, NYdbProtos::DynamicConfig::ResolveAllConfigResponse>(
             std::move(request),
             extractor,
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncResolveAllConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncResolveAllConfig,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -282,7 +282,7 @@ public:
     }
 
     TAsyncVerboseResolveConfigResult VerboseResolveConfig(const std::string& config, const std::map<uint64_t, std::string>& volatileConfigs, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::ResolveAllConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::ResolveAllConfigRequest>(settings);
         request.set_config(TStringType{config});
         for (auto& [id, volatileConfig] : volatileConfigs) {
             auto* proto = request.add_volatile_configs();
@@ -294,13 +294,13 @@ public:
         auto promise = NThreading::NewPromise<TVerboseResolveConfigResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
-            auto convert = [] (const Ydb::DynamicConfig::YamlLabelExt::LabelType& label) -> TVerboseResolveConfigResult::TLabel::EType {
+            auto convert = [] (const NYdbProtos::DynamicConfig::YamlLabelExt::LabelType& label) -> TVerboseResolveConfigResult::TLabel::EType {
                 switch(label) {
-                case Ydb::DynamicConfig::YamlLabelExt::NOT_SET:
+                case NYdbProtos::DynamicConfig::YamlLabelExt::NOT_SET:
                     return TVerboseResolveConfigResult::TLabel::EType::Negative;
-                case Ydb::DynamicConfig::YamlLabelExt::COMMON:
+                case NYdbProtos::DynamicConfig::YamlLabelExt::COMMON:
                     return TVerboseResolveConfigResult::TLabel::EType::Common;
-                case Ydb::DynamicConfig::YamlLabelExt::EMPTY:
+                case NYdbProtos::DynamicConfig::YamlLabelExt::EMPTY:
                     return TVerboseResolveConfigResult::TLabel::EType::Empty;
                 default:
                     Y_ABORT("unexpected enum value");
@@ -310,7 +310,7 @@ public:
             std::set<std::string> labels;
             TVerboseResolveConfigResult::ConfigByLabelSet configs;
 
-            if (Ydb::DynamicConfig::ResolveAllConfigResult result; any && any->UnpackTo(&result)) {
+            if (NYdbProtos::DynamicConfig::ResolveAllConfigResult result; any && any->UnpackTo(&result)) {
                 for (auto& config : result.configs()) {
                     std::set<std::vector<TVerboseResolveConfigResult::TLabel>> labelSets;
                     for (auto& labelSet : config.label_sets()) {
@@ -329,10 +329,10 @@ public:
             promise.SetValue(std::move(val));
         };
 
-        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::ResolveAllConfigRequest, Ydb::DynamicConfig::ResolveAllConfigResponse>(
+        Connections_->RunDeferred<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::ResolveAllConfigRequest, NYdbProtos::DynamicConfig::ResolveAllConfigResponse>(
             std::move(request),
             extractor,
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncResolveAllConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncResolveAllConfig,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -341,13 +341,13 @@ public:
     }
 
     TAsyncFetchStartupConfigResult FetchStartupConfig(const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::DynamicConfig::FetchStartupConfigRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::DynamicConfig::FetchStartupConfigRequest>(settings);
 
         auto promise = NThreading::NewPromise<TFetchStartupConfigResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::string config;
-                if (Ydb::DynamicConfig::FetchStartupConfigResult result; any && any->UnpackTo(&result)) {
+                if (NYdbProtos::DynamicConfig::FetchStartupConfigResult result; any && any->UnpackTo(&result)) {
                     config = result.config();
                 }
 
@@ -355,10 +355,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::FetchStartupConfigRequest, Ydb::DynamicConfig::FetchStartupConfigResponse>(
+        Connections_->RunDeferred<NYdbProtos::DynamicConfig::V1::DynamicConfigService, NYdbProtos::DynamicConfig::FetchStartupConfigRequest, NYdbProtos::DynamicConfig::FetchStartupConfigResponse>(
             std::move(request),
             extractor,
-            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncFetchStartupConfig,
+            &NYdbProtos::DynamicConfig::V1::DynamicConfigService::Stub::AsyncFetchStartupConfig,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));

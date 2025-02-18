@@ -48,7 +48,7 @@ std::string GenerateProtectionKey(size_t size) {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TNodeDescription::TImpl {
-    TImpl(const Ydb::Coordination::DescribeNodeResult& desc) {
+    TImpl(const NYdbProtos::Coordination::DescribeNodeResult& desc) {
         auto& config = desc.config();
         if (config.self_check_period_millis()) {
             SelfCheckPeriod_ = TDuration::MilliSeconds(config.self_check_period_millis());
@@ -64,7 +64,7 @@ struct TNodeDescription::TImpl {
         Proto_ = desc;
     }
 
-    void SerializeTo(Ydb::Coordination::CreateNodeRequest& creationRequest) {
+    void SerializeTo(NYdbProtos::Coordination::CreateNodeRequest& creationRequest) {
         auto& config = *creationRequest.mutable_config();
         config.CopyFrom(Proto_.config());
         config.clear_path();
@@ -77,11 +77,11 @@ struct TNodeDescription::TImpl {
     ERateLimiterCountersMode RateLimiterCountersMode_;
     std::string Owner_;
     std::vector<NScheme::TPermissions> EffectivePermissions_;
-    Ydb::Coordination::DescribeNodeResult Proto_;
+    NYdbProtos::Coordination::DescribeNodeResult Proto_;
 };
 
 TNodeDescription::TNodeDescription(
-        const Ydb::Coordination::DescribeNodeResult& desc)
+        const NYdbProtos::Coordination::DescribeNodeResult& desc)
     : Impl_(new TImpl(desc))
 { }
 
@@ -113,11 +113,11 @@ const std::vector<NScheme::TPermissions>& TNodeDescription::GetEffectivePermissi
     return Impl_->EffectivePermissions_;
 }
 
-const Ydb::Coordination::DescribeNodeResult& TNodeDescription::GetProto() const {
+const NYdbProtos::Coordination::DescribeNodeResult& TNodeDescription::GetProto() const {
     return Impl_->Proto_;
 }
 
-void TNodeDescription::SerializeTo(Ydb::Coordination::CreateNodeRequest& creationRequest) const {
+void TNodeDescription::SerializeTo(NYdbProtos::Coordination::CreateNodeRequest& creationRequest) const {
     return Impl_->SerializeTo(creationRequest);
 }
 
@@ -130,7 +130,7 @@ TSemaphoreSession::TSemaphoreSession() {
 }
 
 TSemaphoreSession::TSemaphoreSession(
-        const Ydb::Coordination::SemaphoreSession& desc)
+        const NYdbProtos::Coordination::SemaphoreSession& desc)
 {
     OrderId_ = desc.order_id();
     SessionId_ = desc.session_id();
@@ -146,7 +146,7 @@ TSemaphoreDescription::TSemaphoreDescription() {
 }
 
 TSemaphoreDescription::TSemaphoreDescription(
-        const Ydb::Coordination::SemaphoreDescription& desc)
+        const NYdbProtos::Coordination::SemaphoreDescription& desc)
 {
     Name_ = desc.name();
     Data_ = desc.data();
@@ -167,9 +167,9 @@ TSemaphoreDescription::TSemaphoreDescription(
 
 class TSessionContext : public TThrRefBase {
     using TPtr = TIntrusivePtr<TSessionContext>;
-    using TService = Ydb::Coordination::V1::CoordinationService;
-    using TRequest = Ydb::Coordination::SessionRequest;
-    using TResponse = Ydb::Coordination::SessionResponse;
+    using TService = NYdbProtos::Coordination::V1::CoordinationService;
+    using TRequest = NYdbProtos::Coordination::SessionRequest;
+    using TResponse = NYdbProtos::Coordination::SessionResponse;
     using TGrpcStatus = NYdbGrpc::TGrpcStatus;
     using IProcessor = NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>;
 
@@ -642,8 +642,8 @@ private:
 
 private:
     TPlainStatus MakePlainStatus(
-        Ydb::StatusIds::StatusCode protoStatus,
-        const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& protoIssues) const
+        NYdbProtos::StatusIds::StatusCode protoStatus,
+        const google::protobuf::RepeatedPtrField<NYdbProtos::Issue::IssueMessage>& protoIssues) const
     {
         NYdb::NIssue::TIssues issues;
         NYdb::NIssue::IssuesFromMessage(protoIssues, issues);
@@ -1797,7 +1797,7 @@ namespace {
 template<class Settings>
 void ConvertSettingsToProtoConfig(
     const Settings& settings,
-    Ydb::Coordination::Config* config)
+    NYdbProtos::Coordination::Config* config)
 {
     if (settings.SelfCheckPeriod_) {
         config->set_self_check_period_millis(settings.SelfCheckPeriod_->MilliSeconds());
@@ -1806,32 +1806,32 @@ void ConvertSettingsToProtoConfig(
         config->set_session_grace_period_millis(settings.SessionGracePeriod_->MilliSeconds());
     }
     if (settings.ReadConsistencyMode_ != EConsistencyMode::UNSET) {
-        config->set_read_consistency_mode(static_cast<Ydb::Coordination::ConsistencyMode>(settings.ReadConsistencyMode_));
+        config->set_read_consistency_mode(static_cast<NYdbProtos::Coordination::ConsistencyMode>(settings.ReadConsistencyMode_));
     }
     if (settings.AttachConsistencyMode_ != EConsistencyMode::UNSET) {
-        config->set_attach_consistency_mode(static_cast<Ydb::Coordination::ConsistencyMode>(settings.AttachConsistencyMode_));
+        config->set_attach_consistency_mode(static_cast<NYdbProtos::Coordination::ConsistencyMode>(settings.AttachConsistencyMode_));
     }
     if (settings.RateLimiterCountersMode_ != ERateLimiterCountersMode::UNSET) {
-        config->set_rate_limiter_counters_mode(static_cast<Ydb::Coordination::RateLimiterCountersMode>(settings.RateLimiterCountersMode_));
+        config->set_rate_limiter_counters_mode(static_cast<NYdbProtos::Coordination::RateLimiterCountersMode>(settings.RateLimiterCountersMode_));
     }
 }
 
 }
 
-TCreateNodeSettings::TCreateNodeSettings(const Ydb::Coordination::Config& config) {
+TCreateNodeSettings::TCreateNodeSettings(const NYdbProtos::Coordination::Config& config) {
     if (config.self_check_period_millis() != 0u) {
         SelfCheckPeriod(TDuration::MilliSeconds(config.self_check_period_millis()));
     }
     if (config.session_grace_period_millis() != 0u) {
         SessionGracePeriod(TDuration::MilliSeconds(config.session_grace_period_millis()));
     }
-    if (config.read_consistency_mode() != Ydb::Coordination::CONSISTENCY_MODE_UNSET) {
+    if (config.read_consistency_mode() != NYdbProtos::Coordination::CONSISTENCY_MODE_UNSET) {
         ReadConsistencyMode(static_cast<EConsistencyMode>(config.read_consistency_mode()));
     }
-    if (config.attach_consistency_mode() != Ydb::Coordination::CONSISTENCY_MODE_UNSET) {
+    if (config.attach_consistency_mode() != NYdbProtos::Coordination::CONSISTENCY_MODE_UNSET) {
         AttachConsistencyMode(static_cast<EConsistencyMode>(config.attach_consistency_mode()));
     }
-    if (config.rate_limiter_counters_mode() != Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_UNSET) {
+    if (config.rate_limiter_counters_mode() != NYdbProtos::Coordination::RATE_LIMITER_COUNTERS_MODE_UNSET) {
         RateLimiterCountersMode(static_cast<ERateLimiterCountersMode>(config.rate_limiter_counters_mode()));
     }
 }
@@ -1863,50 +1863,50 @@ public:
     }
 
     TAsyncStatus CreateNode(
-        Ydb::Coordination::CreateNodeRequest&& request,
+        NYdbProtos::Coordination::CreateNodeRequest&& request,
         const TCreateNodeSettings& settings)
     {
-        return RunSimple<Ydb::Coordination::V1::CoordinationService,
-                        Ydb::Coordination::CreateNodeRequest,
-                        Ydb::Coordination::CreateNodeResponse>(
+        return RunSimple<NYdbProtos::Coordination::V1::CoordinationService,
+                        NYdbProtos::Coordination::CreateNodeRequest,
+                        NYdbProtos::Coordination::CreateNodeResponse>(
             std::move(request),
-            &Ydb::Coordination::V1::CoordinationService::Stub::AsyncCreateNode,
+            &NYdbProtos::Coordination::V1::CoordinationService::Stub::AsyncCreateNode,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus AlterNode(
-        Ydb::Coordination::AlterNodeRequest&& request,
+        NYdbProtos::Coordination::AlterNodeRequest&& request,
         const TAlterNodeSettings& settings)
     {
-        return RunSimple<Ydb::Coordination::V1::CoordinationService,
-                        Ydb::Coordination::AlterNodeRequest,
-                        Ydb::Coordination::AlterNodeResponse>(
+        return RunSimple<NYdbProtos::Coordination::V1::CoordinationService,
+                        NYdbProtos::Coordination::AlterNodeRequest,
+                        NYdbProtos::Coordination::AlterNodeResponse>(
             std::move(request),
-            &Ydb::Coordination::V1::CoordinationService::Stub::AsyncAlterNode,
+            &NYdbProtos::Coordination::V1::CoordinationService::Stub::AsyncAlterNode,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus DropNode(
-        Ydb::Coordination::DropNodeRequest&& request,
+        NYdbProtos::Coordination::DropNodeRequest&& request,
         const TDropNodeSettings& settings)
     {
-        return RunSimple<Ydb::Coordination::V1::CoordinationService,
-                        Ydb::Coordination::DropNodeRequest,
-                        Ydb::Coordination::DropNodeResponse>(
+        return RunSimple<NYdbProtos::Coordination::V1::CoordinationService,
+                        NYdbProtos::Coordination::DropNodeRequest,
+                        NYdbProtos::Coordination::DropNodeResponse>(
             std::move(request),
-            &Ydb::Coordination::V1::CoordinationService::Stub::AsyncDropNode,
+            &NYdbProtos::Coordination::V1::CoordinationService::Stub::AsyncDropNode,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncDescribeNodeResult DescribeNode(
-        Ydb::Coordination::DescribeNodeRequest&& request,
+        NYdbProtos::Coordination::DescribeNodeRequest&& request,
         const TDescribeNodeSettings& settings)
     {
         auto promise = NewPromise<TDescribeNodeResult>();
 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::Coordination::DescribeNodeResult result;
+                NYdbProtos::Coordination::DescribeNodeResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
@@ -1916,12 +1916,12 @@ public:
                         TNodeDescription(std::move(result))));
             };
 
-        Connections_->RunDeferred<Ydb::Coordination::V1::CoordinationService,
-                                Ydb::Coordination::DescribeNodeRequest,
-                                Ydb::Coordination::DescribeNodeResponse>(
+        Connections_->RunDeferred<NYdbProtos::Coordination::V1::CoordinationService,
+                                NYdbProtos::Coordination::DescribeNodeRequest,
+                                NYdbProtos::Coordination::DescribeNodeResponse>(
             std::move(request),
             std::move(extractor),
-            &Ydb::Coordination::V1::CoordinationService::Stub::AsyncDescribeNode,
+            &NYdbProtos::Coordination::V1::CoordinationService::Stub::AsyncDescribeNode,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -1949,7 +1949,7 @@ TAsyncStatus TClient::CreateNode(
     const std::string& path,
     const TCreateNodeSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Coordination::CreateNodeRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Coordination::CreateNodeRequest>(settings);
     request.set_path(TStringType{path});
     ConvertSettingsToProtoConfig(settings, request.mutable_config());
     return Impl_->CreateNode(std::move(request), settings);
@@ -1959,7 +1959,7 @@ TAsyncStatus TClient::AlterNode(
     const std::string& path,
     const TAlterNodeSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Coordination::AlterNodeRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Coordination::AlterNodeRequest>(settings);
     request.set_path(TStringType{path});
     ConvertSettingsToProtoConfig(settings, request.mutable_config());
     return Impl_->AlterNode(std::move(request), settings);
@@ -1969,7 +1969,7 @@ TAsyncStatus TClient::DropNode(
     const std::string& path,
     const TDropNodeSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Coordination::DropNodeRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Coordination::DropNodeRequest>(settings);
     request.set_path(TStringType{path});
     return Impl_->DropNode(std::move(request), settings);
 }
@@ -1978,7 +1978,7 @@ TAsyncDescribeNodeResult TClient::DescribeNode(
     const std::string& path,
     const TDescribeNodeSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Coordination::DescribeNodeRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Coordination::DescribeNodeRequest>(settings);
     request.set_path(TStringType{path});
     return Impl_->DescribeNode(std::move(request), settings);
 }

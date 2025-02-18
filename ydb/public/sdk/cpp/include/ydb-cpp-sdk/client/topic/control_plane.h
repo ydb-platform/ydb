@@ -38,7 +38,7 @@ enum class EAutoPartitioningStrategy: uint32_t {
 
 class TConsumer {
 public:
-    TConsumer(const Ydb::Topic::Consumer&);
+    TConsumer(const NYdbProtos::Topic::Consumer&);
 
     const std::string& GetConsumerName() const;
     bool GetImportant() const;
@@ -58,7 +58,7 @@ private:
 
 class TTopicStats {
 public:
-    TTopicStats(const Ydb::Topic::DescribeTopicResult::TopicStats& topicStats);
+    TTopicStats(const NYdbProtos::Topic::DescribeTopicResult::TopicStats& topicStats);
 
     uint64_t GetStoreSizeBytes() const;
     TDuration GetMaxWriteTimeLag() const;
@@ -79,7 +79,7 @@ private:
 
 class TPartitionStats {
 public:
-    TPartitionStats(const Ydb::Topic::PartitionStats& partitionStats);
+    TPartitionStats(const NYdbProtos::Topic::PartitionStats& partitionStats);
 
     uint64_t GetStartOffset() const;
     uint64_t GetEndOffset() const;
@@ -103,7 +103,7 @@ private:
 
 class TPartitionConsumerStats {
 public:
-    TPartitionConsumerStats(const Ydb::Topic::DescribeConsumerResult::PartitionConsumerStats& partitionStats);
+    TPartitionConsumerStats(const NYdbProtos::Topic::DescribeConsumerResult::PartitionConsumerStats& partitionStats);
     uint64_t GetCommittedOffset() const;
     uint64_t GetLastReadOffset() const;
     std::string GetReaderName() const;
@@ -125,7 +125,7 @@ private:
 // Topic partition location
 class TPartitionLocation {
 public:
-    TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation);
+    TPartitionLocation(const NYdbProtos::Topic::PartitionLocation& partitionLocation);
     int32_t GetNodeId() const;
     int64_t GetGeneration() const;
 
@@ -139,8 +139,8 @@ private:
 
 class TPartitionInfo {
 public:
-    TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionInfo& partitionInfo);
-    TPartitionInfo(const Ydb::Topic::DescribeConsumerResult::PartitionInfo& partitionInfo);
+    TPartitionInfo(const NYdbProtos::Topic::DescribeTopicResult::PartitionInfo& partitionInfo);
+    TPartitionInfo(const NYdbProtos::Topic::DescribeConsumerResult::PartitionInfo& partitionInfo);
 
     uint64_t GetPartitionId() const;
     bool GetActive() const;
@@ -180,14 +180,14 @@ public:
         , DownUtilizationPercent_(0)
         , UpUtilizationPercent_(0) {
     }
-    TAutoPartitioningSettings(const Ydb::Topic::AutoPartitioningSettings& settings);
+    TAutoPartitioningSettings(const NYdbProtos::Topic::AutoPartitioningSettings& settings);
     TAutoPartitioningSettings(EAutoPartitioningStrategy strategy, TDuration stabilizationWindow, ui64 downUtilizationPercent, ui64 upUtilizationPercent)
         : Strategy_(strategy)
         , StabilizationWindow_(stabilizationWindow)
         , DownUtilizationPercent_(downUtilizationPercent)
         , UpUtilizationPercent_(upUtilizationPercent) {}
 
-    void SerializeTo(Ydb::Topic::AutoPartitioningSettings& proto) const;
+    void SerializeTo(NYdbProtos::Topic::AutoPartitioningSettings& proto) const;
 
     EAutoPartitioningStrategy GetStrategy() const;
     TDuration GetStabilizationWindow() const;
@@ -221,7 +221,7 @@ class TPartitioningSettings {
     friend struct TPartitioningSettingsBuilder;
 public:
     TPartitioningSettings() : MinActivePartitions_(0), MaxActivePartitions_(0), PartitionCountLimit_(0), AutoPartitioningSettings_(){}
-    TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings);
+    TPartitioningSettings(const NYdbProtos::Topic::PartitioningSettings& settings);
     TPartitioningSettings(uint64_t minActivePartitions, uint64_t maxActivePartitions, TAutoPartitioningSettings autoPartitioning = {})
         : MinActivePartitions_(minActivePartitions)
         , MaxActivePartitions_(maxActivePartitions)
@@ -230,7 +230,7 @@ public:
     {
     }
 
-    void SerializeTo(Ydb::Topic::PartitioningSettings& proto) const;
+    void SerializeTo(NYdbProtos::Topic::PartitioningSettings& proto) const;
 
     uint64_t GetMinActivePartitions() const;
     uint64_t GetMaxActivePartitions() const;
@@ -270,7 +270,7 @@ class TTopicDescription {
     friend class NYdb::V3::TProtoAccessor;
 
 public:
-    TTopicDescription(Ydb::Topic::DescribeTopicResult&& desc);
+    TTopicDescription(NYdbProtos::Topic::DescribeTopicResult&& desc);
 
     const std::string& GetOwner() const;
 
@@ -304,12 +304,12 @@ public:
 
     const TTopicStats& GetTopicStats() const;
 
-    void SerializeTo(Ydb::Topic::CreateTopicRequest& request) const;
+    void SerializeTo(NYdbProtos::Topic::CreateTopicRequest& request) const;
 private:
 
-    const Ydb::Topic::DescribeTopicResult& GetProto() const;
+    const NYdbProtos::Topic::DescribeTopicResult& GetProto() const;
 
-    const Ydb::Topic::DescribeTopicResult Proto_;
+    const NYdbProtos::Topic::DescribeTopicResult Proto_;
     std::vector<TPartitionInfo> Partitions_;
     std::vector<ECodec> SupportedCodecs_;
     TPartitioningSettings PartitioningSettings_;
@@ -333,7 +333,7 @@ class TConsumerDescription {
     friend class NYdb::V3::TProtoAccessor;
 
 public:
-    TConsumerDescription(Ydb::Topic::DescribeConsumerResult&& desc);
+    TConsumerDescription(NYdbProtos::Topic::DescribeConsumerResult&& desc);
 
     const std::vector<TPartitionInfo>& GetPartitions() const;
 
@@ -341,10 +341,10 @@ public:
 
 private:
 
-    const Ydb::Topic::DescribeConsumerResult& GetProto() const;
+    const NYdbProtos::Topic::DescribeConsumerResult& GetProto() const;
 
 
-    const Ydb::Topic::DescribeConsumerResult Proto_;
+    const NYdbProtos::Topic::DescribeConsumerResult Proto_;
     std::vector<TPartitionInfo> Partitions_;
     TConsumer Consumer_;
 };
@@ -353,13 +353,13 @@ class TPartitionDescription {
     friend class NYdb::V3::TProtoAccessor;
 
 public:
-    TPartitionDescription(Ydb::Topic::DescribePartitionResult&& desc);
+    TPartitionDescription(NYdbProtos::Topic::DescribePartitionResult&& desc);
 
     const TPartitionInfo& GetPartition() const;
 private:
-    const Ydb::Topic::DescribePartitionResult& GetProto() const;
+    const NYdbProtos::Topic::DescribePartitionResult& GetProto() const;
 
-    const Ydb::Topic::DescribePartitionResult Proto_;
+    const NYdbProtos::Topic::DescribePartitionResult Proto_;
     TPartitionInfo Partition_;
 };
 
@@ -367,7 +367,7 @@ private:
 struct TDescribeTopicResult : public TStatus {
     friend class NYdb::V3::TProtoAccessor;
 
-    TDescribeTopicResult(TStatus&& status, Ydb::Topic::DescribeTopicResult&& result);
+    TDescribeTopicResult(TStatus&& status, NYdbProtos::Topic::DescribeTopicResult&& result);
 
     const TTopicDescription& GetTopicDescription() const;
 
@@ -379,7 +379,7 @@ private:
 struct TDescribeConsumerResult : public TStatus {
     friend class NYdb::V3::TProtoAccessor;
 
-    TDescribeConsumerResult(TStatus&& status, Ydb::Topic::DescribeConsumerResult&& result);
+    TDescribeConsumerResult(TStatus&& status, NYdbProtos::Topic::DescribeConsumerResult&& result);
 
     const TConsumerDescription& GetConsumerDescription() const;
 
@@ -391,7 +391,7 @@ private:
 struct TDescribePartitionResult: public TStatus {
     friend class NYdb::V3::TProtoAccessor;
 
-    TDescribePartitionResult(TStatus&& status, Ydb::Topic::DescribePartitionResult&& result);
+    TDescribePartitionResult(TStatus&& status, NYdbProtos::Topic::DescribePartitionResult&& result);
 
     const TPartitionDescription& GetPartitionDescription() const;
 
@@ -443,9 +443,9 @@ struct TConsumerSettings {
 
     TConsumerSettings(TSettings& parent) : Parent_(parent) {}
     TConsumerSettings(TSettings& parent, const std::string& name) : ConsumerName_(name), Parent_(parent) {}
-    TConsumerSettings(TSettings& parent, const Ydb::Topic::Consumer& proto);
+    TConsumerSettings(TSettings& parent, const NYdbProtos::Topic::Consumer& proto);
 
-    void SerializeTo(Ydb::Topic::Consumer& proto) const;
+    void SerializeTo(NYdbProtos::Topic::Consumer& proto) const;
 
     FLUENT_SETTING(std::string, ConsumerName);
     FLUENT_SETTING_DEFAULT(bool, Important, false);
@@ -534,9 +534,9 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
     using TAttributes = std::map<std::string, std::string>;
 
     TCreateTopicSettings() = default;
-    TCreateTopicSettings(const Ydb::Topic::CreateTopicRequest& proto);
+    TCreateTopicSettings(const NYdbProtos::Topic::CreateTopicRequest& proto);
 
-    void SerializeTo(Ydb::Topic::CreateTopicRequest& proto) const;
+    void SerializeTo(NYdbProtos::Topic::CreateTopicRequest& proto) const;
 
     FLUENT_SETTING(TPartitioningSettings, PartitioningSettings);
 

@@ -20,7 +20,7 @@ public:
 };
 TCommonCodecsProvider COMMON_CODECS_PROVIDER;
 
-TDescribeTopicResult::TDescribeTopicResult(TStatus&& status, Ydb::Topic::DescribeTopicResult&& result)
+TDescribeTopicResult::TDescribeTopicResult(TStatus&& status, NYdbProtos::Topic::DescribeTopicResult&& result)
     : TStatus(std::move(status))
     , TopicDescription_(std::move(result))
 {
@@ -30,7 +30,7 @@ const TTopicDescription& TDescribeTopicResult::GetTopicDescription() const {
     return TopicDescription_;
 }
 
-TDescribeConsumerResult::TDescribeConsumerResult(TStatus&& status, Ydb::Topic::DescribeConsumerResult&& result)
+TDescribeConsumerResult::TDescribeConsumerResult(TStatus&& status, NYdbProtos::Topic::DescribeConsumerResult&& result)
     : TStatus(std::move(status))
     , ConsumerDescription_(std::move(result))
 {
@@ -40,7 +40,7 @@ const TConsumerDescription& TDescribeConsumerResult::GetConsumerDescription() co
     return ConsumerDescription_;
 }
 
-TDescribePartitionResult::TDescribePartitionResult(TStatus&& status, Ydb::Topic::DescribePartitionResult&& result)
+TDescribePartitionResult::TDescribePartitionResult(TStatus&& status, NYdbProtos::Topic::DescribePartitionResult&& result)
     : TStatus(std::move(status))
     , PartitionDescription_(std::move(result))
 {
@@ -50,7 +50,7 @@ const TPartitionDescription& TDescribePartitionResult::GetPartitionDescription()
     return PartitionDescription_;
 }
 
-TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
+TTopicDescription::TTopicDescription(NYdbProtos::Topic::DescribeTopicResult&& result)
     : Proto_(std::move(result))
     , PartitioningSettings_(Proto_.partitioning_settings())
     , RetentionPeriod_(TDuration::Seconds(Proto_.retention_period().seconds()))
@@ -79,7 +79,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     }
 }
 
-TConsumerDescription::TConsumerDescription(Ydb::Topic::DescribeConsumerResult&& result)
+TConsumerDescription::TConsumerDescription(NYdbProtos::Topic::DescribeConsumerResult&& result)
     : Proto_(std::move(result))
     , Consumer_(Proto_.consumer())
 {
@@ -88,13 +88,13 @@ TConsumerDescription::TConsumerDescription(Ydb::Topic::DescribeConsumerResult&& 
     }
 }
 
-TPartitionDescription::TPartitionDescription(Ydb::Topic::DescribePartitionResult&& result)
+TPartitionDescription::TPartitionDescription(NYdbProtos::Topic::DescribePartitionResult&& result)
     : Proto_(std::move(result))
     , Partition_(Proto_.partition())
 {
 }
 
-TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
+TConsumer::TConsumer(const NYdbProtos::Topic::Consumer& consumer)
     : ConsumerName_(consumer.name())
     , Important_(consumer.important())
     , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
@@ -183,7 +183,7 @@ const std::vector<TConsumer>& TTopicDescription::GetConsumers() const {
     return Consumers_;
 }
 
-void TTopicDescription::SerializeTo(Ydb::Topic::CreateTopicRequest& request) const {
+void TTopicDescription::SerializeTo(NYdbProtos::Topic::CreateTopicRequest& request) const {
     *request.mutable_partitioning_settings() = Proto_.partitioning_settings();
     *request.mutable_retention_period() = Proto_.retention_period();
     request.set_retention_storage_mb(Proto_.retention_storage_mb());
@@ -195,15 +195,15 @@ void TTopicDescription::SerializeTo(Ydb::Topic::CreateTopicRequest& request) con
     request.set_metering_mode(Proto_.metering_mode());
 }
 
-const Ydb::Topic::DescribeTopicResult& TTopicDescription::GetProto() const {
+const NYdbProtos::Topic::DescribeTopicResult& TTopicDescription::GetProto() const {
     return Proto_;
 }
 
-const Ydb::Topic::DescribeConsumerResult& TConsumerDescription::GetProto() const {
+const NYdbProtos::Topic::DescribeConsumerResult& TConsumerDescription::GetProto() const {
     return Proto_;
 }
 
-const Ydb::Topic::DescribePartitionResult& TPartitionDescription::GetProto() const {
+const NYdbProtos::Topic::DescribePartitionResult& TPartitionDescription::GetProto() const {
     return Proto_;
 }
 
@@ -227,14 +227,14 @@ const std::vector<NScheme::TPermissions>& TTopicDescription::GetEffectivePermiss
     return EffectivePermissions_;
 }
 
-TPartitioningSettings::TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings)
+TPartitioningSettings::TPartitioningSettings(const NYdbProtos::Topic::PartitioningSettings& settings)
     : MinActivePartitions_(settings.min_active_partitions())
     , MaxActivePartitions_(settings.max_active_partitions())
     , PartitionCountLimit_(settings.partition_count_limit())
     , AutoPartitioningSettings_(settings.auto_partitioning_settings())
 {}
 
-void TPartitioningSettings::SerializeTo(Ydb::Topic::PartitioningSettings& proto) const {
+void TPartitioningSettings::SerializeTo(NYdbProtos::Topic::PartitioningSettings& proto) const {
     proto.set_min_active_partitions(MinActivePartitions_);
     proto.set_max_active_partitions(MaxActivePartitions_);
     proto.set_partition_count_limit(PartitionCountLimit_);
@@ -257,15 +257,15 @@ TAutoPartitioningSettings TPartitioningSettings::GetAutoPartitioningSettings() c
     return AutoPartitioningSettings_;
 }
 
-TAutoPartitioningSettings::TAutoPartitioningSettings(const Ydb::Topic::AutoPartitioningSettings& settings)
+TAutoPartitioningSettings::TAutoPartitioningSettings(const NYdbProtos::Topic::AutoPartitioningSettings& settings)
     : Strategy_(static_cast<EAutoPartitioningStrategy>(settings.strategy()))
     , StabilizationWindow_(TDuration::Seconds(settings.partition_write_speed().stabilization_window().seconds()))
     , DownUtilizationPercent_(settings.partition_write_speed().down_utilization_percent())
     , UpUtilizationPercent_(settings.partition_write_speed().up_utilization_percent())
 {}
 
-void TAutoPartitioningSettings::SerializeTo(Ydb::Topic::AutoPartitioningSettings& proto) const {
-    proto.set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(Strategy_));
+void TAutoPartitioningSettings::SerializeTo(NYdbProtos::Topic::AutoPartitioningSettings& proto) const {
+    proto.set_strategy(static_cast<NYdbProtos::Topic::AutoPartitioningStrategy>(Strategy_));
     auto& writeSpeed = *proto.mutable_partition_write_speed();
     writeSpeed.mutable_stabilization_window()->set_seconds(StabilizationWindow_.Seconds());
     writeSpeed.set_down_utilization_percent(DownUtilizationPercent_);
@@ -288,7 +288,7 @@ uint32_t TAutoPartitioningSettings::GetDownUtilizationPercent() const {
     return DownUtilizationPercent_;
 }
 
-TTopicStats::TTopicStats(const Ydb::Topic::DescribeTopicResult::TopicStats& topicStats)
+TTopicStats::TTopicStats(const NYdbProtos::Topic::DescribeTopicResult::TopicStats& topicStats)
     : StoreSizeBytes_(topicStats.store_size_bytes())
     , MinLastWriteTime_(TInstant::Seconds(topicStats.min_last_write_time().seconds()))
     , MaxWriteTimeLag_(TDuration::Seconds(topicStats.max_write_time_lag().seconds()) + TDuration::MicroSeconds(topicStats.max_write_time_lag().nanos() / 1000))
@@ -323,7 +323,7 @@ uint64_t TTopicStats::GetBytesWrittenPerDay() const {
 }
 
 
-TPartitionStats::TPartitionStats(const Ydb::Topic::PartitionStats& partitionStats)
+TPartitionStats::TPartitionStats(const NYdbProtos::Topic::PartitionStats& partitionStats)
     : StartOffset_(partitionStats.partition_offsets().start())
     , EndOffset_(partitionStats.partition_offsets().end())
     , StoreSizeBytes_(partitionStats.store_size_bytes())
@@ -368,7 +368,7 @@ uint64_t TPartitionStats::GetBytesWrittenPerDay() const {
 }
 
 
-TPartitionConsumerStats::TPartitionConsumerStats(const Ydb::Topic::DescribeConsumerResult::PartitionConsumerStats& partitionStats)
+TPartitionConsumerStats::TPartitionConsumerStats(const NYdbProtos::Topic::DescribeConsumerResult::PartitionConsumerStats& partitionStats)
     : CommittedOffset_(partitionStats.committed_offset())
     , LastReadOffset_(partitionStats.last_read_offset())
     , ReaderName_(partitionStats.reader_name())
@@ -406,7 +406,7 @@ const TDuration& TPartitionConsumerStats::GetMaxWriteTimeLag() const {
     return MaxWriteTimeLag_;
 }
 
-TPartitionLocation::TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation)
+TPartitionLocation::TPartitionLocation(const NYdbProtos::Topic::PartitionLocation& partitionLocation)
     : NodeId_(partitionLocation.node_id())
     , Generation_(partitionLocation.generation())
 {
@@ -420,7 +420,7 @@ int64_t TPartitionLocation::GetGeneration() const {
     return Generation_;
 }
 
-TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionInfo& partitionInfo)
+TPartitionInfo::TPartitionInfo(const NYdbProtos::Topic::DescribeTopicResult::PartitionInfo& partitionInfo)
     : PartitionId_(partitionInfo.partition_id())
     , Active_(partitionInfo.active())
     , PartitionStats_()
@@ -450,7 +450,7 @@ TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionI
     }
 }
 
-TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeConsumerResult::PartitionInfo& partitionInfo)
+TPartitionInfo::TPartitionInfo(const NYdbProtos::Topic::DescribeConsumerResult::PartitionInfo& partitionInfo)
     : PartitionId_(partitionInfo.partition_id())
     , Active_(partitionInfo.active())
     , PartitionStats_()
@@ -559,15 +559,15 @@ TAsyncStatus TTopicClient::CommitOffset(const std::string& path, uint64_t partit
 
 namespace {
 
-Ydb::Topic::SupportedCodecs SerializeCodecs(const std::vector<ECodec>& codecs) {
-    Ydb::Topic::SupportedCodecs proto;
+NYdbProtos::Topic::SupportedCodecs SerializeCodecs(const std::vector<ECodec>& codecs) {
+    NYdbProtos::Topic::SupportedCodecs proto;
     for (ECodec codec : codecs) {
-        proto.add_codecs(static_cast<Ydb::Topic::Codec>(codec));
+        proto.add_codecs(static_cast<NYdbProtos::Topic::Codec>(codec));
     }
     return proto;
 }
 
-std::vector<ECodec> DeserializeCodecs(const Ydb::Topic::SupportedCodecs& proto) {
+std::vector<ECodec> DeserializeCodecs(const NYdbProtos::Topic::SupportedCodecs& proto) {
     std::vector<ECodec> codecs;
     codecs.reserve(proto.codecs_size());
     for (int codec : proto.codecs()) {
@@ -593,8 +593,8 @@ std::map<std::string, std::string> DeserializeAttributes(const google::protobuf:
 }
 
 template <typename TSettings>
-google::protobuf::RepeatedPtrField<Ydb::Topic::Consumer> SerializeConsumers(const std::vector<TConsumerSettings<TSettings>>& consumers) {
-    google::protobuf::RepeatedPtrField<Ydb::Topic::Consumer> proto;
+google::protobuf::RepeatedPtrField<NYdbProtos::Topic::Consumer> SerializeConsumers(const std::vector<TConsumerSettings<TSettings>>& consumers) {
+    google::protobuf::RepeatedPtrField<NYdbProtos::Topic::Consumer> proto;
     proto.Reserve(consumers.size());
     for (const auto& consumer : consumers) {
         consumer.SerializeTo(*proto.Add());
@@ -603,7 +603,7 @@ google::protobuf::RepeatedPtrField<Ydb::Topic::Consumer> SerializeConsumers(cons
 }
 
 template <typename TSettings>
-std::vector<TConsumerSettings<TSettings>> DeserializeConsumers(TSettings& parent, const google::protobuf::RepeatedPtrField<Ydb::Topic::Consumer>& proto) {
+std::vector<TConsumerSettings<TSettings>> DeserializeConsumers(TSettings& parent, const google::protobuf::RepeatedPtrField<NYdbProtos::Topic::Consumer>& proto) {
     std::vector<TConsumerSettings<TSettings>> consumers;
     consumers.reserve(proto.size());
     for (const auto& consumer : proto) {
@@ -615,7 +615,7 @@ std::vector<TConsumerSettings<TSettings>> DeserializeConsumers(TSettings& parent
 }
 
 template <typename TSettings>
-TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::Topic::Consumer& proto)
+TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const NYdbProtos::Topic::Consumer& proto)
     : ConsumerName_(proto.name())
     , Important_(proto.important())
     , ReadFrom_(TInstant::Seconds(proto.read_from().seconds()))
@@ -626,7 +626,7 @@ TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::To
 }
 
 template <typename TSettings>
-void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) const {
+void TConsumerSettings<TSettings>::SerializeTo(NYdbProtos::Topic::Consumer& proto) const {
     proto.set_name(ConsumerName_);
     proto.set_important(Important_);
     proto.mutable_read_from()->set_seconds(ReadFrom_.Seconds());
@@ -637,7 +637,7 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
 template struct TConsumerSettings<TCreateTopicSettings>;
 template struct TConsumerSettings<TAlterTopicSettings>;
 
-TCreateTopicSettings::TCreateTopicSettings(const Ydb::Topic::CreateTopicRequest& proto)
+TCreateTopicSettings::TCreateTopicSettings(const NYdbProtos::Topic::CreateTopicRequest& proto)
     : PartitioningSettings_(TPartitioningSettings(proto.partitioning_settings()))
     , RetentionPeriod_(TDuration::Seconds(proto.retention_period().seconds()))
     , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
@@ -650,7 +650,7 @@ TCreateTopicSettings::TCreateTopicSettings(const Ydb::Topic::CreateTopicRequest&
     Consumers_ = DeserializeConsumers(*this, proto.consumers());
 }
 
-void TCreateTopicSettings::SerializeTo(Ydb::Topic::CreateTopicRequest& request) const {
+void TCreateTopicSettings::SerializeTo(NYdbProtos::Topic::CreateTopicRequest& request) const {
     PartitioningSettings_.SerializeTo(*request.mutable_partitioning_settings());
     request.mutable_retention_period()->set_seconds(RetentionPeriod_.Seconds());
     *request.mutable_supported_codecs() = SerializeCodecs(SupportedCodecs_);

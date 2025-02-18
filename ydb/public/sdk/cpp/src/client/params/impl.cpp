@@ -6,7 +6,7 @@
 
 namespace NYdb::inline V3 {
 
-TParams::TImpl::TImpl(::google::protobuf::Map<TStringType, Ydb::TypedValue>&& paramsMap) {
+TParams::TImpl::TImpl(::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>&& paramsMap) {
     ParamsMap_.swap(paramsMap);
 }
 
@@ -36,11 +36,11 @@ std::optional<TValue> TParams::TImpl::GetValue(const std::string& name) const {
     return std::optional<TValue>();
 }
 
-::google::protobuf::Map<TStringType, Ydb::TypedValue>* TParams::TImpl::GetProtoMapPtr() {
+::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>* TParams::TImpl::GetProtoMapPtr() {
     return &ParamsMap_;
 }
 
-const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& TParams::TImpl::GetProtoMap() const {
+const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>& TParams::TImpl::GetProtoMap() const {
     return ParamsMap_;
 }
 

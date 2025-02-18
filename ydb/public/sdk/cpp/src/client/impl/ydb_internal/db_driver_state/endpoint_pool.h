@@ -14,7 +14,7 @@
 namespace NYdb::inline V3 {
 
 struct TListEndpointsResult {
-    Ydb::Discovery::ListEndpointsResult Result;
+    NYdbProtos::Discovery::ListEndpointsResult Result;
     TPlainStatus DiscoveryStatus;
 };
 

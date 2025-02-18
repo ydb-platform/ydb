@@ -18,7 +18,7 @@ struct TPlainStatus {
     NYdb::NIssue::TIssues Issues;
     std::string Endpoint;
     std::multimap<std::string, std::string> Metadata;
-    Ydb::CostInfo ConstInfo;
+    NYdbProtos::CostInfo ConstInfo;
 
     TPlainStatus()
         : Status(EStatus::SUCCESS)

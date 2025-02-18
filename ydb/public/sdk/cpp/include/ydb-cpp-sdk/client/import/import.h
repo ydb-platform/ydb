@@ -55,7 +55,7 @@ public:
 
 public:
     using TOperation::TOperation;
-    TImportFromS3Response(TStatus&& status, Ydb::Operations::Operation&& operation);
+    TImportFromS3Response(TStatus&& status, NYdbProtos::Operations::Operation&& operation);
 
     const TMetadata& Metadata() const;
 

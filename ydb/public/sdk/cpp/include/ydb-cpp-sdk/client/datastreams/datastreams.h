@@ -33,36 +33,36 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         ESM_ON_DEMAND = 2,
     };
 
-    using TCreateStreamResult = TProtoResultWrapper<Ydb::DataStreams::V1::CreateStreamResult>;
-    using TDeleteStreamResult = TProtoResultWrapper<Ydb::DataStreams::V1::DeleteStreamResult>;
-    using TDescribeStreamResult = TProtoResultWrapper<Ydb::DataStreams::V1::DescribeStreamResult>;
-    using TPutRecordResult = TProtoResultWrapper<Ydb::DataStreams::V1::PutRecordResult>;
-    using TRegisterStreamConsumerResult = TProtoResultWrapper<Ydb::DataStreams::V1::RegisterStreamConsumerResult>;
-    using TDeregisterStreamConsumerResult = TProtoResultWrapper<Ydb::DataStreams::V1::DeregisterStreamConsumerResult>;
-    using TDescribeStreamConsumerResult = TProtoResultWrapper<Ydb::DataStreams::V1::DescribeStreamConsumerResult>;
-    using TListStreamsResult = TProtoResultWrapper<Ydb::DataStreams::V1::ListStreamsResult>;
-    using TListShardsResult = TProtoResultWrapper<Ydb::DataStreams::V1::ListShardsResult>;
-    using TPutRecordsResult = TProtoResultWrapper<Ydb::DataStreams::V1::PutRecordsResult>;
-    using TGetRecordsResult = TProtoResultWrapper<Ydb::DataStreams::V1::GetRecordsResult>;
-    using TGetShardIteratorResult = TProtoResultWrapper<Ydb::DataStreams::V1::GetShardIteratorResult>;
-    // using TSubscribeToShardResult = TProtoResultWrapper<Ydb::DataStreams::V1::SubscribeToShardResult>;
-    using TDescribeLimitsResult = TProtoResultWrapper<Ydb::DataStreams::V1::DescribeLimitsResult>;
-    using TDescribeStreamSummaryResult = TProtoResultWrapper<Ydb::DataStreams::V1::DescribeStreamSummaryResult>;
-    using TDecreaseStreamRetentionPeriodResult = TProtoResultWrapper<Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResult>;
-    using TIncreaseStreamRetentionPeriodResult = TProtoResultWrapper<Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResult>;
-    using TUpdateShardCountResult = TProtoResultWrapper<Ydb::DataStreams::V1::UpdateShardCountResult>;
-    using TUpdateStreamModeResult = TProtoResultWrapper<Ydb::DataStreams::V1::UpdateStreamModeResult>;
-    using TListStreamConsumersResult = TProtoResultWrapper<Ydb::DataStreams::V1::ListStreamConsumersResult>;
-    using TAddTagsToStreamResult = TProtoResultWrapper<Ydb::DataStreams::V1::AddTagsToStreamResult>;
-    using TDisableEnhancedMonitoringResult = TProtoResultWrapper<Ydb::DataStreams::V1::DisableEnhancedMonitoringResult>;
-    using TEnableEnhancedMonitoringResult = TProtoResultWrapper<Ydb::DataStreams::V1::EnableEnhancedMonitoringResult>;
-    using TListTagsForStreamResult = TProtoResultWrapper<Ydb::DataStreams::V1::ListTagsForStreamResult>;
-    using TMergeShardsResult = TProtoResultWrapper<Ydb::DataStreams::V1::MergeShardsResult>;
-    using TRemoveTagsFromStreamResult = TProtoResultWrapper<Ydb::DataStreams::V1::RemoveTagsFromStreamResult>;
-    using TSplitShardResult = TProtoResultWrapper<Ydb::DataStreams::V1::SplitShardResult>;
-    using TStartStreamEncryptionResult = TProtoResultWrapper<Ydb::DataStreams::V1::StartStreamEncryptionResult>;
-    using TStopStreamEncryptionResult = TProtoResultWrapper<Ydb::DataStreams::V1::StopStreamEncryptionResult>;
-    using TUpdateStreamResult = TProtoResultWrapper<Ydb::DataStreams::V1::UpdateStreamResult>;
+    using TCreateStreamResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::CreateStreamResult>;
+    using TDeleteStreamResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::DeleteStreamResult>;
+    using TDescribeStreamResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::DescribeStreamResult>;
+    using TPutRecordResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::PutRecordResult>;
+    using TRegisterStreamConsumerResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::RegisterStreamConsumerResult>;
+    using TDeregisterStreamConsumerResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::DeregisterStreamConsumerResult>;
+    using TDescribeStreamConsumerResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::DescribeStreamConsumerResult>;
+    using TListStreamsResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::ListStreamsResult>;
+    using TListShardsResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::ListShardsResult>;
+    using TPutRecordsResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::PutRecordsResult>;
+    using TGetRecordsResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::GetRecordsResult>;
+    using TGetShardIteratorResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::GetShardIteratorResult>;
+    // using TSubscribeToShardResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::SubscribeToShardResult>;
+    using TDescribeLimitsResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::DescribeLimitsResult>;
+    using TDescribeStreamSummaryResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::DescribeStreamSummaryResult>;
+    using TDecreaseStreamRetentionPeriodResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::DecreaseStreamRetentionPeriodResult>;
+    using TIncreaseStreamRetentionPeriodResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::IncreaseStreamRetentionPeriodResult>;
+    using TUpdateShardCountResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::UpdateShardCountResult>;
+    using TUpdateStreamModeResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::UpdateStreamModeResult>;
+    using TListStreamConsumersResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::ListStreamConsumersResult>;
+    using TAddTagsToStreamResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::AddTagsToStreamResult>;
+    using TDisableEnhancedMonitoringResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::DisableEnhancedMonitoringResult>;
+    using TEnableEnhancedMonitoringResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::EnableEnhancedMonitoringResult>;
+    using TListTagsForStreamResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::ListTagsForStreamResult>;
+    using TMergeShardsResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::MergeShardsResult>;
+    using TRemoveTagsFromStreamResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::RemoveTagsFromStreamResult>;
+    using TSplitShardResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::SplitShardResult>;
+    using TStartStreamEncryptionResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::StartStreamEncryptionResult>;
+    using TStopStreamEncryptionResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::StopStreamEncryptionResult>;
+    using TUpdateStreamResult = TProtoResultWrapper<NYdbProtos::DataStreams::V1::UpdateStreamResult>;
 
     using TAsyncCreateStreamResult = NThreading::TFuture<TCreateStreamResult>;
     using TAsyncDeleteStreamResult = NThreading::TFuture<TDeleteStreamResult>;
@@ -128,7 +128,7 @@ namespace NYdb::inline V3::NDataStreams::V1 {
             , DownUtilizationPercent_(0)
             , UpUtilizationPercent_(0) {
         }
-        TAutoPartitioningSettings(const Ydb::DataStreams::V1::AutoPartitioningSettings& settings);
+        TAutoPartitioningSettings(const NYdbProtos::DataStreams::V1::AutoPartitioningSettings& settings);
         TAutoPartitioningSettings(EAutoPartitioningStrategy strategy, TDuration stabilizationWindow, uint64_t downUtilizationPercent, uint64_t upUtilizationPercent)
             : Strategy_(strategy)
             , StabilizationWindow_(stabilizationWindow)
@@ -153,7 +153,7 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         friend struct TPartitioningSettingsBuilder<TUpdateStreamSettings>;
     public:
         TPartitioningSettings() : MinActivePartitions_(0), MaxActivePartitions_(0), AutoPartitioningSettings_(){}
-        TPartitioningSettings(const Ydb::DataStreams::V1::PartitioningSettings& settings);
+        TPartitioningSettings(const NYdbProtos::DataStreams::V1::PartitioningSettings& settings);
         TPartitioningSettings(uint64_t minActivePartitions, uint64_t maxActivePartitions, TAutoPartitioningSettings autoscalingSettings = {})
             : MinActivePartitions_(minActivePartitions)
             , MaxActivePartitions_(maxActivePartitions)
@@ -334,10 +334,10 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         TAsyncDescribeStreamResult DescribeStream(const std::string& path, TDescribeStreamSettings settings = TDescribeStreamSettings());
         TAsyncPutRecordResult PutRecord(const std::string& path, const TDataRecord& record, TPutRecordSettings settings = TPutRecordSettings());
         TAsyncListStreamsResult ListStreams(TListStreamsSettings settings = TListStreamsSettings());
-        TAsyncListShardsResult ListShards(const std::string& path, const Ydb::DataStreams::V1::ShardFilter& shardFilter, TListShardsSettings settings = TListShardsSettings());
+        TAsyncListShardsResult ListShards(const std::string& path, const NYdbProtos::DataStreams::V1::ShardFilter& shardFilter, TListShardsSettings settings = TListShardsSettings());
         TAsyncPutRecordsResult PutRecords(const std::string& path, const std::vector<TDataRecord>& records, TPutRecordsSettings settings = TPutRecordsSettings());
         TAsyncGetRecordsResult GetRecords(const std::string& shardIterator, TGetRecordsSettings settings = TGetRecordsSettings());
-        TAsyncGetShardIteratorResult GetShardIterator(const std::string& path, const std::string& shardId, Ydb::DataStreams::V1::ShardIteratorType shardIteratorTypeStr,
+        TAsyncGetShardIteratorResult GetShardIterator(const std::string& path, const std::string& shardId, NYdbProtos::DataStreams::V1::ShardIteratorType shardIteratorTypeStr,
                                                       TGetShardIteratorSettings settings = TGetShardIteratorSettings());
         // TAsyncSubscribeToShardResult SubscribeToShard(TSubscribeToShardSettings settings = TSubscribeToShardSettings());
         TAsyncDescribeLimitsResult DescribeLimits(TDescribeLimitsSettings settings = TDescribeLimitsSettings());

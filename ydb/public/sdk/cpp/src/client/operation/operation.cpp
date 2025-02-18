@@ -21,8 +21,8 @@ namespace NOperation {
 constexpr TDuration OPERATION_CLIENT_TIMEOUT = TDuration::Seconds(5);
 
 using namespace NThreading;
-using namespace Ydb::Operation;
-using namespace Ydb::Operations;
+using namespace NYdbProtos::Operation;
+using namespace NYdbProtos::Operations;
 
 class TOperationClient::TImpl : public TClientImplCommon<TOperationClient::TImpl> {
     template <typename TRequest, typename TResponse>

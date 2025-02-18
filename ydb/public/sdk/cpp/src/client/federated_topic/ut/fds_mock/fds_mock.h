@@ -14,10 +14,10 @@ namespace NYdb::NFederatedTopic::NTests {
 // create 2 queues, for requests and responses
 // getrequest() - put request and returns<request, promise<response>>
 // sendresponse()
-class TFederationDiscoveryServiceMock: public Ydb::FederationDiscovery::V1::FederationDiscoveryService::Service {
+class TFederationDiscoveryServiceMock: public NYdbProtos::FederationDiscovery::V1::FederationDiscoveryService::Service {
 public:
-    using TRequest = Ydb::FederationDiscovery::ListFederationDatabasesRequest;
-    using TResponse = Ydb::FederationDiscovery::ListFederationDatabasesResponse;
+    using TRequest = NYdbProtos::FederationDiscovery::ListFederationDatabasesRequest;
+    using TResponse = NYdbProtos::FederationDiscovery::ListFederationDatabasesResponse;
 
     struct TGrpcResult {
         TResponse Response;
@@ -80,15 +80,15 @@ public:
         return grpc::Status(grpc::StatusCode::UNKNOWN, "No response after timeout");
     }
 
-    TGrpcResult ComposeOkResult(::Ydb::FederationDiscovery::DatabaseInfo::Status status) {
-        Ydb::FederationDiscovery::ListFederationDatabasesResponse okResponse;
+    TGrpcResult ComposeOkResult(::NYdbProtos::FederationDiscovery::DatabaseInfo::Status status) {
+        NYdbProtos::FederationDiscovery::ListFederationDatabasesResponse okResponse;
 
         auto op = okResponse.mutable_operation();
-        op->set_status(Ydb::StatusIds::SUCCESS);
+        op->set_status(NYdbProtos::StatusIds::SUCCESS);
         okResponse.mutable_operation()->set_ready(true);
         okResponse.mutable_operation()->set_id("12345");
 
-        Ydb::FederationDiscovery::ListFederationDatabasesResult mockResult;
+        NYdbProtos::FederationDiscovery::ListFederationDatabasesResult mockResult;
         mockResult.set_control_plane_endpoint("cp.logbroker-federation:2135");
         mockResult.set_self_location("fancy_datacenter");
         auto c1 = mockResult.add_federation_databases();
@@ -122,31 +122,31 @@ public:
     }
 
     TGrpcResult ComposeOkResultAvailableDatabases() {
-        return ComposeOkResult(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
+        return ComposeOkResult(::NYdbProtos::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
     }
 
     TGrpcResult ComposeOkResultUnavailableDatabases() {
-        return ComposeOkResult(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_UNAVAILABLE);
+        return ComposeOkResult(::NYdbProtos::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_UNAVAILABLE);
     }
 
     TGrpcResult ComposeUnavailableResult() {
-        Ydb::FederationDiscovery::ListFederationDatabasesResponse response;
+        NYdbProtos::FederationDiscovery::ListFederationDatabasesResponse response;
         auto op = response.mutable_operation();
-        op->set_status(Ydb::StatusIds::UNAVAILABLE);
+        op->set_status(NYdbProtos::StatusIds::UNAVAILABLE);
         response.mutable_operation()->set_ready(true);
         response.mutable_operation()->set_id("12345");
         return {response, grpc::Status::OK};
     }
 
     TGrpcResult ComposeOkResultWithUnavailableDatabase(int unavailableDb) {
-        Ydb::FederationDiscovery::ListFederationDatabasesResponse okResponse;
+        NYdbProtos::FederationDiscovery::ListFederationDatabasesResponse okResponse;
 
         auto op = okResponse.mutable_operation();
-        op->set_status(Ydb::StatusIds::SUCCESS);
+        op->set_status(NYdbProtos::StatusIds::SUCCESS);
         okResponse.mutable_operation()->set_ready(true);
         okResponse.mutable_operation()->set_id("12345");
 
-        Ydb::FederationDiscovery::ListFederationDatabasesResult mockResult;
+        NYdbProtos::FederationDiscovery::ListFederationDatabasesResult mockResult;
         mockResult.set_control_plane_endpoint("cp.logbroker-federation:2135");
         mockResult.set_self_location("fancy_datacenter");
         for (int i = 1; i <= 3; ++i) {
@@ -157,9 +157,9 @@ public:
             c1->set_endpoint("localhost:" + ToString(Port));
             c1->set_location(TStringBuilder() << "dc" << i);
             if (i == unavailableDb) {
-                c1->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_UNAVAILABLE);
+                c1->set_status(::NYdbProtos::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_UNAVAILABLE);
             } else {
-                c1->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
+                c1->set_status(::NYdbProtos::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
             }
             c1->set_weight(i == 0 ? 1000 : 500);
         }

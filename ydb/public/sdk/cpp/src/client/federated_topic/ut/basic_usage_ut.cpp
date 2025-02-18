@@ -65,14 +65,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         Y_ASSERT(fdsRequest.has_value());
         // TODO check fdsRequest->Req db header
 
-        Ydb::FederationDiscovery::ListFederationDatabasesResponse response;
+        NYdbProtos::FederationDiscovery::ListFederationDatabasesResponse response;
 
         auto op = response.mutable_operation();
-        op->set_status(Ydb::StatusIds::SUCCESS);
+        op->set_status(NYdbProtos::StatusIds::SUCCESS);
         response.mutable_operation()->set_ready(true);
         response.mutable_operation()->set_id("12345");
 
-        Ydb::FederationDiscovery::ListFederationDatabasesResult mockResult;
+        NYdbProtos::FederationDiscovery::ListFederationDatabasesResult mockResult;
         mockResult.set_control_plane_endpoint("cp.logbroker-federation:2135");
         mockResult.set_self_location("fancy_datacenter");
         auto c1 = mockResult.add_federation_databases();
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         c1->set_id("account-dc1");
         c1->set_endpoint("localhost:" + ToString(fdsMock.Port));
         c1->set_location("dc1");
-        c1->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
+        c1->set_status(::NYdbProtos::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
         c1->set_weight(1000);
         auto c2 = mockResult.add_federation_databases();
         c2->set_name("dc2");
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         c2->set_id("account-dc2");
         c2->set_endpoint("localhost:" + ToString(fdsMock.Port));
         c2->set_location("dc2");
-        c2->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
+        c2->set_status(::NYdbProtos::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
         c2->set_weight(500);
 
         op->mutable_result()->PackFrom(mockResult);
@@ -240,14 +240,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto events = ReadSession->GetEvents(false);
         UNIT_ASSERT(events.empty());
 
-        Ydb::FederationDiscovery::ListFederationDatabasesResponse Response;
+        NYdbProtos::FederationDiscovery::ListFederationDatabasesResponse Response;
 
         auto op = Response.mutable_operation();
-        op->set_status(Ydb::StatusIds::SUCCESS);
+        op->set_status(NYdbProtos::StatusIds::SUCCESS);
         Response.mutable_operation()->set_ready(true);
         Response.mutable_operation()->set_id("12345");
 
-        Ydb::FederationDiscovery::ListFederationDatabasesResult mockResult;
+        NYdbProtos::FederationDiscovery::ListFederationDatabasesResult mockResult;
         mockResult.set_control_plane_endpoint("cp.logbroker-federation:2135");
         mockResult.set_self_location("fancy_datacenter");
         auto c1 = mockResult.add_federation_databases();
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         c1->set_id("account-dc1");
         c1->set_endpoint("localhost:" + ToString(fdsMock.Port));
         c1->set_location("dc1");
-        c1->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
+        c1->set_status(::NYdbProtos::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
         c1->set_weight(1000);
         auto c2 = mockResult.add_federation_databases();
         c2->set_name("dc2");
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         c2->set_id("account-dc2");
         c2->set_endpoint("localhost:" + ToString(fdsMock.Port));
         c2->set_location("dc2");
-        c2->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
+        c2->set_status(::NYdbProtos::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
         c2->set_weight(500);
 
         op->mutable_result()->PackFrom(mockResult);
@@ -440,9 +440,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         {
             auto fdsRequest = fdsMock.GetNextPendingRequest();
             Y_ASSERT(fdsRequest.has_value());
-            Ydb::FederationDiscovery::ListFederationDatabasesResponse response;
+            NYdbProtos::FederationDiscovery::ListFederationDatabasesResponse response;
             auto op = response.mutable_operation();
-            op->set_status(Ydb::StatusIds::BAD_REQUEST);
+            op->set_status(NYdbProtos::StatusIds::BAD_REQUEST);
             response.mutable_operation()->set_ready(true);
             response.mutable_operation()->set_id("12345");
             fdsRequest->Result.SetValue({std::move(response), grpc::Status::OK});
@@ -955,12 +955,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto writer = topicClient.CreateWriteSession(writeSettings);
 
-        Ydb::FederationDiscovery::ListFederationDatabasesResponse response;
+        NYdbProtos::FederationDiscovery::ListFederationDatabasesResponse response;
         auto op = response.mutable_operation();
-        op->set_status(Ydb::StatusIds::SUCCESS);
+        op->set_status(NYdbProtos::StatusIds::SUCCESS);
         response.mutable_operation()->set_ready(true);
         response.mutable_operation()->set_id("12345");
-        Ydb::FederationDiscovery::ListFederationDatabasesResult mockResult;
+        NYdbProtos::FederationDiscovery::ListFederationDatabasesResult mockResult;
         mockResult.set_control_plane_endpoint("cp.logbroker-federation:2135");
         mockResult.set_self_location("fancy_datacenter");
         auto c1 = mockResult.add_federation_databases();
@@ -969,7 +969,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         c1->set_id("account-dc1");
         c1->set_endpoint("localhost:" + ToString(fdsMock.Port));
         c1->set_location("dc1");
-        c1->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
+        c1->set_status(::NYdbProtos::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
         c1->set_weight(1000);
         auto c2 = mockResult.add_federation_databases();
         c2->set_name("dc2");
@@ -977,7 +977,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         c2->set_id("account-dc2");
         c2->set_endpoint("localhost:" + ToString(fdsMock.Port));
         c2->set_location("dc2");
-        c2->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_UNAVAILABLE);
+        c2->set_status(::NYdbProtos::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_UNAVAILABLE);
         c2->set_weight(500);
         op->mutable_result()->PackFrom(mockResult);
         auto fdsRequest = fdsMock.WaitNextPendingRequest();
@@ -1229,16 +1229,16 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         db->set_name("db" + ToString(id));
         db->set_location("dc" + ToString(id));
         db->set_weight(weight);
-        db->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
+        db->set_status(NYdbProtos::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
         dbInfos.push_back(db);
     }
 
     void EnableDatabase(std::vector<std::shared_ptr<TDbInfo>>& dbInfos, int id) {
-        dbInfos[id - 1]->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
+        dbInfos[id - 1]->set_status(NYdbProtos::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
     }
 
     void DisableDatabase(std::vector<std::shared_ptr<TDbInfo>>& dbInfos, int id) {
-        dbInfos[id - 1]->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_UNAVAILABLE);
+        dbInfos[id - 1]->set_status(NYdbProtos::FederationDiscovery::DatabaseInfo_Status_UNAVAILABLE);
     }
 
     Y_UNIT_TEST(SelectDatabaseByHash) {

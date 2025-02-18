@@ -4,7 +4,7 @@
 
 namespace NYdb::inline V3 {
 
-const Ydb::ResultSet& TProtoAccessor::GetProto(const TResultSet& resultSet) {
+const NYdbProtos::ResultSet& TProtoAccessor::GetProto(const TResultSet& resultSet) {
     return resultSet.GetProto();
 }
 

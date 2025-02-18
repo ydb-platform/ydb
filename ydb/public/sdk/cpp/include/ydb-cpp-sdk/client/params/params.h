@@ -7,7 +7,7 @@
 
 #include <google/protobuf/map.h>
 
-namespace Ydb {
+YDB_PROTOS_NAMESPACE {
     class TypedValue;
 }
 
@@ -51,10 +51,10 @@ public:
     std::optional<TValue> GetValue(const std::string& name) const;
 
 private:
-    TParams(::google::protobuf::Map<TStringType, Ydb::TypedValue>&& protoMap);
+    TParams(::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>&& protoMap);
 
-    ::google::protobuf::Map<TStringType, Ydb::TypedValue>* GetProtoMapPtr();
-    const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& GetProtoMap() const;
+    ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>* GetProtoMapPtr();
+    const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>& GetProtoMap() const;
 
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
@@ -67,7 +67,7 @@ public:
     bool Finished();
 
 private:
-    TParamValueBuilder(TParamsBuilder& owner, Ydb::Type& typeProto, Ydb::Value& valueProto);
+    TParamValueBuilder(TParamsBuilder& owner, NYdbProtos::Type& typeProto, NYdbProtos::Value& valueProto);
 
     TParamsBuilder& Owner_;
     bool Finished_;
@@ -90,7 +90,7 @@ public:
     TParams Build();
 
 private:
-    TParamsBuilder(const ::google::protobuf::Map<TStringType, Ydb::Type>& typeInfo);
+    TParamsBuilder(const ::google::protobuf::Map<TStringType, NYdbProtos::Type>& typeInfo);
 
     class TImpl;
     std::unique_ptr<TImpl> Impl_;

@@ -105,7 +105,7 @@ protected:
         auto promise = NThreading::NewPromise<TOp>();
 
         auto extractor = [promise]
-            (Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
+            (NYdbProtos::Operations::Operation* operation, TPlainStatus status) mutable {
                 TStatus st(std::move(status));
                 if (!operation) {
                     promise.SetValue(TOp(std::move(st)));

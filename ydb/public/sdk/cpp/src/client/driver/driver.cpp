@@ -23,7 +23,7 @@ using NYdbGrpc::TResponseCallback;
 using NYdbGrpc::TGrpcStatus;
 using NYdbGrpc::TTcpKeepAliveSettings;
 
-using Ydb::StatusIds;
+using NYdbProtos::StatusIds;
 
 using namespace NThreading;
 

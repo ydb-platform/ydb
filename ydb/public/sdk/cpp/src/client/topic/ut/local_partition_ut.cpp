@@ -116,7 +116,7 @@ namespace NYdb::NTopic::NTests {
             return builder.BuildAndStart();
         }
 
-        class TMockDiscoveryService: public Ydb::Discovery::V1::DiscoveryService::Service {
+        class TMockDiscoveryService: public NYdbProtos::Discovery::V1::DiscoveryService::Service {
         public:
             TMockDiscoveryService()
             {
@@ -141,14 +141,14 @@ namespace NYdb::NTopic::NTests {
                 MockResults.clear_endpoints();
                 if (nodeCount > 0)
                 {
-                    Ydb::Discovery::EndpointInfo* endpoint = MockResults.add_endpoints();
+                    NYdbProtos::Discovery::EndpointInfo* endpoint = MockResults.add_endpoints();
                     endpoint->set_address(TStringBuilder() << "localhost");
                     endpoint->set_port(port);
                     endpoint->set_node_id(firstNodeId);
                 }
                 if (nodeCount > 1)
                 {
-                    Ydb::Discovery::EndpointInfo* endpoint = MockResults.add_endpoints();
+                    NYdbProtos::Discovery::EndpointInfo* endpoint = MockResults.add_endpoints();
                     endpoint->set_address(TStringBuilder() << "ip6-localhost"); // name should be different
                     endpoint->set_port(port);
                     endpoint->set_node_id(firstNodeId + 1);
@@ -164,7 +164,7 @@ namespace NYdb::NTopic::NTests {
                 SetEndpointsLocked(firstNodeId, nodeCount, port);
             }
 
-            grpc::Status ListEndpoints(grpc::ServerContext* context, const Ydb::Discovery::ListEndpointsRequest* request, Ydb::Discovery::ListEndpointsResponse* response) override {
+            grpc::Status ListEndpoints(grpc::ServerContext* context, const NYdbProtos::Discovery::ListEndpointsRequest* request, NYdbProtos::Discovery::ListEndpointsResponse* response) override {
                 std::lock_guard lock(Lock);
                 UNIT_ASSERT(context);
 
@@ -184,7 +184,7 @@ namespace NYdb::NTopic::NTests {
 
                 auto* op = response->mutable_operation();
                 op->set_ready(true);
-                op->set_status(Ydb::StatusIds::SUCCESS);
+                op->set_status(NYdbProtos::StatusIds::SUCCESS);
                 op->mutable_result()->PackFrom(MockResults);
 
                 Cerr << "==== ListEndpoints response: " << response->ShortDebugString() << Endl;
@@ -201,7 +201,7 @@ namespace NYdb::NTopic::NTests {
             }
 
         private:
-            Ydb::Discovery::ListEndpointsResult MockResults;
+            NYdbProtos::Discovery::ListEndpointsResult MockResults;
             TString DiscoveryAddr;
             std::unique_ptr<grpc::Server> Server;
             TAdaptiveLock Lock;

@@ -12,7 +12,7 @@
 
 namespace NYdb::inline V3::NDebug {
 
-using namespace Ydb;
+using namespace NYdbProtos;
 
 using namespace NThreading;
 

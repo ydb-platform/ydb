@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             }
         )";
 
-        Ydb::Type protoType;
+        NYdbProtos::Type protoType;
         google::protobuf::TextFormat::ParseFromString(protoTypeStr, &protoType);
 
         UNIT_ASSERT_NO_DIFF(FormatType(protoType),
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             }
         )";
 
-        Ydb::Type protoType;
+        NYdbProtos::Type protoType;
         google::protobuf::TextFormat::ParseFromString(protoTypeStr, &protoType);
 
         UNIT_ASSERT_NO_DIFF(FormatType(protoType),
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             }
         )";
 
-        Ydb::Type protoType;
+        NYdbProtos::Type protoType;
         google::protobuf::TextFormat::ParseFromString(protoTypeStr, &protoType);
 
         UNIT_ASSERT_NO_DIFF(FormatType(protoType),
@@ -287,10 +287,10 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             }
         )";
 
-        Ydb::Type protoType;
+        NYdbProtos::Type protoType;
         google::protobuf::TextFormat::ParseFromString(protoTypeStr, &protoType);
 
-        Ydb::Value protoValue;
+        NYdbProtos::Value protoValue;
         google::protobuf::TextFormat::ParseFromString(protoValueStr, &protoValue);
 
         TValue value(TType(protoType), protoValue);
@@ -341,10 +341,10 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             }
         )";
 
-        Ydb::Type protoType;
+        NYdbProtos::Type protoType;
         google::protobuf::TextFormat::ParseFromString(protoTypeStr, &protoType);
 
-        Ydb::Value protoValue;
+        NYdbProtos::Value protoValue;
         google::protobuf::TextFormat::ParseFromString(protoValueStr, &protoValue);
 
         TValue value(TType(protoType), protoValue);
@@ -428,10 +428,10 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             }
         )";
 
-        Ydb::Type protoType;
+        NYdbProtos::Type protoType;
         google::protobuf::TextFormat::ParseFromString(protoTypeStr, &protoType);
 
-        Ydb::Value protoValue;
+        NYdbProtos::Value protoValue;
         google::protobuf::TextFormat::ParseFromString(protoValueStr, &protoValue);
 
         TValue value(TType(protoType), protoValue);
@@ -507,10 +507,10 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             }
         )";
 
-        Ydb::Type protoType;
+        NYdbProtos::Type protoType;
         google::protobuf::TextFormat::ParseFromString(protoTypeStr, &protoType);
 
-        Ydb::Value protoValue;
+        NYdbProtos::Value protoValue;
         google::protobuf::TextFormat::ParseFromString(protoValueStr, &protoValue);
 
         TValue value(TType(protoType), protoValue);

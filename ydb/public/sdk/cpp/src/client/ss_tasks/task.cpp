@@ -9,7 +9,7 @@ namespace NYdb::inline V3 {
 namespace NSchemeShard {
 
 /// YT
-TBackgroundProcessesResponse::TBackgroundProcessesResponse(TStatus&& status, Ydb::Operations::Operation&& operation)
+TBackgroundProcessesResponse::TBackgroundProcessesResponse(TStatus&& status, NYdbProtos::Operations::Operation&& operation)
     : TOperation(std::move(status), std::move(operation))
 {
     Metadata_.Id = GetProto().DebugString();

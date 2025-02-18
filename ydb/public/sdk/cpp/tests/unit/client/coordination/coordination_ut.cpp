@@ -18,12 +18,12 @@ using namespace NYdb::NCoordination;
 
 namespace {
 
-    class TMockDiscoveryService : public Ydb::Discovery::V1::DiscoveryService::Service {
+    class TMockDiscoveryService : public NYdbProtos::Discovery::V1::DiscoveryService::Service {
     public:
         grpc::Status ListEndpoints(
                 grpc::ServerContext* context,
-                const Ydb::Discovery::ListEndpointsRequest* request,
-                Ydb::Discovery::ListEndpointsResponse* response) override
+                const NYdbProtos::Discovery::ListEndpointsRequest* request,
+                NYdbProtos::Discovery::ListEndpointsResponse* response) override
         {
             Y_UNUSED(context);
 
@@ -34,28 +34,28 @@ namespace {
 
             auto* op = response->mutable_operation();
             op->set_ready(true);
-            op->set_status(Ydb::StatusIds::SUCCESS);
+            op->set_status(NYdbProtos::StatusIds::SUCCESS);
             op->mutable_result()->PackFrom(*result);
             return grpc::Status::OK;
         }
 
         // From database name to result
-        std::unordered_map<std::string, Ydb::Discovery::ListEndpointsResult> MockResults;
+        std::unordered_map<std::string, NYdbProtos::Discovery::ListEndpointsResult> MockResults;
     };
 
-    class TMockCoordinationService : public Ydb::Coordination::V1::CoordinationService::Service {
+    class TMockCoordinationService : public NYdbProtos::Coordination::V1::CoordinationService::Service {
     public:
         grpc::Status Session(
                 grpc::ServerContext* context,
                 grpc::ServerReaderWriter<
-                    Ydb::Coordination::SessionResponse,
-                    Ydb::Coordination::SessionRequest>* stream) override
+                    NYdbProtos::Coordination::SessionResponse,
+                    NYdbProtos::Coordination::SessionRequest>* stream) override
         {
             Y_UNUSED(context);
 
             std::cerr << "Session stream started" << std::endl;
 
-            Ydb::Coordination::SessionRequest request;
+            NYdbProtos::Coordination::SessionRequest request;
 
             // Process session start
             {
@@ -70,7 +70,7 @@ namespace {
                 if (!sessionId) {
                     sessionId = ++LastSessionId;
                 }
-                Ydb::Coordination::SessionResponse response;
+                NYdbProtos::Coordination::SessionResponse response;
                 auto* started = response.mutable_session_started();
                 started->set_session_id(sessionId);
                 started->set_timeout_millis(start.timeout_millis());
@@ -84,7 +84,7 @@ namespace {
                 Y_ABORT_UNLESS(request.has_ping(), "Only ping requests are supported");
                 if (++pings_received <= 2) {
                     // Only reply to the first 2 ping requests
-                    Ydb::Coordination::SessionResponse response;
+                    NYdbProtos::Coordination::SessionResponse response;
                     auto* pong = response.mutable_pong();
                     pong->set_opaque(request.ping().opaque());
                     stream->Write(response);

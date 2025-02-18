@@ -142,7 +142,7 @@ public:
     };
 
     using TOperation::TOperation;
-    TScriptExecutionOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+    TScriptExecutionOperation(TStatus&& status, NYdbProtos::Operations::Operation&& operation);
 
     const TMetadata& Metadata() const {
         return Metadata_;

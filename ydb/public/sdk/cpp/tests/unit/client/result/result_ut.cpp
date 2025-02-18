@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(CppGrpcClientResultSetTest) {
             "    }\n"
             "  }\n"
             "}\n";
-        Ydb::ResultSet rsProto;
+        NYdbProtos::ResultSet rsProto;
         google::protobuf::TextFormat::ParseFromString(TStringType{resultSetString}, &rsProto);
 
         NYdb::TResultSet rs(std::move(rsProto));
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(CppGrpcClientResultSetTest) {
             "    }\n"
             "  }\n"
             "}\n";
-        Ydb::ResultSet rsProto;
+        NYdbProtos::ResultSet rsProto;
         google::protobuf::TextFormat::ParseFromString(TStringType{resultSetString}, &rsProto);
 
         NYdb::TResultSet rs(std::move(rsProto));
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(CppGrpcClientResultSetTest) {
             "    null_flag_value: NULL_VALUE\n"
             "  }\n"
             "}\n";
-        Ydb::ResultSet rsProto;
+        NYdbProtos::ResultSet rsProto;
         google::protobuf::TextFormat::ParseFromString(TStringType{resultSetString}, &rsProto);
 
         NYdb::TResultSet rs(std::move(rsProto));
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(CppGrpcClientResultSetTest) {
             "    bytes_value: \"test content\"\n"
             "  }\n"
             "}\n";
-        Ydb::ResultSet rsProto;
+        NYdbProtos::ResultSet rsProto;
         google::protobuf::TextFormat::ParseFromString(TStringType{resultSetString}, &rsProto);
 
         NYdb::TResultSet rs(std::move(rsProto));

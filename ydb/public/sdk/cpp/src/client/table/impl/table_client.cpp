@@ -360,7 +360,7 @@ i64 TTableClient::TImpl::GetCurrentPoolSize() const {
 TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessionSettings& settings, bool standalone,
     std::string preferredLocation)
 {
-    auto request = MakeOperationRequest<Ydb::Table::CreateSessionRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::CreateSessionRequest>(settings);
 
     auto createSessionPromise = NewPromise<TCreateSessionResult>();
     auto self = shared_from_this();
@@ -369,7 +369,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
 
     auto createSessionExtractor = [createSessionPromise, self, standalone]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
-            Ydb::Table::CreateSessionResult result;
+            NYdbProtos::Table::CreateSessionResult result;
             if (any) {
                 any->UnpackTo(&result);
             }
@@ -387,10 +387,10 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
             createSessionPromise.SetValue(std::move(val));
         };
 
-    Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse>(
+    Connections_->RunDeferred<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::CreateSessionRequest, NYdbProtos::Table::CreateSessionResponse>(
         std::move(request),
         createSessionExtractor,
-        &Ydb::Table::V1::TableService::Stub::AsyncCreateSession,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncCreateSession,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         rpcSettings);
@@ -401,7 +401,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
 }
 
 TAsyncKeepAliveResult TTableClient::TImpl::KeepAlive(const TSession::TImpl* session, const TKeepAliveSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::KeepAliveRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::KeepAliveRequest>(settings);
     request.set_session_id(TStringType{session->GetId()});
 
     auto keepAliveResultPromise = NewPromise<TKeepAliveResult>();
@@ -409,16 +409,16 @@ TAsyncKeepAliveResult TTableClient::TImpl::KeepAlive(const TSession::TImpl* sess
 
     auto keepAliveExtractor = [keepAliveResultPromise, self]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
-            Ydb::Table::KeepAliveResult result;
+            NYdbProtos::Table::KeepAliveResult result;
             ESessionStatus sessionStatus = ESessionStatus::Unspecified;
             if (any) {
                 any->UnpackTo(&result);
 
                 switch (result.session_status()) {
-                    case Ydb::Table::KeepAliveResult_SessionStatus_SESSION_STATUS_READY:
+                    case NYdbProtos::Table::KeepAliveResult_SessionStatus_SESSION_STATUS_READY:
                         sessionStatus = ESessionStatus::Ready;
                     break;
-                    case Ydb::Table::KeepAliveResult_SessionStatus_SESSION_STATUS_BUSY:
+                    case NYdbProtos::Table::KeepAliveResult_SessionStatus_SESSION_STATUS_BUSY:
                         sessionStatus = ESessionStatus::Busy;
                     break;
                     default:
@@ -429,10 +429,10 @@ TAsyncKeepAliveResult TTableClient::TImpl::KeepAlive(const TSession::TImpl* sess
             keepAliveResultPromise.SetValue(std::move(val));
         };
 
-    Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::KeepAliveRequest, Ydb::Table::KeepAliveResponse>(
+    Connections_->RunDeferred<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::KeepAliveRequest, NYdbProtos::Table::KeepAliveResponse>(
         std::move(request),
         keepAliveExtractor,
-        &Ydb::Table::V1::TableService::Stub::AsyncKeepAlive,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncKeepAlive,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         TRpcRequestSettings::Make(settings, session->GetEndpointKey())
@@ -441,76 +441,76 @@ TAsyncKeepAliveResult TTableClient::TImpl::KeepAlive(const TSession::TImpl* sess
     return keepAliveResultPromise.GetFuture();
 }
 
-TFuture<TStatus> TTableClient::TImpl::CreateTable(Ydb::Table::CreateTableRequest&& request, const TCreateTableSettings& settings)
+TFuture<TStatus> TTableClient::TImpl::CreateTable(NYdbProtos::Table::CreateTableRequest&& request, const TCreateTableSettings& settings)
 {
-    return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::CreateTableRequest,Ydb::Table::CreateTableResponse>(
+    return RunSimple<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::CreateTableRequest,NYdbProtos::Table::CreateTableResponse>(
         std::move(request),
-        &Ydb::Table::V1::TableService::Stub::AsyncCreateTable,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncCreateTable,
         TRpcRequestSettings::Make(settings));
 }
 
-TFuture<TStatus> TTableClient::TImpl::AlterTable(Ydb::Table::AlterTableRequest&& request, const TAlterTableSettings& settings)
+TFuture<TStatus> TTableClient::TImpl::AlterTable(NYdbProtos::Table::AlterTableRequest&& request, const TAlterTableSettings& settings)
 {
-    return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse>(
+    return RunSimple<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::AlterTableRequest, NYdbProtos::Table::AlterTableResponse>(
         std::move(request),
-        &Ydb::Table::V1::TableService::Stub::AsyncAlterTable,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncAlterTable,
         TRpcRequestSettings::Make(settings));
 }
 
-TAsyncOperation TTableClient::TImpl::AlterTableLong(Ydb::Table::AlterTableRequest&& request, const TAlterTableSettings& settings)
+TAsyncOperation TTableClient::TImpl::AlterTableLong(NYdbProtos::Table::AlterTableRequest&& request, const TAlterTableSettings& settings)
 {
-    using Ydb::Table::V1::TableService;
-    using Ydb::Table::AlterTableRequest;
-    using Ydb::Table::AlterTableResponse;
+    using NYdbProtos::Table::V1::TableService;
+    using NYdbProtos::Table::AlterTableRequest;
+    using NYdbProtos::Table::AlterTableResponse;
     return RunOperation<TableService, AlterTableRequest, AlterTableResponse, TOperation>(
         std::move(request),
-        &Ydb::Table::V1::TableService::Stub::AsyncAlterTable,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncAlterTable,
         TRpcRequestSettings::Make(settings));
 }
 
 TFuture<TStatus> TTableClient::TImpl::CopyTable(const std::string& sessionId, const std::string& src, const std::string& dst,
     const TCopyTableSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Table::CopyTableRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::CopyTableRequest>(settings);
     request.set_session_id(TStringType{sessionId});
     request.set_source_path(TStringType{src});
     request.set_destination_path(TStringType{dst});
 
-    return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::CopyTableRequest, Ydb::Table::CopyTableResponse>(
+    return RunSimple<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::CopyTableRequest, NYdbProtos::Table::CopyTableResponse>(
         std::move(request),
-        &Ydb::Table::V1::TableService::Stub::AsyncCopyTable,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncCopyTable,
         TRpcRequestSettings::Make(settings));
 }
 
-TFuture<TStatus> TTableClient::TImpl::CopyTables(Ydb::Table::CopyTablesRequest&& request, const TCopyTablesSettings& settings)
+TFuture<TStatus> TTableClient::TImpl::CopyTables(NYdbProtos::Table::CopyTablesRequest&& request, const TCopyTablesSettings& settings)
 {
-    return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::CopyTablesRequest, Ydb::Table::CopyTablesResponse>(
+    return RunSimple<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::CopyTablesRequest, NYdbProtos::Table::CopyTablesResponse>(
         std::move(request),
-        &Ydb::Table::V1::TableService::Stub::AsyncCopyTables,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncCopyTables,
         TRpcRequestSettings::Make(settings));
 }
 
-TFuture<TStatus> TTableClient::TImpl::RenameTables(Ydb::Table::RenameTablesRequest&& request, const TRenameTablesSettings& settings)
+TFuture<TStatus> TTableClient::TImpl::RenameTables(NYdbProtos::Table::RenameTablesRequest&& request, const TRenameTablesSettings& settings)
 {
-    return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RenameTablesRequest, Ydb::Table::RenameTablesResponse>(
+    return RunSimple<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::RenameTablesRequest, NYdbProtos::Table::RenameTablesResponse>(
         std::move(request),
-        &Ydb::Table::V1::TableService::Stub::AsyncRenameTables,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncRenameTables,
         TRpcRequestSettings::Make(settings));
 }
 
 TFuture<TStatus> TTableClient::TImpl::DropTable(const std::string& sessionId, const std::string& path, const TDropTableSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::DropTableRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::DropTableRequest>(settings);
     request.set_session_id(TStringType{sessionId});
     request.set_path(TStringType{path});
 
-    return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse>(
+    return RunSimple<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::DropTableRequest, NYdbProtos::Table::DropTableResponse>(
         std::move(request),
-        &Ydb::Table::V1::TableService::Stub::AsyncDropTable,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncDropTable,
         TRpcRequestSettings::Make(settings));
 }
 
 TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const std::string& sessionId, const std::string& path, const TDescribeTableSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::DescribeTableRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::DescribeTableRequest>(settings);
     request.set_session_id(TStringType{sessionId});
     request.set_path(TStringType{path});
     if (settings.WithKeyShardBoundary_) {
@@ -537,7 +537,7 @@ TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const std::string& 
 
     auto extractor = [promise, settings]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
-            Ydb::Table::DescribeTableResult result;
+            NYdbProtos::Table::DescribeTableResult result;
             if (any) {
                 any->UnpackTo(&result);
             }
@@ -546,10 +546,10 @@ TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const std::string& 
             promise.SetValue(std::move(describeTableResult));
         };
 
-    Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::DescribeTableRequest, Ydb::Table::DescribeTableResponse>(
+    Connections_->RunDeferred<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::DescribeTableRequest, NYdbProtos::Table::DescribeTableResponse>(
         std::move(request),
         extractor,
-        &Ydb::Table::V1::TableService::Stub::AsyncDescribeTable,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncDescribeTable,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         TRpcRequestSettings::Make(settings));
@@ -558,25 +558,25 @@ TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const std::string& 
 }
 
 TAsyncDescribeExternalDataSourceResult TTableClient::TImpl::DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::DescribeExternalDataSourceRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::DescribeExternalDataSourceRequest>(settings);
     request.set_path(path);
 
     auto promise = NewPromise<TDescribeExternalDataSourceResult>();
 
     auto extractor = [promise, settings](google::protobuf::Any* any, TPlainStatus status) mutable {
-        Ydb::Table::DescribeExternalDataSourceResult proto;
+        NYdbProtos::Table::DescribeExternalDataSourceResult proto;
         if (any) {
             any->UnpackTo(&proto);
         }
         promise.SetValue(TDescribeExternalDataSourceResult(TStatus(std::move(status)), std::move(proto)));
     };
 
-    Connections_->RunDeferred<Ydb::Table::V1::TableService,
-                              Ydb::Table::DescribeExternalDataSourceRequest,
-                              Ydb::Table::DescribeExternalDataSourceResponse>(
+    Connections_->RunDeferred<NYdbProtos::Table::V1::TableService,
+                              NYdbProtos::Table::DescribeExternalDataSourceRequest,
+                              NYdbProtos::Table::DescribeExternalDataSourceResponse>(
         std::move(request),
         extractor,
-        &Ydb::Table::V1::TableService::Stub::AsyncDescribeExternalDataSource,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncDescribeExternalDataSource,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         TRpcRequestSettings::Make(settings)
@@ -586,25 +586,25 @@ TAsyncDescribeExternalDataSourceResult TTableClient::TImpl::DescribeExternalData
 }
 
 TAsyncDescribeExternalTableResult TTableClient::TImpl::DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::DescribeExternalTableRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::DescribeExternalTableRequest>(settings);
     request.set_path(path);
 
     auto promise = NewPromise<TDescribeExternalTableResult>();
 
     auto extractor = [promise, settings](google::protobuf::Any* any, TPlainStatus status) mutable {
-        Ydb::Table::DescribeExternalTableResult proto;
+        NYdbProtos::Table::DescribeExternalTableResult proto;
         if (any) {
             any->UnpackTo(&proto);
         }
         promise.SetValue(TDescribeExternalTableResult(TStatus(std::move(status)), std::move(proto)));
     };
 
-    Connections_->RunDeferred<Ydb::Table::V1::TableService,
-                              Ydb::Table::DescribeExternalTableRequest,
-                              Ydb::Table::DescribeExternalTableResponse>(
+    Connections_->RunDeferred<NYdbProtos::Table::V1::TableService,
+                              NYdbProtos::Table::DescribeExternalTableRequest,
+                              NYdbProtos::Table::DescribeExternalTableResponse>(
         std::move(request),
         extractor,
-        &Ydb::Table::V1::TableService::Stub::AsyncDescribeExternalTable,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncDescribeExternalTable,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         TRpcRequestSettings::Make(settings)
@@ -616,7 +616,7 @@ TAsyncDescribeExternalTableResult TTableClient::TImpl::DescribeExternalTable(con
 TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& session, const std::string& query,
     const TPrepareDataQuerySettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Table::PrepareDataQueryRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::PrepareDataQueryRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
     request.set_yql_text(TStringType{query});
 
@@ -629,7 +629,7 @@ TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& s
             TDataQuery dataQuery(*sessionPtr, query, "");
 
             if (any) {
-                Ydb::Table::PrepareQueryResult result;
+                NYdbProtos::Table::PrepareQueryResult result;
                 any->UnpackTo(&result);
 
                 if (status.Ok()) {
@@ -646,10 +646,10 @@ TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& s
 
     CollectQuerySize(query, QuerySizeHistogram);
 
-    Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::PrepareDataQueryRequest, Ydb::Table::PrepareDataQueryResponse>(
+    Connections_->RunDeferred<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::PrepareDataQueryRequest, NYdbProtos::Table::PrepareDataQueryResponse>(
         std::move(request),
         extractor,
-        &Ydb::Table::V1::TableService::Stub::AsyncPrepareDataQuery,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncPrepareDataQuery,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
@@ -661,20 +661,20 @@ TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& s
 TAsyncStatus TTableClient::TImpl::ExecuteSchemeQuery(const std::string& sessionId, const std::string& query,
     const TExecSchemeQuerySettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Table::ExecuteSchemeQueryRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::ExecuteSchemeQueryRequest>(settings);
     request.set_session_id(TStringType{sessionId});
     request.set_yql_text(TStringType{query});
 
-    return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::ExecuteSchemeQueryRequest, Ydb::Table::ExecuteSchemeQueryResponse>(
+    return RunSimple<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::ExecuteSchemeQueryRequest, NYdbProtos::Table::ExecuteSchemeQueryResponse>(
         std::move(request),
-        &Ydb::Table::V1::TableService::Stub::AsyncExecuteSchemeQuery,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncExecuteSchemeQuery,
         TRpcRequestSettings::Make(settings));
 }
 
 TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSession& session, const TTxSettings& txSettings,
     const TBeginTxSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Table::BeginTransactionRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::BeginTransactionRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
     SetTxSettings(txSettings, request.mutable_tx_settings());
 
@@ -684,7 +684,7 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             std::string txId;
             if (any) {
-                Ydb::Table::BeginTransactionResult result;
+                NYdbProtos::Table::BeginTransactionResult result;
                 any->UnpackTo(&result);
                 txId = result.tx_meta().id();
             }
@@ -694,10 +694,10 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
             promise.SetValue(std::move(beginTxResult));
         };
 
-    Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BeginTransactionRequest, Ydb::Table::BeginTransactionResponse>(
+    Connections_->RunDeferred<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::BeginTransactionRequest, NYdbProtos::Table::BeginTransactionResponse>(
         std::move(request),
         extractor,
-        &Ydb::Table::V1::TableService::Stub::AsyncBeginTransaction,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncBeginTransaction,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
@@ -709,7 +709,7 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
 TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSession& session, const std::string& txId,
     const TCommitTxSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Table::CommitTransactionRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::CommitTransactionRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
     request.set_tx_id(TStringType{txId});
     request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
@@ -720,7 +720,7 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             std::optional<TQueryStats> queryStats;
             if (any) {
-                Ydb::Table::CommitTransactionResult result;
+                NYdbProtos::Table::CommitTransactionResult result;
                 any->UnpackTo(&result);
 
                 if (result.has_query_stats()) {
@@ -732,10 +732,10 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
             promise.SetValue(std::move(commitTxResult));
         };
 
-    Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::CommitTransactionRequest, Ydb::Table::CommitTransactionResponse>(
+    Connections_->RunDeferred<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::CommitTransactionRequest, NYdbProtos::Table::CommitTransactionResponse>(
         std::move(request),
         extractor,
-        &Ydb::Table::V1::TableService::Stub::AsyncCommitTransaction,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncCommitTransaction,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
@@ -747,13 +747,13 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
 TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, const std::string& txId,
     const TRollbackTxSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Table::RollbackTransactionRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::RollbackTransactionRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
     request.set_tx_id(TStringType{txId});
 
-    return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RollbackTransactionRequest, Ydb::Table::RollbackTransactionResponse>(
+    return RunSimple<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::RollbackTransactionRequest, NYdbProtos::Table::RollbackTransactionResponse>(
         std::move(request),
-        &Ydb::Table::V1::TableService::Stub::AsyncRollbackTransaction,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncRollbackTransaction,
         TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
         );
 }
@@ -761,7 +761,7 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
 TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSession& session, const std::string& query,
     const TExplainDataQuerySettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Table::ExplainDataQueryRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::ExplainDataQueryRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
     request.set_yql_text(TStringType{query});
     request.set_collect_full_diagnostics(settings.WithCollectFullDiagnostics_);
@@ -774,7 +774,7 @@ TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSessio
             std::string plan;
             std::string diagnostics;
             if (any) {
-                Ydb::Table::ExplainQueryResult result;
+                NYdbProtos::Table::ExplainQueryResult result;
                 any->UnpackTo(&result);
                 ast = result.query_ast();
                 plan = result.query_plan();
@@ -785,10 +785,10 @@ TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSessio
             promise.SetValue(std::move(val));
         };
 
-    Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::ExplainDataQueryRequest, Ydb::Table::ExplainDataQueryResponse>(
+    Connections_->RunDeferred<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::ExplainDataQueryRequest, NYdbProtos::Table::ExplainDataQueryResponse>(
         std::move(request),
         extractor,
-        &Ydb::Table::V1::TableService::Stub::AsyncExplainDataQuery,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncExplainDataQuery,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
@@ -797,7 +797,7 @@ TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSessio
     return promise.GetFuture();
 }
 
-void TTableClient::TImpl::SetTypedValue(Ydb::TypedValue* protoValue, const TValue& value) {
+void TTableClient::TImpl::SetTypedValue(NYdbProtos::TypedValue* protoValue, const TValue& value) {
     protoValue->mutable_type()->CopyFrom(TProtoAccessor::GetProto(value.GetType()));
     protoValue->mutable_value()->CopyFrom(TProtoAccessor::GetProto(value));
 }
@@ -807,7 +807,7 @@ NThreading::TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TReadTableStrea
     const std::string& path,
     const TReadTableSettings& settings)
 {
-    auto request = MakeRequest<Ydb::Table::ReadTableRequest>();
+    auto request = MakeRequest<NYdbProtos::Table::ReadTableRequest>();
     request.set_session_id(TStringType{sessionId});
     request.set_path(TStringType{path});
     request.set_ordered(settings.Ordered_);
@@ -820,8 +820,8 @@ NThreading::TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TReadTableStrea
     if (settings.UseSnapshot_) {
         request.set_use_snapshot(
             settings.UseSnapshot_.value()
-            ? Ydb::FeatureFlag::ENABLED
-            : Ydb::FeatureFlag::DISABLED);
+            ? NYdbProtos::FeatureFlag::ENABLED
+            : NYdbProtos::FeatureFlag::DISABLED);
     }
 
     if (settings.From_) {
@@ -853,18 +853,18 @@ NThreading::TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TReadTableStrea
     if (settings.ReturnNotNullAsOptional_) {
         request.set_return_not_null_data_as_optional(
             settings.ReturnNotNullAsOptional_.value()
-            ? Ydb::FeatureFlag::ENABLED
-            : Ydb::FeatureFlag::DISABLED);
+            ? NYdbProtos::FeatureFlag::ENABLED
+            : NYdbProtos::FeatureFlag::DISABLED);
     }
 
     auto promise = NewPromise<std::pair<TPlainStatus, TReadTableStreamProcessorPtr>>();
 
-    Connections_->StartReadStream<Ydb::Table::V1::TableService, Ydb::Table::ReadTableRequest, Ydb::Table::ReadTableResponse>(
+    Connections_->StartReadStream<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::ReadTableRequest, NYdbProtos::Table::ReadTableResponse>(
         std::move(request),
         [promise] (TPlainStatus status, TReadTableStreamProcessorPtr processor) mutable {
             promise.SetValue(std::make_pair(status, processor));
         },
-        &Ydb::Table::V1::TableService::Stub::AsyncStreamReadTable,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncStreamReadTable,
         DbDriverState_,
         TRpcRequestSettings::Make(settings));
 
@@ -873,7 +873,7 @@ NThreading::TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TReadTableStrea
 }
 
 TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const std::string& path, TValue&& keys, const std::vector<std::string>& columns, const TReadRowsSettings& settings) {
-    auto request = MakeRequest<Ydb::Table::ReadRowsRequest>();
+    auto request = MakeRequest<NYdbProtos::Table::ReadRowsRequest>();
     request.set_path(TStringType{path});
     auto* protoKeys = request.mutable_keys();
     *protoKeys->mutable_type() = TProtoAccessor::GetProto(keys.GetType());
@@ -886,11 +886,11 @@ TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const std::string& path, TVal
 
     auto promise = NewPromise<TReadRowsResult>();
 
-    auto responseCb = [promise] (Ydb::Table::ReadRowsResponse* response, TPlainStatus status) mutable {
-        Ydb::ResultSet resultSet;
+    auto responseCb = [promise] (NYdbProtos::Table::ReadRowsResponse* response, TPlainStatus status) mutable {
+        NYdbProtos::ResultSet resultSet;
         // if there is no response status contains transport errors
         if (response) {
-            Ydb::StatusIds::StatusCode msgStatus = response->status();
+            NYdbProtos::StatusIds::StatusCode msgStatus = response->status();
             NYdb::NIssue::TIssues issues;
             NYdb::NIssue::IssuesFromMessage(response->issues(), issues);
             status = TPlainStatus(static_cast<EStatus>(msgStatus), std::move(issues));
@@ -900,10 +900,10 @@ TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const std::string& path, TVal
         promise.SetValue(std::move(val));
     };
 
-    Connections_->Run<Ydb::Table::V1::TableService, Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>(
+    Connections_->Run<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::ReadRowsRequest, NYdbProtos::Table::ReadRowsResponse>(
         std::move(request),
         responseCb,
-        &Ydb::Table::V1::TableService::Stub::AsyncReadRows,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncReadRows,
         DbDriverState_,
         TRpcRequestSettings::Make(settings)
         );
@@ -912,11 +912,11 @@ TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const std::string& path, TVal
 }
 
 TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, const TCloseSessionSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::DeleteSessionRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::DeleteSessionRequest>(settings);
     request.set_session_id(TStringType{sessionImpl->GetId()});
-    return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse>(
+    return RunSimple<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::DeleteSessionRequest, NYdbProtos::Table::DeleteSessionResponse>(
         std::move(request),
-        &Ydb::Table::V1::TableService::Stub::AsyncDeleteSession,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncDeleteSession,
         TRpcRequestSettings::Make(settings, sessionImpl->GetEndpointKey())
         );
 }
@@ -991,7 +991,7 @@ void TTableClient::TImpl::SetStatCollector(const NSdkStats::TStatCollector::TCli
 }
 
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::BulkUpsertRequest>(settings);
     request.set_table(TStringType{table});
     *request.mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType());
     *request.mutable_rows()->mutable_value() = rows.GetProto();
@@ -1005,10 +1005,10 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
             promise.SetValue(std::move(val));
         };
 
-    Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
+    Connections_->RunDeferred<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::BulkUpsertRequest, NYdbProtos::Table::BulkUpsertResponse>(
         std::move(request),
         extractor,
-        &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncBulkUpsert,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         TRpcRequestSettings::Make(settings));
@@ -1019,7 +1019,7 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, EDataFormat format,
     const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
+    auto request = MakeOperationRequest<NYdbProtos::Table::BulkUpsertRequest>(settings);
     request.set_table(TStringType{table});
     if (format == EDataFormat::ApacheArrow) {
         request.mutable_arrow_batch_settings()->set_schema(TStringType{schema});
@@ -1044,10 +1044,10 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
             promise.SetValue(std::move(val));
         };
 
-    Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
+    Connections_->RunDeferred<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::BulkUpsertRequest, NYdbProtos::Table::BulkUpsertResponse>(
         std::move(request),
         extractor,
-        &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncBulkUpsert,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         TRpcRequestSettings::Make(settings));
@@ -1056,10 +1056,10 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
 }
 
 TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TTableClient::TImpl::StreamExecuteScanQueryInternal(const std::string& query,
-    const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
+    const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>* params,
     const TStreamExecScanQuerySettings& settings)
 {
-    auto request = MakeRequest<Ydb::Table::ExecuteScanQueryRequest>();
+    auto request = MakeRequest<NYdbProtos::Table::ExecuteScanQueryRequest>();
     request.mutable_query()->set_yql_text(TStringType{query});
 
     if (params) {
@@ -1067,9 +1067,9 @@ TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TT
     }
 
     if (settings.Explain_) {
-        request.set_mode(Ydb::Table::ExecuteScanQueryRequest::MODE_EXPLAIN);
+        request.set_mode(NYdbProtos::Table::ExecuteScanQueryRequest::MODE_EXPLAIN);
     } else {
-        request.set_mode(Ydb::Table::ExecuteScanQueryRequest::MODE_EXEC);
+        request.set_mode(NYdbProtos::Table::ExecuteScanQueryRequest::MODE_EXEC);
     }
 
     request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
@@ -1078,15 +1078,15 @@ TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TT
     auto promise = NewPromise<std::pair<TPlainStatus, TScanQueryProcessorPtr>>();
 
     Connections_->StartReadStream<
-        Ydb::Table::V1::TableService,
-        Ydb::Table::ExecuteScanQueryRequest,
-        Ydb::Table::ExecuteScanQueryPartialResponse>
+        NYdbProtos::Table::V1::TableService,
+        NYdbProtos::Table::ExecuteScanQueryRequest,
+        NYdbProtos::Table::ExecuteScanQueryPartialResponse>
     (
         std::move(request),
         [promise] (TPlainStatus status, TScanQueryProcessorPtr processor) mutable {
             promise.SetValue(std::make_pair(status, processor));
         },
-        &Ydb::Table::V1::TableService::Stub::AsyncStreamExecuteScanQuery,
+        &NYdbProtos::Table::V1::TableService::Stub::AsyncStreamExecuteScanQuery,
         DbDriverState_,
         TRpcRequestSettings::Make(settings)
     );
@@ -1095,7 +1095,7 @@ TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TT
 }
 
 TAsyncScanQueryPartIterator TTableClient::TImpl::StreamExecuteScanQuery(const std::string& query,
-    const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
+    const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>* params,
     const TStreamExecScanQuerySettings& settings)
 {
     auto promise = NewPromise<TScanQueryPartIterator>();
@@ -1123,8 +1123,8 @@ TAsyncScanQueryPartIterator TTableClient::TImpl::StreamExecuteScanQuery(const st
 
 
 void TTableClient::TImpl::SetParams(
-    ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
-    Ydb::Table::ExecuteDataQueryRequest* request)
+    ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>* params,
+    NYdbProtos::Table::ExecuteDataQueryRequest* request)
 {
     if (params) {
         request->mutable_parameters()->swap(*params);
@@ -1132,14 +1132,14 @@ void TTableClient::TImpl::SetParams(
 }
 
 void TTableClient::TImpl::SetParams(
-    const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& params,
-    Ydb::Table::ExecuteDataQueryRequest* request)
+    const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>& params,
+    NYdbProtos::Table::ExecuteDataQueryRequest* request)
 {
     *request->mutable_parameters() = params;
 }
 
 void TTableClient::TImpl::CollectParams(
-    ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
+    ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>* params,
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> histgoram)
 {
 
@@ -1153,7 +1153,7 @@ void TTableClient::TImpl::CollectParams(
 }
 
 void TTableClient::TImpl::CollectParams(
-    const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& params,
+    const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>& params,
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> histgoram)
 {
 
@@ -1174,7 +1174,7 @@ void TTableClient::TImpl::CollectQuerySize(const std::string& query, NSdkStats::
 
 void TTableClient::TImpl::CollectQuerySize(const TDataQuery&, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>&) {}
 
-void TTableClient::TImpl::SetTxSettings(const TTxSettings& txSettings, Ydb::Table::TransactionSettings* proto)
+void TTableClient::TImpl::SetTxSettings(const TTxSettings& txSettings, NYdbProtos::Table::TransactionSettings* proto)
 {
     switch (txSettings.Mode_) {
         case TTxSettings::TS_SERIALIZABLE_RW:
@@ -1198,22 +1198,22 @@ void TTableClient::TImpl::SetTxSettings(const TTxSettings& txSettings, Ydb::Tabl
     }
 }
 
-void TTableClient::TImpl::SetQuery(const std::string& queryText, Ydb::Table::Query* query) {
+void TTableClient::TImpl::SetQuery(const std::string& queryText, NYdbProtos::Table::Query* query) {
     query->set_yql_text(TStringType{queryText});
 }
 
-void TTableClient::TImpl::SetQuery(const TDataQuery& queryData, Ydb::Table::Query* query) {
+void TTableClient::TImpl::SetQuery(const TDataQuery& queryData, NYdbProtos::Table::Query* query) {
     query->set_id(TStringType{queryData.GetId()});
 }
 
 void TTableClient::TImpl::SetQueryCachePolicy(const std::string&, const TExecDataQuerySettings& settings,
-    Ydb::Table::QueryCachePolicy* queryCachePolicy)
+    NYdbProtos::Table::QueryCachePolicy* queryCachePolicy)
 {
     queryCachePolicy->set_keep_in_cache(settings.KeepInQueryCache_.value_or(false));
 }
 
 void TTableClient::TImpl::SetQueryCachePolicy(const TDataQuery&, const TExecDataQuerySettings& settings,
-    Ydb::Table::QueryCachePolicy* queryCachePolicy) {
+    NYdbProtos::Table::QueryCachePolicy* queryCachePolicy) {
     queryCachePolicy->set_keep_in_cache(settings.KeepInQueryCache_.value_or(true));
 }
 

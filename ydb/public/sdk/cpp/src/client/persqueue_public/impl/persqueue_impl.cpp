@@ -72,16 +72,16 @@ std::shared_ptr<TPersQueueClient::TImpl> TPersQueueClient::TImpl::GetClientForEn
 }
 
 std::shared_ptr<TPersQueueClient::TImpl::IReadSessionConnectionProcessorFactory> TPersQueueClient::TImpl::CreateReadSessionConnectionProcessorFactory() {
-    using TService = Ydb::PersQueue::V1::PersQueueService;
-    using TRequest = Ydb::PersQueue::V1::MigrationStreamingReadClientMessage;
-    using TResponse = Ydb::PersQueue::V1::MigrationStreamingReadServerMessage;
+    using TService = NYdbProtos::PersQueue::V1::PersQueueService;
+    using TRequest = NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage;
+    using TResponse = NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage;
     return CreateConnectionProcessorFactory<TService, TRequest, TResponse>(&TService::Stub::AsyncMigrationStreamingRead, Connections_, DbDriverState_);
 }
 
 std::shared_ptr<TPersQueueClient::TImpl::IWriteSessionConnectionProcessorFactory> TPersQueueClient::TImpl::CreateWriteSessionConnectionProcessorFactory() {
-    using TService = Ydb::PersQueue::V1::PersQueueService;
-    using TRequest = Ydb::PersQueue::V1::StreamingWriteClientMessage;
-    using TResponse = Ydb::PersQueue::V1::StreamingWriteServerMessage;
+    using TService = NYdbProtos::PersQueue::V1::PersQueueService;
+    using TRequest = NYdbProtos::PersQueue::V1::StreamingWriteClientMessage;
+    using TResponse = NYdbProtos::PersQueue::V1::StreamingWriteServerMessage;
     return CreateConnectionProcessorFactory<TService, TRequest, TResponse>(&TService::Stub::AsyncStreamingWrite, Connections_, DbDriverState_);
 }
 

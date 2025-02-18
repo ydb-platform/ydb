@@ -37,11 +37,11 @@ Y_UNIT_TEST_SUITE(ToMessage) {
         TIssue issue;
         issue.SetMessage(nonUtf8String);
 
-        Ydb::Issue::IssueMessage msg;
+        NYdbProtos::Issue::IssueMessage msg;
         IssueToMessage(issue, &msg);
         NYdb::TStringType serialized;
         UNIT_ASSERT(msg.SerializeToString(&serialized));
-        Ydb::Issue::IssueMessage msg2;
+        NYdbProtos::Issue::IssueMessage msg2;
         UNIT_ASSERT(msg2.ParseFromString(serialized));
     }
 }

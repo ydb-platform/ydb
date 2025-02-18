@@ -26,7 +26,7 @@ namespace {
     }
 }
 
-Y_DECLARE_OUT_SPEC(, Ydb::Issue::IssueMessage, stream, value) {
+Y_DECLARE_OUT_SPEC(, NYdbProtos::Issue::IssueMessage, stream, value) {
     google::protobuf::TextFormat::Printer printer;
     printer.SetSingleLineMode(true);
     printer.SetUseUtf8StringEscaping(true);
@@ -43,14 +43,14 @@ Y_DECLARE_OUT_SPEC(, Ydb::Issue::IssueMessage, stream, value) {
     stream << "{ " << str << " }";
 }
 
-Y_DECLARE_OUT_SPEC(, Ydb::VariantType, stream, value) {
+Y_DECLARE_OUT_SPEC(, NYdbProtos::VariantType, stream, value) {
     stream << "{ " << ShortUtf8DebugString(value) << " }";
 }
 
-Y_DECLARE_OUT_SPEC(, Ydb::Topic::StreamReadMessage_ReadResponse, stream, value) {
+Y_DECLARE_OUT_SPEC(, NYdbProtos::Topic::StreamReadMessage_ReadResponse, stream, value) {
     stream << "{ " << ShortUtf8DebugString(value) << " }";
 }
 
-Y_DECLARE_OUT_SPEC(, Ydb::Topic::StreamReadMessage_CommitOffsetResponse, stream, value) {
+Y_DECLARE_OUT_SPEC(, NYdbProtos::Topic::StreamReadMessage_CommitOffsetResponse, stream, value) {
     stream << "{ " << ShortUtf8DebugString(value) << " }";
 }

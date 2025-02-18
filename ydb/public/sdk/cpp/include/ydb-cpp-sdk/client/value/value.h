@@ -2,12 +2,14 @@
 
 #include "fwd.h"
 
+#include <ydb-cpp-sdk/type_switcher.h>
+
 #include <util/datetime/base.h>
 
 #include <optional>
 #include <memory>
 
-namespace Ydb {
+YDB_PROTOS_NAMESPACE {
     class Type;
     class Value;
 }
@@ -20,14 +22,14 @@ class TResultSetParser;
 class TType {
     friend class TProtoAccessor;
 public:
-    TType(const Ydb::Type& typeProto);
-    TType(Ydb::Type&& typeProto);
+    TType(const NYdbProtos::Type& typeProto);
+    TType(NYdbProtos::Type&& typeProto);
 
     std::string ToString() const;
     void Out(IOutputStream& o) const;
 
-    const Ydb::Type& GetProto() const;
-    Ydb::Type& GetProto();
+    const NYdbProtos::Type& GetProto() const;
+    NYdbProtos::Type& GetProto();
 
 private:
     class TImpl;
@@ -225,7 +227,7 @@ private:
 
 struct TDecimalValue {
     std::string ToString() const;
-    TDecimalValue(const Ydb::Value& decimalValueProto, const TDecimalType& decimalType);
+    TDecimalValue(const NYdbProtos::Value& decimalValueProto, const TDecimalType& decimalType);
     TDecimalValue(const std::string& decimalString, uint8_t precision, uint8_t scale);
 
     TDecimalType DecimalType_;
@@ -240,7 +242,7 @@ struct TPgValue {
         VK_BINARY
     };
 
-    TPgValue(const Ydb::Value& pgValueProto, const TPgType& pgType);
+    TPgValue(const NYdbProtos::Value& pgValueProto, const TPgType& pgType);
     TPgValue(EPgValueKind kind, const std::string& content, const TPgType& pgType);
     bool IsNull() const;
     bool IsText() const;
@@ -253,7 +255,7 @@ struct TPgValue {
 struct TUuidValue {
     std::string ToString() const;
     TUuidValue(uint64_t low_128, uint64_t high_128);
-    TUuidValue(const Ydb::Value& uuidValueProto);
+    TUuidValue(const NYdbProtos::Value& uuidValueProto);
     TUuidValue(const std::string& uuidString);
 
     union {
@@ -267,14 +269,14 @@ class TValue {
     friend class TValueParser;
     friend class TProtoAccessor;
 public:
-    TValue(const TType& type, const Ydb::Value& valueProto);
-    TValue(const TType& type, Ydb::Value&& valueProto);
+    TValue(const TType& type, const NYdbProtos::Value& valueProto);
+    TValue(const TType& type, NYdbProtos::Value&& valueProto);
 
     const TType& GetType() const;
     TType & GetType();
 
-    const Ydb::Value& GetProto() const;
-    Ydb::Value& GetProto();
+    const NYdbProtos::Value& GetProto() const;
+    NYdbProtos::Value& GetProto();
 
 private:
     class TImpl;
@@ -394,7 +396,7 @@ public:
 
 private:
     TValueParser(const TType& type);
-    void Reset(const Ydb::Value& value);
+    void Reset(const NYdbProtos::Value& value);
 
     class TImpl;
     std::unique_ptr<TImpl> Impl_;
@@ -519,7 +521,7 @@ protected:
 
     TValueBuilderBase(const TType& type);
 
-    TValueBuilderBase(Ydb::Type& type, Ydb::Value& value);
+    TValueBuilderBase(NYdbProtos::Type& type, NYdbProtos::Value& value);
 
     ~TValueBuilderBase();
 

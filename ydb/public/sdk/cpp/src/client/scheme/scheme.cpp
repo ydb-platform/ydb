@@ -15,14 +15,14 @@ namespace NYdb::inline V3 {
 namespace NScheme {
 
 using namespace NThreading;
-using namespace Ydb::Scheme;
+using namespace NYdbProtos::Scheme;
 
-TPermissions::TPermissions(const ::Ydb::Scheme::Permissions& proto)
+TPermissions::TPermissions(const ::NYdbProtos::Scheme::Permissions& proto)
     : Subject(proto.subject())
     , PermissionNames(proto.permission_names().begin(), proto.permission_names().end())
 {}
 
-void TPermissions::SerializeTo(::Ydb::Scheme::Permissions& proto) const {
+void TPermissions::SerializeTo(::NYdbProtos::Scheme::Permissions& proto) const {
     proto.set_subject(TStringType{Subject});
     for (const auto& name : PermissionNames) {
         proto.add_permission_names(TStringType{name});
@@ -34,7 +34,7 @@ TVirtualTimestamp::TVirtualTimestamp(uint64_t planStep, uint64_t txId)
     , TxId(txId)
 {}
 
-TVirtualTimestamp::TVirtualTimestamp(const ::Ydb::VirtualTimestamp& proto)
+TVirtualTimestamp::TVirtualTimestamp(const ::NYdbProtos::VirtualTimestamp& proto)
     : TVirtualTimestamp(proto.plan_step(), proto.tx_id())
 {}
 
@@ -75,46 +75,46 @@ bool TVirtualTimestamp::operator!=(const TVirtualTimestamp& rhs) const {
     return !(*this == rhs);
 }
 
-static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) {
+static ESchemeEntryType ConvertProtoEntryType(::NYdbProtos::Scheme::Entry::Type entry) {
     switch (entry) {
-    case ::Ydb::Scheme::Entry::DIRECTORY:
+    case ::NYdbProtos::Scheme::Entry::DIRECTORY:
         return ESchemeEntryType::Directory;
-    case ::Ydb::Scheme::Entry::TABLE:
+    case ::NYdbProtos::Scheme::Entry::TABLE:
         return ESchemeEntryType::Table;
-    case ::Ydb::Scheme::Entry::COLUMN_TABLE:
+    case ::NYdbProtos::Scheme::Entry::COLUMN_TABLE:
         return ESchemeEntryType::ColumnTable;
-    case ::Ydb::Scheme::Entry::PERS_QUEUE_GROUP:
+    case ::NYdbProtos::Scheme::Entry::PERS_QUEUE_GROUP:
         return ESchemeEntryType::PqGroup;
-    case ::Ydb::Scheme::Entry::DATABASE:
+    case ::NYdbProtos::Scheme::Entry::DATABASE:
         return ESchemeEntryType::SubDomain;
-    case ::Ydb::Scheme::Entry::RTMR_VOLUME:
+    case ::NYdbProtos::Scheme::Entry::RTMR_VOLUME:
         return ESchemeEntryType::RtmrVolume;
-    case ::Ydb::Scheme::Entry::BLOCK_STORE_VOLUME:
+    case ::NYdbProtos::Scheme::Entry::BLOCK_STORE_VOLUME:
         return ESchemeEntryType::BlockStoreVolume;
-    case ::Ydb::Scheme::Entry::COORDINATION_NODE:
+    case ::NYdbProtos::Scheme::Entry::COORDINATION_NODE:
         return ESchemeEntryType::CoordinationNode;
-    case ::Ydb::Scheme::Entry::SEQUENCE:
+    case ::NYdbProtos::Scheme::Entry::SEQUENCE:
         return ESchemeEntryType::Sequence;
-    case ::Ydb::Scheme::Entry::REPLICATION:
+    case ::NYdbProtos::Scheme::Entry::REPLICATION:
         return ESchemeEntryType::Replication;
-    case ::Ydb::Scheme::Entry::TOPIC:
+    case ::NYdbProtos::Scheme::Entry::TOPIC:
         return ESchemeEntryType::Topic;
-    case ::Ydb::Scheme::Entry::COLUMN_STORE:
+    case ::NYdbProtos::Scheme::Entry::COLUMN_STORE:
         return ESchemeEntryType::ColumnStore;
-    case ::Ydb::Scheme::Entry::EXTERNAL_TABLE:
+    case ::NYdbProtos::Scheme::Entry::EXTERNAL_TABLE:
         return ESchemeEntryType::ExternalTable;
-    case ::Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE:
+    case ::NYdbProtos::Scheme::Entry::EXTERNAL_DATA_SOURCE:
         return ESchemeEntryType::ExternalDataSource;
-    case ::Ydb::Scheme::Entry::VIEW:
+    case ::NYdbProtos::Scheme::Entry::VIEW:
         return ESchemeEntryType::View;
-    case ::Ydb::Scheme::Entry::RESOURCE_POOL:
+    case ::NYdbProtos::Scheme::Entry::RESOURCE_POOL:
         return ESchemeEntryType::ResourcePool;
     default:
         return ESchemeEntryType::Unknown;
     }
 }
 
-TSchemeEntry::TSchemeEntry(const ::Ydb::Scheme::Entry& proto)
+TSchemeEntry::TSchemeEntry(const ::NYdbProtos::Scheme::Entry& proto)
     : Name(proto.name())
     , Owner(proto.owner())
     , Type(ConvertProtoEntryType(proto.type()))
@@ -134,29 +134,29 @@ void TSchemeEntry::Out(IOutputStream& out) const {
         << " }";
 }
 
-void TSchemeEntry::SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request) const {
+void TSchemeEntry::SerializeTo(::NYdbProtos::Scheme::ModifyPermissionsRequest& request) const {
     request.mutable_actions()->Add()->set_change_owner(TStringType{Owner});
     for (const auto& permission : Permissions) {
         permission.SerializeTo(*request.mutable_actions()->Add()->mutable_grant());
     }
 }
 
-TModifyPermissionsSettings::TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request) {
+TModifyPermissionsSettings::TModifyPermissionsSettings(const ::NYdbProtos::Scheme::ModifyPermissionsRequest& request) {
     for (const auto& action : request.actions()) {
         switch (action.action_case()) {
-            case Ydb::Scheme::PermissionsAction::kGrant:
+            case NYdbProtos::Scheme::PermissionsAction::kGrant:
                 AddGrantPermissions(action.grant());
                 break;
-            case Ydb::Scheme::PermissionsAction::kRevoke:
+            case NYdbProtos::Scheme::PermissionsAction::kRevoke:
                 AddRevokePermissions(action.revoke());
                 break;
-            case Ydb::Scheme::PermissionsAction::kSet:
+            case NYdbProtos::Scheme::PermissionsAction::kSet:
                 AddSetPermissions(action.set());
                 break;
-            case Ydb::Scheme::PermissionsAction::kChangeOwner:
+            case NYdbProtos::Scheme::PermissionsAction::kChangeOwner:
                 AddChangeOwner(action.change_owner());
                 break;
-            case Ydb::Scheme::PermissionsAction::ACTION_NOT_SET:
+            case NYdbProtos::Scheme::PermissionsAction::ACTION_NOT_SET:
                 break;
         }
     }
@@ -168,27 +168,27 @@ public:
         : TClientImplCommon(std::move(connections), settings) {}
 
     TAsyncStatus MakeDirectory(const std::string& path, const TMakeDirectorySettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Scheme::MakeDirectoryRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Scheme::MakeDirectoryRequest>(settings);
         request.set_path(TStringType{path});
 
-        return RunSimple<Ydb::Scheme::V1::SchemeService, MakeDirectoryRequest, MakeDirectoryResponse>(
+        return RunSimple<NYdbProtos::Scheme::V1::SchemeService, MakeDirectoryRequest, MakeDirectoryResponse>(
             std::move(request),
-            &Ydb::Scheme::V1::SchemeService::Stub::AsyncMakeDirectory,
+            &NYdbProtos::Scheme::V1::SchemeService::Stub::AsyncMakeDirectory,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus RemoveDirectory(const std::string& path, const TRemoveDirectorySettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Scheme::RemoveDirectoryRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Scheme::RemoveDirectoryRequest>(settings);
         request.set_path(TStringType{path});
 
-        return RunSimple<Ydb::Scheme::V1::SchemeService, RemoveDirectoryRequest, RemoveDirectoryResponse>(
+        return RunSimple<NYdbProtos::Scheme::V1::SchemeService, RemoveDirectoryRequest, RemoveDirectoryResponse>(
             std::move(request),
-            &Ydb::Scheme::V1::SchemeService::Stub::AsyncRemoveDirectory,
+            &NYdbProtos::Scheme::V1::SchemeService::Stub::AsyncRemoveDirectory,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncDescribePathResult DescribePath(const std::string& path, const TDescribePathSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Scheme::DescribePathRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Scheme::DescribePathRequest>(settings);
         request.set_path(TStringType{path});
 
         auto promise = NThreading::NewPromise<TDescribePathResult>();
@@ -203,10 +203,10 @@ public:
                 promise.SetValue(TDescribePathResult(TStatus(std::move(status)), result.self()));
             };
 
-        Connections_->RunDeferred<Ydb::Scheme::V1::SchemeService, DescribePathRequest, DescribePathResponse>(
+        Connections_->RunDeferred<NYdbProtos::Scheme::V1::SchemeService, DescribePathRequest, DescribePathResponse>(
             std::move(request),
             extractor,
-            &Ydb::Scheme::V1::SchemeService::Stub::AsyncDescribePath,
+            &NYdbProtos::Scheme::V1::SchemeService::Stub::AsyncDescribePath,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -215,7 +215,7 @@ public:
     }
 
     TAsyncListDirectoryResult ListDirectory(const std::string& path, const TListDirectorySettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Scheme::ListDirectoryRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Scheme::ListDirectoryRequest>(settings);
         request.set_path(TStringType{path});
 
         auto promise = NThreading::NewPromise<TListDirectoryResult>();
@@ -236,10 +236,10 @@ public:
                 promise.SetValue(TListDirectoryResult(TStatus(std::move(status)), result.self(), std::move(children)));
             };
 
-        Connections_->RunDeferred<Ydb::Scheme::V1::SchemeService, ListDirectoryRequest, ListDirectoryResponse>(
+        Connections_->RunDeferred<NYdbProtos::Scheme::V1::SchemeService, ListDirectoryRequest, ListDirectoryResponse>(
             std::move(request),
             extractor,
-            &Ydb::Scheme::V1::SchemeService::Stub::AsyncListDirectory,
+            &NYdbProtos::Scheme::V1::SchemeService::Stub::AsyncListDirectory,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -255,7 +255,7 @@ public:
     }
 
     TAsyncStatus ModifyPermissions(const std::string& path, const TModifyPermissionsSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Scheme::ModifyPermissionsRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Scheme::ModifyPermissionsRequest>(settings);
         request.set_path(TStringType{path});
         if (settings.ClearAcl_) {
             request.set_clear_permissions(true);
@@ -286,9 +286,9 @@ public:
             }
         }
 
-        return RunSimple<Ydb::Scheme::V1::SchemeService, ModifyPermissionsRequest, ModifyPermissionsResponse>(
+        return RunSimple<NYdbProtos::Scheme::V1::SchemeService, ModifyPermissionsRequest, ModifyPermissionsResponse>(
             std::move(request),
-            &Ydb::Scheme::V1::SchemeService::Stub::AsyncModifyPermissions,
+            &NYdbProtos::Scheme::V1::SchemeService::Stub::AsyncModifyPermissions,
             TRpcRequestSettings::Make(settings));
     }
 

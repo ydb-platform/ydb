@@ -135,7 +135,7 @@ void TWriteSessionImpl::DoCdsRequest(TDuration delay) {
         if (!cdsRequestIsUnnecessary) {
             auto extractor = [cbContext = SelfContext]
                     (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult result;
+                NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
@@ -145,7 +145,7 @@ void TWriteSessionImpl::DoCdsRequest(TDuration delay) {
                 }
             };
 
-            Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest req;
+            NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersRequest req;
             auto* params = req.add_write_sessions();
             params->set_topic(TStringType{Settings.Path_});
             params->set_source_id(TStringType{Settings.MessageGroupId_});
@@ -157,12 +157,12 @@ void TWriteSessionImpl::DoCdsRequest(TDuration delay) {
             LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Do schedule cds request after " << delay.MilliSeconds() << " ms\n");
             auto cdsRequestCall = [req_=std::move(req), extr=std::move(extractor), connections = std::shared_ptr<TGRpcConnectionsImpl>(Connections), dbState=DbDriverState, settings=Settings]() mutable {
                 LOG_LAZY(dbState->Log, TLOG_INFO, TStringBuilder() << "MessageGroupId [" << settings.MessageGroupId_ << "] Running cds request ms\n");
-                connections->RunDeferred<Ydb::PersQueue::V1::ClusterDiscoveryService,
-                                        Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest,
-                                        Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResponse>(
+                connections->RunDeferred<NYdbProtos::PersQueue::V1::ClusterDiscoveryService,
+                                        NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersRequest,
+                                        NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersResponse>(
                     std::move(req_),
                     std::move(extr),
-                    &Ydb::PersQueue::V1::ClusterDiscoveryService::Stub::AsyncDiscoverClusters,
+                    &NYdbProtos::PersQueue::V1::ClusterDiscoveryService::Stub::AsyncDiscoverClusters,
                     dbState,
                     INITIAL_DEFERRED_CALL_DELAY,
                     TRpcRequestSettings::Make(settings)); // TODO: make client timeout setting
@@ -179,7 +179,7 @@ void TWriteSessionImpl::DoCdsRequest(TDuration delay) {
 }
 
 void TWriteSessionImpl::OnCdsResponse(
-        TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result
+        TStatus& status, const NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersResult& result
 ) {
     LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Got CDS response: \n" << result.ShortDebugString());
     std::string endpoint, name;
@@ -200,7 +200,7 @@ void TWriteSessionImpl::OnCdsResponse(
     EStatus errorStatus = EStatus::INTERNAL_ERROR;
     {
         std::lock_guard guard(Lock);
-        const Ydb::PersQueue::ClusterDiscovery::WriteSessionClusters& wsClusters = result.write_sessions_clusters(0);
+        const NYdbProtos::PersQueue::ClusterDiscovery::WriteSessionClusters& wsClusters = result.write_sessions_clusters(0);
         bool isFirst = true;
 
         for (const auto& clusterInfo : wsClusters.clusters()) {
@@ -564,7 +564,7 @@ void TWriteSessionImpl::OnConnect(
 void TWriteSessionImpl::InitImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    Ydb::PersQueue::V1::StreamingWriteClientMessage req;
+    NYdbProtos::PersQueue::V1::StreamingWriteClientMessage req;
     auto* init = req.mutable_init_request();
     init->set_topic(TStringType{Settings.Path_});
     init->set_message_group_id(TStringType{Settings.MessageGroupId_});

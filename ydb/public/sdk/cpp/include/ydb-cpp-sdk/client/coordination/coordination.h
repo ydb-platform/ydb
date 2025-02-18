@@ -1,8 +1,9 @@
 #pragma once
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
-namespace Ydb {
+YDB_PROTOS_NAMESPACE {
 namespace Coordination {
     class Config;
     class CreateNodeRequest;
@@ -97,7 +98,7 @@ enum class ERateLimiterCountersMode {
 //! Represents coordination node description
 class TNodeDescription {
 public:
-    TNodeDescription(const Ydb::Coordination::DescribeNodeResult& desc);
+    TNodeDescription(const NYdbProtos::Coordination::DescribeNodeResult& desc);
 
     const std::optional<TDuration>& GetSelfCheckPeriod() const;
     const std::optional<TDuration>& GetSessionGracePeriod() const;
@@ -107,9 +108,9 @@ public:
 
     const std::string& GetOwner() const;
     const std::vector<NScheme::TPermissions>& GetEffectivePermissions() const;
-    const Ydb::Coordination::DescribeNodeResult& GetProto() const;
+    const NYdbProtos::Coordination::DescribeNodeResult& GetProto() const;
 
-    void SerializeTo(Ydb::Coordination::CreateNodeRequest& creationRequest) const;
+    void SerializeTo(NYdbProtos::Coordination::CreateNodeRequest& creationRequest) const;
 
 private:
     struct TImpl;
@@ -123,7 +124,7 @@ class TSemaphoreSession {
 public:
     TSemaphoreSession();
 
-    TSemaphoreSession(const Ydb::Coordination::SemaphoreSession& desc);
+    TSemaphoreSession(const NYdbProtos::Coordination::SemaphoreSession& desc);
 
     uint64_t GetOrderId() const { return OrderId_; }
     uint64_t GetSessionId() const { return SessionId_; }
@@ -146,7 +147,7 @@ class TSemaphoreDescription {
 public:
     TSemaphoreDescription();
 
-    TSemaphoreDescription(const Ydb::Coordination::SemaphoreDescription& desc);
+    TSemaphoreDescription(const NYdbProtos::Coordination::SemaphoreDescription& desc);
 
     const std::string& GetName() const { return Name_; }
     const std::string& GetData() const { return Data_; }
@@ -195,7 +196,7 @@ struct TNodeSettings : public TOperationRequestSettings<TDerived> {
 
 struct TCreateNodeSettings : public TNodeSettings<TCreateNodeSettings> {
     TCreateNodeSettings() = default;
-    TCreateNodeSettings(const Ydb::Coordination::Config& config);
+    TCreateNodeSettings(const NYdbProtos::Coordination::Config& config);
 };
 struct TAlterNodeSettings : public TNodeSettings<TAlterNodeSettings> { };
 struct TDropNodeSettings : public TOperationRequestSettings<TDropNodeSettings> { };

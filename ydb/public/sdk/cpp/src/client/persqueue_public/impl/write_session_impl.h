@@ -159,8 +159,8 @@ private:
     friend class NTests::TSimpleWriteSessionTestAdapter;
 
 private:
-    using TClientMessage = Ydb::PersQueue::V1::StreamingWriteClientMessage;
-    using TServerMessage = Ydb::PersQueue::V1::StreamingWriteServerMessage;
+    using TClientMessage = NYdbProtos::PersQueue::V1::StreamingWriteClientMessage;
+    using TServerMessage = NYdbProtos::PersQueue::V1::StreamingWriteServerMessage;
     using IWriteSessionConnectionProcessorFactory =
             TPersQueueClient::TImpl::IWriteSessionConnectionProcessorFactory;
     using IProcessor = IWriteSessionConnectionProcessorFactory::IProcessor;
@@ -335,7 +335,7 @@ private:
     void InitWriter();
 
     void DoCdsRequest(TDuration delay = TDuration::Zero());
-    void OnCdsResponse(TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result);
+    void OnCdsResponse(TStatus& status, const NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersResult& result);
     void OnConnect(TPlainStatus&& st, typename IProcessor::TPtr&& processor,
             const NYdbGrpc::IQueueClientContextPtr& connectContext);
     void OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext);
@@ -355,7 +355,7 @@ private:
     TMemoryUsageChange OnCompressedImpl(TBlock&& block);
 
     //std::string GetDebugIdentity() const;
-    Ydb::PersQueue::V1::StreamingWriteClientMessage GetInitClientMessage();
+    NYdbProtos::PersQueue::V1::StreamingWriteClientMessage GetInitClientMessage();
     bool CleanupOnAcknowledged(ui64 id);
     bool IsReadyToSendNextImpl();
     void DumpState();

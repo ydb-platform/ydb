@@ -19,7 +19,7 @@ namespace NYdb::inline V3 {
 namespace NExport {
 
 using namespace NThreading;
-using namespace Ydb::Export;
+using namespace NYdbProtos::Export;
 
 /// Common
 namespace {
@@ -41,7 +41,7 @@ std::vector<TExportItemProgress> ItemsProgressFromProto(const google::protobuf::
 } // anonymous
 
 /// YT
-TExportToYtResponse::TExportToYtResponse(TStatus&& status, Ydb::Operations::Operation&& operation)
+TExportToYtResponse::TExportToYtResponse(TStatus&& status, NYdbProtos::Operations::Operation&& operation)
     : TOperation(std::move(status), std::move(operation))
 {
     ExportToYtMetadata metadata;
@@ -70,7 +70,7 @@ const TExportToYtResponse::TMetadata& TExportToYtResponse::Metadata() const {
 }
 
 /// S3
-TExportToS3Response::TExportToS3Response(TStatus&& status, Ydb::Operations::Operation&& operation)
+TExportToS3Response::TExportToS3Response(TStatus&& status, NYdbProtos::Operations::Operation&& operation)
     : TOperation(std::move(status), std::move(operation))
 {
     ExportToS3Metadata metadata;

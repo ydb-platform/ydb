@@ -31,36 +31,36 @@ bool DecodePreparedQueryIdCompat(const std::string& in, std::string& out) {
     return false;
 }
 
-std::string ProtoToString(const Ydb::TOperationId& proto) {
+std::string ProtoToString(const NYdbProtos::TOperationId& proto) {
     using namespace ::google::protobuf;
     const Reflection& reflection = *proto.GetReflection();
     std::vector<const FieldDescriptor*> fields;
     reflection.ListFields(proto, &fields);
     TStringStream res;
     switch (proto.kind()) {
-        case Ydb::TOperationId::OPERATION_DDL:
-        case Ydb::TOperationId::OPERATION_DML:
+        case NYdbProtos::TOperationId::OPERATION_DDL:
+        case NYdbProtos::TOperationId::OPERATION_DML:
             res << "ydb://operation";
             break;
-        case Ydb::TOperationId::SESSION_YQL:
+        case NYdbProtos::TOperationId::SESSION_YQL:
             res << "ydb://session";
             break;
-        case Ydb::TOperationId::PREPARED_QUERY_ID:
+        case NYdbProtos::TOperationId::PREPARED_QUERY_ID:
             res << "ydb://preparedqueryid";
             break;
-        case Ydb::TOperationId::CMS_REQUEST:
+        case NYdbProtos::TOperationId::CMS_REQUEST:
             res << "ydb://cmsrequest";
             break;
-        case Ydb::TOperationId::EXPORT:
+        case NYdbProtos::TOperationId::EXPORT:
             res << "ydb://export";
             break;
-        case Ydb::TOperationId::IMPORT:
+        case NYdbProtos::TOperationId::IMPORT:
             res << "ydb://import";
             break;
-        case Ydb::TOperationId::BUILD_INDEX:
+        case NYdbProtos::TOperationId::BUILD_INDEX:
             res << "ydb://buildindex";
             break;
-        case Ydb::TOperationId::SCRIPT_EXECUTION:
+        case NYdbProtos::TOperationId::SCRIPT_EXECUTION:
             res << "ydb://scriptexec";
             break;
         default:
@@ -79,7 +79,7 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
                 }
                 for (int i = 0; i < size; i++) {
                     const auto& message = reflection.GetRepeatedMessage(proto, field, i);
-                    const auto& data = dynamic_cast<const Ydb::TOperationId::TData&>(message);
+                    const auto& data = dynamic_cast<const NYdbProtos::TOperationId::TData&>(message);
                     TUri::ReEncode(res, data.key());
                     res << "=";
                     TUri::ReEncode(res, data.value());
@@ -107,12 +107,12 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
 class TOperationId::TImpl {
 public:
     TImpl() {
-        Proto.set_kind(Ydb::TOperationId::UNUSED);
+        Proto.set_kind(NYdbProtos::TOperationId::UNUSED);
     }
 
     TImpl(const std::string &string, bool allowEmpty) {
         if (allowEmpty && string.empty()) {
-            Proto.set_kind(Ydb::TOperationId::UNUSED);
+            Proto.set_kind(NYdbProtos::TOperationId::UNUSED);
             return;
         }
 
@@ -134,7 +134,7 @@ public:
             ythrow yexception() << "Invalid operation kind: " << kind;
         }
 
-        Proto.set_kind(static_cast<Ydb::TOperationId::EKind>(kind));
+        Proto.set_kind(static_cast<NYdbProtos::TOperationId::EKind>(kind));
 
         std::string query = uri.PrintS(TField::FlagQuery);
 
@@ -165,11 +165,11 @@ public:
 
     ~TImpl() = default;
 
-    Ydb::TOperationId& GetProto() {
+    NYdbProtos::TOperationId& GetProto() {
         return Proto;
     }
 
-    const Ydb::TOperationId& GetProto() const {
+    const NYdbProtos::TOperationId& GetProto() const {
         return Proto;
     }
 
@@ -205,7 +205,7 @@ private:
         }
     }
 
-    Ydb::TOperationId Proto;
+    NYdbProtos::TOperationId Proto;
     std::unordered_map<std::string, std::vector<const std::string*>> Index;
 };
 
@@ -244,7 +244,7 @@ TOperationId::EKind TOperationId::GetKind() const {
 }
 
 void TOperationId::SetKind(const EKind& kind) {
-    Impl->GetProto().set_kind(static_cast<Ydb::TOperationId_EKind>(kind));
+    Impl->GetProto().set_kind(static_cast<NYdbProtos::TOperationId_EKind>(kind));
 }
 
 std::vector<TOperationId::TData> TOperationId::GetData() const {
@@ -271,11 +271,11 @@ std::string TOperationId::ToString() const {
     return ProtoToString(Impl->GetProto());
 }
 
-const Ydb::TOperationId& TOperationId::GetProto() const {
+const NYdbProtos::TOperationId& TOperationId::GetProto() const {
     return Impl->GetProto();
 }
 
-void AddOptionalValue(Ydb::TOperationId& proto, const std::string& key, const std::string& value) {
+void AddOptionalValue(NYdbProtos::TOperationId& proto, const std::string& key, const std::string& value) {
     auto data = proto.add_data();
     data->set_key(NYdb::TStringType{key});
     data->set_value(NYdb::TStringType{value});

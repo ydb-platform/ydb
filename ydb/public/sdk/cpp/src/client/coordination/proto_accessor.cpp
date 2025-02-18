@@ -4,7 +4,7 @@
 
 namespace NYdb::inline V3 {
 
-const Ydb::Coordination::DescribeNodeResult& TProtoAccessor::GetProto(const NCoordination::TNodeDescription& nodeDescription) {
+const NYdbProtos::Coordination::DescribeNodeResult& TProtoAccessor::GetProto(const NCoordination::TNodeDescription& nodeDescription) {
     return nodeDescription.GetProto();
 }
 

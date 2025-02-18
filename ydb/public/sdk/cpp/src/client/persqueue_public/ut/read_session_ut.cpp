@@ -32,8 +32,8 @@ using namespace ::testing; // Google mock.
                   "Real event got: " << DebugString(event)) \
     /**/
 
-TString Compress(const TString& sourceData, Ydb::PersQueue::V1::Codec codec = Ydb::PersQueue::V1::CODEC_GZIP) {
-    if (codec == Ydb::PersQueue::V1::CODEC_RAW || codec == Ydb::PersQueue::V1::CODEC_UNSPECIFIED) {
+TString Compress(const TString& sourceData, NYdbProtos::PersQueue::V1::Codec codec = NYdbProtos::PersQueue::V1::CODEC_GZIP) {
+    if (codec == NYdbProtos::PersQueue::V1::CODEC_RAW || codec == NYdbProtos::PersQueue::V1::CODEC_UNSPECIFIED) {
         return sourceData;
     }
 
@@ -41,13 +41,13 @@ TString Compress(const TString& sourceData, Ydb::PersQueue::V1::Codec codec = Yd
     TStringOutput out(compressed);
     THolder<IOutputStream> coder;
     switch (codec) {
-    case Ydb::PersQueue::V1::CODEC_GZIP:
+    case NYdbProtos::PersQueue::V1::CODEC_GZIP:
         coder = MakeHolder<TZLibCompress>(&out, ZLib::GZip);
         break;
-    case Ydb::PersQueue::V1::CODEC_LZOP:
+    case NYdbProtos::PersQueue::V1::CODEC_LZOP:
         throw yexception() << "LZO codec is disabled";
         break;
-    case Ydb::PersQueue::V1::CODEC_ZSTD:
+    case NYdbProtos::PersQueue::V1::CODEC_ZSTD:
         coder = MakeHolder<TZstdCompress>(&out);
         break;
     default:
@@ -195,11 +195,11 @@ private:
     std::queue<std::future<void>> CallbackFutures;
 };
 
-struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::V1::MigrationStreamingReadClientMessage, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>::IProcessor {
+struct TMockReadSessionProcessor : public TMockProcessorFactory<NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage, NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage>::IProcessor {
     // Request to read.
     struct TClientReadInfo {
         TReadCallback Callback;
-        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage* Dst;
+        NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage* Dst;
 
         operator bool() const {
             return Dst != nullptr;
@@ -209,7 +209,7 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
     // Response from server.
     struct TServerReadInfo {
         NYdbGrpc::TGrpcStatus Status;
-        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage Response;
+        NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage Response;
 
         TServerReadInfo& Failure(grpc::StatusCode status = grpc::StatusCode::UNAVAILABLE, const TString& message = {}, bool internal = false) {
             Status.GRpcStatusCode = status;
@@ -277,7 +277,7 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
             return *this;
         }
 
-        TServerReadInfo& Message(ui64 offset, const TString& data, Ydb::PersQueue::V1::Codec codec, ui64 seqNo = 1, TInstant createTimestamp = TInstant::MilliSeconds(42)) {
+        TServerReadInfo& Message(ui64 offset, const TString& data, NYdbProtos::PersQueue::V1::Codec codec, ui64 seqNo = 1, TInstant createTimestamp = TInstant::MilliSeconds(42)) {
             const int lastPartitionData = Response.data_batch().partition_data_size();
             UNIT_ASSERT(lastPartitionData > 0);
             auto* partitionData = Response.mutable_data_batch()->mutable_partition_data(lastPartitionData - 1);
@@ -293,11 +293,11 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
             return *this;
         }
 
-        TServerReadInfo& CompressMessage(ui64 offset, const TString& sourceData, Ydb::PersQueue::V1::Codec codec = Ydb::PersQueue::V1::CODEC_GZIP, ui64 seqNo = 1, TInstant createTimestamp = TInstant::MilliSeconds(42)) {
+        TServerReadInfo& CompressMessage(ui64 offset, const TString& sourceData, NYdbProtos::PersQueue::V1::Codec codec = NYdbProtos::PersQueue::V1::CODEC_GZIP, ui64 seqNo = 1, TInstant createTimestamp = TInstant::MilliSeconds(42)) {
             return Message(offset, Compress(sourceData, codec), codec, seqNo, createTimestamp);
         }
 
-        TServerReadInfo& BrokenCompressMessage(ui64 offset, const TString& sourceData, Ydb::PersQueue::V1::Codec codec = Ydb::PersQueue::V1::CODEC_GZIP, ui64 seqNo = 1, TInstant createTimestamp = TInstant::MilliSeconds(42)) {
+        TServerReadInfo& BrokenCompressMessage(ui64 offset, const TString& sourceData, NYdbProtos::PersQueue::V1::Codec codec = NYdbProtos::PersQueue::V1::CODEC_GZIP, ui64 seqNo = 1, TInstant createTimestamp = TInstant::MilliSeconds(42)) {
             return Message(offset, "broken_header_" + Compress(sourceData, codec), codec, seqNo, createTimestamp);
         }
 
@@ -346,7 +346,7 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
         UNIT_ASSERT_C(false, "This method is not expected to be called");
     }
 
-    void Read(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage* response, TReadCallback callback) override {
+    void Read(NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage* response, TReadCallback callback) override {
         with_lock (Lock) {
             UNIT_ASSERT(!ActiveRead);
             ActiveRead.Callback = std::move(callback);
@@ -357,39 +357,39 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
         }
     }
 
-    void Write(Ydb::PersQueue::V1::MigrationStreamingReadClientMessage&& request, TWriteCallback callback) override {
+    void Write(NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage&& request, TWriteCallback callback) override {
         UNIT_ASSERT(!callback); // Read session doesn't set callbacks.
         switch (request.request_case()) {
-        case Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::kInitRequest:
+        case NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::kInitRequest:
             OnInitRequest(request.init_request());
             break;
-        case Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::kRead:
+        case NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::kRead:
             OnReadRequest(request.read());
             break;
-        case Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::kStartRead:
+        case NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::kStartRead:
             OnStartReadRequest(request.start_read());
             break;
-        case Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::kCommit:
+        case NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::kCommit:
             OnCommitRequest(request.commit());
             break;
-        case Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::kReleased:
+        case NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::kReleased:
             OnReleasedRequest(request.released());
             break;
-        case Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::kStatus:
+        case NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::kStatus:
             OnStatusRequest(request.status());
             break;
-        case Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::REQUEST_NOT_SET:
+        case NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::REQUEST_NOT_SET:
             UNIT_ASSERT_C(false, "Invalid request");
             break;
         }
     }
 
-    MOCK_METHOD(void, OnInitRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::InitRequest&), ());
-    MOCK_METHOD(void, OnReadRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Read&), ());
-    MOCK_METHOD(void, OnStartReadRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::StartRead&), ());
-    MOCK_METHOD(void, OnCommitRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit&), ());
-    MOCK_METHOD(void, OnReleasedRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Released&), ());
-    MOCK_METHOD(void, OnStatusRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Status&), ());
+    MOCK_METHOD(void, OnInitRequest, (const NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::InitRequest&), ());
+    MOCK_METHOD(void, OnReadRequest, (const NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::Read&), ());
+    MOCK_METHOD(void, OnStartReadRequest, (const NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::StartRead&), ());
+    MOCK_METHOD(void, OnCommitRequest, (const NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::Commit&), ());
+    MOCK_METHOD(void, OnReleasedRequest, (const NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::Released&), ());
+    MOCK_METHOD(void, OnStatusRequest, (const NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::Status&), ());
 
     void Wait() {
         std::queue<std::future<void>> callbackFutures;
@@ -455,8 +455,8 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
 class TReadSessionImplTestSetup {
 public:
     // Types
-    using IReadSessionConnectionProcessorFactory = ISessionConnectionProcessorFactory<Ydb::PersQueue::V1::MigrationStreamingReadClientMessage, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>;
-    using TMockProcessorFactory = ::TMockProcessorFactory<Ydb::PersQueue::V1::MigrationStreamingReadClientMessage, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>;
+    using IReadSessionConnectionProcessorFactory = ISessionConnectionProcessorFactory<NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage, NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage>;
+    using TMockProcessorFactory = ::TMockProcessorFactory<NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage, NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage>;
 
 
     struct TFakeContext : public NYdbGrpc::IQueueClientContext {
@@ -939,7 +939,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                 }
             });
         EXPECT_CALL(*setup.MockProcessor, OnInitRequest(_))
-            .WillOnce(Invoke([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::InitRequest& req) {
+            .WillOnce(Invoke([](const NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::InitRequest& req) {
                 UNIT_ASSERT_STRINGS_EQUAL(req.consumer(), "TestConsumer");
                 UNIT_ASSERT_VALUES_EQUAL(req.max_lag_duration_ms(), 32000);
                 UNIT_ASSERT_VALUES_EQUAL(req.start_from_written_at_ms(), 42000);
@@ -1113,7 +1113,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             UNIT_ASSERT(stream);
 
             EXPECT_CALL(*setup.MockProcessor, OnStartReadRequest(_))
-                .WillOnce(Invoke([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::StartRead& req) {
+                .WillOnce(Invoke([](const NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::StartRead& req) {
                     UNIT_ASSERT_STRINGS_EQUAL(req.topic().path(), "TestTopic");
                     UNIT_ASSERT_STRINGS_EQUAL(req.cluster(), "TestCluster");
                     UNIT_ASSERT_VALUES_EQUAL(req.partition(), 1);
@@ -1153,7 +1153,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             UNIT_ASSERT_EQUAL(destroyEvent.GetPartitionStream(), stream);
 
             EXPECT_CALL(*setup.MockProcessor, OnReleasedRequest(_))
-                .WillOnce(Invoke([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Released& req) {
+                .WillOnce(Invoke([](const NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::Released& req) {
                     UNIT_ASSERT_STRINGS_EQUAL(req.topic().path(), "TestTopic");
                     UNIT_ASSERT_STRINGS_EQUAL(req.cluster(), "TestCluster");
                     UNIT_ASSERT_VALUES_EQUAL(req.partition(), 1);
@@ -1240,7 +1240,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         setup.AssertNoEvents();
     }
 
-    void DecompressImpl(Ydb::PersQueue::V1::Codec codec, const TString& data = "msg", ::IExecutor::TPtr executor = nullptr) {
+    void DecompressImpl(NYdbProtos::PersQueue::V1::Codec codec, const TString& data = "msg", ::IExecutor::TPtr executor = nullptr) {
         TReadSessionImplTestSetup setup;
         if (executor) {
             setup.Settings.DecompressionExecutor(executor);
@@ -1265,33 +1265,33 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
     }
 
     Y_UNIT_TEST(DecompressRaw) {
-        DecompressImpl(Ydb::PersQueue::V1::CODEC_RAW);
-        DecompressImpl(Ydb::PersQueue::V1::CODEC_UNSPECIFIED); // The same.
+        DecompressImpl(NYdbProtos::PersQueue::V1::CODEC_RAW);
+        DecompressImpl(NYdbProtos::PersQueue::V1::CODEC_UNSPECIFIED); // The same.
     }
 
     Y_UNIT_TEST(DecompressGzip) {
-        DecompressImpl(Ydb::PersQueue::V1::CODEC_GZIP);
+        DecompressImpl(NYdbProtos::PersQueue::V1::CODEC_GZIP);
     }
 
     Y_UNIT_TEST(DecompressZstd) {
-        DecompressImpl(Ydb::PersQueue::V1::CODEC_ZSTD);
+        DecompressImpl(NYdbProtos::PersQueue::V1::CODEC_ZSTD);
     }
 
     Y_UNIT_TEST(DecompressRawEmptyMessage) {
-        DecompressImpl(Ydb::PersQueue::V1::CODEC_RAW, "");
-        DecompressImpl(Ydb::PersQueue::V1::CODEC_UNSPECIFIED, ""); // The same.
+        DecompressImpl(NYdbProtos::PersQueue::V1::CODEC_RAW, "");
+        DecompressImpl(NYdbProtos::PersQueue::V1::CODEC_UNSPECIFIED, ""); // The same.
     }
 
     Y_UNIT_TEST(DecompressGzipEmptyMessage) {
-        DecompressImpl(Ydb::PersQueue::V1::CODEC_GZIP, "");
+        DecompressImpl(NYdbProtos::PersQueue::V1::CODEC_GZIP, "");
     }
 
     Y_UNIT_TEST(DecompressZstdEmptyMessage) {
-        DecompressImpl(Ydb::PersQueue::V1::CODEC_ZSTD, "");
+        DecompressImpl(NYdbProtos::PersQueue::V1::CODEC_ZSTD, "");
     }
 
     Y_UNIT_TEST(DecompressWithSynchronousExecutor) {
-        DecompressImpl(Ydb::PersQueue::V1::CODEC_ZSTD, "msg", new TSynchronousExecutor());
+        DecompressImpl(NYdbProtos::PersQueue::V1::CODEC_ZSTD, "msg", new TSynchronousExecutor());
     }
 
     TString GenerateMessageData(size_t size) {
@@ -1332,7 +1332,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         THashSet<ui64> committedCookies;
         THashSet<ui64> committedOffsets;
         EXPECT_CALL(*setup.MockProcessor, OnCommitRequest(_))
-            .WillRepeatedly(Invoke([&committedCookies, &committedOffsets](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
+            .WillRepeatedly(Invoke([&committedCookies, &committedOffsets](const NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
                 for (const auto& commit : req.cookies()) {
                     committedCookies.insert(commit.partition_cookie());
                 }
@@ -1348,7 +1348,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             TMockReadSessionProcessor::TServerReadInfo resp;
             resp.PartitionData(i).Batch("src_id", TInstant::Seconds(123), "127.0.0.1", { { "k", "v" }, { "k1", "v1" }});
             for (size_t j = 0; j < messagesInServerBatchCount; ++j) {
-                resp.Message(offset++, compressedMessageData, Ydb::PersQueue::V1::CODEC_GZIP, seqNo++);
+                resp.Message(offset++, compressedMessageData, NYdbProtos::PersQueue::V1::CODEC_GZIP, seqNo++);
                 if (j == messagesInServerBatchCount / 2) { // This may lead to empty batch. Client is expected to behave well with empty batch in protobuf.
                     resp.Batch("src_id_2", TInstant::Seconds(321), "1.0.0.127", { { "v", "k" }, { "v1", "k1" }});
                 }
@@ -1494,7 +1494,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                 if (i == 22) {
                     resp.Batch("src_id2", TInstant::Seconds(123), "127.0.0.1", { { "k", "v" }, { "k1", "v1" }});
                 }
-                resp.Message(offset++, compressedMessageData, Ydb::PersQueue::V1::CODEC_GZIP, seqNo++);
+                resp.Message(offset++, compressedMessageData, NYdbProtos::PersQueue::V1::CODEC_GZIP, seqNo++);
             }
             setup.MockProcessor->AddServerResponse(resp);
         }
@@ -1525,7 +1525,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         setup.SuccessfulInit();
         TPartitionStream::TPtr stream = setup.CreatePartitionStream();
         EXPECT_CALL(*setup.MockProcessor, OnStatusRequest(_))
-            .WillOnce(Invoke([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Status& req) {
+            .WillOnce(Invoke([](const NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::Status& req) {
                 UNIT_ASSERT_VALUES_EQUAL(req.topic().path(), "TestTopic");
                 UNIT_ASSERT_VALUES_EQUAL(req.cluster(), "TestCluster");
                 UNIT_ASSERT_VALUES_EQUAL(req.partition(), 1);
@@ -1571,7 +1571,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         bool has1 = false;
         bool has2 = false;
         EXPECT_CALL(*setup.MockProcessor, OnCommitRequest(_))
-            .WillRepeatedly(Invoke([&](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
+            .WillRepeatedly(Invoke([&](const NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
                 Cerr << "Got commit req " << req << "\n";
                 for (const auto& commit : req.cookies()) {
                     if (commit.partition_cookie() == 1) {
@@ -1906,9 +1906,9 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                                 cbCtx);
 
         NTopic::TPartitionData<true> message;
-        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_Batch* batch =
+        NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_Batch* batch =
             message.mutable_batches()->Add();
-        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_MessageData* messageData =
+        NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_MessageData* messageData =
             batch->mutable_message_data()->Add();
         *messageData->mutable_data() = "*";
 

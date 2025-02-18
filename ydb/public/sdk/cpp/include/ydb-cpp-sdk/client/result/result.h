@@ -3,10 +3,11 @@
 #include "fwd.h"
 
 #include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
 #include <string>
 
-namespace Ydb {
+YDB_PROTOS_NAMESPACE {
     class ResultSet;
 }
 
@@ -34,8 +35,8 @@ class TResultSet {
     friend class TResultSetParser;
     friend class NYdb::V3::TProtoAccessor;
 public:
-    TResultSet(const Ydb::ResultSet& proto);
-    TResultSet(Ydb::ResultSet&& proto);
+    TResultSet(const NYdbProtos::ResultSet& proto);
+    TResultSet(NYdbProtos::ResultSet&& proto);
 
     //! Returns number of columns
     size_t ColumnsCount() const;
@@ -50,7 +51,7 @@ public:
     const std::vector<TColumn>& GetColumnsMeta() const;
 
 private:
-    const Ydb::ResultSet& GetProto() const;
+    const NYdbProtos::ResultSet& GetProto() const;
 
 private:
     class TImpl;

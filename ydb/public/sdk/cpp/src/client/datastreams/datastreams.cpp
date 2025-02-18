@@ -21,24 +21,24 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         return { *this };
     }
 
-    void SetPartitionSettings(const TPartitioningSettings& ps, ::Ydb::DataStreams::V1::PartitioningSettings* pt) {
+    void SetPartitionSettings(const TPartitioningSettings& ps, ::NYdbProtos::DataStreams::V1::PartitioningSettings* pt) {
         pt->set_max_active_partitions(ps.GetMaxActivePartitions());
         pt->set_min_active_partitions(ps.GetMinActivePartitions());
 
-        ::Ydb::DataStreams::V1::AutoPartitioningStrategy strategy;
+        ::NYdbProtos::DataStreams::V1::AutoPartitioningStrategy strategy;
         switch (ps.GetAutoPartitioningSettings().GetStrategy()) {
             case EAutoPartitioningStrategy::Unspecified:
             case EAutoPartitioningStrategy::Disabled:
-                strategy = ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED;
+                strategy = ::NYdbProtos::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED;
                 break;
             case EAutoPartitioningStrategy::ScaleUp:
-                strategy = ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP;
+                strategy = ::NYdbProtos::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP;
                 break;
             case EAutoPartitioningStrategy::ScaleUpAndDown:
-                strategy = ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN;
+                strategy = ::NYdbProtos::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN;
                 break;
             case EAutoPartitioningStrategy::Paused:
-                strategy = ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED;
+                strategy = ::NYdbProtos::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED;
                 break;
         }
 
@@ -103,16 +103,16 @@ namespace NYdb::inline V3::NDataStreams::V1 {
 
         TAsyncCreateStreamResult CreateStream(const std::string &path, TCreateStreamSettings settings) {
             if (settings.RetentionPeriodHours_.has_value() && settings.RetentionStorageMegabytes_.has_value()) {
-                return NThreading::MakeFuture(TProtoResultWrapper<Ydb::DataStreams::V1::CreateStreamResult>(
+                return NThreading::MakeFuture(TProtoResultWrapper<NYdbProtos::DataStreams::V1::CreateStreamResult>(
                     NYdb::TPlainStatus(NYdb::EStatus::BAD_REQUEST, "both retention types can not be set"),
-                    std::make_unique<Ydb::DataStreams::V1::CreateStreamResult>()));
+                    std::make_unique<NYdbProtos::DataStreams::V1::CreateStreamResult>()));
             }
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::CreateStreamRequest,
-                    Ydb::DataStreams::V1::CreateStreamResponse,
-                    Ydb::DataStreams::V1::CreateStreamResult>(settings,
-                        &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncCreateStream,
-                        [&](Ydb::DataStreams::V1::CreateStreamRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::CreateStreamRequest,
+                    NYdbProtos::DataStreams::V1::CreateStreamResponse,
+                    NYdbProtos::DataStreams::V1::CreateStreamResult>(settings,
+                        &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncCreateStream,
+                        [&](NYdbProtos::DataStreams::V1::CreateStreamRequest& req) {
                             req.set_stream_name(TStringType{path});
                             req.set_shard_count(settings.ShardCount_);
                             if (settings.RetentionStorageMegabytes_.has_value()) {
@@ -125,8 +125,8 @@ namespace NYdb::inline V3::NDataStreams::V1 {
                             req.set_write_quota_kb_per_sec(settings.WriteQuotaKbPerSec_);
                             if (settings.StreamMode_.has_value()) {
                                 req.mutable_stream_mode_details()->set_stream_mode(
-                                        *settings.StreamMode_ == ESM_PROVISIONED ? Ydb::DataStreams::V1::StreamMode::PROVISIONED
-                                                                                : Ydb::DataStreams::V1::StreamMode::ON_DEMAND);
+                                        *settings.StreamMode_ == ESM_PROVISIONED ? NYdbProtos::DataStreams::V1::StreamMode::PROVISIONED
+                                                                                : NYdbProtos::DataStreams::V1::StreamMode::ON_DEMAND);
                             }
 
                             if (settings.PartitioningSettings_.has_value()) {
@@ -136,11 +136,11 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         }
 
         TAsyncListStreamsResult ListStreams(TListStreamsSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::ListStreamsRequest,
-                    Ydb::DataStreams::V1::ListStreamsResponse,
-                    Ydb::DataStreams::V1::ListStreamsResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListStreams,
-                                                             [&](Ydb::DataStreams::V1::ListStreamsRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::ListStreamsRequest,
+                    NYdbProtos::DataStreams::V1::ListStreamsResponse,
+                    NYdbProtos::DataStreams::V1::ListStreamsResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncListStreams,
+                                                             [&](NYdbProtos::DataStreams::V1::ListStreamsRequest& req) {
                                                                  req.set_exclusive_start_stream_name(TStringType{settings.ExclusiveStartStreamName_});
                                                                  req.set_limit(settings.Limit_);
                                                                  req.set_recurse(settings.Recurse_);
@@ -148,20 +148,20 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         }
 
         TAsyncDescribeStreamResult DescribeStream(TDescribeStreamSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::DescribeStreamRequest,
-                    Ydb::DataStreams::V1::DescribeStreamResponse,
-                    Ydb::DataStreams::V1::DescribeStreamResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStream);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::DescribeStreamRequest,
+                    NYdbProtos::DataStreams::V1::DescribeStreamResponse,
+                    NYdbProtos::DataStreams::V1::DescribeStreamResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStream);
         }
 
         TAsyncListShardsResult ListShards(const std::string &path,
-            const Ydb::DataStreams::V1::ShardFilter& shardFilter,
+            const NYdbProtos::DataStreams::V1::ShardFilter& shardFilter,
             TListShardsSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::ListShardsRequest,
-                    Ydb::DataStreams::V1::ListShardsResponse,
-                    Ydb::DataStreams::V1::ListShardsResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListShards,
-                    [&](Ydb::DataStreams::V1::ListShardsRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::ListShardsRequest,
+                    NYdbProtos::DataStreams::V1::ListShardsResponse,
+                    NYdbProtos::DataStreams::V1::ListShardsResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncListShards,
+                    [&](NYdbProtos::DataStreams::V1::ListShardsRequest& req) {
                         req.set_exclusive_start_shard_id(TStringType{settings.ExclusiveStartShardId_});
                         req.set_max_results(settings.MaxResults_);
                         req.set_next_token(TStringType{settings.NextToken_});
@@ -172,11 +172,11 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         }
 
         TAsyncPutRecordsResult PutRecords(const std::string& path, const std::vector<TDataRecord>& records, TPutRecordsSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::PutRecordsRequest,
-                    Ydb::DataStreams::V1::PutRecordsResponse,
-                    Ydb::DataStreams::V1::PutRecordsResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecords,
-                                                            [&](Ydb::DataStreams::V1::PutRecordsRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::PutRecordsRequest,
+                    NYdbProtos::DataStreams::V1::PutRecordsResponse,
+                    NYdbProtos::DataStreams::V1::PutRecordsResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecords,
+                                                            [&](NYdbProtos::DataStreams::V1::PutRecordsRequest& req) {
                                                                 req.set_stream_name(TStringType{path});
                                                                 for (const auto& record : records) {
                                                                     auto* protoRecord = req.add_records();
@@ -188,24 +188,24 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         }
 
         TAsyncGetRecordsResult GetRecords(const std::string& shardIterator, TGetRecordsSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::GetRecordsRequest,
-                    Ydb::DataStreams::V1::GetRecordsResponse,
-                    Ydb::DataStreams::V1::GetRecordsResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncGetRecords,
-                        [&](Ydb::DataStreams::V1::GetRecordsRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::GetRecordsRequest,
+                    NYdbProtos::DataStreams::V1::GetRecordsResponse,
+                    NYdbProtos::DataStreams::V1::GetRecordsResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncGetRecords,
+                        [&](NYdbProtos::DataStreams::V1::GetRecordsRequest& req) {
                             req.set_shard_iterator(TStringType{shardIterator});
                             req.set_limit(settings.Limit_);
                         });
         }
 
         TAsyncGetShardIteratorResult GetShardIterator(const std::string& path, const std::string& shardId,
-                                                      Ydb::DataStreams::V1::ShardIteratorType shardIteratorType,
+                                                      NYdbProtos::DataStreams::V1::ShardIteratorType shardIteratorType,
                                                       TGetShardIteratorSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::GetShardIteratorRequest,
-                    Ydb::DataStreams::V1::GetShardIteratorResponse,
-                    Ydb::DataStreams::V1::GetShardIteratorResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncGetShardIterator,
-                        [&](Ydb::DataStreams::V1::GetShardIteratorRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::GetShardIteratorRequest,
+                    NYdbProtos::DataStreams::V1::GetShardIteratorResponse,
+                    NYdbProtos::DataStreams::V1::GetShardIteratorResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncGetShardIterator,
+                        [&](NYdbProtos::DataStreams::V1::GetShardIteratorRequest& req) {
                             req.set_stream_name(TStringType{path});
                             req.set_shard_id(TStringType{shardId});
                             req.set_shard_iterator_type(shardIteratorType);
@@ -215,35 +215,35 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         }
 
         /*TAsyncSubscribeToShardResult SubscribeToShard(TSubscribeToShardSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::SubscribeToShardRequest,
-                    Ydb::DataStreams::V1::SubscribeToShardResponse,
-                    Ydb::DataStreams::V1::SubscribeToShardResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncSubscribeToShard);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::SubscribeToShardRequest,
+                    NYdbProtos::DataStreams::V1::SubscribeToShardResponse,
+                    NYdbProtos::DataStreams::V1::SubscribeToShardResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncSubscribeToShard);
         }*/
 
         TAsyncDescribeLimitsResult DescribeLimits(TDescribeLimitsSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::DescribeLimitsRequest,
-                    Ydb::DataStreams::V1::DescribeLimitsResponse,
-                    Ydb::DataStreams::V1::DescribeLimitsResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeLimits);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::DescribeLimitsRequest,
+                    NYdbProtos::DataStreams::V1::DescribeLimitsResponse,
+                    NYdbProtos::DataStreams::V1::DescribeLimitsResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeLimits);
         }
 
         TAsyncDescribeStreamSummaryResult DescribeStreamSummary(const std::string& path, TDescribeStreamSummarySettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::DescribeStreamSummaryRequest,
-                    Ydb::DataStreams::V1::DescribeStreamSummaryResponse,
-                    Ydb::DataStreams::V1::DescribeStreamSummaryResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamSummary,
-                                                                       [&](Ydb::DataStreams::V1::DescribeStreamSummaryRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::DescribeStreamSummaryRequest,
+                    NYdbProtos::DataStreams::V1::DescribeStreamSummaryResponse,
+                    NYdbProtos::DataStreams::V1::DescribeStreamSummaryResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamSummary,
+                                                                       [&](NYdbProtos::DataStreams::V1::DescribeStreamSummaryRequest& req) {
                                                                            req.set_stream_name(TStringType{path});
                                                                        });
         }
 
         TAsyncDecreaseStreamRetentionPeriodResult DecreaseStreamRetentionPeriod(const std::string& path, TDecreaseStreamRetentionPeriodSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodRequest,
-                    Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResponse,
-                    Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDecreaseStreamRetentionPeriod,
-                                                                               [&](Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::DecreaseStreamRetentionPeriodRequest,
+                    NYdbProtos::DataStreams::V1::DecreaseStreamRetentionPeriodResponse,
+                    NYdbProtos::DataStreams::V1::DecreaseStreamRetentionPeriodResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDecreaseStreamRetentionPeriod,
+                                                                               [&](NYdbProtos::DataStreams::V1::DecreaseStreamRetentionPeriodRequest& req) {
                                                                                    req.set_stream_name(TStringType{path});
                                                                                    req.set_retention_period_hours(settings.RetentionPeriodHours_);
                                                                                });
@@ -251,11 +251,11 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         }
 
         TAsyncIncreaseStreamRetentionPeriodResult IncreaseStreamRetentionPeriod(const std::string& path, TIncreaseStreamRetentionPeriodSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodRequest,
-                    Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResponse,
-                    Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncIncreaseStreamRetentionPeriod,
-                                                                  [&](Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::IncreaseStreamRetentionPeriodRequest,
+                    NYdbProtos::DataStreams::V1::IncreaseStreamRetentionPeriodResponse,
+                    NYdbProtos::DataStreams::V1::IncreaseStreamRetentionPeriodResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncIncreaseStreamRetentionPeriod,
+                                                                  [&](NYdbProtos::DataStreams::V1::IncreaseStreamRetentionPeriodRequest& req) {
                                                                       req.set_stream_name(TStringType{path});
                                                                       req.set_retention_period_hours(settings.RetentionPeriodHours_);
                                                                   });
@@ -263,64 +263,64 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         }
 
         TAsyncUpdateShardCountResult UpdateShardCount(const std::string& path, TUpdateShardCountSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::UpdateShardCountRequest,
-                    Ydb::DataStreams::V1::UpdateShardCountResponse,
-                    Ydb::DataStreams::V1::UpdateShardCountResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateShardCount,
-                                                                  [&](Ydb::DataStreams::V1::UpdateShardCountRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::UpdateShardCountRequest,
+                    NYdbProtos::DataStreams::V1::UpdateShardCountResponse,
+                    NYdbProtos::DataStreams::V1::UpdateShardCountResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateShardCount,
+                                                                  [&](NYdbProtos::DataStreams::V1::UpdateShardCountRequest& req) {
                                                                       req.set_stream_name(TStringType{path});
                                                                       req.set_target_shard_count(settings.TargetShardCount_);
                                                                   });
         }
 
         TAsyncUpdateStreamModeResult UpdateStreamMode(const std::string& path, TUpdateStreamModeSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::UpdateStreamModeRequest,
-                    Ydb::DataStreams::V1::UpdateStreamModeResponse,
-                    Ydb::DataStreams::V1::UpdateStreamModeResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStreamMode,
-                                                                  [&](Ydb::DataStreams::V1::UpdateStreamModeRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::UpdateStreamModeRequest,
+                    NYdbProtos::DataStreams::V1::UpdateStreamModeResponse,
+                    NYdbProtos::DataStreams::V1::UpdateStreamModeResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStreamMode,
+                                                                  [&](NYdbProtos::DataStreams::V1::UpdateStreamModeRequest& req) {
                                                                     req.set_stream_arn(TStringType{path});
 
                                                                     req.mutable_stream_mode_details()->set_stream_mode(
-                                                                        settings.StreamMode_ == ESM_PROVISIONED ? Ydb::DataStreams::V1::StreamMode::PROVISIONED
-                                                                                                                : Ydb::DataStreams::V1::StreamMode::ON_DEMAND);
+                                                                        settings.StreamMode_ == ESM_PROVISIONED ? NYdbProtos::DataStreams::V1::StreamMode::PROVISIONED
+                                                                                                                : NYdbProtos::DataStreams::V1::StreamMode::ON_DEMAND);
                                                                         });
         }
 
         TAsyncRegisterStreamConsumerResult RegisterStreamConsumer(const std::string& path, const std::string& consumer_name, TRegisterStreamConsumerSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::RegisterStreamConsumerRequest,
-                    Ydb::DataStreams::V1::RegisterStreamConsumerResponse,
-                    Ydb::DataStreams::V1::RegisterStreamConsumerResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncRegisterStreamConsumer,
-                    [&](Ydb::DataStreams::V1::RegisterStreamConsumerRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::RegisterStreamConsumerRequest,
+                    NYdbProtos::DataStreams::V1::RegisterStreamConsumerResponse,
+                    NYdbProtos::DataStreams::V1::RegisterStreamConsumerResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncRegisterStreamConsumer,
+                    [&](NYdbProtos::DataStreams::V1::RegisterStreamConsumerRequest& req) {
                         req.set_stream_arn(TStringType{path});
                         req.set_consumer_name(TStringType{consumer_name});
                     });
         }
 
         TAsyncDeregisterStreamConsumerResult DeregisterStreamConsumer(const std::string& path, const std::string& consumer_name, TDeregisterStreamConsumerSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::DeregisterStreamConsumerRequest,
-                    Ydb::DataStreams::V1::DeregisterStreamConsumerResponse,
-                    Ydb::DataStreams::V1::DeregisterStreamConsumerResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDeregisterStreamConsumer,
-                    [&](Ydb::DataStreams::V1::DeregisterStreamConsumerRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::DeregisterStreamConsumerRequest,
+                    NYdbProtos::DataStreams::V1::DeregisterStreamConsumerResponse,
+                    NYdbProtos::DataStreams::V1::DeregisterStreamConsumerResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDeregisterStreamConsumer,
+                    [&](NYdbProtos::DataStreams::V1::DeregisterStreamConsumerRequest& req) {
                         req.set_stream_arn(TStringType{path});
                         req.set_consumer_name(TStringType{consumer_name});
                     });
         }
 
         TAsyncDescribeStreamConsumerResult DescribeStreamConsumer(TDescribeStreamConsumerSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::DescribeStreamConsumerRequest,
-                    Ydb::DataStreams::V1::DescribeStreamConsumerResponse,
-                    Ydb::DataStreams::V1::DescribeStreamConsumerResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamConsumer);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::DescribeStreamConsumerRequest,
+                    NYdbProtos::DataStreams::V1::DescribeStreamConsumerResponse,
+                    NYdbProtos::DataStreams::V1::DescribeStreamConsumerResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamConsumer);
         }
 
         TAsyncListStreamConsumersResult ListStreamConsumers(const std::string& path, TListStreamConsumersSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::ListStreamConsumersRequest,
-                    Ydb::DataStreams::V1::ListStreamConsumersResponse,
-                    Ydb::DataStreams::V1::ListStreamConsumersResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListStreamConsumers, [&](Ydb::DataStreams::V1::ListStreamConsumersRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::ListStreamConsumersRequest,
+                    NYdbProtos::DataStreams::V1::ListStreamConsumersResponse,
+                    NYdbProtos::DataStreams::V1::ListStreamConsumersResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncListStreamConsumers, [&](NYdbProtos::DataStreams::V1::ListStreamConsumersRequest& req) {
                         req.set_stream_arn(TStringType{path});
                         req.set_next_token(TStringType{settings.NextToken_});
                         req.set_max_results(settings.MaxResults_);
@@ -328,80 +328,80 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         }
 
         TAsyncAddTagsToStreamResult AddTagsToStream(TAddTagsToStreamSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::AddTagsToStreamRequest,
-                    Ydb::DataStreams::V1::AddTagsToStreamResponse,
-                    Ydb::DataStreams::V1::AddTagsToStreamResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncAddTagsToStream);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::AddTagsToStreamRequest,
+                    NYdbProtos::DataStreams::V1::AddTagsToStreamResponse,
+                    NYdbProtos::DataStreams::V1::AddTagsToStreamResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncAddTagsToStream);
         }
 
         TAsyncDisableEnhancedMonitoringResult DisableEnhancedMonitoring(TDisableEnhancedMonitoringSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::DisableEnhancedMonitoringRequest,
-                    Ydb::DataStreams::V1::DisableEnhancedMonitoringResponse,
-                    Ydb::DataStreams::V1::DisableEnhancedMonitoringResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDisableEnhancedMonitoring);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::DisableEnhancedMonitoringRequest,
+                    NYdbProtos::DataStreams::V1::DisableEnhancedMonitoringResponse,
+                    NYdbProtos::DataStreams::V1::DisableEnhancedMonitoringResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDisableEnhancedMonitoring);
         }
 
         TAsyncEnableEnhancedMonitoringResult EnableEnhancedMonitoring(TEnableEnhancedMonitoringSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::EnableEnhancedMonitoringRequest,
-                    Ydb::DataStreams::V1::EnableEnhancedMonitoringResponse,
-                    Ydb::DataStreams::V1::EnableEnhancedMonitoringResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncEnableEnhancedMonitoring);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::EnableEnhancedMonitoringRequest,
+                    NYdbProtos::DataStreams::V1::EnableEnhancedMonitoringResponse,
+                    NYdbProtos::DataStreams::V1::EnableEnhancedMonitoringResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncEnableEnhancedMonitoring);
         }
 
         TAsyncListTagsForStreamResult ListTagsForStream(TListTagsForStreamSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::ListTagsForStreamRequest,
-                    Ydb::DataStreams::V1::ListTagsForStreamResponse,
-                    Ydb::DataStreams::V1::ListTagsForStreamResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListTagsForStream);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::ListTagsForStreamRequest,
+                    NYdbProtos::DataStreams::V1::ListTagsForStreamResponse,
+                    NYdbProtos::DataStreams::V1::ListTagsForStreamResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncListTagsForStream);
         }
 
         TAsyncMergeShardsResult MergeShards(TMergeShardsSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::MergeShardsRequest,
-                    Ydb::DataStreams::V1::MergeShardsResponse,
-                    Ydb::DataStreams::V1::MergeShardsResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncMergeShards);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::MergeShardsRequest,
+                    NYdbProtos::DataStreams::V1::MergeShardsResponse,
+                    NYdbProtos::DataStreams::V1::MergeShardsResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncMergeShards);
         }
 
         TAsyncRemoveTagsFromStreamResult RemoveTagsFromStream(TRemoveTagsFromStreamSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::RemoveTagsFromStreamRequest,
-                    Ydb::DataStreams::V1::RemoveTagsFromStreamResponse,
-                    Ydb::DataStreams::V1::RemoveTagsFromStreamResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncRemoveTagsFromStream);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::RemoveTagsFromStreamRequest,
+                    NYdbProtos::DataStreams::V1::RemoveTagsFromStreamResponse,
+                    NYdbProtos::DataStreams::V1::RemoveTagsFromStreamResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncRemoveTagsFromStream);
         }
 
         TAsyncSplitShardResult SplitShard(TSplitShardSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::SplitShardRequest,
-                    Ydb::DataStreams::V1::SplitShardResponse,
-                    Ydb::DataStreams::V1::SplitShardResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncSplitShard);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::SplitShardRequest,
+                    NYdbProtos::DataStreams::V1::SplitShardResponse,
+                    NYdbProtos::DataStreams::V1::SplitShardResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncSplitShard);
         }
 
         TAsyncStartStreamEncryptionResult StartStreamEncryption(TStartStreamEncryptionSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::StartStreamEncryptionRequest,
-                    Ydb::DataStreams::V1::StartStreamEncryptionResponse,
-                    Ydb::DataStreams::V1::StartStreamEncryptionResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncStartStreamEncryption);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::StartStreamEncryptionRequest,
+                    NYdbProtos::DataStreams::V1::StartStreamEncryptionResponse,
+                    NYdbProtos::DataStreams::V1::StartStreamEncryptionResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncStartStreamEncryption);
         }
 
         TAsyncStopStreamEncryptionResult StopStreamEncryption(TStopStreamEncryptionSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::StopStreamEncryptionRequest,
-                    Ydb::DataStreams::V1::StopStreamEncryptionResponse,
-                    Ydb::DataStreams::V1::StopStreamEncryptionResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncStopStreamEncryption);
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::StopStreamEncryptionRequest,
+                    NYdbProtos::DataStreams::V1::StopStreamEncryptionResponse,
+                    NYdbProtos::DataStreams::V1::StopStreamEncryptionResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncStopStreamEncryption);
         }
 
         TAsyncUpdateStreamResult UpdateStream(const std::string& streamName, TUpdateStreamSettings settings) {
             if (settings.RetentionPeriodHours_.has_value() && settings.RetentionStorageMegabytes_.has_value()) {
-                return NThreading::MakeFuture(TProtoResultWrapper<Ydb::DataStreams::V1::UpdateStreamResult>(
+                return NThreading::MakeFuture(TProtoResultWrapper<NYdbProtos::DataStreams::V1::UpdateStreamResult>(
                     NYdb::TPlainStatus(NYdb::EStatus::BAD_REQUEST, "both retention types can not be set"),
-                    std::make_unique<Ydb::DataStreams::V1::UpdateStreamResult>()));
+                    std::make_unique<NYdbProtos::DataStreams::V1::UpdateStreamResult>()));
             }
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::UpdateStreamRequest,
-                    Ydb::DataStreams::V1::UpdateStreamResponse,
-                    Ydb::DataStreams::V1::UpdateStreamResult>(settings,
-                        &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStream,
-                        [&](Ydb::DataStreams::V1::UpdateStreamRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::UpdateStreamRequest,
+                    NYdbProtos::DataStreams::V1::UpdateStreamResponse,
+                    NYdbProtos::DataStreams::V1::UpdateStreamResult>(settings,
+                        &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStream,
+                        [&](NYdbProtos::DataStreams::V1::UpdateStreamRequest& req) {
                             req.set_stream_name(TStringType{streamName});
                             req.set_target_shard_count(settings.TargetShardCount_);
                             if (settings.RetentionPeriodHours_.has_value()) {
@@ -413,8 +413,8 @@ namespace NYdb::inline V3::NDataStreams::V1 {
                             req.set_write_quota_kb_per_sec(settings.WriteQuotaKbPerSec_);
                             if (settings.StreamMode_.has_value()) {
                                 req.mutable_stream_mode_details()->set_stream_mode(
-                                        *settings.StreamMode_ == ESM_PROVISIONED ? Ydb::DataStreams::V1::StreamMode::PROVISIONED
-                                                                                : Ydb::DataStreams::V1::StreamMode::ON_DEMAND);
+                                        *settings.StreamMode_ == ESM_PROVISIONED ? NYdbProtos::DataStreams::V1::StreamMode::PROVISIONED
+                                                                                : NYdbProtos::DataStreams::V1::StreamMode::ON_DEMAND);
                             }
 
                             if (settings.PartitioningSettings_.has_value()) {
@@ -424,23 +424,23 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         }
 
         TAsyncDeleteStreamResult DeleteStream(const std::string &path, TDeleteStreamSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::DeleteStreamRequest,
-                    Ydb::DataStreams::V1::DeleteStreamResponse,
-                    Ydb::DataStreams::V1::DeleteStreamResult>(settings,
-                        &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDeleteStream,
-                        [&](Ydb::DataStreams::V1::DeleteStreamRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::DeleteStreamRequest,
+                    NYdbProtos::DataStreams::V1::DeleteStreamResponse,
+                    NYdbProtos::DataStreams::V1::DeleteStreamResult>(settings,
+                        &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDeleteStream,
+                        [&](NYdbProtos::DataStreams::V1::DeleteStreamRequest& req) {
                             req.set_stream_name(TStringType{path});
                             req.set_enforce_consumer_deletion(settings.EnforceConsumerDeletion_);
                         });
         }
 
         TAsyncDescribeStreamResult DescribeStream(const std::string &path, TDescribeStreamSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::DescribeStreamRequest,
-                    Ydb::DataStreams::V1::DescribeStreamResponse,
-                    Ydb::DataStreams::V1::DescribeStreamResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStream,
-                                                              [&](Ydb::DataStreams::V1::DescribeStreamRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::DescribeStreamRequest,
+                    NYdbProtos::DataStreams::V1::DescribeStreamResponse,
+                    NYdbProtos::DataStreams::V1::DescribeStreamResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStream,
+                                                              [&](NYdbProtos::DataStreams::V1::DescribeStreamRequest& req) {
                                                                   req.set_stream_name(TStringType{path});
                                                                   req.set_exclusive_start_shard_id(TStringType{settings.ExclusiveStartShardId_});
                                                                   req.set_limit(settings.Limit_);
@@ -448,11 +448,11 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         }
 
         TAsyncPutRecordResult PutRecord(const std::string &path, const TDataRecord& record, TPutRecordSettings settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService,
-                    Ydb::DataStreams::V1::PutRecordRequest,
-                    Ydb::DataStreams::V1::PutRecordResponse,
-                    Ydb::DataStreams::V1::PutRecordResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecord,
-                                                                [&](Ydb::DataStreams::V1::PutRecordRequest& req) {
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService,
+                    NYdbProtos::DataStreams::V1::PutRecordRequest,
+                    NYdbProtos::DataStreams::V1::PutRecordResponse,
+                    NYdbProtos::DataStreams::V1::PutRecordResult>(settings, &NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecord,
+                                                                [&](NYdbProtos::DataStreams::V1::PutRecordRequest& req) {
                                                                     req.set_stream_name(TStringType{path});
                                                                     req.set_explicit_hash_key(TStringType{record.ExplicitHashDecimal});
                                                                     req.set_partition_key(TStringType{record.PartitionKey});
@@ -462,7 +462,7 @@ namespace NYdb::inline V3::NDataStreams::V1 {
 
         template<class TProtoRequest, class TProtoResponse, class TProtoResult, class TMethod>
         NThreading::TFuture<TProtoResultWrapper<TProtoResult>> DoProtoRequest(const TProtoRequest& proto, TMethod method, const TProtoRequestSettings& settings) {
-            return CallImpl<Ydb::DataStreams::V1::DataStreamsService, TProtoRequest, TProtoResponse, TProtoResult>(settings, method,
+            return CallImpl<NYdbProtos::DataStreams::V1::DataStreamsService, TProtoRequest, TProtoResponse, TProtoResult>(settings, method,
                [&](TProtoRequest& req) {
                     req.CopyFrom(proto);
                });
@@ -499,7 +499,7 @@ namespace NYdb::inline V3::NDataStreams::V1 {
     }
 
     TAsyncListShardsResult TDataStreamsClient::ListShards(const std::string& path,
-                                                          const Ydb::DataStreams::V1::ShardFilter& shardFilter,
+                                                          const NYdbProtos::DataStreams::V1::ShardFilter& shardFilter,
                                                           TListShardsSettings settings) {
         return Impl_->ListShards(path, shardFilter, settings);
     }
@@ -512,7 +512,7 @@ namespace NYdb::inline V3::NDataStreams::V1 {
         return Impl_->GetRecords(shardIterator, settings);
     }
 
-    TAsyncGetShardIteratorResult TDataStreamsClient::GetShardIterator(const std::string& path, const std::string& shardId, Ydb::DataStreams::V1::ShardIteratorType shardIteratorType, TGetShardIteratorSettings settings) {
+    TAsyncGetShardIteratorResult TDataStreamsClient::GetShardIterator(const std::string& path, const std::string& shardId, NYdbProtos::DataStreams::V1::ShardIteratorType shardIteratorType, TGetShardIteratorSettings settings) {
         return Impl_->GetShardIterator(path, shardId, shardIteratorType, settings);
     }
 
@@ -607,351 +607,351 @@ namespace NYdb::inline V3::NDataStreams::V1 {
 
 
     // Instantiate template protobuf methods
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::PutRecordsResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::PutRecordsResult>> TDataStreamsClient::DoProtoRequest
             <
-                Ydb::DataStreams::V1::PutRecordsRequest,
-                Ydb::DataStreams::V1::PutRecordsResponse,
-                Ydb::DataStreams::V1::PutRecordsResult,
-                decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecords)
+                NYdbProtos::DataStreams::V1::PutRecordsRequest,
+                NYdbProtos::DataStreams::V1::PutRecordsResponse,
+                NYdbProtos::DataStreams::V1::PutRecordsResult,
+                decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecords)
             >(
-                    const Ydb::DataStreams::V1::PutRecordsRequest& request,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecords) method,
+                    const NYdbProtos::DataStreams::V1::PutRecordsRequest& request,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecords) method,
                     TProtoRequestSettings settings
             );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::PutRecordResult>>TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::PutRecordResult>>TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::PutRecordRequest,
-                    Ydb::DataStreams::V1::PutRecordResponse,
-                    Ydb::DataStreams::V1::PutRecordResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecord)
+                    NYdbProtos::DataStreams::V1::PutRecordRequest,
+                    NYdbProtos::DataStreams::V1::PutRecordResponse,
+                    NYdbProtos::DataStreams::V1::PutRecordResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecord)
                 >(
-                        const Ydb::DataStreams::V1::PutRecordRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecord) method,
+                        const NYdbProtos::DataStreams::V1::PutRecordRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecord) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::ListStreamsResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::ListStreamsResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::ListStreamsRequest,
-                    Ydb::DataStreams::V1::ListStreamsResponse,
-                    Ydb::DataStreams::V1::ListStreamsResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListStreams)
+                    NYdbProtos::DataStreams::V1::ListStreamsRequest,
+                    NYdbProtos::DataStreams::V1::ListStreamsResponse,
+                    NYdbProtos::DataStreams::V1::ListStreamsResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncListStreams)
                 >(
-                        const Ydb::DataStreams::V1::ListStreamsRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListStreams) method,
+                        const NYdbProtos::DataStreams::V1::ListStreamsRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncListStreams) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::CreateStreamResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::CreateStreamResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::CreateStreamRequest,
-                    Ydb::DataStreams::V1::CreateStreamResponse,
-                    Ydb::DataStreams::V1::CreateStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncCreateStream)
+                    NYdbProtos::DataStreams::V1::CreateStreamRequest,
+                    NYdbProtos::DataStreams::V1::CreateStreamResponse,
+                    NYdbProtos::DataStreams::V1::CreateStreamResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncCreateStream)
                 >(
-                        const Ydb::DataStreams::V1::CreateStreamRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncCreateStream) method,
+                        const NYdbProtos::DataStreams::V1::CreateStreamRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncCreateStream) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::UpdateStreamResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::UpdateStreamResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::UpdateStreamRequest,
-                    Ydb::DataStreams::V1::UpdateStreamResponse,
-                    Ydb::DataStreams::V1::UpdateStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStream)
+                    NYdbProtos::DataStreams::V1::UpdateStreamRequest,
+                    NYdbProtos::DataStreams::V1::UpdateStreamResponse,
+                    NYdbProtos::DataStreams::V1::UpdateStreamResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStream)
                 >(
-                        const Ydb::DataStreams::V1::UpdateStreamRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStream) method,
+                        const NYdbProtos::DataStreams::V1::UpdateStreamRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStream) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::DeleteStreamResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::DeleteStreamResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::DeleteStreamRequest,
-                    Ydb::DataStreams::V1::DeleteStreamResponse,
-                    Ydb::DataStreams::V1::DeleteStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDeleteStream)
+                    NYdbProtos::DataStreams::V1::DeleteStreamRequest,
+                    NYdbProtos::DataStreams::V1::DeleteStreamResponse,
+                    NYdbProtos::DataStreams::V1::DeleteStreamResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDeleteStream)
                 >(
-                        const Ydb::DataStreams::V1::DeleteStreamRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDeleteStream) method,
+                        const NYdbProtos::DataStreams::V1::DeleteStreamRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDeleteStream) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::DescribeStreamResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::DescribeStreamResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::DescribeStreamRequest,
-                    Ydb::DataStreams::V1::DescribeStreamResponse,
-                    Ydb::DataStreams::V1::DescribeStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStream)
+                    NYdbProtos::DataStreams::V1::DescribeStreamRequest,
+                    NYdbProtos::DataStreams::V1::DescribeStreamResponse,
+                    NYdbProtos::DataStreams::V1::DescribeStreamResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStream)
                 >(
-                        const Ydb::DataStreams::V1::DescribeStreamRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStream) method,
+                        const NYdbProtos::DataStreams::V1::DescribeStreamRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStream) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::ListShardsResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::ListShardsResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::ListShardsRequest,
-                    Ydb::DataStreams::V1::ListShardsResponse,
-                    Ydb::DataStreams::V1::ListShardsResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListShards)
+                    NYdbProtos::DataStreams::V1::ListShardsRequest,
+                    NYdbProtos::DataStreams::V1::ListShardsResponse,
+                    NYdbProtos::DataStreams::V1::ListShardsResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncListShards)
                 >(
-                        const Ydb::DataStreams::V1::ListShardsRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListShards) method,
+                        const NYdbProtos::DataStreams::V1::ListShardsRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncListShards) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::GetRecordsResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::GetRecordsResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::GetRecordsRequest,
-                    Ydb::DataStreams::V1::GetRecordsResponse,
-                    Ydb::DataStreams::V1::GetRecordsResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncGetRecords)
+                    NYdbProtos::DataStreams::V1::GetRecordsRequest,
+                    NYdbProtos::DataStreams::V1::GetRecordsResponse,
+                    NYdbProtos::DataStreams::V1::GetRecordsResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncGetRecords)
                 >(
-                        const Ydb::DataStreams::V1::GetRecordsRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncGetRecords) method,
+                        const NYdbProtos::DataStreams::V1::GetRecordsRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncGetRecords) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::GetShardIteratorResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::GetShardIteratorResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::GetShardIteratorRequest,
-                    Ydb::DataStreams::V1::GetShardIteratorResponse,
-                    Ydb::DataStreams::V1::GetShardIteratorResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncGetShardIterator)
+                    NYdbProtos::DataStreams::V1::GetShardIteratorRequest,
+                    NYdbProtos::DataStreams::V1::GetShardIteratorResponse,
+                    NYdbProtos::DataStreams::V1::GetShardIteratorResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncGetShardIterator)
                 >(
-                        const Ydb::DataStreams::V1::GetShardIteratorRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncGetShardIterator) method,
+                        const NYdbProtos::DataStreams::V1::GetShardIteratorRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncGetShardIterator) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::DescribeLimitsResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::DescribeLimitsResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::DescribeLimitsRequest,
-                    Ydb::DataStreams::V1::DescribeLimitsResponse,
-                    Ydb::DataStreams::V1::DescribeLimitsResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeLimits)
+                    NYdbProtos::DataStreams::V1::DescribeLimitsRequest,
+                    NYdbProtos::DataStreams::V1::DescribeLimitsResponse,
+                    NYdbProtos::DataStreams::V1::DescribeLimitsResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeLimits)
                 >(
-                        const Ydb::DataStreams::V1::DescribeLimitsRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeLimits) method,
+                        const NYdbProtos::DataStreams::V1::DescribeLimitsRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeLimits) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::DecreaseStreamRetentionPeriodResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodRequest,
-                    Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResponse,
-                    Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDecreaseStreamRetentionPeriod)
+                    NYdbProtos::DataStreams::V1::DecreaseStreamRetentionPeriodRequest,
+                    NYdbProtos::DataStreams::V1::DecreaseStreamRetentionPeriodResponse,
+                    NYdbProtos::DataStreams::V1::DecreaseStreamRetentionPeriodResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDecreaseStreamRetentionPeriod)
                 >(
-                        const Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDecreaseStreamRetentionPeriod) method,
+                        const NYdbProtos::DataStreams::V1::DecreaseStreamRetentionPeriodRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDecreaseStreamRetentionPeriod) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::IncreaseStreamRetentionPeriodResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodRequest,
-                    Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResponse,
-                    Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncIncreaseStreamRetentionPeriod)
+                    NYdbProtos::DataStreams::V1::IncreaseStreamRetentionPeriodRequest,
+                    NYdbProtos::DataStreams::V1::IncreaseStreamRetentionPeriodResponse,
+                    NYdbProtos::DataStreams::V1::IncreaseStreamRetentionPeriodResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncIncreaseStreamRetentionPeriod)
                 >(
-                        const Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncIncreaseStreamRetentionPeriod) method,
+                        const NYdbProtos::DataStreams::V1::IncreaseStreamRetentionPeriodRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncIncreaseStreamRetentionPeriod) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::UpdateShardCountResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::UpdateShardCountResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::UpdateShardCountRequest,
-                    Ydb::DataStreams::V1::UpdateShardCountResponse,
-                    Ydb::DataStreams::V1::UpdateShardCountResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateShardCount)
+                    NYdbProtos::DataStreams::V1::UpdateShardCountRequest,
+                    NYdbProtos::DataStreams::V1::UpdateShardCountResponse,
+                    NYdbProtos::DataStreams::V1::UpdateShardCountResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateShardCount)
                 >(
-                        const Ydb::DataStreams::V1::UpdateShardCountRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateShardCount) method,
+                        const NYdbProtos::DataStreams::V1::UpdateShardCountRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateShardCount) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::UpdateStreamModeResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::UpdateStreamModeResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::UpdateStreamModeRequest,
-                    Ydb::DataStreams::V1::UpdateStreamModeResponse,
-                    Ydb::DataStreams::V1::UpdateStreamModeResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStreamMode)
+                    NYdbProtos::DataStreams::V1::UpdateStreamModeRequest,
+                    NYdbProtos::DataStreams::V1::UpdateStreamModeResponse,
+                    NYdbProtos::DataStreams::V1::UpdateStreamModeResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStreamMode)
                 >(
-                        const Ydb::DataStreams::V1::UpdateStreamModeRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStreamMode) method,
+                        const NYdbProtos::DataStreams::V1::UpdateStreamModeRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStreamMode) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::RegisterStreamConsumerResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::RegisterStreamConsumerResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::RegisterStreamConsumerRequest,
-                    Ydb::DataStreams::V1::RegisterStreamConsumerResponse,
-                    Ydb::DataStreams::V1::RegisterStreamConsumerResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncRegisterStreamConsumer)
+                    NYdbProtos::DataStreams::V1::RegisterStreamConsumerRequest,
+                    NYdbProtos::DataStreams::V1::RegisterStreamConsumerResponse,
+                    NYdbProtos::DataStreams::V1::RegisterStreamConsumerResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncRegisterStreamConsumer)
                 >(
-                        const Ydb::DataStreams::V1::RegisterStreamConsumerRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncRegisterStreamConsumer) method,
+                        const NYdbProtos::DataStreams::V1::RegisterStreamConsumerRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncRegisterStreamConsumer) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::DeregisterStreamConsumerResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::DeregisterStreamConsumerResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::DeregisterStreamConsumerRequest,
-                    Ydb::DataStreams::V1::DeregisterStreamConsumerResponse,
-                    Ydb::DataStreams::V1::DeregisterStreamConsumerResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDeregisterStreamConsumer)
+                    NYdbProtos::DataStreams::V1::DeregisterStreamConsumerRequest,
+                    NYdbProtos::DataStreams::V1::DeregisterStreamConsumerResponse,
+                    NYdbProtos::DataStreams::V1::DeregisterStreamConsumerResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDeregisterStreamConsumer)
                 >(
-                        const Ydb::DataStreams::V1::DeregisterStreamConsumerRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDeregisterStreamConsumer) method,
+                        const NYdbProtos::DataStreams::V1::DeregisterStreamConsumerRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDeregisterStreamConsumer) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::DescribeStreamConsumerResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::DescribeStreamConsumerResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::DescribeStreamConsumerRequest,
-                    Ydb::DataStreams::V1::DescribeStreamConsumerResponse,
-                    Ydb::DataStreams::V1::DescribeStreamConsumerResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamConsumer)
+                    NYdbProtos::DataStreams::V1::DescribeStreamConsumerRequest,
+                    NYdbProtos::DataStreams::V1::DescribeStreamConsumerResponse,
+                    NYdbProtos::DataStreams::V1::DescribeStreamConsumerResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamConsumer)
                 >(
-                        const Ydb::DataStreams::V1::DescribeStreamConsumerRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamConsumer) method,
+                        const NYdbProtos::DataStreams::V1::DescribeStreamConsumerRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamConsumer) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::ListStreamConsumersResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::ListStreamConsumersResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::ListStreamConsumersRequest,
-                    Ydb::DataStreams::V1::ListStreamConsumersResponse,
-                    Ydb::DataStreams::V1::ListStreamConsumersResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListStreamConsumers)
+                    NYdbProtos::DataStreams::V1::ListStreamConsumersRequest,
+                    NYdbProtos::DataStreams::V1::ListStreamConsumersResponse,
+                    NYdbProtos::DataStreams::V1::ListStreamConsumersResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncListStreamConsumers)
                 >(
-                        const Ydb::DataStreams::V1::ListStreamConsumersRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListStreamConsumers) method,
+                        const NYdbProtos::DataStreams::V1::ListStreamConsumersRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncListStreamConsumers) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::AddTagsToStreamResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::AddTagsToStreamResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::AddTagsToStreamRequest,
-                    Ydb::DataStreams::V1::AddTagsToStreamResponse,
-                    Ydb::DataStreams::V1::AddTagsToStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncAddTagsToStream)
+                    NYdbProtos::DataStreams::V1::AddTagsToStreamRequest,
+                    NYdbProtos::DataStreams::V1::AddTagsToStreamResponse,
+                    NYdbProtos::DataStreams::V1::AddTagsToStreamResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncAddTagsToStream)
                 >(
-                        const Ydb::DataStreams::V1::AddTagsToStreamRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncAddTagsToStream) method,
+                        const NYdbProtos::DataStreams::V1::AddTagsToStreamRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncAddTagsToStream) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::DisableEnhancedMonitoringResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::DisableEnhancedMonitoringResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::DisableEnhancedMonitoringRequest,
-                    Ydb::DataStreams::V1::DisableEnhancedMonitoringResponse,
-                    Ydb::DataStreams::V1::DisableEnhancedMonitoringResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDisableEnhancedMonitoring)
+                    NYdbProtos::DataStreams::V1::DisableEnhancedMonitoringRequest,
+                    NYdbProtos::DataStreams::V1::DisableEnhancedMonitoringResponse,
+                    NYdbProtos::DataStreams::V1::DisableEnhancedMonitoringResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDisableEnhancedMonitoring)
                 >(
-                        const Ydb::DataStreams::V1::DisableEnhancedMonitoringRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDisableEnhancedMonitoring) method,
+                        const NYdbProtos::DataStreams::V1::DisableEnhancedMonitoringRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDisableEnhancedMonitoring) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::EnableEnhancedMonitoringResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::EnableEnhancedMonitoringResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::EnableEnhancedMonitoringRequest,
-                    Ydb::DataStreams::V1::EnableEnhancedMonitoringResponse,
-                    Ydb::DataStreams::V1::EnableEnhancedMonitoringResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncEnableEnhancedMonitoring)
+                    NYdbProtos::DataStreams::V1::EnableEnhancedMonitoringRequest,
+                    NYdbProtos::DataStreams::V1::EnableEnhancedMonitoringResponse,
+                    NYdbProtos::DataStreams::V1::EnableEnhancedMonitoringResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncEnableEnhancedMonitoring)
                 >(
-                        const Ydb::DataStreams::V1::EnableEnhancedMonitoringRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncEnableEnhancedMonitoring) method,
+                        const NYdbProtos::DataStreams::V1::EnableEnhancedMonitoringRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncEnableEnhancedMonitoring) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::MergeShardsResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::MergeShardsResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::MergeShardsRequest,
-                    Ydb::DataStreams::V1::MergeShardsResponse,
-                    Ydb::DataStreams::V1::MergeShardsResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncMergeShards)
+                    NYdbProtos::DataStreams::V1::MergeShardsRequest,
+                    NYdbProtos::DataStreams::V1::MergeShardsResponse,
+                    NYdbProtos::DataStreams::V1::MergeShardsResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncMergeShards)
                 >(
-                        const Ydb::DataStreams::V1::MergeShardsRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncMergeShards) method,
+                        const NYdbProtos::DataStreams::V1::MergeShardsRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncMergeShards) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::ListTagsForStreamResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::ListTagsForStreamResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::ListTagsForStreamRequest,
-                    Ydb::DataStreams::V1::ListTagsForStreamResponse,
-                    Ydb::DataStreams::V1::ListTagsForStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListTagsForStream)
+                    NYdbProtos::DataStreams::V1::ListTagsForStreamRequest,
+                    NYdbProtos::DataStreams::V1::ListTagsForStreamResponse,
+                    NYdbProtos::DataStreams::V1::ListTagsForStreamResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncListTagsForStream)
                 >(
-                        const Ydb::DataStreams::V1::ListTagsForStreamRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListTagsForStream) method,
+                        const NYdbProtos::DataStreams::V1::ListTagsForStreamRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncListTagsForStream) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::RemoveTagsFromStreamResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::RemoveTagsFromStreamResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::RemoveTagsFromStreamRequest,
-                    Ydb::DataStreams::V1::RemoveTagsFromStreamResponse,
-                    Ydb::DataStreams::V1::RemoveTagsFromStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncRemoveTagsFromStream)
+                    NYdbProtos::DataStreams::V1::RemoveTagsFromStreamRequest,
+                    NYdbProtos::DataStreams::V1::RemoveTagsFromStreamResponse,
+                    NYdbProtos::DataStreams::V1::RemoveTagsFromStreamResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncRemoveTagsFromStream)
                 >(
-                        const Ydb::DataStreams::V1::RemoveTagsFromStreamRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncRemoveTagsFromStream) method,
+                        const NYdbProtos::DataStreams::V1::RemoveTagsFromStreamRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncRemoveTagsFromStream) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::SplitShardResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::SplitShardResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::SplitShardRequest,
-                    Ydb::DataStreams::V1::SplitShardResponse,
-                    Ydb::DataStreams::V1::SplitShardResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncSplitShard)
+                    NYdbProtos::DataStreams::V1::SplitShardRequest,
+                    NYdbProtos::DataStreams::V1::SplitShardResponse,
+                    NYdbProtos::DataStreams::V1::SplitShardResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncSplitShard)
                 >(
-                        const Ydb::DataStreams::V1::SplitShardRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncSplitShard) method,
+                        const NYdbProtos::DataStreams::V1::SplitShardRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncSplitShard) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::StartStreamEncryptionResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::StartStreamEncryptionResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::StartStreamEncryptionRequest,
-                    Ydb::DataStreams::V1::StartStreamEncryptionResponse,
-                    Ydb::DataStreams::V1::StartStreamEncryptionResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncStartStreamEncryption)
+                    NYdbProtos::DataStreams::V1::StartStreamEncryptionRequest,
+                    NYdbProtos::DataStreams::V1::StartStreamEncryptionResponse,
+                    NYdbProtos::DataStreams::V1::StartStreamEncryptionResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncStartStreamEncryption)
                 >(
-                        const Ydb::DataStreams::V1::StartStreamEncryptionRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncStartStreamEncryption) method,
+                        const NYdbProtos::DataStreams::V1::StartStreamEncryptionRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncStartStreamEncryption) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::StopStreamEncryptionResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::StopStreamEncryptionResult>> TDataStreamsClient::DoProtoRequest
                 <
-                    Ydb::DataStreams::V1::StopStreamEncryptionRequest,
-                    Ydb::DataStreams::V1::StopStreamEncryptionResponse,
-                    Ydb::DataStreams::V1::StopStreamEncryptionResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncStopStreamEncryption)
+                    NYdbProtos::DataStreams::V1::StopStreamEncryptionRequest,
+                    NYdbProtos::DataStreams::V1::StopStreamEncryptionResponse,
+                    NYdbProtos::DataStreams::V1::StopStreamEncryptionResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncStopStreamEncryption)
                 >(
-                        const Ydb::DataStreams::V1::StopStreamEncryptionRequest& request,
-                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncStopStreamEncryption) method,
+                        const NYdbProtos::DataStreams::V1::StopStreamEncryptionRequest& request,
+                        decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncStopStreamEncryption) method,
                         TProtoRequestSettings settings
                 );
 
-    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::DescribeStreamSummaryResult>> TDataStreamsClient::DoProtoRequest
+    template NThreading::TFuture<TProtoResultWrapper<NYdbProtos::DataStreams::V1::DescribeStreamSummaryResult>> TDataStreamsClient::DoProtoRequest
             <
-                    Ydb::DataStreams::V1::DescribeStreamSummaryRequest,
-                    Ydb::DataStreams::V1::DescribeStreamSummaryResponse,
-                    Ydb::DataStreams::V1::DescribeStreamSummaryResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamSummary)
+                    NYdbProtos::DataStreams::V1::DescribeStreamSummaryRequest,
+                    NYdbProtos::DataStreams::V1::DescribeStreamSummaryResponse,
+                    NYdbProtos::DataStreams::V1::DescribeStreamSummaryResult,
+                    decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamSummary)
             >(
-            const Ydb::DataStreams::V1::DescribeStreamSummaryRequest& request,
-            decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamSummary) method,
+            const NYdbProtos::DataStreams::V1::DescribeStreamSummaryRequest& request,
+            decltype(&NYdbProtos::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamSummary) method,
             TProtoRequestSettings settings
     );
 }

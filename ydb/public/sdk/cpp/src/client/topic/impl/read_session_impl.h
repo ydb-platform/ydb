@@ -34,13 +34,13 @@ namespace NYdb::inline V3::NTopic {
 
 template <bool UseMigrationProtocol>
 using TClientMessage = std::conditional_t<UseMigrationProtocol,
-    Ydb::PersQueue::V1::MigrationStreamingReadClientMessage,
-    Ydb::Topic::StreamReadMessage::FromClient>;
+    NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage,
+    NYdbProtos::Topic::StreamReadMessage::FromClient>;
 
 template <bool UseMigrationProtocol>
 using TServerMessage = std::conditional_t<UseMigrationProtocol,
-    Ydb::PersQueue::V1::MigrationStreamingReadServerMessage,
-    Ydb::Topic::StreamReadMessage::FromServer>;
+    NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage,
+    NYdbProtos::Topic::StreamReadMessage::FromServer>;
 
 template <bool UseMigrationProtocol>
 using IReadSessionConnectionProcessorFactory =
@@ -51,8 +51,8 @@ using IProcessor = typename IReadSessionConnectionProcessorFactory<UseMigrationP
 
 template <bool UseMigrationProtocol>
 using TPartitionData = std::conditional_t<UseMigrationProtocol,
-    Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData,
-    Ydb::Topic::StreamReadMessage::ReadResponse::PartitionData>;
+    NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData,
+    NYdbProtos::Topic::StreamReadMessage::ReadResponse::PartitionData>;
 
 template <bool UseMigrationProtocol>
 using TAWriteSessionMeta = std::conditional_t<UseMigrationProtocol,
@@ -1281,7 +1281,7 @@ private:
         typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr CommitOffset(ui64 partitionStreamId, ui64 offset);
 
         // Gets and then removes committed cookie from mapping.
-        typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr RetrieveCommittedCookie(const Ydb::PersQueue::V1::CommitCookie& cookieProto);
+        typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr RetrieveCommittedCookie(const NYdbProtos::PersQueue::V1::CommitCookie& cookieProto);
 
         // Removes mapping on partition stream.
         void RemoveMapping(ui64 partitionStreamId);

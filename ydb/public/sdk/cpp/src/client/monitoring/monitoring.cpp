@@ -16,13 +16,13 @@ using namespace NThreading;
 
 class TSelfCheckResult::TImpl {
 public:
-    TImpl(Ydb::Monitoring::SelfCheckResult&& result)
+    TImpl(NYdbProtos::Monitoring::SelfCheckResult&& result)
         : Result(std::move(result))
     {}
-    Ydb::Monitoring::SelfCheckResult Result;
+    NYdbProtos::Monitoring::SelfCheckResult Result;
 };
 
-TSelfCheckResult::TSelfCheckResult(TStatus&& status, Ydb::Monitoring::SelfCheckResult&& result)
+TSelfCheckResult::TSelfCheckResult(TStatus&& status, NYdbProtos::Monitoring::SelfCheckResult&& result)
     : TStatus(std::move(status))
     , Impl_(std::make_shared<TSelfCheckResult::TImpl>(std::move(result)))
 {}
@@ -34,14 +34,14 @@ public:
     {}
 
     TAsyncSelfCheckResult SelfCheck(const TSelfCheckSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Monitoring::SelfCheckRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Monitoring::SelfCheckRequest>(settings);
 
         if (settings.ReturnVerboseStatus_) {
             request.set_return_verbose_status(settings.ReturnVerboseStatus_.value());
         }
 
         if (settings.MinimumStatus_) {
-            request.set_minimum_status((::Ydb::Monitoring::StatusFlag_Status)settings.MinimumStatus_.value());
+            request.set_minimum_status((::NYdbProtos::Monitoring::StatusFlag_Status)settings.MinimumStatus_.value());
         }
 
         if (settings.MaximumLevel_) {
@@ -52,7 +52,7 @@ public:
 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::Monitoring::SelfCheckResult result;
+                NYdbProtos::Monitoring::SelfCheckResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
@@ -63,16 +63,16 @@ public:
                 promise.SetValue(std::move(val));
         };
 
-        using Ydb::Monitoring::SelfCheckRequest;
-        using Ydb::Monitoring::SelfCheckResponse;
+        using NYdbProtos::Monitoring::SelfCheckRequest;
+        using NYdbProtos::Monitoring::SelfCheckResponse;
 
         auto requestSettings = TRpcRequestSettings::Make(settings);
         requestSettings.EndpointPolicy = TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint;
 
-        Connections_->RunDeferred<Ydb::Monitoring::V1::MonitoringService, SelfCheckRequest, SelfCheckResponse>(
+        Connections_->RunDeferred<NYdbProtos::Monitoring::V1::MonitoringService, SelfCheckRequest, SelfCheckResponse>(
             std::move(request),
             extractor,
-            &Ydb::Monitoring::V1::MonitoringService::Stub::AsyncSelfCheck,
+            &NYdbProtos::Monitoring::V1::MonitoringService::Stub::AsyncSelfCheck,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             requestSettings);
@@ -91,7 +91,7 @@ TAsyncSelfCheckResult TMonitoringClient::SelfCheck(const TSelfCheckSettings& set
 
 }
 
-const Ydb::Monitoring::SelfCheckResult& TProtoAccessor::GetProto(const NYdb::NMonitoring::TSelfCheckResult& selfCheckResult) {
+const NYdbProtos::Monitoring::SelfCheckResult& TProtoAccessor::GetProto(const NYdb::NMonitoring::TSelfCheckResult& selfCheckResult) {
     return selfCheckResult.Impl_->Result;
 }
 

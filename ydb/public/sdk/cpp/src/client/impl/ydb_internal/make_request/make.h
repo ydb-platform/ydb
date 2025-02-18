@@ -2,6 +2,7 @@
 
 #include <src/client/impl/ydb_internal/internal_header.h>
 #include <ydb/public/api/protos/ydb_common.pb.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
 #include <util/datetime/base.h>
 
@@ -30,7 +31,7 @@ void FillOperationParams(const TRequestSettings& settings, TProtoRequest& params
     }
 
     if (settings.ReportCostInfo_) {
-        operationParams.set_report_cost_info(Ydb::FeatureFlag::ENABLED);
+        operationParams.set_report_cost_info(NYdbProtos::FeatureFlag::ENABLED);
     }
 }
 

@@ -151,8 +151,8 @@ private:
     friend class TSimpleBlockingWriteSession;
 
 private:
-    using TClientMessage = Ydb::Topic::StreamWriteMessage::FromClient;
-    using TServerMessage = Ydb::Topic::StreamWriteMessage::FromServer;
+    using TClientMessage = NYdbProtos::Topic::StreamWriteMessage::FromClient;
+    using TServerMessage = NYdbProtos::Topic::StreamWriteMessage::FromServer;
     using IWriteSessionConnectionProcessorFactory =
             TTopicClient::TImpl::IWriteSessionConnectionProcessorFactory;
     using IProcessor = IWriteSessionConnectionProcessorFactory::IProcessor;
@@ -419,11 +419,11 @@ private:
     void UpdateTimedCountersImpl();
 
     void ConnectToPreferredPartitionLocation(const TDuration& delay);
-    void OnDescribePartition(const TStatus& status, const Ydb::Topic::DescribePartitionResult& proto, const NYdbGrpc::IQueueClientContextPtr& describePartitionContext);
+    void OnDescribePartition(const TStatus& status, const NYdbProtos::Topic::DescribePartitionResult& proto, const NYdbGrpc::IQueueClientContextPtr& describePartitionContext);
 
     std::optional<TEndpointKey> GetPreferredEndpointImpl(ui32 partitionId, uint64_t partitionNodeId);
 
-    bool TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const;
+    bool TxIsChanged(const NYdbProtos::Topic::StreamWriteMessage_WriteRequest* writeRequest) const;
 
     void TrySubscribeOnTransactionCommit(TTransaction* tx);
     void CancelTransactions();

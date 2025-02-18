@@ -2,16 +2,19 @@
 
 #include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
 #include <optional>
 
 #include <util/datetime/base.h>
 
-namespace Ydb::Replication {
+YDB_PROTOS_NAMESPACE {
+namespace Replication {
     class ConnectionParams;
     class ConsistencyLevelGlobal;
     class DescribeReplicationResult;
     class DescribeReplicationResult_Stats;
+}
 }
 
 namespace NYdb::inline V3 {
@@ -44,7 +47,7 @@ public:
         OAuth,
     };
 
-    explicit TConnectionParams(const Ydb::Replication::ConnectionParams& params);
+    explicit TConnectionParams(const NYdbProtos::Replication::ConnectionParams& params);
 
     const std::string& GetDiscoveryEndpoint() const;
     const std::string& GetDatabase() const;
@@ -66,7 +69,7 @@ struct TRowConsistency {
 
 class TGlobalConsistency {
 public:
-    explicit TGlobalConsistency(const Ydb::Replication::ConsistencyLevelGlobal& proto);
+    explicit TGlobalConsistency(const NYdbProtos::Replication::ConsistencyLevelGlobal& proto);
 
     const TDuration& GetCommitInterval() const;
 
@@ -77,7 +80,7 @@ private:
 class TStats {
 public:
     TStats() = default;
-    TStats(const Ydb::Replication::DescribeReplicationResult_Stats& stats);
+    TStats(const NYdbProtos::Replication::DescribeReplicationResult_Stats& stats);
 
     const std::optional<TDuration>& GetLag() const;
     const std::optional<float>& GetInitialScanProgress() const;
@@ -133,7 +136,7 @@ public:
         Done,
     };
 
-    explicit TReplicationDescription(const Ydb::Replication::DescribeReplicationResult& desc);
+    explicit TReplicationDescription(const NYdbProtos::Replication::DescribeReplicationResult& desc);
 
     const TConnectionParams& GetConnectionParams() const;
     const std::vector<TItem> GetItems() const;
@@ -164,15 +167,15 @@ private:
 
 class TDescribeReplicationResult: public NScheme::TDescribePathResult {
     friend class NYdb::V3::TProtoAccessor;
-    const Ydb::Replication::DescribeReplicationResult& GetProto() const;
+    const NYdbProtos::Replication::DescribeReplicationResult& GetProto() const;
 
 public:
-    TDescribeReplicationResult(TStatus&& status, Ydb::Replication::DescribeReplicationResult&& desc);
+    TDescribeReplicationResult(TStatus&& status, NYdbProtos::Replication::DescribeReplicationResult&& desc);
     const TReplicationDescription& GetReplicationDescription() const;
 
 private:
     TReplicationDescription ReplicationDescription_;
-    std::unique_ptr<Ydb::Replication::DescribeReplicationResult> Proto_;
+    std::unique_ptr<NYdbProtos::Replication::DescribeReplicationResult> Proto_;
 };
 
 class TReplicationClient {

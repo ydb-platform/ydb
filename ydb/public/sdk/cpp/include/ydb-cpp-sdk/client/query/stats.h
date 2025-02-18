@@ -1,13 +1,17 @@
 #pragma once
 
+#include <ydb-cpp-sdk/type_switcher.h>
+
 #include <util/datetime/base.h>
 
 #include <memory>
 #include <optional>
 #include <string>
 
-namespace Ydb::TableStats {
+YDB_PROTOS_NAMESPACE {
+namespace TableStats {
     class QueryStats;
+}
 }
 
 namespace NYdb::inline V3 {
@@ -22,8 +26,8 @@ class TExecStats {
 public:
     TExecStats() = default;
 
-    explicit TExecStats(Ydb::TableStats::QueryStats&& proto);
-    explicit TExecStats(const Ydb::TableStats::QueryStats& proto);
+    explicit TExecStats(NYdbProtos::TableStats::QueryStats&& proto);
+    explicit TExecStats(const NYdbProtos::TableStats::QueryStats& proto);
 
     std::string ToString(bool withPlan = false) const;
 
@@ -35,7 +39,7 @@ public:
     TDuration GetTotalCpuTime() const;
 
 private:
-    const Ydb::TableStats::QueryStats& GetProto() const;
+    const NYdbProtos::TableStats::QueryStats& GetProto() const;
 
 private:
     class TImpl;

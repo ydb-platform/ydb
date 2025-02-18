@@ -2240,6 +2240,7 @@ message TAppConfig {
     optional string ConfigStorePath = 104;
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
     optional bool ConfigLoadedFromStore = 106;
+    optional string StartupConfigYaml = 107;
 }
 
 message TYdbVersion {

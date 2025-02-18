@@ -5357,7 +5357,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleChangefeed) {
+    THashMap<TString, TTypedScheme> GetSchemeWithChangefeed() {
         THashMap<TString, TTypedScheme> schemes;
 
         const auto changefeedName = "update_changefeed";
@@ -5441,7 +5441,14 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 std::move(attr)
             }
         );
+        return schemes;
+    }
 
-        ShouldSucceed(schemes);
+    Y_UNIT_TEST(ShouldSucceedOnSingleChangefeed) {
+        ShouldSucceed(GetSchemeWithChangefeed());
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleChangefeed) {
+        CancelShouldSucceed(GetSchemeWithChangefeed());
     }
 }

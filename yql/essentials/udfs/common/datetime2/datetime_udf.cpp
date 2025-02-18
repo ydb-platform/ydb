@@ -512,8 +512,16 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 #undef ACCESSORS
 #undef ACCESSORS_POLY
 
-    inline bool ValidateYear(ui16 year) {
-        return year >= NUdf::MIN_YEAR - 1 || year <= NUdf::MAX_YEAR + 1;
+    // FIXME: The default value for TResourceName allows to omit
+    // explicit specialization in functions that still doesn't support
+    // big datetime types. Should be removed in future.
+    template<const char* TResourceName = TMResourceName>
+    inline bool ValidateYear(std::conditional_t<TResourceName == TMResourceName, ui16, i32> year) {
+        if constexpr (TResourceName == TMResourceName) {
+            return year >= NUdf::MIN_YEAR || year < NUdf::MAX_YEAR;
+        } else {
+            return year >= NUdf::MIN_YEAR32 || year < NUdf::MAX_YEAR32;
+        }
     }
 
     inline bool ValidateMonth(ui8 month) {
@@ -1412,88 +1420,8 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
     // Update
 
     class TUpdate : public TBoxedValue {
-        const TSourcePosition Pos_;
     public:
-        explicit TUpdate(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-        {
-            try {
-                EMPTY_RESULT_ON_EMPTY_ARG(0);
-                auto result = args[0];
-
-                if (args[1]) {
-                    auto year = args[1].Get<ui16>();
-                    if (!ValidateYear(year)) {
-                        return TUnboxedValuePod();
-                    }
-                    SetYear(result, year);
-                }
-                if (args[2]) {
-                    auto month = args[2].Get<ui8>();
-                    if (!ValidateMonth(month)) {
-                        return TUnboxedValuePod();
-                    }
-                    SetMonth(result, month);
-                }
-                if (args[3]) {
-                    auto day = args[3].Get<ui8>();
-                    if (!ValidateDay(day)) {
-                        return TUnboxedValuePod();
-                    }
-                    SetDay(result, day);
-                }
-                if (args[4]) {
-                    auto hour = args[4].Get<ui8>();
-                    if (!ValidateHour(hour)) {
-                        return TUnboxedValuePod();
-                    }
-                    SetHour(result, hour);
-                }
-                if (args[5]) {
-                    auto minute = args[5].Get<ui8>();
-                    if (!ValidateMinute(minute)) {
-                        return TUnboxedValuePod();
-                    }
-                    SetMinute(result, minute);
-                }
-                if (args[6]) {
-                    auto second = args[6].Get<ui8>();
-                    if (!ValidateSecond(second)) {
-                        return TUnboxedValuePod();
-                    }
-                    SetSecond(result, second);
-                }
-                if (args[7]) {
-                    auto microsecond = args[7].Get<ui32>();
-                    if (!ValidateMicrosecond(microsecond)) {
-                        return TUnboxedValuePod();
-                    }
-                    SetMicrosecond(result, microsecond);
-                }
-                if (args[8]) {
-                    auto timezoneId = args[8].Get<ui16>();
-                    if (!ValidateTimezoneId(timezoneId)) {
-                        return TUnboxedValuePod();
-                    }
-                    SetTimezoneId(result, timezoneId);
-                }
-
-                auto& builder = valueBuilder->GetDateBuilder();
-                auto& storage = Reference(result);
-                if (!storage.Validate(builder)) {
-                    return TUnboxedValuePod();
-                }
-                return result;
-            } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-            }
-        }
-
+        typedef bool TTypeAwareMarker;
         static const TStringRef& Name() {
             static auto name = TStringRef::Of("Update");
             return name;
@@ -1501,7 +1429,7 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
 
         static bool DeclareSignature(
             const TStringRef& name,
-            TType*,
+            TType* userType,
             IFunctionTypeInfoBuilder& builder,
             bool typesOnly)
         {
@@ -1509,28 +1437,179 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
                 return false;
             }
 
-            auto resourceType = builder.Resource(TMResourceName);
-            auto optionalResourceType = builder.Optional()->Item(resourceType).Build();
-
-            builder.OptionalArgs(8).Args()->Add(resourceType).Flags(ICallablePayload::TArgumentFlags::AutoMap)
-                .Add(builder.Optional()->Item<ui16>().Build()).Name("Year")
-                .Add(builder.Optional()->Item<ui8>().Build()).Name("Month")
-                .Add(builder.Optional()->Item<ui8>().Build()).Name("Day")
-                .Add(builder.Optional()->Item<ui8>().Build()).Name("Hour")
-                .Add(builder.Optional()->Item<ui8>().Build()).Name("Minute")
-                .Add(builder.Optional()->Item<ui8>().Build()).Name("Second")
-                .Add(builder.Optional()->Item<ui32>().Build()).Name("Microsecond")
-                .Add(builder.Optional()->Item<ui16>().Build()).Name("TimezoneId");
-
-            builder.Returns(optionalResourceType);
-
-            if (!typesOnly) {
-                builder.Implementation(new TUpdate(builder.GetSourcePosition()));
+            if (!userType) {
+                builder.SetError("User type is missing");
+                return true;
             }
 
-            builder.IsStrict();
+            builder.UserType(userType);
+
+            const auto typeInfoHelper = builder.TypeInfoHelper();
+            TTupleTypeInspector tuple(*typeInfoHelper, userType);
+            Y_ENSURE(tuple, "Tuple with args and options tuples expected");
+            Y_ENSURE(tuple.GetElementsCount() > 0,
+                     "Tuple has to contain positional arguments");
+
+            TTupleTypeInspector argsTuple(*typeInfoHelper, tuple.GetElementType(0));
+            Y_ENSURE(argsTuple, "Tuple with args expected");
+            if (argsTuple.GetElementsCount() == 0) {
+                builder.SetError("At least one argument expected");
+                return true;
+            }
+
+            auto argType = argsTuple.GetElementType(0);
+
+            if (const auto optType = TOptionalTypeInspector(*typeInfoHelper, argType)) {
+                argType = optType.GetItemType();
+            }
+
+            TResourceTypeInspector resource(*typeInfoHelper, argType);
+            if (!resource) {
+                TDataTypeInspector data(*typeInfoHelper, argType);
+                if (!data) {
+                    SetInvalidTypeError(builder, typeInfoHelper, argType);
+                    return true;
+                }
+
+                const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
+                if (features & NUdf::BigDateType) {
+                    BuildSignature<TM64ResourceName>(builder, typesOnly);
+                    return true;
+                }
+                if (features & (NUdf::DateType | NUdf::TzDateType)) {
+                    BuildSignature<TMResourceName>(builder, typesOnly);
+                    return true;
+                }
+
+                SetInvalidTypeError(builder, typeInfoHelper, argType);
+                return true;
+            }
+
+            if (resource.GetTag() == TStringRef::Of(TM64ResourceName)) {
+                BuildSignature<TM64ResourceName>(builder, typesOnly);
+                return true;
+            }
+
+            if (resource.GetTag() == TStringRef::Of(TMResourceName)) {
+                BuildSignature<TMResourceName>(builder, typesOnly);
+                return true;
+            }
+
+            ::TStringBuilder sb;
+            sb << "Unexpected Resource tag: got '" << resource.GetTag() << "'";
+            builder.SetError(sb);
             return true;
         }
+    private:
+        template<const char* TResourceName>
+        class TImpl : public TBoxedValue {
+        public:
+            TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+                try {
+                    EMPTY_RESULT_ON_EMPTY_ARG(0);
+                    auto result = args[0];
+
+                    if (args[1]) {
+                        auto year = args[1].Get<std::conditional_t<TResourceName == TMResourceName, ui16, i32>>();
+                        if (!ValidateYear<TResourceName>(year)) {
+                            return TUnboxedValuePod();
+                        }
+                        SetYear<TResourceName>(result, year);
+                    }
+                    if (args[2]) {
+                        auto month = args[2].Get<ui8>();
+                        if (!ValidateMonth(month)) {
+                            return TUnboxedValuePod();
+                        }
+                        SetMonth<TResourceName>(result, month);
+                    }
+                    if (args[3]) {
+                        auto day = args[3].Get<ui8>();
+                        if (!ValidateDay(day)) {
+                            return TUnboxedValuePod();
+                        }
+                        SetDay<TResourceName>(result, day);
+                    }
+                    if (args[4]) {
+                        auto hour = args[4].Get<ui8>();
+                        if (!ValidateHour(hour)) {
+                            return TUnboxedValuePod();
+                        }
+                        SetHour<TResourceName>(result, hour);
+                    }
+                    if (args[5]) {
+                        auto minute = args[5].Get<ui8>();
+                        if (!ValidateMinute(minute)) {
+                            return TUnboxedValuePod();
+                        }
+                        SetMinute<TResourceName>(result, minute);
+                    }
+                    if (args[6]) {
+                        auto second = args[6].Get<ui8>();
+                        if (!ValidateSecond(second)) {
+                            return TUnboxedValuePod();
+                        }
+                        SetSecond<TResourceName>(result, second);
+                    }
+                    if (args[7]) {
+                        auto microsecond = args[7].Get<ui32>();
+                        if (!ValidateMicrosecond(microsecond)) {
+                            return TUnboxedValuePod();
+                        }
+                        SetMicrosecond<TResourceName>(result, microsecond);
+                    }
+                    if (args[8]) {
+                        auto timezoneId = args[8].Get<ui16>();
+                        if (!ValidateTimezoneId(timezoneId)) {
+                            return TUnboxedValuePod();
+                        }
+                        SetTimezoneId<TResourceName>(result, timezoneId);
+                    }
+
+                    auto& builder = valueBuilder->GetDateBuilder();
+                    auto& storage = Reference<TResourceName>(result);
+                    if (!storage.Validate(builder)) {
+                        return TUnboxedValuePod();
+                    }
+                    return result;
+                } catch (const std::exception& e) {
+                    TStringBuilder sb;
+                    sb << CurrentExceptionMessage();
+                    sb << Endl << "[" << TStringBuf(Name()) << "]" ;
+                    UdfTerminate(sb.c_str());
+                }
+            }
+
+        };
+
+        static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
+            ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+        {
+            ::TStringBuilder sb;
+            sb << "Invalid argument type: got ";
+            TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
+            sb << ", but Resource<" << TMResourceName <<"> or Resource<"
+               << TM64ResourceName << "> expected";
+            builder.SetError(sb);
+        }
+
+        template<const char* TResourceName>
+        static void BuildSignature(NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+            builder.Returns<TOptional<TResource<TResourceName>>>();
+            builder.OptionalArgs(8).Args()->Add<TAutoMap<TResource<TResourceName>>>()
+                .template Add<TOptional<std::conditional_t<TResourceName == TMResourceName, ui16, i32>>>().Name("Year")
+                .template Add<TOptional<ui8>>().Name("Month")
+                .template Add<TOptional<ui8>>().Name("Day")
+                .template Add<TOptional<ui8>>().Name("Hour")
+                .template Add<TOptional<ui8>>().Name("Minute")
+                .template Add<TOptional<ui8>>().Name("Second")
+                .template Add<TOptional<ui32>>().Name("Microsecond")
+                .template Add<TOptional<ui16>>().Name("TimezoneId");
+            builder.IsStrict();
+            if (!typesOnly) {
+                builder.Implementation(new TImpl<TResourceName>());
+            }
+    }
     };
 
     // From*

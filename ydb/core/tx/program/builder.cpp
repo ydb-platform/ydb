@@ -274,12 +274,18 @@ TConclusionStatus TProgramBuilder::ReadAssign(
 
     switch (assign.GetExpressionCase()) {
         case TId::kFunction: {
+
+            std::shared_ptr<IKernelLogic> kernelLogic;
+            if (assign.GetFunction().GetKernelName()) {
+                kernelLogic.reset(IKernelLogic::TFactory::Construct(assign.GetFunction().GetKernelName()));
+            }
+
             std::vector<TColumnChainInfo> arguments;
             auto function = MakeFunction(columnName, assign.GetFunction(), arguments);
             if (function.IsFail()) {
                 return function;
             }
-            auto processor = TCalculationProcessor::Build(std::move(arguments), columnName.GetColumnId(), function.DetachResult());
+            auto processor = TCalculationProcessor::Build(std::move(arguments), columnName.GetColumnId(), function.DetachResult(), kernelLogic);
             if (processor.IsFail()) {
                 return processor;
             }
@@ -380,7 +386,7 @@ TConclusionStatus TProgramBuilder::ReadGroupBy(const NKikimrSSA::TProgram::TGrou
             }
             auto aggrType = GetAggregationType(agg.GetFunction());
             auto argColumnIds = extractColumnIds(agg.GetFunction().GetArguments());
-            auto status = TCalculationProcessor::Build(std::move(argColumnIds), columnName.GetColumnId(), func.DetachResult());
+            auto status = TCalculationProcessor::Build(std::move(argColumnIds), columnName.GetColumnId(), func.DetachResult(), nullptr);
             if (status.IsFail()) {
                 return status;
             }

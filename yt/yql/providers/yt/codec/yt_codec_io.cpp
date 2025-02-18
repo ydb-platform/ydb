@@ -1536,7 +1536,7 @@ public:
         YQL_ENSURE(inputFields.size() == ColumnConverters_.size());
 
         auto rowIndices = batch->GetColumnByName("$row_index");
-        YQL_ENSURE(rowIndices || decoder.Dynamic);
+        YQL_ENSURE(rowIndices || decoder.Dynamic || Specs_.IsTableContent_);
 
         arrow::compute::ExecContext execContext(Pool_);
         std::vector<arrow::Datum> convertedBatch;

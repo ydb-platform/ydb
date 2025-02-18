@@ -18,7 +18,7 @@ private:
     using TBase = ICompositeChunkedArray;
 
 private:
-    std::vector<std::shared_ptr<IChunkedArray>> Chunks;
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<IChunkedArray>>, Chunks);
 
 protected:
     virtual ui32 DoGetNullsCount() const override {
@@ -49,7 +49,7 @@ protected:
 public:
     TCompositeChunkedArray(std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& chunks, const ui32 recordsCount,
         const std::shared_ptr<arrow::DataType>& type)
-        : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, type)
+        : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray, type)
         , Chunks(std::move(chunks)) {
     }
 

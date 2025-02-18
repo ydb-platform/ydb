@@ -1245,7 +1245,7 @@ void SerializeTaskToProto(
 
     SerializeCtxToMap(*tasksGraph.GetMeta().UserRequestContext, *result->MutableRequestContext());
 
-    result->SetEnableMetering(enableMetering);
+    result->SetDisableMetering(!enableMetering);
     FillTaskMeta(stageInfo, task, *result);
 }
 

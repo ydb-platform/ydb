@@ -1,6 +1,5 @@
 #pragma once
 #include "process_columns.h"
-#include <ydb/core/formats/factory.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>

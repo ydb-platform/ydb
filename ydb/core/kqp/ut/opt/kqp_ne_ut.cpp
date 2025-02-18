@@ -4261,7 +4261,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         CompareYson(R"([[[1u];[2u]];[[2u];[2u]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-
     Y_UNIT_TEST(FullScanCount) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;

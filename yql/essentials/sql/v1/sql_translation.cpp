@@ -95,6 +95,9 @@ TNodePtr BuildViewSelect(
     // to be able to compile view queries with subqueries.
     context.PushCurrentBlocks(&parentContext.GetCurrentBlocks());
 
+    // We need to copy the parent's UDFs in order for the new names to be unique in the parent too.
+    context.SimpleUdfs = parentContext.SimpleUdfs;
+
     context.Settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
 
     TSqlSelect selectTranslator(context, context.Settings.Mode);
@@ -115,6 +118,13 @@ TNodePtr BuildViewSelect(
         parentContext.Issues.AddIssues(issues);
         return nullptr;
     }
+
+    // UDF (user-defined function) declarations are added to the AST translation result
+    // during the YQL Program Node building.
+    // However, the YQL Program Node would be built from the parent query using the parent context.
+    // So, in order to be able to compile the views whose query translation contains UDFs
+    // we need to make the parent context aware of the UDFs referenced in the view select statement.
+    parentContext.SimpleUdfs = std::move(context.SimpleUdfs);
     return node;
 }
 

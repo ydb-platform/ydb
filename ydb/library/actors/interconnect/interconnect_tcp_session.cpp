@@ -699,6 +699,7 @@ namespace NActors {
             size_t maxBytes) {
         LWPROBE_IF_TOO_LONG(SlowICWriteData, Proxy->PeerNodeId, ms) {
             constexpr ui32 iovLimit = 256;
+            constexpr ui32 zcThreshold = 16384;
 
             ui32 maxElementsInIOV;
             if (Params.Encryption) {
@@ -718,6 +719,22 @@ namespace NActors {
             stream.ProduceIoVec(wbuffers, maxElementsInIOV, maxBytes);
             Y_ABORT_UNLESS(!wbuffers.empty());
 
+            ssize_t zcPos = -1;
+            for (size_t i = 0; i < wbuffers.size(); i++) {
+                if (wbuffers[i].Size > zcThreshold) {
+                    zcPos = i;
+                    break;
+                }
+            }
+
+            if (wbuffers.size() > 1) {
+                if (zcPos == 0) {
+                    wbuffers.resize(1);
+                } else if (zcPos > 0) {
+                    wbuffers.resize((size_t)zcPos);
+                }
+            }
+
             TString err;
             ssize_t r = 0;
             { // issue syscall with timing
@@ -726,7 +743,11 @@ namespace NActors {
                 do {
                     if (wbuffers.size() == 1) {
                         auto& front = wbuffers.front();
-                        r = socket.Send(front.Data, front.Size, &err);
+                        if (front.Size > zcThreshold) {
+                            r = socket.SendZc(front.Data, front.Size);
+                        } else {
+                            r = socket.Send(front.Data, front.Size, &err);
+                        }
                     } else {
                         r = socket.WriteV(reinterpret_cast<const iovec*>(wbuffers.data()), wbuffers.size());
                     }

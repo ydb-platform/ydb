@@ -2,6 +2,7 @@ import time
 import logging
 from .base import TllTieringTestBase, ColumnTableHelper
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
+import pytest
 
 logger = logging.getLogger(__name__)
 

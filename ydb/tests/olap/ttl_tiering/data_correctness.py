@@ -5,6 +5,7 @@ import ydb
 import concurrent
 import random
 import datetime
+import pytest
 
 logger = logging.getLogger(__name__)
 

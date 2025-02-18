@@ -793,10 +793,8 @@ private:
                 case EState::CreateChangefeed:
                     if (item.WaitTxId == InvalidTxId) {
                         if (!IsCreatedByQuery(item) || item.PreparedCreationQuery) {
-                            Cerr << "AllocateTxIdCreateChfg: " << IsCreatedByQuery(item) << " " << item.PreparedCreationQuery << Endl;
                             AllocateTxId(importInfo, itemIdx);
                         } else {
-                            Cerr << "NoAllocateTxIdCreateChfg SchemeQueryExecutor: " << IsCreatedByQuery(item) << " " << item.PreparedCreationQuery << Endl;
                             const auto database = GetDatabase(*Self);
                             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                                 Self->SelfId(), importInfo->Id, itemIdx, item.CreationQuery, database
@@ -804,7 +802,6 @@ private:
                             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
                         }
                     } else {
-                        Cerr << "SubscribeTxCreateChfg: " << IsCreatedByQuery(item) << " " << item.PreparedCreationQuery << Endl;
                         SubscribeTx(importInfo, itemIdx);
                     }
                     break;

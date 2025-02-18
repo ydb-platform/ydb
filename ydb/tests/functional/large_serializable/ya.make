@@ -13,7 +13,7 @@ REQUIREMENTS(
 )
 
 SIZE(LARGE)
-TAG(ya:fat)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(
     ydb/tests/tools/ydb_serializable

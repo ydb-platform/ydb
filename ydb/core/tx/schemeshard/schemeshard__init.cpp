@@ -803,7 +803,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32> TBackupSettingsRec;
+    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool> TBackupSettingsRec;
     typedef TDeque<TBackupSettingsRec> TBackupSettingsRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -815,7 +815,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::ScanSettings>(""),
             rowSet.template GetValueOrDefault<typename SchemaTable::NeedToBill>(true),
             rowSet.template GetValueOrDefault<typename SchemaTable::TableDescription>(""),
-            rowSet.template GetValueOrDefault<typename SchemaTable::NumberOfRetries>(0)
+            rowSet.template GetValueOrDefault<typename SchemaTable::NumberOfRetries>(0),
+            rowSet.template GetValueOrDefault<typename SchemaTable::EnableChecksums>(false)
         );
     }
 
@@ -3791,6 +3792,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 bool needToBill = std::get<5>(rec);
                 TString tableDesc = std::get<6>(rec);
                 ui32 nRetries = std::get<7>(rec);
+                bool enableChecksums = std::get<8>(rec);
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
 
@@ -3800,6 +3802,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 tableInfo->BackupSettings.SetTableName(tableName);
                 tableInfo->BackupSettings.SetNeedToBill(needToBill);
                 tableInfo->BackupSettings.SetNumberOfRetries(nRetries);
+                tableInfo->BackupSettings.SetEnableChecksums(enableChecksums);
 
                 if (ytSerializedSettings) {
                     auto settings = tableInfo->BackupSettings.MutableYTSettings();

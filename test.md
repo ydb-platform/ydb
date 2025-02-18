@@ -3,7 +3,7 @@ test
    
 ![Custom Badge](https://img.shields.io/badge/progress-50%25-brightgreen?style=for-the-badge)
 ![Custom Badge](https://img.shields.io/badge/DONE-10%2F2050%25-red?style=for-the-badge&logo=database&labelColor=grey)
-![Custom Badge](https://img.shields.io/badge/progess-(10%2F20)50%25-red?style=for-the-badge&logo=database&labelColor=grey)
+![Custom Badge](https://img.shields.io/badge/progess-10%2F20:50%25-red?style=for-the-badge&logo=database&labelColor=grey)
 
 
 <p>Progress:</p>

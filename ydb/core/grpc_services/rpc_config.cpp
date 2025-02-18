@@ -138,7 +138,13 @@ public:
     using TBase = TBSConfigRequestGrpc<TReplaceStorageConfigRequest, TEvReplaceStorageConfigRequest, Ydb::Config::ReplaceConfigResult>;
     using TBase::TBase;
 
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) override {
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
+        const auto& request = *GetProtoRequest();
+        if (request.dry_run()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            issues.AddIssue("DryRun is not supported yet.");
+            return false;
+        }
         return true;
     }
 
@@ -200,9 +206,16 @@ public:
     using TBase = TBSConfigRequestGrpc<TFetchStorageConfigRequest, TEvFetchStorageConfigRequest, Ydb::Config::FetchConfigResult>;
     using TBase::TBase;
 
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) override {
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
+        const auto& request = *GetProtoRequest();
+        if (request.mode_case() != Ydb::Config::FetchConfigRequest::ModeCase::kAll) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            issues.AddIssue("Only fetch mode \"all\" is supported now.");
+            return false;
+        }
         return true;
     }
+
     NACLib::EAccessRights GetRequiredAccessRights() const {
         return NACLib::GenericManage;
     }
@@ -241,7 +254,7 @@ public:
                 }
                 break;
             case Ydb::Config::FetchConfigRequest::ModeCase::kTarget:
-                // TODO: !imp error
+                // TODO: implement, currently impossible (see ValidateRequest)
                 break;
             case Ydb::Config::FetchConfigRequest::ModeCase::MODE_NOT_SET:
                 break; // TODO: maybe error

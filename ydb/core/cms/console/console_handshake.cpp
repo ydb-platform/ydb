@@ -183,10 +183,23 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerValidateConfigRequest:
     }
 
     auto& record = response->Record;
+
+    bool allowIncorrectVersion = ev->Get()->Record.GetAllowIncorrectVersion();
+    bool allowIncorrectCluster = ev->Get()->Record.GetAllowIncorrectCluster();
+
+    if (allowIncorrectVersion xor allowIncorrectCluster) {
+        record.SetStatus(NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigNotValid);
+        record.SetErrorReason("Options AllowIncorrectVersion and AllowIncorrectCluster currently can be used only together");
+        SendInReply(ev->Sender, ev->InterconnectSession, std::move(response), ev->Cookie);
+        return;
+    }
+
+    bool force = allowIncorrectVersion && allowIncorrectCluster;
+
     auto mainYamlConfig = ev->Get()->Record.GetYAML();
 
     TUpdateConfigOpContext opCtx;
-    ReplaceMainConfigMetadata(mainYamlConfig, false, opCtx);
+    ReplaceMainConfigMetadata(mainYamlConfig, force, opCtx);
     ValidateMainConfig(opCtx);
     bool hasForbiddenUnknownFields = !opCtx.UnknownFields.empty() && !ev->Get()->Record.GetAllowUnknownFields();
 

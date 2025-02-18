@@ -5,6 +5,7 @@
 #include <ydb-cpp-sdk/client/topic/codecs.h>
 #include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 

@@ -1065,16 +1065,13 @@ int RunMain(int argc, const char* argv[])
             auto fileGateway = MakeIntrusive<TDummyPqGateway>();
 
             for (auto& s : pqFileList) {
-                TStringBuf topicName, others;
-                TStringBuf(s).Split('@', topicName, others);
-                TStringBuf path, partitionCountStr;
-                TStringBuf(others).Split(':', path, partitionCountStr);
-                if (topicName.empty() || path.empty()) {
-                    Cerr << "Incorrect table mapping, expected form topic@path[:partitions_count]" << Endl;
+                TStringBuf topicName, filePath;
+                TStringBuf(s).Split('@', topicName, filePath);
+                if (topicName.empty() || filePath.empty()) {
+                    Cerr << "Incorrect table mapping, expected form topic@file" << Endl;
                     return 1;
                 }
-                size_t partitionCount = !partitionCountStr.empty() ? FromString<size_t>(partitionCountStr) : 1;
-                fileGateway->AddDummyTopic(TDummyTopic("pq", TString(topicName), TString(path), partitionCount));
+                fileGateway->AddDummyTopic(TDummyTopic("pq", TString(topicName), TString(filePath)));
             }
             pqGateway = std::move(fileGateway);
         } else {

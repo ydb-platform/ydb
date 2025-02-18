@@ -528,6 +528,9 @@ private:
         const bool shouldSkipData = Channels->ShouldSkipData(outputChannel.ChannelId);
         const bool hasFreeMemory = Channels->HasFreeMemoryInChannel(outputChannel.ChannelId);
         UpdateBlocked(outputChannel, !hasFreeMemory);
+        if (!hasFreeMemory) {
+            ProcessOutputsState.IsFull = true;
+        }
 
         if (!shouldSkipData && !outputChannel.EarlyFinish && !hasFreeMemory) {
             CA_LOG_T("DrainOutputChannel return because No free memory in channel, channel: " << outputChannel.ChannelId);
@@ -555,6 +558,9 @@ private:
 
         const ui32 allowedOvercommit = AllowedChannelsOvercommit();
         const i64 sinkFreeSpaceBeforeSend = sinkInfo.AsyncOutput->GetFreeSpace();
+        if (sinkFreeSpaceBeforeSend <= 0) {
+            ProcessOutputsState.IsFull = true;
+        }
 
         i64 toSend = sinkFreeSpaceBeforeSend + allowedOvercommit;
         CA_LOG_T("About to drain sink " << outputIndex
@@ -696,13 +702,7 @@ private:
     }
 
     void DoExecuteImpl() override {
-        bool isFull = false;
-        if (ProcessOutputsState.Inflight == 0 && ProcessOutputsState.HasDataToSend && !ProcessOutputsState.DataWasSent && ProcessOutputsState.LastRunStatus == ERunStatus::PendingOutput) {
-            // FIXME is this condition correct?
-            // we need to stop polling when output is full and all input buffers are full
-            isFull = true;
-        }
-        PollAsyncInput(!isFull);
+        PollAsyncInput(!ProcessOutputsState.IsFull);
         if (ProcessSourcesState.Inflight == 0) {
             auto req = GetCheckpointRequest();
             CA_LOG_T("DoExecuteImpl: " << (bool) req);
@@ -945,6 +945,10 @@ private:
             }
         }
 
+        if (!Channels->HasFreeMemoryInChannel(outputChannel.ChannelId)) {
+            ProcessOutputsState.IsFull = true;
+        }
+
         ProcessOutputsState.DataWasSent |= asyncData.Changed;
 
         ProcessOutputsState.AllOutputsFinished =
@@ -1024,6 +1028,9 @@ private:
         CA_LOG_T("Drain sink " << outputIndex
             << ". Free space decreased: " << (sinkInfo.FreeSpaceBeforeSend - sinkInfo.AsyncOutput->GetFreeSpace())
             << ", sent data from buffer: " << dataSize);
+        if (sinkInfo.AsyncOutput->GetFreeSpace() <= 0) {
+            ProcessOutputsState.IsFull = true;
+        }
 
         ProcessOutputsState.DataWasSent |= dataWasSent;
         ProcessOutputsState.AllOutputsFinished =

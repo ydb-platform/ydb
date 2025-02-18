@@ -2172,7 +2172,7 @@ message TAppConfig {
     //optional TLocalConfig LocalConfig = 23; DEPRECATED
     optional TDynamicNodeConfig DynamicNodeConfig = 24;
     optional NKikimrCms.TCmsConfig CmsConfig = 25;
-    optional TFeatureFlags FeatureFlags = 26;
+    optional TFeatureFlags FeatureFlags = 26 [(NMarkers.AllowInDatabaseConfig) = true];
     optional TSqsConfig SqsConfig = 27;
     optional NKikimrPQ.TPQConfig PQConfig = 28;
     optional NKikimrTenantPool.TTenantPoolConfig TenantPoolConfig = 29;
@@ -2183,7 +2183,7 @@ message TAppConfig {
     optional NKikimrProto.TKeyConfig KeyConfig = 35;
     optional NKikimrProto.TKeyConfig PDiskKeyConfig = 51;
     optional NKikimrNodeBroker.TConfig NodeBrokerConfig = 36;
-    optional TTableServiceConfig TableServiceConfig = 37;
+    optional TTableServiceConfig TableServiceConfig = 37 [(NMarkers.AllowInDatabaseConfig) = true];
     optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 38; // dynamic configuration via cms
     optional TImmediateControlsConfig ImmediateControlsConfig = 39;
     optional TAllocatorConfig AllocatorConfig = 40;

@@ -1,4 +1,5 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/raw_socket/sock_config.h>
 #include <ydb/core/util/address_classifier.h>
 
@@ -7,12 +8,6 @@
 #include "kafka_events.h"
 #include "kafka_log_impl.h"
 #include "kafka_metrics.h"
-#include "actors/kafka_read_session_actor.h"
-
-
-#include <strstream>
-#include <sstream>
-#include <iosfwd>
 
 namespace NKafka {
 
@@ -103,6 +98,11 @@ public:
 
     void Bootstrap() {
         Context->ConnectionId = SelfId();
+        Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement;
+        // if no authentication required, then we can use local database as our target
+        if (!Context->RequireAuthentication) {
+            Context->DatabasePath = NKikimr::AppData()->TenantName;
+        }
 
         Become(&TKafkaConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
@@ -339,7 +339,7 @@ protected:
         if (Request->Header.ClientId.has_value() && Request->Header.ClientId != "") {
             Context->KafkaClient = Request->Header.ClientId.value();
         }
-        
+
         switch (Request->Header.RequestApiKey) {
             case PRODUCE:
                 HandleMessage(&Request->Header, Cast<TProduceRequestData>(Request), ctx);
@@ -449,6 +449,7 @@ protected:
             return;
         }
 
+        Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement;
         Context->UserToken = event->UserToken;
         Context->DatabasePath = event->DatabasePath;
         Context->AuthenticationStep = authStep;
@@ -626,10 +627,12 @@ protected:
                     case INFLIGTH_CHECK:
                         if (!Context->Authenticated() && !PendingRequestsQueue.empty()) {
                             // Allow only one message to be processed at a time for non-authenticated users
+                            KAFKA_LOG_ERROR("DoRead: failed inflight check: there are " << PendingRequestsQueue.size() << " pending requests and user is not authnicated.  Only one paraller request is allowed for a non-authenticated user.");
                             return true;
                         }
                         if (InflightSize + Request->ExpectedSize > Context->Config.GetMaxInflightSize()) {
                             // We limit the size of processed messages so as not to exceed the size of available memory
+                            KAFKA_LOG_ERROR("DoRead: failed inflight check: InflightSize + Request->ExpectedSize=" << InflightSize + Request->ExpectedSize << " > Context->Config.GetMaxInflightSize=" << Context->Config.GetMaxInflightSize());
                             return true;
                         }
                         InflightSize += Request->ExpectedSize;
@@ -709,6 +712,12 @@ protected:
                 }
             }
         }
+    }
+
+    bool RequireAuthentication(EApiKey apiKey) {
+        return !(EApiKey::API_VERSIONS == apiKey || 
+                EApiKey::SASL_HANDSHAKE == apiKey || 
+                EApiKey::SASL_AUTHENTICATE == apiKey);
     }
 
     void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {

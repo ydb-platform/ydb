@@ -13,6 +13,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
@@ -79,7 +80,8 @@ struct TRunActorParams { // TODO2 : Change name
         TDuration resultTtl,
         std::map<TString, Ydb::TypedValue>&& queryParameters,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-        const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager
+        const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager,
+        const NYql::IPqGateway::TPtr& pqGateway
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -145,6 +147,7 @@ struct TRunActorParams { // TODO2 : Change name
     std::map<TString, Ydb::TypedValue> QueryParameters;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
     ::NFq::NConfig::TWorkloadManagerConfig WorkloadManager;
+    NYql::IPqGateway::TPtr PqGateway;
 };
 
 } /* NFq */

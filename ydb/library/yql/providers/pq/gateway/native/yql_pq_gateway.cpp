@@ -148,7 +148,7 @@ ITopicClient::TPtr TPqNativeGateway::GetTopicClient(const NYdb::TDriver& driver,
 }
 
 NYdb::NTopic::TTopicClientSettings TPqNativeGateway::GetTopicClientSettings() const {
-    return CommonTopicClientSettings.GetOrElse(NYdb::NTopic::TTopicClientSettings());
+    return CommonTopicClientSettings ? *CommonTopicClientSettings : NYdb::NTopic::TTopicClientSettings();
 }
 
 TPqNativeGateway::~TPqNativeGateway() {

@@ -16,6 +16,7 @@
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <yql/essentials/providers/common/metrics/service_counters.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
@@ -53,7 +54,8 @@ NActors::IActor* CreatePendingFetcher(
     const ::NMonitoring::TDynamicCounterPtr& clientCounters,
     const TString& tenantName,
     NActors::TMon* monitoring,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    const NYql::IPqGateway::TPtr& pqGateway
     );
 
 NActors::IActor* CreateRunActor(

@@ -163,7 +163,7 @@ public:
         GetEventQueue(topic)->Push(std::move(e), size);
      }
 
-     virtual NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override {
+     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override {
         return NYdb::NTopic::TTopicClientSettings();
      }
 

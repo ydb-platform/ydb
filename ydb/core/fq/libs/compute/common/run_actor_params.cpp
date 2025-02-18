@@ -60,7 +60,8 @@ TRunActorParams::TRunActorParams(
     TDuration resultTtl,
     std::map<TString, Ydb::TypedValue>&& queryParameters,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-    const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager
+    const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager,
+    const NYql::IPqGateway::TPtr& pqGateway
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -117,6 +118,7 @@ TRunActorParams::TRunActorParams(
     , QueryParameters(std::move(queryParameters))
     , S3ActorsFactory(std::move(s3ActorsFactory))
     , WorkloadManager(workloadManager)
+    , PqGateway(pqGateway)
     {
     }
 

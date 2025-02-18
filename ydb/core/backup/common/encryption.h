@@ -1,0 +1,138 @@
+#pragma once
+
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
+#include <util/generic/buffer.h>
+#include <util/generic/maybe.h>
+#include <util/generic/string.h>
+
+#include <vector>
+
+namespace NKikimr::NBackup {
+
+// Backup file type.
+// Must be different for all files in one backup item folder.
+// Must suit to one byte.
+enum class EBackupFileType : unsigned char {
+    Metadata = 0,
+};
+
+struct TEncryptionIV {
+    TEncryptionIV() = default; // Uninitialized IV
+    TEncryptionIV(const TEncryptionIV&) = default;
+    TEncryptionIV(TEncryptionIV&&) = default;
+
+    // Generate new random IV
+    static TEncryptionIV Generate();
+
+    // Combine IV for backup item file
+    // base: base IV for the whole backup
+    // backupItemNumber: unique backup item number within backup
+    // shardNumber (only for sharded backup items such as tables): datashard number
+    static TEncryptionIV Combine(const TEncryptionIV& base, EBackupFileType fileType, uint32_t backupItemNumber, uint32_t shardNumber);
+
+    // Combine IV for specific chunk
+    // fileIV: IV for backup item file got by Combine() function
+    static TEncryptionIV CombineForChunk(const TEncryptionIV& fileIV, uint32_t chunkNumber);
+
+    operator bool() const {
+        return !IV.empty();
+    }
+
+    bool operator!() const {
+        return IV.empty();
+    }
+
+    size_t Size() const {
+        return IV.size();
+    }
+
+    const unsigned char* Ptr() const {
+        Y_VERIFY(!IV.empty());
+        return &IV[0];
+    }
+
+    TString GetHexString() const;
+    TString GetBinaryString() const;
+
+    std::vector<unsigned char> IV;
+
+    // Proper size for ciphers used in backups
+    static constexpr size_t SIZE = 12;
+
+    static constexpr size_t FILE_TYPE_OFFSET = 0;
+    static constexpr size_t FILE_TYPE_SIZE = 1;
+
+    static constexpr size_t BACKUP_ITEM_OFFSET = FILE_TYPE_OFFSET + FILE_TYPE_SIZE;
+    static constexpr size_t BACKUP_ITEM_SIZE = 3;
+    static constexpr uint32_t MAX_BACKUP_ITEM_NUMBER = (1 << (8 * BACKUP_ITEM_SIZE));
+
+    static constexpr size_t SHARD_NUMBER_OFFSET = BACKUP_ITEM_OFFSET + BACKUP_ITEM_SIZE;
+    static constexpr size_t SHARD_NUMBER_SIZE = 4;
+
+    static constexpr size_t CHUNK_NUMBER_OFFSET = SHARD_NUMBER_OFFSET + SHARD_NUMBER_SIZE;
+    static constexpr size_t CHUNK_NUMBER_SIZE = 4;
+
+    static_assert(CHUNK_NUMBER_OFFSET + CHUNK_NUMBER_SIZE == SIZE);
+};
+
+struct TEncryptionKey {
+    explicit TEncryptionKey(const TString& bytes)
+        : Key(reinterpret_cast<const unsigned char*>(bytes.data()), reinterpret_cast<const unsigned char*>(bytes.data() + bytes.size()))
+    {
+    }
+
+    operator bool() const {
+        return !Key.empty();
+    }
+
+    bool operator!() const {
+        return Key.empty();
+    }
+
+    size_t Size() const {
+        return Key.size();
+    }
+
+    const unsigned char* Ptr() const {
+        Y_VERIFY(!Key.empty());
+        return &Key[0];
+    }
+
+    std::vector<unsigned char> Key;
+};
+
+// Class that writes encrypted file
+// Has streaming interface
+class TEncryptedFileSerializer {
+public:
+    TEncryptedFileSerializer(TString algorithm, TEncryptionKey key, TEncryptionIV iv, bool writeIV);
+
+    // Streaming interface
+    // File consists of blocks that contain MAC
+    // Block size should not be too big
+    // because whole block must be read before usage.
+    TBuffer AddBlock(TStringBuf data, bool last);
+
+    // Helper that serializes of the whole file at one time
+    static TBuffer EncryptFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data, bool writeIV);
+
+private:
+    class TImpl;
+    std::unique_ptr<TImpl> Impl;
+};
+
+// Class that reads encrypted file
+// Has streaming interface
+class TEncryptedFileDeserializer {
+public:
+    TEncryptedFileDeserializer(TEncryptionKey key, TEncryptionIV iv);
+
+    TMaybe<TBuffer> AddBlock(TStringBuf data, bool last);
+
+private:
+    TEncryptionIV IV;
+    TEncryptionKey Key;
+};
+
+} // NKikimr::NBackup

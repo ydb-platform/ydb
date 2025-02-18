@@ -522,28 +522,6 @@ private:
         Send(Self->SelfId(), CreateChangefeedPropose(Self, txId, item));
     }
 
-    bool CancelCreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        const auto& item = importInfo->Items.at(itemIdx);
-
-        if (item.WaitTxId == InvalidTxId) {
-            if (item.SubState == ESubState::Proposed) {
-                importInfo->State = EState::Cancellation;
-            }
-
-            return false;
-        }
-
-        importInfo->State = EState::Cancellation;
-
-        LOG_I("TImport::TTxProgress: cancel restore's tx"
-            << ": info# " << importInfo->ToString()
-            << ", item# " << item.ToString(itemIdx));
-
-        Send(Self->SelfId(), CancelRestorePropose(importInfo, item.WaitTxId), 0, importInfo->Id);
-        return true;
-    }
-
     void AllocateTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
@@ -660,9 +638,6 @@ private:
             }
 
             switch (importInfo->Items.at(i).State) {
-            case EState::CreateChangefeed:
-                CancelCreateChangefeed(importInfo, i);
-                break;
             case EState::Transferring:
                 CancelTransferring(importInfo, i);
                 break;
@@ -826,9 +801,7 @@ private:
 
                 switch (item.State) {
                 case EState::CreateChangefeed:
-                    if (!CancelCreateChangefeed(importInfo, itemIdx)) {
-                        txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
-                    }
+                    txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
                     break;
 
                 case EState::Transferring:
@@ -852,10 +825,6 @@ private:
                     Self->PersistImportItemState(db, importInfo, itemIdx);
 
                     switch (item.State) {
-                    case EState::CreateChangefeed:
-                        CancelCreateChangefeed(importInfo, itemIdx);
-                        break;
-
                     case EState::Transferring:
                         CancelTransferring(importInfo, itemIdx);
                         break;
@@ -1138,11 +1107,6 @@ private:
 
         if (importInfo->State != EState::Waiting && item.State == EState::Transferring) {
             CancelTransferring(importInfo, itemIdx);
-            return;
-        }
-
-        if (importInfo->State != EState::Waiting && item.State == EState::CreateChangefeed) {
-            CancelCreateChangefeed(importInfo, itemIdx);
             return;
         }
 

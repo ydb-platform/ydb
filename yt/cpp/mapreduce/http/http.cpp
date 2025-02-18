@@ -766,14 +766,12 @@ THttpResponse::THttpResponse(
         return;
     }
 
-    ErrorResponse_ = TErrorResponse(HttpCode_, Context_.RequestId);
-
     auto logAndSetError = [&] (int code, const TString& rawError) {
         YT_LOG_ERROR("RSP %v - HTTP %v - %v",
             Context_.RequestId,
             HttpCode_,
             rawError.data());
-        ErrorResponse_->SetError(TYtError(code, rawError));
+        ErrorResponse_ = TErrorResponse(TYtError(code, rawError), Context_.RequestId);
     };
 
     switch (HttpCode_) {
@@ -807,8 +805,7 @@ THttpResponse::THttpResponse(
                     ExtendGenericError(*ErrorResponse_, NClusterErrorCodes::NBus::TransportError, "transport error");
                 }
             } else {
-                ErrorResponse_->SetRawError(
-                    errorString + " - X-YT-Error is missing in headers");
+                ErrorResponse_ = TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), Context_.RequestId);
             }
             break;
         }
@@ -854,8 +851,9 @@ TMaybe<TErrorResponse> THttpResponse::ParseError(const THttpHeaders& headers)
 {
     for (const auto& header : headers) {
         if (header.Name() == "X-YT-Error") {
-            TErrorResponse errorResponse(HttpCode_, Context_.RequestId);
-            errorResponse.ParseFromJsonError(header.Value());
+            TYtError error;
+            error.ParseFrom(header.Value());
+            TErrorResponse errorResponse(std::move(error), Context_.RequestId);
             if (errorResponse.IsOk()) {
                 return Nothing();
             }

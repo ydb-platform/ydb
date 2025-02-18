@@ -695,8 +695,7 @@ void THttpRawBatchRequest::ParseResponse(
                 if (errorIt == responseNode.end()) {
                     BatchItemList_[i].ResponseParser->SetResponse(Nothing());
                 } else {
-                    TErrorResponse error(400, requestId);
-                    error.SetError(TYtError(errorIt->second));
+                    TErrorResponse error(TYtError(errorIt->second), requestId);
                     if (auto curInterval = IsRetriable(error) ? retryPolicy->OnRetriableError(error) : Nothing()) {
                         YT_LOG_INFO(
                             "Batch subrequest (%s) failed, will retry, error: %s",

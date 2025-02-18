@@ -169,17 +169,20 @@ TString TEncryptionIV::GetBinaryString() const {
 
 class TEncryptedFileSerializer::TImpl {
 public:
-    TImpl(TString algorithm, TEncryptionKey key, TEncryptionIV iv, bool writeIV)
+    TImpl(TString algorithm, TEncryptionKey key, TEncryptionIV iv)
         : Algorithm(std::move(algorithm))
         , NormalizedAlgName(NormalizeAlgName(Algorithm))
         , Key(std::move(key))
         , IV(std::move(iv))
-        , WriteIV(writeIV)
     {
         ResetCtx();
     }
 
     TBuffer AddBlock(TStringBuf data, bool last) {
+        if (!data) {
+            throw yexception() << "Empty data block";
+        }
+
         TBuffer buffer;
         ReserveBufferSize(buffer, data, last);
         if (CurrentChunkNumber == 0) {
@@ -207,7 +210,7 @@ public:
             throw yexception() << "Unknown cipher algorithm: \"" << Algorithm << "\"";
         }
 
-        const EVP_CIPHER* cipher = GetCipherByName(NormalizedAlgName); // throws
+        const EVP_CIPHER* cipher = GetCipherByName(NormalizedAlgName);
 
         // Check key length
         const int keyLength = EVP_CIPHER_key_length(cipher);
@@ -322,9 +325,7 @@ public:
         TExportEncryptedFileHeader header;
         header.SetVersion(1);
         header.SetEncryptionAlgorithm(NormalizedAlgName);
-        if (WriteIV) {
-            header.SetIV(IV.GetBinaryString());
-        }
+        header.SetIV(IV.GetBinaryString());
         TString serialized;
         if (!header.SerializeToString(&serialized)) {
             throw yexception() << "Failed to write header";
@@ -347,7 +348,6 @@ private:
     TString NormalizedAlgName;
     TEncryptionKey Key;
     TEncryptionIV IV;
-    const bool WriteIV;
     TCipherCtxPtr Ctx;
     uint32_t CurrentChunkNumber = 0; // 0 for header
 
@@ -355,17 +355,19 @@ private:
     char PreviousMAC[MAC_SIZE] = {};
 };
 
-TEncryptedFileSerializer::TEncryptedFileSerializer(TString algorithm, TEncryptionKey key, TEncryptionIV iv, bool writeIV)
-    : Impl(new TImpl(std::move(algorithm), std::move(key), std::move(iv), writeIV))
+TEncryptedFileSerializer::TEncryptedFileSerializer(TString algorithm, TEncryptionKey key, TEncryptionIV iv)
+    : Impl(new TImpl(std::move(algorithm), std::move(key), std::move(iv)))
 {
 }
+
+TEncryptedFileSerializer::~TEncryptedFileSerializer() = default;
 
 TBuffer TEncryptedFileSerializer::AddBlock(TStringBuf data, bool last) {
     return Impl->AddBlock(data, last);
 }
 
-TBuffer TEncryptedFileSerializer::EncryptFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data, bool writeIV) {
-    TEncryptedFileSerializer serializer(std::move(algorithm), std::move(key), std::move(iv), writeIV);
+TBuffer TEncryptedFileSerializer::EncryptFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data) {
+    TEncryptedFileSerializer serializer(std::move(algorithm), std::move(key), std::move(iv));
     return serializer.AddBlock(data, true);
 }
 

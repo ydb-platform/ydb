@@ -106,7 +106,8 @@ struct TEncryptionKey {
 // Has streaming interface
 class TEncryptedFileSerializer {
 public:
-    TEncryptedFileSerializer(TString algorithm, TEncryptionKey key, TEncryptionIV iv, bool writeIV);
+    TEncryptedFileSerializer(TString algorithm, TEncryptionKey key, TEncryptionIV iv);
+    ~TEncryptedFileSerializer();
 
     // Streaming interface
     // File consists of blocks that contain MAC
@@ -115,7 +116,7 @@ public:
     TBuffer AddBlock(TStringBuf data, bool last);
 
     // Helper that serializes of the whole file at one time
-    static TBuffer EncryptFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data, bool writeIV);
+    static TBuffer EncryptFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data);
 
 private:
     class TImpl;

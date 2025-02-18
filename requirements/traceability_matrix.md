@@ -6,8 +6,8 @@
 #### REQ-BULK-001: The system should support data insertion using `bulk_upsert` across all data types and transports.
 **Description**: Enable the insertion of all data types (e.g., Int32, Uint64, String) using transports like arrow and BoxedValue, ensuring data visibility and integrity.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-BULK-001-1.1 | All Data Types Support via Arrow | Verify bulk insertion of all data types using arrow transport. Status: Pending |  | Pending |
 | REQ-BULK-001-1.2 | All Data Types Support via BoxedValue | Verify bulk insertion using BoxedValue transport. Status: Pending |  | Pending |
 | REQ-BULK-001-1.3 | Data Visibility Post-Insertion | Ensure latest values are visible post-insertion. |  | Pending |
@@ -24,8 +24,8 @@
 #### [ISSUE-14668](https://github.com/ydb-platform/ydb/issues/14668): Test suite: CS/(INSERT INTO/UPSERT/REPLACE) support
 ![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F9:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | #14669 | It is possible to write data types in all columns, including PK and data |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14669)](https://github.com/ydb-platform/ydb/issues/14669) | Pending |
 | #14670 | If the data already exists in the table, INSERT INTO returns an error, REPLACE/UPSERT overwrites it |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14670)](https://github.com/ydb-platform/ydb/issues/14670) | Pending |
 | #14671 | If there is no data in the table, INSERT INTO inserts the data, REPLACE does nothing, UPSERT inserts the data |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14671)](https://github.com/ydb-platform/ydb/issues/14671) | Pending |
@@ -40,16 +40,16 @@
 #### [ISSUE-14680](https://github.com/ydb-platform/ydb/issues/14680): Test Suite: Reading data
 ![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F2:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | #14679 | LogBench - working with reads, aggregation, JSON types. The test is successful on a small amount of data |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14679)](https://github.com/ydb-platform/ydb/issues/14679) | Pending |
 | #14681 | TPCH S100 is successful |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14681)](https://github.com/ydb-platform/ydb/issues/14681) | Pending |
 
 #### [ISSUE-13527](https://github.com/ydb-platform/ydb/issues/13527): Test Suite: cs/read-write
 ![PROGRESS](https://img.shields.io/badge/PROGRESS-1%2F8:12%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | #13528 | Test cs read-write. Check all column types work | Для каждого типа проверяем, что он может быть PK/не PK столбцом через create table + тривиальную операцию. Убеждаемся что операции чтения-записи проходят корректно | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13528)](https://github.com/ydb-platform/ydb/issues/13528) | Pending |
 | #13529 | Test cs read-write. Quota exhaustion | Пишем в таблицу пока квота не закончится. Далее удаляем таблицу, убеждаемся что база работоспособна (путем манипулирования с таблицами) | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13529)](https://github.com/ydb-platform/ydb/issues/13529) | Pending |
 | #13530 | Test cs read-write. Log scenario (write in the end) | Делаем табличку с PK типа Timestamp | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13530)](https://github.com/ydb-platform/ydb/issues/13530) | Pending |
@@ -62,8 +62,8 @@
 #### [ISSUE-14639](https://github.com/ydb-platform/ydb/issues/14639): Test suite: cs/write data
 ![PROGRESS](https://img.shields.io/badge/PROGRESS-2%2F8:25%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | #14640 | You can write all kinds of data via bulk_upsert with all kinds of transport: arrow, BoxedValue |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14640)](https://github.com/ydb-platform/ydb/issues/14640) | Pending |
 | #14642 | After a successful bulk_upsert write, the latest data values are visible | There can be multiple entries in bulk_upsert with the same key. We expect that only the last record is written. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14642)](https://github.com/ydb-platform/ydb/issues/14642) | Pending |
 | #14643 | If there are multiple identical keys within a single bulk_upsert data bundle, the last one is written | Test bulk upsert into the table with overlapping keys. Data are inserted by overlapping chunks | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14643)](https://github.com/ydb-platform/ydb/issues/14643) | Pending |
@@ -79,8 +79,8 @@
 
 **Description**: статистики по таблицам для UI, доступность информации через .sys
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | #13955 | TBD |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13955)](https://github.com/ydb-platform/ydb/issues/13955) | Pending |
 
 #### [ISSUE-13956](https://github.com/ydb-platform/ydb/issues/13956): Test suite: cs/schema
@@ -88,8 +88,8 @@
 
 **Description**: взаимодействие со ским-шардом, создание/удаление таблиц/сторов, представление/оптимизиация хранения схем, актуализация данных
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | #13957 | TBD |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13957)](https://github.com/ydb-platform/ydb/issues/13957) | Pending |
 
 #### [ISSUE-13959](https://github.com/ydb-platform/ydb/issues/13959): Test suite: cs/indexes
@@ -97,23 +97,23 @@
 
 **Description**: индексы/статистики
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | #13960 | TBD |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13960)](https://github.com/ydb-platform/ydb/issues/13960) | Pending |
 
 #### [ISSUE-14601](https://github.com/ydb-platform/ydb/issues/14601): Test Suite: Workload Manager
 ![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | #14602 | Test WM. Classifiers move queires to right resource pool |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14602)](https://github.com/ydb-platform/ydb/issues/14602) | Pending |
 
 ### INSERT INTO, UPSERT, and REPLACE Operations
 #### REQ-INS-001: Support INSERT INTO, UPSERT, and REPLACE for data modifications with expected behaviors.
 **Description**: Ensure data can be inserted or updated with proper handling of duplicates and expected transactional behaviors.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-INS-001-2.1 | Data Type Support in All Columns | Verify data types, including PK fields, are supported in all columns. |  | Pending |
 | REQ-INS-001-2.2 | Handling Existing Data with INSERT INTO | Confirm errors are appropriately thrown when inserting existing data. |  | Pending |
 | REQ-INS-001-2.3 | UPSERT and REPLACE Operations | Validate that UPSERT updates and REPLACE correctly overwrites existing data. |  | Pending |
@@ -130,8 +130,8 @@
 #### REQ-READ-001: Provide robust and efficient data reading capabilities.
 **Description**: Execute and validate operations concerning reading data, including aggregation and supported data types.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-READ-001-3.1 | LogBench Operations | Validate reading, aggregating, and processing JSON types through LogBench tests, focused on smaller datasets. |  | Pending |
 | REQ-READ-001-3.2 | TPC-H S1 Execution | Confirm successful execution and performance of TPC-H S1 queries. |  | Pending |
 
@@ -140,8 +140,8 @@
 #### REQ-FEDQ-001: Allow and manage federated query execution.
 **Description**: Enable and validate operations involving federated query execution, taking advantage of diverse data sources.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-FEDQ-001-10.1 | Cross-Source Federated Queries | Test execution of queries spanning multiple federated data sources. |  | Pending |
 | REQ-FEDQ-001-10.2 | Federated Source Data Insertions | Validate data insertions deriving from federated sources. |  | Pending |
 
@@ -153,8 +153,8 @@
 
 **Description**: Сжатие (в широком смысле, напр., dictionary encoding), sparse, column_family
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | #13627 | Test cs column family. Create multiple/maximum column family for one table | Создать несколько/максимальное количество `Column Family` в одной таблице. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13627)](https://github.com/ydb-platform/ydb/issues/13627) | Pending |
 | #13640 | Test cs column family. Check all supported compression | Проверить включения/измнения всех алгоримов сжатия и проверить размеры данных через sys после включения/измнения сжатия для `Column Family` | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13640)](https://github.com/ydb-platform/ydb/issues/13640) | Pending |
 | #13642 | Test cs column family. Check all supported compression with S3 | Проверить включения/измнения всех алгоримов сжатия c вытеснением в S3 и проверять, что сжатие применялось | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13642)](https://github.com/ydb-platform/ydb/issues/13642) | Pending |
@@ -171,8 +171,8 @@
 #### [ISSUE-13526](https://github.com/ydb-platform/ydb/issues/13526): Test Suite: cs/tiering+ttl
 ![PROGRESS](https://img.shields.io/badge/PROGRESS-4%2F12:33%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | #13468 | Test tiering. Functional. Data deleted by DELETE statement are deleted from S3 | При явном удалении данные с помощью DELETE связанные с ним данные удаляются из S3 (тест дожидается пропажи данных в S3) | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13468)](https://github.com/ydb-platform/ydb/issues/13468) | Pending |
 | #13467 | Test tiering. Functional. When configuring DELETE tier, data evaporates from S3 | Изменение настроек тиринга в части удаления данных из S3 приводит к полной очистке бакета  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13467)](https://github.com/ydb-platform/ydb/issues/13467) | Pending |
 | #13466 | Test tiering. Functional. Check data migration when altering tiering settings | Изменение настроек тиринга приводит к ожидаемому перемещению данных из одного тира в другой  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13466)](https://github.com/ydb-platform/ydb/issues/13466) | Pending |
@@ -192,8 +192,8 @@
 #### REQ-PERF-001: Ensure system operations meet expected performance benchmarks.
 **Description**: Maintain performance standards across operations, ensuring response times and throughput align with requirements.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-PERF-001-7.1 | Bulk Upsert Performance | Measure and analyze the efficiency of bulk upsert operations. |  | Pending |
 | REQ-PERF-001-7.2 | DELETE Operation Speed | Validate performance expectations during DELETE operations. |  | Pending |
 | REQ-PERF-001-7.3 | TTL Deletion Speed | Measure and confirm deletion speed exceeds insertion speed. |  | Pending |
@@ -202,8 +202,8 @@
 #### REQ-DISK-001: Effectively manage disk space to avoid system failures.
 **Description**: Utilize efficient disk space management strategies, particularly under scenarios with constrained disk resources.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-DISK-001-8.1 | Disk Space Recovery | Test system behavior and recovery strategies for low disk space conditions. |  | Pending |
 | REQ-DISK-001-8.2 | Resilience to Disk Saturation | Ensure database resilience and behavior expectations under full disk conditions. |  | Pending |
 
@@ -211,8 +211,8 @@
 #### REQ-DOC-001: Maintain and update comprehensive documentation.
 **Description**: Ensure all functionalities are clearly documented, aiding user orientation and system understanding.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-DOC-001-9.1 | Documentation Completeness | Review documentation for completeness and clarity. |  | Pending |
 
 ### Load Testing
@@ -222,8 +222,8 @@
 Issues:
 - 14493:  Nodes crush under write+select: https
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-LOAD-001-1.1 | Bulk Upsert - 25MB/s | Measure bulk upsert performance at 25MB/s. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14493)](https://github.com/ydb-platform/ydb/issues/14493) | Pending |
 | REQ-LOAD-001-1.2 | Bulk Upsert - 1GB/s | Measure bulk upsert performance at 1GB/s. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14493)](https://github.com/ydb-platform/ydb/issues/14493) | Pending |
 | REQ-LOAD-001-1.3 | SELECT | Measure bulk upsert performance at 1GB/s. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14493)](https://github.com/ydb-platform/ydb/issues/14493) | Pending |
@@ -231,31 +231,31 @@ Issues:
 #### REQ-LOAD-002: Evaluate system performance under simple queue scenarios.
 **Description**: Test the ability of the system to efficiently process tasks in simple queue scenarios.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-LOAD-002-2.1 | Simple Queue Load | Validate performance under simple queue load conditions. |  | Pending |
 
 #### REQ-LOAD-003: Assess system capabilities with an OLAP workload.
 **Description**: Verify OLAP queries perform efficiently under varied load.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-LOAD-003-3.1 | OLAP Workload Performance | Test OLAP workload performance metrics. |  | Pending |
 
 ### Stability
 #### REQ-STAB-001: Ensure system stability under load scenarios with Nemesis.
 **Description**: Validate stability by running load tests with a one-minute reload interval using Nemesis.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-STAB-001-4.1 | Nemesis Stability Test | Measure stability performance during Nemesis events. |  | Pending |
 
 ### Compatibility
 #### REQ-COMP-001: Validate compatibility during system upgrades.
 **Description**: Ensure seamless transition and compatibility when upgrading the system from one version to another.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-COMP-001-5.1 | Upgrade 24-3 to 24-4 | Test upgrade compatibility from version 24-3 to 24-4. |  | Pending |
 | REQ-COMP-001-5.2 | Upgrade 24-4 to 25-1 | Test upgrade compatibility from version 24-4 to 25-1. |  | Pending |
 
@@ -263,8 +263,8 @@ Issues:
 #### REQ-PERF-001: Ensure the system handles aggregate functions efficiently across various data sizes.
 **Description**: Verify that aggregate functions maintain performance standards at increasing data volumes, ensuring response times are within acceptable limits.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-PERF-001-1.1 | COUNT Function Performance - 1GB | Validate performance with a dataset of 1GB. |  | Pending |
 | REQ-PERF-001-1.2 | COUNT Function Performance - 10GB | Validate performance with a dataset of 10GB. |  | Pending |
 | REQ-PERF-001-1.3 | COUNT Function Performance - 100GB | Validate performance with a dataset of 100GB. |  | Pending |
@@ -274,44 +274,44 @@ Issues:
 #### REQ-PERF-002: Ensure system can efficiently compute distinct counts at scale.
 **Description**: Evaluate the ability to perform COUNT(DISTINCT) operations with acceptable overhead across increasing data volumes.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-PERF-002-2.1 | COUNT DISTINCT Performance - 1GB | Measure distinct count efficiency at 1GB. |  | Pending |
 | REQ-PERF-002-2.2 | COUNT DISTINCT Performance - 10GB | Measure distinct count efficiency at 10GB. |  | Pending |
 
 #### REQ-PERF-003: Validate efficiency of SUM operations over large datasets.
 **Description**: Ensure SUM functions execute with optimal performance metrics at different data scales.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-PERF-003-3.1 | SUM Function Performance - 1GB | Validate SUM operation efficiency with 1GB of data. |  | Pending |
 | REQ-PERF-003-3.2 | SUM Function Performance - 10GB | Validate SUM operation efficiency with 10GB of data. |  | Pending |
 
 #### REQ-PERF-004: Ensure system maintains average calculation efficiency.
 **Description**: Verify AVG functions sustain performance as data sizes increase.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-PERF-004-4.1 | AVG Function Performance - 1GB | Performance metrics for AVG operation on 1GB of data. |  | Pending |
 
 #### REQ-PERF-005: Efficient computation of MIN/MAX operations.
 **Description**: Confirm that minimum and maximum functions perform within the expected time frames across various datasets.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-PERF-005-5.1 | MIN/MAX Performance - 1GB | Validate performance of MIN/MAX operations with 1GB. |  | Pending |
 
 #### REQ-PERF-006: TPC-H benchmark testing on scalability.
 **Description**: Evaluate system performance using TPC-H benchmark tests at different dataset volumes.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-PERF-006-6.1 | TPC-H Performance - 10GB | Validate TPC-H benchmark performance with 10GB. |  | Pending |
 
 #### REQ-PERF-007: ClickBench benchmark to test efficiency under different conditions.
 **Description**: Assess system capabilities using ClickBench, targeting different data sizes.
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | REQ-PERF-007-7.1 | ClickBench Performance - 1GB | Evaluate with ClickBench on 1GB of data. |  | Pending |
 

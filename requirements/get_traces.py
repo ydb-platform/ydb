@@ -221,8 +221,8 @@ def generate_traceability_matrix(requirements, output_path):
                     file.write(f"- {issue['id']}: {issue['description']}\n")
                 file.write("\n")
 
-            file.write("| Case ID | Name | Description | Issues | Test Case Status |\n")
-            file.write("|---------|------|-------------|--------|------------------|\n")
+            file.write("| Case ID | Name | Description | Issues |  Status |\n")
+            file.write("|---------|------|-------------|--------|:--------|\n")
             
             for case in req['cases']:
                 issues_list = ""
@@ -234,6 +234,34 @@ def generate_traceability_matrix(requirements, output_path):
                     issues_list = issues_list + ','.join([f"{issue['bage']}" for issue in req['issues']] or req['issues'])
                 file.write(f"| {case['case_id']} | {case['name']} | {case['description']} | {issues_list} | {case['status']} |\n")
             file.write("\n")
+            
+def generate_summary(requirements, output_path):
+    with open(output_path, 'w', encoding='utf-8') as file:
+        file.write("# Traceability Matrix\n\n")
+        section = ''
+        subsection = ''
+        for req in requirements:
+            if req.get('sub_issues_summary'):
+                if section != req['section']:
+                    file.write(f"## {req['section']}\n\n")
+                    section = req['section']
+                if subsection != req['subsection']:
+                    file.write(f"### {req['subsection']}\n")
+                    subsection = req['subsection']
+                
+                if req.get('url'):
+                    file.write(f"#### [{req['id']}]({req['url']}): {req['title']}\n")
+                else:
+                    file.write(f"#### {req['id']}: {req['title']}\n")
+                if req.get('badge'):
+                    file.write(f"[{req['badge']}](./traceability_matrix.md)\n\n")
+                if req['description']:
+                    file.write(f"**Description**: {req['description']}\n\n")
+                if req.get('issues'):
+                    file.write("Issues:\n")
+                    for issue in req['issues']:
+                        file.write(f"- {issue['id']}: {issue['description']}\n")
+                    file.write("\n")
 
 def collect_requirements_from_directory(directory, github_token):
     requirements = []
@@ -250,9 +278,12 @@ def process_and_generate_matrices(base_directory, github_token):
         requirements = collect_requirements_from_directory(root, github_token)
 
         if requirements:
-            output_file = os.path.join(root, 'traceability_matrix.md')
-            generate_traceability_matrix(requirements, output_file)
-            print(f"Generated traceability matrix in {output_file}")
+            matrix_output_file = os.path.join(root, 'traceability_matrix.md')
+            summary_output_file = os.path.join(root, 'summary.md')
+            generate_traceability_matrix(requirements, matrix_output_file)
+            print(f"Generated traceability matrix in {matrix_output_file}")
+            generate_summary(requirements, summary_output_file)
+            print(f"Generated summary in {summary_output_file}")
 
 if __name__ == "__main__":
     GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # You need to set this environment variable with your GitHub token

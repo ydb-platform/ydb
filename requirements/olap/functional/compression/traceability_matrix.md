@@ -6,8 +6,8 @@
 
 **Description**: Сжатие (в широком смысле, напр., dictionary encoding), sparse, column_family
 
-| Case ID | Name | Description | Issues | Test Case Status |
-|---------|------|-------------|--------|------------------|
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
 | #13627 | Test cs column family. Create multiple/maximum column family for one table | Создать несколько/максимальное количество `Column Family` в одной таблице. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13627)](https://github.com/ydb-platform/ydb/issues/13627) | Pending |
 | #13640 | Test cs column family. Check all supported compression | Проверить включения/измнения всех алгоримов сжатия и проверить размеры данных через sys после включения/измнения сжатия для `Column Family` | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13640)](https://github.com/ydb-platform/ydb/issues/13640) | Pending |
 | #13642 | Test cs column family. Check all supported compression with S3 | Проверить включения/измнения всех алгоримов сжатия c вытеснением в S3 и проверять, что сжатие применялось | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13642)](https://github.com/ydb-platform/ydb/issues/13642) | Pending |

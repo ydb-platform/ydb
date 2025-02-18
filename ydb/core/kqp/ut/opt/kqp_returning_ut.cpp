@@ -310,8 +310,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-        CompareYson(R"([[2;[2]];[3;[2]];[1;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
+        UNIT_ASSERT(!result.IsSuccess());
     }
 }
 

@@ -68,29 +68,42 @@ namespace NKikimr::NStorage {
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
                 (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
-            StorageConfigYaml = StorageConfigFetchYaml = {};
-            StorageConfigFetchYamlHash = 0;
-            StorageConfigYamlVersion.reset();
+            // extract the main config from newly applied section
+            MainConfigYaml = MainConfigFetchYaml = {};
+            MainConfigYamlVersion.reset();
+            MainConfigFetchYamlHash = 0;
 
             if (config.HasConfigComposite()) {
                 try {
                     // parse the composite stream
                     TStringInput ss(config.GetConfigComposite());
                     TZstdDecompress zstd(&ss);
-                    StorageConfigYaml = TString::Uninitialized(LoadSize(&zstd));
-                    zstd.LoadOrFail(StorageConfigYaml.Detach(), StorageConfigYaml.size());
-                    StorageConfigFetchYaml = TString::Uninitialized(LoadSize(&zstd));
-                    zstd.LoadOrFail(StorageConfigFetchYaml.Detach(), StorageConfigFetchYaml.size());
+                    MainConfigYaml = TString::Uninitialized(LoadSize(&zstd));
+                    zstd.LoadOrFail(MainConfigYaml.Detach(), MainConfigYaml.size());
+                    MainConfigFetchYaml = TString::Uninitialized(LoadSize(&zstd));
+                    zstd.LoadOrFail(MainConfigFetchYaml.Detach(), MainConfigFetchYaml.size());
 
                     // extract _current_ config version
-                    auto metadata = NYamlConfig::GetMetadata(StorageConfigYaml);
+                    auto metadata = NYamlConfig::GetMainMetadata(MainConfigYaml);
                     Y_DEBUG_ABORT_UNLESS(metadata.Version.has_value());
-                    StorageConfigYamlVersion = metadata.Version.value_or(0);
+                    MainConfigYamlVersion = metadata.Version.value_or(0);
 
                     // and _fetched_ config hash
-                    StorageConfigFetchYamlHash = NYaml::GetConfigHash(StorageConfigFetchYaml);
+                    MainConfigFetchYamlHash = NYaml::GetConfigHash(MainConfigFetchYaml);
                 } catch (const std::exception& ex) {
                     Y_ABORT("ConfigComposite format incorrect: %s", ex.what());
+                }
+            }
+
+            // now extract the additional storage section
+            StorageConfigYaml.reset();
+            if (config.HasCompressedStorageYaml()) {
+                try {
+                    TStringInput ss(config.GetCompressedStorageYaml());
+                    TZstdDecompress zstd(&ss);
+                    StorageConfigYaml.emplace(zstd.ReadAll());
+                } catch (const std::exception& ex) {
+                    Y_ABORT("CompressedStorageYaml format incorrect: %s", ex.what());
                 }
             }
 

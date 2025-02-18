@@ -25,17 +25,37 @@ class TGeneralContainer {
 private:
     std::optional<ui64> RecordsCount;
     YDB_READONLY_DEF(std::shared_ptr<NModifier::TSchema>, Schema);
-    std::vector<std::shared_ptr<NAccessor::IChunkedArray>> Columns;
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<NAccessor::IChunkedArray>>, Columns);
     void Initialize();
 public:
     TGeneralContainer(const ui32 recordsCount);
+
+    TGeneralContainer Slice(const ui32 offset, const ui32 count) const {
+        std::vector<std::shared_ptr<NAccessor::IChunkedArray>> columns;
+        for (auto&& i : Columns) {
+            columns.emplace_back(i->ISlice(offset, count));
+        }
+        return TGeneralContainer(Schema->GetFields(), std::move(columns));
+    }
+
+    ui64 GetRawSizeVerified() const {
+        ui64 result = 0;
+        for (auto&& i : Columns) {
+            result += i->GetRawSizeVerified();
+        }
+        return result;
+    }
 
     ui32 GetRecordsCount() const {
         AFL_VERIFY(RecordsCount);
         return *RecordsCount;
     }
 
-    TString DebugString() const;
+    NJson::TJsonValue DebugJson(const bool withData = false) const;
+
+    TString DebugString(const bool withData = false) const {
+        return DebugJson(withData).GetStringRobust();
+    }
 
     [[nodiscard]] TConclusionStatus SyncSchemaTo(const std::shared_ptr<arrow::Schema>& schema,
         const IFieldsConstructor* defaultFieldsConstructor, const bool forceDefaults);

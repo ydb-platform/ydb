@@ -576,15 +576,15 @@ std::vector<ECodec> DeserializeCodecs(const Ydb::Topic::SupportedCodecs& proto) 
     return codecs;
 }
 
-google::protobuf::Map<TProtoStringType, TProtoStringType> SerializeAttributes(const std::map<std::string, std::string>& attributes) {
-    google::protobuf::Map<TProtoStringType, TProtoStringType> proto;
+google::protobuf::Map<TStringType, TStringType> SerializeAttributes(const std::map<std::string, std::string>& attributes) {
+    google::protobuf::Map<TStringType, TStringType> proto;
     for (const auto& [key, value] : attributes) {
-        proto.emplace(key, value);
+        proto[key] = value;
     }
     return proto;
 }
 
-std::map<std::string, std::string> DeserializeAttributes(const google::protobuf::Map<TProtoStringType, TProtoStringType>& proto) {
+std::map<std::string, std::string> DeserializeAttributes(const google::protobuf::Map<TStringType, TStringType>& proto) {
     std::map<std::string, std::string> attributes;
     for (const auto& [key, value] : proto) {
         attributes.emplace(key, value);

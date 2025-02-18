@@ -282,6 +282,11 @@ public:
         const TUnfreezeTableOptions& options),
         (path, options))
 
+    DELEGATE_METHOD(TFuture<void>, CancelTabletTransition, (
+        NTabletClient::TTabletId tabletId,
+        const TCancelTabletTransitionOptions& options),
+        (tabletId, options))
+
     DELEGATE_METHOD(TFuture<void>, ReshardTable, (
         const NYPath::TYPath& path,
         const std::vector<NTableClient::TLegacyOwningKey>& pivotKeys,

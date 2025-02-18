@@ -156,9 +156,11 @@ class IConfigurationResult {
 public:
     virtual ~IConfigurationResult() {}
     virtual const NKikimrConfig::TAppConfig& GetConfig() const = 0;
-    virtual bool HasYamlConfig() const = 0;
-    virtual const TString& GetYamlConfig() const = 0;
+    virtual bool HasMainYamlConfig() const = 0;
+    virtual const TString& GetMainYamlConfig() const = 0;
     virtual TMap<ui64, TString> GetVolatileYamlConfigs() const = 0;
+    virtual bool HasDatabaseYamlConfig() const = 0;
+    virtual const TString& GetDatabaseYamlConfig() const = 0;
 };
 
 class IDynConfigClient {

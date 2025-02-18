@@ -204,15 +204,22 @@ public:
             const size_t index,
             const NScheme::TTypeInfo type,
             const NUdf::TUnboxedValuePod& value,
-            const i32 typmod = -1) {
+            const TString& typeMod) {
         CellsInfo[index].Type = type;
         CellsInfo[index].Value = value;
 
-        if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
+        if (type.GetTypeId() == NScheme::NTypeIds::Pg && value) {
             auto typeDesc = type.GetPgTypeDesc();
-            if (typmod != -1 && NPg::TypeDescNeedsCoercion(typeDesc)) {
+            if (!typeMod.empty() && NPg::TypeDescNeedsCoercion(typeDesc)) {
+
+                auto typeModResult = NPg::BinaryTypeModFromTextTypeMod(typeMod, type.GetPgTypeDesc());
+                if (typeModResult.Error) {
+                    ythrow yexception() << "BinaryTypeModFromTextTypeMod error: " << *typeModResult.Error;
+                }
+
+                YQL_ENSURE(typeModResult.Typmod != -1);
                 TMaybe<TString> err;
-                CellsInfo[index].PgBinaryValue = NYql::NCommon::PgValueCoerce(value, NPg::PgTypeIdFromTypeDesc(typeDesc), typmod, &err);
+                CellsInfo[index].PgBinaryValue = NYql::NCommon::PgValueCoerce(value, NPg::PgTypeIdFromTypeDesc(typeDesc), typeModResult.Typmod, &err);
                 if (err) {
                     ythrow yexception() << "PgValueCoerce error: " << *err;
                 }
@@ -274,11 +281,13 @@ private:
             }
         }
 
-        const auto ref = cellInfo.Type.GetTypeId() == NScheme::NTypeIds::Pg
+        const bool isPg = cellInfo.Type.GetTypeId() == NScheme::NTypeIds::Pg;
+
+        const auto ref = isPg
             ? NYql::NUdf::TStringRef(cellInfo.PgBinaryValue)
             : cellInfo.Value.AsStringRef();
 
-        if (TCell::CanInline(ref.Size())) {
+        if (!isPg && TCell::CanInline(ref.Size())) {
             return TCell(ref.Data(), ref.Size());
         } else {
             char* initialPtr = dataPtr;
@@ -302,11 +311,13 @@ private:
             return sizeof(cellInfo.Value.GetInt128());
         }
 
-        if (cellInfo.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
-            return cellInfo.PgBinaryValue.size();
-        }
-        const auto s = cellInfo.Value.AsStringRef().Size();
-        return TCell::CanInline(s) ? 0 : s;
+        const bool isPg = cellInfo.Type.GetTypeId() == NScheme::NTypeIds::Pg;
+
+        const auto ref = isPg
+            ? NYql::NUdf::TStringRef(cellInfo.PgBinaryValue)
+            : cellInfo.Value.AsStringRef();
+
+        return (!isPg && TCell::CanInline(ref.Size())) ? 0 : ref.Size();
     }
 
     TCharVectorPtr Allocate(size_t size) {
@@ -336,7 +347,11 @@ public:
         TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
-                rowBuilder.AddCell(WriteIndex[index], Columns[index].PType, row.GetElement(index));
+                rowBuilder.AddCell(
+                    WriteIndex[index],
+                    Columns[index].PType,
+                    row.GetElement(index),
+                    Columns[index].PTypeMod);
             }
             auto rowWithData = rowBuilder.Build();
             BatchBuilder.AddRow(TConstArrayRef<TCell>{rowWithData.Cells.begin(), rowWithData.Cells.end()});
@@ -638,7 +653,11 @@ public:
         TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
-                rowBuilder.AddCell(WriteIndex[index], Columns[index].PType, row.GetElement(index));
+                rowBuilder.AddCell(
+                    WriteIndex[index],
+                    Columns[index].PType,
+                    row.GetElement(index),
+                    Columns[index].PTypeMod);
             }
             auto rowWithData = rowBuilder.Build();
             RowBatcher.AddRow(std::move(rowWithData));
@@ -1173,8 +1192,6 @@ public:
 
         if (info.Metadata.Priority == 0) {
             FlushSerializer(token, GetMemory() >= Settings.MemoryLimitTotal);
-        } else {
-            YQL_ENSURE(GetMemory() <= Settings.MemoryLimitTotal);
         }
     }
 

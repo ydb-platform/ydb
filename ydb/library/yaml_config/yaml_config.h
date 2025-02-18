@@ -73,10 +73,11 @@ NKikimrConfig::TAppConfig YamlToProto(
  * Stores intermediate resolve data in resolvedYamlConfig and resolvedJsonConfig if given
  */
 void ResolveAndParseYamlConfig(
-    const TString& yamlConfig,
+    const TString& mainYamlConfig,
     const TMap<ui64, TString>& volatileYamlConfigs,
     const TMap<TString, TString>& labels,
     NKikimrConfig::TAppConfig& appConfig,
+    std::optional<TString> databaseYamlConfig = std::nullopt,
     TString* resolvedYamlConfig = nullptr,
     TString* resolvedJsonConfig = nullptr);
 

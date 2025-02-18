@@ -33,9 +33,6 @@
   - string.h:
     - contrib/restricted/emscripten/system/lib/libc/musl/include/string.h
     - contrib/restricted/emscripten/system/lib/libc/musl/src/include/string.h
-  - sys/auxv.h:
-    - contrib/restricted/emscripten/system/lib/libc/musl/include/sys/auxv.h
-    - contrib/restricted/emscripten/system/lib/libc/musl/src/include/sys/auxv.h
   - sys/membarrier.h:
     - contrib/restricted/emscripten/system/lib/libc/musl/include/sys/membarrier.h
     - contrib/restricted/emscripten/system/lib/libc/musl/src/include/sys/membarrier.h
@@ -49,6 +46,7 @@
     - contrib/restricted/emscripten/system/lib/libc/musl/include/sys/time.h
     - contrib/restricted/emscripten/system/lib/libc/musl/src/include/sys/time.h
   - time.h:
+    - contrib/restricted/emscripten/system/include/compat/time.h
     - contrib/restricted/emscripten/system/lib/libc/musl/include/time.h
     - contrib/restricted/emscripten/system/lib/libc/musl/src/include/time.h
 
@@ -214,12 +212,10 @@
   - strings.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/strings.h
   - stropts.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/stropts.h
   - sys/acct.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/acct.h
-  - sys/auxv.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/auxv.h
   - sys/cachectl.h:         contrib/restricted/emscripten/system/lib/libc/musl/include/sys/cachectl.h
   - sys/dir.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/sys/dir.h
   - sys/epoll.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/epoll.h
   - sys/errno.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/errno.h
-  - sys/eventfd.h:          contrib/restricted/emscripten/system/lib/libc/musl/include/sys/eventfd.h
   - sysexits.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sysexits.h
   - sys/fcntl.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/fcntl.h
   - sys/file.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/file.h
@@ -237,7 +233,6 @@
   - sys/param.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/param.h
   - sys/personality.h:      contrib/restricted/emscripten/system/lib/libc/musl/include/sys/personality.h
   - sys/poll.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/poll.h
-  - sys/prctl.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/prctl.h
   - sys/procfs.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/procfs.h
   - sys/ptrace.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/ptrace.h
   - sys/quota.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/quota.h

@@ -47,6 +47,8 @@ SRCS(
     yql_yt_dq_optimize.cpp
     yql_yt_dq_hybrid.cpp
     yql_yt_wide_flow.cpp
+    yql_yt_ytflow_integration.cpp
+    yql_yt_ytflow_optimize.cpp
 
     phy_opt/yql_yt_phy_opt.cpp
     phy_opt/yql_yt_phy_opt_content.cpp
@@ -78,6 +80,8 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/tz
     yql/essentials/sql
+    yql/essentials/sql/v1
+    yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils
     yql/essentials/utils/log
     yql/essentials/core
@@ -119,6 +123,9 @@ PEERDIR(
     yt/yql/providers/yt/opt
     yt/yql/providers/yt/gateway/qplayer
     yt/yql/providers/yt/proto
+    yt/yql/providers/ytflow/expr_nodes
+    yt/yql/providers/ytflow/integration/interface
+    yt/yql/providers/ytflow/integration/proto
 )
 
 YQL_LAST_ABI_VERSION()

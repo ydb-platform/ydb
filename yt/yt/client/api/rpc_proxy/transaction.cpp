@@ -22,7 +22,7 @@ NApi::ITransactionPtr CreateTransaction(
     i64 sequenceNumberSourceId,
     TStringBuf capitalizedCreationReason)
 {
-    return New<TTransaction>(
+    auto transaction = New<TTransaction>(
         std::move(connection),
         std::move(client),
         std::move(channel),
@@ -37,9 +37,12 @@ NApi::ITransactionPtr CreateTransaction(
         std::move(stickyParameters),
         sequenceNumberSourceId,
         capitalizedCreationReason);
+
+    transaction->Initialize();
+
+    return transaction;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi::NRpcProxy
-

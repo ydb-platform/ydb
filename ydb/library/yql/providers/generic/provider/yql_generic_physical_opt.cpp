@@ -27,7 +27,7 @@ namespace NYql {
                 : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
             {
                 using EFlag = NPushdown::TSettings::EFeatureFlag;
-                Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64);
+                Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::DateTimeTypes | EFlag::TimestampCtor);
             }
         };
 
@@ -72,7 +72,7 @@ namespace NYql {
                             // Get table metadata
                             const auto [tableMeta, issue] = State_->GetTable(
                                 read.DataSource().Cluster().Value(),
-                                read.Table().Value(),
+                                read.Table().Name().Value(),
                                 ctx.GetPosition(node.Pos()));
                             if (issue.has_value()) {
                                 ctx.AddError(issue.value());

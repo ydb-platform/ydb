@@ -21,6 +21,8 @@ PEERDIR(
     yql/essentials/core/qplayer/storage/interface
     yql/essentials/core/qplayer/udf_resolver
     yql/essentials/sql
+    yql/essentials/sql/v1
+    yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils/log
     yql/essentials/core
     yql/essentials/core/type_ann

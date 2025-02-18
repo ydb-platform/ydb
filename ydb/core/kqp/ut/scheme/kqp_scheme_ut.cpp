@@ -2577,6 +2577,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_DEBUG);
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -2585,7 +2587,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         const auto subtypeStr = IndexSubtypeSqlString(type).data();
         const auto withStr = IndexWithSqlString(type).data();
 
-        // Non-covered index
+        // Non-covered index, single column
         {
             auto status = session.ExecuteSchemeQuery(Sprintf(R"(
                 --!syntax_v1
@@ -2606,10 +2608,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
 
             if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
-                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetVectorIndexSettings()).Settings;
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetIndexSettings()).Settings;
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             }
         }
 
@@ -2628,7 +2635,58 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
         }
 
-        // Covered index
+        // Non-covered index, multiple columns
+        {
+            auto status = session.ExecuteSchemeQuery(Sprintf(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` ADD INDEX CommentIndex %s %s ON (Group, Comment) %s;
+            )", typeStr, subtypeStr, withStr)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "CommentIndex");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type));
+            std::vector<std::string> indexColumns{"Group", "Comment"};
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns(), indexColumns);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
+
+            if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetIndexSettings()).Settings;
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            }
+        }
+
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` DROP INDEX CommentIndex;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
+        }
+
+        // Covered index, single column
         {
             auto status = session.ExecuteSchemeQuery(Sprintf(R"(
                 --!syntax_v1
@@ -2648,11 +2706,82 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 1);
 
             if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
-                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetVectorIndexSettings()).Settings;
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetIndexSettings()).Settings;
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+           }
+        }
+
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` DROP INDEX NameIndex;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
+        }
+
+        // Covered index, multiple columns
+        {
+            auto status = session.ExecuteSchemeQuery(Sprintf(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` ADD INDEX CommentIndex %s %s ON (Group, Comment) COVER (Amount) %s;
+            )", typeStr, subtypeStr, withStr)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "CommentIndex");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type));
+            std::vector<std::string> indexColumns{"Group", "Comment"};
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns(), indexColumns);
+            std::vector<std::string> dataColumns{"Amount"};
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns(), dataColumns);
+
+            if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetIndexSettings()).Settings;
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             }
+        }
+
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` DROP INDEX CommentIndex;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
         }
     }
 
@@ -2786,7 +2915,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(AlterIndexImplTableUsingPublicAPI) {
         TKikimrRunner kikimr;
         kikimr.GetTestClient().GrantConnect("user@builtin");
-        
+
         auto adminSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(adminSession);
 
@@ -2823,7 +2952,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = userSession.AlterTable("/Root/SecondaryKeys/Index/indexImplTable", tableSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-                "Error: Access denied for user@builtin to path Root/SecondaryKeys/Index/indexImplTable"
+                "Error: Access denied for user@builtin on path Root/SecondaryKeys/Index/indexImplTable"
             );
         }
         // grant necessary permission
@@ -3004,7 +3133,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 0);
-            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).Settings;
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -3056,7 +3185,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Covered");
-            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).Settings;
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -3125,7 +3254,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Key", EPrimitiveType::Uint64)
                 .AddNullableColumn("Embedding", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
-                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{ 
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                     1024,
@@ -3145,7 +3274,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 0);
-            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).Settings;
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -3165,7 +3294,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Embedding", EPrimitiveType::String)
                 .AddNullableColumn("Covered", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
-                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {"Covered"}, {TVectorIndexSettings{ 
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {"Covered"}, {TVectorIndexSettings{
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                     1024,
@@ -3186,7 +3315,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Covered");
-            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).Settings;
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -4166,7 +4295,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        
+
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -4368,7 +4497,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             // Drop user with ACL
             auto session = db.CreateSession().GetValueSync().GetSession();
-            
+
             TString query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE USER user2 PASSWORD NULL;
@@ -5393,7 +5522,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             WITH (
                 STORE = UNSUPPORTED
             );
-        )"; 
+        )";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
     }
@@ -6054,7 +6183,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = TStringBuilder() << R"(
@@ -6079,7 +6208,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = TStringBuilder() << R"(
@@ -6144,7 +6273,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto queryAlter = TStringBuilder() << R"(
@@ -6180,7 +6309,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             CompareYson(R"(
                 [[[1];1];[[2];1];[[3];2];[[105];105];[[107];107];[[206];206];[[208];208]]
             )", FormatResultSetYson(result.GetResultSet(0)));
-        } 
+        }
     }
 
     Y_UNIT_TEST(Int8Int16) {
@@ -10662,10 +10791,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         {
             auto session = testHelper.GetSession();
             auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64 NOT NULL, 
-                Value1 String, 
-                Value2 Uint32, 
-                PRIMARY KEY (Key), 
+                Key Uint64 NOT NULL,
+                Value1 String,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
                 FAMILY default (
                     COMPRESSION="snappy"
                 )) WITH (STORE = COLUMN);)";
@@ -11631,11 +11760,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TString tableName = "/Root/ColumnTableTest";
         auto session = testHelper.GetSession();
         auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
-            Key Uint64 NOT NULL, 
-            Value1 String, 
-            Value2 Uint32, 
-            PRIMARY KEY (Key), 
-            FAMILY default ()) 
+            Key Uint64 NOT NULL,
+            Value1 String,
+            Value2 Uint32,
+            PRIMARY KEY (Key),
+            FAMILY default ())
             WITH (STORE = COLUMN);)";
         auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -11662,13 +11791,13 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TString tableName = "/Root/ColumnTableTest";
         auto session = testHelper.GetSession();
         auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
-            Key Uint64 NOT NULL, 
-            Value1 String, 
-            Value2 Uint32, 
-            PRIMARY KEY (Key), 
+            Key Uint64 NOT NULL,
+            Value1 String,
+            Value2 Uint32,
+            PRIMARY KEY (Key),
             FAMILY family1 (
                 COMPRESSION_LEVEL = 2
-            )) 
+            ))
             WITH (STORE = COLUMN);)";
         auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
@@ -11679,12 +11808,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TString tableName = "/Root/ColumnTableTest";
         auto session = testHelper.GetSession();
         auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
-            Key Uint64 NOT NULL, 
-            Value1 String, 
-            Value2 Uint32, 
-            PRIMARY KEY (Key), 
+            Key Uint64 NOT NULL,
+            Value1 String,
+            Value2 Uint32,
+            PRIMARY KEY (Key),
             FAMILY family1 (
-            )) 
+            ))
             WITH (STORE = COLUMN);)";
         auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
@@ -11959,7 +12088,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-nan\" As Decimal(35, 10))", "[]");
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"-inf\"];[\"155555555555555.1\"];[\"255555555555555.1\"];[\"1255555555555555.1\"];[\"1555555555555555.1\"];[\"inf\"]]");
     }
-        
+
     Y_UNIT_TEST(DecimalCsv) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -12078,11 +12207,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             tableInserter.AddRow().Add(1).AddNull().Add(jsonString);
             tableInserter.AddRow().Add(2).Add(jsonString).Add(jsonBin);
             testHelper.BulkUpsert(testTable, tableInserter);
-        }
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(3).Add(jsonBin).AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter, Ydb::StatusIds::SCHEME_ERROR);
         }
     }
 }

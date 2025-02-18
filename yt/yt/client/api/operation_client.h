@@ -26,6 +26,7 @@ struct TSuspendOperationOptions
     : public TTimeoutOptions
 {
     bool AbortRunningJobs = false;
+    std::optional<TString> Reason;
 };
 
 struct TResumeOperationOptions
@@ -209,6 +210,7 @@ struct TListJobsOptions
     std::optional<bool> WithCompetitors;
     std::optional<bool> WithMonitoringDescriptor;
     std::optional<TString> TaskName;
+    std::optional<std::string> OperationIncarnation;
 
     std::optional<TInstant> FromTime;
     std::optional<TInstant> ToTime;
@@ -317,6 +319,7 @@ struct TOperation
     NYson::TYsonString RuntimeParameters;
 
     std::optional<bool> Suspended;
+    std::optional<TString> SuspendReason;
 
     NYson::TYsonString Events;
     NYson::TYsonString Result;
@@ -386,6 +389,7 @@ struct TJob
     std::optional<TString> MonitoringDescriptor;
     std::optional<ui64> JobCookie;
     NYson::TYsonString ArchiveFeatures;
+    std::optional<std::string> OperationIncarnation;
 
     std::optional<bool> IsStale;
 

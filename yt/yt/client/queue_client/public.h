@@ -30,6 +30,7 @@ DECLARE_REFCOUNTED_STRUCT(IProducerSession)
 
 DECLARE_REFCOUNTED_STRUCT(IPartitionReader)
 DECLARE_REFCOUNTED_CLASS(TPartitionReaderConfig)
+DECLARE_REFCOUNTED_CLASS(TQueueStaticExportConfig)
 DECLARE_REFCOUNTED_CLASS(TQueueStaticExportDestinationConfig)
 
 ////////////////////////////////////////////////////////////////////////////////

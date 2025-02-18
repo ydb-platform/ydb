@@ -9,6 +9,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -158,6 +159,7 @@ private:
     std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
     std::shared_ptr<NOlap::TSchemaObjectsCache> SchemaObjectsCache;
+    std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
 
 public:
@@ -165,7 +167,8 @@ public:
 
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const ui64 tabletId);
+        const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
+        const ui64 tabletId);
 
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {
         return LoadTimeCounters;

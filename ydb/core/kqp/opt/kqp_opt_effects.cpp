@@ -232,7 +232,8 @@ TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionH
 }
 
 TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
-        const bool allowInconsistentWrites, const TStringBuf mode, const i64 order, const bool isOlap, TExprContext& ctx) {
+        const bool allowInconsistentWrites, const bool enableStreamWrite,
+        const TStringBuf mode, const i64 order, const bool isOlap, TExprContext& ctx) {
     Y_DEBUG_ABORT_UNLESS(IsDqPureExpr(expr));
 
     return Build<TDqStage>(ctx, expr.Pos())
@@ -254,6 +255,9 @@ TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
                 .Settings<TKqpTableSinkSettings>()
                     .Table(table)
                     .InconsistentWrite(allowInconsistentWrites
+                        ? ctx.NewAtom(expr.Pos(), "true")
+                        : ctx.NewAtom(expr.Pos(), "false"))
+                    .StreamWrite(enableStreamWrite
                         ? ctx.NewAtom(expr.Pos(), "true")
                         : ctx.NewAtom(expr.Pos(), "false"))
                     .Mode(ctx.NewAtom(expr.Pos(), mode))
@@ -308,6 +312,11 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     }
 
     sinkEffect = NeedSinks(table, kqpCtx) || (kqpCtx.IsGenericQuery() && settings.AllowInconsistentWrites);
+
+    const bool useStreamWriteForConsistentSink = CanEnableStreamWrite(table, kqpCtx)
+        && (!HasReadTable(node.Table().PathId().Value(), node.Input().Ptr()) || settings.IsConditionalUpdate);
+    const bool useStreamWrite = sinkEffect && (settings.AllowInconsistentWrites || useStreamWriteForConsistentSink);
+
     const bool isOlap = (table.Metadata->Kind == EKikimrTableKind::Olap);
     const i64 priority = isOlap ? 0 : order;
 
@@ -315,7 +324,8 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
         if (sinkEffect) {
             stageInput = RebuildPureStageWithSink(
                 node.Input(), node.Table(),
-                settings.AllowInconsistentWrites, settings.Mode, priority, isOlap, ctx);
+                settings.AllowInconsistentWrites, useStreamWrite,
+                settings.Mode, priority, isOlap, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -355,6 +365,9 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 .InconsistentWrite(settings.AllowInconsistentWrites
                     ? ctx.NewAtom(node.Pos(), "true")
                     : ctx.NewAtom(node.Pos(), "false"))
+                .StreamWrite(useStreamWrite
+                    ? ctx.NewAtom(node.Pos(), "true")
+                    : ctx.NewAtom(node.Pos(), "false"))
                 .Mode(ctx.NewAtom(node.Pos(), settings.Mode))
                 .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
                 .TableType(ctx.NewAtom(node.Pos(), isOlap ? "olap" : "oltp"))
@@ -367,11 +380,8 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             .Name("row")
             .Done();
 
-        if (table.Metadata->Kind == EKikimrTableKind::Olap || settings.AllowInconsistentWrites) {
-            // OLAP is expected to write into all shards (hash partitioning),
-            // so we use serveral sinks for this without union all.
-            // (TODO: shuffle by shard instead of DqCnMap)
-
+        if ((table.Metadata->Kind == EKikimrTableKind::Olap && useStreamWrite)
+                || settings.AllowInconsistentWrites) {
             auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
                 .Output(dqUnion.Output())
                 .Done();
@@ -456,15 +466,28 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
 bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TCoArgument& inputArg, TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect, bool& sinkEffect, const i64 order)
 {
+    TKqpDeleteRowsSettings settings;
+    if (node.Settings()) {
+        settings = TKqpDeleteRowsSettings::Parse(node.Settings().Cast());
+    }
+
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
     sinkEffect = NeedSinks(table, kqpCtx);
+
+    const bool useStreamWriteForConsistentSink = CanEnableStreamWrite(table, kqpCtx)
+        && (!HasReadTable(node.Table().PathId().Value(), node.Input().Ptr()) || settings.IsConditionalDelete);
+    const bool useStreamWrite = sinkEffect && useStreamWriteForConsistentSink;
+
     const bool isOlap = (table.Metadata->Kind == EKikimrTableKind::Olap);
     const i64 priority = isOlap ? 0 : order;
 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
             const auto keyColumns = BuildKeyColumnsList(table, node.Pos(), ctx);
-            stageInput = RebuildPureStageWithSink(node.Input(), node.Table(), false, "delete", priority, isOlap, ctx);
+            stageInput = RebuildPureStageWithSink(
+                node.Input(), node.Table(),
+                false, useStreamWrite,
+                "delete", priority, isOlap, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -500,6 +523,9 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
             .Settings<TKqpTableSinkSettings>()
                 .Table(node.Table())
                 .InconsistentWrite(ctx.NewAtom(node.Pos(), "false"))
+                .StreamWrite(useStreamWrite
+                        ? ctx.NewAtom(node.Pos(), "true")
+                        : ctx.NewAtom(node.Pos(), "false"))
                 .Mode(ctx.NewAtom(node.Pos(), "delete"))
                 .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
                 .TableType(ctx.NewAtom(node.Pos(), isOlap ? "olap" : "oltp"))

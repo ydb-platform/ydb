@@ -179,8 +179,8 @@ private:
     std::shared_ptr<TFetchingScript> Script;
 
     void FinishInitialization(std::shared_ptr<TFetchingScript>&& script) {
-        AFL_VERIFY(AtomicCas(&InitializationDetector, 1, 2));
         Script = std::move(script);
+        AFL_VERIFY(AtomicCas(&InitializationDetector, 1, 2));
     }
 
 public:
@@ -313,6 +313,19 @@ public:
         : TStepAction(std::static_pointer_cast<IDataSource>(source), std::move(cursor), ownerActorId) {
     }
     TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId);
+};
+
+class TProgramStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    const NArrow::NSSA::TResourceProcessorStep Step;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TProgramStep(const NArrow::NSSA::TResourceProcessorStep& step)
+        : TBase("EARLY_FILTER_STEP")
+        , Step(step) {
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

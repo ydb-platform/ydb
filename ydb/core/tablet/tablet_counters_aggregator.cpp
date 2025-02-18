@@ -1354,9 +1354,9 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
     auto mon = appData->Mon;
     if (mon) {
         if (!Follower)
-            mon->RegisterActorPage(nullptr, "labeledcounters", "Labeled Counters", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId(), false);
+            mon->RegisterActorPage(nullptr, "labeledcounters", "Labeled Counters", false, TActivationContext::ActorSystem(), SelfId(), false);
         else
-            mon->RegisterActorPage(nullptr, "followercounters", "Follower Counters", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId(), false);
+            mon->RegisterActorPage(nullptr, "followercounters", "Follower Counters", false, TActivationContext::ActorSystem(), SelfId(), false);
     }
 
     ctx.Schedule(TDuration::Seconds(WAKEUP_TIMEOUT_SECONDS), new TEvents::TEvWakeup());

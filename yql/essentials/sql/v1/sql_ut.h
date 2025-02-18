@@ -1,6 +1,7 @@
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
 #include <util/generic/map.h>
 
 #include <library/cpp/regex/pcre/pcre.h>
@@ -44,7 +45,14 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
     settings.AnsiLexer = ansiLexer;
     settings.Antlr4Parser = false;
     settings.SyntaxVersion = 1;
-    auto res = SqlToYql(query, settings);
+
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(),
+        nullptr
+    );
+
+    auto res = SqlToYql(translators, query, settings);
     if (debug == EDebugOutput::ToCerr) {
         Err2Str(res, debug);
     }
@@ -55,7 +63,7 @@ inline NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 1
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug);
 }
 
-inline NYql::TAstParseResult 
+inline NYql::TAstParseResult
 SqlToYqlWithSettings(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
 }

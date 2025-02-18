@@ -1510,14 +1510,6 @@ public:
     using THostRecordMap = std::shared_ptr<THostRecordMapImpl>;
 
 private:
-    using TYamlConfig = std::tuple<TString, ui64, TString>; // yaml, configVersion, yamlReturnedByFetch; this tuple must not change
-
-    static TString CompressYamlConfig(const TYamlConfig& configYaml);
-    static TString CompressStorageYamlConfig(const TString& storageConfigYaml);
-    static TYamlConfig DecompressYamlConfig(const TString& buffer);
-    static TString DecompressStorageYamlConfig(const TString& buffer);
-
-private:
     TString InstanceId;
     std::shared_ptr<std::atomic_uint64_t> SelfHealUnreassignableGroups = std::make_shared<std::atomic_uint64_t>();
     TMaybe<TActorId> MigrationId;
@@ -1547,7 +1539,6 @@ private:
     TMap<TGroupId, TBlobDepotDeleteQueueInfo> BlobDepotDeleteQueue;
     ui64 NextOperationLogIndex = 1;
     TActorId StatProcessorActorId;
-    TInstant LastMetricsCommit;
     bool SelfHealEnable = false;
     bool UseSelfHealLocalPolicy = false;
     bool TryToRelocateBrokenDisksLocallyFirst = false;
@@ -1603,6 +1594,7 @@ private:
             EvProcessIncomingEvent,
             EvUpdateHostRecords,
             EvUpdateShredState,
+            EvCommitMetrics,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -1825,6 +1817,8 @@ private:
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void OnHostRecordsInitiate();
+
+    void CommitMetrics();
 
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
@@ -2177,6 +2171,7 @@ public:
         }
 
         ShredState.Initialize();
+        CommitMetrics();
     }
 
     void UpdatePDisksCounters() {

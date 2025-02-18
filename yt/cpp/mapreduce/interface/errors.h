@@ -159,6 +159,8 @@ class TErrorResponse
 public:
     TErrorResponse(int httpCode, const TString& requestId);
 
+    TErrorResponse(TYtError error, const TString& requestId);
+
     /// Get error object returned by server.
     const TYtError& GetError() const;
 

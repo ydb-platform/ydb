@@ -449,6 +449,18 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         MockNoSession(ReadActorId3);
         ExpectStopSession(topicSessionId);
     }
+
+    Y_UNIT_TEST_F(IgnoreWrongPartitionId, TFixture) {
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1);
+        auto topicSessionId = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(topicSessionId);
+
+        MockNewDataArrived(PartitionId1, topicSessionId, ReadActorId1);
+
+        MockStopSession(Source1, ReadActorId1);
+        ExpectStopSession(topicSessionId);
+    }
 }
 
 }

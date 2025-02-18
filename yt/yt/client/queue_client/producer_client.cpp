@@ -345,6 +345,7 @@ private:
                 if (Options_.AutoSequenceNumber) {
                     pushQueueProducerOptions.SequenceNumber = TQueueProducerSequenceNumber{LastSequenceNumber_.load().Underlying() + 1};
                 }
+                pushQueueProducerOptions.RequireSyncReplica = Options_.RequireSyncReplica;
 
                 return transaction->PushQueueProducer(ProducerPath_, QueuePath_, SessionId_, Epoch_, NameTable_, buffer.SerializedRows, pushQueueProducerOptions)
                     .Apply(BIND([=, this, this_ = MakeStrong(this)] (const TPushQueueProducerResult& pushQueueProducerResult) {

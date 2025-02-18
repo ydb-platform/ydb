@@ -141,12 +141,30 @@ public:
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
-    void Cancelled() {
+    void CancelQuery() {
         if (SessionId) {
             auto event = std::make_unique<NKqp::TEvKqp::TEvCancelQueryRequest>();
             event->Record.MutableRequest()->SetSessionId(SessionId);
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
+            if (QueryResponse && !QueryResponse.IsDone()) {
+                QueryResponse.Error("QueryCancelled");
+            }
         }
+    }
+
+    void CloseSession() {
+        if (SessionId) {
+            if (QueryResponse && !QueryResponse.IsDone()) {
+                CancelQuery();
+            }
+            auto event = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
+            event->Record.MutableRequest()->SetSessionId(SessionId);
+            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
+        }
+    }
+
+    void Cancelled() {
+        CancelQuery();
         PassAway();
     }
 
@@ -160,11 +178,7 @@ public:
         if (QueryId) {
             Viewer->EndRunningQuery(QueryId, SelfId());
         }
-        if (SessionId) {
-            auto event = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
-            event->Record.MutableRequest()->SetSessionId(SessionId);
-            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
-        }
+        CloseSession();
         TBase::PassAway();
     }
 
@@ -353,6 +367,7 @@ public:
         }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         QueryResponse = MakeRequest<NKqp::TEvKqp::TEvQueryResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+
     }
 
 private:
@@ -565,6 +580,7 @@ private:
             NYql::IssuesFromMessage(record.GetIssues(), issues);
             MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(record.GetStatusCode()), NYdb::NAdapters::ToSdkIssues(std::move(issues))));
         }
+        CancelQuery();
         ReplyWithJsonAndPassAway(jsonResponse);
     }
 

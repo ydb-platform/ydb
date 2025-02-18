@@ -107,7 +107,7 @@ public:
         if (mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "kqp_node", "KQP Node", false,
-                TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                TActivationContext::ActorSystem(), SelfId());
         }
 
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
@@ -285,6 +285,8 @@ private:
             if (msg.HasUserToken() && msg.GetUserToken()) {
                 createArgs.UserToken.Reset(MakeIntrusive<NACLib::TUserToken>(msg.GetUserToken()));
             }
+
+            createArgs.Database = msg.GetDatabase();
 
             auto result = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
 

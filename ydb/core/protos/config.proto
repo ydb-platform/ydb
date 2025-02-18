@@ -1063,6 +1063,7 @@ message TQueryServiceConfig {
 
     optional NYql.TS3GatewayConfig S3 = 6;
     optional NYql.TYtGatewayConfig Yt = 15;
+    optional NYql.TSolomonGatewayConfig Solomon = 21;
     optional NYql.TFileStorageConfig FileStorage = 16;
     optional NYql.THttpGatewayConfig HttpGateway = 7;
     optional NYql.TGenericConnectorConfig Connector = 8 [deprecated=true];
@@ -1387,28 +1388,39 @@ message TImmediateControlsConfig {
             MaxValue: 50,
             DefaultValue: 10 }];
 
-        optional uint64 ThrottlingDeviceSpeed = 14 [(ControlOptions) = {
-            Description: "Maximum allowed speed when throttling is active",
-            MinValue: 1048576,
-            MaxValue: 10737418240,
-            DefaultValue: 52428800 }];
-        optional uint64 ThrottlingMinSstCount = 15 [(ControlOptions) = {
+        reserved 14;
+        optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
+            Description: "0 - working mode, 1 - dry run mode",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
+        optional uint64 ThrottlingMinLevel0SstCount = 15 [(ControlOptions) = {
             Description: "Minimum level 0 SST count - throttling is turned on",
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 100 }];
-        optional uint64 ThrottlingMaxSstCount = 16 [(ControlOptions) = {
+        optional uint64 ThrottlingMaxLevel0SstCount = 16 [(ControlOptions) = {
             Description: "Maximum level 0 SST count - throttling speed is zero",
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 250 }];
-        optional uint64 ThrottlingMinInplacedSize = 17 [(ControlOptions) = {
-            Description: "Minimum size of all inplaced blobs - throttling is turned on",
+        optional uint64 ThrottlingMinInplacedSizeHDD = 17 [(ControlOptions) = {
+            Description: "Minimum size of all inplaced blobs (HDD) - throttling is turned on",
             MinValue: 1048576,
             MaxValue: 536870912000,
             DefaultValue: 21474836480 }];
-        optional uint64 ThrottlingMaxInplacedSize = 18 [(ControlOptions) = {
-            Description: "Maximum size of all inplaced blobs - throttling speed is zero",
+        optional uint64 ThrottlingMaxInplacedSizeHDD = 18 [(ControlOptions) = {
+            Description: "Maximum size of all inplaced blobs (HDD) - throttling speed is zero",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 64424509440 }];
+        optional uint64 ThrottlingMinInplacedSizeSSD = 24 [(ControlOptions) = {
+            Description: "Minimum size of all inplaced blobs (SSD) - throttling is turned on",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 21474836480 }];
+        optional uint64 ThrottlingMaxInplacedSizeSSD = 25 [(ControlOptions) = {
+            Description: "Maximum size of all inplaced blobs (SSD) - throttling speed is zero",
             MinValue: 1048576,
             MaxValue: 536870912000,
             DefaultValue: 64424509440 }];
@@ -2113,7 +2125,8 @@ message TKafkaProxyConfig {
     }
 
     optional TProxy Proxy = 7;
-    optional bool MeteringV2Enabled = 10 [default = false];
+    optional bool MeteringV2Enabled = 10 [default = true];
+    optional bool AuthViaApiKey = 11 [default = true];
 }
 
 message TAwsCompatibilityConfig {
@@ -2222,6 +2235,10 @@ message TAppConfig {
 
     optional TConfigVersion Version = 102;
     repeated TLabel Labels = 103;
+
+    optional string ConfigStorePath = 104;
+    optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
+    optional bool ConfigLoadedFromStore = 106;
 }
 
 message TYdbVersion {

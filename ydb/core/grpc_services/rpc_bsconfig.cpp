@@ -95,7 +95,17 @@ public:
 
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) {
         auto *cmd = ev.Record.MutableReplaceStorageConfig();
-        cmd->SetYAML(GetProtoRequest()->yaml_config());
+        auto *request = GetProtoRequest();
+        if (request->has_yaml_config()) {
+            cmd->SetYAML(request->yaml_config());
+        }
+        if (request->has_storage_yaml_config()) {
+            cmd->SetStorageYAML(request->storage_yaml_config());
+        }
+        if (request->has_switch_dedicated_storage_section()) {
+            cmd->SetSwitchDedicatedStorageSection(request->switch_dedicated_storage_section());
+        }
+        cmd->SetDedicatedStorageSectionConfigMode(request->dedicated_config_mode());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,

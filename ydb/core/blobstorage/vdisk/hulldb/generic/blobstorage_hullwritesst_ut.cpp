@@ -172,7 +172,7 @@ namespace NKikimr {
                 memRec.SetDiskBlob(TDiskPart(0, 0, data.size()));
                 merger.Clear();
                 merger.AddFromFresh(memRec, &blobBuf, key, step + 1);
-                merger.Finish(false);
+                merger.Finish(false, true);
 
                 auto push = [&] {
                     TDiskPart preallocatedLocation;
@@ -220,7 +220,7 @@ namespace NKikimr {
                 merger.Clear();
                 merger.AddFromFresh(memRec1, nullptr, key, 1);
                 merger.AddFromFresh(memRec2, nullptr, key, 2);
-                merger.Finish(false);
+                merger.Finish(false, true);
 
                 auto push = [&] {
                     TDiskPart preallocatedLocation;
@@ -256,7 +256,7 @@ namespace NKikimr {
                 TMemRecBlock memRec(gen);
                 merger.Clear();
                 merger.AddFromFresh(memRec, nullptr, key, gen + 1);
-                merger.Finish(false);
+                merger.Finish(false, true);
 
                 if (!WriterPtr->PushIndexOnly(key, memRec, nullptr, nullptr)) {
                     Finish(gen);

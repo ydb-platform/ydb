@@ -91,7 +91,7 @@ public:
     NKikimrHive::TNodeStatistics Statistics;
     bool DeletionScheduled = false;
     TString Name;
-    ui64 DrainSeqNo;
+    ui64 DrainSeqNo = 0;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;

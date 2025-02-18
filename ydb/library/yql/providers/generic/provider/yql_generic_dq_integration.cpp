@@ -91,7 +91,7 @@ namespace NYql {
                         .Input<TGenSourceSettings>()
                             .World(genReadTable.World())
                             .Cluster(genReadTable.DataSource().Cluster())
-                            .Table(genReadTable.Table())
+                            .Table(genReadTable.Table().Name())
                             .Token<TCoSecureParam>()
                                 .Name().Build(token)
                                 .Build()

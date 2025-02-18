@@ -236,6 +236,14 @@ namespace NSQLTranslationV1 {
             return true;
         }
 
+        [[nodiscard]] auto& GetMatchRecognizeAggregations() {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+            return MatchRecognizeAggregations;
+        }
+
         TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
         void WarnUnusedHints();
 
@@ -258,6 +266,11 @@ namespace NSQLTranslationV1 {
         EColumnRefState TopLevelColumnReferenceState = EColumnRefState::Deny;
         TString MatchRecognizeDefineVar;
         TString MatchRecognizeAggrVar;
+        struct TMatchRecognizeAggregation {
+            TString Var;
+            TAggregationPtr Aggr;
+        };
+        TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations;
         TString NoColumnErrorContext = "in current scope";
         TVector<TBlocks*> CurrentBlocks;
 
@@ -358,6 +371,8 @@ namespace NSQLTranslationV1 {
         bool SeqMode = false;
         bool EmitUnionMerge = false;
         TVector<size_t> ForAllStatementsParts;
+
+        TMaybe<TString> Engine;
     };
 
     class TColumnRefScope {

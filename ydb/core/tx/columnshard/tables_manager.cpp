@@ -126,7 +126,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_VERIFY(preset);
             AFL_VERIFY(preset->Id == versionInfo.GetSchemaPresetId())("preset", preset->Id)("table", versionInfo.GetSchemaPresetId());
 
-            if (!table.IsDropped()) {
+            if (!table.IsDropped() && versionInfo.HasTtlSettings()) {
                 auto& ttlSettings = versionInfo.GetTtlSettings();
                 auto vIt = lastVersion.find(pathId);
                 if (vIt == lastVersion.end()) {
@@ -178,8 +178,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                 "version", info.GetSchema().GetVersion());
             NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(info);
             if (!PrimaryIndex) {
-                PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(
-                    TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager, version, preset->Id, schemaInitializationData);
+                PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager,
+                    version, preset->Id, schemaInitializationData, PortionsStats);
             } else if (PrimaryIndex->GetVersionedIndex().IsEmpty() ||
                        info.GetSchema().GetVersion() > PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion()) {
                 PrimaryIndex->RegisterSchemaVersion(version, preset->Id, schemaInitializationData);
@@ -295,7 +295,7 @@ void TTablesManager::AddSchemaVersion(
     Schema::SaveSchemaPresetVersionInfo(db, presetId, version, versionInfo);
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager,
-            version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
+            version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);
         }
@@ -357,11 +357,13 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
     const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const ui64 tabletId)
+    const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
+    const ui64 tabletId)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , LoadTimeCounters(std::make_unique<TTableLoadTimeCounters>())
     , SchemaObjectsCache(schemaCache)
+    , PortionsStats(portionsStats)
     , TabletId(tabletId) {
     AFL_VERIFY(SchemaObjectsCache);
 }

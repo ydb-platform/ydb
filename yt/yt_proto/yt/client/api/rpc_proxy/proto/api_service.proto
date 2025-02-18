@@ -2268,6 +2268,7 @@ message TReqSuspendOperation
         string operation_alias = 3;
     }
     optional bool abort_running_jobs = 2 [default = false];
+    optional string reason = 4;
 }
 
 message TRspSuspendOperation
@@ -2434,6 +2435,8 @@ message TReqListJobs
     optional string task_name = 19;
 
     optional bool with_monitoring_descriptor = 21;
+
+    optional string operation_incarnation = 25;
 
     optional uint64 from_time = 22; // TInstant
     optional uint64 to_time = 23; // TInstant
@@ -3015,6 +3018,7 @@ message TReqGetFlowView
 {
     required bytes pipeline_path = 1; // YPath
     optional bytes view_path = 2; // YPath
+    optional bool cache = 3 [default = true];
 }
 
 message TRspGetFlowView
@@ -3056,6 +3060,7 @@ message TOperation
     optional bytes runtime_parameters = 16; // YSON
 
     optional bool suspended = 17;
+    optional string suspend_reason = 29;
 
     optional bytes events = 18; // YSON
     optional bytes result = 19; // YSON
@@ -3172,6 +3177,7 @@ message TJob
     optional uint64 job_cookie = 27;
     optional bytes archive_features = 29; // YSON
     optional string monitoring_descriptor = 30;
+    optional string operation_incarnation = 31;
 }
 
 message TListJobsStatistics

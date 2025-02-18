@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 PROTO_NAMESPACE(yt)
 
 SRCS(
+    arcadia_interop_ut.cpp
     async_barrier_ut.cpp
     async_looper_ut.cpp
     async_rw_lock_ut.cpp
@@ -47,6 +48,7 @@ PEERDIR(
     yt/yt/core/test_framework
 
     library/cpp/json/yson
+    library/cpp/threading/future
 )
 
 REQUIREMENTS(

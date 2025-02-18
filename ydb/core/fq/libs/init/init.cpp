@@ -201,17 +201,18 @@ void Init(
         credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
     }
 
-    NYql::TPqGatewayServices pqServices(
-        yqSharedResources->UserSpaceYdbDriver,
-        pqCmConnections,
-        credentialsFactory,
-        std::make_shared<NYql::TPqGatewayConfig>(protoConfig.GetGateways().GetPq()),
-        appData->FunctionRegistry,
-        nullptr,
-        GetCommonTopicClientSettings(protoConfig.GetCommon())
-    );
+    auto commonTopicClientSettings = GetCommonTopicClientSettings(protoConfig.GetCommon());
 
     if (protoConfig.GetRowDispatcher().GetEnabled()) {
+        NYql::TPqGatewayServices pqServices(
+            yqSharedResources->UserSpaceYdbDriver,
+            nullptr,
+            nullptr,
+            std::make_shared<NYql::TPqGatewayConfig>(),
+            nullptr,
+            nullptr,
+            commonTopicClientSettings
+        );
         auto rowDispatcher = NFq::NewRowDispatcherService(
             protoConfig.GetRowDispatcher(),
             NKikimr::CreateYdbCredentialsProviderFactory,
@@ -232,7 +233,16 @@ void Init(
         NYql::NDq::TS3ReadActorFactoryConfig readActorFactoryCfg = NYql::NDq::CreateReadActorFactoryConfig(protoConfig.GetGateways().GetS3());
 
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
-        auto pqGateway = defaultPqGateway ? defaultPqGateway : NYql::CreatePqNativeGateway(pqServices);
+        NYql::TPqGatewayServices pqServices(
+            yqSharedResources->UserSpaceYdbDriver,
+            pqCmConnections,
+            credentialsFactory,
+            std::make_shared<NYql::TPqGatewayConfig>(protoConfig.GetGateways().GetPq()),
+            appData->FunctionRegistry,
+            nullptr,
+            commonTopicClientSettings
+        );
+        auto pqGateway = defaultPqGateway ? defaultPqGateway : NYql::CreatePqNativeGateway(std::move(pqServices));
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, 
             yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), protoConfig.GetCommon().GetPqReconnectPeriod());
 
@@ -336,6 +346,15 @@ void Init(
     }
 
     if (protoConfig.GetPendingFetcher().GetEnabled()) {
+        NYql::TPqGatewayServices pqServices(
+            yqSharedResources->UserSpaceYdbDriver,
+            pqCmConnections,
+            credentialsFactory,
+            std::make_shared<NYql::TPqGatewayConfig>(protoConfig.GetGateways().GetPq()),
+            appData->FunctionRegistry,
+            nullptr,
+            commonTopicClientSettings
+        );
         auto fetcher = CreatePendingFetcher(
             yqSharedResources,
             NKikimr::CreateYdbCredentialsProviderFactory,

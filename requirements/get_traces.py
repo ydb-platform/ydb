@@ -43,7 +43,7 @@ def parse_requirements(file_path, github_token):
                     if issue_data['sub_issues_summary']['percent_completed'] == 100:
                         status = 'DONE'
                         color = f'purplergb(249%2C%20239%2C%20254%2C1)'
-                    elif 0 > issue_data['sub_issues_summary']['percent_completed'] < 100 :
+                    elif 0 < issue_data['sub_issues_summary']['percent_completed'] < 100 :
                         status = 'PROGRESS'
                         color = f'purplergb(254%2C%20248%2C%20202%2C1)'
                     else:

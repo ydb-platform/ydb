@@ -46,7 +46,7 @@
 | #14681 | TPCH S100 is successful |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14681)](https://github.com/ydb-platform/ydb/issues/14681) | Pending |
 
 #### [ISSUE-13527](https://github.com/ydb-platform/ydb/issues/13527): Test Suite: cs/read-write
-![TO%20DO](https://img.shields.io/badge/TO%20DO-1%2F8:12%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
+![PROGRESS](https://img.shields.io/badge/PROGRESS-1%2F8:12%25-purplergb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
@@ -60,7 +60,7 @@
 | #13848 | Test CS RW load. Write, modify, read TBs | Проверка записи/модификации/чтения на больших объёмах данных (единицы-десятки. TB) | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13848)](https://github.com/ydb-platform/ydb/issues/13848) | Pending |
 
 #### [ISSUE-14639](https://github.com/ydb-platform/ydb/issues/14639): Test suite: cs/write data
-![TO%20DO](https://img.shields.io/badge/TO%20DO-2%2F8:25%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
+![PROGRESS](https://img.shields.io/badge/PROGRESS-2%2F8:25%25-purplergb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
@@ -169,7 +169,7 @@
 
 ### TTL
 #### [ISSUE-13526](https://github.com/ydb-platform/ydb/issues/13526): Test Suite: cs/tiering+ttl
-![TO%20DO](https://img.shields.io/badge/TO%20DO-4%2F12:33%25-purplergb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)
+![PROGRESS](https://img.shields.io/badge/PROGRESS-4%2F12:33%25-purplergb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|

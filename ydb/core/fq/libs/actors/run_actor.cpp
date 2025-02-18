@@ -571,7 +571,7 @@ private:
                         SelfId(),
                         Params.QueryId,
                         Params.YqSharedResources->UserSpaceYdbDriver,
-                        Params.PqGateway,
+                        Params.DefaultPqGateway,
                         Params.Resources.topic_consumers(),
                         PrepareReadRuleCredentials()
                     )
@@ -1436,7 +1436,7 @@ private:
                 SelfId(),
                 Params.QueryId,
                 Params.YqSharedResources->UserSpaceYdbDriver,
-                Params.PqGateway,
+                Params.DefaultPqGateway,
                 Params.Resources.topic_consumers(),
                 PrepareReadRuleCredentials()
             )

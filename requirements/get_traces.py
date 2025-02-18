@@ -242,7 +242,7 @@ def generate_traceability_matrix(requirements, output_path):
             
 def generate_summary(requirements, output_path):
     with open(output_path, 'w', encoding='utf-8') as file:
-        file.write("# Traceability Matrix\n\n")
+        file.write("# Summary\n\n")
         section = ''
         subsection = ''
         for req in requirements:
@@ -258,11 +258,11 @@ def generate_summary(requirements, output_path):
                     file.write(f"#### [{req['id']}]({req['url']}): {req['title']}\n")
                 else:
                     file.write(f"#### {req['id']}: {req['title']}\n")
+                if req['description']:
+                    file.write(f"**Description**: {req['description']}\n")
                 if req.get('badge'):
                     linq = to_anchor(f"{req['id']}: {req['title']}")
                     file.write(f"[{req['badge']}](./traceability_matrix.md{linq})\n\n")
-                if req['description']:
-                    file.write(f"**Description**: {req['description']}\n\n")
                 if req.get('issues'):
                     file.write("Issues:\n")
                     for issue in req['issues']:

@@ -1,4 +1,4 @@
-# Traceability Matrix
+# Summary
 
 ## Functional Requirements
 
@@ -18,19 +18,16 @@
 
 ### Other
 #### [ISSUE-13952](https://github.com/ydb-platform/ydb/issues/13952): Test Suite: cs/introspection
+**Description**: статистики по таблицам для UI, доступность информации через .sys
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-13952-test-suite-csintrospection)
 
-**Description**: статистики по таблицам для UI, доступность информации через .sys
-
 #### [ISSUE-13956](https://github.com/ydb-platform/ydb/issues/13956): Test suite: cs/schema
+**Description**: взаимодействие со ским-шардом, создание/удаление таблиц/сторов, представление/оптимизиация хранения схем, актуализация данных
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-13956-test-suite-csschema)
 
-**Description**: взаимодействие со ским-шардом, создание/удаление таблиц/сторов, представление/оптимизиация хранения схем, актуализация данных
-
 #### [ISSUE-13959](https://github.com/ydb-platform/ydb/issues/13959): Test suite: cs/indexes
-[![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-13959-test-suite-csindexes)
-
 **Description**: индексы/статистики
+[![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-13959-test-suite-csindexes)
 
 #### [ISSUE-14601](https://github.com/ydb-platform/ydb/issues/14601): Test Suite: Workload Manager
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-14601-test-suite-workload-manager)
@@ -39,9 +36,8 @@
 
 ### Compression
 #### [ISSUE-13626](https://github.com/ydb-platform/ydb/issues/13626): Test Suite: cs/compression
-[![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F11:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-13626-test-suite-cscompression)
-
 **Description**: Сжатие (в широком смысле, напр., dictionary encoding), sparse, column_family
+[![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F11:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-13626-test-suite-cscompression)
 
 ### TTL
 #### [ISSUE-13526](https://github.com/ydb-platform/ydb/issues/13526): Test Suite: cs/tiering+ttl

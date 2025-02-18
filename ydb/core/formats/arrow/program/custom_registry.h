@@ -5,7 +5,7 @@ namespace arrow::compute {
     class ExecContext;
 }
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow::NSSA {
     arrow::compute::FunctionRegistry* GetCustomFunctionRegistry();
     arrow::compute::ExecContext* GetCustomExecContext();
 }

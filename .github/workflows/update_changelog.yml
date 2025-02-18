@@ -1,0 +1,94 @@
+name: Update Changelog
+
+on:
+  workflow_dispatch:
+    inputs:
+      type:
+        description: "Type of when to retreive commits from"
+        options: ["date", "tag", "commit"]
+        required: true
+        type: choice
+        default: "date"
+      start:
+        description: "Date '2021-01-01' or tag 'v1.0.0' or commit 'sha'"
+        required: true
+      changelog_path:
+        description: "The value associated with the type."
+        required: true
+        default: "CHANGELOG.md"
+      prefix:
+        description: "Prefix for the changelog update"
+        required: true
+        default: "changelog-for-"
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  gather-prs:
+    runs-on: ubuntu-latest
+    outputs:
+      prs: ${{ steps.pr-list.outputs.prs }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Get merged PRs
+        id: pr-list
+        run: |
+          TYPE="${{ github.event.inputs.type }}"
+          START="${{ github.event.inputs.start }}"
+          BRANCH="${GITHUB_REF_NAME}"
+
+          echo "::notice:: branch = ${GITHUB_REF_NAME}, start = $START"
+
+          if [ "$TYPE" == "date" ]; then
+            echo "Getting PRs since date: $START"
+            PRS=$(gh pr list --state merged --json number,title,baseRefName,mergedAt --jq ".[] | select(.baseRefName == \"$BRANCH\" and .mergedAt >= \"$START\") | {id: .number}" | jq -c -s ".")
+          elif [ "$TYPE" == "tag" ]; then
+            echo "Fetching tags from remote"
+            git fetch --tags
+            echo "Getting PRs since tag: $START"
+            COMMIT=$(git rev-list -n 1 $START)
+            PRS=$(gh pr list --state merged --json number,title,baseRefName,mergedAt --jq ".[] | select(.baseRefName == \"$BRANCH\" and .mergeCommit.oid >= \"$COMMIT\") | {id: .number}" | jq -c -s ".")
+          elif [ "$TYPE" == "commit" ]; then
+            echo "Getting PRs since commit: $START"
+            PRS=$(gh pr list --state merged --json number,title,baseRefName,mergedAt --jq ".[] | select(.baseRefName == \"$BRANCH\" and .mergeCommit.oid >= \"$START\") | {id: .number}" | jq -c -s ".")
+          else
+            echo "::error::Invalid type: $TYPE"
+            exit 1
+          fi
+
+          if [ -z "$PRS" ]; then
+            PRS="[]"
+          fi
+          echo "$PRS" > prs.json
+          echo "prs=$PRS" >> "$GITHUB_OUTPUT"
+
+      - name: Debug PR list output
+        run: |
+          cat prs.json
+
+      - name: Upload PRs JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: prs-json
+          path: prs.json
+
+  update-changelog:
+    needs: gather-prs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Update Changelog
+        uses: ./.github/actions/update_changelog 
+        env:
+          UPDATE_REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          pr_data: "${{ needs.gather-prs.outputs.prs }}"
+          changelog_path: "${{ github.event.inputs.changelog_path }}"
+          base_branch: "${GITHUB_REF_NAME}"
+          suffix: "${{ github.event.inputs.start }}"

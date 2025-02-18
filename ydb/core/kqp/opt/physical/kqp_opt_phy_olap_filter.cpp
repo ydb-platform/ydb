@@ -165,6 +165,17 @@ TMaybeNode<TExprBase> YqlIfPushdown(const TCoIf& ifOp, const TExprNode& argument
 }
 
 TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& argument, TExprContext& ctx) {
+    const auto parameters = FindNodes(apply.Ptr(), [] (const TExprNode::TPtr& node) {
+        if (const auto maybeParam = TMaybeNode<TCoParameter>(node))
+            return true;
+        return false;
+    });
+
+    // Temporary fix for https://st.yandex-team.ru/KIKIMR-22216
+    if (parameters.size()!=0) {
+        return nullptr;
+    }
+
     const auto members = FindNodes(apply.Ptr(), [&argument] (const TExprNode::TPtr& node) {
         if (const auto maybeMember = TMaybeNode<TCoMember>(node))
             return maybeMember.Cast().Struct().Raw() == &argument;

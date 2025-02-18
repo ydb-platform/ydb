@@ -42,29 +42,6 @@
 namespace NYql {
 namespace NDq {
 
-namespace {
-
-struct TEvPrivate {
-    enum EEv : ui32 {
-        EvRuntimeError = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-    struct TEvAsyncOutputError : public NActors::TEventLocal<TEvAsyncOutputError, EvRuntimeError> {
-        TEvAsyncOutputError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)
-            : StatusCode(statusCode)
-            , Issues(issues)
-        {}
-
-        NYql::NDqProto::StatusIds::StatusCode StatusCode;
-        NYql::TIssues Issues;
-    };
-};
-
-} // anonymous namespace
-
 struct TSinkCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
     void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override final {
         OnSinkError(outputIndex, issues, fatalCode);
@@ -121,6 +98,26 @@ class TDqComputeActorBase : public NActors::TActorBootstrapped<TDerived>
                           , public TSinkCallbacks
                           , public TOutputTransformCallbacks
 {
+private:
+    struct TEvPrivate {
+        enum EEv : ui32 {
+            EvAsyncOutputError = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvEnd
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+        struct TEvAsyncOutputError : public NActors::TEventLocal<TEvAsyncOutputError, EvAsyncOutputError> {
+            TEvAsyncOutputError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)
+                : StatusCode(statusCode)
+                , Issues(issues)
+            {}
+
+            NYql::NDqProto::StatusIds::StatusCode StatusCode;
+            NYql::TIssues Issues;
+        };
+    };
+
 protected:
     enum EEvWakeupTag : ui64 {
         TimeoutTag = 1,

@@ -57,6 +57,7 @@ class TestWorkloadManager(TpchTestBaseH1):
             """
         self.query(pool_definition)
 
+    @pytest.mark.test_case("#14602")
     @pytest.mark.parametrize("wait_for_timeout", [(False), (True)])
     def test_pool_classifier_init(self, wait_for_timeout):
         """

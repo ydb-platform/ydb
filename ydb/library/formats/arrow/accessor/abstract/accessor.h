@@ -15,6 +15,11 @@ namespace NKikimr::NArrow::NSerialization {
 class ISerializer;
 }
 
+namespace NKikimr::NArrow {
+class TColumnFilter;
+
+}
+
 namespace NKikimr::NArrow::NAccessor {
 
 class TColumnLoader;
@@ -246,6 +251,7 @@ private:
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const = 0;
     virtual ui32 DoGetNullsCount() const = 0;
     virtual ui32 DoGetValueRawBytes() const = 0;
+    virtual std::shared_ptr<IChunkedArray> DoApplyFilter(const TColumnFilter& filter) const;
 
 protected:
     std::shared_ptr<arrow::Schema> GetArraySchema() const {
@@ -313,6 +319,10 @@ protected:
     }
 
 public:
+    std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter) const {
+        return DoApplyFilter(filter);
+    }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", ::ToString(Type));

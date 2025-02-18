@@ -19,7 +19,6 @@ option java_package = "ru.yandex.kikimr.proto";
 message TProgram {
     message TColumn {
         optional uint64 Id = 1;
-        optional string Name = 2;
     }
 
     message TConstant {

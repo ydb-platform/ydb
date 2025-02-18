@@ -79,7 +79,7 @@ std::pair<TExprBase, TCoAtomList> CreateRowsToReplace(const TExprBase& input,
 
 bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
     bool hasIndexesToWrite = false;
-    YQL_ENSURE(tableData.Metadata->Indexes.size() == tableData.Metadata->SecondaryGlobalIndexMetadata.size());
+    YQL_ENSURE(tableData.Metadata->Indexes.size() == tableData.Metadata->ImplTables.size());
     for (const auto& index : tableData.Metadata->Indexes) {
         if (index.ItUsedForWrite()) {
             hasIndexesToWrite = true;
@@ -159,6 +159,25 @@ TExprNode::TPtr IsUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add()
             .Name().Build("IsUpdate")
+        .Build()
+    .Done().Ptr();
+}
+
+TExprNode::TPtr IsConditionalUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add()
+            .Name().Build("IsUpdate")
+        .Build()
+        .Add()
+            .Name().Build("IsConditionalUpdate")
+        .Build()
+    .Done().Ptr();
+}
+
+TExprNode::TPtr IsConditionalDeleteSetting(TExprContext& ctx, const TPositionHandle& pos) {
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add()
+            .Name().Build("IsConditionalDelete")
         .Build()
     .Done().Ptr();
 }
@@ -425,6 +444,7 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
         .Table(BuildTableMeta(tableData, del.Pos(), ctx))
         .Input(keysToDelete)
         .ReturningColumns<TCoAtomList>().Build()
+        .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
         .Done();
 }
 
@@ -445,6 +465,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
         .Table(BuildTableMeta(tableData, del.Pos(), ctx))
         .Input(ProjectColumns(rowsToDelete, pk, ctx))
         .ReturningColumns<TCoAtomList>().Build()
+        .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
         .Done();
 
     TVector<TExprBase> effects;
@@ -469,6 +490,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
             .Table(indexMeta)
             .Input(ProjectColumns(rowsToDelete, indexTableColumns, ctx))
             .ReturningColumns<TCoAtomList>().Build()
+            .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
             .Done();
 
         effects.push_back(indexDelete);
@@ -566,7 +588,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
         .Columns()
             .Add(updateColumnsList)
             .Build()
-        .Settings(IsUpdateSetting(ctx, update.Pos()))
+        .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
 }
@@ -611,7 +633,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             .Columns<TCoAtomList>()
                 .Add(updateColumnsList)
                 .Build()
-            .Settings(IsUpdateSetting(ctx, update.Pos()))
+            .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
             .Done();
 
         effects.emplace_back(effect);
@@ -629,7 +651,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         .Columns()
             .Add(updateColumnsList)
             .Build()
-        .Settings(IsUpdateSetting(ctx, update.Pos()))
+        .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
 
@@ -711,6 +733,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
 TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, const TKikimrTablesData& tablesData,
     bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
 {
+    Y_UNUSED(kqpCtx);
     TKikimrKey key(ctx);
     YQL_ENSURE(key.Extract(read.TableKey().Ref()));
     YQL_ENSURE(key.GetKeyType() == TKikimrKey::Type::Table);
@@ -720,12 +743,6 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
     if (view && !view->PrimaryFlag) {
         const auto& indexName = view->Name;
         if (!ValidateTableHasIndex(tableData.Metadata, ctx, read.Pos())) {
-            return nullptr;
-        }
-
-        if (kqpCtx->IsScanQuery() && !kqpCtx->Config->EnableKqpScanQueryStreamLookup) {
-            const TString err = "Secondary index is not supported for ScanQuery";
-            ctx.AddError(YqlIssue(ctx.GetPosition(read.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, err));
             return nullptr;
         }
 
@@ -893,7 +910,7 @@ TIntrusivePtr<TKikimrTableMetadata> GetIndexMetadata(const TKqlReadTableIndex& r
     const TKikimrTablesData& tables, TStringBuf cluster)
 {
     const auto& tableDesc = GetTableData(tables, cluster, read.Table().Path());
-    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(read.Index().StringValue());
+    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(read.Index().Value());
     return indexMeta;
 }
 

@@ -34,7 +34,7 @@ public:
         const auto kill = BasicBlock::Create(context, "kill", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-        BranchInst::Create(kill, good, IsEmpty(value, block), block);
+        BranchInst::Create(kill, good, IsEmpty(value, block, context), block);
 
         block = kill;
         const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TUnwrapWrapper::Throw));

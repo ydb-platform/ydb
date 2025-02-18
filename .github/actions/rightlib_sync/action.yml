@@ -1,0 +1,35 @@
+name: rightlib sync
+description: Automatically sync rightlib branch into main
+inputs:
+  command:
+    required: true
+    description: "create-pr or check-pr"
+  repository:
+    required: true
+    description: "token for access GitHub"
+  gh_personal_access_token:
+    required: true
+    description: "token for access GitHub"
+runs:
+  using: "composite"
+  steps:
+    - name: install packages
+      shell: bash
+      run: |
+        pip install PyGithub==2.5.0
+
+    - name: configure
+      shell: bash
+      run: |
+        git config --global user.email "alex@ydb.tech"
+        git config --global user.name "Alexander Smirnov"
+
+    - name: run-command
+      shell: bash
+      env:
+        REPO: ${{ inputs.repository }}
+        TOKEN: ${{ inputs.gh_personal_access_token }}
+      run: |
+        cd ./ydb/ci/rightlib
+        ./sync-rightlib.py "${{ inputs.command }}"
+

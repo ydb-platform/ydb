@@ -436,7 +436,7 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
 
-        annotate(BranchInst::Create(make, main, IsInvalid(statePtr, block), block));
+        annotate(BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block));
         block = make;
 
         const auto count = GetNodeValue(Count, ctx, block);
@@ -959,7 +959,7 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
 
-        annotate(BranchInst::Create(make, main, IsInvalid(statePtr, block), block));
+        annotate(BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block));
         block = make;
 
         const auto arrayType = ArrayType::get(Type::getInt1Ty(context), Directions.size());

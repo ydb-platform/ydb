@@ -49,7 +49,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   TDriver driver(driverConfig);
   ```
 
-  This example uses authentication token from the `YDB_TOKEN` environment variable. For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../concepts/auth.md) pages.
+  This example uses authentication token from the `YDB_TOKEN` environment variable. For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../security/authentication.md) pages.
 
   App code snippet for creating a client:
 
@@ -75,7 +75,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   In this example `CloudAuthHelper.getAuthProviderFromEnviron()` helper method is used which retrieves auth token from environment variables.
   For example, `YDB_ACCESS_TOKEN_CREDENTIALS`.
-  For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../concepts/auth.md) pages.
+  For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../security/authentication.md) pages.
 
   Topic client ([source code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) uses {{ ydb-short-name }} transport and handles all topics topic operations, manages read and write sessions.
 
@@ -843,11 +843,41 @@ All the metadata provided when writing a message is sent to a consumer with the 
   List<MetadataItem> metadata = message.getMetadataItems();
   ```
 
+- Python
+
+  To write a message that includes metadata, create the `TopicWriterMessage` object with the `metadata_items` argument as shown below:
+
+  ```python
+  message = ydb.TopicWriterMessage(data=f"message-data", metadata_items={"meta-key": "meta-value"})
+  writer.write(message)
+  ```
+
+  While reading, retrieve metadata from the `metadata_items` field of the `PublicMessage` object:
+
+  ```python
+  message = reader.receive_message()
+  for meta_key, meta_value in message.metadata_items.items():
+      print(f"{meta_key}: {meta_value}")
+  ```
+
 {% endlist %}
 
 ### Write in a transaction {#write-tx}
 
 {% list tabs group=lang %}
+
+- C++
+
+  To write to a topic within a transaction, it is necessary to pass a transaction object reference to the `Write` method of the writing session.
+
+  ```c++
+    auto tableSession = tableClient.GetSession().GetValueSync().GetSession();
+    auto transaction = tableSession.BeginTransaction().GetValueSync().GetTransaction();
+    NYdb::NTopic::TWriteMessage writeMessage("message");
+
+    topicSession->Write(std::move(writeMessage), transaction);
+    transaction.Commit().GetValueSync();
+  ```
 
 - Go
 
@@ -1382,6 +1412,8 @@ If a commit fails with an error, the application should log it and continue; it 
    }
    ```
 
+   The `Commit` call is fast by default, saving data into an internal buffer and returning control to the caller. The real message to the server is sent in the background. To prevent losing the last commits, call the `Reader.Close()` method before exiting the program.
+
 - Python
 
    ```python
@@ -1390,6 +1422,8 @@ If a commit fails with an error, the application should log it and continue; it 
        process(message)
        reader.commit(message)
    ```
+
+   The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
 
 - Java
 
@@ -1451,6 +1485,8 @@ If a commit fails with an error, the application should log it and continue; it 
    }
    ```
 
+   The `Commit` call is fast by default, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
+
 - Python
 
    ```python
@@ -1459,6 +1495,8 @@ If a commit fails with an error, the application should log it and continue; it 
      process(batch)
      reader.commit(batch)
    ```
+
+   The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
 
 - Java (sync)
 

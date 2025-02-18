@@ -1,7 +1,10 @@
 #pragma once
 
 #include "abstract.h"
+#include "parsing.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -22,6 +25,11 @@ private:
 
     TConclusion<std::shared_ptr<arrow::util::Codec>> BuildCodec(const arrow::Compression::type& cType, const std::optional<ui32> level) const;
     static const inline TFactory::TRegistrator<TNativeSerializer> Registrator = TFactory::TRegistrator<TNativeSerializer>(GetClassNameStatic());
+
+    static std::shared_ptr<arrow::util::Codec> GetDefaultCodec() {
+        return *arrow::util::Codec::Create(arrow::Compression::LZ4_FRAME);
+    }
+
 protected:
     virtual bool IsCompatibleForExchangeWithSameClass(const ISerializer& /*item*/) const override {
         return true;
@@ -53,7 +61,21 @@ protected:
     static arrow::ipc::IpcOptions BuildDefaultOptions() {
         arrow::ipc::IpcWriteOptions options;
         options.use_threads = false;
-        options.codec = *arrow::util::Codec::Create(arrow::Compression::LZ4_FRAME);
+        if (HasAppData()) {
+            if (AppData()->ColumnShardConfig.HasDefaultCompression()) {
+                arrow::Compression::type codec = CompressionFromProto(AppData()->ColumnShardConfig.GetDefaultCompression()).value();
+                if (AppData()->ColumnShardConfig.HasDefaultCompressionLevel()) {
+                    options.codec = NArrow::TStatusValidator::GetValid(
+                        arrow::util::Codec::Create(codec, AppData()->ColumnShardConfig.GetDefaultCompressionLevel()));
+                } else {
+                    options.codec = NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec));
+                }
+            } else {
+                options.codec = GetDefaultCodec();
+            }
+        } else {
+            options.codec = GetDefaultCodec();
+        }
         return options;
     }
 
@@ -83,7 +105,7 @@ public:
     }
 
     static arrow::ipc::IpcOptions GetDefaultOptions() {
-        static arrow::ipc::IpcWriteOptions options = BuildDefaultOptions();
+        arrow::ipc::IpcWriteOptions options = BuildDefaultOptions();
         return options;
     }
 

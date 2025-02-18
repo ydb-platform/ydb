@@ -10,9 +10,9 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
@@ -842,6 +842,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedInitialScan(true)
                 .SetEnableUuidAsPrimaryKey(true)
                 .SetEnableTablePgTypes(true)
+                .SetEnableTableDatetime64(true)
                 .SetEnableParameterizedDecimal(true)
                 .SetEnablePgSyntax(true)
                 .SetEnableTopicSplitMerge(true)
@@ -1149,7 +1150,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             // get records
             auto reader = client.CreateReadSession(TReadSessionSettings()
-                .AppendTopics(TString("/Root/Table/Stream"))
+                .AppendTopics(std::string{"/Root/Table/Stream"})
                 .ConsumerName("user")
                 .DisableClusterDiscovery(true)
             );
@@ -1164,7 +1165,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionStream();
                     for (const auto& item : data->GetMessages()) {
                         const auto& record = records.at(reads++);
-                        AssertJsonsEqual(item.GetData(), record);
+                        AssertJsonsEqual(TString{item.GetData()}, record);
                         if (checkKey) {
                             UNIT_ASSERT_VALUES_EQUAL(item.GetPartitionKey(), CalcPartitionKey(record));
                         }
@@ -1314,7 +1315,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct TopicRunner {
     private:
-        using TMessageMeta = TVector<std::pair<TString, TString>>;
+        using TMessageMeta = std::vector<std::pair<std::string, std::string>>;
 
         static TString DumpMessageMeta(TMessageMeta messageMeta) {
             std::stable_sort(messageMeta.begin(), messageMeta.end());
@@ -1324,7 +1325,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         static void AssertMessageMetaContains(const TMessageMeta& actual, const TMessageMeta& expected) {
             for (const auto& e : expected) {
                 auto it = std::find_if(actual.begin(), actual.end(), [&e](const auto& a) {
-                    return a.first == e.first && CheckJsonsEqual(a.second, e.second);
+                    return a.first == e.first && CheckJsonsEqual(TString{a.second}, TString{e.second});
                 });
                 UNIT_ASSERT_C(it != actual.end(), TStringBuilder() << "Message meta '" << e << "' was expected"
                     << ": actual# " << DumpMessageMeta(actual)
@@ -1344,7 +1345,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionSession();
                     for (const auto& item : data->GetMessages()) {
                         const auto& [body, meta] = records.at(reads++);
-                        AssertJsonsEqual(item.GetData(), body);
+                        AssertJsonsEqual(TString{item.GetData()}, body);
                         AssertMessageMetaContains(item.GetMessageMeta()->Fields, meta);
                     }
                 } else if (auto* create = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev)) {
@@ -1383,7 +1384,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             // create reader
             auto reader = client.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
-                .AppendTopics(TString("/Root/Table/Stream"))
+                .AppendTopics(std::string{"/Root/Table/Stream"})
                 .ConsumerName("user")
             );
 
@@ -2064,6 +2065,23 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"key":[30],"update":{"pgtext_value":"lorem \"ipsum\""}})",
             R"({"key":[31],"update":{"pgtimestamp_value":"2020-01-01 23:30:10"}})",
             R"({"key":[32],"update":{"pgdate_value":"2020-03-01"}})",
+        });
+    }
+
+    Y_UNIT_TEST(DecimalKey) {
+        const auto table = TShardedTableOptions()
+            .Columns({
+                {"decimal1_key", "Decimal(1, 0)", true, false},
+                {"decimal35_key", "Decimal(35, 10)", true, false},
+                {"decimal_value", "Decimal", false , false},
+            });
+        TopicRunner::Read(table, Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {
+            R"(
+                UPSERT INTO `/Root/Table` (decimal1_key, decimal35_key, decimal_value)
+                VALUES (CAST("5.0" AS Decimal(1, 0)), CAST("355555555555555.321" AS Decimal(35, 10)), CAST("4.321" AS Decimal(22, 9)));
+            )",
+        }, {
+            R"({"update":{"decimal_value":"4.321"},"key":["5","355555555555555.321"]})",
         });
     }
 
@@ -2936,7 +2954,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         // create reader
         auto reader = client.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
-            .AppendTopics(TString("/Root/Table/Stream"))
+            .AppendTopics(std::string{"/Root/Table/Stream"})
             .ConsumerName("user")
         );
 
@@ -4135,6 +4153,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
 template <>
 void Out<std::pair<TString, TString>>(IOutputStream& output, const std::pair<TString, TString>& x) {
+    output << x.first << ":" << x.second;
+}
+
+template <>
+void Out<std::pair<std::string, std::string>>(IOutputStream& output, const std::pair<std::string, std::string>& x) {
     output << x.first << ":" << x.second;
 }
 

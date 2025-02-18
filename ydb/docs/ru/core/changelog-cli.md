@@ -2,9 +2,66 @@
 
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.19.0 {#2-19-0}
+
+Дата выхода 5 февраля 2024. Для обновления до версии **2.19.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+### Функциональность
+
+* Добавлена поддержка [потоков изменений (changefeeds)](./concepts/cdc.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `ydb tools dump` и `ydb tools restore`.
+* Добавлена рекомендация с текстом `CREATE TABLE` при схемной ошибке во время выполнения [команды](./reference/ydb-cli/export-import/import-file.md) `ydb import file csv`.
+* Добавлен вывод статистики для текущего процесса при выполнении [команды](./reference/ydb-cli/commands/workload/index.md) `ydb workload`.
+* Добавлен текст запроса к сообщению, если запрос завершился ошибкой при выполнении [команды](./reference/ydb-cli/commands/workload/index.md) `ydb workload run`.
+* Добавлено сообщение в случае ошибки истечения глобального таймаута при выполнении [команды](./reference/ydb-cli/commands/workload/index.md) `ydb workload run`.
+
+{% if feature_view %}
+
+* **_(Требуется сервер v25.1+)_** Добавлена поддержка [представлений (VIEW)](./concepts/datamodel/view.md) при выполнении операций `ydb export s3` и `ydb import s3`. Представления экспортируются как YQL-выражение `CREATE VIEW`, которое выполняется при импорте.
+
+{% endif %}
+
+* **_(Требуется сервер v25.1+)_** Добавлена опция `--skip-checksum-validation` для [команды](./reference/ydb-cli/export-import/import-s3.md) `ydb import s3`, позволяющая отключить валидацию контрольной суммы на стороне сервера.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `ydb debug ping` добавлены новые опции: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `ydb admin storage fetch` добавлены новые опции: `--dedicated-storage-section` and `--dedicated-cluster-section`.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `ydb admin storage replace` добавлены новые опции: `--filename`, `--dedicated-cluster-yaml`, `--dedicated-storage-yaml`, `--enable-dedicated-storage-section` and `--disable-dedicated-storage-section`.
+
+### Исправления ошибок
+
+* Исправлена ошибка, из-за которой [команда](./reference/ydb-cli/commands/service.md) `ydb update` в arm64-версии исполняемого файла YDB CLI скачивала и заменяла себя исполняемым файлом amd64-версии. Чтобы обновить ранее установленный YDB CLI до последней arm64-версии (а не amd64), его нужно переустановить.
+* [Команда](./reference/ydb-cli/commands/workload/index.md) `ydb workload run` теперь возвращает корректный код возврата.
+* Исправлена ошибка, из-за которой [команды](./reference/ydb-cli/workload-tpch.md) `ydb workload tpch import generator` и `ydb workload tpcds import generator` завершались с ошибкой из-за отсутствия необходимых таблиц в схеме.
+* Исправлена ошибка с обратными слешами при указании путей в [команде]](./reference/ydb-cli/commands/workload/index.md) `ydb workload` на Windows.
+
+## Версия 2.18.0 {#2-18-0}
+
+Дата выхода 24 декабря 2024. Для обновления до версии **2.18.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+### Функциональность
+
+* Добавлена поддержка [представлений (VIEW)](./concepts/datamodel/view) при выполнении операций резервного копирования `ydb tools dump` и восстановления `ydb tools restore`. Представления сохраняются в файл "create_view.sql" в виде запросов `CREATE VIEW`, которые будут выполнены для восстановления.
+* В [команду](./reference/ydb-cli/workload-topic#run-write) `ydb workload topic run` добавлены опции `--tx-commit-interval` и `--tx-commit-messages`, которые задают интервал между коммитами транзакций в миллисекундах и в количестве записанных сообщений соответственно.
+* В [команде](./reference/ydb-cli/topic-read) `ydb topic read` параметр `--consumer` перестал быть обязательным. В режиме чтения без подписчика обязательно должны быть указаны идентификаторы партиций с помощью параметра `--partition-ids`. Чтение в этом случае выполняется без сохранения коммита оффсетов.
+* [Команда](./reference/ydb-cli/export-import/import-file.md) `ydb import file csv` теперь сохраняет прогресс выполнения. Повторный запуск команды импорта продолжится с той строки, на которой она была прервана.
+* В командах `ydb workload kv` и `ydb workload stock` значение параметра `--executer` по умолчанию изменено на "generic", благодаря чему они больше не используют устаревшую инфраструктуру выполнения запросов.
+* Изменен формат загрузки данных в таблицы для нагрузочных тестов `ydb workload` с CSV на Parquet.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена команда `ydb admin storage` с подкомандами `fetch` и `replace` для управления конфигурацией хранилища сервера.
+
+### Изменения с потерей обратной совместимости
+
+* В команде `ydb workload * run` параметр `--query-settings` заменен на `--query-prefix`.
+
+### Исправления ошибок
+
+* Исправлена ошибка, из-за которой команда `ydb workload * run` в режиме `--dry-run` могла приводить к сбою.
+* Исправлена ошибка в `ydb import file csv`, из-за которой несколько столбцов с экранированными кавычками в одной строке обрабатывались неправильно.
+
 ## Версия 2.17.0 {#2-17-0}
 
 Дата выхода 4 декабря 2024. Для обновления до версии **2.17.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+### Функциональность
+
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена команда `ydb debug ping` для проверки производительности и связанности.
 
 ### Производительность
 
@@ -21,14 +78,14 @@
 
 ### Функциональность
 
-* Увеличена пропускная способность команды `{{ ydb-cli }} import file csv` примерно в 3 раза.  
+* Увеличена пропускная способность команды `{{ ydb-cli }} import file csv` примерно в 3 раза.
 * Добавлена поддержка [stock-нагрузки](./reference/ydb-cli/commands/workload/stock.md) для [колоночных таблиц](./concepts/datamodel/table.md#column-oriented-tables).
-* Реализована поддержка временных меток в формате [ISO 8601](https://ru.wikipedia.org/wiki/ISO_8601) для команд `ydb topic`.  
-* В команду `{{ ydb-cli }} sql` добавлена опция `--explain-ast`, которая выводит AST запроса.  
-* Добавлена подсветка синтаксиса ANSI SQL в интерактивном режиме.  
-* В команды `{{ ydb-cli }} workload tpch` и `{{ ydb-cli }} workload tpcds` добавлена поддержка синтаксиса PostgreSQL.  
-* В команду `{{ ydb-cli }} workload tpcds run` добавлена опция `-c` для сравнения результата с ожидаемым значением и отображения различий.  
-* В команды `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore` добавлено логирование событий.  
+* Реализована поддержка временных меток в формате [ISO 8601](https://ru.wikipedia.org/wiki/ISO_8601) для команд `ydb topic`.
+* В команду `{{ ydb-cli }} sql` добавлена опция `--explain-ast`, которая выводит AST запроса.
+* Добавлена подсветка синтаксиса ANSI SQL в интерактивном режиме.
+* В команды `{{ ydb-cli }} workload tpch` и `{{ ydb-cli }} workload tpcds` добавлена поддержка синтаксиса PostgreSQL.
+* В команду `{{ ydb-cli }} workload tpcds run` добавлена опция `-c` для сравнения результата с ожидаемым значением и отображения различий.
+* В команды `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore` добавлено логирование событий.
 * В команду `{{ ydb-cli }} tools restore` добавлено указание места возникновения ошибки.
 
 ### Изменения с потерей обратной совместимости

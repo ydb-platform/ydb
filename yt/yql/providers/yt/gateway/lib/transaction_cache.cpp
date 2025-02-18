@@ -441,7 +441,12 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         createdEntry->Client = CreateClient(server, createClientOptions);
         createdEntry->TransactionSpec = specProvider();
         if (externalTx) {
-            createdEntry->ExternalTx = createdEntry->Client->AttachTransaction(externalTx);
+            try {
+                createdEntry->ExternalTx = createdEntry->Client->AttachTransaction(externalTx);
+            } catch (const yexception& e) {
+                throw TErrorException(0) << e.what();
+            }
+
             createdEntry->Tx = createdEntry->ExternalTx->StartTransaction(TStartTransactionOptions().Attributes(createdEntry->TransactionSpec));
         } else {
             createdEntry->Tx = createdEntry->Client->StartTransaction(TStartTransactionOptions().Attributes(createdEntry->TransactionSpec));

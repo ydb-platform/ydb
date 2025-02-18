@@ -1,7 +1,6 @@
 (
 #comment
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let vt1 (VariantType (TupleType (DataType 'Int32) (DataType 'String))))
 (let vt2 (VariantType (StructType '('x (DataType 'Int32)) '('y (DataType 'String)))))

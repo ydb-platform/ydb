@@ -7,7 +7,7 @@
 
 #define INV_ARG "Invalid argument for JWT token source: "
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 static const TString TOKEN_TYPE = "urn:ietf:params:oauth:token-type:jwt";
 

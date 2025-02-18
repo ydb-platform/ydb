@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:15:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:16:4: Warning: At function: JsonQuery
+        	    JSON_QUERY($nested_json, @@strict $."привет"@@);
+	   ^
+            <tmp_path>/program.sql:<main>:16:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+            	    JSON_QUERY($nested_json, @@strict $."привет"@@);
+	   ^

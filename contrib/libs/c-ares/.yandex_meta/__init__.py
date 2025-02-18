@@ -49,7 +49,7 @@ def post_install(self):
 
 
 c_ares = CMakeNinjaNixProject(
-    owners=["max42", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/c-ares",
     nixattr="c-ares",
     copy_sources=[

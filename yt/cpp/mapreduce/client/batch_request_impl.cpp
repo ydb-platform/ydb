@@ -7,6 +7,7 @@
 
 #include <yt/cpp/mapreduce/http/retry_request.h>
 
+#include <yt/cpp/mapreduce/interface/raw_batch_request.h>
 #include <yt/cpp/mapreduce/interface/config.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
@@ -14,19 +15,11 @@
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/yson/node/serialize.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
-#include <yt/cpp/mapreduce/raw_client/rpc_parameters_serialization.h>
-
 #include <util/generic/guid.h>
 #include <util/string/builder.h>
 
-#include <exception>
-
 namespace NYT {
 namespace NDetail {
-
-using namespace NRawClient;
 
 using ::NThreading::TFuture;
 using ::NThreading::TPromise;
@@ -36,11 +29,11 @@ using ::NThreading::NewPromise;
 
 TBatchRequest::TBatchRequest(const TTransactionId& defaultTransaction, ::TIntrusivePtr<TClient> client)
     : DefaultTransaction_(defaultTransaction)
-    , Impl_(MakeIntrusive<TRawBatchRequest>(client->GetContext().Config))
+    , Impl_(client->GetRawClient()->CreateRawBatchRequest())
     , Client_(client)
 { }
 
-TBatchRequest::TBatchRequest(TRawBatchRequest* impl, ::TIntrusivePtr<TClient> client)
+TBatchRequest::TBatchRequest(IRawBatchRequest* impl, ::TIntrusivePtr<TClient> client)
     : Impl_(impl)
     , Client_(std::move(client))
 { }
@@ -50,7 +43,7 @@ TBatchRequest::~TBatchRequest() = default;
 IBatchRequestBase& TBatchRequest::WithTransaction(const TTransactionId& transactionId)
 {
     if (!TmpWithTransaction_) {
-        TmpWithTransaction_.Reset(new TBatchRequest(Impl_.Get(), Client_));
+        TmpWithTransaction_.reset(new TBatchRequest(Impl_.Get(), Client_));
     }
     TmpWithTransaction_->DefaultTransaction_ = transactionId;
     return *TmpWithTransaction_;
@@ -189,7 +182,7 @@ TFuture<TCheckPermissionResponse> TBatchRequest::CheckPermission(
 
 void TBatchRequest::ExecuteBatch(const TExecuteBatchOptions& options)
 {
-    NYT::NDetail::ExecuteBatch(Client_->GetRetryPolicy()->CreatePolicyForGenericRequest(), Client_->GetContext(), *Impl_, options);
+    Impl_->ExecuteBatch(options);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

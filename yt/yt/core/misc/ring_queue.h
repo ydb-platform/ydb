@@ -280,7 +280,7 @@ private:
     static void MoveRange(T* begin, T* end, T* result)
     {
         if (std::is_trivially_move_constructible<T>::value) {
-            ::memcpy(result, begin, sizeof (T) * (end - begin));
+            ::memcpy(result, begin, sizeof(T) * (end - begin));
         } else {
             for (auto* current = begin; current != end; ++current) {
                 new(result++) T(std::move(*current));

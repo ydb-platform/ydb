@@ -114,6 +114,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join-group-by-with-null.test_plan/int8_tbl",
                                                                                         "ReadColumns": [
                                                                                             "q1",
                                                                                             "q2"
@@ -191,6 +192,7 @@
                                                                                                                     {
                                                                                                                         "Inputs": [],
                                                                                                                         "Name": "TableFullScan",
+                                                                                                                        "Path": "/Root/postgres_jointest/join-group-by-with-null.test_plan/int8_tbl",
                                                                                                                         "ReadColumns": [
                                                                                                                             "q1",
                                                                                                                             "q2"

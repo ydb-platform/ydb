@@ -71,7 +71,7 @@ const IMemoryUsageTrackerPtr& TChannelWrapper::GetChannelMemoryTracker()
 
 void TClientRequestControlThunk::SetUnderlying(IClientRequestControlPtr underlying)
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     if (!underlying) {
         return;
@@ -105,7 +105,7 @@ void TClientRequestControlThunk::SetUnderlying(IClientRequestControlPtr underlyi
 
 void TClientRequestControlThunk::Cancel()
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     auto guard = Guard(SpinLock_);
 

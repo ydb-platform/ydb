@@ -32,6 +32,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
     if (!outItemType || !outItemType->IsPersistable()) {
         return node;
     }
+    if (!EnsurePersistableYsonTypes(node.Pos(), *outItemType, ctx, State_)) {
+        return {};
+    }
 
     auto cluster = TString{GetClusterName(input)};
     TSyncMap syncList;

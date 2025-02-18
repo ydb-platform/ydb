@@ -3,7 +3,7 @@
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 
 class TOperation::TImpl {

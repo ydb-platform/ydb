@@ -25,6 +25,23 @@
 1,"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"
 ```
 
+## Контрольные суммы {#checksums}
+
+{% note info %}
+
+Контрольные суммы файлов создаются только при выгрузке в S3-совместимое объектное хранилище.
+
+{% endnote %}
+
+{{ ydb-short-name }} генерирует контрольную сумму для каждого файла выгрузки и сохраняет ее в соответствующем файле с суффиксом `.sha256`.
+
+Контрольные суммы файлов можно проверить с помощью консольной утилиты `sha256sum`:
+
+```sh
+$ sha256sum -c scheme.pb.sha256
+scheme.pb: OK
+```
+
 ## Примеры {#example}
 
 ### Таблицы {#example-table}
@@ -114,14 +131,8 @@ state: STATE_ENABLED
 Содержимое файла `series/update_feed/topic_description.pb`:
 
 ```proto
-self {
-  name: "update_feed"
-  owner: "Alice"
-  type: TOPIC
-  created_at {
-    plan_step: 1734362034420
-    tx_id: 281474982949619
-  }
+retention_period {
+  seconds: 86400
 }
 consumers {
   name: "my_consumer"

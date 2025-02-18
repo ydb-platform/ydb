@@ -101,6 +101,7 @@ void Serialize(const TQueryStatistics& statistics, NYson::IYsonConsumer* consume
         .Item("incomplete_input").Value(statistics.IncompleteInput)
         .Item("incomplete_output").Value(statistics.IncompleteOutput)
         .Item("memory_usage").Value(statistics.MemoryUsage)
+        .Item("total_grouped_row_count").Value(statistics.TotalGroupedRowCount)
         .DoIf(!statistics.InnerStatistics.empty(), [&] (NYTree::TFluentMap fluent) {
             fluent
                 .Item("inner_statistics").DoListFor(statistics.InnerStatistics, [=] (

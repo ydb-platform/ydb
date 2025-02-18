@@ -53,6 +53,7 @@ RECURSE_FOR_TESTS(
     ut_ttl
     ut_user_attributes
     ut_user_attributes_reboots
+    ut_vector_index_build_reboots
     ut_view
 )
 
@@ -76,6 +77,7 @@ SRCS(
     schemeshard__init_populator.cpp
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
+    schemeshard__list_users.cpp
     schemeshard__login.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
@@ -194,6 +196,7 @@ SRCS(
     schemeshard__sync_update_tenants.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
+    schemeshard__unmark_restore_tables.cpp
     schemeshard__upgrade_access_database.cpp
     schemeshard__upgrade_schema.cpp
     schemeshard_audit_log.cpp
@@ -232,6 +235,7 @@ SRCS(
     schemeshard_import__get.cpp
     schemeshard_import__list.cpp
     schemeshard_import_flow_proposals.cpp
+    schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
     schemeshard_path.cpp
@@ -306,6 +310,8 @@ PEERDIR(
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer
+    ydb/public/lib/ydb_cli/dump/files
+    ydb/public/lib/ydb_cli/dump/util
     yql/essentials/minikql
     yql/essentials/providers/common/proto
     ydb/services/bg_tasks
@@ -317,10 +323,12 @@ YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     SRCS(
+        schemeshard_export_scheme_uploader_fallback.cpp
         schemeshard_import_scheme_getter_fallback.cpp
     )
 ELSE()
     SRCS(
+        schemeshard_export_scheme_uploader.cpp
         schemeshard_import_scheme_getter.cpp
     )
 ENDIF()

@@ -18,6 +18,23 @@ namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TStruct, class TValue>
+struct TTypedYsonStructField
+    : public ITypeErasedYsonStructField
+{
+    TYsonStructField<TStruct, TValue> Field;
+};
+
+template <class TStruct, class TValue>
+ITypeErasedYsonStructFieldPtr CreateTypeErasedYsonStructField(TYsonStructField<TStruct, TValue> field)
+{
+    auto erasedField = New<TTypedYsonStructField<TStruct, TValue>>();
+    erasedField->Field = field;
+    return erasedField;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NPrivate {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -171,7 +188,7 @@ struct TYsonSourceTraits<NYson::TYsonPullParserCursor*>
     static void FillMap(NYson::TYsonPullParserCursor*& source, TMap& map, TFiller filler)
     {
         source->ParseMap([&] (NYson::TYsonPullParserCursor* cursor) {
-            auto key = ExtractTo<TString>(cursor);
+            auto key = ExtractTo<std::string>(cursor);
             filler(map, std::move(key), source);
         });
     }
@@ -422,7 +439,7 @@ void LoadFromSource(
     using TValue = typename TMap::mapped_type;
 
     try {
-        TTraits::FillMap(source, parameter, [&] (TMap& map, const TString& key, auto childSource) {
+        TTraits::FillMap(source, parameter, [&] (TMap& map, const std::string& key, auto childSource) {
             TValue value;
             LoadFromSource(
                 value,
@@ -621,6 +638,13 @@ bool CompareValues(const T& lhs, const T& rhs);
 template <CAnyMap T>
 bool CompareValues(const T& lhs, const T& rhs);
 
+template <class T>
+concept CNode = CNodePtr<TIntrusivePtr<T>>;
+
+// INode, IListNode, IMapNode.
+template <CNode T>
+bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Any T.
@@ -707,6 +731,13 @@ bool CompareValues(const T& lhs, const T& rhs)
     return true;
 }
 
+// INode, IListNode, IMapNode.
+template <CNode T>
+bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
+{
+    return AreNodesEqual(lhs, rhs);
+}
+
 } // namespace NPrivate
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -722,12 +753,27 @@ TValue& TYsonFieldAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* sou
     return TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(source)->*Field_;
 }
 
+template <class TStruct, class TValue>
+bool TYsonFieldAccessor<TStruct, TValue>::HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const
+{
+    if (auto typedThat = DynamicPointerCast<TTypedYsonStructField<TStruct, TValue>>(erasedField)) {
+        return typedThat->Field == Field_;
+    }
+    return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TStruct, class TValue>
 TUniversalYsonParameterAccessor<TStruct, TValue>::TUniversalYsonParameterAccessor(std::function<TValue&(TStruct*)> accessor)
     : Accessor_(std::move(accessor))
 { }
+
+template <class TStruct, class TValue>
+bool TUniversalYsonParameterAccessor<TStruct, TValue>::HoldsField(ITypeErasedYsonStructFieldPtr /*field*/) const
+{
+    YT_UNIMPLEMENTED();
+}
 
 template <class TStruct, class TValue>
 TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
@@ -739,7 +785,7 @@ TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(const TYsonSt
 
 template <class TValue>
 TYsonStructParameter<TValue>::TYsonStructParameter(
-    TString key,
+    std::string key,
     std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor,
     int fieldIndex)
     : Key_(std::move(key))
@@ -896,7 +942,7 @@ bool TYsonStructParameter<TValue>::CanOmitValue(const TYsonStructBase* self) con
 }
 
 template <class TValue>
-TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::Alias(const TString& name)
+TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::Alias(const std::string& name)
 {
     Aliases_.push_back(name);
     return *this;
@@ -924,7 +970,7 @@ TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::EnforceDefaultUnreco
 }
 
 template <class TValue>
-const std::vector<TString>& TYsonStructParameter<TValue>::GetAliases() const
+const std::vector<std::string>& TYsonStructParameter<TValue>::GetAliases() const
 {
     return Aliases_;
 }
@@ -936,7 +982,7 @@ bool TYsonStructParameter<TValue>::IsRequired() const
 }
 
 template <class TValue>
-const TString& TYsonStructParameter<TValue>::GetKey() const
+const std::string& TYsonStructParameter<TValue>::GetKey() const
 {
     return Key_;
 }
@@ -983,7 +1029,7 @@ TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::DontSerializeDefault
     // to do the deep validation.
     static_assert(
         NPrivate::CSupportsDontSerializeDefault<TValue>,
-        "DontSerializeDefault requires |Parameter| to be TString, TDuration, an arithmetic type or an optional of those");
+        "DontSerializeDefault requires |Parameter| to be std::string, TDuration, an arithmetic type or an optional of those");
 
     SerializeDefault_ = false;
     return *this;
@@ -1028,6 +1074,19 @@ template <class TValue>
 int TYsonStructParameter<TValue>::GetFieldIndex() const
 {
     return FieldIndex_;
+}
+
+template <class TValue>
+const TValue& TYsonStructParameter<TValue>::GetValue(const TYsonStructBase* source) const
+{
+    YT_VERIFY(FieldAccessor_);
+    return FieldAccessor_->GetValue(source);
+}
+
+template <class TValue>
+bool TYsonStructParameter<TValue>::HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const
+{
+    return FieldAccessor_ && FieldAccessor_->HoldsField(erasedField);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

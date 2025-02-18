@@ -14,7 +14,7 @@ class TTopicFilters : public ITopicFilters {
         NMonitoring::TDynamicCounters::TCounterPtr InFlightCompileRequests;
         NMonitoring::TDynamicCounters::TCounterPtr CompileErrors;
 
-        TCounters(NMonitoring::TDynamicCounterPtr counters)
+        explicit TCounters(NMonitoring::TDynamicCounterPtr counters)
             : Counters(counters)
         {
             Register();
@@ -81,6 +81,18 @@ class TTopicFilters : public ITopicFilters {
 
             LOG_ROW_DISPATCHER_TRACE("Send compile request with id " << InFlightCompilationId);
             NActors::TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(Self.Config.CompileServiceId, Self.Owner, PurecalcFilter->GetCompileRequest().release(), 0, InFlightCompilationId));
+        }
+
+        void AbortCompilation() {
+            if (!InFlightCompilationId) {
+                return;
+            }
+
+            LOG_ROW_DISPATCHER_TRACE("Send abort compile request with id " << InFlightCompilationId);
+            NActors::TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(Self.Config.CompileServiceId, Self.Owner, new TEvRowDispatcher::TEvPurecalcCompileAbort(), 0, InFlightCompilationId));
+
+            InFlightCompilationId = 0;
+            Self.Counters.InFlightCompileRequests->Dec();
         }
 
         void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr ev) {
@@ -205,7 +217,14 @@ public:
 
     void RemoveFilter(NActors::TActorId filterId) override {
         LOG_ROW_DISPATCHER_TRACE("Remove filter with id " << filterId);
-        Filters.erase(filterId);
+
+        const auto it = Filters.find(filterId);
+        if (it == Filters.end()) {
+            return;
+        }
+
+        it->second.AbortCompilation();
+        Filters.erase(it);
     }
 
     TFiltersStatistic GetStatistics() override {
@@ -217,7 +236,7 @@ public:
     }
 
 private:
-    void PushToFilter(const TFilterHandler& filterHandler, const TVector<ui64>& offsets, const TVector<ui64>& columnIndex, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) {
+    void PushToFilter(const TFilterHandler& filterHandler, const TVector<ui64>& /* offsets */, const TVector<ui64>& columnIndex, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) {
         const auto consumer = filterHandler.GetConsumer();
         const auto& columnIds = consumer->GetColumnIds();
 

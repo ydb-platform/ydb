@@ -8,7 +8,8 @@
 #include <ydb/core/pgproxy/pg_proxy_types.h>
 #define INCLUDE_YDB_INTERNAL_H
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -209,7 +210,7 @@ protected:
     static void FillError(const NKikimrKqp::TEvQueryResponse& record, typename TResponseEventPtr::element_type& response) {
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-        NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), std::move(issues));
+        NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), NYdb::NAdapters::ToSdkIssues(std::move(issues)));
         TString message(TStringBuilder() << status);
         response.ErrorFields.push_back({'E', "ERROR"});
         response.ErrorFields.push_back({'M', message});
@@ -231,14 +232,14 @@ protected:
             std::optional<NYdb::TPgType> pgType = GetPgTypeFromYdbType(column.Type);
             if (pgType.has_value()) {
                 response->DataFields.push_back({
-                    .Name = column.Name,
+                    .Name = TString{column.Name},
                     .DataType = pgType->Oid,
                     .DataTypeSize = pgType->Typlen,
                     .DataTypeModifier = pgType->Typmod,
                 });
             } else {
                 response->DataFields.push_back({
-                    .Name = column.Name
+                    .Name = TString{column.Name}
                 });
             }
         }

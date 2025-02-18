@@ -44,7 +44,7 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());
     RecordSnapshotMax.SerializeToProto(*portionMeta.MutableRecordSnapshotMax());
-    for (auto&& i : BlobIds) {
+    for (auto&& i : GetBlobIds()) {
         *portionMeta.AddBlobIds() = i.GetLogoBlobId().AsBinaryString();
     }
     return portionMeta;

@@ -49,7 +49,12 @@ public:
         Scanner->OnSentDataFromInterval(intervalIdx);
     }
 
-    const TReadMetadata::TConstPtr& GetReadMetadata() const {
+    template <class T>
+    std::shared_ptr<T> GetReadMetadataVerifiedAs() const {
+        return SpecialReadContext->GetReadMetadataVerifiedAs<T>();
+    }
+
+    const NCommon::TReadMetadata::TConstPtr& GetReadMetadata() const {
         return SpecialReadContext->GetReadMetadata();
     }
 

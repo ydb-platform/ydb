@@ -22,10 +22,11 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
-        const auto check = IsExists(value, block);
+        auto& context = ctx.Codegen.GetContext();
+        const auto check = IsExists(value, block, context);
         if (Node->IsTemporaryValue())
             ValueCleanup(Node->GetRepresentation(), value, ctx, block);
-        return MakeBoolean(check, ctx.Codegen.GetContext(), block);
+        return MakeBoolean(check, context, block);
     }
 #endif
 };
@@ -65,9 +66,10 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+        auto& context = ctx.Codegen.GetContext();
         const auto state = GetNodeValue(State, ctx, block);
         const auto value = GetNodeValue(Arg, ctx, block);
-        const auto check = IsExists(value, block);
+        const auto check = IsExists(value, block, context);
         if (Arg->IsTemporaryValue())
             ValueCleanup(Arg->GetRepresentation(), value, ctx, block);
         const auto zext = new ZExtInst(check, state->getType(), "zext", block);

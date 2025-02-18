@@ -5,7 +5,9 @@ import copy
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-from ydb.tools.cfg import types, validation, walle
+from ydb.tools.cfg import types, validation, walle, utils
+
+from ydb.core.protos import config_pb2
 
 DEFAULT_LOG_LEVEL = types.LogLevels.NOTICE
 
@@ -60,10 +62,11 @@ def merge_with_default(dft, override):
 
 
 class KiKiMRDrive(object):
-    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None, kind=None):
+    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None, kind=None, pdisk_config=None):
         self.type = type
         self.path = path
         self.shared_with_os = shared_with_os
+        self.pdisk_config = pdisk_config
         self.expected_slot_count = expected_slot_count
         self.kind = kind
 
@@ -74,10 +77,11 @@ class KiKiMRDrive(object):
             and self.shared_with_os == other.shared_with_os
             and self.expected_slot_count == other.expected_slot_count
             and self.kind == other.kind
+            and self.pdisk_config == other.pdisk_config
         )
 
     def __hash__(self):
-        return hash("\0".join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.kind))))
+        return hash("\0".join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.kind, self.pdisk_config))))
 
 
 Domain = collections.namedtuple(
@@ -264,7 +268,7 @@ def normalize_domain(domain_name):
 
 
 class ClusterDetailsProvider(object):
-    def __init__(self, template, walle_provider, validator=None, database=None):
+    def __init__(self, template, host_info_provider, validator=None, database=None, use_new_style_cfg=False):
         if not validator:
             validator = validation.default_validator()
 
@@ -277,16 +281,16 @@ class ClusterDetailsProvider(object):
         if database is not None:
             self.__cluster_description = self.get_subjective_description(self.__cluster_description, database, self.__validator)
 
-        self._use_walle = self.__cluster_description.get("use_walle", True)
-        if not walle_provider:
-            walle_provider = walle.NopHostsInformationProvider()
-        self._walle = walle_provider
+        self._use_walle = self.__cluster_description.get("use_walle", False)
+        self._k8s_settings = self.__cluster_description.get("k8s_settings", {"use": False})
+
+        if host_info_provider is not None:
+            self._host_info_provider = host_info_provider
+        else:
+            self._host_info_provider = walle.NopHostsInformationProvider()
+
         self.__translated_storage_pools_deprecated = None
-        self.__translated_hosts = None
-        self.__racks = {}
-        self.__bodies = {}
-        self.__dcs = {}
-        self.use_new_style_kikimr_cfg = self.__cluster_description.get("use_new_style_kikimr_cfg", False)
+        self.use_new_style_kikimr_cfg = self.__cluster_description.get("use_new_style_kikimr_cfg", use_new_style_cfg)
         self.need_generate_app_config = self.__cluster_description.get("need_generate_app_config", False)
         self.need_txt_files = self.__cluster_description.get("need_txt_files", True)
         self.use_auto_config = self.__cluster_description.get("use_auto_config", False)
@@ -297,6 +301,11 @@ class ClusterDetailsProvider(object):
         self.table_profiles_config = self.__cluster_description.get("table_profiles_config")
         self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
+        self.memory_controller_config = self.__cluster_description.get("memory_controller_config")
+        self.s3_proxy_resolver_config = self.__cluster_description.get("s3_proxy_resolver_config")
+        self.channel_profile_config = self.__cluster_description.get("channel_profile_config")
+        self.immediate_controls_config = self.__cluster_description.get("immediate_controls_config")
+        self.cms_config = self.__cluster_description.get("cms_config")
         self.pdisk_key_config = self.__cluster_description.get("pdisk_key_config", {})
         if not self.need_txt_files and not self.use_new_style_kikimr_cfg:
             assert "cannot remove txt files without new style kikimr cfg!"
@@ -343,27 +352,54 @@ class ClusterDetailsProvider(object):
         return self._use_walle
 
     @property
+    def use_k8s_api(self):
+        return self._k8s_settings.get("use")
+
+    @property
+    def k8s_rack_label(self):
+        return self._k8s_settings.get("k8s_rack_label")
+
+    @property
+    def k8s_dc_label(self):
+        return self._k8s_settings.get("k8s_dc_label")
+
+    @property
     def security_settings(self):
         return self.__cluster_description.get("security_settings", {})
 
     @property
-    def forbid_implicit_storage_pools(self):
-        return self.__cluster_description.get("forbid_implicit_storage_pools", False)
+    def security_config(self):
+        return self.__cluster_description.get("security_config", {})
 
     def _get_datacenter(self, host_description):
         if host_description.get("datacenter") is not None:
             return str(host_description.get("datacenter"))
-        return str(self._walle.get_datacenter(host_description.get("name", host_description.get("host"))))
+        dc = host_description.get("location", {}).get("data_center", None)
+        if dc:
+            return str(dc)
+        return str(self._host_info_provider.get_datacenter(host_description.get("name", host_description.get("host"))))
 
     def _get_rack(self, host_description):
         if host_description.get("rack") is not None:
             return str(host_description.get("rack"))
-        return str(self._walle.get_rack(host_description.get("name", host_description.get("host"))))
+        rack = host_description.get("location", {}).get("rack", None)
+        if rack:
+            return str(rack)
+
+        hostname = host_description.get("name", host_description.get("host"))
+
+        if isinstance(self._host_info_provider, walle.NopHostsInformationProvider):
+            raise RuntimeError(f"there is no 'rack' specified for host {hostname} in template, and no host info provider has been specified")
+
+        return str(self._host_info_provider.get_rack(hostname))
 
     def _get_body(self, host_description):
         if host_description.get("body") is not None:
             return str(host_description.get("body"))
-        return str(self._walle.get_body(host_description.get("name", host_description.get("host"))))
+        body = host_description.get("location", {}).get("body", None)
+        if body:
+            return str(body)
+        return str(self._host_info_provider.get_body(host_description.get("name", host_description.get("host"))))
 
     def _collect_drives_info(self, host_description):
         host_config_id = host_description.get("host_config_id", None)
@@ -555,14 +591,16 @@ class ClusterDetailsProvider(object):
             domain_name = domain.get("domain_name")
 
             storage_pool_kinds = {
-                pool_kind.get("kind"): self.__storage_pool_kind(pool_kind) for pool_kind in domain.get("storage_pool_kinds", [])
+                pool_kind.get("kind"): self.__storage_pool_kind(pool_kind)
+                for pool_kind in domain.get("storage_pool_kinds", [])
             }
             assert len(set(storage_pool_kinds.keys())) == len(
                 storage_pool_kinds.keys()
             ), "required unique kind value in storage_pool_kinds items"
 
             storage_pools = [
-                self.__storage_pool(storage_pool_kinds, pool_instance, domain_name) for pool_instance in domain.get("storage_pools", [])
+                self.__storage_pool(storage_pool_kinds, pool_instance, domain_name)
+                for pool_instance in domain.get("storage_pools", [])
             ]
 
             domains.append(
@@ -584,6 +622,16 @@ class ClusterDetailsProvider(object):
             )
         return domains
 
+    @property
+    def domains_config(self):
+        domains_config_dict = self.__cluster_description.get("domains_config", {})
+        if domains_config_dict == {}:
+            return None
+
+        domains_config = config_pb2.TDomainsConfig()
+        utils.wrap_parse_dict(domains_config_dict, domains_config)
+        return domains_config
+
     @staticmethod
     def _get_domain_tenants(domain_description):
         tenants = domain_description.get("databases", [])
@@ -604,7 +652,9 @@ class ClusterDetailsProvider(object):
 
     @property
     def fail_domain_type(self):
-        return types.FailDomainType.from_string(str(self.__cluster_description.get("fail_domain_type", DEFAULT_FAIL_DOMAIN_TYPE)))
+        return types.FailDomainType.from_string(
+            str(self.__cluster_description.get("fail_domain_type", DEFAULT_FAIL_DOMAIN_TYPE))
+        )
 
     @property
     def min_fail_domains(self):
@@ -622,6 +672,16 @@ class ClusterDetailsProvider(object):
     # Log Stuff
     @property
     def log_config(self):
+        # `config.yaml` style
+        log_config_dict = self.__cluster_description.get("log_config", {})
+        if log_config_dict != {}:
+            log_config = config_pb2.TLogConfig()
+            if "default_level" not in log_config_dict:
+                log_config["default_level"] = self.default_log_level
+            utils.wrap_parse_dict(log_config_dict, log_config)
+            return log_config
+
+        # Old, `template.yaml` style
         log_config = copy.deepcopy(self.__cluster_description.get("log", {}))
 
         if "entries" in log_config:
@@ -649,11 +709,20 @@ class ClusterDetailsProvider(object):
 
     @property
     def grpc_config(self):
-        return merge_with_default(GRPC_DEFAULT_CONFIG, self.__cluster_description.get("grpc", {}))
+        grpc_config = merge_with_default(GRPC_DEFAULT_CONFIG, self.__cluster_description.get("grpc", {}))
+        # specifying both `port` and `ssl_port` leads to erroneous behavior in ydbd, half of the incoming
+        # connections use tls, half do not, so this is prohibited
+        if grpc_config.get("ssl_port") is not None:
+            del grpc_config["port"]
+        return grpc_config
 
     @property
     def dynamicnameservice_config(self):
         return merge_with_default(DYNAMIC_NAME_SERVICE, self.__cluster_description.get("dynamicnameservice", {}))
+
+    @property
+    def nameservice_config(self):
+        return self.__cluster_description.get("nameservice_config")
 
     @property
     def grpc_port(self):

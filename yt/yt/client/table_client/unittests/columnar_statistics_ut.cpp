@@ -31,7 +31,8 @@ void UpdateValueHll(TUnversionedValue value, std::vector<TColumnarHyperLogLogDig
     hll->at(value.Id).Add(fingerprint);
 }
 
-std::vector<TColumnarHyperLogLogDigest> ComputeHll(const std::vector<TUnversionedRow>& rows) {
+std::vector<TColumnarHyperLogLogDigest> ComputeHll(const std::vector<TUnversionedRow>& rows)
+{
     std::vector<TColumnarHyperLogLogDigest> result;
     if (rows.empty()) {
         return result;
@@ -45,7 +46,8 @@ std::vector<TColumnarHyperLogLogDigest> ComputeHll(const std::vector<TUnversione
     return result;
 }
 
-std::vector<TColumnarHyperLogLogDigest> ComputeHll(const std::vector<TVersionedRow>& rows) {
+std::vector<TColumnarHyperLogLogDigest> ComputeHll(const std::vector<TVersionedRow>& rows)
+{
     std::vector<TColumnarHyperLogLogDigest> result;
     if (rows.empty()) {
         return result;
@@ -103,7 +105,9 @@ TEST(TUpdateColumnarStatisticsTest, EmptyStruct)
         .ColumnNonNullValueCounts = {2, 3, 3},
         .ChunkRowCount = 3,
         .LegacyChunkRowCount = 0,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = ComputeHll(rows)}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = ComputeHll(rows),
+        },
     };
     EXPECT_EQ(statistics, expected);
 }
@@ -129,8 +133,8 @@ TEST(TUpdateColumnarStatisticsTest, InitializedStruct)
         .LegacyChunkRowCount = 3,
         .LargeStatistics = TLargeColumnarStatistics{
             .ColumnHyperLogLogDigests =
-                std::vector<TColumnarHyperLogLogDigest>(4, TColumnarHyperLogLogDigest())
-        }
+                std::vector<TColumnarHyperLogLogDigest>(4, TColumnarHyperLogLogDigest()),
+        },
     };
 
     auto rowBuffer = New<TRowBuffer>();
@@ -168,7 +172,9 @@ TEST(TUpdateColumnarStatisticsTest, InitializedStruct)
         .ColumnNonNullValueCounts = {7, 12, 52, 5},
         .ChunkRowCount = 52,
         .LegacyChunkRowCount = 3,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = ComputeHll(rows)}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = ComputeHll(rows),
+        },
     };
     EXPECT_EQ(statistics, expected);
 }
@@ -202,7 +208,9 @@ TEST(TUpdateColumnarStatisticsTest, DefaultStruct)
         .ColumnNonNullValueCounts = {1, 1, 1},
         .ChunkRowCount = 1,
         .LegacyChunkRowCount = 0,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = ComputeHll(rows)}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = ComputeHll(rows),
+        },
     };
     EXPECT_EQ(statistics, expected);
 }
@@ -236,7 +244,9 @@ TEST(TUpdateColumnarStatisticsTest, StructSizeLessThanRowSize)
         .ColumnNonNullValueCounts = {1, 1, 1},
         .ChunkRowCount = 1,
         .LegacyChunkRowCount = 0,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = ComputeHll(rows)}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = ComputeHll(rows),
+        },
     };
     EXPECT_EQ(statistics, expected);
 }
@@ -269,13 +279,13 @@ TEST(TUpdateColumnarStatisticsTest, ResizeNoHll)
             MakeUnversionedInt64Value(12),
             MakeUnversionedStringValue("buzz"),
             MakeUnversionedDoubleValue(1e70),
-            MakeUnversionedNullValue()
+            MakeUnversionedNullValue(),
         },
         .ColumnMaxValues = {
             MakeUnversionedInt64Value(12),
             MakeUnversionedStringValue("buzz"),
             MakeUnversionedDoubleValue(1e70),
-            MakeUnversionedNullValue()
+            MakeUnversionedNullValue(),
         },
         .ColumnNonNullValueCounts = {1, 1, 1, 0},
         .ChunkRowCount = 1,
@@ -321,13 +331,13 @@ TEST(TUpdateColumnarStatisticsTest, ResizeHll)
             MakeUnversionedInt64Value(12),
             MakeUnversionedStringValue("buzz"),
             MakeUnversionedDoubleValue(1e70),
-            MakeUnversionedNullValue()
+            MakeUnversionedNullValue(),
         },
         .ColumnMaxValues = {
             MakeUnversionedInt64Value(12),
             MakeUnversionedStringValue("buzz"),
             MakeUnversionedDoubleValue(1e70),
-            MakeUnversionedNullValue()
+            MakeUnversionedNullValue(),
         },
         .ColumnNonNullValueCounts = {1, 1, 1, 0},
         .ChunkRowCount = 1,
@@ -345,18 +355,20 @@ TEST(TUpdateColumnarStatisticsTest, ResizeHll)
             MakeUnversionedInt64Value(12),
             MakeUnversionedStringValue("buzz"),
             MakeUnversionedDoubleValue(1e70),
-            MakeUnversionedNullValue()
+            MakeUnversionedNullValue(),
         },
         .ColumnMaxValues = {
             MakeUnversionedInt64Value(12),
             MakeUnversionedStringValue("buzz"),
             MakeUnversionedDoubleValue(1e70),
-            MakeUnversionedNullValue()
+            MakeUnversionedNullValue(),
         },
         .ColumnNonNullValueCounts = {1, 1, 1, 0},
         .ChunkRowCount = 1,
         .LegacyChunkRowCount = 0,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = {}}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = {},
+        },
     };
     EXPECT_EQ(statistics, expectedNoHll);
 
@@ -405,7 +417,9 @@ TEST(TUpdateColumnarStatisticsTest, CombineHllAndNoHll)
         .ColumnNonNullValueCounts = {2, 2, 2},
         .ChunkRowCount = 2,
         .LegacyChunkRowCount = 0,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = expectedHll1}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = expectedHll1,
+        },
     };
 
     EXPECT_EQ(statistics1, expected1);
@@ -438,7 +452,9 @@ TEST(TUpdateColumnarStatisticsTest, CombineHllAndNoHll)
         .ColumnNonNullValueCounts = {0, 1, 1},
         .ChunkRowCount = 1,
         .LegacyChunkRowCount = 0,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = {}}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = {},
+        },
     };
 
     EXPECT_EQ(statistics2, expected2);
@@ -463,7 +479,9 @@ TEST(TUpdateColumnarStatisticsTest, CombineHllAndNoHll)
         .ColumnNonNullValueCounts = {2, 3, 3},
         .ChunkRowCount = 3,
         .LegacyChunkRowCount = 0,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = {}}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = {},
+        },
     };
 
     EXPECT_EQ(statistics3, expected3);
@@ -500,7 +518,9 @@ TEST(TUpdateColumnarStatisticsTest, CombineHllAndNoHll)
         .ColumnNonNullValueCounts = {3, 3, 3},
         .ChunkRowCount = 3,
         .LegacyChunkRowCount = 0,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = expectedHll4}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = expectedHll4,
+        },
     };
 
     EXPECT_EQ(statistics4, expected4);
@@ -619,7 +639,9 @@ TEST(TUpdateColumnarStatisticsTest, DifferentTypesInOneColumn)
         .ColumnNonNullValueCounts = {3},
         .ChunkRowCount = 3,
         .LegacyChunkRowCount = 0,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = ComputeHll(rows)}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = ComputeHll(rows),
+        },
     };
     EXPECT_EQ(statistics, expected);
 }
@@ -650,17 +672,19 @@ TEST(TUpdateColumnarStatisticsTest, VersionedRow)
         .ColumnMinValues = {
             MakeUnversionedInt64Value(12),
             MakeUnversionedStringValue("a"),
-            MakeUnversionedInt64Value(1)
+            MakeUnversionedInt64Value(1),
         },
         .ColumnMaxValues = {
             MakeUnversionedInt64Value(33),
             MakeUnversionedStringValue("c"),
-            MakeUnversionedInt64Value(143)
+            MakeUnversionedInt64Value(143),
         },
         .ColumnNonNullValueCounts = {2, 3, 2},
         .ChunkRowCount = 2,
         .LegacyChunkRowCount = 0,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = ComputeHll(rows)}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = ComputeHll(rows),
+        },
     };
     EXPECT_EQ(statistics, expected);
 }
@@ -689,8 +713,8 @@ TEST(TMergeColumnarStatisticsTest, EmptyAndNonEmpty)
         .LegacyChunkRowCount = 5,
         .LargeStatistics = TLargeColumnarStatistics{
             .ColumnHyperLogLogDigests =
-                std::vector<TColumnarHyperLogLogDigest>(4, TColumnarHyperLogLogDigest())
-        }
+                std::vector<TColumnarHyperLogLogDigest>(4, TColumnarHyperLogLogDigest()),
+        },
     };
     lhs += rhs;
     EXPECT_EQ(lhs, rhs);
@@ -717,8 +741,8 @@ TEST(TMergeColumnarStatisticsTest, NonEmptyAndEmpty)
         .LegacyChunkRowCount = 5,
         .LargeStatistics = TLargeColumnarStatistics{
             .ColumnHyperLogLogDigests =
-                std::vector<TColumnarHyperLogLogDigest>(4, TColumnarHyperLogLogDigest())
-        }
+                std::vector<TColumnarHyperLogLogDigest>(4, TColumnarHyperLogLogDigest()),
+        },
     };
     auto rhs = TColumnarStatistics::MakeEmpty(4);
     auto oldLhs = lhs;
@@ -753,8 +777,8 @@ TEST(TMergeColumnarStatisticsTest, DifferentTypes)
         .LegacyChunkRowCount = 2,
         .LargeStatistics = TLargeColumnarStatistics{
             .ColumnHyperLogLogDigests =
-                std::vector<TColumnarHyperLogLogDigest>(7, TColumnarHyperLogLogDigest())
-        }
+                std::vector<TColumnarHyperLogLogDigest>(7, TColumnarHyperLogLogDigest()),
+        },
     };
 
     TColumnarStatistics rhs{
@@ -782,8 +806,8 @@ TEST(TMergeColumnarStatisticsTest, DifferentTypes)
         .LegacyChunkRowCount = 3,
         .LargeStatistics = TLargeColumnarStatistics{
             .ColumnHyperLogLogDigests =
-                std::vector<TColumnarHyperLogLogDigest>(7, TColumnarHyperLogLogDigest())
-        }
+                std::vector<TColumnarHyperLogLogDigest>(7, TColumnarHyperLogLogDigest()),
+        },
     };
 
     lhs += rhs;
@@ -813,8 +837,8 @@ TEST(TMergeColumnarStatisticsTest, DifferentTypes)
         .LegacyChunkRowCount = 5,
         .LargeStatistics = TLargeColumnarStatistics{
             .ColumnHyperLogLogDigests =
-                std::vector<TColumnarHyperLogLogDigest>(7, TColumnarHyperLogLogDigest())
-        }
+                std::vector<TColumnarHyperLogLogDigest>(7, TColumnarHyperLogLogDigest()),
+        },
     };
     EXPECT_EQ(lhs, expected);
 }
@@ -827,7 +851,9 @@ TEST(TMergeColumnarStatisticsTest, DifferentTypesInOneColumn)
         .ColumnMaxValues = {MakeUnversionedBooleanValue(false)},
         .ColumnNonNullValueCounts = {20},
         .ChunkRowCount = 20,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = {TColumnarHyperLogLogDigest()},}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = {TColumnarHyperLogLogDigest()},
+        },
     };
 
     TColumnarStatistics rhs{
@@ -836,7 +862,9 @@ TEST(TMergeColumnarStatisticsTest, DifferentTypesInOneColumn)
         .ColumnMaxValues = {MakeUnversionedStringValue("pick")},
         .ColumnNonNullValueCounts = {13},
         .ChunkRowCount = 13,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = {TColumnarHyperLogLogDigest()},}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = {TColumnarHyperLogLogDigest()},
+        },
     };
 
     lhs += rhs;
@@ -848,7 +876,9 @@ TEST(TMergeColumnarStatisticsTest, DifferentTypesInOneColumn)
         .ColumnNonNullValueCounts = {33},
         .ChunkRowCount = 33,
         .LegacyChunkRowCount = 0,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = {TColumnarHyperLogLogDigest()},}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = {TColumnarHyperLogLogDigest()},
+        },
     };
     EXPECT_EQ(lhs, expected);
 }
@@ -933,7 +963,7 @@ TEST(TColumnarStatisticsColumnSelectionTest, ColumnSelect)
         .LegacyChunkRowCount = 2,
         .LargeStatistics = TLargeColumnarStatistics{
             .ColumnHyperLogLogDigests =
-                std::vector<TColumnarHyperLogLogDigest>(7, TColumnarHyperLogLogDigest())
+                std::vector<TColumnarHyperLogLogDigest>(7, TColumnarHyperLogLogDigest()),
         }
     };
     auto nameTable = TNameTable::FromKeyColumns({"buzz", "off", "taken", "sec", "list", "size", "friend"});
@@ -971,8 +1001,8 @@ TEST(TColumnarStatisticsColumnSelectionTest, ColumnSelect)
         .LegacyChunkRowCount = 2,
         .LargeStatistics = TLargeColumnarStatistics{
             .ColumnHyperLogLogDigests =
-                std::vector<TColumnarHyperLogLogDigest>(6, TColumnarHyperLogLogDigest())
-        }
+                std::vector<TColumnarHyperLogLogDigest>(6, TColumnarHyperLogLogDigest()),
+        },
     };
     EXPECT_EQ(selectedStatistics, expected);
 
@@ -1004,7 +1034,9 @@ TEST(TColumnarStatisticsColumnSelectionTest, ColumnSelect)
         .ColumnNonNullValueCounts = {0, 10, 8, 0, 3, 0},
         .ChunkRowCount = 10,
         .LegacyChunkRowCount = 2,
-        .LargeStatistics = TLargeColumnarStatistics{.ColumnHyperLogLogDigests = {}}
+        .LargeStatistics = TLargeColumnarStatistics{
+            .ColumnHyperLogLogDigests = {},
+        },
     };
     EXPECT_EQ(selectedStatisticsNoHll, expectedNoHll);
 }

@@ -9,6 +9,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -105,7 +106,13 @@ public:
         return PathId;
     }
 
+    const NOlap::TSnapshot& GetDropVersionVerified() const {
+        AFL_VERIFY(DropVersion);
+        return *DropVersion;
+    }
+
     void SetDropVersion(const NOlap::TSnapshot& version) {
+        AFL_VERIFY(!DropVersion)("exists", DropVersion->DebugString())("version", version.DebugString());
         DropVersion = version;
     }
 
@@ -113,8 +120,14 @@ public:
         Versions.insert(snapshot);
     }
 
-    bool IsDropped() const {
-        return DropVersion.has_value();
+    bool IsDropped(const std::optional<NOlap::TSnapshot>& minReadSnapshot = std::nullopt) const {
+        if (!DropVersion) {
+            return false;
+        }
+        if (!minReadSnapshot) {
+            return true;
+        }
+        return *DropVersion < *minReadSnapshot;
     }
 
     TTableInfo() = default;
@@ -139,19 +152,23 @@ private:
     THashMap<ui64, TTableInfo> Tables;
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
-    THashSet<ui64> PathsToDrop;
+    std::map<NOlap::TSnapshot, THashSet<ui64>> PathsToDrop;
     THashMap<ui64, NOlap::TTiering> Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
+    std::shared_ptr<NOlap::TSchemaObjectsCache> SchemaObjectsCache;
+    std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
 
 public:
     friend class TTxInit;
 
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
-        const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager, const ui64 tabletId);
+        const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
+        const ui64 tabletId);
 
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {
         return LoadTimeCounters;
@@ -164,12 +181,19 @@ public:
         return Ttl;
     }
 
-    const THashSet<ui64>& GetPathsToDrop() const {
+    const std::map<NOlap::TSnapshot, THashSet<ui64>>& GetPathsToDrop() const {
         return PathsToDrop;
     }
 
-    THashSet<ui64>& MutablePathsToDrop() {
-        return PathsToDrop;
+    THashSet<ui64> GetPathsToDrop(const NOlap::TSnapshot& minReadSnapshot) const {
+        THashSet<ui64> result;
+        for (auto&& i : PathsToDrop) {
+            if (minReadSnapshot < i.first) {
+                break;
+            }
+            result.insert(i.second.begin(), i.second.end());
+        }
+        return result;
     }
 
     const THashMap<ui64, TTableInfo>& GetTables() const {
@@ -234,8 +258,9 @@ public:
     const TTableInfo& GetTable(const ui64 pathId) const;
     ui64 GetMemoryUsage() const;
 
-    bool HasTable(const ui64 pathId, bool withDeleted = false) const;
-    bool IsReadyForWrite(const ui64 pathId) const;
+    bool HasTable(const ui64 pathId, const bool withDeleted = false, const std::optional<NOlap::TSnapshot> minReadSnapshot = std::nullopt) const;
+    bool IsReadyForStartWrite(const ui64 pathId, const bool withDeleted) const;
+    bool IsReadyForFinishWrite(const ui64 pathId, const NOlap::TSnapshot& minReadSnapshot) const;
     bool HasPreset(const ui32 presetId) const;
 
     void DropTable(const ui64 pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);

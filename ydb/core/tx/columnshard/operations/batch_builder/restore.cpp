@@ -1,6 +1,7 @@
 #include "restore.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/engines/writer/buffer/events.h>
 #include <ydb/core/tx/columnshard/operations/slice_builder/builder.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
@@ -10,12 +11,12 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
     auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId, WriteData.GetWriteMeta().GetLockIdOptional());
     request->TaskIdentifier = GetTaskId();
     request->ReadToSnapshot = Snapshot;
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")("count", IncomingData ? IncomingData->num_rows() : 0)(
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")("count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0)(
         "task_id", WriteData.GetWriteMeta().GetId());
-    auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData, Context.GetActualSchema()->GetPKColumnNames());
+    auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData.GetContainer(), Context.GetActualSchema()->GetPKColumnNames());
     request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData, false);
     for (auto&& i : Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false)) {
-        request->AddColumn(i, Context.GetActualSchema()->GetIndexInfo().GetColumnName(i));
+        request->AddColumn(i);
     }
     return request;
 }
@@ -46,18 +47,24 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
     }
 
     auto batchResult = Merger->BuildResultBatch();
-    std::shared_ptr<NConveyor::ITask> task =
-        std::make_shared<NOlap::TBuildSlicesTask>(BufferActorId, std::move(WriteData), batchResult, Context);
-    NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+    if (!WriteData.GetWritePortions() || !Context.GetNoTxWrite()) {
+        std::shared_ptr<NConveyor::ITask> task =
+            std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batchResult.GetContainer(), Context);
+        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+    } else {
+        NActors::TActivationContext::ActorSystem()->Send(
+            Context.GetBufferizationPortionsActorId(), new NWritingPortions::TEvAddInsertedDataToBuffer(
+                               std::make_shared<NEvWrite::TWriteData>(WriteData), batchResult, std::make_shared<TWritingContext>(Context)));
+    }
     return TConclusionStatus::Success();
 }
 
-TModificationRestoreTask::TModificationRestoreTask(const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData,
-    const std::shared_ptr<IMerger>& merger, const TSnapshot actualSnapshot, const std::shared_ptr<arrow::RecordBatch>& incomingData,
+TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
+    const TSnapshot actualSnapshot, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData,
     const TWritingContext& context)
-    : TBase(context.GetTabletId(), context.GetTabletActorId(), writeData.GetWriteMeta().GetId() + "::" + ::ToString(writeData.GetWriteMeta().GetWriteId()))
+    : TBase(context.GetTabletId(), context.GetTabletActorId(),
+          writeData.GetWriteMeta().GetId() + "::" + ::ToString(writeData.GetWriteMeta().GetWriteId()))
     , WriteData(std::move(writeData))
-    , BufferActorId(bufferActorId)
     , Merger(merger)
     , LocalPathId(WriteData.GetWriteMeta().GetTableId())
     , Snapshot(actualSnapshot)

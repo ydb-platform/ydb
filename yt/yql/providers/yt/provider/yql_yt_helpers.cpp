@@ -573,6 +573,25 @@ bool IsConstExpSortDirections(NNodes::TExprBase sortDirections) {
     return false;
 }
 
+void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TListType &needCalc, TNodeSet &uniqNodes) {
+    YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
+    const auto lambdaBody = qlFilter.Child(1)->Child(1);
+    VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
+        if (node->IsCallable({"And", "Or", "Not", "<", "<=", ">", ">=", "==", "!="})) {
+            return true;
+        }
+        if (node->IsCallable("Member")) {
+            return false;
+        }
+        if (uniqNodes.insert(node.Get()).second) {
+            if (NeedCalc(TExprBase(node.Get()))) {
+                needCalc.push_back(node);
+            }
+        }
+        return false;
+    });
+}
+
 TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
     TExprNode::TListType needCalc;
     TNodeSet uniqNodes;
@@ -591,6 +610,9 @@ TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
                             }
                         }
                     }
+                    break;
+                case EYtSettingType::QLFilter:
+                    GetNodesToCalculateFromQLFilter(setting.Value().Cast().Ref(), needCalc, uniqNodes);
                     break;
                 default:
                     break;
@@ -883,7 +905,30 @@ TExprNode::TPtr GetLimitExpr(const TExprNode::TPtr& limitSetting, TExprContext& 
         }
 
         if (skip) {
-            limitValues.push_back(ctx.NewCallable(child->Pos(), "+", { take, skip }));
+            auto uintMax = ctx.Builder(child->Pos())
+                .Callable("Uint64")
+                    .Atom(0, ToString(Max<ui64>()), TNodeFlags::Default)
+                .Seal()
+                .Build();
+            limitValues.push_back(
+                ctx.Builder(child->Pos())
+                    .Callable("If")
+                        .Callable(0, ">")
+                            .Add(0, take)
+                            .Callable(1, "-")
+                                .Add(0, uintMax)
+                                .Add(1, skip)
+                            .Seal()
+                        .Seal()
+                        .Add(1, uintMax)
+                        .Callable(2, "+")
+                            .Add(0, take)
+                            .Add(1, skip)
+                        .Seal()
+                    .Seal()
+                    .Build()
+            );
+
         } else {
             limitValues.push_back(take);
         }

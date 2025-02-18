@@ -2,8 +2,6 @@
 PRAGMA FeatureR010 = 'prototype';
 PRAGMA config.flags('MatchRecognizeStream', 'disable');
 
-USE plato;
-
 $data = [<||>];
 
 $BadPredicate = (

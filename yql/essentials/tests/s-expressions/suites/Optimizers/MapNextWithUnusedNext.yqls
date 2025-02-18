@@ -1,6 +1,5 @@
 (
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let lst (AsList (Int32 '0) (Int32 '1) (Int32 '2) (Int32 '3)))
 (let lst (Iterator lst))

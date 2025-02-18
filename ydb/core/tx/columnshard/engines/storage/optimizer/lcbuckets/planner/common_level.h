@@ -67,6 +67,10 @@ private:
         }
     }
 
+    virtual TInstant DoGetWeightExpirationInstant() const override {
+        return TInstant::Max();
+    }
+
 public:
     TLevelPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,
         const std::shared_ptr<IPortionsLevel>& nextLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& summaryPortionsInfo,

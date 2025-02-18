@@ -8,6 +8,29 @@
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 
+class TAccessorSignals: public NColumnShard::TCommonCountersOwner {
+private:
+    using TBase = NColumnShard::TCommonCountersOwner;
+
+public:
+    const NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
+    const NMonitoring::TDynamicCounters::TCounterPtr FetchingCount;
+    const NMonitoring::TDynamicCounters::TCounterPtr AskNew;
+    const NMonitoring::TDynamicCounters::TCounterPtr AskDuplication;
+    const NMonitoring::TDynamicCounters::TCounterPtr ResultFromCache;
+    const NMonitoring::TDynamicCounters::TCounterPtr ResultAskDirectly;
+
+    TAccessorSignals()
+        : TBase("AccessorsFetching")
+        , QueueSize(TBase::GetValue("Queue/Count"))
+        , FetchingCount(TBase::GetValue("Fetching/Count"))
+        , AskNew(TBase::GetDeriviative("Ask/Fault/Count"))
+        , AskDuplication(TBase::GetDeriviative("Ask/Duplication/Count"))
+        , ResultFromCache(TBase::GetDeriviative("ResultFromCache/Count"))
+        , ResultAskDirectly(TBase::GetDeriviative("ResultAskDirectly/Count")) {
+    }
+};
+
 class IDataAccessorsManager {
 private:
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) = 0;
@@ -80,10 +103,8 @@ private:
 public:
     TActorAccessorsManager(const NActors::TActorId& actorId, const NActors::TActorId& tabletActorId)
         : TBase(tabletActorId)
-        , ActorId(actorId) 
-        , AccessorsCallback(std::make_shared<TActorAccessorsCallback>(ActorId))
-    {
-
+        , ActorId(actorId)
+        , AccessorsCallback(std::make_shared<TActorAccessorsCallback>(ActorId)) {
         AFL_VERIFY(!!tabletActorId);
     }
 };
@@ -93,69 +114,36 @@ private:
     using TBase = IDataAccessorsManager;
     THashMap<ui64, std::unique_ptr<IGranuleDataAccessor>> Managers;
     THashMap<ui64, std::vector<std::shared_ptr<TDataAccessorsRequest>>> RequestsByPortion;
+    TAccessorSignals Counters;
     const std::shared_ptr<IAccessorCallback> AccessorCallback;
 
-    virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ask_data")("request", request->DebugString());
-        for (auto&& i : request->GetPathIds()) {
-            auto it = Managers.find(i);
-            if (it == Managers.end()) {
-                request->AddError(i, "incorrect path id");
-            } else {
-                auto portions = request->StartFetching(i);
-                std::vector<TPortionInfo::TConstPtr> portionsAsk;
-                for (auto&& [_, i] : portions) {
-                    auto itRequest = RequestsByPortion.find(i->GetPortionId());
-                    if (itRequest == RequestsByPortion.end()) {
-                        portionsAsk.emplace_back(i);
-                    } else {
-                        itRequest->second.emplace_back(request);
-                    }
-                }
-                if (portionsAsk.empty()) {
-                    continue;
-                }
-                auto accessors = it->second->AskData(portionsAsk, AccessorCallback, request->GetConsumer());
-                for (auto&& p : portionsAsk) {
-                    auto itAccessor = accessors.find(p->GetPortionId());
-                    if (itAccessor == accessors.end()) {
-                        AFL_VERIFY(RequestsByPortion.emplace(p->GetPortionId(), std::vector<std::shared_ptr<TDataAccessorsRequest>>({request})).second);
-                    } else {
-                        request->AddAccessor(itAccessor->second);
-                    }
-                }
-            }
+    class TPortionToAsk {
+    private:
+        TPortionInfo::TConstPtr Portion;
+        YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
+
+    public:
+        TPortionToAsk(const TPortionInfo::TConstPtr& portion, const std::shared_ptr<const TAtomicCounter>& abortionFlag)
+            : Portion(portion)
+            , AbortionFlag(abortionFlag) {
         }
-    }
-    virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) override {
-        if (update) {
-            auto it = Managers.find(controller->GetPathId());
-            if (it != Managers.end()) {
-                it->second = std::move(controller);
-            }
-        } else {
-            AFL_VERIFY(Managers.emplace(controller->GetPathId(), std::move(controller)).second);
+
+        TPortionInfo::TConstPtr ExtractPortion() {
+            return std::move(Portion);
         }
-    }
+    };
+
+    std::deque<TPortionToAsk> PortionsAsk;
+    TPositiveControlInteger PortionsAskInFlight;
+
+    void DrainQueue();
+
+    virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override;
+    virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) override;
     virtual void DoUnregisterController(const ui64 pathId) override {
         AFL_VERIFY(Managers.erase(pathId));
     }
-    virtual void DoAddPortion(const TPortionDataAccessor& accessor) override {
-        {
-            auto it = Managers.find(accessor.GetPortionInfo().GetPathId());
-            AFL_VERIFY(it != Managers.end());
-            it->second->ModifyPortions({ accessor }, {});
-        }
-        {
-            auto it = RequestsByPortion.find(accessor.GetPortionInfo().GetPortionId());
-            if (it != RequestsByPortion.end()) {
-                for (auto&& i : it->second) {
-                    i->AddAccessor(accessor);
-                }
-            }
-            RequestsByPortion.erase(it);
-        }
-    }
+    virtual void DoAddPortion(const TPortionDataAccessor& accessor) override;
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portionInfo) override {
         auto it = Managers.find(portionInfo->GetPathId());
         AFL_VERIFY(it != Managers.end());
@@ -191,8 +179,7 @@ public:
 
     TLocalManager(const std::shared_ptr<IAccessorCallback>& callback)
         : TBase(NActors::TActorId())
-        , AccessorCallback(callback)
-    {
+        , AccessorCallback(callback) {
     }
 };
 

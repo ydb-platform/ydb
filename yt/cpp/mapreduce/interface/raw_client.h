@@ -132,6 +132,12 @@ public:
 
     // Operations
 
+    virtual TOperationId StartOperation(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        EOperationType type,
+        const TNode& spec) = 0;
+
     virtual TOperationAttributes GetOperation(
         const TOperationId& operationId,
         const TGetOperationOptions& options = {}) = 0;
@@ -182,11 +188,6 @@ public:
         const TJobId& jobId,
         const TGetJobFailContextOptions& options = {}) = 0;
 
-    virtual TString GetJobStderrWithRetries(
-        const TOperationId& operationId,
-        const TJobId& jobId,
-        const TGetJobStderrOptions& options = {}) = 0;
-
     virtual IFileReaderPtr GetJobStderr(
         const TOperationId& operationId,
         const TJobId& jobId,
@@ -195,6 +196,12 @@ public:
     virtual std::vector<TJobTraceEvent> GetJobTrace(
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) = 0;
+
+    // Files
+    virtual std::unique_ptr<IInputStream> ReadFile(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFileReaderOptions& options = {}) = 0;
 
     // File cache
 
@@ -266,6 +273,18 @@ public:
         const TYPath& path,
         const TAlterTableOptions& options = {}) = 0;
 
+    virtual std::unique_ptr<IInputStream> ReadTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TMaybe<TFormat>& format,
+        const TTableReaderOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IInputStream> ReadBlobTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TKey& key,
+        const TBlobTableReaderOptions& options = {}) = 0;
+
     virtual void AlterTableReplica(
         TMutationId& mutationId,
         const TReplicaId& replicaId,
@@ -309,7 +328,11 @@ public:
 
     virtual ui64 GenerateTimestamp() = 0;
 
-    virtual TAuthorizationInfo WhoAmI() = 0;
+    // Batch
+
+    virtual IRawBatchRequestPtr CreateRawBatchRequest() = 0;
+
+    virtual IRawClientPtr Clone() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -64,7 +64,7 @@ public:
             TestCtx.SectorMap->ZeroInit(1_MB / NPDisk::NSectorMap::SECTOR_SIZE);
         }
 
-        if (!Settings.ReadOnly) {
+        if (!Settings.ReadOnly && !Settings.InitiallyZeroed) {
             if (Settings.DiskSize) {
                 FormatPDiskForTest(TestCtx.Path, formatGuid, Settings.ChunkSize, Settings.DiskSize, false, TestCtx.SectorMap, Settings.SmallDisk);
             } else {
@@ -103,6 +103,7 @@ public:
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_SYSLOG, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_TEST, NLog::PRI_DEBUG);
+        Runtime->SetLogPriority(NKikimrServices::BS_PDISK_SHRED, NLog::PRI_DEBUG);
         Sender = Runtime->AllocateEdgeActor();
 
         auto cfg = DefaultPDiskConfig(Settings.IsBad);
@@ -265,7 +266,7 @@ struct TVDiskMock {
 
     void Init() {
         const auto evInitRes = TestCtx->TestResponse<NPDisk::TEvYardInitResult>(
-                new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID, TestCtx->TestCtx.PDiskGuid),
+                new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID, TestCtx->TestCtx.PDiskGuid, TestCtx->Sender),
                 NKikimrProto::OK);
 
         PDiskParams = evInitRes->PDiskParams;
@@ -277,7 +278,6 @@ struct TVDiskMock {
         }
         UNIT_ASSERT_C(commited.empty(), "there are leaked chunks# " << FormatList(commited));
     }
-
 
     void ReserveChunk() {
         const auto evReserveRes = TestCtx->TestResponse<NPDisk::TEvChunkReserveResult>(
@@ -295,6 +295,16 @@ struct TVDiskMock {
         SendEvLogImpl(1, rec);
         Chunks[EChunkState::COMMITTED].insert(reservedChunks.begin(), reservedChunks.end());
         reservedChunks.clear();
+    }
+
+    void MarkCommitedChunksDirty() {
+        auto& commited = Chunks[EChunkState::COMMITTED];
+        TStackVec<TChunkIdx, 1> chunksToMark;
+        NPDisk::TCommitRecord rec;
+        for (auto it = commited.begin(); it != commited.end(); ++it) {
+            rec.DirtyChunks.push_back(*it);
+        }
+        SendEvLogImpl(1, rec);
     }
 
     void DeleteCommitedChunks() {
@@ -348,6 +358,49 @@ struct TVDiskMock {
         return LastUsedLsn + 1 - FirstLsnToKeep;
     }
 
+    void PerformHarakiri() {
+        TestCtx->TestResponse<NPDisk::TEvHarakiriResult>(
+            new NPDisk::TEvHarakiri(PDiskParams->Owner, PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+    }
+
+    void RespondToCutLog() {
+        Cerr << __FILE__ << ":" << __LINE__ << Endl;
+        THolder<NPDisk::TEvCutLog> evReq = TestCtx->Recv<NPDisk::TEvCutLog>();
+        if (evReq) {
+            CutLogAllButOne();
+        }
+    }
+    
+    void RespondToPreShredCompact(ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString& errorReason) {
+        THolder<NPDisk::TEvPreShredCompactVDisk> evReq = TestCtx->Recv<NPDisk::TEvPreShredCompactVDisk>();
+        if (evReq) {
+            TestCtx->Send(new NPDisk::TEvPreShredCompactVDiskResult(PDiskParams->Owner, PDiskParams->OwnerRound,
+                shredGeneration, status, errorReason));
+        }
+    }
+
+    void RespondToShred(ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString& errorReason) {
+        THolder<NPDisk::TEvShredVDisk> evReq = TestCtx->Recv<NPDisk::TEvShredVDisk>();
+        if (evReq) {
+            if (status == NKikimrProto::OK) {
+                auto& commited = Chunks[EChunkState::COMMITTED];
+                NPDisk::TCommitRecord rec;
+                rec.DeleteChunks = TVector<TChunkIdx>();
+                for (const TChunkIdx &idx : evReq->ChunksToShred) {
+                    if (commited.contains(idx)) {
+                        rec.DeleteChunks.push_back(idx);
+                        Chunks[EChunkState::DELETED].insert(idx);
+                        commited.erase(idx); 
+                    }
+                }
+                SendEvLogImpl(1, rec);
+            }
+            TestCtx->Send(new NPDisk::TEvShredVDiskResult(PDiskParams->Owner, PDiskParams->OwnerRound,
+                shredGeneration, status, errorReason));
+        }
+    }
+
 private:
     void SendEvLogImpl(const ui64 size, TMaybe<NPDisk::TCommitRecord> commitRec) {
         auto evLog = MakeHolder<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(size)),
@@ -362,7 +415,6 @@ private:
     }
 
     void SendEvLogImpl(const ui64 size, TMaybe<ui64> firstLsnToKeep, bool isStartingPoint) {
-
         TMaybe<NPDisk::TCommitRecord> rec;
 
         if (firstLsnToKeep || isStartingPoint) {

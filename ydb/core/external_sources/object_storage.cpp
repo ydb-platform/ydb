@@ -20,7 +20,8 @@
 #include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <library/cpp/scheme/scheme.h>
 #include <library/cpp/json/json_reader.h>
@@ -70,12 +71,12 @@ struct TObjectStorageExternalSource : public IExternalSource {
             } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "data.date.format"sv, "csv_delimiter"sv}, lowerKey)) {
                 objectStorage.mutable_format_setting()->insert({lowerKey, value});
             } else {
-                ythrow TExternalSourceException() << "Unknown attribute " << key;
+                throw TExternalSourceException() << "Unknown attribute " << key;
             }
         }
 
         if (auto issues = Validate(schema, objectStorage, PathsLimit, general.location())) {
-            ythrow TExternalSourceException() << issues.ToString();
+            throw TExternalSourceException() << issues.ToString();
         }
 
         return objectStorage.SerializeAsString();
@@ -136,7 +137,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
 
         if (!proto.GetProperties().GetProperties().empty()) {
-            ythrow TExternalSourceException() << "ObjectStorage source doesn't support any properties";
+            throw TExternalSourceException() << "ObjectStorage source doesn't support any properties";
         }
 
         ValidateHostname(HostnamePatterns, proto.GetLocation());
@@ -479,7 +480,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             auto promise = NThreading::NewPromise<TMetadataResult>();
             auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
                 if (!response.Status.IsSuccess()) {
-                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(response.Status.GetIssues()));
+                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(NYdb::NAdapters::ToYqlIssues(response.Status.GetIssues())));
                     return;
                 }
                 meta->Changed = true;
@@ -546,7 +547,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (value.Success()) {
                 return value.Metadata;
             }
-            ythrow TExternalSourceException{} << value.Issues().ToOneLineString();
+            throw TExternalSourceException{} << value.Issues().ToOneLineString();
         });
     }
 

@@ -64,11 +64,11 @@ void TKafkaListOffsetsActor::HandleMissingTopicName(const TListOffsetsRequestDat
 }
 
 TActorId TKafkaListOffsetsActor::SendOffsetsRequest(const TListOffsetsRequestData::TListOffsetsTopic& topic, const NActors::TActorContext&) {
-    KAFKA_LOG_D("ListOffsets actor: Get offsets for topic '" << topic.Name << "' for user '" << Context->UserToken->GetUserSID() << "'");
+    KAFKA_LOG_D("ListOffsets actor: Get offsets for topic '" << topic.Name << "' for user " << GetUsernameOrAnonymous(Context));
 
     TEvKafka::TGetOffsetsRequest offsetsRequest;
     offsetsRequest.Topic = NormalizePath(Context->DatabasePath, topic.Name.value());
-    offsetsRequest.Token = Context->UserToken->GetSerializedToken();
+    offsetsRequest.Token = GetUserSerializedToken(Context);
     offsetsRequest.Database = Context->DatabasePath;
 
     for (const auto& partitionRequest: topic.Partitions) {

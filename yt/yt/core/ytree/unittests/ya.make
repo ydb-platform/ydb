@@ -10,9 +10,11 @@ SRCS(
     resolver_ut.cpp
     serialize_ut.cpp
     service_combiner_ut.cpp
+    text_yson_convert_ut.cpp
     tree_builder_ut.cpp
     lazy_ypath_service_ut.cpp
     yson_schema_ut.cpp
+    yson_struct_update_ut.cpp
     yson_struct_ut.cpp
     ytree_fluent_ut.cpp
     ytree_ut.cpp

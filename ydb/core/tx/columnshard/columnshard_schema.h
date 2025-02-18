@@ -1122,6 +1122,15 @@ public:
         return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, *BlobData);
     }
 
+    TIndexChunk BuildIndexChunk(const TPortionInfo& portionInfo) const {
+        if (BlobData) {
+            return BuildIndexChunk();
+        } else {
+            AFL_VERIFY(!!BlobRange);
+            return BuildIndexChunk(portionInfo.GetMeta().GetBlobIdxVerified(BlobRange->BlobId));
+        }
+    }
+
     template <class TSource>
     TIndexChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
         : PathId(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PathId>())

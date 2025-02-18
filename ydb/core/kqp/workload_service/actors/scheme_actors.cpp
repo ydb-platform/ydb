@@ -223,7 +223,7 @@ private:
         }
 
         Issues.AddIssues(std::move(issues));
-        Send(ReplyActorId, new TEvPrivate::TEvFetchPoolResponse(status, DatabaseId, PoolId, PoolConfig, PathIdFromPathId(PathId), std::move(Issues)));
+        Send(ReplyActorId, new TEvPrivate::TEvFetchPoolResponse(status, DatabaseId, PoolId, PoolConfig, TPathId::FromProto(PathId), std::move(Issues)));
         PassAway();
     }
 
@@ -325,16 +325,19 @@ public:
 protected:
     void StartRequest() override {
         LOG_D("Start pool creating");
+        const auto& database = DatabaseIdToDatabase(DatabaseId);
+
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
         auto& schemeTx = *event->Record.MutableTransaction()->MutableModifyScheme();
-        schemeTx.SetWorkingDir(JoinPath({DatabaseIdToDatabase(DatabaseId), ".metadata/workload_manager/pools"}));
+        schemeTx.SetWorkingDir(JoinPath({database, ".metadata/workload_manager/pools"}));
         schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
         schemeTx.SetInternal(true);
 
         BuildCreatePoolRequest(*schemeTx.MutableCreateResourcePool());
         BuildModifyAclRequest(*schemeTx.MutableModifyACL());
 
+        event->Record.SetDatabaseName(database);
         if (UserToken) {
             event->Record.SetUserToken(UserToken->SerializeAsString());
         }

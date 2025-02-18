@@ -10,6 +10,7 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from abc import abstractmethod, ABC
 from typing import Set, List, Dict, Any, Callable, Optional
 from time import sleep
+from ydb.tests.olap.lib.utils import get_external_param
 
 
 class TestContext:
@@ -316,7 +317,7 @@ class ScenarioTestHelper:
         result = os.path.join('/', YdbCluster.ydb_database, YdbCluster.tables_path)
         if self.test_context is not None:
             result = _add_not_empty(result, self.test_context.suite)
-            result = _add_not_empty(result, self.test_context.test)
+            result = _add_not_empty(result, self.test_context.test) + get_external_param("table_suffix", "")
         result = _add_not_empty(result, path)
         return result
 
@@ -326,6 +327,7 @@ class ScenarioTestHelper:
         expected_status: ydb.StatusCode | Set[ydb.StatusCode],
         retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = {},
         n_retries=0,
+        fail_on_error=True,
     ):
         if isinstance(expected_status, ydb.StatusCode):
             expected_status = {expected_status}
@@ -349,9 +351,11 @@ class ScenarioTestHelper:
             if status in expected_status:
                 return result
             if status not in retriable_status:
-                pytest.fail(f'Unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
+                if fail_on_error:
+                    pytest.fail(f'Unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
             sleep(3)
-        pytest.fail(f'Retries exceeded with unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
+        if fail_on_error:
+            pytest.fail(f'Retries exceeded with unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
 
     def _bulk_upsert_impl(
         self, tablename: str, data_generator: ScenarioTestHelper.IDataGenerator, expected_status: ydb.StatusCode | Set[ydb.StatusCode]
@@ -463,7 +467,7 @@ class ScenarioTestHelper:
 
     @allure.step('Execute query')
     def execute_query(
-        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS
+        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True
     ):
         """Run a query on the tested database.
 
@@ -479,7 +483,7 @@ class ScenarioTestHelper:
 
         allure.attach(yql, 'request', allure.attachment_type.TEXT)
         with ydb.QuerySessionPool(YdbCluster.get_ydb_driver()) as pool:
-            self._run_with_expected_status(lambda: pool.execute_with_retries(yql), expected_status)
+            self._run_with_expected_status(lambda: pool.execute_with_retries(yql, None, ydb.RetrySettings(max_retries=retries)), expected_status, fail_on_error=fail_on_error)
 
     def drop_if_exist(self, names: List[str], operation) -> None:
         """Erase entities in the tested database, if it exists.
@@ -653,7 +657,7 @@ class ScenarioTestHelper:
         )
 
     @allure.step('List path {path}')
-    def list_path(self, path: str) -> List[ydb.SchemeEntry]:
+    def list_path(self, path: str, folder: str) -> List[ydb.SchemeEntry]:
         """Recursively describe the path in the database under test.
 
         If the path is a directory or TableStore, then all subpaths are included in the description.
@@ -666,7 +670,7 @@ class ScenarioTestHelper:
             If the path does not exist, an empty list is returned.
         """
 
-        root_path = self.get_full_path('')
+        root_path = self.get_full_path(folder)
         try:
             self_descr = YdbCluster._describe_path_impl(os.path.join(root_path, path))
         except ydb.issues.SchemeError:
@@ -681,7 +685,7 @@ class ScenarioTestHelper:
             return self_descr
 
     @allure.step('Remove path {path}')
-    def remove_path(self, path: str) -> None:
+    def remove_path(self, path: str, folder: str = '') -> None:
         """Recursively delete a path in the tested database.
 
         If the path is a directory or TableStore, then all nested paths are removed.
@@ -696,12 +700,12 @@ class ScenarioTestHelper:
 
         import ydb.tests.olap.scenario.helpers.drop_helper as dh
 
-        root_path = self.get_full_path('')
-        for e in self.list_path(path):
+        root_path = self.get_full_path(folder)
+        for e in self.list_path(path, folder):
             if e.is_any_table():
-                self.execute_scheme_query(dh.DropTable(e.name))
+                self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)))
             elif e.is_column_store():
-                self.execute_scheme_query(dh.DropTableStore(e.name))
+                self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)))
             elif e.is_directory():
                 self._run_with_expected_status(
                     lambda: YdbCluster.get_ydb_driver().scheme_client.remove_directory(os.path.join(root_path, e.name)),

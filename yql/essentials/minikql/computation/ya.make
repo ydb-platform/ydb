@@ -5,6 +5,7 @@ SRCS(
     mkql_block_impl.cpp
     mkql_block_reader.cpp
     mkql_block_transport.cpp
+    mkql_block_trimmer.cpp
     mkql_computation_node.cpp
     mkql_computation_node_holders.cpp
     mkql_computation_node_impl.cpp
@@ -22,6 +23,7 @@ PEERDIR(
     yql/essentials/public/types
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/udf
+    yql/essentials/public/udf/arrow
     yql/essentials/minikql/arrow
 )
 
@@ -31,9 +33,11 @@ END()
 
 RECURSE(
     llvm14
+    llvm16
     no_llvm
 )
 
 RECURSE_FOR_TESTS(
     llvm14/ut
+    llvm16/ut
 )

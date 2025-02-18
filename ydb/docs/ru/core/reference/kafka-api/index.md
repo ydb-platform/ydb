@@ -5,6 +5,6 @@
 Документация по SDK содержит следующие разделы:
 
 - [Аутентификация](auth.md)
-- [Чтение и запись](read-write.md)
+- [Чтение и запись](examples.md)
 - [Kafka Connect](./connect/index.md)
 - [Ограничения](constraints.md)

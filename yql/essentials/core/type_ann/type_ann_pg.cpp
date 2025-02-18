@@ -3705,7 +3705,11 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                             }
                                         }
 
-                                        YQL_ENSURE(found);
+                                        if (!found) {
+                                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                                TStringBuilder() << "Alias `" << alias << "` not found."));
+                                            return IGraphTransformer::TStatus::Error;
+                                        }
                                     } else {
                                         isExpr = true;
                                         o.AddColumn(TString(column->Head().Content()));

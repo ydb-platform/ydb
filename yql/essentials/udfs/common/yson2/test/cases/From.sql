@@ -1,6 +1,7 @@
 /* syntax version 1 */
 select
 Yson::IsEntity(Yson::From(NULL)),
+Yson::IsEntity(Yson::From(Void())),
 Yson::IsEntity(Yson::Parse(Yson("#"))),
 Yson::IsEntity(Yson::Parse(Yson("1"))),
 

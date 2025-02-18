@@ -425,8 +425,8 @@ class TCdcStreamScan: public IActorCallback, public IScan {
         auto response = MakeHolder<TEvDataShard::TEvCdcStreamScanResponse>();
 
         response->Record.SetTabletId(DataShard.TabletId);
-        PathIdFromPathId(TablePathId, response->Record.MutableTablePathId());
-        PathIdFromPathId(StreamPathId, response->Record.MutableStreamPathId());
+        TablePathId.ToProto(response->Record.MutableTablePathId());
+        StreamPathId.ToProto(response->Record.MutableStreamPathId());
         response->Record.SetStatus(status);
         response->Record.SetErrorDescription(error);
         Stats.Serialize(*response->Record.MutableStats());
@@ -570,7 +570,7 @@ public:
         LOG_D("Run"
             << ": ev# " << record.ShortDebugString());
 
-        const auto tablePathId = PathIdFromPathId(record.GetTablePathId());
+        const auto tablePathId = TPathId::FromProto(record.GetTablePathId());
         if (!Self->GetUserTables().contains(tablePathId.LocalPathId)) {
             Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::BAD_REQUEST,
                 TStringBuilder() << "Unknown table"
@@ -588,7 +588,7 @@ public:
             return true;
         }
 
-        const auto streamPathId = PathIdFromPathId(record.GetStreamPathId());
+        const auto streamPathId = TPathId::FromProto(record.GetStreamPathId());
         auto it = table->CdcStreams.find(streamPathId);
         if (it == table->CdcStreams.end()) {
             Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::SCHEME_ERROR,

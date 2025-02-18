@@ -12,7 +12,5 @@
         "linux-x86_64": {
             "uri": "sbr:6682380912"
         }
-    },
-    "match": "GDB",
-    "platform_replacements": {}
+    }
 }

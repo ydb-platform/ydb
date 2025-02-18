@@ -52,7 +52,7 @@
                                                                 "ExternalPlanNodeId": 4
                                                             }
                                                         ],
-                                                        "Limit": "SUM(10,100)",
+                                                        "Limit": "Min(If,SUM(10,100))",
                                                         "Name": "Limit"
                                                     }
                                                 ],
@@ -126,6 +126,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableRangeScan",
+                                                                                        "Path": "/local/clickbench/plans/row/hits",
                                                                                         "ReadColumns": [
                                                                                             "EventDate",
                                                                                             "IsRefresh",

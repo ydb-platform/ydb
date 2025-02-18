@@ -474,6 +474,11 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
     registrar.Parameter("max_heavy_columns", &TThis::MaxHeavyColumns)
         .Default(0);
 
+    registrar.Parameter("block_size", &TThis::BlockSize)
+        .Default();
+    registrar.Parameter("buffer_size", &TThis::BufferSize)
+        .Default();
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->ValidateUniqueKeys && !config->ValidateSorted) {
             THROW_ERROR_EXCEPTION("\"validate_unique_keys\" is allowed to be true only if \"validate_sorted\" is true");

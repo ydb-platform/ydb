@@ -33,6 +33,15 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void SetTimeoutOptions(
+    NRpc::TClientRequest& request,
+    const TTimeoutOptions& options)
+{
+    request.SetTimeout(options.Timeout);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool IsRetriableError(const TError& error)
 {
     if (IsChannelFailureError(error)) {

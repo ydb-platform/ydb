@@ -6,20 +6,21 @@ import re
 import yatest.common
 from yql_utils import get_supported_providers, yql_binary_path, is_xfail, is_skip_forceblocks, get_param, \
     dump_table_yson, get_gateway_cfg_suffix, do_custom_query_check, normalize_result, \
-    stable_result_file, stable_table_file, is_with_final_result_issues, log
+    stable_result_file, stable_table_file, is_with_final_result_issues, log, is_unordered_result, is_sorted_table
 
-from test_utils import get_config, DATA_PATH
+from test_utils import get_config
 from test_file_common import run_file, run_file_no_cache
 
 ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
+DATA_PATH = yatest.common.source_path('yt/yql/tests/sql/suites')
 
 
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if get_gateway_cfg_suffix() != '' and what != 'Results':
         pytest.skip('non-trivial gateways.conf')
 
-    config = get_config(suite, case, cfg)
+    config = get_config(suite, case, cfg, data_path=DATA_PATH)
 
     program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
@@ -41,17 +42,17 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if is_with_final_result_issues(config):
         extra_args += ["--with-final-issues"]
 
-    (res, tables_res) = run_file('dq', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, extra_args=extra_args)
+    (res, tables_res) = run_file('dq', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, extra_args=extra_args, data_path=DATA_PATH)
 
     if what == 'Results' or force_blocks:
         if not xfail:
             if force_blocks:
                 yqlrun_res, yqlrun_tables_res = run_file_no_cache('dq', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, \
-                                                                    extra_args=["--emulate-yt"], force_blocks=True)
+                                                                    extra_args=["--emulate-yt"], force_blocks=True, data_path=DATA_PATH)
                 dq_result_name = 'Scalar'
                 yqlrun_result_name = 'Block'
             else:
-                yqlrun_res, yqlrun_tables_res = run_file_no_cache('yt', suite, case, cfg, config, yql_http_file_server)
+                yqlrun_res, yqlrun_tables_res = run_file_no_cache('yt', suite, case, cfg, config, yql_http_file_server, data_path=DATA_PATH)
                 dq_result_name = 'DQFILE'
                 yqlrun_result_name = 'YQLRUN'
 
@@ -60,8 +61,8 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
 
             if os.path.exists(yqlrun_res.results_file):
                 assert os.path.exists(res.results_file)
-                dq_res_yson = normalize_result(stable_result_file(res), False)
-                yqlrun_res_yson = normalize_result(stable_result_file(yqlrun_res), False)
+                dq_res_yson = normalize_result(stable_result_file(res), is_unordered_result(res))
+                yqlrun_res_yson = normalize_result(stable_result_file(yqlrun_res), is_unordered_result(yqlrun_res))
 
                 # Compare results
                 assert dq_res_yson == yqlrun_res_yson, 'RESULTS_DIFFER\n' \
@@ -73,8 +74,10 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
 
                 if os.path.exists(yqlrun_tables_res[table].file):
                     assert os.path.exists(tables_res[table].file)
-                    yqlrun_table_yson = dump_table_yson(stable_table_file(yqlrun_tables_res[table]), False)
-                    dq_table_yson = dump_table_yson(stable_table_file(tables_res[table]), False)
+                    yqlrun_table_yson = dump_table_yson(stable_table_file(yqlrun_tables_res[table]), \
+                        not is_sorted_table(yqlrun_tables_res[table]))
+                    dq_table_yson = dump_table_yson(stable_table_file(tables_res[table]), \
+                        not is_sorted_table(tables_res[table]))
 
                     assert yqlrun_table_yson == dq_table_yson, \
                         'OUT_TABLE_DIFFER: %(table)s\n' \

@@ -9,6 +9,9 @@ PEERDIR(
     library/cpp/resource
     yql/essentials/core/user_data
     yql/essentials/core
+    yql/essentials/utils/log
+    yql/essentials/sql
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

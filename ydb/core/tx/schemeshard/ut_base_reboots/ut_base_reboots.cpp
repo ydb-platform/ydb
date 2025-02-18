@@ -721,6 +721,63 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
+    Y_UNIT_TEST(CopyIndexedTableWithReboots) { //+
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableDescription {
+                        Name: "Table"
+                        Columns { Name: "key1"       Type: "Uint32"}
+                        Columns { Name: "key2"       Type: "Utf8"}
+                        Columns { Name: "key3"       Type: "Uint64"}
+                        Columns { Name: "value0"      Type: "String"}
+                        Columns { Name: "value1"      Type: "String"}
+                        KeyColumnNames: ["key1", "key2", "key3"]
+                        UniformPartitionsCount: 2
+                    }
+                    IndexDescription {
+                      Name: "VectorIndexByValue0CoveringValue1"
+                      Type: EIndexTypeGlobalVectorKmeansTree
+                      KeyColumnNames: ["value0"]
+                      DataColumnNames: ["value1"]
+                      VectorIndexKmeansTreeDescription {
+                        Settings {
+                          settings {
+                            metric: DISTANCE_COSINE
+                            vector_type: VECTOR_TYPE_INT8
+                            vector_dimension: 2
+                          }
+                          clusters: 3
+                          levels: 5
+                        }
+                      }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCopyTable(runtime, ++t.TxId, "/MyRoot", "NewTable1", "/MyRoot/Table");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+
+            TestCopyTable(runtime, ++t.TxId, "/MyRoot", "NewTable2", "/MyRoot/NewTable1");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "MyRoot"),
+                                   {NLs::ChildrenCount(4)});
+                TestDescribeResult(DescribePath(runtime, "MyRoot/Table"),
+                                   {NLs::PathExist, NLs::IndexesCount(1)});
+                TestDescribeResult(DescribePath(runtime, "MyRoot/NewTable1"),
+                                   {NLs::PathExist, NLs::IndexesCount(1)});
+                TestDescribeResult(DescribePath(runtime, "MyRoot/NewTable2"),
+                                   {NLs::PathExist, NLs::IndexesCount(1)});
+            }
+        });
+    }
 
     Y_UNIT_TEST(CopyTableAndDropWithReboots) { //+
         TTestWithReboots t;

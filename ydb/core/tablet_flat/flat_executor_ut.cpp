@@ -445,6 +445,10 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
         Send(Sender, new NFake::TEvCompacted(table));
     }
 
+    void DataCleanupComplete(ui64 dataCleanupComplete, const TActorContext&) override {
+        Send(Sender, new NFake::TEvDataCleaned(dataCleanupComplete));
+    }
+
     void ScanComplete(NTable::EAbort, TAutoPtr<IDestructable>, ui64 cookie, const TActorContext&) override
     {
         UNIT_ASSERT_VALUES_EQUAL(cookie, ScanCookie);
@@ -6545,8 +6549,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reboot) {
         IActor *tabletActor = nullptr; // save tablet to get its actor id and avoid using tablet resolver which has outdated info
         while (true) {
             struct TReassignedStarter : NFake::TStarter {
-                NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
-                    auto *info = TStarter::MakeTabletInfo(tablet);
+                NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount) noexcept override {
+                    auto *info = TStarter::MakeTabletInfo(tablet, channelsCount);
                     info->Channels[1].History.emplace_back(3, 3);
                     return info;
                 }

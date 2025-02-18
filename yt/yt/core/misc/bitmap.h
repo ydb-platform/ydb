@@ -4,7 +4,7 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <util/system/align.h>
 

@@ -168,6 +168,12 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
             return EValidationResult::Error;
         }
     }
+    if (config.HasColumnShardConfig()) {
+        NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateColumnShardConfig(config.GetColumnShardConfig(), msg);
+        if (result == NKikimr::NConfig::EValidationResult::Error) {
+            return EValidationResult::Error;
+        }
+    }
     if (msg.size() > 0) {
         return EValidationResult::Warn;
     }

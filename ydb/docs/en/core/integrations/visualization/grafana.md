@@ -12,7 +12,7 @@ Follow the Grafana's [plugin installation docs](https://grafana.com/docs/grafana
 
 ### {{ ydb-short-name }} user for the data source
 
-Set up an {{ ydb-short-name }} user account with **read-only** permissions [(more about permissions)](../../security/access-management.md) and access to databases and tables you want to query.
+Set up an {{ ydb-short-name }} user account with **read-only** permissions [(more about permissions)](../../security/authorization.md#right) and access to databases and tables you want to query.
 
 {% note warning %}
 

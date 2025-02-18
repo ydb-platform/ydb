@@ -1,5 +1,5 @@
 diff --git a/include/__mutex/once_flag.h b/include/__mutex/once_flag.h
-index 5a6f8e0..cdd53d1 100644
+index 9d7baec..9cd3dff 100644
 --- a/include/__mutex/once_flag.h
 +++ b/include/__mutex/once_flag.h
 @@ -21,6 +21,10 @@
@@ -13,7 +13,7 @@ index 5a6f8e0..cdd53d1 100644
  #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
  #  pragma GCC system_header
  #endif
-@@ -60,7 +64,11 @@ struct _LIBCPP_TEMPLATE_VIS once_flag {
+@@ -63,7 +67,11 @@ struct _LIBCPP_TEMPLATE_VIS once_flag {
    static const _State_type _Complete = ~_State_type(0);
  
  private:
@@ -25,7 +25,7 @@ index 5a6f8e0..cdd53d1 100644
  
  #ifndef _LIBCPP_CXX03_LANG
    template <class _Callable, class... _Args>
-@@ -115,13 +123,21 @@ void _LIBCPP_HIDE_FROM_ABI __call_once_proxy(void* __vp) {
+@@ -118,13 +126,21 @@ void _LIBCPP_HIDE_FROM_ABI __call_once_proxy(void* __vp) {
    (*__p)();
  }
  
@@ -47,7 +47,7 @@ index 5a6f8e0..cdd53d1 100644
      typedef tuple<_Callable&&, _Args&&...> _Gp;
      _Gp __f(std::forward<_Callable>(__func), std::forward<_Args>(__args)...);
      __call_once_param<_Gp> __p(__f);
-@@ -133,7 +149,11 @@ inline _LIBCPP_HIDE_FROM_ABI void call_once(once_flag& __flag, _Callable&& __fun
+@@ -136,7 +152,11 @@ inline _LIBCPP_HIDE_FROM_ABI void call_once(once_flag& __flag, _Callable&& __fun
  
  template <class _Callable>
  inline _LIBCPP_HIDE_FROM_ABI void call_once(once_flag& __flag, _Callable& __func) {
@@ -59,7 +59,7 @@ index 5a6f8e0..cdd53d1 100644
      __call_once_param<_Callable> __p(__func);
      std::__call_once(__flag.__state_, &__p, &__call_once_proxy<_Callable>);
    }
-@@ -141,7 +161,11 @@ inline _LIBCPP_HIDE_FROM_ABI void call_once(once_flag& __flag, _Callable& __func
+@@ -144,7 +164,11 @@ inline _LIBCPP_HIDE_FROM_ABI void call_once(once_flag& __flag, _Callable& __func
  
  template <class _Callable>
  inline _LIBCPP_HIDE_FROM_ABI void call_once(once_flag& __flag, const _Callable& __func) {

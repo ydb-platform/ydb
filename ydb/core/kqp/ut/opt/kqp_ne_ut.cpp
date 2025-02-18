@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto explainResult = session.ExplainDataQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-        UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpReadRangesSource"), explainResult.GetAst());
+        UNIT_ASSERT_C(explainResult.GetAst().contains("KqpReadRangesSource"), explainResult.GetAst());
 
         auto params = kikimr.GetTableClient().GetParamsBuilder()
             .AddParam("$key").Uint64(302).Build()
@@ -2199,7 +2199,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                     auto result = session.ExplainDataQuery(query).GetValueSync();
                     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                         TStringBuilder() << query << Endl << "Failed with: " << result.GetIssues().ToString());
-                    UNIT_ASSERT_C(result.GetAst().Contains("('('\"ItemsLimit\""),
+                    UNIT_ASSERT_C(result.GetAst().contains("('('\"ItemsLimit\""),
                         TStringBuilder() << query << Endl << "Failed with AST: " << result.GetAst());
 
                     NJson::TJsonValue plan;
@@ -2620,7 +2620,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
             AssertSuccessResult(result);
             auto resultYson = FormatResultSetYson(result.GetResultSet(0));
-            CompareYson(item.second, resultYson);
+            CompareYson(item.second, TString{resultYson});
         }
 
         for (auto& item: testData) {
@@ -4260,7 +4260,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertTableReads(result, "/Root/Sample", 2);
         CompareYson(R"([[[1u];[2u]];[[2u];[2u]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
-
 
     Y_UNIT_TEST(FullScanCount) {
         TKikimrSettings settings;

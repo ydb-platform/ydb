@@ -67,6 +67,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/sqllogictest_insert.test_plan/a2",
                                                         "ReadColumns": null,
                                                         "ReadRanges": [
                                                             "a (-\u221e, +\u221e)",

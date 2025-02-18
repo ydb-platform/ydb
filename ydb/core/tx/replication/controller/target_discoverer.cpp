@@ -54,7 +54,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 << ": path# " << path.first
                 << ", type# " << entry.Type);
 
-            NYql::TIssues issues;
+            NYdb::NIssue::TIssues issues;
             issues.AddIssue(TStringBuilder() << "Unsupported entry type: " << entry.Type);
             Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
         } else {
@@ -114,8 +114,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 }
 
                 const auto& target = ToAdd.emplace_back(
-                    CanonizePath(ChildPath(SplitPath(path.first), index.GetIndexName())),
-                    CanonizePath(ChildPath(SplitPath(path.second), {index.GetIndexName(), "indexImplTable"})),
+                    CanonizePath(ChildPath(SplitPath(path.first), TString{index.GetIndexName()})),
+                    CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"})),
                     TReplication::ETargetKind::IndexTable);
                 LOG_I("Add target"
                     << ": srcPath# " << target.SrcPath
@@ -170,10 +170,10 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             return false;
         }
 
-        return entry.Name.StartsWith("~")
-            || entry.Name.StartsWith(".sys")
-            || entry.Name.StartsWith(".metadata")
-            || entry.Name.StartsWith("export-");
+        return entry.Name.starts_with("~")
+            || entry.Name.starts_with(".sys")
+            || entry.Name.starts_with(".metadata")
+            || entry.Name.starts_with("export-");
     }
 
     void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {

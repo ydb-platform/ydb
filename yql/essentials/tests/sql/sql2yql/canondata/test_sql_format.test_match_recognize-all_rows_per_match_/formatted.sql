@@ -1,6 +1,6 @@
-PRAGMA FeatureR010 = "prototype";
+PRAGMA FeatureR010 = 'prototype';
 
-$input =
+$input = (
     SELECT
         *
     FROM
@@ -19,7 +19,7 @@ $input =
             <|time: 1100, value: 5|>,
             <|time: 1200, value: 0|>,
         ])
-;
+);
 
 SELECT
     *

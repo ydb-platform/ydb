@@ -9,7 +9,10 @@ namespace NYdb::NConsoleClient::NStorageConfig {
 
 class TCommandStorageConfig : public TClientCommandTree {
 public:
-    TCommandStorageConfig();
+    TCommandStorageConfig(std::optional<bool> overrideOnlyExplicitProfile = std::nullopt);
+    void PropagateFlags(const TCommandFlags& flags) override;
+private:
+    std::optional<bool> OverrideOnlyExplicitProfile;
 };
 
 class TCommandStorageConfigReplace : public TYdbCommand {
@@ -20,8 +23,16 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    TString StorageConfig;
     TString Filename;
+    TString ClusterYamlPath;
+    TString StorageYamlPath;
+    bool EnableDedicatedStorageSection = false;
+    bool DisableDedicatedStorageSection = false;
+
+    std::optional<TString> ClusterYaml;
+    std::optional<TString> StorageYaml;
+    std::optional<bool> SwitchDedicatedStorageSection;
+    bool DedicatedConfigMode = false;
 };
 
 class TCommandStorageConfigFetch : public TYdbCommand {
@@ -30,5 +41,9 @@ public:
     void Config(TConfig&) override;
     void Parse(TConfig&) override;
     int Run(TConfig& config) override;
+
+public:
+    bool DedicatedStorageSection = false;
+    bool DedicatedClusterSection = false;
 };
 }

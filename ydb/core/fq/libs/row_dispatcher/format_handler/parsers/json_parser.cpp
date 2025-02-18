@@ -42,9 +42,15 @@ struct TJsonParserBuffer {
 
     void AddMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
         Y_ENSURE(!Finished, "Cannot add messages into finished buffer");
+
+        const auto offset = message.GetOffset();
+        if (Y_UNLIKELY(Offsets && Offsets.back() > offset)) {
+            LOG_ROW_DISPATCHER_WARN("Got message with offset " << offset << " which is less than previous offset " << Offsets.back());
+        }
+
         NumberValues++;
         Values << message.GetData();
-        Offsets.emplace_back(message.GetOffset());
+        Offsets.emplace_back(offset);
     }
 
     std::pair<const char*, size_t> Finish() {
@@ -65,6 +71,7 @@ struct TJsonParserBuffer {
 
 private:
     TStringBuilder Values = {};
+    const TString LogPrefix = "TJsonParser: Buffer: ";
 };
 
 class TColumnParser {
@@ -358,7 +365,7 @@ public:
     }
 
 public:
-    void ParseMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
         LOG_ROW_DISPATCHER_TRACE("Add " << messages.size() << " messages to parse");
 
         Y_ENSURE(!Buffer.Finished, "Cannot parse messages with finished buffer");

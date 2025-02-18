@@ -123,17 +123,26 @@ struct TEvPrivate {
 };
 
 template <class TDerived, EExecType ExecType>
-class TKqpExecuterBase : public TActorBootstrapped<TDerived> {
+class TKqpExecuterBase : public TActor<TDerived> {
     static_assert(ExecType == EExecType::Data || ExecType == EExecType::Scan);
+
 public:
-    TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
+    TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request,
+        NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        const TGUCSettings::TPtr GUCSettings,
+        const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr)
-        : Request(std::move(request))
+        : NActors::TActor<TDerived>(&TDerived::ReadyState)
+        , Request(std::move(request))
+        , AsyncIoFactory(std::move(asyncIoFactory))
+        , FederatedQuerySetup(federatedQuerySetup)
+        , GUCSettings(GUCSettings)
         , BufferActorId(bufferActorId)
         , TxManager(txManager)
         , Database(database)
@@ -146,7 +155,13 @@ public:
         , HasOlapTable(false)
         , StreamResult(streamResult)
         , StatementResultIndex(statementResultIndex)
+        , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
+        , VerboseMemoryLimitException(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException())
     {
+        if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
+            ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
+        }
+
         EnableReadsMerge = *MergeDatashardReadsControl() == 1;
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
@@ -159,9 +174,7 @@ public:
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
 
         CheckDuplicateRows = tableServiceConfig.GetEnableRowsDuplicationCheck();
-    }
 
-    void Bootstrap() {
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
@@ -171,11 +184,10 @@ public:
         }
 
         LOG_T("Bootstrap done, become ReadyState");
-        this->Become(&TKqpExecuterBase::ReadyState);
     }
 
     TActorId SelfId() {
-       return TActorBootstrapped<TDerived>::SelfId();
+       return TActor<TDerived>::SelfId();
     }
 
     TString BuildMemoryLimitExceptionMessage() const {
@@ -209,12 +221,16 @@ protected:
         KqpTableResolverId = {};
 
         if (reply.Status != Ydb::StatusIds::SUCCESS) {
-            ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds_StatusCode_Name(reply.Status));
+            if (ExecuterStateSpan) {
+                ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds_StatusCode_Name(reply.Status));
+            }
             ReplyErrorAndDie(reply.Status, reply.Issues);
             return false;
         }
 
-        ExecuterStateSpan.EndOk();
+        if (ExecuterStateSpan) {
+            ExecuterStateSpan.EndOk();
+        }
 
         return true;
     }
@@ -224,24 +240,30 @@ protected:
         auto& reply = *ev->Get();
 
         KqpShardsResolverId = {};
+        ShardsResolved = true;
 
         // TODO: count resolve time in CpuTime
 
         if (reply.Status != Ydb::StatusIds::SUCCESS) {
-            ExecuterStateSpan.EndError(Ydb::StatusIds_StatusCode_Name(reply.Status));
+            if (ExecuterStateSpan) {
+                ExecuterStateSpan.EndError(Ydb::StatusIds_StatusCode_Name(reply.Status));
+            }
 
             LOG_W("Shards nodes resolve failed, status: " << Ydb::StatusIds_StatusCode_Name(reply.Status)
                 << ", issues: " << reply.Issues.ToString());
             ReplyErrorAndDie(reply.Status, reply.Issues);
             return false;
         }
-        ExecuterStateSpan.EndOk();
+        if (ExecuterStateSpan) {
+            ExecuterStateSpan.EndOk();
+        }
 
         LOG_D("Shards nodes resolved, success: " << reply.ShardNodes.size() << ", failed: " << reply.Unresolved);
 
         ShardIdToNodeId = std::move(reply.ShardNodes);
         for (auto& [shardId, nodeId] : ShardIdToNodeId) {
             ShardsOnNode[nodeId].push_back(shardId);
+            ParticipantNodes.emplace(nodeId);
         }
 
         if (IsDebugLogEnabled()) {
@@ -304,13 +326,14 @@ protected:
             batch.Payload = NYql::MakeChunkedBuffer(std::move(computeData.Payload));
 
             if (!trailingResults) {
-                TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
-                auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
                 auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
                 streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
                 streamEv->Record.SetQueryResultIndex(*txResult.QueryResultIndex + StatementResultIndex);
                 streamEv->Record.SetChannelId(channel.Id);
-                streamEv->Record.MutableResultSet()->Swap(&resultSet);
+
+                TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
+                protoBuilder.BuildYdbResultSet(*streamEv->Record.MutableResultSet(), std::move(batches),
+                    txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
 
                 LOG_D("Send TEvStreamData to " << Target << ", seqNo: " << streamEv->Record.GetSeqNo()
                     << ", nRows: " << streamEv->Record.GetResultSet().rows().size());
@@ -504,6 +527,15 @@ protected:
 
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
+
+        switch (Request.IsolationLevel) {
+            case NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW:
+                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+                break;
+            default:
+                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC);
+                break;
+        }
 
         LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
         if (IsDebugLogEnabled()) {
@@ -906,9 +938,10 @@ protected:
                 .Columns = BuildKqpColumns(op, tableInfo),
             };
 
+            auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
             task.Meta.Reads.ConstructInPlace();
             task.Meta.Reads->emplace_back(std::move(readInfo));
-            task.Meta.ReadInfo.Reverse = op.GetReadRange().GetReverse();
+            task.Meta.ReadInfo.Reverse = readSettings.Reverse;
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
@@ -953,6 +986,16 @@ protected:
             if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
                 ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
             }
+            if (!settings.GetInconsistentTx()
+                    && TasksGraph.GetMeta().LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION
+                    && GetSnapshot().IsValid()) {
+                settings.MutableMvccSnapshot()->SetStep(GetSnapshot().Step);
+                settings.MutableMvccSnapshot()->SetTxId(GetSnapshot().TxId);
+            }
+            if (!settings.GetInconsistentTx() && TasksGraph.GetMeta().LockMode) {
+                settings.SetLockMode(*TasksGraph.GetMeta().LockMode);
+            }
+
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);
         } else {
@@ -1063,7 +1106,7 @@ protected:
         }
 
         std::sort(std::begin(shardsRanges), std::end(shardsRanges), [&](const TShardRangesWithShardId& lhs, const TShardRangesWithShardId& rhs) {
-                return CompareBorders<false, false>(
+                return CompareBorders<true, true>(
                     lhs.Ranges->GetRightBorder().first->GetCells(),
                     rhs.Ranges->GetRightBorder().first->GetCells(),
                     lhs.Ranges->GetRightBorder().second,
@@ -1086,7 +1129,7 @@ protected:
         return result;
     }
 
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const bool shardsResolved, bool limitTasksPerNode) {
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode) {
         if (EnableReadsMerge) {
             limitTasksPerNode = true;
         }
@@ -1125,7 +1168,7 @@ protected:
             if (nodeId) {
                 task.Meta.NodeId = *nodeId;
             } else {
-                YQL_ENSURE(!shardsResolved);
+                YQL_ENSURE(!ShardsResolved);
                 task.Meta.ShardId = taskLocation;
             }
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
@@ -1213,6 +1256,10 @@ protected:
                 settings->SetLockNodeId(self.NodeId());
             }
 
+            if (TasksGraph.GetMeta().LockMode) {
+                settings->SetLockMode(*TasksGraph.GetMeta().LockMode);
+            }
+
             createdTasksIds.push_back(task.Id);
             return task;
         };
@@ -1233,15 +1280,14 @@ protected:
                 ? TMaybe<ui64>{*nodeIdPtr}
                 : Nothing();
 
-            YQL_ENSURE(!shardsResolved || nodeId);
+            YQL_ENSURE(!ShardsResolved || nodeId);
             YQL_ENSURE(Stats);
 
             if (shardId) {
                 Stats->AffectedShards.insert(*shardId);
             }
 
-            if (limitTasksPerNode) {
-                YQL_ENSURE(shardsResolved);
+            if (limitTasksPerNode && ShardsResolved) {
                 const auto maxScanTasksPerNode = GetScanTasksPerNode(stageInfo, /* isOlapScan */ false, *nodeId);
                 auto& nodeTasks = nodeIdToTasks[*nodeId];
                 if (nodeTasks.size() < maxScanTasksPerNode) {
@@ -1280,8 +1326,13 @@ protected:
                         settings->SetShardIdHint(*shardsRangesForTask[0].ShardId);
                     }
 
+                    bool hasRanges = false;
                     for (const auto& shardRanges : shardsRangesForTask) {
-                        shardRanges.Ranges->SerializeTo(settings);
+                        hasRanges |= shardRanges.Ranges->HasRanges();
+                    }
+
+                    for (const auto& shardRanges : shardsRangesForTask) {
+                        shardRanges.Ranges->SerializeTo(settings, !hasRanges);
                     }
                 }
             }
@@ -1561,6 +1612,41 @@ protected:
         }
     }
 
+    bool BuildPlannerAndSubmitTasks() {
+        Planner = CreateKqpPlanner({
+            .TasksGraph = TasksGraph,
+            .TxId = TxId,
+            .Executer = SelfId(),
+            .Database = Database,
+            .UserToken = UserToken,
+            .Deadline = Deadline.GetOrElse(TInstant::Zero()),
+            .StatsMode = Request.StatsMode,
+            .RlPath = Request.RlPath,
+            .ExecuterSpan =  ExecuterSpan,
+            .ResourcesSnapshot = std::move(ResourcesSnapshot),
+            .ExecuterRetriesConfig = ExecuterRetriesConfig,
+            .MkqlMemoryLimit = Request.MkqlMemoryLimit,
+            .AsyncIoFactory = AsyncIoFactory,
+            .FederatedQuerySetup = FederatedQuerySetup,
+            .OutputChunkMaxSize = Request.OutputChunkMaxSize,
+            .GUCSettings = GUCSettings,
+            .ResourceManager_ = Request.ResourceManager_,
+            .CaFactory_ = Request.CaFactory_,
+            .BlockTrackingMode = BlockTrackingMode,
+            .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
+            .VerboseMemoryLimitException = VerboseMemoryLimitException,
+        });
+
+        auto err = Planner->PlanExecution();
+        if (err) {
+            TlsActivationContext->Send(err.release());
+            return false;
+        }
+
+        Planner->Submit();
+        return true;
+    }
+
     void BuildScanTasksFromShards(TStageInfo& stageInfo) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, std::vector<TShardInfoWithId>> nodeShards;
@@ -1834,8 +1920,12 @@ protected:
 
         LWTRACK(KqpBaseExecuterReplyErrorAndDie, ResponseEv->Orbit, TxId);
 
-        ExecuterSpan.EndError(response.DebugString());
-        ExecuterStateSpan.EndError(response.DebugString());
+        if (ExecuterSpan) {
+            ExecuterSpan.EndError(response.DebugString());
+        }
+        if (ExecuterStateSpan) {
+            ExecuterStateSpan.EndError(response.DebugString());
+        }
 
         this->Shutdown();
     }
@@ -1872,6 +1962,8 @@ protected:
 
     void PassAway() override {
         YQL_ENSURE(AlreadyReplied && ResponseEv);
+
+        ResponseEv->ParticipantNodes = std::move(ParticipantNodes);
 
         // Fill response stats
         {
@@ -1974,6 +2066,10 @@ protected:
 
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
+    NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
+    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const TGUCSettings::TPtr GUCSettings;
+
     TActorId BufferActorId;
     IKqpTransactionManagerPtr TxManager;
     const TString Database;
@@ -1987,6 +2083,7 @@ protected:
     TActorId Target;
     ui64 TxId = 0;
 
+    bool ShardsResolved = false;
     TKqpTasksGraph TasksGraph;
 
     TActorId KqpTableResolverId;
@@ -2031,8 +2128,16 @@ protected:
     bool CheckDuplicateRows = false;
 
     ui32 StatementResultIndex;
+
+    // Track which nodes has been involved during execution
+    THashSet<ui32> ParticipantNodes;
+
     bool AlreadyReplied = false;
     bool EnableReadsMerge = false;
+
+    const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
+    const bool VerboseMemoryLimitException;
+    TMaybe<ui8> ArrayBufferMinFillPercentage;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
@@ -2051,8 +2156,10 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TPreparedQueryHolder::TConstPtr preparedQuery,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex);
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings);
 
 } // namespace NKqp
 } // namespace NKikimr

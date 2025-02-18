@@ -26,11 +26,10 @@ private:
     TAsyncStatus AlterResourcePool(const NYql::TAlterObjectSettings& settings, TInternalModificationContext& context, ui32 nodeId) const;
     TAsyncStatus DropResourcePool(const NYql::TDropObjectSettings& settings, TInternalModificationContext& context, ui32 nodeId) const;
 
-    void PrepareCreateResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const;
-    void PrepareAlterResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TAlterObjectSettings& settings, TInternalModificationContext& context) const;
-    void PrepareDropResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const;
+    [[nodiscard]] TYqlConclusionStatus PrepareCreateResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const;
+    [[nodiscard]] TYqlConclusionStatus PrepareAlterResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TAlterObjectSettings& settings, TInternalModificationContext& context) const;
+    [[nodiscard]] TYqlConclusionStatus PrepareDropResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const;
 
-    TAsyncStatus ChainFeatures(TAsyncStatus lastFeature, std::function<TAsyncStatus()> callback) const;
     TAsyncStatus ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, ui32 nodeId, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const;
 };
 

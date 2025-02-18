@@ -27,7 +27,7 @@ public:
     void Abort() override;
 
 private:
-    THolder<TNodeTableWriter> NodeWriter_;
+    std::unique_ptr<TNodeTableWriter> NodeWriter_;
     TVector<const ::google::protobuf::Descriptor*> Descriptors_;
 };
 
@@ -51,7 +51,7 @@ public:
     void Abort() override;
 
 protected:
-    THolder<IProxyOutput> Output_;
+    std::unique_ptr<IProxyOutput> Output_;
     TVector<const ::google::protobuf::Descriptor*> Descriptors_;
 };
 

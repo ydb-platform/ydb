@@ -156,7 +156,7 @@ public:
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
 
-        BranchInst::Create(main, make, HasValue(udfPtr, block), block);
+        BranchInst::Create(main, make, HasValue(udfPtr, block, context), block);
 
         block = make;
 

@@ -17,6 +17,7 @@
  */
 
 #include "orc/ColumnPrinter.hh"
+#include "orc/Int128.hh"
 #include "orc/orc-config.hh"
 
 #include "Adaptor.hh"
@@ -35,7 +36,7 @@ namespace orc {
 
   class VoidColumnPrinter : public ColumnPrinter {
    public:
-    VoidColumnPrinter(std::string&);
+    VoidColumnPrinter(std::string&, ColumnPrinter::Param);
     ~VoidColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
@@ -43,10 +44,10 @@ namespace orc {
 
   class BooleanColumnPrinter : public ColumnPrinter {
    private:
-    const int64_t* data;
+    const int64_t* data_;
 
    public:
-    BooleanColumnPrinter(std::string&);
+    BooleanColumnPrinter(std::string&, ColumnPrinter::Param);
     ~BooleanColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
@@ -54,10 +55,10 @@ namespace orc {
 
   class LongColumnPrinter : public ColumnPrinter {
    private:
-    const int64_t* data;
+    const int64_t* data_;
 
    public:
-    LongColumnPrinter(std::string&);
+    LongColumnPrinter(std::string&, ColumnPrinter::Param);
     ~LongColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
@@ -65,11 +66,11 @@ namespace orc {
 
   class DoubleColumnPrinter : public ColumnPrinter {
    private:
-    const double* data;
-    const bool isFloat;
+    const double* data_;
+    const bool isFloat_;
 
    public:
-    DoubleColumnPrinter(std::string&, const Type& type);
+    DoubleColumnPrinter(std::string&, const Type& type, ColumnPrinter::Param);
     virtual ~DoubleColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
@@ -77,11 +78,11 @@ namespace orc {
 
   class TimestampColumnPrinter : public ColumnPrinter {
    private:
-    const int64_t* seconds;
-    const int64_t* nanoseconds;
+    const int64_t* seconds_;
+    const int64_t* nanoseconds_;
 
    public:
-    TimestampColumnPrinter(std::string&);
+    TimestampColumnPrinter(std::string&, ColumnPrinter::Param);
     ~TimestampColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
@@ -89,10 +90,10 @@ namespace orc {
 
   class DateColumnPrinter : public ColumnPrinter {
    private:
-    const int64_t* data;
+    const int64_t* data_;
 
    public:
-    DateColumnPrinter(std::string&);
+    DateColumnPrinter(std::string&, ColumnPrinter::Param);
     ~DateColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
@@ -100,11 +101,12 @@ namespace orc {
 
   class Decimal64ColumnPrinter : public ColumnPrinter {
    private:
-    const int64_t* data;
-    int32_t scale;
+    const int64_t* data_;
+    int32_t scale_;
+    ColumnPrinter::Param param_;
 
    public:
-    Decimal64ColumnPrinter(std::string&);
+    Decimal64ColumnPrinter(std::string&, ColumnPrinter::Param);
     ~Decimal64ColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
@@ -112,11 +114,12 @@ namespace orc {
 
   class Decimal128ColumnPrinter : public ColumnPrinter {
    private:
-    const Int128* data;
-    int32_t scale;
+    const Int128* data_;
+    int32_t scale_;
+    ColumnPrinter::Param param_;
 
    public:
-    Decimal128ColumnPrinter(std::string&);
+    Decimal128ColumnPrinter(std::string&, ColumnPrinter::Param);
     ~Decimal128ColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
@@ -124,11 +127,11 @@ namespace orc {
 
   class StringColumnPrinter : public ColumnPrinter {
    private:
-    const char* const* start;
-    const int64_t* length;
+    const char* const* start_;
+    const int64_t* length_;
 
    public:
-    StringColumnPrinter(std::string&);
+    StringColumnPrinter(std::string&, ColumnPrinter::Param);
     virtual ~StringColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
@@ -136,11 +139,11 @@ namespace orc {
 
   class BinaryColumnPrinter : public ColumnPrinter {
    private:
-    const char* const* start;
-    const int64_t* length;
+    const char* const* start_;
+    const int64_t* length_;
 
    public:
-    BinaryColumnPrinter(std::string&);
+    BinaryColumnPrinter(std::string&, ColumnPrinter::Param);
     virtual ~BinaryColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
@@ -148,11 +151,11 @@ namespace orc {
 
   class ListColumnPrinter : public ColumnPrinter {
    private:
-    const int64_t* offsets;
-    std::unique_ptr<ColumnPrinter> elementPrinter;
+    const int64_t* offsets_;
+    std::unique_ptr<ColumnPrinter> elementPrinter_;
 
    public:
-    ListColumnPrinter(std::string&, const Type& type);
+    ListColumnPrinter(std::string&, const Type& type, ColumnPrinter::Param);
     virtual ~ListColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
@@ -160,12 +163,12 @@ namespace orc {
 
   class MapColumnPrinter : public ColumnPrinter {
    private:
-    const int64_t* offsets;
-    std::unique_ptr<ColumnPrinter> keyPrinter;
-    std::unique_ptr<ColumnPrinter> elementPrinter;
+    const int64_t* offsets_;
+    std::unique_ptr<ColumnPrinter> keyPrinter_;
+    std::unique_ptr<ColumnPrinter> elementPrinter_;
 
    public:
-    MapColumnPrinter(std::string&, const Type& type);
+    MapColumnPrinter(std::string&, const Type& type, ColumnPrinter::Param);
     virtual ~MapColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
@@ -173,23 +176,23 @@ namespace orc {
 
   class UnionColumnPrinter : public ColumnPrinter {
    private:
-    const unsigned char* tags;
-    const uint64_t* offsets;
-    std::vector<std::unique_ptr<ColumnPrinter>> fieldPrinter;
+    const unsigned char* tags_;
+    const uint64_t* offsets_;
+    std::vector<std::unique_ptr<ColumnPrinter>> fieldPrinter_;
 
    public:
-    UnionColumnPrinter(std::string&, const Type& type);
+    UnionColumnPrinter(std::string&, const Type& type, ColumnPrinter::Param);
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
   };
 
   class StructColumnPrinter : public ColumnPrinter {
    private:
-    std::vector<std::unique_ptr<ColumnPrinter>> fieldPrinter;
-    std::vector<std::string> fieldNames;
+    std::vector<std::unique_ptr<ColumnPrinter>> fieldPrinter_;
+    std::vector<std::string> fieldNames_;
 
    public:
-    StructColumnPrinter(std::string&, const Type& type);
+    StructColumnPrinter(std::string&, const Type& type, ColumnPrinter::Param);
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
   };
@@ -203,7 +206,7 @@ namespace orc {
     file.append(ptr, len);
   }
 
-  ColumnPrinter::ColumnPrinter(std::string& _buffer) : buffer(_buffer) {
+  ColumnPrinter::ColumnPrinter(std::string& buffer) : buffer(buffer) {
     notNull = nullptr;
     hasNulls = false;
   }
@@ -221,69 +224,70 @@ namespace orc {
     }
   }
 
-  std::unique_ptr<ColumnPrinter> createColumnPrinter(std::string& buffer, const Type* type) {
+  std::unique_ptr<ColumnPrinter> createColumnPrinter(std::string& buffer, const Type* type,
+                                                     ColumnPrinter::Param param) {
     std::unique_ptr<ColumnPrinter> result;
     if (type == nullptr) {
-      result = std::make_unique<VoidColumnPrinter>(buffer);
+      result = std::make_unique<VoidColumnPrinter>(buffer, param);
     } else {
       switch (static_cast<int64_t>(type->getKind())) {
         case BOOLEAN:
-          result = std::make_unique<BooleanColumnPrinter>(buffer);
+          result = std::make_unique<BooleanColumnPrinter>(buffer, param);
           break;
 
         case BYTE:
         case SHORT:
         case INT:
         case LONG:
-          result = std::make_unique<LongColumnPrinter>(buffer);
+          result = std::make_unique<LongColumnPrinter>(buffer, param);
           break;
 
         case FLOAT:
         case DOUBLE:
-          result = std::make_unique<DoubleColumnPrinter>(buffer, *type);
+          result = std::make_unique<DoubleColumnPrinter>(buffer, *type, param);
           break;
 
         case STRING:
         case VARCHAR:
         case CHAR:
-          result = std::make_unique<StringColumnPrinter>(buffer);
+          result = std::make_unique<StringColumnPrinter>(buffer, param);
           break;
 
         case BINARY:
-          result = std::make_unique<BinaryColumnPrinter>(buffer);
+          result = std::make_unique<BinaryColumnPrinter>(buffer, param);
           break;
 
         case TIMESTAMP:
         case TIMESTAMP_INSTANT:
-          result = std::make_unique<TimestampColumnPrinter>(buffer);
+          result = std::make_unique<TimestampColumnPrinter>(buffer, param);
           break;
 
         case LIST:
-          result = std::make_unique<ListColumnPrinter>(buffer, *type);
+          result = std::make_unique<ListColumnPrinter>(buffer, *type, param);
           break;
 
         case MAP:
-          result = std::make_unique<MapColumnPrinter>(buffer, *type);
+          result = std::make_unique<MapColumnPrinter>(buffer, *type, param);
           break;
 
         case STRUCT:
-          result = std::make_unique<StructColumnPrinter>(buffer, *type);
+          result = std::make_unique<StructColumnPrinter>(buffer, *type, param);
           break;
 
         case DECIMAL:
           if (type->getPrecision() == 0 || type->getPrecision() > 18) {
-            result = std::make_unique<Decimal128ColumnPrinter>(buffer);
+            result = std::make_unique<Decimal128ColumnPrinter>(buffer, param);
           } else {
-            result = std::make_unique<Decimal64ColumnPrinter>(buffer);
+            result = std::make_unique<Decimal64ColumnPrinter>(buffer, param);
           }
           break;
 
         case DATE:
-          result = std::make_unique<DateColumnPrinter>(buffer);
+          result = std::make_unique<DateColumnPrinter>(buffer, param);
           break;
 
         case UNION:
-          result = std::make_unique<UnionColumnPrinter>(buffer, *type);
+          result = std::make_unique<UnionColumnPrinter>(buffer, *type, param);
           break;
 
         default:
@@ -293,7 +297,8 @@ namespace orc {
     return result;
   }
 
-  VoidColumnPrinter::VoidColumnPrinter(std::string& _buffer) : ColumnPrinter(_buffer) {
+  VoidColumnPrinter::VoidColumnPrinter(std::string& buffer, ColumnPrinter::Param)
+      : ColumnPrinter(buffer) {
     // PASS
   }
 
@@ -305,33 +310,34 @@ namespace orc {
     writeString(buffer, "null");
   }
 
-  LongColumnPrinter::LongColumnPrinter(std::string& _buffer)
-      : ColumnPrinter(_buffer), data(nullptr) {
+  LongColumnPrinter::LongColumnPrinter(std::string& buffer, ColumnPrinter::Param)
+      : ColumnPrinter(buffer), data_(nullptr) {
     // PASS
   }
 
   void LongColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    data = dynamic_cast<const LongVectorBatch&>(batch).data.data();
+    data_ = dynamic_cast<const LongVectorBatch&>(batch).data.data();
   }
 
   void LongColumnPrinter::printRow(uint64_t rowId) {
     if (hasNulls && !notNull[rowId]) {
       writeString(buffer, "null");
     } else {
-      const auto numBuffer = std::to_string(static_cast<int64_t>(data[rowId]));
+      const auto numBuffer = std::to_string(static_cast<int64_t>(data_[rowId]));
       writeString(buffer, numBuffer.c_str());
     }
   }
 
-  DoubleColumnPrinter::DoubleColumnPrinter(std::string& _buffer, const Type& type)
-      : ColumnPrinter(_buffer), data(nullptr), isFloat(type.getKind() == FLOAT) {
+  DoubleColumnPrinter::DoubleColumnPrinter(std::string& buffer, const Type& type,
+                                           ColumnPrinter::Param)
+      : ColumnPrinter(buffer), data_(nullptr), isFloat_(type.getKind() == FLOAT) {
     // PASS
   }
 
   void DoubleColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    data = dynamic_cast<const DoubleVectorBatch&>(batch).data.data();
+    data_ = dynamic_cast<const DoubleVectorBatch&>(batch).data.data();
   }
 
   void DoubleColumnPrinter::printRow(uint64_t rowId) {
@@ -339,86 +345,76 @@ namespace orc {
       writeString(buffer, "null");
     } else {
       char numBuffer[64];
-      snprintf(numBuffer, sizeof(numBuffer), isFloat ? "%.7g" : "%.14g", data[rowId]);
+      snprintf(numBuffer, sizeof(numBuffer), isFloat_ ? "%.7g" : "%.14g", data_[rowId]);
       writeString(buffer, numBuffer);
     }
   }
 
-  Decimal64ColumnPrinter::Decimal64ColumnPrinter(std::string& _buffer)
-      : ColumnPrinter(_buffer), data(nullptr), scale(0) {
+  Decimal64ColumnPrinter::Decimal64ColumnPrinter(std::string& buffer, ColumnPrinter::Param param)
+      : ColumnPrinter(buffer), data_(nullptr), scale_(0), param_(param) {
     // PASS
   }
 
   void Decimal64ColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    data = dynamic_cast<const Decimal64VectorBatch&>(batch).values.data();
-    scale = dynamic_cast<const Decimal64VectorBatch&>(batch).scale;
+    data_ = dynamic_cast<const Decimal64VectorBatch&>(batch).values.data();
+    scale_ = dynamic_cast<const Decimal64VectorBatch&>(batch).scale;
   }
 
-  std::string toDecimalString(int64_t value, int32_t scale) {
-    std::stringstream buffer;
-    if (scale == 0) {
-      buffer << value;
-      return buffer.str();
-    }
-    std::string sign = "";
-    if (value < 0) {
-      sign = "-";
-      value = -value;
-    }
-    buffer << value;
-    std::string str = buffer.str();
-    int32_t len = static_cast<int32_t>(str.length());
-    if (len > scale) {
-      return sign + str.substr(0, static_cast<size_t>(len - scale)) + "." +
-             str.substr(static_cast<size_t>(len - scale), static_cast<size_t>(scale));
-    } else if (len == scale) {
-      return sign + "0." + str;
-    } else {
-      std::string result = sign + "0.";
-      for (int32_t i = 0; i < scale - len; ++i) {
-        result += "0";
-      }
-      return result + str;
-    }
+  std::string toDecimalString(int64_t value, int32_t scale, bool trimTrailingZeros) {
+    return Int128(value).toDecimalString(scale, trimTrailingZeros);
   }
 
   void Decimal64ColumnPrinter::printRow(uint64_t rowId) {
     if (hasNulls && !notNull[rowId]) {
       writeString(buffer, "null");
     } else {
-      writeString(buffer, toDecimalString(data[rowId], scale).c_str());
+      bool trimTrailingZeros = param_.printDecimalTrimTrailingZeros;
+      if (param_.printDecimalAsString) {
+        writeChar(buffer, '"');
+        writeString(buffer, toDecimalString(data_[rowId], scale_, trimTrailingZeros).c_str());
+        writeChar(buffer, '"');
+      } else {
+        writeString(buffer, toDecimalString(data_[rowId], scale_, trimTrailingZeros).c_str());
+      }
     }
   }
 
-  Decimal128ColumnPrinter::Decimal128ColumnPrinter(std::string& _buffer)
-      : ColumnPrinter(_buffer), data(nullptr), scale(0) {
+  Decimal128ColumnPrinter::Decimal128ColumnPrinter(std::string& buffer, ColumnPrinter::Param param)
+      : ColumnPrinter(buffer), data_(nullptr), scale_(0), param_(param) {
     // PASS
   }
 
   void Decimal128ColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    data = dynamic_cast<const Decimal128VectorBatch&>(batch).values.data();
-    scale = dynamic_cast<const Decimal128VectorBatch&>(batch).scale;
+    data_ = dynamic_cast<const Decimal128VectorBatch&>(batch).values.data();
+    scale_ = dynamic_cast<const Decimal128VectorBatch&>(batch).scale;
   }
 
   void Decimal128ColumnPrinter::printRow(uint64_t rowId) {
     if (hasNulls && !notNull[rowId]) {
       writeString(buffer, "null");
     } else {
-      writeString(buffer, data[rowId].toDecimalString(scale).c_str());
+      bool trimTrailingZeros = param_.printDecimalTrimTrailingZeros;
+      if (param_.printDecimalAsString) {
+        writeChar(buffer, '"');
+        writeString(buffer, data_[rowId].toDecimalString(scale_, trimTrailingZeros).c_str());
+        writeChar(buffer, '"');
+      } else {
+        writeString(buffer, data_[rowId].toDecimalString(scale_, trimTrailingZeros).c_str());
+      }
     }
   }
 
-  StringColumnPrinter::StringColumnPrinter(std::string& _buffer)
-      : ColumnPrinter(_buffer), start(nullptr), length(nullptr) {
+  StringColumnPrinter::StringColumnPrinter(std::string& buffer, ColumnPrinter::Param)
+      : ColumnPrinter(buffer), start_(nullptr), length_(nullptr) {
     // PASS
   }
 
   void StringColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    start = dynamic_cast<const StringVectorBatch&>(batch).data.data();
-    length = dynamic_cast<const StringVectorBatch&>(batch).length.data();
+    start_ = dynamic_cast<const StringVectorBatch&>(batch).data.data();
+    length_ = dynamic_cast<const StringVectorBatch&>(batch).length.data();
   }
 
   void StringColumnPrinter::printRow(uint64_t rowId) {
@@ -426,8 +422,8 @@ namespace orc {
       writeString(buffer, "null");
     } else {
       writeChar(buffer, '"');
-      for (int64_t i = 0; i < length[rowId]; ++i) {
-        char ch = static_cast<char>(start[rowId][i]);
+      for (int64_t i = 0; i < length_[rowId]; ++i) {
+        char ch = static_cast<char>(start_[rowId][i]);
         switch (ch) {
           case '\\':
             writeString(buffer, "\\\\");
@@ -459,15 +455,16 @@ namespace orc {
     }
   }
 
-  ListColumnPrinter::ListColumnPrinter(std::string& _buffer, const Type& type)
-      : ColumnPrinter(_buffer), offsets(nullptr) {
-    elementPrinter = createColumnPrinter(buffer, type.getSubtype(0));
+  ListColumnPrinter::ListColumnPrinter(std::string& buffer, const Type& type,
+                                       ColumnPrinter::Param param)
+      : ColumnPrinter(buffer), offsets_(nullptr) {
+    elementPrinter_ = createColumnPrinter(buffer, type.getSubtype(0), param);
   }
 
   void ListColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    offsets = dynamic_cast<const ListVectorBatch&>(batch).offsets.data();
-    elementPrinter->reset(*dynamic_cast<const ListVectorBatch&>(batch).elements);
+    offsets_ = dynamic_cast<const ListVectorBatch&>(batch).offsets.data();
+    elementPrinter_->reset(*dynamic_cast<const ListVectorBatch&>(batch).elements);
   }
 
   void ListColumnPrinter::printRow(uint64_t rowId) {
@@ -475,28 +472,29 @@ namespace orc {
       writeString(buffer, "null");
     } else {
       writeChar(buffer, '[');
-      for (int64_t i = offsets[rowId]; i < offsets[rowId + 1]; ++i) {
-        if (i != offsets[rowId]) {
+      for (int64_t i = offsets_[rowId]; i < offsets_[rowId + 1]; ++i) {
+        if (i != offsets_[rowId]) {
           writeString(buffer, ", ");
         }
-        elementPrinter->printRow(static_cast<uint64_t>(i));
+        elementPrinter_->printRow(static_cast<uint64_t>(i));
       }
       writeChar(buffer, ']');
     }
   }
 
-  MapColumnPrinter::MapColumnPrinter(std::string& _buffer, const Type& type)
-      : ColumnPrinter(_buffer), offsets(nullptr) {
-    keyPrinter = createColumnPrinter(buffer, type.getSubtype(0));
-    elementPrinter = createColumnPrinter(buffer, type.getSubtype(1));
+  MapColumnPrinter::MapColumnPrinter(std::string& buffer, const Type& type,
+                                     ColumnPrinter::Param param)
+      : ColumnPrinter(buffer), offsets_(nullptr) {
+    keyPrinter_ = createColumnPrinter(buffer, type.getSubtype(0), param);
+    elementPrinter_ = createColumnPrinter(buffer, type.getSubtype(1), param);
   }
 
   void MapColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
     const MapVectorBatch& myBatch = dynamic_cast<const MapVectorBatch&>(batch);
-    offsets = myBatch.offsets.data();
-    keyPrinter->reset(*myBatch.keys);
-    elementPrinter->reset(*myBatch.elements);
+    offsets_ = myBatch.offsets.data();
+    keyPrinter_->reset(*myBatch.keys);
+    elementPrinter_->reset(*myBatch.elements);
   }
 
   void MapColumnPrinter::printRow(uint64_t rowId) {
@@ -504,34 +502,35 @@ namespace orc {
       writeString(buffer, "null");
     } else {
       writeChar(buffer, '[');
-      for (int64_t i = offsets[rowId]; i < offsets[rowId + 1]; ++i) {
-        if (i != offsets[rowId]) {
+      for (int64_t i = offsets_[rowId]; i < offsets_[rowId + 1]; ++i) {
+        if (i != offsets_[rowId]) {
           writeString(buffer, ", ");
         }
         writeString(buffer, "{\"key\": ");
-        keyPrinter->printRow(static_cast<uint64_t>(i));
+        keyPrinter_->printRow(static_cast<uint64_t>(i));
         writeString(buffer, ", \"value\": ");
-        elementPrinter->printRow(static_cast<uint64_t>(i));
+        elementPrinter_->printRow(static_cast<uint64_t>(i));
         writeChar(buffer, '}');
       }
       writeChar(buffer, ']');
     }
   }
 
-  UnionColumnPrinter::UnionColumnPrinter(std::string& _buffer, const Type& type)
-      : ColumnPrinter(_buffer), tags(nullptr), offsets(nullptr) {
+  UnionColumnPrinter::UnionColumnPrinter(std::string& buffer, const Type& type,
+                                         ColumnPrinter::Param param)
+      : ColumnPrinter(buffer), tags_(nullptr), offsets_(nullptr) {
     for (unsigned int i = 0; i < type.getSubtypeCount(); ++i) {
-      fieldPrinter.push_back(createColumnPrinter(buffer, type.getSubtype(i)));
+      fieldPrinter_.push_back(createColumnPrinter(buffer, type.getSubtype(i), param));
     }
   }
 
   void UnionColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
     const UnionVectorBatch& unionBatch = dynamic_cast<const UnionVectorBatch&>(batch);
-    tags = unionBatch.tags.data();
-    offsets = unionBatch.offsets.data();
-    for (size_t i = 0; i < fieldPrinter.size(); ++i) {
-      fieldPrinter[i]->reset(*(unionBatch.children[i]));
+    tags_ = unionBatch.tags.data();
+    offsets_ = unionBatch.offsets.data();
+    for (size_t i = 0; i < fieldPrinter_.size(); ++i) {
+      fieldPrinter_[i]->reset(*(unionBatch.children[i]));
     }
   }
 
@@ -540,27 +539,28 @@ namespace orc {
       writeString(buffer, "null");
     } else {
       writeString(buffer, "{\"tag\": ");
-      const auto numBuffer = std::to_string(static_cast<int64_t>(tags[rowId]));
+      const auto numBuffer = std::to_string(static_cast<int64_t>(tags_[rowId]));
       writeString(buffer, numBuffer.c_str());
       writeString(buffer, ", \"value\": ");
-      fieldPrinter[tags[rowId]]->printRow(offsets[rowId]);
+      fieldPrinter_[tags_[rowId]]->printRow(offsets_[rowId]);
       writeChar(buffer, '}');
     }
   }
 
-  StructColumnPrinter::StructColumnPrinter(std::string& _buffer, const Type& type)
-      : ColumnPrinter(_buffer) {
+  StructColumnPrinter::StructColumnPrinter(std::string& buffer, const Type& type,
+                                           ColumnPrinter::Param param)
+      : ColumnPrinter(buffer) {
     for (unsigned int i = 0; i < type.getSubtypeCount(); ++i) {
-      fieldNames.push_back(type.getFieldName(i));
-      fieldPrinter.push_back(createColumnPrinter(buffer, type.getSubtype(i)));
+      fieldNames_.push_back(type.getFieldName(i));
+      fieldPrinter_.push_back(createColumnPrinter(buffer, type.getSubtype(i), param));
     }
   }
 
   void StructColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
     const StructVectorBatch& structBatch = dynamic_cast<const StructVectorBatch&>(batch);
-    for (size_t i = 0; i < fieldPrinter.size(); ++i) {
-      fieldPrinter[i]->reset(*(structBatch.fields[i]));
+    for (size_t i = 0; i < fieldPrinter_.size(); ++i) {
+      fieldPrinter_[i]->reset(*(structBatch.fields[i]));
     }
   }
 
@@ -569,21 +569,21 @@ namespace orc {
       writeString(buffer, "null");
     } else {
       writeChar(buffer, '{');
-      for (unsigned int i = 0; i < fieldPrinter.size(); ++i) {
+      for (unsigned int i = 0; i < fieldPrinter_.size(); ++i) {
         if (i != 0) {
           writeString(buffer, ", ");
         }
         writeChar(buffer, '"');
-        writeString(buffer, fieldNames[i].c_str());
+        writeString(buffer, fieldNames_[i].c_str());
         writeString(buffer, "\": ");
-        fieldPrinter[i]->printRow(rowId);
+        fieldPrinter_[i]->printRow(rowId);
       }
       writeChar(buffer, '}');
     }
   }
 
-  DateColumnPrinter::DateColumnPrinter(std::string& _buffer)
-      : ColumnPrinter(_buffer), data(nullptr) {
+  DateColumnPrinter::DateColumnPrinter(std::string& buffer, ColumnPrinter::Param)
+      : ColumnPrinter(buffer), data_(nullptr) {
     // PASS
   }
 
@@ -591,7 +591,7 @@ namespace orc {
     if (hasNulls && !notNull[rowId]) {
       writeString(buffer, "null");
     } else {
-      const time_t timeValue = data[rowId] * 24 * 60 * 60;
+      const time_t timeValue = data_[rowId] * 24 * 60 * 60;
       struct tm tmValue;
       gmtime_r(&timeValue, &tmValue);
       char timeBuffer[11];
@@ -604,11 +604,11 @@ namespace orc {
 
   void DateColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    data = dynamic_cast<const LongVectorBatch&>(batch).data.data();
+    data_ = dynamic_cast<const LongVectorBatch&>(batch).data.data();
   }
 
-  BooleanColumnPrinter::BooleanColumnPrinter(std::string& _buffer)
-      : ColumnPrinter(_buffer), data(nullptr) {
+  BooleanColumnPrinter::BooleanColumnPrinter(std::string& buffer, ColumnPrinter::Param)
+      : ColumnPrinter(buffer), data_(nullptr) {
     // PASS
   }
 
@@ -616,17 +616,17 @@ namespace orc {
     if (hasNulls && !notNull[rowId]) {
       writeString(buffer, "null");
     } else {
-      writeString(buffer, (data[rowId] ? "true" : "false"));
+      writeString(buffer, (data_[rowId] ? "true" : "false"));
     }
   }
 
   void BooleanColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    data = dynamic_cast<const LongVectorBatch&>(batch).data.data();
+    data_ = dynamic_cast<const LongVectorBatch&>(batch).data.data();
   }
 
-  BinaryColumnPrinter::BinaryColumnPrinter(std::string& _buffer)
-      : ColumnPrinter(_buffer), start(nullptr), length(nullptr) {
+  BinaryColumnPrinter::BinaryColumnPrinter(std::string& buffer, ColumnPrinter::Param)
+      : ColumnPrinter(buffer), start_(nullptr), length_(nullptr) {
     // PASS
   }
 
@@ -635,11 +635,11 @@ namespace orc {
       writeString(buffer, "null");
     } else {
       writeChar(buffer, '[');
-      for (int64_t i = 0; i < length[rowId]; ++i) {
+      for (int64_t i = 0; i < length_[rowId]; ++i) {
         if (i != 0) {
           writeString(buffer, ", ");
         }
-        const auto numBuffer = std::to_string(static_cast<int>(start[rowId][i]) & 0xff);
+        const auto numBuffer = std::to_string(static_cast<int>(start_[rowId][i]) & 0xff);
         writeString(buffer, numBuffer.c_str());
       }
       writeChar(buffer, ']');
@@ -648,12 +648,12 @@ namespace orc {
 
   void BinaryColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    start = dynamic_cast<const StringVectorBatch&>(batch).data.data();
-    length = dynamic_cast<const StringVectorBatch&>(batch).length.data();
+    start_ = dynamic_cast<const StringVectorBatch&>(batch).data.data();
+    length_ = dynamic_cast<const StringVectorBatch&>(batch).length.data();
   }
 
-  TimestampColumnPrinter::TimestampColumnPrinter(std::string& _buffer)
-      : ColumnPrinter(_buffer), seconds(nullptr), nanoseconds(nullptr) {
+  TimestampColumnPrinter::TimestampColumnPrinter(std::string& buffer, ColumnPrinter::Param)
+      : ColumnPrinter(buffer), seconds_(nullptr), nanoseconds_(nullptr) {
     // PASS
   }
 
@@ -662,8 +662,8 @@ namespace orc {
     if (hasNulls && !notNull[rowId]) {
       writeString(buffer, "null");
     } else {
-      int64_t nanos = nanoseconds[rowId];
-      time_t secs = static_cast<time_t>(seconds[rowId]);
+      int64_t nanos = nanoseconds_[rowId];
+      time_t secs = static_cast<time_t>(seconds_[rowId]);
       struct tm tmValue;
       gmtime_r(&secs, &tmValue);
       char timeBuffer[20];
@@ -694,7 +694,7 @@ namespace orc {
   void TimestampColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
     const TimestampVectorBatch& ts = dynamic_cast<const TimestampVectorBatch&>(batch);
-    seconds = ts.data.data();
-    nanoseconds = ts.nanoseconds.data();
+    seconds_ = ts.data.data();
+    nanoseconds_ = ts.nanoseconds.data();
   }
 }  // namespace orc

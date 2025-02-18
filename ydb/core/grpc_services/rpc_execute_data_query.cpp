@@ -12,7 +12,7 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/protos/query_stats.pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
@@ -26,6 +26,16 @@ using namespace NOperationId;
 using namespace Ydb;
 using namespace Ydb::Table;
 using namespace NKqp;
+
+bool NeedCollectDiagnostics(const Ydb::Table::ExecuteDataQueryRequest& req) {
+    switch (req.collect_stats()) {
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
+            return true;
+        default:
+            return false;
+    }
+}
 
 using TEvExecuteDataQueryRequest = TGrpcRequestOperationCall<Ydb::Table::ExecuteDataQueryRequest,
     Ydb::Table::ExecuteDataQueryResponse>;
@@ -147,6 +157,8 @@ public:
             req->has_query_cache_policy() ? &req->query_cache_policy() : nullptr,
             req->has_operation_params() ? &req->operation_params() : nullptr);
 
+        ev->Record.MutableRequest()->SetCollectDiagnostics(NeedCollectDiagnostics(*req));
+
         ReportCostInfo_ = req->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
 
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId());
@@ -166,6 +178,9 @@ public:
         if (from.HasQueryStats()) {
             FillQueryStats(*to->mutable_query_stats(), from);
             to->mutable_query_stats()->set_query_ast(from.GetQueryAst());
+            if (from.HasQueryDiagnostics()) {
+                to->mutable_query_stats()->set_query_meta(from.GetQueryDiagnostics());
+            }
             return;
         }
     }

@@ -16,7 +16,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/log/log.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>

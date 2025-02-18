@@ -1,15 +1,14 @@
 #pragma once
 
-#include <library/cpp/yt/misc/enum.h>
-#include <library/cpp/yt/misc/guid.h>
-#include <library/cpp/yt/misc/hash.h>
-
 #include <yt/yt/client/election/public.h>
 #include <yt/yt/client/job_tracker_client/public.h>
 
+#include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/guid.h>
+#include <library/cpp/yt/misc/hash.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/string/string_builder.h>
 
@@ -147,6 +146,7 @@ DEFINE_ENUM(EObjectType,
     ((ChunkMap)                                     (402))
     ((LostChunkMap)                                 (403))
     ((LostVitalChunkMap)                            (413))
+    ((LostVitalChunksSampleMap)                     (464))
     ((PrecariousChunkMap)                           (410))
     ((PrecariousVitalChunkMap)                      (411))
     ((OverreplicatedChunkMap)                       (404))
@@ -345,7 +345,7 @@ DEFINE_ENUM(EObjectType,
     ((ClusterProxyNode)                            (1500))
 
     // Zookeeper stuff
-    ((ZookeeperShard)                              (1400))
+    // COMPAT(babenko): drop completely
     ((ZookeeperShardMap)                           (1401))
 
     // Flow stuff

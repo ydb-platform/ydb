@@ -6,7 +6,7 @@
 #include <ydb/core/protos/msgbus_kv.pb.h>
 
 #include <util/datetime/base.h>
-#include <ydb/library/grpc/client/grpc_common.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
 
 namespace NKikimr {
     namespace NGRpcProxy {
@@ -25,7 +25,6 @@ namespace NKikimr {
         using TJSONCallback = TCallback<NKikimrClient::TJSON>;
         using TNodeRegistrationResponseCallback = TCallback<NKikimrClient::TNodeRegistrationResponse>;
         using TCmsResponseCallback = TCallback<NKikimrClient::TCmsResponse>;
-        using TSqsResponseCallback = TCallback<NKikimrClient::TSqsResponse>;
         using TConsoleResponseCallback = TCallback<NKikimrClient::TConsoleResponse>;
 
         using TFinishCallback = std::function<void (const TGrpcError*)>;
@@ -85,11 +84,6 @@ namespace NKikimr {
             // CMS INTERFACE
             /////////////////////////////////////////////////////////////////////////////////////////////////
             void CmsRequest(const NKikimrClient::TCmsRequest& request, TCmsResponseCallback callback);
-
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            // SQS INTERFACE
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            void SqsRequest(const NKikimrClient::TSqsRequest& request, TSqsResponseCallback callback);
 
             /////////////////////////////////////////////////////////////////////////////////////////////////
             // CONSOLE INTERFACE

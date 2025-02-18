@@ -7,6 +7,7 @@
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 #include <ydb/core/blobstorage/vdisk/common/circlebufstream.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
 using namespace NKikimrServices;
 
@@ -31,8 +32,8 @@ namespace NKikimr {
 
             void Bootstrap(const TActorContext &ctx) {
                 KeepState.Init(
-                    std::make_shared<TActorNotify>(ctx.ExecutorThread.ActorSystem, ctx.SelfID),
-                    std::make_shared<TActorSystemLoggerCtx>(ctx.ExecutorThread.ActorSystem));
+                    std::make_shared<TActorNotify>(ctx.ActorSystem(), ctx.SelfID),
+                    std::make_shared<TActorSystemLoggerCtx>(ctx.ActorSystem()));
                 PerformActions(ctx);
                 Become(&TThis::StateFunc);
             }
@@ -240,6 +241,12 @@ namespace NKikimr {
                 PerformActions(ctx);
             }
 
+            void Handle(TEvListChunks::TPtr ev, const TActorContext& ctx) {
+                auto response = std::make_unique<TEvListChunksResult>();
+                KeepState.ListChunks(ev->Get()->ChunksOfInterest, response->ChunksSyncLog);
+                ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+            }
+
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
@@ -251,6 +258,7 @@ namespace NKikimr {
                 HFunc(TEvBlobStorage::TEvVBaldSyncLog, Handle)
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)
+                HFunc(TEvListChunks, Handle)
             )
 
         public:

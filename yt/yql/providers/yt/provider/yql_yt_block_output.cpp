@@ -42,12 +42,17 @@ private:
 
         auto settings = RemoveSetting(map.Settings().Ref(), EYtSettingType::BlockOutputReady, ctx);
         settings = AddSetting(*settings, EYtSettingType::BlockOutputApplied, TExprNode::TPtr(), ctx);
+
         auto mapperLambda = Build<TCoLambda>(ctx, map.Mapper().Pos())
             .Args({"flow"})
-            .Body<TCoWideToBlocks>()
-                .Input<TExprApplier>()
-                    .Apply(map.Mapper())
-                    .With(0, "flow")
+            .Body<TCoToFlow>()
+                .Input<TCoWideToBlocks>()
+                    .Input<TCoFromFlow>()
+                        .Input<TExprApplier>()
+                            .Apply(map.Mapper())
+                            .With(0, "flow")
+                        .Build()
+                    .Build()
                 .Build()
             .Build()
             .Done()

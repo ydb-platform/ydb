@@ -7,7 +7,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/threading/future/future.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 namespace NYql {
 

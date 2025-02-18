@@ -43,7 +43,7 @@ ui64 TTxMediator::SubjectiveTime() {
 
 void TTxMediator::InitSelfState(const TActorContext &ctx) {
     Y_ABORT_UNLESS(Config.Bukets);
-    ExecQueue = ctx.ExecutorThread.RegisterActor(CreateTxMediatorExecQueue(ctx.SelfID, TabletID(), 1, Config.Bukets->Buckets()));
+    ExecQueue = ctx.Register(CreateTxMediatorExecQueue(ctx.SelfID, TabletID(), 1, Config.Bukets->Buckets()));
     Y_ABORT_UNLESS(!!ExecQueue);
 
     Y_ABORT_UNLESS(Config.CoordinatorSeletor);
@@ -308,7 +308,7 @@ void TTxMediator::HandleForwardWatch(TAutoPtr<IEventHandle> &ev, const TActorCon
         << " FORWARD Watch from# " << ev->Sender << " to# " << ExecQueue.ToString() << " ExecQueue");
     // Preserve Recipient (server) and InterconnectSession
     ev->Rewrite(ev->GetTypeRewrite(), ExecQueue);
-    ctx.ExecutorThread.Send(ev.Release());
+    ctx.Send(ev.Release());
 }
 
 void TTxMediator::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {

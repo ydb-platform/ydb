@@ -84,6 +84,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_select_distinct.test_plan/onek",
                                                                         "ReadColumns": [
                                                                             "string4"
                                                                         ],

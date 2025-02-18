@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -60,7 +60,7 @@ namespace NYT::NPhoenix2 {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 
 #define TYPE_DECL_INL_H_
 #include "type_decl-inl.h"

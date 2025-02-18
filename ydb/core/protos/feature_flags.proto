@@ -104,20 +104,20 @@ message TFeatureFlags {
     optional bool EnableDataShardGenericReadSets = 81 [default = false];
     // enable alter database operation to create subdomain's system tablets
     // directly in subdomain's hive
-    optional bool EnableAlterDatabaseCreateHiveFirst = 82 [default = false];
+    optional bool EnableAlterDatabaseCreateHiveFirst = 82 [default = true];
     reserved 83; // EnableKqpDataQuerySourceRead
     optional bool EnableSmallDiskOptimization = 84 [default = true];
     optional bool EnableDataShardVolatileTransactions = 85 [default = true];
-    optional bool EnableTopicServiceTx = 86 [default = false];
+    optional bool EnableTopicServiceTx = 86 [default = true];
     optional bool EnableLLVMCache = 87 [default = false];
     optional bool EnableExternalDataSources = 88 [default = false];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = true, (RequireRestart) = true];
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = true];
-    optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = false];
+    optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = true];
     optional bool EnableScriptExecutionOperations = 92 [default = true];
     optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
-    optional bool EnableTopicSplitMerge = 95 [default = false];
+    optional bool EnableTopicSplitMerge = 95 [default = true];
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
     optional bool EnableSubscriptionsInDiscovery = 98 [default = false, (RequireRestart) = true];
@@ -183,4 +183,14 @@ message TFeatureFlags {
     optional bool EnableVDiskThrottling = 158 [default = false];
     optional bool EnableDataShardInMemoryStateMigration = 159 [default = true];
     optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = false];
+    optional bool DisableLocalDBEraseCache = 161 [default = false];
+    optional bool EnableExportChecksums = 162 [default = false];
+    optional bool EnableTopicTransfer = 163 [default = false];
+    optional bool EnableViewExport = 164 [default = false];
+    optional bool EnableColumnStore = 165 [default = false];
+    optional bool EnableStrictAclCheck = 166 [default = false];
+    optional bool DatabaseYamlConfigAllowed = 167 [default = false];
+    // deny non-administrators the privilege of administering local users and groups
+    optional bool EnableStrictUserManagement = 168 [default = false];
+    optional bool EnableDatabaseAdmin = 169 [default = false];
 }

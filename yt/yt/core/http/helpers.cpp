@@ -401,7 +401,7 @@ bool TryParseTraceParent(const TString& traceParent, NTracing::TSpanContext& spa
         return false;
     }
 
-    // NB: we support three-part form in which version is assumed to be zero.
+    // NB: We support three-part form in which version is assumed to be zero.
     ui8 version = 0;
     if (parts.size() == 4) {
         if (parts[0].size() != 2) {

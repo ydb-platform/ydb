@@ -21,7 +21,7 @@ using namespace NObjectClient;
 
 void TChunkReplica::RegisterMetadata(auto&& registrar)
 {
-    PHOENIX_REGISTER_FIELD(1, Value_)();
+    PHOENIX_REGISTER_FIELD(1, Value_);
 }
 
 PHOENIX_DEFINE_TYPE(TChunkReplica);
@@ -173,7 +173,7 @@ void TChunkReplicaAddressFormatter::operator()(TStringBuilderBase* builder, TChu
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TChunkReplicaList TChunkReplicaWithMedium::ToChunkReplicas(const TChunkReplicaWithMediumList& replicasWithMedia)
+TChunkReplicaList TChunkReplicaWithMedium::ToChunkReplicas(TRange<TChunkReplicaWithMedium> replicasWithMedia)
 {
     TChunkReplicaList replicas;
     replicas.reserve(replicasWithMedia.size());

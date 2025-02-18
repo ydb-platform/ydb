@@ -39,6 +39,7 @@ the header itself as this list might be out of date.
 * MIPS 32-bit o32 ABI
 * MIPS 32-bit n32 ABI
 * MIPS 64-bit n64 ABI
+* LOONGARCH 64-bit ABI
 
 ## API
 
@@ -108,26 +109,29 @@ preferred and will often move things much faster.
 ### Review
 
 You get your change reviewed, you can upload it to
-[Rietveld](https://codereview.chromium.org)
+[Gerrit](https://chromium-review.googlesource.com/q/project:linux-syscall-support+status:open)
 using `git cl upload` from
-[Chromium's depot-tools](http://dev.chromium.org/developers/how-tos/depottools).
+[Chromium's depot-tools](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html).
 
 ### Testing
 
-Unfortunately, LSS has no automated test suite.
+Tests are found in the [tests/](./tests/) subdirectory.  It does not (yet) offer
+100% coverage, but should grow over time.
 
-You can test LSS by patching it into Chromium, building Chromium, and running
-Chromium's tests.
+New commits that update/change/add syscall wrappers should include tests for
+them too.  Consult the [test documentation](./tests/README.md) for more details.
 
-You can compile-test LSS by running:
+To run, just run `make` inside the tests directory.  It will compile & execute
+the tests locally.
 
-    gcc -Wall -Wextra -Wstrict-prototypes -c linux_syscall_support.h
+There is some limited cross-compile coverage available if you run `make cross`.
+It only compiles things (does not execute at all).
 
 ### Rolling into Chromium
 
 If you commit a change to LSS, please also commit a Chromium change to update
 `lss_revision` in
-[Chromium's DEPS](https://chromium.googlesource.com/chromium/src/+/master/DEPS)
+[Chromium's DEPS](https://chromium.googlesource.com/chromium/src/+/HEAD/DEPS)
 file.
 
 This ensures that the LSS change gets tested, so that people who commit later

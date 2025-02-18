@@ -11,6 +11,8 @@
 
 #include <array>
 
+#include <util/string/escape.h>
+
 #include <util/stream/mem.h>
 
 namespace NYT::NYson {

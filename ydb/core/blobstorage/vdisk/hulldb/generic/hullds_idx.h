@@ -200,13 +200,15 @@ namespace NKikimr {
         // CompactedLsn. We use CompactedLsn at recovery to determine what logs records
         // have to be ignored
         TCompactedLsn CompactedLsn;
+        // DataInplaced aggregated from all levels
+        ui64 AllLevelsDataInplaced = 0;
         // Takes snapshot of the database, actorSystem must be provided, if actorSystem is null,
         // optimization applies;
         // This function is private and must not be called directly
         TLevelIndexSnapshot PrivateGetSnapshot(TActorSystem *actorSystemToNotifyLevelIndex) {
             Y_DEBUG_ABORT_UNLESS(Loaded);
             return TLevelIndexSnapshot(CurSlice, Fresh.GetSnapshot(), CurSlice->Level0CurSstsNum(),
-                    actorSystemToNotifyLevelIndex, DelayedCompactionDeleterInfo);
+                    AllLevelsDataInplaced, actorSystemToNotifyLevelIndex, DelayedCompactionDeleterInfo);
         }
 
     public:
@@ -463,15 +465,19 @@ namespace NKikimr {
             ui64 DataHuge = 0;
         };
 
-        TLevelGroupInfo level0, level1to8, level9to16, level17, level18;
+        TLevelGroupInfo level0, level1to8, level9to16, level17, level18, level19;
 
-        auto process = [](TLevelGroupInfo *stat, TLevelSegment *seg) {
+        ui64 allLevelsDataInplaced = 0;
+
+        auto process = [&allLevelsDataInplaced](TLevelGroupInfo *stat, TLevelSegment *seg) {
             stat->SstNum += 1;
             stat->NumItems += seg->Info.Items;
             stat->NumItemsInplaced += seg->Info.ItemsWithInplacedData;
             stat->NumItemsHuge += seg->Info.ItemsWithHugeData;
             stat->DataInplaced += seg->Info.InplaceDataTotalSize;
             stat->DataHuge += seg->Info.HugeDataTotalSize;
+
+            allLevelsDataInplaced += seg->Info.InplaceDataTotalSize;
         };
 
         for (const auto& seg : CurSlice->Level0.Segs->Segments) {
@@ -511,6 +517,10 @@ namespace NKikimr {
                 case 18:
                     info = &level18;
                     break;
+
+                case 19:
+                    info = &level19;
+                    break;
             }
 
             if (info) {
@@ -522,11 +532,14 @@ namespace NKikimr {
             ++levelIndex;
         }
 
+        AllLevelsDataInplaced = allLevelsDataInplaced;
+
         for (const auto& p : {std::make_pair(&level0, &stat.Level0),
                 std::make_pair(&level1to8, &stat.Level1to8),
                 std::make_pair(&level9to16, &stat.Level9to16),
                 std::make_pair(&level17, &stat.Level17),
-                std::make_pair(&level18, &stat.Level18)}) {
+                std::make_pair(&level18, &stat.Level18),
+                std::make_pair(&level19, &stat.Level19)}) {
             TLevelGroupInfo *from = p.first;
             NMonGroup::TLsmLevelGroup *to = p.second;
             to->SstNum() = from->SstNum;
@@ -584,4 +597,3 @@ namespace NKikimr {
     extern template class TLevelIndex<TKeyBlock, TMemRecBlock>;
 
 } // NKikimr
-

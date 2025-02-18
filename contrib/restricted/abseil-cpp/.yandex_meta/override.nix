@@ -1,11 +1,11 @@
 self: super: with self; rec {
-  version = "20240722.0";
+  version = "20240722.1";
 
   src = fetchFromGitHub {
     owner = "abseil";
     repo = "abseil-cpp";
     rev = version;
-    hash = "sha256-51jpDhdZ0n+KLmxh8KVaTz53pZAB0dHjmILFX+OLud4=";
+    hash = "sha256-ir4hG2VIPv3se7JfWqCM/siLqFEFkmhMW/IGCocy6Pc=";
   };
 
   patches = [];

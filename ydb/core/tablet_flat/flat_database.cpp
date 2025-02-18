@@ -518,6 +518,11 @@ const TDbStats& TDatabase::Counters() const noexcept
     return DatabaseImpl->Stats;
 }
 
+TDbRuntimeStats TDatabase::RuntimeCounters() const noexcept
+{
+    return DatabaseImpl->GetRuntimeStats();
+}
+
 void TDatabase::UpdateApproximateFreeSharesByChannel(const THashMap<ui32, float>& approximateFreeSpaceShareByChannel)
 {
     for (auto& [channel, value] : approximateFreeSpaceShareByChannel) {

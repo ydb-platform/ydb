@@ -10,6 +10,8 @@
 
 #include <contrib/libs/grpc/include/grpc/grpc.h>
 
+#include <contrib/libs/grpc/src/core/lib/event_engine/thread_pool.h>
+
 #include <contrib/libs/grpc/src/core/lib/iomgr/executor.h>
 
 #include <atomic>
@@ -91,9 +93,7 @@ private:
                 {.ShutdownPriority = GrpcDispatcherThreadShutdownPriority})
             , LibraryLock_(std::move(libraryLock))
             , GuardedCompletionQueue_(TGrpcCompletionQueuePtr(grpc_completion_queue_create_for_next(nullptr)))
-        {
-            Start();
-        }
+        { }
 
         TGuardedGrpcCompletionQueue* GetGuardedCompletionQueue()
         {
@@ -170,15 +170,18 @@ private:
 
     void DoInitialize()
     {
-        VERIFY_SPINLOCK_AFFINITY(ConfigLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(ConfigLock_);
         YT_VERIFY(!IsInitialized());
 
         grpc_core::Executor::SetThreadsLimit(Config_->GrpcThreadCount);
+        grpc_event_engine::experimental::ThreadPool::SetThreadsLimit(Config_->GrpcEventEngineThreadCount);
 
         // Initialize grpc only after configuration is done.
         auto grpcLock = New<TGrpcLibraryLock>();
         for (int index = 0; index < Config_->DispatcherThreadCount; ++index) {
-            Threads_.push_back(New<TDispatcherThread>(grpcLock, index));
+            auto dispatcherThread = New<TDispatcherThread>(grpcLock, index);
+            dispatcherThread->Start();
+            Threads_.push_back(std::move(dispatcherThread));
         }
         LibraryLock_ = grpcLock;
         Initialized_.store(true);

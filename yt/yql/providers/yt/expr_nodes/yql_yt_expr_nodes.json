@@ -492,6 +492,15 @@
                 {"Index": 1, "Name": "UserStateType", "Type": "TExprBase"},
                 {"Index": 2, "Name": "ProcessStateKey", "Type": "TCoAtom"}
             ]
+        },
+        {
+            "Name": "TYtQLFilter",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YtQLFilter"},
+            "Children": [
+                {"Index": 0, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Predicate", "Type": "TCoLambda"}
+            ]
         }
     ]
 }

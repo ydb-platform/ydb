@@ -24,13 +24,13 @@ int TCommandListEndpoints::Run(TConfig& config) {
     NDiscovery::TListEndpointsResult result = client.ListEndpoints(
         FillSettings(NDiscovery::TListEndpointsSettings())
     ).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     PrintResponse(result);
     return EXIT_SUCCESS;
 }
 
 void TCommandListEndpoints::PrintResponse(NDiscovery::TListEndpointsResult& result) {
-    const TVector<NDiscovery::TEndpointInfo>& endpoints = result.GetEndpointsInfo();
+    const std::vector<NDiscovery::TEndpointInfo>& endpoints = result.GetEndpointsInfo();
     if (endpoints.size()) {
         for (auto& endpoint : endpoints) {
             if (endpoint.Ssl) {
@@ -39,7 +39,7 @@ void TCommandListEndpoints::PrintResponse(NDiscovery::TListEndpointsResult& resu
                 Cout << "grpc://";
             }
             Cout << endpoint.Address << ":" << endpoint.Port;
-            if (endpoint.Location) {
+            if (!endpoint.Location.empty()) {
                 Cout << " [" << endpoint.Location << "]";
             }
             for (const auto& service : endpoint.Services) {
@@ -68,21 +68,21 @@ int TCommandWhoAmI::Run(TConfig& config) {
     NDiscovery::TWhoAmIResult result = client.WhoAmI(
         FillSettings(NDiscovery::TWhoAmISettings().WithGroups(WithGroups))
     ).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     PrintResponse(result);
     driver.Stop(true);
     return EXIT_SUCCESS;
 }
 
 void TCommandWhoAmI::PrintResponse(NDiscovery::TWhoAmIResult& result) {
-    const TString& userName = result.GetUserName();
-    if (userName) {
+    const std::string& userName = result.GetUserName();
+    if (!userName.empty()) {
         Cout << "User SID: " << userName << Endl;
         if (WithGroups) {
-            const TVector<TString>& groups = result.GetGroups();
+            const std::vector<std::string>& groups = result.GetGroups();
             if (groups.size() > 0) {
                 Cout << Endl << "Group SIDs:" << Endl;
-                for (const TString& group : groups) {
+                for (const std::string& group : groups) {
                     Cout << group << Endl;
                 }
             } else {

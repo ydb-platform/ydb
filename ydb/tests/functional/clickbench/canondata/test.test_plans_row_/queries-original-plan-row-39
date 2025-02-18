@@ -52,7 +52,7 @@
                                                                 "ExternalPlanNodeId": 4
                                                             }
                                                         ],
-                                                        "Limit": "SUM(10,1000)",
+                                                        "Limit": "Min(If,SUM(10,1000))",
                                                         "Name": "Limit"
                                                     }
                                                 ],
@@ -144,6 +144,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableRangeScan",
+                                                                                        "Path": "/local/clickbench/plans/row/hits",
                                                                                         "ReadColumns": [
                                                                                             "AdvEngineID",
                                                                                             "IsRefresh",

@@ -2,7 +2,7 @@ title: gdb14
 service: buildroot
 
 shared:
-  resource_path: &resource-path "build/external_resources/gdb/resources.json"
+  mapping_path: &mapping-path "build/external_resources/gdb/resources.json"
   input: &base-input
     package: gdb/14
     toolchain_name: gdb14
@@ -47,12 +47,12 @@ ci:
       jobs:
         build:
           title: Build
-          task: projects/devtools/contrib/toolchain_registry/build
+          task: projects/devtools/toolchain_registry/build
           input:
             <<: *base-input
             revision: ${flow-vars.revision}
-            resource_path: *resource-path
-            particular_platforms: ${flow-vars.platforms}
+            mapping_path: *mapping-path
+            selected_platforms: ${flow-vars.platforms}
 
         update-mapping:
           title: Update mapping.conf.json
@@ -69,9 +69,10 @@ ci:
 
         release:
           title: Release
-          task: projects/devtools/contrib/toolchain_registry/release
+          task: projects/devtools/toolchain_registry/release
           needs: update-mapping
           input:
             <<: *base-input
             revision: ${flow-vars.revision}
             pr_id: ${tasks.build.output_params.pr_id}
+            built_resources: ${tasks.build.output_params.built_resources}

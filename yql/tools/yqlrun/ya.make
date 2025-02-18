@@ -16,14 +16,14 @@ PEERDIR(
     yql/tools/yqlrun/http
     yql/tools/yqlrun/lib
 
-    yt/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/comp_nodes/llvm16
     yt/yql/providers/yt/codec/codegen
 
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/udf_resolve
     yql/essentials/minikql/invoke_builtins
-    yql/essentials/minikql/invoke_builtins/llvm14
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/invoke_builtins/llvm16
+    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/parser/pg_wrapper
     yql/essentials/parser/pg_catalog
     yql/essentials/core/services/mounts
@@ -38,7 +38,9 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/protos
     yql/essentials/ast
+    yql/essentials/sql
     yql/essentials/sql/pg
+    yql/essentials/sql/v1
 
     library/cpp/getopt
     library/cpp/logger

@@ -87,6 +87,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/clickbench/plans/row/hits",
                                                         "ReadColumns": null,
                                                         "ReadRanges": [
                                                             "CounterID (-\u221e, +\u221e)",

@@ -4,7 +4,7 @@
 #include "type_decl.h"
 #endif
 
-namespace NYT::NPhoenix2::NDetail {
+namespace NYT::NPhoenix::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -40,7 +40,7 @@ struct TTraits;
 
 #define PHOENIX_DECLARE_TYPE__PROLOGUE(type, typeTagValue) \
 public: \
-    [[maybe_unused]] static constexpr auto TypeTag = ::NYT::NPhoenix2::TTypeTag(typeTagValue); \
+    [[maybe_unused]] static constexpr auto TypeTag = ::NYT::NPhoenix::TTypeTag(typeTagValue); \
     static void RegisterMetadata(auto&& registrar); \
     \
 private: \
@@ -48,24 +48,20 @@ private: \
     using TLoadContextImpl = TLoadContext; \
     \
     template <class TThis, class TContext> \
-    friend std::unique_ptr<::NYT::NPhoenix2::NDetail::TRuntimeTypeLoadSchedule<TThis, TContext>> NYT::NPhoenix2::NDetail::BuildRuntimeTypeLoadSchedule( \
-        const ::NYT::NPhoenix2::NDetail::TTypeLoadSchedule* schedule); \
+    friend std::unique_ptr<::NYT::NPhoenix::NDetail::TRuntimeTypeLoadSchedule<TThis, TContext>> NYT::NPhoenix::NDetail::BuildRuntimeTypeLoadSchedule( \
+        const ::NYT::NPhoenix::NDetail::TTypeLoadSchedule* schedule); \
     template <class TThis> \
-    friend struct ::NYT::NPhoenix2::NDetail::TTraits
+    friend struct ::NYT::NPhoenix::NDetail::TTraits
 
 #define PHOENIX_DECLARE_TYPE__IMPL(type, typeTagValue, saveLoadModifier) \
     PHOENIX_DECLARE_TYPE__PROLOGUE(type, typeTagValue); \
 public: \
-    static const ::NYT::NPhoenix2::TTypeDescriptor& GetTypeDescriptor(); \
-    void SaveImpl(TSaveContext& context) const saveLoadModifier; \
-    void LoadImpl(TLoadContext& context) saveLoadModifier; \
+    static const ::NYT::NPhoenix::TTypeDescriptor& GetTypeDescriptor(); \
     void Save(TSaveContext& context) const saveLoadModifier; \
     void Load(TLoadContext& context) saveLoadModifier; \
-    void Persist(const TPersistenceContext& context) saveLoadModifier; \
-    using TPhoenix2SupportTag = type; \
     \
 private: \
-    static const ::NYT::NPhoenix2::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& GetRuntimeFieldDescriptorMap()
+    static const ::NYT::NPhoenix::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& GetRuntimeFieldDescriptorMap()
 
 #define PHOENIX_DECLARE_FRIEND() \
     template <class T> \
@@ -81,46 +77,26 @@ private: \
     PHOENIX_DECLARE_TYPE__PROLOGUE(type, typeTag); \
     \
 public: \
-    static const ::NYT::NPhoenix2::TTypeDescriptor& GetTypeDescriptor() \
+    static const ::NYT::NPhoenix::TTypeDescriptor& GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
+        static const auto& descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
         return descriptor; \
     } \
     \
-    static const ::NYT::NPhoenix2::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& GetRuntimeFieldDescriptorMap() \
+    static const ::NYT::NPhoenix::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& GetRuntimeFieldDescriptorMap() \
     { \
-        static const auto map = ::NYT::NPhoenix2::NDetail::BuildRuntimeFieldDescriptorMap<TThis, TLoadContext>(); \
+        static const auto map = ::NYT::NPhoenix::NDetail::BuildRuntimeFieldDescriptorMap<TThis, TLoadContext>(); \
         return map; \
-    } \
-    \
-    void SaveImpl(TSaveContext& context) const saveLoadModifier \
-    { \
-        ::NYT::NPhoenix2::NDetail::SaveImpl(this, context); \
-    } \
-    \
-    void LoadImpl(TLoadContext& context) saveLoadModifier \
-    { \
-        ::NYT::NPhoenix2::NDetail::LoadImpl(this, context); \
     } \
     \
     void Save(TSaveContext& context) const saveLoadModifier \
     { \
-        const_cast<type*>(this)->Persist(context); \
+        ::NYT::NPhoenix::NDetail::SaveImpl(this, context); \
     } \
     \
     void Load(TLoadContext& context) saveLoadModifier \
     { \
-        Persist(context); \
-    } \
-    \
-    void Persist(const TPersistenceContext& context) saveLoadModifier \
-    { \
-        if (context.IsSave()) { \
-            type::SaveImpl(context.SaveContext()); \
-        } else { \
-            YT_VERIFY(context.IsLoad()); \
-            type::LoadImpl(context.LoadContext()); \
-        } \
+        ::NYT::NPhoenix::NDetail::LoadImpl(this, context); \
     }
 
 #define PHOENIX_DECLARE_TEMPLATE_TYPE(type, typeTag) \
@@ -131,9 +107,31 @@ public: \
 
 #define PHOENIX_DECLARE_OPAQUE_TYPE(type, typeTagValue) \
 public: \
-    [[maybe_unused]] static constexpr auto TypeTag = ::NYT::NPhoenix2::TTypeTag(typeTagValue); \
-    static const ::NYT::NPhoenix2::TTypeDescriptor& GetTypeDescriptor()
+    [[maybe_unused]] static constexpr auto TypeTag = ::NYT::NPhoenix::TTypeTag(typeTagValue); \
+    static const ::NYT::NPhoenix::TTypeDescriptor& GetTypeDescriptor()
+
+#define PHOENIX_INHERIT_POLYMORPHIC_TYPE(baseType, type, tag) \
+class type                                                    \
+    : public baseType                                         \
+{                                                             \
+public:                                                       \
+    using baseType::baseType;                                 \
+                                                              \
+private:                                                      \
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(type, tag);              \
+}
+
+#define PHOENIX_INHERIT_POLYMORPHIC_TEMPLATE_TYPE(baseType, type, tag, ...) \
+class type                                                                  \
+    : public baseType<__VA_ARGS__>                                          \
+{                                                                           \
+public:                                                                     \
+    using baseType::baseType;                                               \
+                                                                            \
+private:                                                                    \
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(type, tag);                            \
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2::NDetail
+} // namespace NYT::NPhoenix::NDetail

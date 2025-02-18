@@ -8,7 +8,6 @@
 
 #include <yt/yt/core/ytree/unittests/proto/test.pb.h>
 
-
 namespace NYT::NYTree {
 namespace {
 

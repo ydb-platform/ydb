@@ -506,6 +506,10 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     return columnType;
 }
 
+void FillColumnDescription(Ydb::Table::ColumnMeta& out, const NKikimrSchemeOp::TColumnDescription& in) {
+    AddColumn(&out, in);
+}
+
 template <typename TYdbProto>
 void FillColumnDescriptionImpl(TYdbProto& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
@@ -1136,64 +1140,67 @@ void FillAttributesImpl(TOutProto& out, const TInProto& in) {
         outAttrs[inAttr.GetKey()] = inAttr.GetValue();
     }
 }
+void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
+    const NKikimrSchemeOp::TCdcStreamDescription& in) {
 
+    out.set_name(in.GetName());
+    out.set_virtual_timestamps(in.GetVirtualTimestamps());
+    out.set_aws_region(in.GetAwsRegion());
+
+    if (const auto value = in.GetResolvedTimestampsIntervalMs()) {
+        out.mutable_resolved_timestamps_interval()->set_seconds(TDuration::MilliSeconds(value).Seconds());
+    }
+
+    switch (in.GetMode()) {
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly:
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeUpdate:
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewImage:
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeOldImage:
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewAndOldImages:
+        out.set_mode(static_cast<Ydb::Table::ChangefeedMode::Mode>(in.GetMode()));
+        break;
+    default:
+        break;
+    }
+
+    switch (in.GetFormat()) {
+    case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson:
+        out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        break;
+    case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson:
+        out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
+        break;
+    case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDebeziumJson:
+        out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
+        break;
+    default:
+        break;
+    }
+
+    switch (in.GetState()) {
+    case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateReady:
+    case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled:
+    case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan:
+        out.set_state(static_cast<Ydb::Table::ChangefeedDescription::State>(in.GetState()));
+        break;
+    default:
+        break;
+    }
+
+    if (in.HasScanProgress()) {
+        auto& scanProgress = *out.mutable_initial_scan_progress();
+        scanProgress.set_parts_total(in.GetScanProgress().GetShardsTotal());
+        scanProgress.set_parts_completed(in.GetScanProgress().GetShardsCompleted());
+    }
+
+    FillAttributesImpl(out, in);
+
+}
 void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in) {
 
     for (const auto& stream : in.GetCdcStreams()) {
-        auto changefeed = out.add_changefeeds();
-
-        changefeed->set_name(stream.GetName());
-        changefeed->set_virtual_timestamps(stream.GetVirtualTimestamps());
-        changefeed->set_aws_region(stream.GetAwsRegion());
-
-        if (const auto value = stream.GetResolvedTimestampsIntervalMs()) {
-            changefeed->mutable_resolved_timestamps_interval()->set_seconds(TDuration::MilliSeconds(value).Seconds());
-        }
-
-        switch (stream.GetMode()) {
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly:
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeUpdate:
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewImage:
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeOldImage:
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewAndOldImages:
-            changefeed->set_mode(static_cast<Ydb::Table::ChangefeedMode::Mode>(stream.GetMode()));
-            break;
-        default:
-            break;
-        }
-
-        switch (stream.GetFormat()) {
-        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson:
-            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
-            break;
-        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson:
-            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
-            break;
-        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDebeziumJson:
-            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
-            break;
-        default:
-            break;
-        }
-
-        switch (stream.GetState()) {
-        case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateReady:
-        case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled:
-        case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan:
-            changefeed->set_state(static_cast<Ydb::Table::ChangefeedDescription::State>(stream.GetState()));
-            break;
-        default:
-            break;
-        }
-
-        if (stream.HasScanProgress()) {
-            auto& scanProgress = *changefeed->mutable_initial_scan_progress();
-            scanProgress.set_parts_total(stream.GetScanProgress().GetShardsTotal());
-            scanProgress.set_parts_completed(stream.GetScanProgress().GetShardsCompleted());
-        }
-
-        FillAttributesImpl(*changefeed, stream);
+        FillChangefeedDescription(*out.add_changefeeds(), stream);
     }
 }
 

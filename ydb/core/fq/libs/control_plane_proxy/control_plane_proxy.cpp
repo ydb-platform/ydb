@@ -529,7 +529,7 @@ public:
         if (mon) {
             ::NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "yq_control_plane_proxy", "YQ Control Plane Proxy", false,
-                TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                TlsActivationContext->ActorSystem(), SelfId());
         }
 
         const auto& accessServiceProto = Config.Proto.GetAccessService();
@@ -706,6 +706,7 @@ private:
                                               Config,
                                               ControlPlaneStorageServiceActorId(),
                                               requestCounters,
+                                              Counters.GetCommonCounters(RTC_RATE_LIMITER),
                                               probe,
                                               availablePermissions));
     }
@@ -1871,6 +1872,7 @@ private:
                                                    Config.RequestTimeout,
                                                    Counters,
                                                    Config.CommonConfig,
+                                                   Config.ComputeConfig,
                                                    Signer));
                 return;
             }

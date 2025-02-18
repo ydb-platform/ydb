@@ -5,8 +5,8 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
@@ -200,7 +200,7 @@ struct TScriptExecutionsYdbSetup {
         return reply;
     }
 
-    void CheckLeaseExistance(const TString& executionId, bool expectedExistance, TMaybe<i32> expectedStatus) {
+    void CheckLeaseExistance(const TString& executionId, bool expectedExistance, std::optional<i32> expectedStatus) {
         TStringBuilder sql;
             sql <<
                 R"(
@@ -237,7 +237,7 @@ struct TScriptExecutionsYdbSetup {
             NYdb::TResultSetParser rs2 = result.GetResultSetParser(1);
             UNIT_ASSERT(rs2.TryNextRow());
 
-            UNIT_ASSERT_VALUES_EQUAL(rs2.ColumnParser("operation_status").GetOptionalInt32(), expectedStatus);
+            UNIT_ASSERT(rs2.ColumnParser("operation_status").GetOptionalInt32() == expectedStatus);
     }
 
     THolder<TEvScriptLeaseUpdateResponse> UpdateLease(const TString& executionId, TDuration leaseDuration) {
@@ -269,12 +269,12 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         const TString executionId = ydb.CreateQueryInDb();
         UNIT_ASSERT(executionId);
         const TInstant startLeaseTime = TInstant::Now();
-        ydb.CheckLeaseExistance(executionId, true, Nothing());
+        ydb.CheckLeaseExistance(executionId, true, std::nullopt);
         auto checkResult1 = ydb.CheckLeaseStatus(executionId);
         const TDuration checkTime = TInstant::Now() - startLeaseTime;
         if (checkTime < TestLeaseDuration) {
             UNIT_ASSERT_VALUES_EQUAL(checkResult1->Get()->OperationStatus, Nothing());
-            ydb.CheckLeaseExistance(executionId, true, Nothing());
+            ydb.CheckLeaseExistance(executionId, true, std::nullopt);
             SleepUntil(startLeaseTime + TestLeaseDuration);
         }
 
@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
 
         TInstant startLeaseTime = TInstant::Now();
 
-        ydb.CheckLeaseExistance(executionId, true, Nothing());
+        ydb.CheckLeaseExistance(executionId, true, std::nullopt);
         SleepUntil(startLeaseTime + TestLeaseDuration);
 
         startLeaseTime = TInstant::Now();
@@ -300,7 +300,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         UNIT_ASSERT_C(updateResponse->Status == Ydb::StatusIds::SUCCESS, updateResponse->Issues.ToString());
         UNIT_ASSERT(updateResponse->ExecutionEntryExists);
 
-        ydb.CheckLeaseExistance(executionId, true, Nothing());
+        ydb.CheckLeaseExistance(executionId, true, std::nullopt);
         auto checkResult = ydb.CheckLeaseStatus(executionId);
 
         if (TInstant::Now() - startLeaseTime < leaseDuration) {
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
 
         const TString executionId = ydb.CreateQueryInDb();
         UNIT_ASSERT(executionId);
-        ydb.CheckLeaseExistance(executionId, true, Nothing());
+        ydb.CheckLeaseExistance(executionId, true, std::nullopt);
 
         Sleep(TestLeaseDuration);
 

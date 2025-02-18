@@ -1,6 +1,9 @@
 #include "yql_mounts.h"
 
 #include <yql/essentials/core/yql_library_compiler.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/utils/log/profile.h>
 
 #include <library/cpp/resource/resource.h>
 
@@ -117,13 +120,20 @@ namespace NYql {
         bool optimizeLibraries,
         THolder<TExprContext> ownedCtx)
     {
+        YQL_PROFILE_FUNC(DEBUG);
         auto ctx = rawCtx ? rawCtx : ownedCtx.Get();
         Y_ENSURE(ctx);
         TUserDataTable mounts;
         LoadYqlDefaultMounts(mounts);
 
+        NSQLTranslation::TTranslators translators(
+            nullptr,
+            NSQLTranslationV1::MakeTranslator(),
+            nullptr
+        );
+
         TModulesTable modulesTable;
-        if (!CompileLibraries(mounts, *ctx, modulesTable, optimizeLibraries)) {
+        if (!CompileLibraries(translators, mounts, *ctx, modulesTable, optimizeLibraries)) {
             return {};
         }
 
@@ -131,7 +141,7 @@ namespace NYql {
             AddUserDataToTable(mounts, item);
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(std::move(modulesTable), ctx->NextUniqueId,
+        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modulesTable), ctx->NextUniqueId,
             clusterMapping, sqlFlags, optimizeLibraries, std::move(ownedCtx));
         return mounts;
     }

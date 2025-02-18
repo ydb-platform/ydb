@@ -101,7 +101,7 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("node_rpc_timeout", &TThis::NodeRpcTimeout)
         .Default(TDuration::Seconds(15));
     registrar.Parameter("node_ping_period", &TThis::NodePingPeriod)
-        .Default(TDuration::Seconds(15));
+        .Default(TDuration::Seconds(10));
     registrar.Parameter("node_ban_timeout", &TThis::NodeBanTimeout)
         .Default(TDuration::Seconds(60));
 

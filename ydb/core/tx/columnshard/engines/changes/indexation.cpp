@@ -108,7 +108,7 @@ public:
         if (!Schemas.contains(data.GetSchemaVersion())) {
             Schemas.emplace(data.GetSchemaVersion(), blobSchema);
         }
-        auto columnIds = blobSchema->GetIndexInfo().GetColumnIds(false);
+        TColumnIdsView columnIds = blobSchema->GetIndexInfo().GetColumnIds(false);
         std::vector<ui32> filteredIds = data.GetMeta().GetSchemaSubset().Apply(columnIds.begin(), columnIds.end());
         if (data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete) {
             filteredIds.emplace_back((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
@@ -247,7 +247,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         {
             const auto blobData = Blobs.Extract(IStoragesManager::DefaultStorageId, blobRange);
 
-            auto blobSchemaView = blobSchema->GetIndexInfo().ArrowSchema();
+            NArrow::TSchemaLiteView blobSchemaView = blobSchema->GetIndexInfo().ArrowSchema();
             auto batchSchema =
                 std::make_shared<arrow::Schema>(inserted.GetMeta().GetSchemaSubset().Apply(blobSchemaView.begin(), blobSchemaView.end()));
             batch = std::make_shared<NArrow::TGeneralContainer>(NArrow::DeserializeBatch(blobData, batchSchema));

@@ -836,6 +836,9 @@ public:
 
         if (Settings->HasLockTxId() && BrokenLocks.empty()) {
             record.SetLockTxId(Settings->GetLockTxId());
+            if (Settings->HasLockMode()) {
+                ev->Record.SetLockMode(Settings->GetLockMode());
+            }
         }
 
         if (Settings->HasLockNodeId()) {

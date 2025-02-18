@@ -446,6 +446,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(MemTableMemoryConsumersCollection.Get(), Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
+    DataCleanupLogic = MakeHolder<TDataCleanupLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get(), GcLogic.Get());
     LogicRedo->InstallCounters(Counters.Get(), nullptr);
 
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
@@ -729,6 +730,7 @@ TExecutorCaches TExecutor::CleanupState() {
     Y_ABORT_UNLESS(!LogicAlter);
     Y_ABORT_UNLESS(!CompactionLogic);
     BorrowLogic.Destroy();
+    DataCleanupLogic.Destroy();
 
     return caches;
 }
@@ -911,6 +913,9 @@ void TExecutor::CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier) {
             if (Owner) {
                 Owner->CompletedLoansChanged(OwnerCtx());
             }
+        }
+        if (DataCleanupLogic->NeedGC()) {
+            GcLogic->SendCollectGarbage(ActorContext());
         }
     }
 
@@ -1327,6 +1332,14 @@ void TExecutor::Handle(TEvBlobStorage::TEvGetResult::TPtr& ev, const TActorConte
     }
 }
 
+void TExecutor::Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev) {
+    if (ev->Get()->Generation != Generation()) {
+        return;
+    }
+
+    DataCleanupLogic->OnGcForStepAckResponse(Generation(), ev->Get()->Step, OwnerCtx());
+}
+
 void TExecutor::AdvancePendingPartSwitches() {
     while (PendingPartSwitches && ApplyReadyPartSwitches()) {
         if (Stats->IsFollower()) {
@@ -1338,6 +1351,11 @@ void TExecutor::AdvancePendingPartSwitches() {
     if (PendingPartSwitches.empty()) {
         PlanTransactionActivation();
         MaybeRelaxRejectProbability();
+
+        // followers haven't DataCleanupLogic
+        if (DataCleanupLogic && DataCleanupLogic->NeedLogSnaphot()) {
+            MakeLogSnapshot();
+        }
     }
 }
 
@@ -2643,6 +2661,7 @@ void TExecutor::MakeLogSnapshot() {
     BorrowLogic->SnapToLog(snap, *commit);
     GcLogic->SnapToLog(snap, commit->Step);
     LogicSnap->MakeSnap(snap, *commit, Logger.Get());
+    DataCleanupLogic->OnMakeLogSnapshot(Generation(), commit->Step);
 
     AttachLeaseCommit(commit.Get(), /* force */ true);
     CommitManager->Commit(commit);
@@ -2936,7 +2955,8 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     case ECommit::Snap:
         LogicSnap->Confirm(msg->Step);
 
-        if (NeedFollowerSnapshot)
+        DataCleanupLogic->OnSnapshotCommited(Generation(), step);
+        if (NeedFollowerSnapshot || DataCleanupLogic->NeedLogSnaphot())
             MakeLogSnapshot();
 
         break;
@@ -2973,6 +2993,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
     GcLogic->OnCollectGarbageResult(ev);
+    DataCleanupLogic->OnCollectedGarbage(OwnerCtx());
 }
 
 void TExecutor::Handle(TEvResourceBroker::TEvResourceAllocated::TPtr &ev) {
@@ -3488,6 +3509,8 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     Y_ABORT_UNLESS(InFlyCompactionGcBarriers.emplace(commit->Step, ops->Barrier).second);
 
+    DataCleanupLogic->OnCompleteCompaction(tableId, CompactionLogic->GetFinishedCompactionInfo(tableId));
+
     AttachLeaseCommit(commit.Get());
     CommitManager->Commit(commit);
 
@@ -3519,7 +3542,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     activeTransaction.Done();
 
-    if (LogicSnap->MayFlush(false)) {
+    if (LogicSnap->MayFlush(false) || DataCleanupLogic->NeedLogSnaphot()) {
         MakeLogSnapshot();
     }
 }
@@ -3563,6 +3586,16 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                 Counters->Simple()[TExecutorCounters::DB_OTHER_BYTES].Set(dbCounters.Parts.OtherBytes);
                 Counters->Simple()[TExecutorCounters::DB_BYKEY_BYTES].Set(dbCounters.Parts.ByKeyBytes);
                 Counters->Simple()[TExecutorCounters::USED_TABLET_MEMORY].Set(UsedTabletMemory);
+            }
+
+            // Runtime stats related to uncommitted changes
+            auto runtimeCounters = Database->RuntimeCounters();
+            {
+                Counters->Simple()[TExecutorCounters::DB_OPEN_TX_COUNT].Set(runtimeCounters.OpenTxCount);
+                Counters->Simple()[TExecutorCounters::DB_TXS_WITH_DATA_COUNT].Set(runtimeCounters.TxsWithDataCount);
+                Counters->Simple()[TExecutorCounters::DB_COMMITTED_TX_COUNT].Set(runtimeCounters.CommittedTxCount);
+                Counters->Simple()[TExecutorCounters::DB_REMOVED_TX_COUNT].Set(runtimeCounters.RemovedTxCount);
+                Counters->Simple()[TExecutorCounters::DB_REMOVED_COMMITTED_TXS].Set(runtimeCounters.RemovedCommittedTxs);
             }
 
             if (CommitManager) /* exists only on leader, mostly storage usage data */ {
@@ -3871,6 +3904,19 @@ bool TExecutor::CompactTables() {
     }
 }
 
+void TExecutor::CleanupData(ui64 dataCleanupGeneration) {
+    if (DataCleanupLogic->TryStartCleanup(dataCleanupGeneration, OwnerCtx())) {
+        for (const auto& [tableId, _] : Scheme().Tables) {
+            auto compactionId = CompactionLogic->PrepareForceCompaction(tableId);
+            DataCleanupLogic->OnCompactionPrepared(tableId, compactionId);
+        }
+        DataCleanupLogic->WaitCompaction();
+        if (DataCleanupLogic->NeedLogSnaphot()) {
+            MakeLogSnapshot();
+        }
+    }
+}
+
 void TExecutor::Handle(NMemory::TEvMemTableRegistered::TPtr &ev) {
     const auto *msg = ev->Get();
 
@@ -3935,6 +3981,7 @@ STFUNC(TExecutor::StateWork) {
         HFunc(NBlockIO::TEvStat, Handle);
         hFunc(NMemory::TEvMemTableRegistered, Handle);
         hFunc(NMemory::TEvMemTableCompact, Handle);
+        hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
     default:
         break;
     }
@@ -4213,6 +4260,10 @@ void TExecutor::SendUserAuxUpdateToFollowers(TString upd, const TActorContext &c
 
 NMetrics::TResourceMetrics* TExecutor::GetResourceMetrics() const {
     return ResourceMetrics.Get();
+}
+
+TExecutorCounters* TExecutor::GetCounters() {
+    return Counters.Get();
 }
 
 void TExecutor::ReadResourceProfile() {

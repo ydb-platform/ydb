@@ -2,12 +2,12 @@
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <ydb/services/ydb/ydb_keys_ut.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -97,7 +97,9 @@ public:
         KikimrServer = std::make_unique<TKikimr>(std::move(appConfig));
         ui16 grpc = KikimrServer->GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig().SetEndpoint(location).SetLog(CreateLogBackend("cerr", TLOG_DEBUG));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TLOG_DEBUG).Release()));
         if (secure) {
             driverConfig.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
         } else {
@@ -122,13 +124,13 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
                                     alterClient.AlterUserAttributes("/", "Root", {{"folder_id", DEFAULT_FOLDER_ID},
                                                                             {"cloud_id", DEFAULT_CLOUD_ID},
-                                                                            {"database_id", "root"}}));        
+                                                                            {"database_id", "root"}}));
         }
 
         DataStreamsClient = std::make_unique<NYDS_V1::TDataStreamsClient>(*Driver,
              TCommonClientSettings()
                  .AuthToken("user@builtin"));
-                                                               
+
     }
 
 public:
@@ -1447,7 +1449,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 for (const auto& item : dataReceivedEvent->GetMessages()) {
                     Cerr << item.DebugString(true) << Endl;
                     UNIT_ASSERT_VALUES_EQUAL(item.GetData(), item.GetPartitionKey());
-                    auto hashKey = item.GetExplicitHash().empty() ? HexBytesToDecimal(MD5::Calc(item.GetPartitionKey())) : BytesToDecimal(item.GetExplicitHash());
+                    auto hashKey = item.GetExplicitHash().empty() ? HexBytesToDecimal(MD5::Calc(item.GetPartitionKey())) : BytesToDecimal(TString{item.GetExplicitHash()});
                     UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataStreams::V1::ShardFromDecimal(hashKey, 5), item.GetPartitionStream()->GetPartitionId());
                     UNIT_ASSERT(item.GetIp().empty());
                     if (item.GetData() == dataStr) {
@@ -1477,8 +1479,18 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        GrantConnect(*driver, "user2@builtin");
+
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
+
+        while (true) {
+            auto result = client.PutRecords(streamName, {{"key", "key", ""}}).ExtractValueSync();
+            if (result.IsSuccess()) {
+                break;
+            }
+        }
 
         // Test for too long partition key
         TString longKey = TString(257, '1');
@@ -1559,8 +1571,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
             Cerr << result.GetResult().DebugString() << Endl;
 
+            // Send multiple records to deplete quota.
+
             Cerr << "Second put records (async)\n";
             auto secondWriteAsync = client.PutRecords(streamPath, records);
+            for (size_t i = 0; i < 10; ++i) {
+                client.PutRecords(streamPath, records);
+            }
 
             Cerr << Now().Seconds() << "Third put records\n";
             result = client.PutRecords(streamPath, records).ExtractValueSync();
@@ -1573,13 +1590,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
             result = secondWriteAsync.ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            if (result.GetStatus() != EStatus::SUCCESS) {
-                result.GetIssues().PrintTo(Cerr);
-            }
-            Cerr << result.GetResult().DebugString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
-            Cerr << result.GetResult().DebugString() << Endl;
-
         }
 
         NYdb::NPersQueue::TPersQueueClient pqClient(*driver);
@@ -1613,7 +1623,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 break;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(readCount, 16);
+        UNIT_ASSERT_GE(readCount, 16);
     }
 
     Y_UNIT_TEST(TestPutRecords) {
@@ -2054,6 +2064,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
 
         const ui32 recordsCount = 30;
         std::vector<NYDS_V1::TDataRecord> records;

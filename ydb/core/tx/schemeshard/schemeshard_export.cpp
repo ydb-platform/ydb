@@ -153,7 +153,8 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::T
         NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo->Settings),
         NIceDb::TUpdate<Schema::Exports::DomainPathOwnerId>(exportInfo->DomainPathId.OwnerId),
         NIceDb::TUpdate<Schema::Exports::DomainPathId>(exportInfo->DomainPathId.LocalPathId),
-        NIceDb::TUpdate<Schema::Exports::Items>(exportInfo->Items.size())
+        NIceDb::TUpdate<Schema::Exports::Items>(exportInfo->Items.size()),
+        NIceDb::TUpdate<Schema::Exports::EnableChecksums>(exportInfo->EnableChecksums)
     );
 
     if (exportInfo->UserSID) {
@@ -169,7 +170,8 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::T
             NIceDb::TUpdate<Schema::ExportItems::SourcePathName>(item.SourcePathName),
             NIceDb::TUpdate<Schema::ExportItems::SourceOwnerPathId>(item.SourcePathId.OwnerId),
             NIceDb::TUpdate<Schema::ExportItems::SourcePathId>(item.SourcePathId.LocalPathId),
-            NIceDb::TUpdate<Schema::ExportItems::State>(static_cast<ui8>(item.State))
+            NIceDb::TUpdate<Schema::ExportItems::State>(static_cast<ui8>(item.State)),
+            NIceDb::TUpdate<Schema::ExportItems::SourcePathType>(item.SourcePathType)
         );
     }
 }
@@ -228,6 +230,10 @@ void TSchemeShard::Handle(TEvExport::TEvForgetExportRequest::TPtr& ev, const TAc
 
 void TSchemeShard::Handle(TEvExport::TEvListExportsRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxListExports(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressExport(ev), ctx);
 }
 
 void TSchemeShard::ResumeExports(const TVector<ui64>& exportIds, const TActorContext& ctx) {

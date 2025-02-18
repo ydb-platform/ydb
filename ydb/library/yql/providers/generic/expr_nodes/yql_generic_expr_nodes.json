@@ -25,13 +25,22 @@
             ]
         },
         {
+            "Name": "TGenTable",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "GenTable"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Splits", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TGenReadTable",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "GenReadTable!"},
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSource", "Type": "TGenDataSource"},
-                {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Table", "Type": "TGenTable"},
                 {"Index": 3, "Name": "Columns", "Type": "TExprBase"},
                 {"Index": 4, "Name": "FilterPredicate", "Type": "TCoLambda"}
             ]

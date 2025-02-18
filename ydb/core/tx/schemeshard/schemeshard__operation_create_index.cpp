@@ -245,8 +245,8 @@ public:
 
         context.OnComplete.ActivateTx(OperationId);
 
-        dstPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;

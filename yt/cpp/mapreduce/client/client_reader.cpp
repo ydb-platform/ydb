@@ -6,22 +6,17 @@
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
-#include <yt/cpp/mapreduce/http/helpers.h>
-#include <yt/cpp/mapreduce/http/requests.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
-
 #include <yt/cpp/mapreduce/interface/config.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/cpp/mapreduce/io/helpers.h>
 #include <yt/cpp/mapreduce/io/yamr_table_reader.h>
-
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
 #include <library/cpp/yson/node/serialize.h>
 
@@ -58,7 +53,7 @@ TClientReader::TClientReader(
 {
     if (options.CreateTransaction_) {
         Y_ABORT_UNLESS(transactionPinger, "Internal error: transactionPinger is null");
-        ReadTransaction_ = MakeHolder<TPingableTransaction>(
+        ReadTransaction_ = std::make_unique<TPingableTransaction>(
             RawClient_,
             ClientRetryPolicy_,
             Context_,
@@ -166,99 +161,28 @@ void TClientReader::CreateRequest(const TMaybe<ui32>& rangeIndex, const TMaybe<u
         CurrentRequestRetryPolicy_ = ClientRetryPolicy_->CreatePolicyForGenericRequest();
     }
 
-    bool areRangesUpdated = false;
+    auto transactionId = (ReadTransaction_ ? ReadTransaction_->GetId() : ParentTransactionId_);
 
-    while (true) {
-        CurrentRequestRetryPolicy_->NotifyNewAttempt();
-
-        THttpHeader header("GET", GetReadTableCommand(Context_.Config->ApiVersion));
-        if (Context_.ServiceTicketAuth) {
-            header.SetServiceTicket(Context_.ServiceTicketAuth->Ptr->IssueServiceTicket());
+    if (rowIndex.Defined()) {
+        auto& ranges = Path_.MutableRanges();
+        if (ranges.Empty()) {
+            ranges.ConstructInPlace(TVector{TReadRange()});
         } else {
-            header.SetToken(Context_.Token);
-        }
-
-        if (Context_.ImpersonationUser) {
-            header.SetImpersonationUser(*Context_.ImpersonationUser);
-        }
-
-        auto transactionId = (ReadTransaction_ ? ReadTransaction_->GetId() : ParentTransactionId_);
-        header.AddTransactionId(transactionId);
-
-        const auto& controlAttributes = Options_.ControlAttributes_;
-        header.AddParameter("control_attributes", TNode()
-            ("enable_row_index", controlAttributes.EnableRowIndex_)
-            ("enable_range_index", controlAttributes.EnableRangeIndex_));
-        header.SetOutputFormat(Format_);
-
-        header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
-
-        if (rowIndex.Defined() && !areRangesUpdated) {
-            auto& ranges = Path_.MutableRanges();
-            if (ranges.Empty()) {
-                ranges.ConstructInPlace(TVector{TReadRange()});
-            } else {
-                if (rangeIndex.GetOrElse(0) >= ranges->size()) {
-                    ythrow yexception()
-                        << "range index " << rangeIndex.GetOrElse(0)
-                        << " is out of range, input range count is " << ranges->size();
-                }
-                ranges->erase(ranges->begin(), ranges->begin() + rangeIndex.GetOrElse(0));
+            if (rangeIndex.GetOrElse(0) >= ranges->size()) {
+                ythrow yexception()
+                    << "range index " << rangeIndex.GetOrElse(0)
+                    << " is out of range, input range count is " << ranges->size();
             }
-            ranges->begin()->LowerLimit(TReadLimit().RowIndex(*rowIndex));
-            areRangesUpdated = true;
+            ranges->erase(ranges->begin(), ranges->begin() + rangeIndex.GetOrElse(0));
         }
-
-        header.MergeParameters(FormIORequestParameters(Path_, Options_));
-
-        auto requestId = CreateGuidAsString();
-
-        try {
-            const auto proxyName = GetProxyForHeavyRequest(Context_);
-            UpdateHeaderForProxyIfNeed(proxyName, Context_, header);
-            Response_ = Context_.HttpClient->Request(GetFullUrlForProxy(proxyName, Context_, header), requestId, header);
-
-            Input_ = Response_->GetResponseStream();
-
-            YT_LOG_DEBUG(
-                "RSP %v - table stream (RangeIndex: %v, RowIndex: %v)",
-                requestId,
-                rangeIndex,
-                rowIndex);
-
-            return;
-        } catch (const TErrorResponse& e) {
-            LogRequestError(
-                requestId,
-                header,
-                e.what(),
-                CurrentRequestRetryPolicy_->GetAttemptDescription());
-
-            if (!IsRetriable(e)) {
-                throw;
-            }
-            auto backoff = CurrentRequestRetryPolicy_->OnRetriableError(e);
-            if (!backoff) {
-                throw;
-            }
-            NDetail::TWaitProxy::Get()->Sleep(*backoff);
-        } catch (const std::exception& e) {
-            LogRequestError(
-                requestId,
-                header,
-                e.what(),
-                CurrentRequestRetryPolicy_->GetAttemptDescription());
-
-            Response_.reset();
-            Input_ = nullptr;
-
-            auto backoff = CurrentRequestRetryPolicy_->OnGenericError(e);
-            if (!backoff) {
-                throw;
-            }
-            NDetail::TWaitProxy::Get()->Sleep(*backoff);
-        }
+        ranges->begin()->LowerLimit(TReadLimit().RowIndex(*rowIndex));
     }
+
+    Input_ = NDetail::RequestWithRetry<std::unique_ptr<IInputStream>>(
+        CurrentRequestRetryPolicy_,
+        [this, &transactionId] (TMutationId /*mutationId*/) {
+            return RawClient_->ReadTable(transactionId, Path_, Format_, Options_);
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,4 +1,4 @@
-G_BENCHMARK()
+G_BENCHMARK(core_tablet_flat_benchmark)
 
 TAG(ya:fat)
 SIZE(LARGE)

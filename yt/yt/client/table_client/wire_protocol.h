@@ -11,14 +11,13 @@
 
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/wire_protocol.pb.h>
 
-#include <yt/yt/core/misc/range.h>
-
 #include <yt/yt/core/compression/public.h>
 
 #include <yt/yt/core/logging/log.h>
 
 #include <library/cpp/yt/misc/enum.h>
 
+#include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/ref.h>
 
 namespace NYT::NTableClient {
@@ -313,6 +312,7 @@ IWireProtocolRowsetReaderPtr CreateWireProtocolRowsetReader(
     NCompression::ECodec codecId,
     NTableClient::TTableSchemaPtr schema,
     bool schemaful,
+    IMemoryChunkProviderPtr memoryChunkProvider,
     const NLogging::TLogger& logger,
     TWireProtocolOptions options = {});
 

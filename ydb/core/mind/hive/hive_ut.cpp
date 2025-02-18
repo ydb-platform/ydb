@@ -1364,6 +1364,104 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.SetObserverFunc(prevObserverFunc);
     }
 
+    Y_UNIT_TEST(TestCheckSubHiveDrain) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::SchemeShard, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0); // root hive good
+        MakeSureTabletIsUp(runtime, TTestTxConfig::SchemeShard, 0); // root ss good
+
+
+        TActorId sender = runtime.AllocateEdgeActor(0);
+        InitSchemeRoot(runtime, sender);
+
+        TSubDomainKey subdomainKey;
+        // Create subdomain
+        do {
+            auto x = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            auto* tran = x->Record.AddTransaction();
+            tran->SetWorkingDir("/dc-1");
+            tran->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSubDomain);
+            auto* subd = tran->MutableSubDomain();
+            subd->SetName("tenant1");
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, x.Release());
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
+            if (reply) {
+                subdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
+                break;
+            }
+        } while (true);
+
+        THolder<TEvHive::TEvCreateTablet> createHive = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, TTabletTypes::Hive, BINDED_CHANNELS);
+        createHive->Record.AddAllowedDomains();
+        createHive->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
+        createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
+        ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
+
+        TTestActorRuntime::TEventObserver prevObserverFunc;
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
+                event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord()->
+                MutablePathDescription()->MutableDomainDescription()->MutableProcessingParams()->SetHive(subHiveTablet);
+            }
+            return prevObserverFunc(event);
+        });
+
+        SendKillLocal(runtime, 0);
+        CreateLocalForTenant(runtime, 0, "/dc-1/tenant1");
+
+        MakeSureTabletIsUp(runtime, subHiveTablet, 0); // sub hive good
+
+        THolder<TEvHive::TEvCreateTablet> createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet1->Record.AddAllowedDomains();
+        createTablet1->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
+        createTablet1->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
+        ui64 tabletId1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId1, 0);
+
+        THolder<TEvHive::TEvCreateTablet> createTablet2 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 2, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet2->Record.AddAllowedDomains();
+        createTablet2->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
+        createTablet2->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
+        ui64 tabletId2 = SendCreateTestTablet(runtime, subHiveTablet, testerTablet, std::move(createTablet2), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId2, 0); // dummy from sub hive also good
+
+        CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus);
+            runtime.DispatchEvents(options);
+        }
+
+        ui32 nodeId = runtime.GetNodeId(0);
+        {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvDrainNode(nodeId));
+            {
+                TDispatchOptions options;
+                options.FinalEvents.emplace_back(TEvTablet::TEvCommit::EventType);
+                runtime.DispatchEvents(options);
+            }
+            Ctest << "Register killer\n";
+            runtime.Register(CreateTabletKiller(hiveTablet));
+            bool wasDedup = false;
+            auto observerHolder = runtime.AddObserver<TEvHive::TEvDrainNodeResult>([&](auto&& event) {
+                if (event->Get()->Record.GetStatus() == NKikimrProto::EReplyStatus::ALREADY) {
+                    wasDedup = true;
+                }
+            });
+            while (!wasDedup) {
+                runtime.DispatchEvents({});
+            }
+        }
+    }
+
     Y_UNIT_TEST(TestCheckSubHiveMigration) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, true);
@@ -2900,6 +2998,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
     }
 
+    // Incorrect test, muted
     Y_UNIT_TEST(TestReassignUseRelativeSpace) {
         // TODO: Remove this code after issue https://github.com/ydb-platform/ydb/issues/12255 will be resolved
         ui64 prevSeed = NActors::DefaultRandomSeed;
@@ -5855,12 +5954,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), expectedStatus);
     }
 
-    void VerifyLockTabletExecutionLost(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& owner) {
+    void VerifyLockTabletExecutionLost(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& owner, NKikimrHive::ELockLostReason reason) {
         TAutoPtr<IEventHandle> handle;
         auto result = runtime.GrabEdgeEventRethrow<TEvHive::TEvLockTabletExecutionLost>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(handle->GetRecipientRewrite(), owner);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTabletID(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(result->Record.GetReason()), static_cast<i32>(reason));
     }
 
     Y_UNIT_TEST(TestLockTabletExecution) {
@@ -5934,7 +6034,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         WaitForTabletIsUp(runtime, tabletId, 0);
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_NODE_DISCONNECTED);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionRebootTimeout) {
@@ -5963,7 +6063,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         WaitForTabletIsUp(runtime, tabletId, 0);
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_HIVE_RESTART);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionDelete) {
@@ -5999,7 +6099,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_TABLET_DELETED);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionDeleteReboot) {
@@ -6040,7 +6140,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_TABLET_DELETED);
     }
 
     void MakeSureTabletStaysDown(TTestActorRuntime& runtime, ui64 tabletId, const TDuration& timeout) {
@@ -6150,7 +6250,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
 
         // wait for the lost lock notification
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_NODE_DISCONNECTED);
 
         // lock reconnect should fail
         SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::ERROR, owner, 500, true);
@@ -6220,7 +6320,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         WaitForTabletIsUp(runtime, tabletId, 0);
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_UNLOCKED);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionStealLock) {
@@ -6246,7 +6346,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner2);
 
         // Hive should notify the old owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_NEW_LOCK);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionLocalGone) {
@@ -6889,6 +6989,96 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ui64 tabletId = createTabletReply->Record.GetTabletID();
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
+    }
+
+    Y_UNIT_TEST(TestStopTenant) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0); // root hive good
+        TActorId sender = runtime.AllocateEdgeActor(0);
+
+        THolder<TEvHive::TEvCreateTablet> createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet1->Record.AddAllowedDomains();
+        createTablet1->Record.MutableAllowedDomains(0)->SetSchemeShard(TTestTxConfig::SchemeShard);
+        createTablet1->Record.MutableAllowedDomains(0)->SetPathId(1);
+        createTablet1->Record.MutableObjectDomain()->SetSchemeShard(1);
+        createTablet1->Record.MutableObjectDomain()->SetPathId(3);
+        ui64 tablet1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true);
+
+        THolder<TEvHive::TEvCreateTablet> createTablet2 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 2, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet2->Record.AddAllowedDomains();
+        createTablet2->Record.MutableAllowedDomains(0)->SetSchemeShard(TTestTxConfig::SchemeShard);
+        createTablet2->Record.MutableAllowedDomains(0)->SetPathId(1);
+        createTablet2->Record.MutableObjectDomain()->SetSchemeShard(1);
+        createTablet2->Record.MutableObjectDomain()->SetPathId(4);
+        ui64 tablet2 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet2), 0, true);
+
+        MakeSureTabletIsUp(runtime, tablet1, 0);
+        MakeSureTabletIsUp(runtime, tablet2, 0);
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_GET);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("StopDomain");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("ss");
+            p3->SetValue("1");
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("path");
+            p4->SetValue("4");
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+        }
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStopTablet);
+            runtime.DispatchEvents(options);
+        }
+
+        MakeSureTabletIsUp(runtime, tablet1, 0);
+        MakeSureTabletIsDown(runtime, tablet2, 0);
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_GET);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("StopDomain");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("ss");
+            p3->SetValue("1");
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("path");
+            p4->SetValue("4");
+            auto* p5 = pb.AddQueryParams();
+            p5->SetKey("stop");
+            p5->SetValue("0");
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+        }
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvBootTablet);
+            runtime.DispatchEvents(options);
+        }
+
+        MakeSureTabletIsUp(runtime, tablet1, 0);
+        MakeSureTabletIsUp(runtime, tablet2, 0);
     }
 }
 

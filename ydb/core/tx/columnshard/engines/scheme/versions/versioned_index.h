@@ -1,5 +1,8 @@
 #pragma once
 #include "abstract_scheme.h"
+
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
+#include <ydb/core/tx/columnshard/engines/scheme/common/cache.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NOlap {
@@ -123,7 +126,7 @@ public:
         return PrimaryKey;
     }
 
-    const TIndexInfo* AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo);
+    const TIndexInfo* AddIndex(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo);
 
     bool LoadShardingInfo(IDbWrapper& db);
 };

@@ -484,6 +484,9 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme Backup = 48;
         NKikimrSchemeOp.TModifyScheme BackupIncremental = 49;
         NKikimrSchemeOp.TModifyScheme Restore = 50;
+        NKikimrSchemeOp.TModifyScheme CreateTransfer = 51;
+        NKikimrSchemeOp.TModifyScheme AlterTransfer = 52;
+        NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
     }
 }
 

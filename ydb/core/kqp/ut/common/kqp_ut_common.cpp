@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
@@ -552,11 +552,11 @@ TString ReformatYson(const TString& yson) {
     return output.Str();
 }
 
-void CompareYson(const TString& expected, const TString& actual) {
-    UNIT_ASSERT_NO_DIFF(ReformatYson(expected), ReformatYson(actual));
+void CompareYson(const TString& expected, const TString& actual, const TString& message) {
+    UNIT_ASSERT_VALUES_EQUAL_C(ReformatYson(expected), ReformatYson(actual), message);
 }
 
-void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual) {
+void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message) {
     TStringStream ysonStream;
     NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Text);
     NYql::IDataProvider::TFillSettings fillSettings;
@@ -564,7 +564,7 @@ void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual)
     KikimrResultToYson(ysonStream, writer, actual, {}, fillSettings, truncated);
     UNIT_ASSERT(!truncated);
 
-    CompareYson(expected, ysonStream.Str());
+    CompareYson(expected, ysonStream.Str(), message);
 }
 
 bool HasIssue(const NYql::TIssues& issues, ui32 code,
@@ -588,8 +588,29 @@ bool HasIssue(const NYql::TIssues& issues, ui32 code,
     return hasIssue;
 }
 
+bool HasIssue(const NYdb::NIssue::TIssues& issues, ui32 code,
+    std::function<bool(const NYdb::NIssue::TIssue& issue)> predicate)
+{
+    bool hasIssue = false;
+
+    for (auto& issue : issues) {
+        NYdb::NIssue::WalkThroughIssues(issue, false, [code, predicate, &hasIssue] (const NYdb::NIssue::TIssue& issue, int level) {
+            Y_UNUSED(level);
+            if (issue.GetCode() == code) {
+                bool issueMatch = predicate
+                    ? predicate(issue)
+                    : true;
+
+                hasIssue = hasIssue || issueMatch;
+            }
+        });
+    }
+
+    return hasIssue;
+}
+
 void PrintQueryStats(const TDataQueryResult& result) {
-    if (!result.GetStats().Defined()) {
+    if (!result.GetStats().has_value()) {
         return;
     }
 
@@ -789,6 +810,13 @@ bool IsTimeoutError(NYdb::EStatus status) {
 // IssueMessageSubString - uses only in case if !streamPart.IsSuccess()
 template<typename TIterator>
 TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles, bool throwOnTimeout = false, const NYdb::EStatus& opStatus = NYdb::EStatus::SUCCESS, const TString& issueMessageSubString = "") {
+    if (!it.IsSuccess()) {
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), opStatus, it.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(it.GetIssues().ToString(), issueMessageSubString,
+            TStringBuilder() << "Issue should contain '" << issueMessageSubString << "'. " << it.GetIssues().ToString());
+        return {};
+    }
+
     TStringStream out;
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
     writer.OnBeginList();
@@ -800,7 +828,8 @@ TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles, bool t
         if (!streamPart.IsSuccess()) {
             if (opStatus != NYdb::EStatus::SUCCESS) {
                 UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), opStatus, streamPart.GetIssues().ToString());
-                UNIT_ASSERT_C(streamPart.GetIssues().ToString().Contains(issueMessageSubString), TStringBuilder() << "Issue should contain '" << issueMessageSubString << "'. " << streamPart.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(streamPart.GetIssues().ToString(), issueMessageSubString,
+                    TStringBuilder() << "Issue should contain '" << issueMessageSubString << "'. " << streamPart.GetIssues().ToString());
                 break;
             }
             if (throwOnTimeout && IsTimeoutError(streamPart.GetStatus())) {
@@ -833,6 +862,11 @@ TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it, bool throwO
 }
 
 TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTimeout, const NYdb::EStatus& opStatus) {
+    if (!it.IsSuccess()) {
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), opStatus, it.GetIssues().ToString());
+        return {};
+    }
+
     TStringStream out;
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
     writer.OnBeginList();
@@ -842,7 +876,7 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTim
         if (!streamPart.IsSuccess()) {
             if (opStatus != NYdb::EStatus::SUCCESS) {
                 UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), opStatus, streamPart.GetIssues().ToString());
-                 break;
+                break;
             }
             if (throwOnTimeout && IsTimeoutError(streamPart.GetStatus())) {
                 throw TStreamReadError(streamPart.GetStatus());
@@ -861,6 +895,11 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTim
 }
 
 TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it, bool throwOnTimeout, const NYdb::EStatus& opStatus) {
+    if (!it.IsSuccess()) {
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), opStatus, it.GetIssues().ToString());
+        return {};
+    }
+
     TStringStream out;
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
     writer.OnBeginList();
@@ -1391,6 +1430,44 @@ void WaitForZeroSessions(const NKqp::TKqpCounters& counters) {
     }
 
     UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+}
+
+void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
+    int iterators = 0;
+    static const TString counterName = "DataShard/ReadIteratorsCount";
+
+    for (int i = 0; i < 10; i++, Sleep(TDuration::Seconds(1))) {
+        TTestActorRuntime* runtime = server.GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        auto shards = GetTableShards(&server, sender, path);
+        UNIT_ASSERT_C(shards.size() > 0, "Table: " << path << " has no shards");
+        iterators = 0;
+        for (auto x : shards) {
+            runtime->SendToPipe(
+                x,
+                sender,
+                new TEvTablet::TEvGetCounters,
+                0,
+                GetPipeConfigWithRetries());
+
+            auto ev = runtime->GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
+            UNIT_ASSERT(ev);
+
+            const NKikimrTabletBase::TEvGetCountersResponse& resp = ev->Get()->Record;
+            for (const auto& counter : resp.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+                if (counterName != counter.GetName()) {
+                    continue;
+                }
+
+                iterators += counter.GetValue();
+            }
+        }
+        if (iterators == 0) {
+            break;
+        }
+    }
+
+    UNIT_ASSERT_C(iterators == 0, "Unable to wait for proper read iterator count, it looks like cancelation doesn`t work (" << iterators << ")");
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {

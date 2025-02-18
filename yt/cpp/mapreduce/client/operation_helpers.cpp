@@ -1,17 +1,14 @@
 #include "operation_helpers.h"
 
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 
 #include <yt/cpp/mapreduce/http/context.h>
-#include <yt/cpp/mapreduce/http/requests.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
 #include <util/string/builder.h>
 

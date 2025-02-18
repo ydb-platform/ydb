@@ -110,6 +110,7 @@ public:
         const ui64 TxId;
         const TMaybe<ui64> LockTxId;
         const ui32 LockNodeId;
+        const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
         NYql::NDqProto::TDqTask* Task;
         TIntrusivePtr<NRm::TTxState> TxInfo;
         const NYql::NDq::TComputeRuntimeSettings& RuntimeSettings;
@@ -129,6 +130,8 @@ public:
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<IKqpNodeState> State = nullptr;
         TComputeActorSchedulingOptions SchedulingOptions = {};
+        TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+        TString Database;
     };
 
     typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;

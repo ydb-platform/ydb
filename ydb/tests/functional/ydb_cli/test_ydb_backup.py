@@ -4,9 +4,10 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 
-from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_items
-import os
+from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_items, equal_to
+import enum
 import logging
+import os
 import pytest
 
 import yatest
@@ -186,18 +187,25 @@ def is_permissions_the_same(scheme_client, path_left, path_right):
     return True
 
 
-def list_all_dirs(prefix, path=""):
+@enum.unique
+class ListMode(enum.IntEnum):
+    DIRS = 0,
+    FILES = 1,
+
+
+def fs_recursive_list(prefix, mode=ListMode.DIRS, path=""):
     paths = []
     full_path = os.path.join(prefix, path)
     logger.debug("prefix# " + prefix + " path# " + path)
     for item in os.listdir(full_path):
         item_path = os.path.join(full_path, item)
         if os.path.isdir(item_path):
-            paths.append(os.path.join(path, item))
-            paths += list_all_dirs(prefix, os.path.join(path, item))
-        else:
-            # don't list regular files
-            pass
+            if mode == ListMode.DIRS:
+                paths.append(os.path.join(path, item))
+            paths += fs_recursive_list(prefix, mode, os.path.join(path, item))
+        elif os.path.isfile(item_path):
+            if mode == ListMode.FILES:
+                paths.append(os.path.join(path, item))
     return paths
 
 
@@ -244,12 +252,12 @@ class BaseTestBackupInFiles(object):
         )
 
         logger.debug("std_out:\n" + execution.std_out.decode('utf-8'))
-        list_all_dirs(backup_files_dir)
-        logger.debug("list_all_dirs(backup_files_dir)# " + str(list_all_dirs(backup_files_dir)))
+        fs_recursive_list(backup_files_dir)
+        logger.debug("fs_recursive_list(backup_files_dir)# " + str(fs_recursive_list(backup_files_dir)))
         logger.debug("expected_dirs# " + str(expected_dirs))
 
         assert_that(
-            list_all_dirs(backup_files_dir),
+            fs_recursive_list(backup_files_dir),
             has_items(*expected_dirs)
         )
 
@@ -271,6 +279,23 @@ class BaseTestBackupInFiles(object):
             for child in self.driver.scheme_client.list_directory(path).children
             if not is_system_object(child)
         ]
+
+    def create_user(self, user, password="password"):
+        yatest.common.execute(
+            [
+                backup_bin(),
+                "--verbose",
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                "--database", "/Root",
+                "yql",
+                "--script", f"CREATE USER {user} PASSWORD '{password}'",
+            ]
+        )
+
+    def create_users(self):
+        self.create_user("alice")
+        self.create_user("bob")
+        self.create_user("eve")
 
 
 class TestBackupSingle(BaseTestBackupInFiles):
@@ -825,6 +850,7 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
         session = self.driver.table_client.session().create()
 
         # Create table and modify permissions on it
+        self.create_users()
         create_table_with_data(session, "folder/table")
         modify_permissions(self.driver.scheme_client, "folder/table")
 
@@ -879,6 +905,7 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
 class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
     def test_folder_with_table(self):
         # Create folder and modify permissions on it
+        self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
         modify_permissions(self.driver.scheme_client, "folder")
 
@@ -935,6 +962,7 @@ class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
 class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupInFiles):
     def test_dont_overwrite_on_already_existing(self):
         # Create folder and modify permissions on it
+        self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
         modify_permissions(self.driver.scheme_client, "folder")
 
@@ -1034,6 +1062,7 @@ class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupI
 class TestPermissionsBackupRestoreSchemeOnly(BaseTestBackupInFiles):
     def test_scheme_only(self):
         # Create folder and modify permissions on it
+        self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
         modify_permissions(self.driver.scheme_client, "folder")
 
@@ -1091,6 +1120,7 @@ class TestPermissionsBackupRestoreSchemeOnly(BaseTestBackupInFiles):
 class TestPermissionsBackupRestoreEmptyDir(BaseTestBackupInFiles):
     def test_empty_dir(self):
         # Create empty folder and modify permissions on it
+        self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
         modify_permissions(self.driver.scheme_client, "folder")
 
@@ -1141,6 +1171,7 @@ class TestRestoreACLOption(BaseTestBackupInFiles):
         session = self.driver.table_client.session().create()
 
         # Create table and modify permissions on it
+        self.create_users()
         create_table_with_data(session, "folder/table")
         modify_permissions(self.driver.scheme_client, "folder/table")
 
@@ -1208,6 +1239,7 @@ class TestRestoreNoData(BaseTestBackupInFiles):
         session = self.driver.table_client.session().create()
 
         # Create table and modify permissions on it
+        self.create_users()
         create_table_with_data(session, "folder/table")
         modify_permissions(self.driver.scheme_client, "folder/table")
 
@@ -1262,3 +1294,132 @@ class TestRestoreNoData(BaseTestBackupInFiles):
             is_data_the_same(session, "/Root/folder/table", "/Root/restored/table"),
             is_(False)
         )
+
+
+class BaseTestClusterBackupInFiles(object):
+    @classmethod
+    def setup_class(cls):
+        cls.cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags=["enable_resource_pools"]))
+        cls.cluster.start()
+
+        cls.root_dir = "/Root"
+        cls.database = os.path.join(cls.root_dir, "db1")
+
+        cls.cluster.create_database(
+            cls.database,
+            storage_pool_units_count={
+                'hdd': 1
+            },
+            timeout_seconds=100
+        )
+
+        cls.database_nodes = cls.cluster.register_and_start_slots(cls.database, count=3)
+        cls.cluster.wait_tenant_up(cls.database)
+
+        driver_config = ydb.DriverConfig(
+            database=cls.database,
+            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
+        cls.driver = ydb.Driver(driver_config)
+        cls.driver.wait(timeout=4)
+
+    @classmethod
+    def teardown_class(cls):
+        cls.cluster.unregister_and_stop_slots(cls.database_nodes)
+        cls.cluster.stop()
+
+    @pytest.fixture(autouse=True, scope='class')
+    @classmethod
+    def set_test_name(cls, request):
+        cls.test_name = request.node.name
+
+    @classmethod
+    def create_backup(cls, command, expected_files, additional_args=[]):
+        backup_files_dir = output_path(cls.test_name, "backup_files_dir")
+        execution = yatest.common.execute(
+            [
+                backup_bin(),
+                "--verbose",
+                "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
+            ]
+            + command
+            + ["--output", backup_files_dir]
+            + additional_args
+        )
+
+        list_result = fs_recursive_list(backup_files_dir, ListMode.FILES)
+
+        logger.debug("std_out:\n" + execution.std_out.decode('utf-8'))
+        logger.debug("fs_recursive_list(backup_files_dir)# " + str(list_result))
+        logger.debug("expected_files# " + str(expected_files))
+
+        assert_that(
+            len(list_result),
+            equal_to(len(expected_files))
+        )
+
+        assert_that(
+            list_result,
+            has_items(*expected_files)
+        )
+
+    @classmethod
+    def create_cluster_backup(cls, expected_files, additional_args=[]):
+        cls.create_backup(
+            [
+                "admin", "cluster", "dump",
+            ],
+            expected_files,
+            additional_args
+        )
+
+    @classmethod
+    def create_database_backup(cls, expected_files, additional_args=[]):
+        cls.create_backup(
+            [
+                "--database", cls.database,
+                "admin", "database", "dump",
+            ],
+            expected_files,
+            additional_args
+        )
+
+
+class TestClusterBackup(BaseTestClusterBackupInFiles):
+    def test_cluster_backup(self):
+        session = self.driver.table_client.session().create()
+        create_table_with_data(session, "db1/table")
+
+        self.create_cluster_backup(expected_files=[
+            # cluster metadata
+            "permissions.pb",
+            "create_user.sql",
+            "create_group.sql",
+            "alter_group.sql",
+
+            # database metadata
+            "Root/db1/database.pb",
+            "Root/db1/permissions.pb",
+            "Root/db1/create_user.sql",
+            "Root/db1/create_group.sql",
+            "Root/db1/alter_group.sql",
+        ])
+
+
+class TestDatabaseBackup(BaseTestClusterBackupInFiles):
+    def test_database_backup(self):
+        session = self.driver.table_client.session().create()
+        create_table_with_data(session, "db1/table")
+
+        self.create_database_backup(expected_files=[
+            # database metadata
+            "database.pb",
+            "permissions.pb",
+            "create_user.sql",
+            "create_group.sql",
+            "alter_group.sql",
+
+            # database table
+            "table/scheme.pb",
+            "table/permissions.pb",
+            "table/data_00.csv",
+        ])

@@ -6,12 +6,18 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
+bool CheckSidExistsOrIsNonYdb(const std::unordered_map<TString, NLogin::TLoginProvider::TSidRecord>& sids, const TString& sid) {
+    // non-YDB user's sid format is <login>@<subsystem>
+    return sid.Contains('@') || sids.contains(sid);
+}
+
 class TModifyACL: public TSubOperationBase {
 public:
     using TSubOperationBase::TSubOperationBase;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
+        const TString databaseName = CanonizePath(context.SS->RootPathElements);
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetModifyACL();
@@ -49,6 +55,26 @@ public:
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
+        }
+
+        if (acl && AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
+            NACLib::TDiffACL diffACL(acl);
+            for (const NACLibProto::TDiffACE& diffACE : diffACL.GetDiffACE()) {
+                if (static_cast<NACLib::EDiffType>(diffACE.GetDiffType()) == NACLib::EDiffType::Add) {
+                    if (!CheckSidExistsOrIsNonYdb(context.SS->LoginProvider.Sids, diffACE.GetACE().GetSID())) {
+                        result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                            TStringBuilder() << "SID " << diffACE.GetACE().GetSID() << " not found in database `" << databaseName << "`");
+                        return result;
+                    }
+                } // remove diff type is allowed in any case
+            }
+        }
+        if (owner && AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
+            if (!CheckSidExistsOrIsNonYdb(context.SS->LoginProvider.Sids, owner)) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    TStringBuilder() << "Owner SID " << owner << " not found in database `" << databaseName << "`");
+                return result;
+            }
         }
 
         THashSet<TPathId> subTree;

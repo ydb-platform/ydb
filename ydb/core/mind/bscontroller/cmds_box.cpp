@@ -226,10 +226,45 @@ namespace NKikimr::NBsController {
         boxes.erase(cmd.GetOriginBoxId());
     }
 
-    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRestartPDisk& cmd, TStatus& /*status*/) {
-        auto targetPDiskId = cmd.GetTargetPDiskId();
+    template <class T>
+    TPDiskId GetPDiskId(const TBlobStorageController::TConfigState& state, const T& command) {
+        if (command.HasTargetPDiskId() && command.HasTargetPDiskLocation()) {
+            throw TExError() << "Only one of TargetPDiskId or PDiskLocation can be specified";
+        }
 
-        TPDiskId pdiskId(targetPDiskId.GetNodeId(), targetPDiskId.GetPDiskId());
+        if (command.HasTargetPDiskId()) {
+            const NKikimrBlobStorage::TPDiskId& pdiskId = command.GetTargetPDiskId();
+            ui32 targetNodeId = pdiskId.GetNodeId();
+            ui32 targetPDiskId = pdiskId.GetPDiskId();
+            if (const auto& hostId = state.HostRecords->GetHostId(targetNodeId)) {
+                TPDiskId target(targetNodeId, targetPDiskId);
+                if (state.PDisks.Find(target) && !state.PDisksToRemove.count(target)) {
+                    return target;
+                }
+                throw TExPDiskNotFound(targetNodeId, targetPDiskId);
+            }
+            throw TExHostNotFound(targetNodeId);
+        } else if (command.HasTargetPDiskLocation()) {
+            const NKikimrBlobStorage::TPDiskLocation& pdiskLocation = command.GetTargetPDiskLocation();
+            const TString& targetFqdn = pdiskLocation.GetFqdn();
+            const TString& targetDiskPath = pdiskLocation.GetPath();
+
+            auto range = state.HostRecords->ResolveNodeId(targetFqdn);
+
+            for (auto it = range.first; it != range.second; ++it) {
+                const TNodeId nodeId = it->second;
+                if (const auto& pdiskId = state.FindPDiskByLocation(nodeId, targetDiskPath)) {
+                    return *pdiskId;
+                }
+            }
+            
+            throw TExPDiskNotFound(targetFqdn, targetDiskPath);
+        }
+        throw TExError() << "Either TargetPDiskId or PDiskLocation must be specified";
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRestartPDisk& cmd, TStatus& /*status*/) {
+        TPDiskId pdiskId = GetPDiskId(*this, cmd);
 
         TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
 
@@ -252,9 +287,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSetPDiskReadOnly& cmd, TStatus& /*status*/) {
-        auto targetPDiskId = cmd.GetTargetPDiskId();
-
-        TPDiskId pdiskId(targetPDiskId.GetNodeId(), targetPDiskId.GetPDiskId());
+        TPDiskId pdiskId = GetPDiskId(*this, cmd);
 
         TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
 
@@ -277,6 +310,29 @@ namespace NKikimr::NBsController {
             }
         } else {
             pdisk->Mood = TPDiskMood::Normal;
+        }
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TStopPDisk& cmd, TStatus& /*status*/) {
+        TPDiskId pdiskId = GetPDiskId(*this, cmd);
+
+        TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
+
+        if (!pdisk) {
+            throw TExPDiskNotFound(pdiskId.NodeId, pdiskId.PDiskId);
+        }
+
+        pdisk->Mood = TPDiskMood::Stop;
+
+        for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) {
+            if (slot->Group) {
+                auto *m = VSlots.FindForUpdate(slot->VSlotId);
+                m->VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                m->IsReady = false;
+                TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
+                GroupFailureModelChanged.insert(slot->Group->ID);
+                group->CalculateGroupStatus();
+            }
         }
     }
 

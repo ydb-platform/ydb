@@ -43,7 +43,7 @@
   **PowerShell.** To do this, run the command:
 
     ```powershell
-    iex (New-Object System.Net.WebClient).DownloadString('https://storage.yandexcloud.net/yandexcloud-ydb/install.ps1')
+    iex (New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/cli-windows')
     ```
 
     Specify whether to add the executable file path to the `PATH` environment variable:
@@ -55,7 +55,7 @@
   **cmd.** To do this, run the command:
 
     ```cmd
-    @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://storage.yandexcloud.net/yandexcloud-ydb/install.ps1'))"
+    @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/cli-windows'))"
     ```
 
     Specify whether to add the executable file path to the `PATH` environment variable:

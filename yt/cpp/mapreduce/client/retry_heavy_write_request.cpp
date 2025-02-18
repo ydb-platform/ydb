@@ -7,6 +7,7 @@
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
@@ -31,7 +32,7 @@ void RetryHeavyWriteRequest(
     const TClientContext& context,
     const TTransactionId& parentId,
     THttpHeader& header,
-    std::function<THolder<IInputStream>()> streamMaker)
+    std::function<std::unique_ptr<IInputStream>()> streamMaker)
 {
     int retryCount = context.Config->RetryCount;
     if (context.ServiceTicketAuth) {
@@ -63,7 +64,7 @@ void RetryHeavyWriteRequest(
                 GetFullUrlForProxy(hostName, context, header),
                 requestId,
                 header);
-            TransferData(input.Get(), request->GetStream());
+            TransferData(input.get(), request->GetStream());
             request->Finish()->GetResponse();
         } catch (TErrorResponse& e) {
             YT_LOG_ERROR("RSP %v - attempt %v failed",
@@ -100,7 +101,7 @@ THeavyRequestRetrier::THeavyRequestRetrier(TParameters parameters)
     : Parameters_(std::move(parameters))
     , RequestRetryPolicy_(Parameters_.ClientRetryPolicy->CreatePolicyForGenericRequest())
     , StreamFactory_([] {
-        return MakeHolder<TNullInput>();
+        return std::make_unique<TNullInput>();
     })
 {
     Retry([] { });

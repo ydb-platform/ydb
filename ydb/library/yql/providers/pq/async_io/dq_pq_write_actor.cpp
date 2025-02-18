@@ -13,8 +13,8 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -103,6 +103,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
             InFlyData = task->GetCounter("InFlyData");
             AlreadyWritten = task->GetCounter("AlreadyWritten");
             FirstContinuationTokenMs = task->GetCounter("FirstContinuationTokenMs");
+            EgressDataRate = task->GetCounter("EgressDataRate", true);
         }
 
         ~TMetrics() {
@@ -117,6 +118,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyData;
         ::NMonitoring::TDynamicCounters::TCounterPtr AlreadyWritten;
         ::NMonitoring::TDynamicCounters::TCounterPtr FirstContinuationTokenMs;
+        ::NMonitoring::TDynamicCounters::TCounterPtr EgressDataRate;
     };
 
     struct TAckInfo {
@@ -295,6 +297,7 @@ private:
 
     NYdb::NTopic::TWriteSessionSettings GetWriteSessionSettings() {
         return NYdb::NTopic::TWriteSessionSettings(SinkParams.GetTopicPath(), GetSourceId(), GetSourceId())
+            .TraceId(LogPrefix)
             .MaxMemoryUsage(FreeSpace)
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
                 ? NYdb::NTopic::ECodec::RAW
@@ -383,6 +386,7 @@ private:
         auto itemSize = GetItemSize(Buffer.front());
         WaitingAcks.emplace(itemSize, TInstant::Now());
         EgressStats.Bytes += itemSize;
+        Metrics.EgressDataRate->Add(itemSize);
         Buffer.pop();
     }
 

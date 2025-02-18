@@ -8,6 +8,7 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import StrEnum, Enum
 from types import TracebackType
+from time import time
 
 
 class WorkloadType(StrEnum):
@@ -33,17 +34,38 @@ class YdbCliHelper:
         if cli == 'git':
             return [yatest.common.work_path('ydb')] + args
         elif cli == 'main':
-            path = os.path.join(yatest.common.context.project_path, '../../../apps/ydb/ydb')
-            return [yatest.common.binary_path(path)] + args
+            return [yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))] + args
         else:
             return [cli] + args
 
     class QueryPlan:
-        def __init__(self, plan: dict | None = None, table: str | None = None, ast: str | None = None, svg: str | None = None) -> None:
-            self.plan = plan
-            self.table = table
-            self.ast = ast
-            self.svg = svg
+        def __init__(self) -> None:
+            self.plan: dict = None
+            self.table: str = None
+            self.ast: str = None
+            self.svg: str = None
+            self.stats: str = None
+
+    class Iteration:
+        def __init__(self):
+            self.final_plan: Optional[YdbCliHelper.QueryPlan] = None
+            self.in_progress_plan: Optional[YdbCliHelper.QueryPlan] = None
+            self.error_message: Optional[str] = None
+            self.time: Optional[float] = None
+
+        def get_error_class(self) -> str:
+            msg_to_class = {
+                'Deadline Exceeded': 'timeout',
+                'Request timeout': 'timeout',
+                'Query did not complete within specified timeout': 'timeout',
+                'There is diff': 'diff'
+            }
+            for msg, cl in msg_to_class.items():
+                if self.error_message and self.error_message.find(msg) >= 0:
+                    return cl
+            if self.error_message:
+                return 'other'
+            return ''
 
     class WorkloadRunResult:
         def __init__(self):
@@ -54,14 +76,26 @@ class YdbCliHelper:
             self.error_message: str = ''
             self.warning_message: str = ''
             self.plans: Optional[list[YdbCliHelper.QueryPlan]] = None
-            self.explain_plan: Optional[YdbCliHelper.QueryPlan] = None
-            self.errors_by_iter: dict[int, str] = {}
-            self.time_by_iter: dict[int, float] = {}
+            self.explain = YdbCliHelper.Iteration()
+            self.iterations: dict[int, YdbCliHelper.Iteration] = {}
             self.traceback: Optional[TracebackType] = None
+            self.start_time = time()
 
         @property
         def success(self) -> bool:
             return len(self.error_message) == 0
+
+        def get_error_stats(self):
+            result = {}
+            for iter in self.iterations.values():
+                cl = iter.get_error_class()
+                if cl:
+                    result[cl] = True
+            if len(result) == 0 and self.error_message:
+                result['other'] = True
+            if self.warning_message:
+                result['warning'] = True
+            return result
 
     class WorkloadProcessor:
         def __init__(self,
@@ -106,6 +140,10 @@ class YdbCliHelper:
                 else:
                     self.result.warning_message = msg
 
+        def _init_iter(self, iter_num: int) -> None:
+            if iter_num not in self.result.iterations:
+                self.result.iterations[iter_num] = YdbCliHelper.Iteration()
+
         def _process_returncode(self, returncode) -> None:
             begin_str = f'{self.query_num}:'
             end_str = 'Query text:'
@@ -126,10 +164,11 @@ class YdbCliHelper:
                         begin_pos = end_pos + 1
                     end_pos = self.result.stderr.find(end_str, begin_pos)
                     msg = (self.result.stderr[begin_pos:] if end_pos < 0 else self.result.stderr[begin_pos:end_pos]).strip()
-                    self.result.errors_by_iter[iter] = msg
+                    self._init_iter(iter)
+                    self.result.iterations[iter].error_message = msg
                     self._add_error(f'Iteration {iter}: {msg}')
-            if returncode != 0 and len(self.result.errors_by_iter) == 0:
-                self._add_error(f'Invalid return code: {returncode} instead 0.')
+            if returncode != 0 and len([x for x in filter(lambda x: x.error_message, self.result.iterations.values())]) == 0:
+                self._add_error(f'Invalid return code: {returncode} instead 0. stderr: {self.result.stderr}')
 
         def _load_plan(self, name: str) -> YdbCliHelper.QueryPlan:
             result = YdbCliHelper.QueryPlan()
@@ -146,11 +185,17 @@ class YdbCliHelper:
             if (os.path.exists(f'{pp}.svg')):
                 with open(f'{pp}.svg') as f:
                     result.svg = f.read()
+            if (os.path.exists(f'{pp}.stats')):
+                with open(f'{pp}.stats') as f:
+                    result.stats = f.read()
             return result
 
         def _load_plans(self) -> None:
-            self.result.plans = [self._load_plan(str(i)) for i in range(self.iterations)]
-            self.result.explain_plan = self._load_plan('explain')
+            for i in range(self.iterations):
+                self._init_iter(i)
+                self.result.iterations[i].final_plan = self._load_plan(str(i))
+                self.result.iterations[i].in_progress_plan = self._load_plan(f'{i}.in_progress')
+            self.result.explain.final_plan = self._load_plan('explain')
 
         def _load_stats(self):
             if not os.path.exists(self._json_path):
@@ -198,7 +243,9 @@ class YdbCliHelper:
             for line in self.result.stdout.splitlines():
                 m = re.search(r'iteration ([0-9]*):\s*ok\s*([\.0-9]*)s', line)
                 if m is not None:
-                    self.result.time_by_iter[int(m.group(1))] = float(m.group(2))
+                    iter = int(m.group(1))
+                    self._init_iter(iter)
+                    self.result.iterations[iter].time = float(m.group(2))
 
         def _get_cmd(self) -> list[str]:
             cmd = YdbCliHelper.get_cli_command() + [

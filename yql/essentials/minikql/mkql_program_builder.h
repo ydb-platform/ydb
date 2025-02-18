@@ -272,7 +272,6 @@ public:
     TRuntimeNode BlockJust(TRuntimeNode data);
 
     TRuntimeNode BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args);
-    TRuntimeNode BlockBitCast(TRuntimeNode value, TType* targetType);
     TRuntimeNode BlockCombineAll(TRuntimeNode flow, std::optional<ui32> filterColumn,
         const TArrayRef<const TAggInfo>& aggs, TType* returnType);
     TRuntimeNode BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
@@ -633,6 +632,7 @@ public:
     TRuntimeNode VisitAll(TRuntimeNode variant, std::function<TRuntimeNode(ui32, TRuntimeNode)> handler);
     TRuntimeNode Way(TRuntimeNode variant);
     TRuntimeNode VariantItem(TRuntimeNode variant);
+    TRuntimeNode DynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType);
 
     //-- random functions
     // expects ui64 seed, returns resource
@@ -853,6 +853,7 @@ private:
 
     TType* ChooseCommonType(TType* type1, TType* type2);
     TType* BuildArithmeticCommonType(TType* type1, TType* type2);
+    TType* BuildWideBlockType(const TArrayRef<TType* const>& wideComponents);
 
     bool IsNull(TRuntimeNode arg);
 protected:

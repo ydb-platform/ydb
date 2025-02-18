@@ -346,6 +346,8 @@ private:
         request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
         request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
         request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
+        request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkUtilizationFieldNumber);
+        request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkWriteThroughputFieldNumber);
     }
 
     void InitTabletWhiteboardRequest(NKikimrWhiteboard::TEvTabletStateRequest* request) {
@@ -471,6 +473,7 @@ private:
 
         std::unordered_set<TString> hostPassed;
         std::unordered_map<TString, TMemoryStats> memoryStats;
+        int nodesWithNetworkUtilization = 0;
 
         for (TNode& node : NodeData) {
             const NKikimrWhiteboard::TSystemStateInfo& systemState = node.SystemState;
@@ -538,6 +541,17 @@ private:
                 ClusterInfo.SetCoresUsed(ClusterInfo.GetCoresUsed() + systemState.GetCoresUsed());
                 ClusterInfo.SetCoresTotal(ClusterInfo.GetCoresTotal() + systemState.GetCoresTotal());
             }
+            if (systemState.HasNetworkUtilization()) {
+                ClusterInfo.SetNetworkUtilization(ClusterInfo.GetNetworkUtilization() + systemState.GetNetworkUtilization());
+                ++nodesWithNetworkUtilization;
+            }
+            if (systemState.HasNetworkWriteThroughput()) {
+                ClusterInfo.SetNetworkWriteThroughput(ClusterInfo.GetNetworkWriteThroughput() + systemState.GetNetworkWriteThroughput());
+            }
+        }
+
+        if (nodesWithNetworkUtilization != 0) {
+            ClusterInfo.SetNetworkUtilization(ClusterInfo.GetNetworkUtilization() / nodesWithNetworkUtilization);
         }
 
         for (const auto& memStats : memoryStats) {

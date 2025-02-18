@@ -243,7 +243,7 @@ struct TEnvironmentSetup {
             {}
 
             void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
-                Send(ev->Sender, new TEvNodeWardenStorageConfig(NKikimrBlobStorage::TStorageConfig(), nullptr));
+                Send(ev->Sender, new TEvNodeWardenStorageConfig(NKikimrBlobStorage::TStorageConfig(), nullptr, false));
             }
 
             STATEFN(StateFunc) {

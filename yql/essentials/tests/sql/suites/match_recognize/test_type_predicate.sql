@@ -2,8 +2,6 @@
 pragma FeatureR010="prototype";
 pragma config.flags("MatchRecognizeStream", "disable");
 
-USE plato;
-
 $data = [<||>];
 
 $BadPredicate = select TableRow() from (select * from AS_TABLE($data) MATCH_RECOGNIZE(

@@ -15,6 +15,7 @@ public:
     static YAML::Node ProtoToYamlSchema(const ::google::protobuf::Descriptor* descriptor);
 
     static void FillEnum(YAML::Node property, const ::google::protobuf::EnumDescriptor* enumDescriptor, const TEnumSettings& enumSettings = TEnumSettings());
+    static void FillEnum(YAML::Node property, const std::vector<std::string_view>& enumNames, const TEnumSettings& enumSettings);
 
     template <typename ProtoType>
     static YAML::Node ProtoToYamlSchema() {

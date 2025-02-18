@@ -50,7 +50,7 @@ public:
     }
 
     void AddError(const ui64 pathId, const TString& errorMessage) {
-        AFL_VERIFY(ErrorsByPathId.emplace(pathId, errorMessage).second);
+        ErrorsByPathId.emplace(pathId, errorMessage);
     }
 
     bool HasErrors() const {
@@ -63,6 +63,7 @@ private:
     THashSet<ui64> RequestIds;
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) = 0;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const = 0;
 
     void OnRequestsFinished(TDataAccessorsResult&& result) {
         DoOnRequestsFinished(std::move(result));
@@ -85,12 +86,18 @@ public:
             OnRequestsFinished(std::move(*Result));
         }
     }
+    const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
+        return DoGetAbortionFlag();
+    }
 
     virtual ~IDataAccessorRequestsSubscriber() = default;
 };
 
 class TFakeDataAccessorsSubscriber: public IDataAccessorRequestsSubscriber {
 private:
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& /*result*/) override {
     }
 };
@@ -223,6 +230,17 @@ public:
             }
         }
         return result;
+    }
+
+    bool IsAborted() const {
+        AFL_VERIFY(HasSubscriber());
+        auto flag = Subscriber->GetAbortionFlag();
+        return flag && flag->Val();
+    }
+
+    const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
+        AFL_VERIFY(HasSubscriber());
+        return Subscriber->GetAbortionFlag();
     }
 
     bool HasSubscriber() const {

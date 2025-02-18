@@ -95,7 +95,17 @@ public:
 
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) {
         auto *cmd = ev.Record.MutableReplaceStorageConfig();
-        cmd->SetYAML(GetProtoRequest()->yaml_config());
+        auto *request = GetProtoRequest();
+        if (request->has_yaml_config()) {
+            cmd->SetYAML(request->yaml_config());
+        }
+        if (request->has_storage_yaml_config()) {
+            cmd->SetStorageYAML(request->storage_yaml_config());
+        }
+        if (request->has_switch_dedicated_storage_section()) {
+            cmd->SetSwitchDedicatedStorageSection(request->switch_dedicated_storage_section());
+        }
+        cmd->SetDedicatedStorageSectionConfigMode(request->dedicated_config_mode());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
@@ -109,7 +119,20 @@ public:
         } catch (const std::exception&) {
             return false; // assuming no distconf enabled in this config
         }
-        return newConfig.HasSelfManagementConfig() && newConfig.GetSelfManagementConfig().GetEnabled();
+        return newConfig.GetSelfManagementConfig().GetEnabled();
+    }
+
+    std::unique_ptr<IEventBase> ProcessControllerQuery() override {
+        auto *request = GetProtoRequest();
+        auto opt = [&](auto&& has, auto&& get) {
+            return std::invoke(has, request) ? std::make_optional(std::invoke(get, request)) : std::nullopt;
+        };
+        using T = std::decay_t<decltype(*request)>;
+        return std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigRequest>(
+            opt(&T::has_yaml_config, &T::yaml_config),
+            opt(&T::has_storage_yaml_config, &T::storage_yaml_config),
+            opt(&T::has_switch_dedicated_storage_section, &T::switch_dedicated_storage_section),
+            request->dedicated_config_mode());
     }
 };
 
@@ -137,6 +160,15 @@ public:
 
     bool IsDistconfEnableQuery() const {
         return false;
+    }
+
+    std::unique_ptr<IEventBase> ProcessControllerQuery() override {
+        auto& request = *GetProtoRequest();
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerFetchConfigRequest>();
+        auto& record = ev->Record;
+        record.SetDedicatedStorageSection(request.dedicated_storage_section());
+        record.SetDedicatedClusterSection(request.dedicated_cluster_section());
+        return ev;
     }
 };
 

@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     audit_log.cpp
     audit_dml_operations.cpp
@@ -33,6 +37,8 @@ SRCS(
     rpc_describe_path.cpp
     rpc_describe_table.cpp
     rpc_describe_table_options.cpp
+    rpc_describe_external_data_source.cpp
+    rpc_describe_external_table.cpp
     rpc_drop_coordination_node.cpp
     rpc_drop_table.cpp
     rpc_discovery.cpp
@@ -145,8 +151,8 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/public/lib/fq
-    ydb/public/lib/operation_id
-    ydb/public/sdk/cpp/client/resources
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/client/resources
     ydb/services/ext_index/common
 )
 

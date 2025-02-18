@@ -102,6 +102,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_select_distinct.test_plan/tenk1",
                                                                         "ReadColumns": [
                                                                             "four",
                                                                             "two"

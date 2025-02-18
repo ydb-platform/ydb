@@ -1,12 +1,7 @@
-USE plato;
+$data = [<|x: nothing(int32?)|>, <|x: just(1)|>];
 
 SELECT
-    key,
-    maybe_null IS NULL AS is_maybe_null,
-    always_null IS NULL AS is_always_null,
-    never_null IS NULL AS is_never_null,
+    x IS NOT NULL
 FROM
-    Input
-ORDER BY
-    key
+    as_table($data)
 ;

@@ -19,7 +19,6 @@ option java_package = "ru.yandex.kikimr.proto";
 message TProgram {
     message TColumn {
         optional uint64 Id = 1;
-        optional string Name = 2;
     }
 
     message TConstant {
@@ -45,6 +44,10 @@ message TProgram {
         repeated uint64 HashValues = 1;
     }
 
+    message TBloomNGrammFilterChecker {
+        repeated uint64 HashValues = 1;
+    }
+
     message TCountMinSketchChecker {
     }
 
@@ -60,6 +63,7 @@ message TProgram {
             TBloomFilterChecker BloomFilter = 40;
             TCompositeChecker Composite = 41;
             TCountMinSketchChecker CountMinSketch = 42;
+            TBloomNGrammFilterChecker BloomNGrammFilter = 43;
         }
     }
 
@@ -120,6 +124,7 @@ message TProgram {
             optional EFunctionType FunctionType = 3 [ default = SIMPLE_ARROW ];
             optional uint32 KernelIdx = 4;
             optional uint32 YqlOperationId = 5; // TKernelRequestBuilder::EBinaryOp
+            optional string KernelName = 6;
         }
 
         message TExternalFunction {

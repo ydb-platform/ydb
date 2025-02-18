@@ -16,6 +16,7 @@
 #include <util/generic/string.h>
 
 #include <map>
+#include <optional>
 
 namespace NKikimr::NYaml {
 
@@ -42,9 +43,9 @@ namespace NKikimr::NYaml {
     };
 
     struct TTransformContext {
-        bool DisableBuiltinSecurity;
-        bool ExplicitEmptyDefaultGroups;
-        bool ExplicitEmptyDefaultAccess;
+        std::optional<bool> DisableBuiltinSecurity;
+        std::optional<bool> DisableBuiltinGroups;
+        std::optional<bool> DisableBuiltinAccess;
         std::map<TCombinedDiskInfoKey, NKikimrConfig::TCombinedDiskInfo> CombinedDiskInfo;
         std::map<TPoolConfigKey, TPoolConfigInfo> PoolConfigInfo;
         std::map<ui32, TString> GroupErasureSpecies;

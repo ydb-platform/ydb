@@ -123,18 +123,22 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     };
 
     if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        NKikimrSchemeOp::TTableDescription indexLevelTableDesc, indexPostingTableDesc;
+        const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
+        NKikimrSchemeOp::TTableDescription indexLevelTableDesc, indexPostingTableDesc, indexPrefixTableDesc;
         // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
-        if (indexDesc.IndexImplTableDescriptionsSize() == 2) {
+        if (indexDesc.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
             indexLevelTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
-            indexPostingTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+            indexPostingTableDesc = indexDesc.GetIndexImplTableDescriptions(1);
+            if (prefixVectorIndex) {
+                indexPrefixTableDesc = indexDesc.GetIndexImplTableDescriptions(2);
+            }
         }
+        const THashSet<TString> indexKeyColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
         result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
-        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
-        // TODO Maybe better to use partition from main table
-        // This tables are temporary and handled differently in apply_build_index
-        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, NTableVectorKmeansTreeIndex::BuildSuffix0)));
-        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, NTableVectorKmeansTreeIndex::BuildSuffix1)));
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(indexKeyColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
+        if (prefixVectorIndex) {
+            result.push_back(createImplTable(CalcVectorKmeansTreePrefixImplTableDesc(indexKeyColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPrefixTableDesc)));
+        }
     } else {
         NKikimrSchemeOp::TTableDescription indexTableDesc;
         // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS

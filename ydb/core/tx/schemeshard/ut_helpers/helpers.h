@@ -391,6 +391,7 @@ namespace NSchemeShardUT_Private {
     void AsyncBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString& columnName, const Ydb::TypedValue& literal);
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg);
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns = {});
+    void AsyncBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TString column, TVector<TString> dataColumns = {});
     void TestBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
         const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus);
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
@@ -523,24 +524,33 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, ui64 schemeShard, ui64 tabletId,
         NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);
 
-    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
+    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& user, const TString& password,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
-    
-    void CreateAlterLoginRemoveUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
+
+    void CreateAlterLoginRemoveUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& user,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
-    void AlterLoginAddGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
-        const TString& member, const TString& group, 
+    void CreateAlterLoginCreateGroup(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& group, const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+    
+    void CreateAlterLoginRemoveGroup(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& group, const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
+    void AlterLoginAddGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& member, const TString& group,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
-    void AlterLoginRemoveGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
-        const TString& member, const TString& group, 
+    void AlterLoginRemoveGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& member, const TString& group,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
-    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, 
+    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
         const TString& user, const TString& password);
+
+    void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& user, bool isEnabled);
 
     // Mimics data query to a single table with multiple partitions
     class TFakeDataReq {

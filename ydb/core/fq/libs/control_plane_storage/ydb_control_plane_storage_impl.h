@@ -19,7 +19,8 @@
 #include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <ydb/library/db_pool/db_pool.h>
 #include <ydb/library/security/util.h>
@@ -252,7 +253,7 @@ protected:
     {
     }
 
-    std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> Read(
+    std::pair<TAsyncStatus, std::shared_ptr<std::vector<NYdb::TResultSet>>> Read(
         const TString& query,
         const NYdb::TParams& params,
         const TRequestCounters& requestCounters,
@@ -262,7 +263,7 @@ protected:
 
     TAsyncStatus Validate(
         NActors::TActorSystem* actorSystem,
-        std::shared_ptr<TMaybe<TTransaction>> transaction,
+        std::shared_ptr<std::optional<TTransaction>> transaction,
         size_t item, const TVector<TValidationQuery>& validators,
         TSession session,
         std::shared_ptr<bool> successFinish,
@@ -281,7 +282,7 @@ protected:
     TAsyncStatus ReadModifyWrite(
         const TString& readQuery,
         const NYdb::TParams& readParams,
-        const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>& prepare,
+        const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
         const TRequestCounters& requestCounters,
         TDebugInfoPtr debugInfo = {},
         const TVector<TValidationQuery>& validators = {},
@@ -764,8 +765,8 @@ private:
                         result = prepare();
                     }
                 } else {
-                    issues.AddIssues(status.GetIssues());
-                    internalIssues.AddIssues(status.GetIssues());
+                    issues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
+                    internalIssues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
                 }
             } catch (const NYql::TCodeLineException& exception) {
                 NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
@@ -841,7 +842,7 @@ private:
                 if (status.IsSuccess()) {
                     result = prepare();
                 } else {
-                    issues.AddIssues(status.GetIssues());
+                    issues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
                 }
             } catch (const NYql::TCodeLineException& exception) {
                 NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
@@ -907,7 +908,7 @@ private:
     struct TPickTaskParams {
         TString ReadQuery;
         TParams ReadParams;
-        std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)> PrepareParams;
+        std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)> PrepareParams;
         TString QueryId;
         bool RetryOnTli = false;
     };

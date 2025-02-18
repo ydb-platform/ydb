@@ -11,6 +11,7 @@ public:
     {
         GetRunOptions().UseRepeatableRandomAndTimeProviders = true;
         GetRunOptions().ResultsFormat = NYson::EYsonFormat::Pretty;
+        GetRunOptions().OptimizeLibs = false;
 
         GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
             opts.AddLongOption("ndebug", "Do not show debug info in error output").NoArgument().SetFlag(&GetRunOptions().NoDebug);

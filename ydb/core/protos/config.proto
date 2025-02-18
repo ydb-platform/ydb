@@ -12,6 +12,7 @@ import "ydb/core/protos/bootstrap.proto";
 import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/config_units.proto";
 import "ydb/core/protos/counters_schemeshard.proto";
+import "ydb/core/protos/data_integrity_trails.proto";
 import "ydb/core/protos/datashard_config.proto";
 import "ydb/core/protos/drivemodel.proto";
 import "ydb/core/protos/feature_flags.proto";
@@ -258,6 +259,9 @@ message TDomainsConfig {
         repeated TGroup DefaultGroups = 16;
         repeated string DefaultAccess = 17;
         optional string AllUsersGroup = 18;
+        optional bool DisableBuiltinSecurity = 19;
+        optional bool DisableBuiltinGroups = 20;
+        optional bool DisableBuiltinAccess = 21;
     }
 
     repeated TDomain Domain = 1;
@@ -1059,6 +1063,7 @@ message TQueryServiceConfig {
 
     optional NYql.TS3GatewayConfig S3 = 6;
     optional NYql.TYtGatewayConfig Yt = 15;
+    optional NYql.TSolomonGatewayConfig Solomon = 21;
     optional NYql.TFileStorageConfig FileStorage = 16;
     optional NYql.THttpGatewayConfig HttpGateway = 7;
     optional NYql.TGenericConnectorConfig Connector = 8 [deprecated=true];
@@ -1264,6 +1269,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 86400000,
             DefaultValue: 50 }];
+        optional uint64 MinPlanResolutionMs = 5 [(ControlOptions) = {
+            Description: "Minimum plan resolution override in milliseconds, which includes volatile planning (0 when not overridden)",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 0 }];
     }
 
     message TSchemeShardControls {
@@ -1290,11 +1300,9 @@ message TImmediateControlsConfig {
             MinValue: 65536,
             MaxValue: 4294967296,
             DefaultValue: 4294967296 }];
-        optional uint64 MemoryLimit = 3 [(ControlOptions) = {
-            Description: "Make a best effort attempt to prevent more than limit bytes of memory from being allocated by the system.",
-            MinValue: 0,
-            MaxValue: 9223372036854775807,
-            DefaultValue: 0 }];
+
+        reserved 3; // was MemoryLimit
+
         optional uint64 PageCacheTargetSize = 4 [(ControlOptions) = {
             Description: "Page Cache Target Size.",
             MinValue: 0,
@@ -1374,6 +1382,68 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 260 }];
+        optional uint64 MaxChunksToDefragInflight = 21 [(ControlOptions) = {
+            Description: "Max inflight defragmentation chunks per one chunk size per vdisk",
+            MinValue: 1,
+            MaxValue: 50,
+            DefaultValue: 10 }];
+
+        reserved 14;
+        optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
+            Description: "0 - working mode, 1 - dry run mode",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
+        optional uint64 ThrottlingMinLevel0SstCount = 15 [(ControlOptions) = {
+            Description: "Minimum level 0 SST count - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 100 }];
+        optional uint64 ThrottlingMaxLevel0SstCount = 16 [(ControlOptions) = {
+            Description: "Maximum level 0 SST count - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 250 }];
+        optional uint64 ThrottlingMinInplacedSizeHDD = 17 [(ControlOptions) = {
+            Description: "Minimum size of all inplaced blobs (HDD) - throttling is turned on",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 21474836480 }];
+        optional uint64 ThrottlingMaxInplacedSizeHDD = 18 [(ControlOptions) = {
+            Description: "Maximum size of all inplaced blobs (HDD) - throttling speed is zero",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 64424509440 }];
+        optional uint64 ThrottlingMinInplacedSizeSSD = 24 [(ControlOptions) = {
+            Description: "Minimum size of all inplaced blobs (SSD) - throttling is turned on",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 21474836480 }];
+        optional uint64 ThrottlingMaxInplacedSizeSSD = 25 [(ControlOptions) = {
+            Description: "Maximum size of all inplaced blobs (SSD) - throttling speed is zero",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 64424509440 }];
+        optional uint64 ThrottlingMinOccupancyPerMille = 19 [(ControlOptions) = {
+            Description: "Minimum occupancy of disk per mille - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 900 }];
+        optional uint64 ThrottlingMaxOccupancyPerMille = 20 [(ControlOptions) = {
+            Description: "Maximum occupancy of disk per mille - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 950 }];
+        optional uint64 ThrottlingMinLogChunkCount = 22 [(ControlOptions) = {
+            Description: "Minimum pdisk log chunk count - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 100 }];
+        optional uint64 ThrottlingMaxLogChunkCount = 23 [(ControlOptions) = {
+            Description: "Maximum pdisk log chunk count - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 130 }];
     }
 
     message TTabletControls {
@@ -1385,6 +1455,24 @@ message TImmediateControlsConfig {
     }
 
     message TDSProxyControls {
+        message TRequestReportingSettings {
+            optional uint64 BucketSize = 1 [(ControlOptions) = {
+                Description: "Capacity for Leaky Bucket algorithm",
+                MinValue: 1,
+                MaxValue: 100000,
+                DefaultValue: 1 }];
+            optional uint64 LeakDurationMs = 2 [(ControlOptions) = {
+                Description: "Leak interval (ms) for Leaky Bucket algorithm",
+                MinValue: 1,
+                MaxValue: 3600000,
+                DefaultValue: 60000 }];
+            optional uint64 LeakRate = 3 [(ControlOptions) = {
+                Description: "Leak size for Leaky Bucket algorithm",
+                MinValue: 1,
+                MaxValue: 100000,
+                DefaultValue: 1 }];
+        }
+
         optional uint64 SlowDiskThreshold = 1 [(ControlOptions) = {
             Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille",
             MinValue: 1,
@@ -1400,11 +1488,7 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 50000 }];
-        optional uint64 LongRequestReportingDelayMs = 4 [(ControlOptions) = {
-            Description: "Delay (ms) between reports of long requests for one handle class",
-            MinValue: 1,
-            MaxValue: 1000000,
-            DefaultValue: 60000 }];
+        reserved 4;
         optional uint64 MaxNumOfSlowDisks = 5 [(ControlOptions) = {
             Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations",
             MinValue: 1,
@@ -1442,6 +1526,8 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 2,
             DefaultValue: 2 }];
+
+        optional TRequestReportingSettings RequestReportingSettings = 12;
     }
 
     message TPDiskControls {
@@ -1627,14 +1713,14 @@ message THiveConfig {
     optional bool ContinueAutoBalancer = 31 [default = true];
     optional double MinNodeUsageToBalance = 32 [default = 0.1];
     optional double MinPeriodBetweenReassign = 33 [default = 300.0]; // seconds
-    optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds
+    optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds, period used for statistics, not to be confused with TabletRestartsPeriod
     optional double NodeRestartWatchPeriod = 35 [default = 3600.0]; // seconds
     optional uint64 NodeDeletePeriod = 36 [default = 3600]; // seconds
     repeated THiveTabletLimit DefaultTabletLimit = 37;
     repeated THiveTabletPreference DefaultTabletPreference = 38;
     optional uint64 SystemTabletCategoryId = 39 [default = 1];
     optional bool EnableFastTabletMove = 40 [default = true];
-    optional uint64 TabletRestartsPeriod = 42 [default = 1000]; // milliseconds
+    optional uint64 TabletRestartsPeriod = 42 [default = 1000]; // milliseconds, period checked for penalties - not to be confused with TabletRestartWatchPeriod
     optional uint64 TabletRestarsMaxCount = 43 [default = 2]; // deprecated, use TabletRestartsMaxCount instead
     optional uint64 PostponeStartPeriod = 44 [default = 1000]; // milliseconds
     optional EHiveNodeSelectStrategy NodeSelectStrategy = 45 [default = HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P];
@@ -1736,6 +1822,15 @@ message TColumnShardConfig {
     optional string ReaderClassName = 28;
     optional bool AllowNullableColumnsInPK = 29 [default = false];
     optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
+    optional bool UseSlicesFilter = 31 [default = true];
+    optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
+    optional uint64 WritingBufferVolumeMb = 33 [default = 32];
+    optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000];
+    optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 128000000];
+    optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
+    optional int32 DefaultCompressionLevel = 37;
+    optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
+    optional bool AlterObjectEnabled = 39 [default = false];
 }
 
 message TSchemeShardConfig {
@@ -2030,7 +2125,8 @@ message TKafkaProxyConfig {
     }
 
     optional TProxy Proxy = 7;
-    optional bool MeteringV2Enabled = 10 [default = false];
+    optional bool MeteringV2Enabled = 10 [default = true];
+    optional bool AuthViaApiKey = 11 [default = true];
 }
 
 message TAwsCompatibilityConfig {
@@ -2132,12 +2228,17 @@ message TAppConfig {
     optional TShutdownConfig ShutdownConfig = 84;
     optional TPrioritiesQueueConfig CompPrioritiesConfig = 85;
     optional TSelfManagementConfig SelfManagementConfig = 86;
+    optional NKikimrProto.TDataIntegrityTrailsConfig DataIntegrityTrailsConfig = 87;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;
 
     optional TConfigVersion Version = 102;
     repeated TLabel Labels = 103;
+
+    optional string ConfigStorePath = 104;
+    optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
+    optional bool ConfigLoadedFromStore = 106;
 }
 
 message TYdbVersion {

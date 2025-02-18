@@ -37,6 +37,9 @@ public:
 
     TString SerializePayloadToString() const;
     TString SerializeFullToString() const;
+    TString DebugString() const {
+        return Data->ToString();
+    }
     ui64 GetMemorySize() const;
 };
 

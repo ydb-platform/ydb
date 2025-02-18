@@ -2,13 +2,15 @@
 
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
 namespace NKikimr::NStorage {
 
     std::optional<TString> TDistributedConfigKeeper::GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config,
             const TString& selfAssemblyUUID) {
-        if (!config->HasSelfManagementConfig() || !config->GetSelfManagementConfig().GetEnabled()) {
+        if (!config->GetSelfManagementConfig().GetEnabled()) {
             return "self-management is not enabled";
         }
         const auto& smConfig = config->GetSelfManagementConfig();
@@ -45,11 +47,24 @@ namespace NKikimr::NStorage {
             return "missing initial config YAML";
         }
         TStringStream ss;
-        {
-            TZstdCompress zstd(&ss);
-            zstd << Cfg->SelfManagementConfig->GetInitialConfigYaml();
+        TString yaml = Cfg->SelfManagementConfig->GetInitialConfigYaml();
+        ui32 version = 0;
+        try {
+            auto json = NYaml::Yaml2Json(YAML::Load(yaml), true);
+            if (json.Has("metadata")) {
+                if (auto& metadata = json["metadata"]; metadata.Has("version")) {
+                    version = metadata["version"].GetUIntegerRobust();
+                }
+            }
+        } catch (const std::exception& ex) {
+            return TStringBuilder() << "failed to parse initial config YAML: " << ex.what();
         }
-        config->SetStorageConfigCompressedYAML(ss.Str());
+        if (version) {
+            return TStringBuilder() << "initial config version must be zero";
+        }
+        if (const auto& error = UpdateConfigComposite(*config, yaml, std::nullopt)) {
+            return TStringBuilder() << "failed to update config yaml: " << *error;
+        }
 
         if (!Cfg->DomainsConfig) { // no automatic configuration required
         } else if (Cfg->DomainsConfig->StateStorageSize() == 1) { // the StateStorage config is already defined explicitly, just migrate it

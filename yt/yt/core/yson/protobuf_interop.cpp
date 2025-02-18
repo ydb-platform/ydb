@@ -203,7 +203,7 @@ public:
     //! This method is called while reflecting types.
     TStringBuf GetYsonName(const FieldDescriptor* descriptor)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         return GetYsonNameFromDescriptor(
             descriptor,
@@ -213,7 +213,7 @@ public:
     //! This method is called while reflecting types.
     std::vector<TStringBuf> GetYsonNameAliases(const FieldDescriptor* descriptor)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         std::vector<TStringBuf> aliases;
         const auto& extensions = descriptor->options().GetRepeatedExtension(NYT::NYson::NProto::field_name_alias);
@@ -226,7 +226,7 @@ public:
     //! This method is called while reflecting types.
     TStringBuf GetYsonLiteral(const EnumValueDescriptor* descriptor)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         return GetYsonNameFromDescriptor(
             descriptor,
@@ -295,7 +295,7 @@ public:
         const Descriptor* descriptor) const
     {
         // No need to call Initialize: it has been already called within Reflect*Type higher up the stack.
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         auto it = MessageTypeConverterMap_.find(descriptor);
         if (it == MessageTypeConverterMap_.end()) {
@@ -311,7 +311,7 @@ public:
         int fieldIndex) const
     {
         // No need to call Initialize: it has been already called within Reflect*Type higher up the stack.
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         auto fieldNumber = descriptor->field(fieldIndex)->number();
         auto it = MessageFieldConverterMap_.find(std::pair(descriptor, fieldNumber));
@@ -352,7 +352,7 @@ private:
 
     TStringBuf InternString(const TString& str)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         return *InternedStrings_.emplace(str).first;
     }
@@ -808,8 +808,9 @@ TProtobufElement TProtobufField::GetElement(bool insideRepeated) const
         });
     } else {
         return std::make_unique<TProtobufScalarElement>(TProtobufScalarElement{
-            static_cast<TProtobufScalarElement::TType>(GetType()),
-            GetEnumYsonStorageType()
+            static_cast<TProtobufElementType>(GetType()),
+            GetEnumYsonStorageType(),
+            EnumType_
         });
     }
 }
@@ -886,7 +887,7 @@ private:
 
 const TProtobufMessageType* TProtobufTypeRegistry::ReflectMessageTypeInternal(const Descriptor* descriptor)
 {
-    VERIFY_SPINLOCK_AFFINITY(Lock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
     TProtobufMessageType* type;
     auto it = MessageTypeMap_.find(descriptor);
@@ -906,7 +907,7 @@ const TProtobufMessageType* TProtobufTypeRegistry::ReflectMessageTypeInternal(co
 
 const TProtobufEnumType* TProtobufTypeRegistry::ReflectEnumTypeInternal(const EnumDescriptor* descriptor)
 {
-    VERIFY_SPINLOCK_AFFINITY(Lock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
     TProtobufEnumType* type;
     auto it = EnumTypeMap_.find(descriptor);
@@ -1038,13 +1039,18 @@ protected:
         }
     }
 
-    void ValidateString(TStringBuf data, TStringBuf fieldFullName)
+    void ValidateString(TStringBuf data, TStringBuf fieldFullName, std::optional<EUtf8Check> utf8Check)
     {
-        auto config = GetProtobufInteropConfig();
-        if (config->Utf8Check == EUtf8Check::Disable || IsUtf(data)) {
+        // TODO(kmokrov): `.or_else` when C++23 arrives.
+        auto effectiveCheck = utf8Check ? *utf8Check : std::invoke([] {
+            auto config = GetProtobufInteropConfig();
+            return config->Utf8Check;
+        });
+
+        if (effectiveCheck == EUtf8Check::Disable || IsUtf(data)) {
             return;
         }
-        switch (config->Utf8Check) {
+        switch (effectiveCheck) {
             case EUtf8Check::Disable:
                 return;
             case EUtf8Check::LogOnFail:
@@ -1164,7 +1170,7 @@ private:
             const auto* field = FieldStack_.back().Field;
             switch (field->GetType()) {
                 case FieldDescriptor::TYPE_STRING:
-                    ValidateString(value, field->GetFullName());
+                    ValidateString(value, field->GetFullName(), Options_.Utf8Check);
                     [[fallthrough]];
 
                 case FieldDescriptor::TYPE_BYTES:
@@ -1554,7 +1560,7 @@ private:
 
     void BeginNestedMessage()
     {
-        auto index =  static_cast<int>(NestedMessages_.size());
+        auto index =  std::ssize(NestedMessages_);
         NestedMessages_.emplace_back(BodyCodedStream_.ByteCount(), -1);
         NestedIndexStack_.push_back(index);
     }
@@ -2686,7 +2692,7 @@ private:
                         }
                         TStringBuf data(PooledString_.data(), length);
                         if (field->GetType() == FieldDescriptor::TYPE_STRING) {
-                            ValidateString(data, field->GetFullName());
+                            ValidateString(data, field->GetFullName(), Options_.Utf8Check);
                         }
                         ParseScalar([&] {
                             if (field->GetBytesFieldConverter()) {
@@ -3045,6 +3051,11 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
         }
 
         tokenizer.Advance();
+        if (options.AllowAsterisks && tokenizer.GetType() == NYPath::ETokenType::Asterisk) {
+            tokenizer.Advance();
+            tokenizer.Expect(NYPath::ETokenType::Slash);
+            tokenizer.Advance();
+        }
         tokenizer.Expect(NYPath::ETokenType::Literal);
 
         const auto& fieldName = tokenizer.GetLiteralValue();
@@ -3109,7 +3120,9 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
 
             tokenizer.Expect(NYPath::ETokenType::Slash);
             tokenizer.Advance();
-            tokenizer.ExpectListIndex();
+            if (!options.AllowAsterisks || tokenizer.GetType() != NYPath::ETokenType::Asterisk) {
+                tokenizer.ExpectListIndex();
+            }
 
             if (!field->IsMessage()) {
                 return GetProtobufElementFromField(

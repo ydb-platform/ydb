@@ -178,7 +178,7 @@ void TVirtualMapBase::GetSelf(
 
     auto writer = New<TAsyncYsonWriter>();
 
-    // NB: we do not want empty attributes (<>) to appear in the result in order to comply
+    // NB: We do not want empty attributes (<>) to appear in the result in order to comply
     // with current behaviour for some paths (like //sys/scheduler/orchid/scheduler/operations).
     if (std::ssize(keys) != size || OwningNode_) {
         writer->OnBeginAttributes();
@@ -607,7 +607,7 @@ void TVirtualListBase::GetSelf(
 
     auto writer = New<TAsyncYsonWriter>();
 
-    // NB: we do not want empty attributes (<>) to appear in the result in order to comply
+    // NB: We do not want empty attributes (<>) to appear in the result in order to comply
     // with current behaviour for some paths (like //sys/scheduler/orchid/scheduler/operations).
     if (limit < size) {
         writer->OnBeginAttributes();

@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/concurrency/config.h>
 
+#include <yt/yt/core/misc/backoff_strategy.h>
+
 #include <library/cpp/yt/misc/enum.h>
 
 #include <vector>
@@ -181,6 +183,12 @@ public:
 
     //! Maximum number of retry attempts to make.
     int RetryAttempts;
+
+    // COMPAT(danilalexeev): YT-23734.
+    bool EnableExponentialRetryBackoffs;
+
+    //! Retry backoff policy.
+    TExponentialBackoffOptions RetryBackoff;
 
     //! Maximum time to spend while retrying.
     //! If null then no limit is enforced.

@@ -516,9 +516,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         } else if (tablet.IsReadyToBlockStorage()) {
             tablet.InitiateBlockStorage(sideEffects);
         } else if (tablet.IsDeleting()) {
-            if (!tablet.InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
-                DeleteTabletWithoutStorage(&tablet);
-            }
+            BlockStorageForDelete(tablet.Id, sideEffects);
         } else if (tablet.IsLockedToActor()) {
             // we are wating for a lock
         } else if (tablet.IsExternalBoot()) {
@@ -855,9 +853,7 @@ void THive::Handle(TEvHive::TEvInitiateBlockStorage::TPtr& ev) {
     TLeaderTabletInfo* tablet = FindTabletEvenInDeleting(tabletId);
     if (tablet != nullptr) {
         if (tablet->IsDeleting()) {
-            if (!tablet->InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
-                DeleteTabletWithoutStorage(tablet);
-            }
+            BlockStorageForDelete(tabletId, sideEffects);
         } else
         if (tablet->IsReadyToBlockStorage()) {
             tablet->InitiateBlockStorage(sideEffects);
@@ -1199,6 +1195,11 @@ TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNod
 THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId) {
     BLOG_D("[FBN] Finding best node for tablet " << tablet.ToString());
     BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " family " << tablet.FamilyString());
+
+    const TDomainInfo* domain = FindDomain(tablet.NodeFilter.ObjectDomain);
+    if (domain && domain->Stopped) {
+        return TNoNodeFound();
+    }
 
     if (tablet.PreferredNodeId != 0) {
         TNodeInfo* node = FindNode(tablet.PreferredNodeId);
@@ -1866,7 +1867,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
 void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo *info, const NKikimrHive::TEvRequestHiveInfo &req) {
     if (info) {
         TInstant now = TActivationContext::Now();
-        TInstant restartsBarrierTime = now - GetTabletRestartsPeriod();
+        TInstant restartsBarrierTime = now - GetTabletRestartWatchPeriod();
         auto& tabletInfo = *response.AddTablets();
         tabletInfo.SetTabletID(tabletId);
         tabletInfo.SetTabletType(info->Type);
@@ -2213,7 +2214,7 @@ void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
         .Persist = ev->Get()->Record.GetPersist(),
         .DownPolicy = policy,
         .DrainInFlight = ev->Get()->Record.GetDrainInFlight(),
-    }, ev->Sender));
+    }, ev->Sender, ev->Get()->Record.GetSeqNo()));
 }
 
 void THive::Handle(TEvHive::TEvFillNode::TPtr& ev) {
@@ -2880,6 +2881,35 @@ ui64 THive::GetObjectImbalance(TFullObjectId object) {
     return it->second->GetImbalance();
 }
 
+void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects) {
+    auto* tablet = FindTabletEvenInDeleting(tabletId);
+    if (tablet == nullptr) {
+        return;
+    }
+    if (DeleteTabletInProgress < MAX_DELETE_TABLET_IN_PROGRESS) {
+        ++DeleteTabletInProgress;
+        if (!tablet->InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
+            DeleteTabletWithoutStorage(tablet);
+        }
+    } else {
+        DeleteTabletQueue.push(tabletId);
+    }
+}
+
+void THive::ProcessPendingStopTablet() {
+    if (!StopTenantTabletsQueue.empty()) {
+        Execute(CreateStopTabletByTenant(StopTenantTabletsQueue.front()));
+        StopTenantTabletsQueue.pop();
+    }
+}
+
+void THive::ProcessPendingResumeTablet() {
+    if (!ResumeTenantTabletsQueue.empty()) {
+        Execute(CreateResumeTabletByTenant(ResumeTenantTabletsQueue.front()));
+        ResumeTenantTabletsQueue.pop();
+    }
+}
+
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -3072,6 +3102,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvGenerateTestData, Handle);
         hFunc(TEvPrivate::TEvRefreshScaleRecommendation, Handle);
         hFunc(TEvHive::TEvConfigureScaleRecommender, Handle);
+        hFunc(TEvPrivate::TEvUpdateFollowers, Handle);
     }
 }
 
@@ -3179,6 +3210,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvGenerateTestData::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvRefreshScaleRecommendation::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvConfigureScaleRecommender::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvUpdateFollowers::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3480,7 +3512,40 @@ void THive::Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev) {
 }
 
 void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
-    Execute(CreateUpdateDcFollowers(ev->Get()->DataCenter));
+    auto dataCenterId = ev->Get()->DataCenter;
+    auto& dataCenter = DataCenters[dataCenterId];
+    if (!dataCenter.UpdateScheduled) {
+        return;
+    }
+    dataCenter.UpdateScheduled = false;
+    if (dataCenter.IsRegistered()) {
+        for (auto& [tabletId, tablet] : Tablets) {
+            for (auto& group : tablet.FollowerGroups) {
+                auto& followers = dataCenter.Followers[{tabletId, group.Id}];
+                i64 neededCount = group.GetFollowerCountForDataCenter(dataCenterId);
+                i64 delta = neededCount - std::ssize(followers);
+                for (i64 i = 0; i < delta; ++i) {
+                    BLOG_TRACE("UpdateDataCenterFollowers: Pending create follower for " << tabletId);
+                    PendingFollowerUpdates.Create(tablet.GetFullTabletId(), group.Id, dataCenterId);
+                }
+            }
+        }
+    } else {
+        for (auto& [group, followers] : dataCenter.Followers) {
+            for (auto follower : followers) {
+                BLOG_TRACE("UpdateDataCenterFollowers: Pending delete follower for " << follower->GetFullTabletId());
+                PendingFollowerUpdates.Delete(follower->GetFullTabletId(), group.second, dataCenterId);
+            }
+        }
+    }
+    if (!PendingFollowerUpdates.Empty() && !ProcessFollowerUpdatesScheduled) {
+        Send(SelfId(), new TEvPrivate::TEvUpdateFollowers);
+        ProcessFollowerUpdatesScheduled = true;
+    }
+}
+
+void THive::Handle(TEvPrivate::TEvUpdateFollowers::TPtr&) {
+    Execute(CreateProcessUpdateFollowers());
 }
 
 void THive::MakeScaleRecommendation() {

@@ -6,6 +6,7 @@ PROTO_NAMESPACE(yt)
 
 SRCS(
     config.cpp
+    GLOBAL configure_dispatcher.cpp
     public.cpp
     dispatcher.cpp
     server.cpp

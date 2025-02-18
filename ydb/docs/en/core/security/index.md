@@ -4,7 +4,8 @@ This section of {{ ydb-short-name }} documentation covers security-related aspec
 
 Main resources:
 
-- [{#T}](access-management.md)
+- [{#T}](authentication.md)
+- [{#T}](authorization.md)
 - [{#T}](audit-log.md)
 - Encryption:
 
@@ -14,5 +15,4 @@ Main resources:
 - [{#T}](short-access-control-notation.md)
 - Concepts:
 
-  - [{#T}](../concepts/auth.md)
   - [{#T}](../concepts/connect.md)

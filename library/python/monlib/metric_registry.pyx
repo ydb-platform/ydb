@@ -264,6 +264,9 @@ cdef class MetricRegistry:
     def reset(self):
         self.__wrapped.Get().Reset()
 
+    def clear(self):
+        self.__wrapped.Get().Clear()
+
     def accept(self, time, Encoder encoder):
         cdef IMetricConsumer* ptr = <IMetricConsumer*>encoder.native()
         timestamp = int((time - dt.datetime(1970, 1, 1)).total_seconds())

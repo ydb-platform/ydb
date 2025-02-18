@@ -449,16 +449,9 @@ public:
     bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
     void Reply(const TActorContext&) override {};
 
-    void Handle(NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev);
     void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) override;
 private:
-    void SendNodesRequest() const;
-
-    NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr NodesInfoEv;
     THashSet<ui64> PartitionIds;
-
-    bool GotPartitions = false;
-    bool GotNodesInfo = false;
 };
 
 } // namespace NKikimr::NGRpcProxy::V1

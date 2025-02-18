@@ -3,6 +3,16 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp::NFederatedQueryTest {
+    TString GetSymbolsString(char start, char end, const TString& skip) {
+        TStringBuilder result;
+        for (char symbol = start; symbol <= end; ++symbol) {
+            if (skip.Contains(symbol)) {
+                continue;
+            }
+            result << symbol;
+        }
+        return result;
+    }
 
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
         NYdb::NOperation::TOperationClient client(ydbDriver);
@@ -31,7 +41,6 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (!appConfig) {
             appConfig.emplace();
         }
-        appConfig->MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
         auto settings = TKikimrSettings();
 
@@ -48,6 +57,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig->GetQueryServiceConfig().GetS3(),
             appConfig->GetQueryServiceConfig().GetGeneric(),
             appConfig->GetQueryServiceConfig().GetYt(),
+            nullptr,
+            appConfig->GetQueryServiceConfig().GetSolomon(),
             nullptr,
             nullptr);
 

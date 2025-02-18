@@ -572,13 +572,13 @@ TCachePolicy GetDefaultCachePolicy(const THttpRequest* request, const TCachePoli
     THeaders headers(request->Headers);
     TStringBuf cacheControl(headers["Cache-Control"]);
     while (TStringBuf cacheItem = cacheControl.NextTok(',')) {
-        Trim(cacheItem, ' ');
+        cacheItem = Trim(cacheItem, ' ');
         if (cacheItem == "no-store" || cacheItem == "no-cache") {
             policy.DiscardCache = true;
         }
         TStringBuf itemName = cacheItem.NextTok('=');
-        TrimEnd(itemName, ' ');
-        TrimBegin(cacheItem, ' ');
+        itemName = TrimEnd(itemName, ' ');
+        cacheItem = TrimBegin(cacheItem, ' ');
         if (itemName == "max-age") {
             policy.TimeToRefresh = policy.TimeToExpire = TDuration::Seconds(FromString(cacheItem));
         }

@@ -12,7 +12,8 @@ PEERDIR(
     yql/essentials/public/types
     yql/essentials/utils/log
     ydb/public/lib/experimental
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/driver
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/ydb/proto
 )

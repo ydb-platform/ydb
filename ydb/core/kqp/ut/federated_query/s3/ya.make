@@ -21,7 +21,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/actors
     yql/essentials/sql/pg_dummy
     ydb/library/testlib/s3_recipe_helper
-    ydb/public/sdk/cpp/client/ydb_types/operation
+    ydb/public/sdk/cpp/src/client/types/operation
 )
 
 YQL_LAST_ABI_VERSION()

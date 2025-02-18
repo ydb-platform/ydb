@@ -1476,21 +1476,36 @@ TRuntimeNode TProgramBuilder::ToBlocks(TRuntimeNode flow) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode flow) {
-    TType* outputItemType;
-    {
-        const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
-        std::vector<TType*> outputItems;
-        outputItems.reserve(wideComponents.size());
-        for (size_t i = 0; i < wideComponents.size(); ++i) {
-            outputItems.push_back(NewBlockType(wideComponents[i], TBlockType::EShape::Many));
-        }
-        outputItems.push_back(NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
-        outputItemType = NewMultiType(outputItems);
+TType* TProgramBuilder::BuildWideBlockType(const TArrayRef<TType* const>& wideComponents) {
+    std::vector<TType*> blockItems;
+    blockItems.reserve(wideComponents.size());
+    for (size_t i = 0; i < wideComponents.size(); i++) {
+        blockItems.push_back(NewBlockType(wideComponents[i], TBlockType::EShape::Many));
     }
+    blockItems.push_back(NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
+    return NewMultiType(blockItems);
+}
 
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputItemType));
-    callableBuilder.Add(flow);
+TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode stream) {
+    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected WideStream as input type");
+    if constexpr (RuntimeVersion < 58U) {
+        // Preserve the old behaviour for ABI compatibility.
+        // Emit (FromFlow (WideToBlocks (ToFlow (<stream>)))) to
+        // process the flow in favor to the given stream following
+        // the older MKQL ABI.
+        // FIXME: Drop the branch below, when the time comes.
+        const auto inputFlow = ToFlow(stream);
+        const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, inputFlow.GetStaticType()));
+        TType* outputMultiType = BuildWideBlockType(wideComponents);
+        TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputMultiType));
+        callableBuilder.Add(inputFlow);
+        const auto outputFlow = TRuntimeNode(callableBuilder.Build(), false);
+        return FromFlow(outputFlow);
+    }
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, stream.GetStaticType()));
+    TType* outputMultiType = BuildWideBlockType(wideComponents);
+    TCallableBuilder callableBuilder(Env, __func__, NewStreamType(outputMultiType));
+    callableBuilder.Add(stream);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -1503,12 +1518,28 @@ TRuntimeNode TProgramBuilder::FromBlocks(TRuntimeNode flow) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode flow) {
-    auto outputItems = ValidateBlockFlowType(flow.GetStaticType());
+TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode stream) {
+    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected WideStream as input type");
+    if constexpr (RuntimeVersion < 55U) {
+        // Preserve the old behaviour for ABI compatibility.
+        // Emit (FromFlow (WideFromBlocks (ToFlow (<stream>)))) to
+        // process the flow in favor to the given stream following
+        // the older MKQL ABI.
+        // FIXME: Drop the branch below, when the time comes.
+        const auto inputFlow = ToFlow(stream);
+        auto outputItems = ValidateBlockFlowType(inputFlow.GetStaticType());
+        outputItems.pop_back();
+        TType* outputMultiType = NewMultiType(outputItems);
+        TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputMultiType));
+        callableBuilder.Add(inputFlow);
+        const auto outputFlow = TRuntimeNode(callableBuilder.Build(), false);
+        return FromFlow(outputFlow);
+    }
+    auto outputItems = ValidateBlockStreamType(stream.GetStaticType());
     outputItems.pop_back();
     TType* outputMultiType = NewMultiType(outputItems);
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputMultiType));
-    callableBuilder.Add(flow);
+    TCallableBuilder callableBuilder(Env, __func__, NewStreamType(outputMultiType));
+    callableBuilder.Add(stream);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -3431,6 +3462,26 @@ TRuntimeNode TProgramBuilder::VariantItem(TRuntimeNode variant) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::DynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType) {
+    if constexpr (RuntimeVersion < 56U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    auto type = AS_TYPE(TVariantType, variantType);
+    auto expectedIndexSlot = type->GetUnderlyingType()->IsTuple() ? NUdf::EDataSlot::Uint32 : NUdf::EDataSlot::Utf8;
+    bool isOptional;
+    auto indexType = UnpackOptionalData(index.GetStaticType(), isOptional);
+    MKQL_ENSURE(indexType->GetDataSlot() == expectedIndexSlot, "Mismatch type of index");
+
+    auto resType = TOptionalType::Create(type, Env);
+
+    TCallableBuilder callableBuilder(Env, __func__, resType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(index);
+    callableBuilder.Add(TRuntimeNode(variantType, true));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::VisitAll(TRuntimeNode variant, std::function<TRuntimeNode(ui32, TRuntimeNode)> handler) {
     const auto type = AS_TYPE(TVariantType, variant);
     std::vector<TRuntimeNode> items;
@@ -4600,7 +4651,8 @@ TRuntimeNode TProgramBuilder::ToDecimal(TRuntimeNode data, ui8 precision, ui8 sc
         } else if (params.second < scale) {
             return Invoke("ScaleUp_" + ::ToString(scale - params.second), decimal, args);
         } else if (params.second > scale) {
-            return Invoke("ScaleDown_" + ::ToString(params.second - scale), decimal, args);
+            TRuntimeNode scaled = Invoke("ScaleDown_" + ::ToString(params.second - scale), decimal, args);
+            return Invoke("CheckBounds_" + ::ToString(precision), decimal, {{ scaled }});
         } else if (precision < params.first) {
             return Invoke("CheckBounds_" + ::ToString(precision), decimal, args);
         } else if (precision > params.first) {
@@ -5719,17 +5771,6 @@ TRuntimeNode TProgramBuilder::BlockFunc(const std::string_view& funcName, TType*
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockBitCast(TRuntimeNode value, TType* targetType) {
-    MKQL_ENSURE(value.GetStaticType()->IsBlock(), "Expected Block type");
-
-    auto returnType = TBlockType::Create(targetType, AS_TYPE(TBlockType, value.GetStaticType())->GetShape(), Env);
-    TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(value);
-    builder.Add(TRuntimeNode(targetType, true));
-
-    return TRuntimeNode(builder.Build(), false);
-}
-
 TRuntimeNode TProgramBuilder::BuildBlockCombineAll(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
         const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     const auto inputType = input.GetStaticType();
@@ -5975,11 +6016,19 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntime
     if constexpr (RuntimeVersion < 53U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
+    if (RuntimeVersion < 57U && joinKind == EJoinKind::Cross) {
+        THROW yexception() << __func__ << " does not support cross join in runtime version (" << RuntimeVersion << ")";
+    }
+
     MKQL_ENSURE(joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left ||
-                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
+                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly || joinKind == EJoinKind::Cross,
                 "Unsupported join kind");
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
+    if (joinKind == EJoinKind::Cross) {
+        MKQL_ENSURE(leftKeyColumns.empty(), "Specifying key columns is not allowed for cross join");
+    } else {
+        MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    }
 
     ValidateBlockStreamType(leftStream.GetStaticType());
     ValidateBlockStreamType(rightStream.GetStaticType());
@@ -6195,7 +6244,7 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
         defineLookup[name] = i;
     }
 
-    TVector<TRuntimeNode> defineNames(defineVarNames.size());
+    TVector<TRuntimeNode> defineNames(patternVarLookup.size());
     TVector<TRuntimeNode> defineNodes(patternVarLookup.size());
     const auto inputDataArg = Arg(NewListType(inputRowType));
     const auto currentRowIndexArg = Arg(NewDataType(NUdf::EDataSlot::Uint64));
@@ -6243,7 +6292,7 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
         callableBuilder.Add(NewDataLiteral(static_cast<i32>(skipTo.To)));
         callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(skipTo.Var));
     }
-    if constexpr (RuntimeVersion >= 53U) {
+    if constexpr (RuntimeVersion >= 54U) {
         callableBuilder.Add(NewDataLiteral(static_cast<i32>(rowsPerMatch)));
         callableBuilder.Add(NewList(outputColumnEntryType, outputColumnOrder));
     }

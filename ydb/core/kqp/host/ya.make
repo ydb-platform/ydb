@@ -22,6 +22,9 @@ PEERDIR(
     yql/essentials/core/services
     yql/essentials/minikql/invoke_builtins
     yql/essentials/sql
+    yql/essentials/sql/v0
+    yql/essentials/sql/v1
+    yql/essentials/parser/pg_wrapper/interface
     yql/essentials/core
     yql/essentials/providers/common/codec
     ydb/library/yql/dq/opt
@@ -33,7 +36,7 @@ PEERDIR(
     yql/essentials/providers/pg/provider
     yql/essentials/providers/result/provider
     ydb/library/yql/providers/s3/expr_nodes
-    ydb/public/sdk/cpp/client/impl/ydb_internal/common
+    ydb/public/sdk/cpp/src/client/impl/ydb_internal/common
 )
 
 YQL_LAST_ABI_VERSION()

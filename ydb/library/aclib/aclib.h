@@ -12,10 +12,13 @@ namespace NACLib {
 #define BUILTIN_SYSTEM_DOMAIN "system"
 
 #define BUILTIN_ACL_METADATA "metadata@" BUILTIN_SYSTEM_DOMAIN
+#define BUILTIN_ACL_TMP "tmp@" BUILTIN_SYSTEM_DOMAIN
+
 class TUserToken;
 class TSystemUsers {
 public:
     static const TUserToken& Metadata();
+    static const TUserToken& Tmp();
 };
 
 enum EAccessRights : ui32 { // bitmask
@@ -117,7 +120,6 @@ public:
     std::pair<ui32, ui32> AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
     std::pair<ui32, ui32> RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
     std::pair<ui32, ui32> RemoveAccess(const NACLibProto::TACE& filter);
-    bool TryRemoveAccess(const NACLib::TSID& sid);
     bool HasAccess(const NACLib::TSID& sid);
     std::pair<ui32, ui32> ClearAccess();
     std::pair<ui32, ui32> ApplyDiff(const NACLibProto::TDiffACL& diffACL);

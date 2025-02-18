@@ -89,6 +89,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join3.test_plan/child",
                                                                                         "ReadColumns": [
                                                                                             "k"
                                                                                         ],
@@ -128,6 +129,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_jointest/join3.test_plan/parent",
                                                                         "ReadColumns": [
                                                                             "k",
                                                                             "pd"

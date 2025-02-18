@@ -39,7 +39,7 @@ public:
     bool StringifyNanAndInfinity;
 
     // Size of buffer used read out input stream in parser.
-    // NB: in case of parsing long string yajl holds in memory whole string prefix and copy it on every parse call.
+    // NB: In case of parsing long string yajl holds in memory whole string prefix and copy it on every parse call.
     // Therefore parsing long strings works faster with larger buffer.
     int BufferSize;
 

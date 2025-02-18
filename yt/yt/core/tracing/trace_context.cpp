@@ -10,6 +10,7 @@
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/ytree/convert.h>
+#include <yt/yt/core/ytree/helpers.h>
 
 #include <yt/yt_proto/yt/core/tracing/proto/tracing_ext.pb.h>
 
@@ -154,31 +155,7 @@ TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation l
     return oldContext;
 }
 
-void OnContextSwitchOut()
-{
-    if (auto* context = TryGetCurrentTraceContext()) {
-        auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
-        auto now = GetApproximateCpuInstant();
-        context->IncrementElapsedCpuTime(now - traceContextTimingCheckpoint);
-        SetCurrentTraceContext(nullptr);
-        traceContextTimingCheckpoint = 0;
-    }
-}
-
-void OnContextSwitchIn()
-{
-    if (auto* context = TryGetTraceContextFromPropagatingStorage(GetCurrentPropagatingStorage())) {
-        SetCurrentTraceContext(context);
-        TraceContextTimingCheckpoint() = GetApproximateCpuInstant();
-    } else {
-        SetCurrentTraceContext(nullptr);
-        TraceContextTimingCheckpoint() = 0;
-    }
-}
-
-void OnPropagatingStorageSwitch(
-    const TPropagatingStorage& oldStorage,
-    const TPropagatingStorage& newStorage)
+void OnPropagatingStorageBeforeSwitch(const TPropagatingStorage& oldStorage)
 {
     TCpuInstant now = 0;
     auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
@@ -189,6 +166,12 @@ void OnPropagatingStorageSwitch(
         now = GetApproximateCpuInstant();
         oldContext->IncrementElapsedCpuTime(now - traceContextTimingCheckpoint);
     }
+}
+
+void OnPropagatingStorageAfterSwitch(const TPropagatingStorage& newStorage)
+{
+    TCpuInstant now = 0;
+    auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
 
     if (auto* newContext = TryGetTraceContextFromPropagatingStorage(newStorage)) {
         SetCurrentTraceContext(newContext);
@@ -200,6 +183,24 @@ void OnPropagatingStorageSwitch(
         SetCurrentTraceContext(nullptr);
         traceContextTimingCheckpoint = 0;
     }
+}
+
+void OnPropagatingStorageSwitch(
+    const TPropagatingStorage& oldStorage,
+    const TPropagatingStorage& newStorage)
+{
+    OnPropagatingStorageBeforeSwitch(oldStorage);
+    OnPropagatingStorageAfterSwitch(newStorage);
+}
+
+void OnContextSwitchOut()
+{
+    OnPropagatingStorageBeforeSwitch(GetCurrentPropagatingStorage());
+}
+
+void OnContextSwitchIn()
+{
+    OnPropagatingStorageAfterSwitch(GetCurrentPropagatingStorage());
 }
 
 void InitializeTraceContexts()
@@ -263,7 +264,7 @@ void TTraceContext::SetRequestId(TRequestId requestId)
     RequestId_ = requestId;
 }
 
-void TTraceContext::SetLoggingTag(const TString& loggingTag)
+void TTraceContext::SetLoggingTag(const std::string& loggingTag)
 {
     LoggingTag_ = loggingTag;
 }
@@ -315,7 +316,7 @@ void TTraceContext::SetAllocationTagList(TAllocationTagListPtr list) noexcept
 
 void TTraceContext::DoSetAllocationTags(TAllocationTags&& tags)
 {
-    VERIFY_SPINLOCK_AFFINITY(AllocationTagsLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(AllocationTagsLock_);
     auto holder = tags.empty() ? nullptr : New<TAllocationTagList>(std::move(tags));
     AllocationTagList_.Store(std::move(holder));
 }

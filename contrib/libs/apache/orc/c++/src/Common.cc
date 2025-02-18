@@ -133,11 +133,11 @@ namespace orc {
   }
 
   std::string FileVersion::toString() const {
-    if (majorVersion == 1 && minorVersion == 9999) {
+    if (majorVersion_ == 1 && minorVersion_ == 9999) {
       return "UNSTABLE-PRE-2.0";
     }
     std::stringstream ss;
-    ss << majorVersion << '.' << minorVersion;
+    ss << majorVersion_ << '.' << minorVersion_;
     return ss.str();
   }
 

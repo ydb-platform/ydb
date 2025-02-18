@@ -9,8 +9,9 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
     ui32 sourceIdx = 0;
     std::deque<std::shared_ptr<IDataSource>> sources;
+    const auto readMetadata = GetReadMetadataVerifiedAs<const TReadMetadata>();
     const auto& portions = GetReadMetadata()->SelectInfo->Portions;
-    const auto& committed = GetReadMetadata()->CommittedBlobs;
+    const auto& committed = readMetadata->CommittedBlobs;
     ui64 compactedPortionsBytes = 0;
     ui64 insertedPortionsBytes = 0;
     ui64 committedPortionsBytes = 0;
@@ -39,8 +40,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
             if (GetReadMetadata()->IsWriteConflictable(i.GetInsertWriteId())) {
                 continue;
             }
-        } else if (GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(i.GetFirst(), i.GetLast()) ==
-                   TPKRangeFilter::EUsageClass::DontUsage) {
+        } else if (!GetReadMetadata()->GetPKRangesFilter().IsUsed(i.GetFirst(), i.GetLast())) {
             continue;
         }
         sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, i, SpecialReadContext));
@@ -51,7 +51,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     auto& stats = GetReadMetadata()->ReadStats;
     stats->IndexPortions = GetReadMetadata()->SelectInfo->Portions.size();
     stats->IndexBatches = GetReadMetadata()->NumIndexedBlobs();
-    stats->CommittedBatches = GetReadMetadata()->CommittedBlobs.size();
+    stats->CommittedBatches = readMetadata->CommittedBlobs.size();
     stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
     stats->CommittedPortionsBytes = committedPortionsBytes;
     stats->InsertedPortionsBytes = insertedPortionsBytes;

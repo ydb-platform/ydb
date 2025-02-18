@@ -174,6 +174,18 @@ void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
     }
 }
 
+bool TExecutorGCLogic::HasGarbageBefore(TGCTime snapshotTime) {
+    for (const auto& [_, ci] : ChannelInfo) {
+        if (ci.MinUncollectedTime < snapshotTime) {
+            return true;
+        }
+        if (!ci.CommittedDelta.empty() && ci.CommittedDelta.begin()->first < snapshotTime) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
     if (!AllowGarbageCollection)
         return;
@@ -357,6 +369,8 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
 void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
     if (GcWaitFor > 0)
         return;
+
+    MinUncollectedTime = uncommittedTime;
 
     TVector<TLogoBlobID> keep;
     TVector<TLogoBlobID> notKeep;

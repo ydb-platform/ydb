@@ -1,18 +1,17 @@
 #include "secondary_index.h"
 
-#include <util/system/env.h>
-
 using namespace NLastGetopt;
 using namespace NYdb;
+using namespace NYdb::NStatusHelpers;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 int main(int argc, char** argv) {
     TOpts opts = TOpts::Default();
 
-    TString endpoint;
-    TString database;
-    TString prefix;
+    std::string endpoint;
+    std::string database;
+    std::string prefix;
 
     opts.AddLongOption('e', "endpoint", "YDB endpoint").Required().RequiredArgument("HOST:PORT")
         .StoreResult(&endpoint);
@@ -31,7 +30,7 @@ int main(int argc, char** argv) {
 
     ECmd cmd = ParseCmd(*argv);
     if (cmd == ECmd::NONE) {
-        Cerr << "Unsupported command '" << *argv << "'" << Endl;
+        std::cerr << "Unsupported command '" << *argv << "'" << std::endl;
         return 1;
     }
 
@@ -42,7 +41,7 @@ int main(int argc, char** argv) {
     auto config = TDriverConfig()
         .SetEndpoint(endpoint)
         .SetDatabase(database)
-        .SetAuthToken(GetEnv("YDB_TOKEN"));
+        .SetAuthToken(std::getenv("YDB_TOKEN") ? std::getenv("YDB_TOKEN") : "");
     TDriver driver(config);
 
     try {
@@ -63,10 +62,10 @@ int main(int argc, char** argv) {
                 return RunDeleteSeries(driver, prefix, argc, argv);
         }
     } catch (const TYdbErrorException& e) {
-        Cerr << "Execution failed: " << e << Endl;
+        std::cerr << "Execution failed: " << e.what() << std::endl;
         return 1;
     }
 
-    Y_UNREACHABLE();
+    __builtin_unreachable();
     return 1;
 }

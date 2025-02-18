@@ -9,7 +9,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/getopt
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/grpc/server
     library/cpp/regex/pcre
     ydb/core/actorlib_impl
@@ -52,7 +52,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/table
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery
@@ -64,6 +64,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/library/yql/udfs/common/knn
     ydb/library/yql/udfs/common/roaring
+    ydb/library/yql/udfs/common/datetime
     yql/essentials/udfs/common/compress_base
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/digest
@@ -84,7 +85,6 @@ SET(YDB_REPLAY_PEERDIRS
     yql/essentials/udfs/common/string
     yql/essentials/udfs/common/top
     yql/essentials/udfs/common/topfreq
-    yql/essentials/udfs/common/unicode_base
     yql/essentials/udfs/common/url_base
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/logs/dsv

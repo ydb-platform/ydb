@@ -335,7 +335,7 @@ TExprNode::TPtr DqMarkBlockStage(const TDqStatePtr& state, const TPublicIds::TPt
             return false;
         }
 
-        if (node->IsCallable("WideToBlocks") && node->Head().IsCallable("ToFlow") && node->Head().Head().IsArgument()) {
+        if (node->IsCallable("WideToBlocks") && node->Head().IsArgument()) {
             // scalar channel as input
             return false;
         }
@@ -949,7 +949,7 @@ private:
                     && !fillSettings.Discard
                     && State->DqGateway
                     && integration
-                    && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams);
+                    && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams, TColumnOrder(columns));
                 settings->EnableFullResultWrite = enableFullResultWrite;
             }
 
@@ -1437,7 +1437,7 @@ private:
             enableFullResultWrite = (ref || autoRef)
                 && !fillSettings.Discard
                 && integration
-                && integration->PrepareFullResultTableParams(pull.Ref(), ctx, graphParams, secureParams);
+                && integration->PrepareFullResultTableParams(pull.Ref(), ctx, graphParams, secureParams, TColumnOrder(columns));
             settings->EnableFullResultWrite = enableFullResultWrite;
         }
 

@@ -43,21 +43,35 @@ public:
     Aws::S3::Model::StorageClass GetStorageClass() const;
 
     inline TString GetPermissionsKey() const {
-        return NBackupRestoreTraits::PermissionsKey(ObjectKeyPattern);
+        return ObjectKeyPattern + '/' + NBackupRestoreTraits::PermissionsKeySuffix();
+    }
+
+    inline TString GetTopicKey(const TString& changefeedName) const {
+        return TStringBuilder() << ObjectKeyPattern << '/'<< changefeedName << '/' << NBackupRestoreTraits::TopicKeySuffix();
+    }
+
+     inline TString GetChangefeedKey(const TString& changefeedName) const {
+        return TStringBuilder() << ObjectKeyPattern << '/' << changefeedName << '/' << NBackupRestoreTraits::ChangefeedKeySuffix();
     }
 
     inline TString GetMetadataKey() const {
-        return NBackupRestoreTraits::MetadataKey(ObjectKeyPattern);
+        return ObjectKeyPattern + '/' + NBackupRestoreTraits::MetadataKeySuffix();
     }
 
     inline TString GetSchemeKey() const {
-        return NBackupRestoreTraits::SchemeKey(ObjectKeyPattern);
+        return ObjectKeyPattern + '/' + NBackupRestoreTraits::SchemeKeySuffix();
     }
 
     inline TString GetDataKey(
         NBackupRestoreTraits::EDataFormat format,
         NBackupRestoreTraits::ECompressionCodec codec) const {
-        return NBackupRestoreTraits::DataKey(ObjectKeyPattern, Shard, format, codec);
+        return ObjectKeyPattern + '/' + NBackupRestoreTraits::DataKeySuffix(Shard, format, codec);
+    }
+
+    inline TString GetDataFile(
+        NBackupRestoreTraits::EDataFormat format,
+        NBackupRestoreTraits::ECompressionCodec codec) const {
+        return NBackupRestoreTraits::DataKeySuffix(Shard, format, codec);
     }
 
 }; // TS3Settings

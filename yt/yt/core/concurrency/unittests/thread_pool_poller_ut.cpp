@@ -24,7 +24,7 @@ class TPollableMock
     : public IPollable
 {
 public:
-    explicit TPollableMock(TString loggingTag = {})
+    explicit TPollableMock(std::string loggingTag = {})
         : LoggingTag_(std::move(loggingTag))
     { }
 
@@ -38,7 +38,7 @@ public:
         return static_cast<void*>(Cookie_.Get());
     }
 
-    const TString& GetLoggingTag() const override
+    const std::string& GetLoggingTag() const override
     {
         return LoggingTag_;
     }
@@ -67,7 +67,7 @@ public:
     }
 
 private:
-    const TString LoggingTag_;
+    const std::string LoggingTag_;
 
     const TPromise<void> RetryPromise_ = NewPromise<void>();
     const TPromise<void> ShutdownPromise_ = NewPromise<void>();

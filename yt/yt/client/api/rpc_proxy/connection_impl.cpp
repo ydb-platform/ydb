@@ -102,7 +102,7 @@ bool IsProxyUrlSecure(const std::string& url)
     return url.starts_with(ProxyUrlCanonicalHttpsPrefix);
 }
 
-TString MakeConnectionLoggingTag(const TConnectionConfigPtr& config, TGuid connectionId)
+std::string MakeConnectionLoggingTag(const TConnectionConfigPtr& config, TGuid connectionId)
 {
     TStringBuilder builder;
     TDelimitedStringBuilderWrapper delimitedBuilder(&builder);
@@ -303,7 +303,7 @@ TClusterTag TConnection::GetClusterTag() const
     return *Config_->ClusterTag;
 }
 
-const TString& TConnection::GetLoggingTag() const
+const std::string& TConnection::GetLoggingTag() const
 {
     return LoggingTag_;
 }

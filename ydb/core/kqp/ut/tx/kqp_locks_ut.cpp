@@ -37,10 +37,10 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-            [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("/Root/Test");
-            }));
+        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
+            [] (const auto& issue) {
+                return issue.GetMessage().contains("/Root/Test");
+            }), result.GetIssues().ToString());
 
         result = session2.ExecuteDataQuery(Q_(R"(
             SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
@@ -77,8 +77,8 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
         commitResult.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-            [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("/Root/Test");
+            [] (const auto& issue) {
+                return issue.GetMessage().contains("/Root/Test");
             }));
 
         result = session2.ExecuteDataQuery(Q_(R"(
@@ -147,8 +147,8 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-            [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("/Root/Test");
+            [] (const auto& issue) {
+                return issue.GetMessage().contains("/Root/Test");
             }));
 
         result = session1.ExecuteDataQuery(Q1_(R"(
@@ -194,8 +194,8 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
 
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-            [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("/Root/Test");
+            [] (const auto& issue) {
+                return issue.GetMessage().contains("/Root/Test");
             }));
 
         result = session1.ExecuteDataQuery(Q1_(R"(
@@ -236,8 +236,8 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
         commitResult.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_C(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-            [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("/Root/Test");
+            [] (const auto& issue) {
+                return issue.GetMessage().contains("/Root/Test");
             }), commitResult.GetIssues().ToString());
     }
 

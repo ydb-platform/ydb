@@ -125,6 +125,24 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleCreateTransfer(TKiCreateTransfer node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleAlterTransfer(TKiAlterTransfer node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDropTransfer(TKiDropTransfer node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateSequence(NNodes::TKiCreateSequence node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(node);
@@ -389,6 +407,8 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::Replication:
                 return TStatus::Ok;
+            case TKikimrKey::Type::Transfer:
+                return TStatus::Ok;
             case TKikimrKey::Type::BackupCollection:
                 return TStatus::Ok;
             case TKikimrKey::Type::Sequence:
@@ -569,6 +589,13 @@ public:
         if (node.IsCallable(TKiCreateReplication::CallableName())
             || node.IsCallable(TKiAlterReplication::CallableName())
             || node.IsCallable(TKiDropReplication::CallableName())
+        ) {
+            return true;
+        }
+
+        if (node.IsCallable(TKiCreateTransfer::CallableName())
+            || node.IsCallable(TKiAlterTransfer::CallableName())
+            || node.IsCallable(TKiDropTransfer::CallableName())
         ) {
             return true;
         }
@@ -1513,6 +1540,51 @@ public:
                 }
                 break;
             }
+
+            case TKikimrKey::Type::Transfer: {
+                auto settings = NCommon::ParseWriteTransferSettings(TExprList(node->Child(4)), ctx);
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+
+                if (mode == "create") {
+                    return Build<TKiCreateTransfer>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Transfer().Build(key.GetTransferPath())
+                        .Source(settings.Source.Cast())
+                        .Target(settings.Target.Cast())
+                        .TransformLambda(settings.TransformLambda.Cast())
+                        .TransferSettings(settings.TransferSettings.Cast())
+                        .Settings(settings.Other)
+                        .Done()
+                        .Ptr();
+                } else if (mode == "alter") {
+                    return Build<TKiAlterTransfer>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Transfer().Build(key.GetTransferPath())
+                        .TransformLambda(settings.TransformLambda.Cast())
+                        .TransferSettings(settings.TransferSettings.Cast())
+                        .Settings(settings.Other)
+                        .Done()
+                        .Ptr();
+                } else if (mode == "drop" || mode == "dropCascade") {
+                    return Build<TKiDropTransfer>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Transfer().Build(key.GetTransferPath())
+                        .Cascade<TCoAtom>()
+                            .Value(mode == "dropCascade")
+                            .Build()
+                        .Done()
+                        .Ptr();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unknown operation type for transfer"));
+                    return nullptr;
+                }
+                break;
+            }
+
             case TKikimrKey::Type::BackupCollection: {
                 auto settings = ParseWriteBackupCollectionSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
@@ -1735,6 +1807,18 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiDropReplication>(input)) {
         return HandleDropReplication(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiCreateTransfer>(input)) {
+        return HandleCreateTransfer(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiAlterTransfer>(input)) {
+        return HandleAlterTransfer(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiDropTransfer>(input)) {
+        return HandleDropTransfer(node.Cast(), ctx);
     }
 
     if (auto node = TMaybeNode<TKiUpsertObject>(input)) {

@@ -13,11 +13,11 @@
 
 #include <util/generic/size_literals.h>
 
-namespace NYdb::NTable {
+namespace NYdb::inline V2::NTable {
     class TTransaction;
 }
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 //! Read settings for single topic.
 struct TTopicReadSettings {
@@ -34,17 +34,17 @@ struct TTopicReadSettings {
     TTopicReadSettings& operator=(TTopicReadSettings&&) = default;
 
     //! Path of topic to read.
-    FLUENT_SETTING(TString, Path);
+    FLUENT_SETTING_DEPRECATED(TString, Path);
 
     //! Start reading from this timestamp.
-    FLUENT_SETTING_OPTIONAL(TInstant, ReadFromTimestamp);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TInstant, ReadFromTimestamp);
 
     //! Partition ids to read.
     //! 0-based.
-    FLUENT_SETTING_VECTOR(ui64, PartitionIds);
+    FLUENT_SETTING_VECTOR_DEPRECATED(ui64, PartitionIds);
 
     //! Max message time lag. All messages older that now - MaxLag will be ignored.
-    FLUENT_SETTING_OPTIONAL(TDuration, MaxLag);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TDuration, MaxLag);
 };
 
 //! Settings for read session.
@@ -75,71 +75,71 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
 
         //! Data size limit for the DataReceivedHandler handler.
         //! The data size may exceed this limit.
-        FLUENT_SETTING_DEFAULT(size_t, MaxMessagesBytes, Max<size_t>());
+        FLUENT_SETTING_DEFAULT_DEPRECATED(size_t, MaxMessagesBytes, Max<size_t>());
 
         //! Function to handle data events.
         //! If this handler is set, data events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TDataReceivedEvent&)>, DataReceivedHandler);
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TDataReceivedEvent&)>, DataReceivedHandler);
 
         //! Function to handle commit ack events.
         //! If this handler is set, commit ack events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TCommitOffsetAcknowledgementEvent&)>,
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TCommitOffsetAcknowledgementEvent&)>,
                        CommitOffsetAcknowledgementHandler);
 
         //! Function to handle start partition session events.
         //! If this handler is set, create partition session events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TStartPartitionSessionEvent&)>,
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TStartPartitionSessionEvent&)>,
                        StartPartitionSessionHandler);
 
         //! Function to handle stop partition session events.
         //! If this handler is set, destroy partition session events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TStopPartitionSessionEvent&)>,
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TStopPartitionSessionEvent&)>,
                        StopPartitionSessionHandler);
 
         //! Function to handle end partition session events.
         //! If this handler is set, end partition session events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TEndPartitionSessionEvent&)>,
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TEndPartitionSessionEvent&)>,
                        EndPartitionSessionHandler);
 
         //! Function to handle partition session status events.
         //! If this handler is set, partition session status events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TPartitionSessionStatusEvent&)>,
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TPartitionSessionStatusEvent&)>,
                        PartitionSessionStatusHandler);
 
         //! Function to handle partition session closed events.
         //! If this handler is set, partition session closed events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TPartitionSessionClosedEvent&)>,
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TPartitionSessionClosedEvent&)>,
                        PartitionSessionClosedHandler);
 
         //! Function to handle session closed events.
         //! If this handler is set, close session events will be handled by handler
         //! and then sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(TSessionClosedHandler, SessionClosedHandler);
+        FLUENT_SETTING_DEPRECATED(TSessionClosedHandler, SessionClosedHandler);
 
         //! Function to handle all event types.
         //! If event with current type has no handler for this type of event,
         //! this handler (if specified) will be used.
         //! If this handler is not specified, event can be received with TReadSession::GetEvent() method.
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TEvent&)>, CommonHandler);
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TEvent&)>, CommonHandler);
 
         //! Executor for handlers.
         //! If not set, default single threaded executor will be used.
-        FLUENT_SETTING(IExecutor::TPtr, HandlersExecutor);
+        FLUENT_SETTING_DEPRECATED(IExecutor::TPtr, HandlersExecutor);
     };
 
 
@@ -160,53 +160,53 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
     }
 
     //! Topics.
-    FLUENT_SETTING_VECTOR(TTopicReadSettings, Topics);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TTopicReadSettings, Topics);
 
     //! Maximum memory usage for read session.
-    FLUENT_SETTING_DEFAULT(size_t, MaxMemoryUsageBytes, 100_MB);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(size_t, MaxMemoryUsageBytes, 100_MB);
 
     //! Max message time lag. All messages older that now - MaxLag will be ignored.
-    FLUENT_SETTING_OPTIONAL(TDuration, MaxLag);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TDuration, MaxLag);
 
     //! Start reading from this timestamp.
-    FLUENT_SETTING_OPTIONAL(TInstant, ReadFromTimestamp);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TInstant, ReadFromTimestamp);
 
     //! Policy for reconnections.
     //! IRetryPolicy::GetDefaultPolicy() if null (not set).
-    FLUENT_SETTING(IRetryPolicy::TPtr, RetryPolicy);
+    FLUENT_SETTING_DEPRECATED(IRetryPolicy::TPtr, RetryPolicy);
 
     //! Event handlers.
     //! See description in TEventHandlers class.
-    FLUENT_SETTING(TEventHandlers, EventHandlers);
+    FLUENT_SETTING_DEPRECATED(TEventHandlers, EventHandlers);
 
     //! Decompress messages
-    FLUENT_SETTING_DEFAULT(bool, Decompress, true);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, Decompress, true);
 
     //! Executor for decompression tasks.
     //! If not set, default executor will be used.
-    FLUENT_SETTING(IExecutor::TPtr, DecompressionExecutor);
+    FLUENT_SETTING_DEPRECATED(IExecutor::TPtr, DecompressionExecutor);
 
     //! Counters.
     //! If counters are not provided explicitly,
     //! they will be created inside session (without link with parent counters).
-    FLUENT_SETTING(TReaderCounters::TPtr, Counters);
+    FLUENT_SETTING_DEPRECATED(TReaderCounters::TPtr, Counters);
 
-    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, ConnectTimeout, TDuration::Seconds(30));
 
     //! AutoPartitioningSupport.
-    FLUENT_SETTING_DEFAULT(bool, AutoPartitioningSupport, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, AutoPartitioningSupport, false);
 
     //! Log.
-    FLUENT_SETTING_OPTIONAL(TLog, Log);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TLog, Log);
 };
 
 struct TReadSessionGetEventSettings : public TCommonClientSettingsBase<TReadSessionGetEventSettings> {
     using TSelf = TReadSessionGetEventSettings;
 
-    FLUENT_SETTING_DEFAULT(bool, Block, false);
-    FLUENT_SETTING_OPTIONAL(size_t, MaxEventsCount);
-    FLUENT_SETTING_DEFAULT(size_t, MaxByteSize, std::numeric_limits<size_t>::max());
-    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<NTable::TTransaction>, Tx);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, Block, false);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(size_t, MaxEventsCount);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(size_t, MaxByteSize, std::numeric_limits<size_t>::max());
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(std::reference_wrapper<NTable::TTransaction>, Tx);
 };
 
 class IReadSession {

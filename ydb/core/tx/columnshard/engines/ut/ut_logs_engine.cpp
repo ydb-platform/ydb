@@ -18,6 +18,8 @@
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 
+#include <ydb/library/arrow_kernels/operations.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -334,7 +336,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, st
     for (auto&& i : changes->GetAppendedPortions()) {
         blobsCount += i.GetBlobs().size();
     }
-    UNIT_ASSERT_VALUES_EQUAL(blobsCount, 1);   // add 2 columns: planStep, txId
+    AFL_VERIFY(blobsCount == 5 || blobsCount == 1)("count", blobsCount);
 
     AddIdsToBlobs(changes->MutableAppendedPortions(), blobs, step);
 
@@ -358,6 +360,9 @@ class TTestCompactionAccessorsSubscriber: public NOlap::IDataAccessorRequestsSub
 private:
     std::shared_ptr<TColumnEngineChanges> Changes;
     const std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         const TDataAccessorsInitializationContext context(VersionedIndex);
@@ -438,6 +443,9 @@ private:
     std::shared_ptr<IMetadataAccessorResultProcessor> Processor;
     TColumnEngineForLogs& Engine;
 
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         Processor->ApplyResult(
             NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>::BuildForTest(std::move(result)), Engine);
@@ -450,7 +458,7 @@ public:
     }
 };
 
-}
+}   // namespace
 
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
     engine.StartActualization(pathEviction);
@@ -463,7 +471,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<ui64, 
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> vChanges = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
     AFL_VERIFY(vChanges.size() == 1)("count", vChanges.size());
     auto changes = vChanges.front();
-    UNIT_ASSERT_VALUES_EQUAL(changes->GetPortionsToRemove().size(), expectedToDrop);
+    UNIT_ASSERT_VALUES_EQUAL(changes->GetPortionsToRemove().GetSize(), expectedToDrop);
 
     changes->StartEmergency();
     {
@@ -482,7 +490,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<ui64, 
     return result;
 }
 
-std::shared_ptr<TPredicate> MakePredicate(int64_t ts, NArrow::EOperation op) {
+std::shared_ptr<TPredicate> MakePredicate(int64_t ts, NKikimr::NKernels::EOperation op) {
     auto type = arrow::timestamp(arrow::TimeUnit::MICRO);
     auto res = arrow::MakeArrayFromScalar(arrow::TimestampScalar(ts, type), 1);
 
@@ -490,7 +498,7 @@ std::shared_ptr<TPredicate> MakePredicate(int64_t ts, NArrow::EOperation op) {
     return std::make_shared<TPredicate>(op, arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), 1, { *res }));
 }
 
-std::shared_ptr<TPredicate> MakeStrPredicate(const std::string& key, NArrow::EOperation op) {
+std::shared_ptr<TPredicate> MakeStrPredicate(const std::string& key, NKikimr::NKernels::EOperation op) {
     auto type = arrow::utf8();
     auto res = arrow::MakeArrayFromScalar(arrow::StringScalar(key), 1);
 
@@ -524,16 +532,14 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // load
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(
-            0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+            0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
         for (auto&& i : paths) {
             engine.RegisterTable(i);
         }
         engine.TestingLoad(db);
 
-        std::vector<TCommittedData> dataToIndex = { TCommittedData(
-            TUserData::Build(paths[0], blobRanges[0], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(1, 2), 0, (TInsertWriteId)2),
-                TCommittedData(
-                    TUserData::Build(paths[0], blobRanges[1], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(2, 1), 0, (TInsertWriteId)1) };
+        std::vector<TCommittedData> dataToIndex = { TCommittedData(TUserData::Build(paths[0], blobRanges[0], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(1, 2), 0, (TInsertWriteId)2),
+            TCommittedData(TUserData::Build(paths[0], blobRanges[1], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(2, 1), 0, (TInsertWriteId)1) };
 
         // write
 
@@ -609,7 +615,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(
-            0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+            0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
         engine.RegisterTable(pathId);
         engine.TestingLoad(db);
 
@@ -660,9 +666,9 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         {
             ui64 txId = 1;
-            std::shared_ptr<TPredicate> gt10k = MakePredicate(10000, NArrow::EOperation::Greater);
+            std::shared_ptr<TPredicate> gt10k = MakePredicate(10000, NKikimr::NKernels::EOperation::Greater);
             if (key[0].GetType() == TTypeInfo(NTypeIds::Utf8)) {
-                gt10k = MakeStrPredicate("10000", NArrow::EOperation::Greater);
+                gt10k = MakeStrPredicate("10000", NKikimr::NKernels::EOperation::Greater);
             }
             NOlap::TPKRangesFilter pkFilter(false);
             Y_ABORT_UNLESS(pkFilter.Add(gt10k, nullptr, indexInfo.GetReplaceKey()));
@@ -672,9 +678,9 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         {
             ui64 txId = 1;
-            std::shared_ptr<TPredicate> lt10k = MakePredicate(8999, NArrow::EOperation::Less);   // TODO: better border checks
+            std::shared_ptr<TPredicate> lt10k = MakePredicate(8999, NKikimr::NKernels::EOperation::Less);   // TODO: better border checks
             if (key[0].GetType() == TTypeInfo(NTypeIds::Utf8)) {
-                lt10k = MakeStrPredicate("08999", NArrow::EOperation::Less);
+                lt10k = MakeStrPredicate("08999", NKikimr::NKernels::EOperation::Less);
             }
             NOlap::TPKRangesFilter pkFilter(false);
             Y_ABORT_UNLESS(pkFilter.Add(nullptr, lt10k, indexInfo.GetReplaceKey()));
@@ -710,7 +716,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(
-            0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+            0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
         engine.RegisterTable(pathId);
         engine.TestingLoad(db);
 
@@ -736,7 +742,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         {   // check it's overloaded after reload
             TColumnEngineForLogs tmpEngine(
-                0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
+                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, TSnapshot::Zero(), 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
             tmpEngine.RegisterTable(pathId);
             tmpEngine.TestingLoad(db);
         }
@@ -768,7 +774,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         {   // check it's not overloaded after reload
             TColumnEngineForLogs tmpEngine(
-                0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
+                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, TSnapshot::Zero(), 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
             tmpEngine.RegisterTable(pathId);
             tmpEngine.TestingLoad(db);
         }
@@ -789,7 +795,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TSnapshot indexSnapshot(1, 1);
         {
             TColumnEngineForLogs engine(
-                0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
             engine.RegisterTable(pathId);
             engine.TestingLoad(db);
 
@@ -868,7 +874,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         {
             // load
             TColumnEngineForLogs engine(
-                0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
             engine.RegisterTable(pathId);
             engine.TestingLoad(db);
 

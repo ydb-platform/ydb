@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:10:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select Just($x) ?? Just($y);
+	^
+        <tmp_path>/program.sql:<main>:10:17: Warning: At function: Coalesce
+        	select Just($x) ?? Just($y);
+	                ^
+            <tmp_path>/program.sql:<main>:10:17: Warning: Consider using explicit CAST or BITCAST to convert from Int32 to Uint64
+            	select Just($x) ?? Just($y);
+	                ^

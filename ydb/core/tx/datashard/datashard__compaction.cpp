@@ -32,7 +32,7 @@ public:
             return true;
         }
 
-        const auto pathId = PathIdFromPathId(record.GetPathId());
+        const auto pathId = TPathId::FromProto(record.GetPathId());
 
         if (Self->GetPathOwnerId() != pathId.OwnerId) {
             LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -293,7 +293,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const T
     auto &record = ev->Get()->Record;
     auto response = MakeHolder<TEvDataShard::TEvGetCompactTableStatsResult>();
 
-    const auto pathId = PathIdFromPathId(record.GetPathId());
+    const auto pathId = TPathId::FromProto(record.GetPathId());
 
     const auto& tableId = pathId.LocalPathId;
     auto it = TableInfos.find(tableId);

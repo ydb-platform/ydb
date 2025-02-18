@@ -106,6 +106,19 @@ namespace NFake {
         }
 
         TEvBlobStorage::TEvGetResult* Handle(TEvBlobStorage::TEvGet *msg) {
+            if (const auto& blk = msg->ReaderTabletData) {
+                if (IsBlocked(blk->Id, blk->Generation)) {
+                    auto response = msg->MakeErrorResponse(NKikimrProto::BLOCKED, "block race detected", GroupId);
+                    return response.release();
+                }
+            }
+            if (const auto& blk = msg->ForceBlockTabletData; blk && blk->Generation) {
+                auto it = Blocks.find(blk->Id);
+                Y_VERIFY_S(it != Blocks.end() && it->second == blk->Generation, "incorrect ForceBlockTabletData"
+                    << " expected Generation# " << blk->Generation
+                    << " having Generation# " << (it != Blocks.end() ? ToString(it->second) : "none"));
+            }
+
             // prepare result structure holding the returned data
             auto result = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, msg->QuerySize, GroupId);
 
@@ -139,9 +152,6 @@ namespace NFake {
                     const ui32 offset = size ? query.Shift : 0;
                     response.Buffer = TRope(data.Buffer.Position(offset), data.Buffer.Position(offset + size));
                 } else {
-                    // ensure this blob is not under GC
-                    Y_ABORT_UNLESS(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());
-
                     // reply with NODATA -- we haven't got this blob
                     response.Status = NKikimrProto::NODATA;
                 }
@@ -418,6 +428,10 @@ namespace NFake {
 
         const TMap<TLogoBlobID, TBlob>& AllMyBlobs() const noexcept {
             return Blobs;
+        }
+
+        TGroupId GetGroupId() const {
+            return GroupId;
         }
 
     private:

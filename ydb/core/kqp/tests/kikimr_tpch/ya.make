@@ -22,7 +22,7 @@ PEERDIR(
     ydb/core/kqp/tests/tpch/lib
     library/cpp/testing/unittest
     ydb/core/protos
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     yql/essentials/public/udf/service/stub
     ydb/public/lib/yson_value
 )

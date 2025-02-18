@@ -7,13 +7,13 @@
 
 #include <ydb/library/aclib/aclib.h>
 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <util/generic/hash.h>
 #include <util/string/split.h>
@@ -25,6 +25,31 @@ namespace NDriverClient {
 
 void WarnProfilePathSet() {
     Cout << "FYI: profile path is set. You can use short pathnames. Try --help for more info." << Endl;
+}
+
+// Get dirname and basename from the pathname using profile config
+std::pair<TString, TString> SplitPath(const TClientCommand::TConfig& config, const TString& pathname) {
+    const bool pathIsAbsolute = pathname.StartsWith('/');
+    if (config.Path) {
+        // Profile path is set
+        if (!pathIsAbsolute) {
+            return std::make_pair(config.Path, pathname);
+        } else {
+            WarnProfilePathSet();
+        }
+    }
+    // path should be absolute here
+    if (!pathIsAbsolute) {
+        ythrow yexception() << "Relative path cannot be used without profile";
+    }
+
+    size_t pos = pathname.rfind('/');
+    if (pos == TString::npos) {
+        // should be unreachable
+        ythrow yexception() << "No single '/' in the absolute path";
+    }
+
+    return std::make_pair(pathname.substr(0, pos), pathname.substr(pos + 1));
 }
 
 class TClientCommandSchemaMkdir : public TClientCommand {
@@ -48,19 +73,7 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         TString pathname = config.ParseResult->GetFreeArgs()[0];
-        size_t pos = pathname.rfind('/');
-        if (config.Path) {
-            // Profile path is set
-            if (!pathname.StartsWith('/')) {
-                Base = config.Path;
-                Name = pathname;
-                return;
-            } else {
-                WarnProfilePathSet();
-            }
-        }
-        Base = pathname.substr(0, pos);
-        Name = pathname.substr(pos + 1);
+        std::tie(Base, Name) = SplitPath(config, pathname);
     }
 
     virtual int Run(TConfig& config) override {
@@ -93,19 +106,7 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         TString pathname = config.ParseResult->GetFreeArgs()[0];
-        size_t pos = pathname.rfind('/');
-        if (config.Path) {
-            // Profile path is set
-            if (!pathname.StartsWith('/')) {
-                Base = config.Path;
-                Name = pathname;
-                return;
-            } else {
-                WarnProfilePathSet();
-            }
-        }
-        Base = pathname.substr(0, pos);
-        Name = pathname.substr(pos + 1);
+        std::tie(Base, Name) = SplitPath(config, pathname);
     }
 
     virtual int Run(TConfig& config) override {
@@ -601,6 +602,9 @@ public:
             }
         }
         Path = pathname;
+        if (Path.rfind('/') == TString::npos) {
+            ythrow yexception() << "No single '/' in the absolute path";
+        }
     }
 
     int Chown(TConfig& config, const TString& path) {
@@ -686,21 +690,7 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         TString pathname = config.ParseResult->GetFreeArgs()[0];
-        size_t pos = pathname.rfind('/');
-        if (config.Path) {
-            // Profile path is set
-            if (!pathname.StartsWith('/')) {
-                Base = config.Path;
-                Name = pathname;
-            } else {
-                WarnProfilePathSet();
-                Base = pathname.substr(0, pos);
-                Name = pathname.substr(pos + 1);
-            }
-        } else {
-            Base = pathname.substr(0, pos);
-            Name = pathname.substr(pos + 1);
-        }
+        std::tie(Base, Name) = SplitPath(config, pathname);
         Access = config.ParseResult->GetFreeArgs()[1];
     }
 
@@ -757,21 +747,7 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         TString pathname = config.ParseResult->GetFreeArgs()[0];
-        size_t pos = pathname.rfind('/');
-        if (config.Path) {
-            // Profile path is set
-            if (!pathname.StartsWith('/')) {
-                Base = config.Path;
-                Name = pathname;
-            } else {
-                WarnProfilePathSet();
-                Base = pathname.substr(0, pos);
-                Name = pathname.substr(pos + 1);
-            }
-        } else {
-            Base = pathname.substr(0, pos);
-            Name = pathname.substr(pos + 1);
-        }
+        std::tie(Base, Name) = SplitPath(config, pathname);
         Access = config.ParseResult->GetFreeArgs()[1];
     }
 
@@ -830,21 +806,7 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         TString pathname = config.ParseResult->GetFreeArgs()[0];
-        size_t pos = pathname.rfind('/');
-        if (config.Path) {
-            // Profile path is set
-            if (!pathname.StartsWith('/')) {
-                Base = config.Path;
-                Name = pathname;
-            } else {
-                WarnProfilePathSet();
-                Base = pathname.substr(0, pos);
-                Name = pathname.substr(pos + 1);
-            }
-        } else {
-            Base = pathname.substr(0, pos);
-            Name = pathname.substr(pos + 1);
-        }
+        std::tie(Base, Name) = SplitPath(config, pathname);
     }
 
     virtual int Run(TConfig& config) override {
@@ -940,13 +902,13 @@ public:
     virtual int Run(TConfig& config) override {
         int res = 0;
 
-        if (!ClientConfig.Locator) {
+        if (ClientConfig.Locator.empty()) {
             Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl;
             return -2;
         }
 
         NYdbGrpc::TCallMeta meta;
-        if (config.SecurityToken) {
+        if (config.SecurityToken.empty()) {
             meta.Aux.push_back({NYdb::YDB_AUTH_TICKET_HEADER, config.SecurityToken});
         }
 
@@ -1040,7 +1002,7 @@ public:
     }
 
     virtual int Run(TConfig& config) override {
-        if (!ClientConfig.Locator) {
+        if (ClientConfig.Locator.empty()) {
             Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl;
             return -2;
         }
@@ -1153,28 +1115,6 @@ public:
         );
     }
 };
-
-std::pair<TString, TString> SplitPath(const TClientCommand::TConfig& config, const TString& pathname) {
-    std::pair<TString, TString> result;
-
-    size_t pos = pathname.rfind('/');
-    if (config.Path) {
-        // Profile path is set
-        if (!pathname.StartsWith('/')) {
-            result.first = config.Path;
-            result.second = pathname;
-        } else {
-            WarnProfilePathSet();
-            result.first = pathname.substr(0, pos);
-            result.second = pathname.substr(pos + 1);
-        }
-    } else {
-        result.first = pathname.substr(0, pos);
-        result.second = pathname.substr(pos + 1);
-    }
-
-    return result;
-}
 
 class TClientCommandSchemaUserAttributeSet: public TClientCommand {
     using TUserAttributesLimits = NSchemeShard::TUserAttributesLimits;

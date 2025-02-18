@@ -41,10 +41,13 @@ SRCS(
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
+    shred.cpp
     snapshots.cpp
     space_check.cpp
     sync.cpp
     ut_helpers.cpp
+    validation.cpp
+    vdisk_malfunction.cpp
 )
 
 PEERDIR(
@@ -72,4 +75,5 @@ RECURSE_FOR_TESTS(
     ut_vdisk_restart
     ut_restart_pdisk
     ut_read_only_pdisk
+    ut_stop_pdisk
 )

@@ -269,10 +269,17 @@ public:
         }
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& callback) override
     {
         if (auto queue = Queue_.Lock()) {
-            queue->RegisterWaitTimeObserver(waitTimeObserver);
+            queue->SubscribeWaitTimeObserved(callback);
+        }
+    }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& callback) override
+    {
+        if (auto queue = Queue_.Lock()) {
+            queue->UnsubscribeWaitTimeObserved(callback);
         }
     }
 
@@ -597,9 +604,7 @@ bool TInvokerQueue<TQueueImpl>::BeginExecute(TEnqueuedAction* action, typename T
 
     auto waitTime = CpuDurationToDuration(action->StartedAt - action->EnqueuedAt);
 
-    if (IsWaitTimeObserverSet_.load()) {
-        WaitTimeObserver_(waitTime);
-    }
+    WaitTimeObserved_.Fire(waitTime);
 
     if (Counters_[action->ProfilingTag]) {
         Counters_[action->ProfilingTag]->DequeuedCounter.Increment();
@@ -676,13 +681,15 @@ IInvoker* TInvokerQueue<TQueueImpl>::GetProfilingTagSettingInvoker(int profiling
 }
 
 template <class TQueueImpl>
-void TInvokerQueue<TQueueImpl>::RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver)
+void TInvokerQueue<TQueueImpl>::SubscribeWaitTimeObserved(const TWaitTimeObserver& callback)
 {
-    WaitTimeObserver_ = waitTimeObserver;
-    auto alreadyInitialized = IsWaitTimeObserverSet_.exchange(true);
+    WaitTimeObserved_.Subscribe(callback);
+}
 
-    // Multiple observers are forbidden.
-    YT_VERIFY(!alreadyInitialized);
+template <class TQueueImpl>
+void TInvokerQueue<TQueueImpl>::UnsubscribeWaitTimeObserved(const TWaitTimeObserver& callback)
+{
+    WaitTimeObserved_.Unsubscribe(callback);
 }
 
 template <class TQueueImpl>

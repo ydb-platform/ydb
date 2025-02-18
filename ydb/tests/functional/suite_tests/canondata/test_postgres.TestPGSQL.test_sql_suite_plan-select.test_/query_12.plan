@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "onek.stringu1,onek.unique1 = v.j,v.i",
+                                                "Condition": "onek.stringu1,onek.unique1 = v.i,v.j",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
@@ -67,6 +67,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_select.test_plan/onek",
                                                         "ReadColumns": [
                                                             "even",
                                                             "fivethous",

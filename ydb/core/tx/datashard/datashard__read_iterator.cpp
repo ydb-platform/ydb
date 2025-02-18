@@ -712,7 +712,7 @@ public:
         record.SetSeqNo(State.SeqNo + 1);
 
         if (!State.IsHeadRead) {
-            State.ReadVersion.Serialize(*record.MutableSnapshot());
+            State.ReadVersion.ToProto(record.MutableSnapshot());
         }
 
         return useful;
@@ -1848,8 +1848,12 @@ public:
         if (hadWrites)
             return EExecutionStatus::DelayCompleteNoMoreRestarts;
 
-        if (Self->Pipeline.HasCommittingOpsBelow(state.ReadVersion) || Reader && Reader->NeedVolatileWaitForCommit())
+        if (Reader && Reader->NeedVolatileWaitForCommit() ||
+            Self->Pipeline.HasCommittingOpsBelow(state.ReadVersion) ||
+            Self->GetVolatileTxManager().HasUnstableVolatileTxsAtSnapshot(state.ReadVersion))
+        {
             return EExecutionStatus::DelayComplete;
+        }
 
         Complete(ctx);
         return EExecutionStatus::Executed;
@@ -2881,10 +2885,13 @@ public:
 
             ApplyLocks(ctx);
 
-            if (!Reader->NeedVolatileWaitForCommit()) {
-                SendResult(ctx);
-            } else {
+            if (Reader->NeedVolatileWaitForCommit() ||
+                Self->Pipeline.HasCommittingOpsBelow(state.ReadVersion) ||
+                Self->GetVolatileTxManager().HasUnstableVolatileTxsAtSnapshot(state.ReadVersion))
+            {
                 DelayedResult = true;
+            } else {
+                SendResult(ctx);
             }
             return true;
         }
@@ -2893,6 +2900,12 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (DelayedResult) {
+            if (!Self->ReadIteratorsByLocalReadId.contains(LocalReadId)) {
+                // the one who removed the iterator should have replied to the user
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << LocalReadId
+                    << " has been invalidated before TTxReadContinue::Complete()");
+                return;
+            }
             SendResult(ctx);
         }
     }

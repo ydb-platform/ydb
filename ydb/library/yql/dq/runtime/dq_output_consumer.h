@@ -3,6 +3,8 @@
 #include "dq_columns_resolve.h"
 #include "dq_output.h"
 
+#include <yql/essentials/public/udf/udf_value_builder.h>
+
 #include <yql/essentials/minikql/mkql_alloc.h>
 
 namespace NKikimr::NMiniKQL {
@@ -48,7 +50,8 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<IDqOutput::TPtr>&& outputs,
     TVector<TColumnInfo>&& keyColumns, const  NKikimr::NMiniKQL::TType* outputType,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TMaybe<ui8> minFillPercentage);
+    TMaybe<ui8> minFillPercentage,
+    NUdf::IPgBuilder* pgBuilder);
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth);
 

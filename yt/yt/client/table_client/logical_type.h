@@ -72,7 +72,7 @@ public:
     Y_FORCE_INLINE const TTaggedLogicalType& UncheckedAsTaggedTypeRef() const;
 
     virtual i64 GetMemoryUsage() const = 0;
-    virtual i64 GetMemoryUsage(i64 limit) const = 0;
+    virtual i64 GetMemoryUsage(i64 threshold) const = 0;
     virtual int GetTypeComplexity() const = 0;
 
     // This function doesn't validate children of current node.
@@ -177,7 +177,7 @@ public:
     TDecimalLogicalType(int precision, int scale);
 
     i64 GetMemoryUsage() const override;
-    i64 GetMemoryUsage(i64 limit) const override;
+    i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -206,7 +206,7 @@ public:
     Y_FORCE_INLINE bool IsElementNullable() const;
 
     i64 GetMemoryUsage() const override;
-    i64 GetMemoryUsage(i64 limit) const override;
+    i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -227,7 +227,7 @@ public:
     Y_FORCE_INLINE ESimpleLogicalValueType GetElement() const;
 
     i64 GetMemoryUsage() const override;
-    i64 GetMemoryUsage(i64 limit) const override;
+    i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -247,7 +247,7 @@ public:
     Y_FORCE_INLINE const TLogicalTypePtr& GetElement() const;
 
     i64 GetMemoryUsage() const override;
-    i64 GetMemoryUsage(i64 limit) const override;
+    i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -308,7 +308,7 @@ public:
     Y_FORCE_INLINE const std::vector<TStructField>& GetFields() const;
 
     i64 GetMemoryUsage() const override;
-    i64 GetMemoryUsage(i64 limit) const override;
+    i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -328,7 +328,7 @@ public:
     Y_FORCE_INLINE const std::vector<TLogicalTypePtr>& GetElements() const;
 
     i64 GetMemoryUsage() const override;
-    i64 GetMemoryUsage(i64 limit) const override;
+    i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -385,7 +385,7 @@ public:
     Y_FORCE_INLINE const TLogicalTypePtr& GetValue() const;
 
     i64 GetMemoryUsage() const override;
-    i64 GetMemoryUsage(i64 limit) const override;
+    i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -407,7 +407,7 @@ public:
     Y_FORCE_INLINE const TLogicalTypePtr& GetElement() const;
 
     i64 GetMemoryUsage() const override;
-    i64 GetMemoryUsage(i64 limit) const override;
+    i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;

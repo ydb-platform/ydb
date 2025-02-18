@@ -3,6 +3,6 @@
     <tmp_path>/program.sql:<main>:8:1: Error: Execution of node: YtMap!
     	SELECT $match(value) AS match FROM Input;
 	^
-        <tmp_path>/program.sql:<main>:6:21: Error: library/cpp/regex/hyperscan/hyperscan.cpp:102: Failed to compile regex: ^*$. Error message (hyperscan): Invalid repeat at index 1.
+        <tmp_path>/program.sql:<main>:6:21: Error: library/cpp/regex/hyperscan/hyperscan.cpp:92: Failed to compile regex: ^*$. Error message (hyperscan): Invalid repeat at index 1.
         	$match = Hyperscan::Match("*");
 	                    ^

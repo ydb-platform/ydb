@@ -179,7 +179,7 @@ void TServiceContextBase::SetComplete()
 
 TFuture<TSharedRefArray> TServiceContextBase::GetAsyncResponseMessage() const
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     auto guard  = Guard(ResponseLock_);
 
@@ -235,7 +235,7 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
 
 bool TServiceContextBase::IsReplied() const
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
     return Replied_.load();
 }
 
@@ -920,7 +920,7 @@ IServicePtr TServerBase::GetServiceOrThrow(const TServiceId& serviceId) const
 
 void TServerBase::ApplyConfig()
 {
-    VERIFY_SPINLOCK_AFFINITY(ServicesLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(ServicesLock_);
 
     auto newAppliedConfig = New<TServerConfig>();
     newAppliedConfig->EnableErrorCodeCounter = DynamicConfig_->EnableErrorCodeCounter.value_or(StaticConfig_->EnableErrorCodeCounter);

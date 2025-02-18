@@ -9,9 +9,11 @@ inline bool IsOptionalOrNull(const TType* type) {
     return type->IsOptional() || type->IsNull() || type->IsPg();
 }
 
-TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType);
+TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool scalar);
 
 NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
+    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values);
+NUdf::TUnboxedValuePod MakeUint64ScalarBlock(TComputationContext& ctx, size_t blockSize,
     const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values);
 NUdf::TUnboxedValuePod FromBlocks(TComputationContext& ctx,
     const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values);

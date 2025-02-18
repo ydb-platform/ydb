@@ -4,7 +4,7 @@
 
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 constexpr TDuration MAX_DEFERRED_CALL_DELAY = TDuration::Seconds(10); // The max delay between GetOperation calls for one operation
 

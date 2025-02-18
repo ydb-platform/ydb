@@ -49,9 +49,9 @@ struct BufferCopyIn {
 struct FileBufferCopyIn : public BufferCopyIn {
 #ifdef _WIN32
     HANDLE h_;
-    FileBufferCopyIn(const char *filename) : h_(::CreateFileA(filename, GENERIC_READ, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL)) {
+    explicit FileBufferCopyIn(const char *filename) : h_(::CreateFileA(filename, GENERIC_READ, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL)) {
         if (h_ == INVALID_HANDLE_VALUE) {
-            throw Exception(boost::format("Cannot open file: %1%") % ::GetLastError());
+            throw Exception("Cannot open file: {}", ::GetLastError());
         }
     }
 
@@ -59,16 +59,16 @@ struct FileBufferCopyIn : public BufferCopyIn {
         ::CloseHandle(h_);
     }
 
-    void seek(size_t len) {
+    void seek(size_t len) override {
         if (::SetFilePointer(h_, len, NULL, FILE_CURRENT) == INVALID_SET_FILE_POINTER && ::GetLastError() != NO_ERROR) {
-            throw Exception(boost::format("Cannot skip file: %1%") % ::GetLastError());
+            throw Exception("Cannot skip file: {}", ::GetLastError());
         }
     }
 
-    bool read(uint8_t *b, size_t toRead, size_t &actual) {
+    bool read(uint8_t *b, size_t toRead, size_t &actual) override {
         DWORD dw = 0;
         if (!::ReadFile(h_, b, toRead, &dw, NULL)) {
-            throw Exception(boost::format("Cannot read file: %1%") % ::GetLastError());
+            throw Exception("Cannot read file: {}", ::GetLastError());
         }
         actual = static_cast<size_t>(dw);
         return actual != 0;
@@ -78,7 +78,7 @@ struct FileBufferCopyIn : public BufferCopyIn {
 
     explicit FileBufferCopyIn(const char *filename) : fd_(open(filename, O_RDONLY | O_BINARY)) {
         if (fd_ < 0) {
-            throw Exception(boost::format("Cannot open file: %1%") % ::strerror(errno));
+            throw Exception("Cannot open file: {}", strerror(errno));
         }
     }
 
@@ -89,12 +89,12 @@ struct FileBufferCopyIn : public BufferCopyIn {
     void seek(size_t len) final {
         off_t r = ::lseek(fd_, len, SEEK_CUR);
         if (r == static_cast<off_t>(-1)) {
-            throw Exception(boost::format("Cannot skip file: %1%") % strerror(errno));
+            throw Exception("Cannot skip file: {}", strerror(errno));
         }
     }
 
     bool read(uint8_t *b, size_t toRead, size_t &actual) final {
-        int n = ::read(fd_, b, toRead);
+        auto n = ::read(fd_, b, toRead);
         if (n > 0) {
             actual = n;
             return true;
@@ -232,9 +232,9 @@ struct BufferCopyOut {
 struct FileBufferCopyOut : public BufferCopyOut {
 #ifdef _WIN32
     HANDLE h_;
-    FileBufferCopyOut(const char *filename) : h_(::CreateFileA(filename, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL)) {
+    explicit FileBufferCopyOut(const char *filename) : h_(::CreateFileA(filename, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL)) {
         if (h_ == INVALID_HANDLE_VALUE) {
-            throw Exception(boost::format("Cannot open file: %1%") % ::GetLastError());
+            throw Exception("Cannot open file: {}", ::GetLastError());
         }
     }
 
@@ -242,11 +242,11 @@ struct FileBufferCopyOut : public BufferCopyOut {
         ::CloseHandle(h_);
     }
 
-    void write(const uint8_t *b, size_t len) {
+    void write(const uint8_t *b, size_t len) override {
         while (len > 0) {
             DWORD dw = 0;
             if (!::WriteFile(h_, b, len, &dw, NULL)) {
-                throw Exception(boost::format("Cannot read file: %1%") % ::GetLastError());
+                throw Exception("Cannot read file: {}", ::GetLastError());
             }
             b += dw;
             len -= dw;
@@ -258,7 +258,7 @@ struct FileBufferCopyOut : public BufferCopyOut {
     explicit FileBufferCopyOut(const char *filename) : fd_(::open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0644)) {
 
         if (fd_ < 0) {
-            throw Exception(boost::format("Cannot open file: %1%") % ::strerror(errno));
+            throw Exception("Cannot open file: {}", ::strerror(errno));
         }
     }
 
@@ -268,7 +268,7 @@ struct FileBufferCopyOut : public BufferCopyOut {
 
     void write(const uint8_t *b, size_t len) final {
         if (::write(fd_, b, len) < 0) {
-            throw Exception(boost::format("Cannot write file: %1%") % ::strerror(errno));
+            throw Exception("Cannot write file: {}", ::strerror(errno));
         }
     }
 #endif

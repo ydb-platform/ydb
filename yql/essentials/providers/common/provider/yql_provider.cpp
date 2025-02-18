@@ -225,6 +225,7 @@ NYson::EYsonFormat GetYsonFormat(const IDataProvider::TFillSettings& fillSetting
 TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtom> temporary;
+    TMaybeNode<TCoAtom> isBatch;
     TMaybeNode<TExprList> columns;
     TMaybeNode<TExprList> returningList;
     TMaybeNode<TCoAtomList> primaryKey;
@@ -347,6 +348,8 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
             } else if (name == "returning") {
                 YQL_ENSURE(tuple.Value().Maybe<TExprList>());
                 returningList = tuple.Value().Cast<TExprList>();
+            } else if (name == "is_batch") {
+                isBatch = Build<TCoAtom>(ctx, node.Pos()).Value("true").Done();
             } else {
                 other.push_back(tuple);
             }
@@ -380,6 +383,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TWriteTableSettings ret(otherSettings);
     ret.Mode = mode;
     ret.Temporary = temporary;
+    ret.IsBatch = isBatch;
     ret.Columns = columns;
     ret.ReturningList = returningList;
     ret.PrimaryKey = primaryKey;
@@ -596,6 +600,87 @@ TWriteReplicationSettings ParseWriteReplicationSettings(TExprList node, TExprCon
     ret.Mode = mode;
     ret.Targets = builtTargets;
     ret.ReplicationSettings = builtSettings;
+
+    return ret;
+}
+
+TDatabaseSettings ParseDatabaseSettings(TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TVector<TCoNameValueTuple> other;
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TDatabaseSettings ret(otherSettings);
+    ret.Mode = mode;
+
+    return ret;
+}
+
+TWriteTransferSettings ParseWriteTransferSettings(TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TMaybeNode<TCoAtom> source;
+    TMaybeNode<TCoAtom> target;
+    TMaybeNode<TCoAtom> transformLambda;
+    TVector<TCoNameValueTuple> settings;
+    TVector<TCoNameValueTuple> other;
+
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "source") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                source = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "target") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                target = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "transformLambda") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                transformLambda = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "settings") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    settings.push_back(item);
+                }
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& builtSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(settings)
+        .Done();
+
+    const auto& builtOther = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TWriteTransferSettings ret(builtOther);
+    ret.Mode = mode;
+    ret.Source = source;
+    ret.Target = target;
+    ret.TransformLambda = transformLambda;
+    ret.TransferSettings = builtSettings;
 
     return ret;
 }
@@ -854,7 +939,7 @@ bool FillUsedFilesImpl(
     if (node.GetTypeAnn()) {
         usedPgExtensions |= node.GetTypeAnn()->GetUsedPgExtensions();
     }
-    
+
     if (node.IsCallable("PgResolvedCall")) {
         auto procId = FromString<ui32>(node.Child(1)->Content());
         const auto& proc = NPg::LookupProc(procId);
@@ -1068,7 +1153,7 @@ void FillSecureParams(
     }
 }
 
-bool AddPgFile(bool isPath, const TString& pathOrContent, const TString& md5, const TString& alias, TUserDataTable& files, 
+bool AddPgFile(bool isPath, const TString& pathOrContent, const TString& md5, const TString& alias, TUserDataTable& files,
     const TTypeAnnotationContext& types, TPositionHandle pos, TExprContext& ctx) {
 
     TUserDataBlock block;
@@ -1136,7 +1221,7 @@ bool FillUsedFiles(
             return false;
         }
     }
-    
+
     Y_ENSURE(remainingPgExtensions == 0);
     if (!needFullPgCatalog) {
         return true;

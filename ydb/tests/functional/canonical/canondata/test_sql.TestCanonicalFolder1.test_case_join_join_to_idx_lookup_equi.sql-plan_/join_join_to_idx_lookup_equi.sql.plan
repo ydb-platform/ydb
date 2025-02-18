@@ -31,10 +31,6 @@
                         "Key2",
                         "Value"
                     ],
-                    "lookup_by": [
-                        "Key1",
-                        "Key2"
-                    ],
                     "type": "Lookup"
                 }
             ]

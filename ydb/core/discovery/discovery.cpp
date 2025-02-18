@@ -184,7 +184,6 @@ namespace NDiscovery {
             if (!CheckEndpointId(endpointId, entry)) {
                 continue;
             }
-
             if (entry.GetSsl()) {
                 AddEndpoint(cachedMessageSsl, statesSsl, entry);
             } else {
@@ -200,7 +199,6 @@ namespace NDiscovery {
                 cachedMessageSsl.set_self_location(location);
             }
         }
-
         return {SerializeResult(cachedMessage), SerializeResult(cachedMessageSsl), std::move(infoEntries)};
     }
 }
@@ -235,6 +233,7 @@ namespace NDiscoveryPrivate {
 
         THashMap<TString, TVector<TWaiter>> Requested;
         bool Scheduled = false;
+        TMaybe<TString> EndpointId;
 
         auto Request(const TString& database) {
             auto result = Requested.emplace(database, TVector<TWaiter>());
@@ -279,7 +278,8 @@ namespace NDiscoveryPrivate {
 
             currentCachedMessage = std::make_shared<NDiscovery::TCachedMessageData>(
                 NDiscovery::CreateCachedMessage(
-                    currentCachedMessage->InfoEntries, std::move(msg->Updates), {}, {}, NameserviceResponse)
+                    currentCachedMessage->InfoEntries, std::move(msg->Updates),
+                    {}, EndpointId.GetOrElse({}), NameserviceResponse)
             );
 
             auto it = Requested.find(path);
@@ -293,7 +293,8 @@ namespace NDiscoveryPrivate {
             const auto& path = msg->Path;
 
             auto newCachedData = std::make_shared<NDiscovery::TCachedMessageData>(
-                NDiscovery::CreateCachedMessage({}, std::move(msg->InfoEntries), {}, {}, NameserviceResponse)
+                NDiscovery::CreateCachedMessage({}, std::move(msg->InfoEntries),
+                {}, EndpointId.GetOrElse({}), NameserviceResponse)
             );
             newCachedData->Status = msg->Status;
 
@@ -372,6 +373,11 @@ namespace NDiscoveryPrivate {
         }
 
     public:
+        TDiscoveryCache() = default;
+        TDiscoveryCache(const TString& endpointId)
+            : EndpointId(endpointId)
+        {
+        }
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::DISCOVERY_CACHE_ACTOR;
         }
@@ -523,7 +529,7 @@ public:
                 return true;
             default:
                 return true;
-        } 
+        }
     }
 
     void MaybeReply() {
@@ -621,8 +627,8 @@ IActor* CreateDiscoverer(
     return new TDiscoverer(f, database, replyTo, cacheId);
 }
 
-IActor* CreateDiscoveryCache() {
-    return new NDiscoveryPrivate::TDiscoveryCache();
+IActor* CreateDiscoveryCache(const TString& endpointId) {
+    return new NDiscoveryPrivate::TDiscoveryCache(endpointId);
 }
 
 }

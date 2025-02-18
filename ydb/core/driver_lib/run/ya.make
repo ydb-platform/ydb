@@ -10,6 +10,10 @@ ELSE()
     )
 ENDIF()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     auto_config_initializer.cpp
     config.cpp
@@ -40,7 +44,7 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/library/actors/util
     library/cpp/getopt/small
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/grpc/server
     ydb/library/grpc/server/actors
     library/cpp/logger
@@ -148,6 +152,7 @@ PEERDIR(
     yql/essentials/minikql/comp_nodes/llvm14
     yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/comp_nodes/dq/llvm14
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/s3/actors
     yql/essentials/public/udf/service/exception_policy

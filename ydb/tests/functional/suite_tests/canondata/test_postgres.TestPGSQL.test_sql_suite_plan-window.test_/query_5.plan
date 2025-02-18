@@ -133,6 +133,7 @@
                                                                                                     {
                                                                                                         "Inputs": [],
                                                                                                         "Name": "TableFullScan",
+                                                                                                        "Path": "/Root/postgres_window.test_plan/empsalary",
                                                                                                         "ReadColumns": [
                                                                                                             "depname",
                                                                                                             "salary"

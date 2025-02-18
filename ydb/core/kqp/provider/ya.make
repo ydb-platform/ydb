@@ -38,7 +38,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/public/decimal
     ydb/public/lib/scheme_types
-    ydb/public/sdk/cpp/client/ydb_topic
+    ydb/public/sdk/cpp/src/client/topic
     yql/essentials/core/expr_nodes
     yql/essentials/core/peephole_opt
     yql/essentials/parser/pg_wrapper/interface
@@ -53,6 +53,7 @@ PEERDIR(
     yql/essentials/providers/result/expr_nodes
     yql/essentials/providers/result/provider
     yql/essentials/sql
+    yql/essentials/sql/v1
     ydb/library/ydb_issue/proto
     yql/essentials/public/issue
     yql/essentials/utils/log

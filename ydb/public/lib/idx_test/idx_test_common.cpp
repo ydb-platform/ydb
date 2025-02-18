@@ -1,9 +1,9 @@
 #include "idx_test_common.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 using namespace NYdb;
-using namespace NYdb::NTable;
+using namespace NYdb::V3::NTable;
 
 namespace NIdxTest {
 
@@ -22,7 +22,7 @@ TMaybe<TTableDescription> DescribeTable(const TString& tableName, TTableClient c
         return describeResult;
     };
     auto status = client.RetryOperationSync(describeFn);
-    ThrowOnError(status);
+    NStatusHelpers::ThrowOnError(status);
     return res;
 }
 

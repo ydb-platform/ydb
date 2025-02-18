@@ -651,6 +651,11 @@ PySSL_SetError(PySSLSocket *sslsock, int ret, const char *filename, int lineno)
                         ERR_GET_REASON(e) == SSL_R_CERTIFICATE_VERIFY_FAILED) {
                     type = state->PySSLCertVerificationErrorObject;
                 }
+                if (ERR_GET_LIB(e) == ERR_LIB_SYS) {
+                    // A system error is being reported; reason is set to errno
+                    errno = ERR_GET_REASON(e);
+                    return PyErr_SetFromErrno(PyExc_OSError);
+                }
                 p = PY_SSL_ERROR_SYSCALL;
             }
             break;
@@ -676,6 +681,11 @@ PySSL_SetError(PySSLSocket *sslsock, int ret, const char *filename, int lineno)
                 errstr = "EOF occurred in violation of protocol";
             }
 #endif
+            if (ERR_GET_LIB(e) == ERR_LIB_SYS) {
+                // A system error is being reported; reason is set to errno
+                errno = ERR_GET_REASON(e);
+                return PyErr_SetFromErrno(PyExc_OSError);
+            }
             break;
         }
         default:
@@ -2900,7 +2910,7 @@ static PyType_Spec PySSLSocket_spec = {
     .name = "_ssl._SSLSocket",
     .basicsize = sizeof(PySSLSocket),
     .flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_IMMUTABLETYPE |
-              Py_TPFLAGS_HAVE_GC),
+              Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_DISALLOW_INSTANTIATION),
     .slots = PySSLSocket_slots,
 };
 
@@ -4951,13 +4961,13 @@ PySSLSession_dealloc(PySSLSession *self)
 static PyObject *
 PySSLSession_richcompare(PyObject *left, PyObject *right, int op)
 {
-    int result;
-    PyTypeObject *sesstype = ((PySSLSession*)left)->ctx->state->PySSLSession_Type;
-
     if (left == NULL || right == NULL) {
         PyErr_BadInternalCall();
         return NULL;
     }
+
+    int result;
+    PyTypeObject *sesstype = ((PySSLSession*)left)->ctx->state->PySSLSession_Type;
 
     if (!Py_IS_TYPE(left, sesstype) || !Py_IS_TYPE(right, sesstype)) {
         Py_RETURN_NOTIMPLEMENTED;

@@ -17,6 +17,8 @@
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
+/ydb/tests/olap @ydb-platform/cs
+/ydb/core/kqp/ut/olap @ydb-platform/cs
 
 #Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/system-infra
 /ydb/core/mind/hive @ydb-platform/system-infra
@@ -109,3 +111,5 @@ ydb/tests/functional/tpc @ydb-platform/engineering
 #@ydb-platform/ui-backend
 /ydb/core/viewer @ydb-platform/ui-backend
 /ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend
+
+/ydb/tests/sql @slonn

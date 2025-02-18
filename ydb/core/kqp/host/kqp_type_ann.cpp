@@ -246,7 +246,7 @@ TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const 
     TKikimrTableMetadataPtr meta;
 
     if (readIndex) {
-        meta = table.second->Metadata->GetIndexMetadata(TString(node->Child(TKqlReadTableIndex::idx_Index)->Content())).first;
+        meta = table.second->Metadata->GetIndexMetadata(node->Child(TKqlReadTableIndex::idx_Index)->Content()).first;
         if (!meta) {
             return TStatus::Error;
         }
@@ -455,7 +455,7 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
     if (isStreamLookup && !EnsureArgsCount(*node, TKqlStreamLookupIndex::Match(node.Get()) ? 5 : 4, ctx)) {
         return TStatus::Error;
     }
-    
+
     if (!isStreamLookup && !EnsureArgsCount(*node, TKqlLookupIndexBase::Match(node.Get()) ? 4 : 3, ctx)) {
         return TStatus::Error;
     }
@@ -560,7 +560,7 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
         if (!EnsureAtom(*index, ctx)) {
             return TStatus::Error;
         }
-        auto indexMeta = table.second->Metadata->GetIndexMetadata(TString(index->Content())).first;
+        auto indexMeta = table.second->Metadata->GetIndexMetadata(index->Content()).first;
 
         if (!CalcKeyColumnsCount(ctx, node->Pos(), *structType, *table.second, *indexMeta, keyColumnsCount)) {
             return TStatus::Error;
@@ -713,7 +713,7 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     if (TKqlUpsertRowsIndex::Match(node.Get())) {
-        Y_ENSURE(!table.second->Metadata->SecondaryGlobalIndexMetadata.empty());
+        Y_ENSURE(!table.second->Metadata->ImplTables.empty());
     }
 
     auto effectType = MakeKqpEffectType(ctx);
@@ -865,7 +865,7 @@ TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData)
 {
-    if (!EnsureMaxArgsCount(*node, 3, ctx) && !EnsureMinArgsCount(*node, 2, ctx)) {
+    if (!EnsureMaxArgsCount(*node, 4, ctx) && !EnsureMinArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
     }
 
@@ -1683,7 +1683,7 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 
     } else if (settings.Strategy == EStreamLookupStrategyType::LookupJoinRows
         || settings.Strategy == EStreamLookupStrategyType::LookupSemiJoinRows) {
-        
+
         if (!EnsureTupleType(node->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }
@@ -1820,7 +1820,7 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
     } else {
         node->SetTypeAnn(ctx.MakeType<TListExprType>(outputRowType));
     }
-    
+
     return TStatus::Ok;
 }
 
@@ -1851,7 +1851,7 @@ TStatus AnnotateKqpSinkEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 5, 6, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 6, 7, ctx)) {
         return TStatus::Error;
     }
     input->SetTypeAnn(ctx.MakeType<TVoidExprType>());

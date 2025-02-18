@@ -48,7 +48,7 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
             THashMap<TPathId, TOldStats> oldStatsMap;
 
             for (const auto& entry : oldStatRecord.GetEntries()) {
-                auto& oldEntry = oldStatsMap[PathIdFromPathId(entry.GetPathId())];
+                auto& oldEntry = oldStatsMap[TPathId::FromProto(entry.GetPathId())];
                 oldEntry.RowCount = entry.GetRowCount();
                 oldEntry.BytesSize = entry.GetBytesSize();
             }
@@ -64,7 +64,7 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
                     newEntry->SetRowCount(entry.GetRowCount());
                     newEntry->SetBytesSize(entry.GetBytesSize());
                 } else {
-                    auto oldIter = oldStatsMap.find(PathIdFromPathId(entry.GetPathId()));
+                    auto oldIter = oldStatsMap.find(TPathId::FromProto(entry.GetPathId()));
                     if (oldIter != oldStatsMap.end()) {
                         newEntry->SetRowCount(oldIter->second.RowCount);
                         newEntry->SetBytesSize(oldIter->second.BytesSize);
@@ -91,7 +91,7 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
         std::unordered_set<TPathId> newPathIds;
 
         for (auto& entry : statRecord.GetEntries()) {
-            auto pathId = PathIdFromPathId(entry.GetPathId());
+            auto pathId = TPathId::FromProto(entry.GetPathId());
             newPathIds.insert(pathId);
             if (oldPathIds.find(pathId) == oldPathIds.end()) {
                 TStatisticsAggregator::TScheduleTraversal traversalTable;

@@ -10,5 +10,4 @@ SELECT
     (1, NULL) IN ((1, 2), (1, 3)), -- Nothing<Bool?>
     (2, NULL) IN ((1, 2), (1, 3)), -- Nothing<Bool?>
     (1, NULL) IN ()
-;
--- Nothing<Bool?>
+; -- Nothing<Bool?>

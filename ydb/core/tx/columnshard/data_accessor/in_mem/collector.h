@@ -6,8 +6,9 @@ class TCollector: public IGranuleDataAccessor {
 private:
     using TBase = IGranuleDataAccessor;
     THashMap<ui64, TPortionDataAccessor> Accessors;
-    virtual THashMap<ui64, TPortionDataAccessor> DoAskData(
-        const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer) override;
+    virtual void DoAskData(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback,
+        const TString& consumer) override;
+    virtual TDataCategorized DoAnalyzeData(const std::vector<TPortionInfo::TConstPtr>& portions, const TString& consumer) override;
     virtual void DoModifyPortions(const std::vector<TPortionDataAccessor>& add,
         const std::vector<ui64>& remove) override;
 

@@ -13,7 +13,7 @@
 #include <ydb/core/tx/long_tx_service/public/types.h>
 #include <ydb/core/tx/tiering/manager.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -181,6 +181,22 @@ struct TTestSchema {
         };
         return schema;
     };
+
+    static std::vector<ui32> GetColumnIds(const std::vector<TTestColumn>& schema, const std::vector<TString>& names) {
+        std::vector<ui32> result;
+        for (auto&& i : names) {
+            bool found = false;
+            for (ui32 idx = 0; idx < schema.size(); ++idx) {
+                if (schema[idx].GetName() == i) {
+                    result.emplace_back(idx + 1);
+                    found = true;
+                    break;
+                }
+            }
+            AFL_VERIFY(found);
+        }
+        return result;
+    }
 
     static auto YdbExoticSchema() {
         std::vector<TTestColumn> schema = {
@@ -395,6 +411,16 @@ struct TTestSchema {
         return out;
     }
 
+    static std::vector<ui32> ExtractIds(const std::vector<NArrow::NTest::TTestColumn>& columns) {
+        std::vector<ui32> out;
+        out.reserve(columns.size());
+        for (auto& col : columns) {
+            Y_UNUSED(col);
+            out.push_back(out.size() + 1);
+        }
+        return out;
+    }
+
     static std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<NArrow::NTest::TTestColumn>& columns) {
         std::vector<NScheme::TTypeInfo> types;
         types.reserve(columns.size());
@@ -563,6 +589,10 @@ namespace NKikimr::NColumnShard {
         std::vector<NArrow::NTest::TTestColumn> Schema = NTxUT::TTestSchema::YdbSchema();
         std::vector<NArrow::NTest::TTestColumn> Pk = NTxUT::TTestSchema::YdbPkSchema();
         bool InStore = true;
+
+        std::vector<ui32> GetColumnIds(const std::vector<TString>& names) const {
+            return NTxUT::TTestSchema::GetColumnIds(Schema, names);
+        }
     };
 
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,

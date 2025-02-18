@@ -217,15 +217,16 @@ void TLogger::Write(TLogEvent&& event) const
     LogManager_->Enqueue(std::move(event));
 }
 
-void TLogger::AddRawTag(const TString& tag)
+void TLogger::AddRawTag(const std::string& tag)
 {
-    if (!Tag_.empty()) {
-        Tag_ += ", ";
+    auto* state = GetMutableCoWState();
+    if (!state->Tag.empty()) {
+        state->Tag += ", ";
     }
-    Tag_ += tag;
+    state->Tag += tag;
 }
 
-TLogger TLogger::WithRawTag(const TString& tag) const
+TLogger TLogger::WithRawTag(const std::string& tag) const
 {
     auto result = *this;
     result.AddRawTag(tag);
@@ -239,10 +240,16 @@ TLogger TLogger::WithEssential(bool essential) const
     return result;
 }
 
+void TLogger::AddStructuredValidator(TStructuredValidator validator)
+{
+    auto* state = GetMutableCoWState();
+    state->StructuredValidators.push_back(std::move(validator));
+}
+
 TLogger TLogger::WithStructuredValidator(TStructuredValidator validator) const
 {
     auto result = *this;
-    result.StructuredValidators_.push_back(std::move(validator));
+    result.AddStructuredValidator(std::move(validator));
     return result;
 }
 
@@ -255,19 +262,39 @@ TLogger TLogger::WithMinLevel(ELogLevel minLevel) const
     return result;
 }
 
-const TString& TLogger::GetTag() const
+const std::string& TLogger::GetTag() const
 {
-    return Tag_;
+    static const std::string emptyResult;
+    return CoWState_ ? CoWState_->Tag : emptyResult;
 }
 
 const TLogger::TStructuredTags& TLogger::GetStructuredTags() const
 {
-    return StructuredTags_;
+    static const TStructuredTags emptyResult;
+    return CoWState_ ? CoWState_->StructuredTags : emptyResult;
 }
 
 const TLogger::TStructuredValidators& TLogger::GetStructuredValidators() const
 {
-    return StructuredValidators_;
+    static const TStructuredValidators emptyResult;
+    return CoWState_ ? CoWState_->StructuredValidators : emptyResult;
+}
+
+TLogger::TCoWState* TLogger::GetMutableCoWState()
+{
+    if (!CoWState_ || GetRefCounter(CoWState_.get())->GetRefCount() > 1) {
+        auto uniquelyOwnedState = New<TCoWState>();
+        if (CoWState_) {
+            *uniquelyOwnedState = *CoWState_;
+        }
+        CoWState_ = StaticPointerCast<const TCoWState>(std::move(uniquelyOwnedState));
+    }
+    return const_cast<TCoWState*>(CoWState_.get());
+}
+
+void TLogger::ResetCoWState()
+{
+    CoWState_.Reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -149,6 +149,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/Root/sqllogictest_select3-14.test_plan/t1",
                                                                         "ReadColumns": [
                                                                             "a",
                                                                             "b",
@@ -256,6 +257,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/sqllogictest_select3-14.test_plan/t1",
                                                         "ReadColumns": [
                                                             "a",
                                                             "b",

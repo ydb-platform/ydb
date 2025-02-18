@@ -16,7 +16,7 @@ class CalledProcessError(subprocess.CalledProcessError):
         return "Command '%s' returned non-zero exit status %d and output was '%s'" % (
             self.cmd,
             self.returncode,
-            self.output
+            self.output,
         )
 
 
@@ -60,7 +60,7 @@ class Slice:
     def _format_drives(self):
         tasks = []
         for (host_name, drive_path) in self._get_all_drives():
-            cmd = "sudo dd if=/dev/zero of={} bs=1M count=1 status=none conv=notrunc".format(drive_path)
+            cmd = "sudo {} admin bs disk obliterate {}".format(self.slice_kikimr_path, drive_path)
             tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
         self.nodes._check_async_execution(tasks)
 
@@ -125,10 +125,10 @@ class Slice:
             self._clear_logs()
 
         if 'kikimr' in self.components:
-            self._format_drives()
-
             if 'bin' in self.components.get('kikimr', []):
                 self._update_kikimr()
+
+            self._format_drives()
 
             if 'cfg' in self.components.get('kikimr', []):
                 static_cfg_path = self.configurator.create_static_cfg()

@@ -316,7 +316,6 @@ namespace NKikimr {
             Impl->Issue(request, std::move(callback), &TImpl::TStub::Async ## NAME); \
         }
 
-        IMPL_REQUEST(Request, TRequest, TResponse)
         IMPL_REQUEST(SchemeOperation, TSchemeOperation, TResponse)
         IMPL_REQUEST(SchemeOperationStatus, TSchemeOperationStatus, TResponse)
         IMPL_REQUEST(SchemeDescribe, TSchemeDescribe, TResponse)
@@ -329,7 +328,6 @@ namespace NKikimr {
         IMPL_REQUEST(LocalEnumerateTablets, TLocalEnumerateTablets, TResponse)
         IMPL_REQUEST(KeyValue, TKeyValueRequest, TResponse)
         IMPL_REQUEST(CmsRequest, TCmsRequest, TCmsResponse)
-        IMPL_REQUEST(SqsRequest, TSqsRequest, TSqsResponse)
         IMPL_REQUEST(LocalMKQL, TLocalMKQL, TResponse)
         IMPL_REQUEST(LocalSchemeTx, TLocalSchemeTx, TResponse)
         IMPL_REQUEST(TabletKillRequest, TTabletKillRequest, TResponse)

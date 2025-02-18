@@ -105,11 +105,14 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::PushConfigToDynamicNode(TActorId actorId, TActorId sessionId) {
         auto ev = std::make_unique<TEvNodeWardenDynamicConfigPush>();
         auto& record = ev->Record;
-        if (StorageConfig) {
-            record.MutableConfig()->CopyFrom(*StorageConfig);
-        }
-        if (!PartOfNodeQuorum()) {
+        if (!PartOfNodeQuorum()) { // this configuration is not reliable, don't push anything
             ev->Record.SetNoQuorum(true);
+        } else if (!StorageConfig) {
+            // no storage configuration -- no nothing
+        } else if (auto *target = record.MutableConfig(); SelfManagementEnabled) {
+            target->CopyFrom(*StorageConfig);
+        } else {
+            target->CopyFrom(BaseConfig);
         }
         auto handle = std::make_unique<IEventHandle>(actorId, SelfId(), ev.release());
         handle->Rewrite(TEvInterconnect::EvForward, sessionId);

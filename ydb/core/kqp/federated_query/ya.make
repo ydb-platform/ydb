@@ -12,7 +12,7 @@ PEERDIR(
     ydb/library/db_pool/protos
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/generic/connector/libcpp
-    yt/yql/providers/yt/comp_nodes/dq
+    ydb/library/yql/providers/solomon/gateway
     yt/yql/providers/yt/gateway/native
     yt/yql/providers/yt/lib/yt_download
 )

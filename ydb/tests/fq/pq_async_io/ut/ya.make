@@ -19,8 +19,8 @@ PEERDIR(
     ydb/library/yql/providers/pq/gateway/native
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql
-    ydb/public/sdk/cpp/client/ydb_datastreams
-    ydb/public/sdk/cpp/client/ydb_persqueue_public
+    ydb/public/sdk/cpp/src/client/datastreams
+    ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/tests/fq/pq_async_io
 )
 

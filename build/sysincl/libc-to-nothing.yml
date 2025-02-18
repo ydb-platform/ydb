@@ -106,6 +106,7 @@
   - shadow.h
   - signal.h
   - spawn.h
+  - stab.h
   - stdalign.h
   - stdarg.h
   - stdatomic.h

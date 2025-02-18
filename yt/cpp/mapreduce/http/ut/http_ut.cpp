@@ -21,10 +21,10 @@ void WriteDataFrame(TStringBuf string, IOutputStream* stream)
     stream->Write(string);
 }
 
-THolder<TSimpleServer> CreateFramingEchoServer()
+std::unique_ptr<TSimpleServer> CreateFramingEchoServer()
 {
     auto port = NTesting::GetFreePort();
-    return MakeHolder<TSimpleServer>(
+    return std::make_unique<TSimpleServer>(
         port,
         [] (IInputStream* input, IOutputStream* output) {
             try {

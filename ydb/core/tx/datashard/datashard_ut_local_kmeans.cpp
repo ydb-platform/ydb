@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                 rec.SetTabletId(tid);
             }
             if (!rec.HasPathId()) {
-                PathIdFromPathId(tableId.PathId, rec.MutablePathId());
+                tableId.PathId.ToProto(rec.MutablePathId());
             }
 
             rec.SetSnapshotTxId(snapshot.TxId);
@@ -69,7 +69,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             rec.SetDoneRounds(0);
             rec.SetNeedsRounds(3);
 
-            rec.SetParent(0);
+            rec.SetParentFrom(0);
+            rec.SetParentTo(0);
             rec.SetChild(1);
 
             if (rec.HasEmbeddingColumn()) {
@@ -113,7 +114,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                 rec.SetSeqNoRound(1);
 
                 rec.SetTabletId(tid);
-                PathIdFromPathId(tableId.PathId, rec.MutablePathId());
+                tableId.PathId.ToProto(rec.MutablePathId());
 
                 rec.SetSnapshotTxId(snapshot.TxId);
                 rec.SetSnapshotStep(snapshot.Step);
@@ -133,7 +134,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                 rec.SetDoneRounds(0);
                 rec.SetNeedsRounds(300);
 
-                rec.SetParent(parent);
+                rec.SetParentFrom(parent);
+                rec.SetParentTo(parent);
                 rec.SetChild(parent + 1);
 
                 rec.SetEmbeddingColumn("embedding");
@@ -261,7 +263,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto ev = std::make_unique<TEvDataShard::TEvLocalKMeansRequest>();
             auto& rec = ev->Record;
 
-            PathIdFromPathId({0, 0}, rec.MutablePathId());
+            TPathId(0, 0).ToProto(rec.MutablePathId());
             DoBadRequest(server, sender, ev);
         }
         {

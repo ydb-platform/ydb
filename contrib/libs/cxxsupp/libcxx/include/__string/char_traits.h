@@ -9,11 +9,11 @@
 #ifndef _LIBCPP___STRING_CHAR_TRAITS_H
 #define _LIBCPP___STRING_CHAR_TRAITS_H
 
-#include <__algorithm/copy_n.h>
 #include <__algorithm/fill_n.h>
 #include <__algorithm/find_end.h>
 #include <__algorithm/find_first_of.h>
 #include <__algorithm/min.h>
+#include <__assert>
 #include <__compare/ordering.h>
 #include <__config>
 #include <__functional/hash.h>
@@ -243,7 +243,7 @@ struct _LIBCPP_TEMPLATE_VIS char_traits<char> {
   copy(char_type* __s1, const char_type* __s2, size_t __n) _NOEXCEPT {
     _LIBCPP_ASSERT_NON_OVERLAPPING_RANGES(!std::__is_pointer_in_range(__s1, __s1 + __n, __s2),
                                           "char_traits::copy: source and destination ranges overlap");
-    std::copy_n(__s2, __n, __s1);
+    std::__constexpr_memmove(__s1, __s2, __element_count(__n));
     return __s1;
   }
 
@@ -320,7 +320,7 @@ struct _LIBCPP_TEMPLATE_VIS char_traits<wchar_t> {
   copy(char_type* __s1, const char_type* __s2, size_t __n) _NOEXCEPT {
     _LIBCPP_ASSERT_NON_OVERLAPPING_RANGES(!std::__is_pointer_in_range(__s1, __s1 + __n, __s2),
                                           "char_traits::copy: source and destination ranges overlap");
-    std::copy_n(__s2, __n, __s1);
+    std::__constexpr_memmove(__s1, __s2, __element_count(__n));
     return __s1;
   }
 
@@ -386,7 +386,7 @@ struct _LIBCPP_TEMPLATE_VIS char_traits<char8_t> {
   copy(char_type* __s1, const char_type* __s2, size_t __n) _NOEXCEPT {
     _LIBCPP_ASSERT_NON_OVERLAPPING_RANGES(!std::__is_pointer_in_range(__s1, __s1 + __n, __s2),
                                           "char_traits::copy: source and destination ranges overlap");
-    std::copy_n(__s2, __n, __s1);
+    std::__constexpr_memmove(__s1, __s2, __element_count(__n));
     return __s1;
   }
 
@@ -465,7 +465,7 @@ struct _LIBCPP_TEMPLATE_VIS char_traits<char16_t> {
   copy(char_type* __s1, const char_type* __s2, size_t __n) _NOEXCEPT {
     _LIBCPP_ASSERT_NON_OVERLAPPING_RANGES(!std::__is_pointer_in_range(__s1, __s1 + __n, __s2),
                                           "char_traits::copy: source and destination ranges overlap");
-    std::copy_n(__s2, __n, __s1);
+    std::__constexpr_memmove(__s1, __s2, __element_count(__n));
     return __s1;
   }
 
@@ -553,7 +553,7 @@ struct _LIBCPP_TEMPLATE_VIS char_traits<char32_t> {
 
   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 static char_type*
   copy(char_type* __s1, const char_type* __s2, size_t __n) _NOEXCEPT {
-    std::copy_n(__s2, __n, __s1);
+    std::__constexpr_memmove(__s1, __s2, __element_count(__n));
     return __s1;
   }
 

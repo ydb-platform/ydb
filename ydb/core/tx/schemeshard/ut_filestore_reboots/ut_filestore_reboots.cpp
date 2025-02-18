@@ -47,8 +47,11 @@ void InitAlterFileStoreConfig(NKikimrFileStore::TConfig& vc, bool channels = fal
     }
 }
 
-void CheckLimits(ui64 correctType, ui64 incorrectType) {
-    const TString typeStr = correctType == 1 ? "ssd" : "hdd";
+void CheckLimits(ui64 correctType, ui64 incorrectType, bool isSystem = false) {
+    const TString typeStr =
+        correctType == 1 ?
+            (isSystem ? "ssd_system" : "ssd") :
+            "hdd";
 
     TTestBasicRuntime runtime;
     TTestEnv env(runtime);
@@ -72,6 +75,7 @@ void CheckLimits(ui64 correctType, ui64 incorrectType) {
     vc.SetBlockSize(4_KB);
     vc.SetBlocksCount(100500);
     vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+    vc.SetIsSystem(isSystem);
 
     vdescr.SetName("FSOther");
     TestCreateFileStore(runtime, ++txId, "/MyRoot", vdescr.DebugString());
@@ -352,8 +356,10 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
     }
 
     Y_UNIT_TEST(CheckFileStoreSSDLimits) {
-        CheckLimits(1, 3);  // ssd, hdd
-        CheckLimits(1, 2);  // ssd, hybrid
+        CheckLimits(1, 3, false); // ssd, hdd
+        CheckLimits(1, 3, true);  // ssd_system, hdd
+        CheckLimits(1, 2, false); // ssd, hybrid
+        CheckLimits(1, 2, true);  // ssd_system, hybrid
     }
 
     Y_UNIT_TEST(CheckFileStoreHDDLimits) {

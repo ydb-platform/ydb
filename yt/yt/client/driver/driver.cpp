@@ -33,7 +33,6 @@
 
 #include <yt/yt/library/tvm/tvm_base.h>
 
-
 namespace NYT::NDriver {
 
 using namespace NYTree;
@@ -51,6 +50,7 @@ using namespace NHiveClient;
 using namespace NTabletClient;
 using namespace NApi;
 using namespace NNodeTrackerClient;
+using namespace NSignature;
 using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -112,7 +112,11 @@ class TDriver
     : public IDriver
 {
 public:
-    TDriver(TDriverConfigPtr config, IConnectionPtr connection)
+    TDriver(
+        TDriverConfigPtr config,
+        IConnectionPtr connection,
+        ISignatureGeneratorPtr signatureGenerator,
+        ISignatureValidatorPtr signatureValidator)
         : Config_(std::move(config))
         , Connection_(std::move(connection))
         , ClientCache_(New<TClientCache>(Config_->ClientCache, Connection_))
@@ -122,6 +126,8 @@ public:
         , ProxyDiscoveryCache_(CreateProxyDiscoveryCache(
             Config_->ProxyDiscoveryCache,
             RootClient_))
+        , SignatureGenerator_(std::move(signatureGenerator))
+        , SignatureValidator_(std::move(signatureValidator))
         , StickyTransactionPool_(CreateStickyTransactionPool(Logger()))
     {
         // Register all commands.
@@ -224,6 +230,7 @@ public:
         REGISTER    (TRemountTableCommand,                 "remount_table",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TFreezeTableCommand,                  "freeze_table",                    Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TUnfreezeTableCommand,                "unfreeze_table",                  Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TCancelTabletTransitionCommand,       "cancel_tablet_transition",        Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TReshardTableCommand,                 "reshard_table",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAlterTableCommand,                   "alter_table",                     Null,       Structured, true,  false, ApiVersion4);
 
@@ -259,6 +266,7 @@ public:
         REGISTER    (TResumeOperationCommand,              "resume_op",                       Null,       Null,       true,  false, ApiVersion3);
         REGISTER    (TCompleteOperationCommand,            "complete_op",                     Null,       Null,       true,  false, ApiVersion3);
         REGISTER    (TUpdateOperationParametersCommand,    "update_op_parameters",            Null,       Null,       true,  false, ApiVersion3);
+        REGISTER    (TPatchOperationSpecCommand,           "patch_op_spec",                   Null,       Null,       true,  false, ApiVersion3);
 
         REGISTER    (TStartOperationCommand,               "start_operation",                 Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbortOperationCommand,               "abort_operation",                 Null,       Structured, true,  false, ApiVersion4);
@@ -266,6 +274,7 @@ public:
         REGISTER    (TResumeOperationCommand,              "resume_operation",                Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TCompleteOperationCommand,            "complete_operation",              Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TUpdateOperationParametersCommand,    "update_operation_parameters",     Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TPatchOperationSpecCommand,           "patch_operation_spec",            Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER_ALL(TParseYPathCommand,                   "parse_ypath",                     Null,       Structured, false, false);
 
@@ -397,9 +406,12 @@ public:
             REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, true,  false);
             REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, true,  false);
             REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, true,  false);
+
+            // TODO(arkady-e1ppa): flags past command name might be complete rubbish -- think them through later.
             REGISTER_ALL(TStartDistributedWriteSessionCommand,    "start_distributed_write_session",      Null,    Structured, true, false);
             REGISTER_ALL(TFinishDistributedWriteSessionCommand,   "finish_distributed_write_session",     Null,    Null,       true, false);
             REGISTER_ALL(TWriteTableFragmentCommand,               "distributed_write_table_partition",    Tabular, Structured, true, true );
+            REGISTER_ALL(TForsakeChaosCoordinator,         "forsake_chaos_coordinator",       Null,       Null,       true,  true);
         }
 
 #undef REGISTER
@@ -490,6 +502,16 @@ public:
         return Connection_;
     }
 
+    ISignatureGeneratorPtr GetSignatureGenerator() override
+    {
+        return SignatureGenerator_;
+    }
+
+    ISignatureValidatorPtr GetSignatureValidator() override
+    {
+        return SignatureValidator_;
+    }
+
     void Terminate() override
     {
         // TODO(ignat): find and eliminate reference loop.
@@ -513,6 +535,8 @@ private:
     TClientCachePtr ClientCache_;
     const IClientPtr RootClient_;
     IProxyDiscoveryCachePtr ProxyDiscoveryCache_;
+    ISignatureGeneratorPtr SignatureGenerator_;
+    ISignatureValidatorPtr SignatureValidator_;
 
     class TCommandContext;
     using TCommandContextPtr = TIntrusivePtr<TCommandContext>;
@@ -705,14 +729,20 @@ private:
 
 IDriverPtr CreateDriver(
     IConnectionPtr connection,
-    TDriverConfigPtr config)
+    TDriverConfigPtr config,
+    ISignatureGeneratorPtr signatureGenerator,
+    ISignatureValidatorPtr signatureValidator)
 {
     YT_VERIFY(connection);
     YT_VERIFY(config);
+    YT_VERIFY(signatureGenerator);
+    YT_VERIFY(signatureValidator);
 
     return New<TDriver>(
         std::move(config),
-        std::move(connection));
+        std::move(connection),
+        std::move(signatureGenerator),
+        std::move(signatureValidator));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

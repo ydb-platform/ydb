@@ -18,7 +18,7 @@ namespace NActors {
     class TMailboxTable;
     class TMailbox;
 
-    class TGenericExecutorThread;
+    class TExecutorThread;
     class IActor;
     class ISchedulerCookie;
     class IExecutorPool;
@@ -46,11 +46,11 @@ namespace NActors {
     struct TActivationContext {
     public:
         TMailbox& Mailbox;
-        TGenericExecutorThread& ExecutorThread;
+        TExecutorThread& ExecutorThread;
         const NHPTimer::STime EventStart;
 
     protected:
-        explicit TActivationContext(TMailbox& mailbox, TGenericExecutorThread& executorThread, NHPTimer::STime eventStart)
+        explicit TActivationContext(TMailbox& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart)
             : Mailbox(mailbox)
             , ExecutorThread(executorThread)
             , EventStart(eventStart)
@@ -133,12 +133,17 @@ namespace NActors {
         static double GetCurrentEventTicksAsSeconds();
 
         static void EnableMailboxStats();
+
+        static ui32 GetOverwrittenEventsPerMailbox();
+        static void SetOverwrittenEventsPerMailbox(ui32 value);
+        static ui64 GetOverwrittenTimePerMailboxTs();
+        static void SetOverwrittenTimePerMailboxTs(ui64 value);
     };
 
     struct TActorContext: public TActivationContext {
         const TActorId SelfID;
         using TEventFlags = IEventHandle::TEventFlags;
-        explicit TActorContext(TMailbox& mailbox, TGenericExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
+        explicit TActorContext(TMailbox& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
             : TActivationContext(mailbox, executorThread, eventStart)
             , SelfID(selfID)
         {
@@ -367,7 +372,7 @@ namespace NActors {
         TMonotonic LastReceiveTimestamp;
         size_t StuckIndex = Max<size_t>();
         friend class TExecutorPoolBaseMailboxed;
-        friend class TGenericExecutorThread;
+        friend class TExecutorThread;
 
         IActor(const ui32 activityType)
             : SelfActorId(TActorId())
@@ -537,6 +542,11 @@ namespace NActors {
         }
 
         void Receive(TAutoPtr<IEventHandle>& ev) {
+#ifndef NDEBUG
+            if (ev->Flags & IEventHandle::FlagDebugTrackReceive) {
+                YaDebugBreak();
+            }
+#endif
             ++HandledEvents;
             LastReceiveTimestamp = TActivationContext::Monotonic();
             if (CImpl.Initialized()) {

@@ -272,7 +272,7 @@ void TProtobufTableConfig::Register(TRegistrar registrar)
 
     registrar.Postprocessor([] (TThis* config) {
         bool hasOtherColumns = false;
-        for (const auto& column: config->Columns) {
+        for (const auto& column : config->Columns) {
             if (column->ProtoType == EProtobufType::OtherColumns) {
                 if (hasOtherColumns) {
                     THROW_ERROR_EXCEPTION("Multiple \"other_columns\" in protobuf config are not allowed");

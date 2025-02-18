@@ -118,6 +118,11 @@ public:
         return Wrap(MakeIntrusive<TAttemptLimitedRetryPolicy>(static_cast<ui32>(Config_->StartOperationRetryCount), Config_));
     }
 
+    IRequestRetryPolicyPtr CreatePolicyForReaderRequest() override
+    {
+        return Wrap(MakeIntrusive<TAttemptLimitedRetryPolicy>(static_cast<ui32>(Config_->ReadRetryCount), Config_));
+    }
+
     IRequestRetryPolicyPtr Wrap(IRequestRetryPolicyPtr basePolicy)
     {
         auto config = RetryConfigProvider_->CreateRetryConfig();
@@ -225,6 +230,7 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
         NRpc::Unavailable,
         NApi::RetriableArchiveError,
         NSequoiaClient::SequoiaRetriableError,
+        NRpc::TransientFailure,
         Canceled,
     }) {
         if (allCodes.contains(code)) {

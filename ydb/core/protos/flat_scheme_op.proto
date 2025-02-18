@@ -317,6 +317,7 @@ message TTableDescription {
 
     optional bool OmitFollowers = 36 [default = false]; // used with CopyFromTable
     optional bool IsBackup = 37 [default = false];
+    optional bool IsRestore = 45 [default = false];
 
     repeated TCdcStreamDescription CdcStreams = 38;
     repeated TSequenceDescription Sequences = 39;
@@ -391,6 +392,14 @@ message TRequestedBloomFilter {
     repeated string ColumnNames = 3;
 }
 
+message TRequestedBloomNGrammFilter {
+    optional uint32 NGrammSize = 1;
+    optional uint32 FilterSizeBytes = 2;
+    optional uint32 HashesCount = 3;
+    optional string ColumnName = 4;
+    optional uint32 RecordsCount = 5;
+}
+
 message TRequestedMaxIndex {
     optional string ColumnName = 1;
 }
@@ -410,6 +419,7 @@ message TOlapIndexRequested {
         TRequestedBloomFilter BloomFilter = 40;
         TRequestedMaxIndex MaxIndex = 41;
         TRequestedCountMinSketch CountMinSketch = 42;
+        TRequestedBloomNGrammFilter BloomNGrammFilter = 43;
     }
 }
 
@@ -417,6 +427,14 @@ message TBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     optional uint64 MaxBytesCount = 2 [default = 8196];
     repeated uint32 ColumnIds = 3;
+}
+
+message TBloomNGrammFilter {
+    optional uint32 NGrammSize = 1;
+    optional uint32 FilterSizeBytes = 2;
+    optional uint32 HashesCount = 3;
+    optional uint32 ColumnId = 4;
+    optional uint32 RecordsCount = 5;
 }
 
 message TMaxIndex {
@@ -441,6 +459,7 @@ message TOlapIndexDescription {
         TBloomFilter BloomFilter = 41;
         TMaxIndex MaxIndex = 42;
         TCountMinSketch CountMinSketch = 43;
+        TBloomNGrammFilter BloomNGrammFilter = 44;
     }
 }
 
@@ -466,6 +485,7 @@ message TCompactionLevelConstructorContainer {
     message TZeroLevel {
         optional uint32 PortionsLiveDurationSeconds = 1;
         optional uint64 ExpectedBlobsSize = 2;
+        optional uint64 PortionsCountAvailable = 3;
     }
 
     oneof Implementation {
@@ -829,11 +849,15 @@ message TReshardColumnTable {
 message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2;
+    optional bool CanLogin = 3 [default = true];
+    optional bool IsHashedPassword = 4 [default = false];
 }
 
 message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2;
+    optional bool CanLogin = 3;
+    optional bool IsHashedPassword = 4 [default = false];
 }
 
 message TLoginRemoveUser {
@@ -1212,6 +1236,7 @@ message TBackupTask {
     }
 
     optional TPathDescription Table = 10; // for further restore
+    repeated TPathDescription ChangefeedUnderlyingTopics = 17; // for further restore
 
     message TScanSettings {
         optional uint64 RowsBatchSize = 1 [default = 0]; // no limit
@@ -1230,6 +1255,7 @@ message TBackupTask {
 
     optional uint64 SnapshotStep = 14;
     optional uint64 SnapshotTxId = 15;
+    optional bool EnableChecksums = 16; // currently available for s3
 }
 
 message TRestoreTask {
@@ -1242,6 +1268,8 @@ message TRestoreTask {
     oneof Settings {
         TS3Settings S3Settings = 6;
     }
+
+    optional bool ValidateChecksums = 7; // currently available for s3
 }
 
 message TPersQueueGroupAllocate {
@@ -1495,6 +1523,7 @@ message TReplicationDescription {
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
     optional NKikimrReplication.TReplicationState State = 6;
+    optional string TransferTransformLambda = 7;
 }
 
 message TBlobDepotDescription {
@@ -1840,6 +1869,7 @@ message TDirEntry {
     optional uint64 PathVersion = 13;
     optional EPathSubType PathSubType = 14;
     optional TPathVersion Version = 15;
+    optional bool ChildrenExist = 16;
 
     optional uint64 BalancerTabletID = 999; //temporary optimization for old PQ read/write protocol. Must be removed later
 }

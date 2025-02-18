@@ -3,7 +3,6 @@
 #include "guid.h"
 #include "mpl.h"
 #include "object_pool.h"
-#include "range.h"
 #include "serialize.h"
 
 #include <yt/yt/core/compression/public.h>
@@ -17,6 +16,8 @@
 #include <library/cpp/yt/misc/preprocessor.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
 #include <library/cpp/yt/misc/static_initializer.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <google/protobuf/duration.pb.h>
 #include <google/protobuf/message.h>

@@ -154,13 +154,13 @@ public:
 
     [[nodiscard]] bool InitPosition(const ui64 position);
 
-    std::shared_ptr<arrow::Table> Slice(const ui64 offset, const ui64 count) const {
-        std::vector<std::shared_ptr<arrow::ChunkedArray>> slicedArrays;
-        for (auto&& i : Columns) {
-            slicedArrays.emplace_back(i->Slice(offset, count));
-        }
-        return arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), slicedArrays, count);
-    }
+     std::shared_ptr<arrow::Table> Slice(const ui64 offset, const ui64 count) const {
+         std::vector<std::shared_ptr<arrow::ChunkedArray>> slicedArrays;
+         for (auto&& i : Columns) {
+             slicedArrays.emplace_back(i->Slice(offset, count));
+         }
+         return arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), slicedArrays, count);
+     }
 
     bool IsSameSchema(const std::shared_ptr<arrow::Schema>& schema) const {
         if (Fields.size() != (size_t)schema->num_fields()) {
@@ -466,6 +466,33 @@ private:
     std::vector<TIntervalPosition> Positions;
 public:
     using const_iterator = std::vector<TIntervalPosition>::const_iterator;
+
+    void Merge(const TIntervalPositions& from) {
+        auto itSelf = Positions.begin();
+        auto itFrom = from.Positions.begin();
+        while (itSelf != Positions.end() && itFrom != from.Positions.end()) {
+            if (*itSelf < *itFrom) {
+                Positions.emplace_back(*itSelf);
+                ++itSelf;
+            } else if (*itFrom < *itSelf) {
+                Positions.emplace_back(*itFrom);
+                ++itFrom;
+            } else {
+                Positions.emplace_back(*itFrom);
+                ++itSelf;
+                ++itFrom;
+            }
+        }
+        if (itSelf == Positions.end()) {
+            Positions.insert(Positions.end(), itFrom, from.Positions.end());
+        } else {
+            Positions.insert(Positions.end(), itSelf, Positions.end());
+        }
+    }
+
+    ui32 GetPointsCount() const {
+        return Positions.size();
+    }
 
     bool IsEmpty() const {
         return Positions.empty();

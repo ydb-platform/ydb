@@ -3,6 +3,8 @@
 #include "dq_input_channel.h"
 #include "dq_columns_resolve.h"
 
+#include <yql/essentials/public/udf/udf_value_builder.h>
+
 namespace NYql::NDq {
 
 struct TDqMeteringStats {
@@ -29,10 +31,10 @@ struct TDqMeteringStats {
 };
 
 NKikimr::NUdf::TUnboxedValue CreateInputUnionValue(const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory, TDqMeteringStats::TInputStatsMeter = {});
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, TDqMeteringStats::TInputStatsMeter, TInstant& startTs, bool& inputConsumed);
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
     TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory,
-    TDqMeteringStats::TInputStatsMeter = {});
+    TDqMeteringStats::TInputStatsMeter, TInstant& startTs, bool& inputConsumed, NUdf::IPgBuilder* pgBuilder = nullptr);
 
 } // namespace NYql::NDq

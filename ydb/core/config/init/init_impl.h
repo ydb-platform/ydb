@@ -2,8 +2,8 @@
 
 #include "init.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
@@ -54,10 +54,16 @@ namespace NKikimr::NConfig {
 
 constexpr TStringBuf NODE_KIND_YDB = "ydb";
 constexpr TStringBuf NODE_KIND_YQ = "yq";
+constexpr TStringBuf CONFIG_NAME = "config.yaml";
 
 constexpr static ui32 DefaultLogLevel = NActors::NLog::PRI_WARN; // log settings
 constexpr static ui32 DefaultLogSamplingLevel = NActors::NLog::PRI_DEBUG; // log settings
 constexpr static ui32 DefaultLogSamplingRate = 0; // log settings
+
+inline bool IsFileExists(const fs::path& path) {
+    std::error_code ec;
+    return fs::exists(path, ec) && !ec;
+}
 
 template<typename T>
 bool ParsePBFromString(const TString &content, T *pb, bool allowUnknown = false) {
@@ -175,7 +181,7 @@ auto MutableConfigPartMerge(
 
 void AddProtoConfigOptions(IProtoConfigFileProvider& out);
 void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out);
-void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
+void LoadMainYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src);
 void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src);
 
@@ -318,6 +324,7 @@ struct TCommonAppOptions {
     TString GRpcPublicHost = "";
     ui32 GRpcPublicPort = 0;
     ui32 GRpcsPublicPort = 0;
+    ui32 KafkaPort = 0;
     TString PGWireAddress = "";
     ui32 PGWirePort = 0;
     TVector<TString> GRpcPublicAddressesV4;
@@ -328,6 +335,7 @@ struct TCommonAppOptions {
     TString PathToInterconnectPrivateKeyFile;
     TString PathToInterconnectCaFile;
     TString YamlConfigFile;
+    TString ConfigStorePath;
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
@@ -388,6 +396,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
         opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
+        opts.AddLongOption("kafka-port", "enable kafka proxy to listen on port").OptionalArgument("PORT").StoreResult(&KafkaPort);
         opts.AddLongOption("pgwire-address", "set host for listen postgres protocol").RequiredArgument("ADDR").StoreResult(&PGWireAddress);
         opts.AddLongOption("pgwire-port", "set port for listen postgres protocol").OptionalArgument("PORT").StoreResult(&PGWirePort);
         opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4);
@@ -421,6 +430,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("body", "body name (used to describe dynamic node location)")
             .RequiredArgument("NUM").StoreResult(&Body);
         opts.AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").StoreResult(&YamlConfigFile);
+        opts.AddLongOption("config-store", "Directory to store Yaml config").RequiredArgument("PATH").StoreResult(&ConfigStorePath);
 
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
@@ -603,6 +613,12 @@ struct TCommonAppOptions {
                 }
             }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+	if (KafkaPort) {
+            auto& conf = *appConfig.MutableKafkaProxyConfig();
+            conf.SetEnableKafkaProxy(true);
+            conf.SetListeningPort(KafkaPort);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::KafkaProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (PGWireAddress) {
             appConfig.MutableLocalPgWireConfig()->SetAddress(PGWireAddress);
@@ -1050,7 +1066,19 @@ public:
 
         Option("auth-file", TCfg::TAuthConfigFieldTag{});
         LoadBootstrapConfig(ProtoConfigFileProvider, ErrorCollector, freeArgs, BaseConfig);
-        LoadYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig);
+
+        TString yamlConfigFile = CommonAppOptions.YamlConfigFile;
+        if (!CommonAppOptions.ConfigStorePath.empty()) {
+            AppConfig.SetConfigStorePath(CommonAppOptions.ConfigStorePath);
+
+            const TString autoConfigPath = TStringBuilder() << CommonAppOptions.ConfigStorePath << "/" << CONFIG_NAME;
+            fs::path path(autoConfigPath.c_str());
+            if (IsFileExists(path)) {
+                AppConfig.SetConfigLoadedFromStore(true);
+                yamlConfigFile = autoConfigPath;
+            }
+        }
+        LoadMainYamlConfig(refs, yamlConfigFile, AppConfig);
         OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
 
         // start memorylog as soon as possible
@@ -1072,7 +1100,7 @@ public:
             InitDynamicNode();
         }
 
-        LoadYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig);
+        LoadMainYamlConfig(refs, yamlConfigFile, AppConfig);
 
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{});
 

@@ -37,7 +37,7 @@ struct TPoolSettings : public TSettingsBase {
     bool operator==(const TPoolSettings& other) const = default;
 
     std::unordered_map<TString, TProperty> GetPropertiesMap(bool restricted = false);
-    void Validate() const;
+    [[nodiscard]] std::optional<TString> Validate() const;
 
     i32 ConcurrentQueryLimit = -1;  // -1 = disabled
     i32 QueueSize = -1;  // -1 = disabled

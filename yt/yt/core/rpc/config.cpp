@@ -141,6 +141,10 @@ void TRetryingChannelConfig::Register(TRegistrar registrar)
     registrar.Parameter("retry_attempts", &TThis::RetryAttempts)
         .GreaterThanOrEqual(1)
         .Default(10);
+    registrar.Parameter("enable_exponential_retry_backoffs", &TThis::EnableExponentialRetryBackoffs)
+        .Default(false);
+    registrar.Parameter("retry_backoff", &TThis::RetryBackoff)
+        .Default();
     registrar.Parameter("retry_timeout", &TThis::RetryTimeout)
         .GreaterThanOrEqual(TDuration::Zero())
         .Default();

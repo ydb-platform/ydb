@@ -4,7 +4,9 @@
 
 Основные материалы:
 
-- [{#T}](access-management.md)
+- [{#T}](authentication.md)
+- [{#T}](authorization.md)
+- [{#T}](builtin-security.md)
 - [{#T}](audit-log.md)
 - Шифрование:
 
@@ -14,5 +16,4 @@
 - [{#T}](short-access-control-notation.md)
 - Концепции:
 
-  - [{#T}](../concepts/auth.md)
   - [{#T}](../concepts/connect.md)

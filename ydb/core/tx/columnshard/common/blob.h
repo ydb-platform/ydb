@@ -194,6 +194,7 @@ public:
 
     TBlobRange RestoreRange(const TUnifiedBlobId& blobId) const;
     bool CheckBlob(const TUnifiedBlobId& blobId) const;
+    TString GetBlobData(const TString& blob) const;
 };
 
 struct TBlobRange {
@@ -273,6 +274,28 @@ struct TBlobRange {
     }
 
     explicit TBlobRange(const TUnifiedBlobId& blobId = TUnifiedBlobId(), ui32 offset = 0, ui32 size = 0);
+
+    static TConclusionStatus Validate(const std::vector<TUnifiedBlobId>& blobIds, const TBlobRangeLink16& range) {
+        if (blobIds.size() <= range.GetBlobIdxVerified()) {
+            return TConclusionStatus::Fail(
+                "incorrect blob index: " + ::ToString(range.GetBlobIdxVerified()) + " in " + ::ToString(blobIds.size()) + " elements");
+        }
+        return Validate(blobIds[range.GetBlobIdxVerified()], range);
+    }
+
+    static TConclusionStatus Validate(const TUnifiedBlobId& blobId, const TBlobRangeLink16& range) {
+        if (!range.GetSize()) {
+            return TConclusionStatus::Fail("zero range size");
+        }
+        if (blobId.BlobSize() <= range.GetOffset()) {
+            return TConclusionStatus::Fail("too big offset for blob: " + ::ToString(range.GetOffset()) + " in " + ::ToString(blobId.BlobSize()));
+        }
+        if (blobId.BlobSize() < range.GetOffset() + range.GetSize()) {
+            return TConclusionStatus::Fail("too big right border for blob: " + ::ToString(range.GetOffset()) + " + " +
+                                           ::ToString(range.GetSize()) + " in " + ::ToString(blobId.BlobSize()));
+        }
+        return TConclusionStatus::Success();
+    }
 
     static TBlobRange FromBlobId(const TUnifiedBlobId& blobId) {
         return TBlobRange(blobId, 0, blobId.BlobSize());

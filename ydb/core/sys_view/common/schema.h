@@ -49,6 +49,17 @@ constexpr TStringBuf PgTablesName = "pg_tables";
 constexpr TStringBuf InformationSchemaTablesName = "tables";
 constexpr TStringBuf PgClassName = "pg_class";
 
+constexpr TStringBuf ResourcePoolClassifiersName = "resource_pool_classifiers";
+
+namespace NAuth {
+    constexpr TStringBuf UsersName = "auth_users";
+    constexpr TStringBuf GroupsName = "auth_groups";
+    constexpr TStringBuf GroupMembersName = "auth_group_members";
+    constexpr TStringBuf OwnersName = "auth_owners";
+    constexpr TStringBuf PermissionsName = "auth_permissions";
+    constexpr TStringBuf EffectivePermissionsName = "auth_effective_permissions";
+}
+
 
 struct Schema : NIceDb::Schema {
     struct PartitionStats : Table<1> {
@@ -611,6 +622,72 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct AuthUsers : Table<15> {
+        struct Sid: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct IsEnabled: Column<2, NScheme::NTypeIds::Bool> {};
+        struct IsLockedOut: Column<3, NScheme::NTypeIds::Bool> {};
+        struct CreatedAt: Column<4, NScheme::NTypeIds::Timestamp> {};
+        struct LastSuccessfulAttemptAt: Column<5, NScheme::NTypeIds::Timestamp> {};
+        struct LastFailedAttemptAt: Column<6, NScheme::NTypeIds::Timestamp> {};
+        struct FailedAttemptCount: Column<7, NScheme::NTypeIds::Uint32> {};
+        struct PasswordHash: Column<8, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Sid>;
+        using TColumns = TableColumns<
+            Sid,
+            IsEnabled,
+            IsLockedOut,
+            CreatedAt,
+            LastSuccessfulAttemptAt,
+            LastFailedAttemptAt,
+            FailedAttemptCount,
+            PasswordHash
+        >;
+    };
+
+    struct AuthGroups : Table<16> {
+        struct Sid: Column<1, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Sid>;
+        using TColumns = TableColumns<
+            Sid
+        >;
+    };
+
+    struct AuthGroupMembers : Table<17> {
+        struct GroupSid: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct MemberSid: Column<2, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<GroupSid, MemberSid>;
+        using TColumns = TableColumns<
+            GroupSid,
+            MemberSid
+        >;
+    };
+
+    struct AuthOwners : Table<18> {
+        struct Path: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Sid: Column<2, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Path>;
+        using TColumns = TableColumns<
+            Path,
+            Sid
+        >;
+    };
+
+    struct AuthPermissions : Table<19> {
+        struct Path: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Sid: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Permission: Column<3, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Path, Sid, Permission>;
+        using TColumns = TableColumns<
+            Path,
+            Sid,
+            Permission
+        >;
+    };
 
     struct PgColumn {
         NIceDb::TColumnId _ColumnId;
@@ -625,6 +702,18 @@ struct Schema : NIceDb::Schema {
         const TVector<PgColumn>& GetColumns(TStringBuf tableName) const;
     private:
         std::unordered_map<TString, TVector<PgColumn>> columnsStorage;
+    };
+
+    struct ResourcePoolClassifiers : Table<20> {
+        struct Name    : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Rank    : Column<2, NScheme::NTypeIds::Int64> {};
+        struct Config  : Column<3, NScheme::NTypeIds::JsonDocument> {};
+
+        using TKey = TableKey<Name>;
+        using TColumns = TableColumns<
+            Name,
+            Rank,
+            Config>;
     };
 };
 

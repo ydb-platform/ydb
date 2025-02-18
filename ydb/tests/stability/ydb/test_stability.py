@@ -56,9 +56,9 @@ class TestSetupForStability(object):
     stress_binaries_deploy_path = '/Berkanavt/nemesis/bin/'
     artifacts = (
         yatest.common.binary_path('ydb/tests/tools/nemesis/driver/nemesis'),
-        yatest.common.binary_path('ydb/tools/simple_queue/simple_queue'),
-        yatest.common.binary_path('ydb/tools/olap_workload/olap_workload'),
-        yatest.common.binary_path('ydb/tools/statistics_workload/statistics_workload'),
+        yatest.common.binary_path('ydb/tests/stress/simple_queue/simple_queue'),
+        yatest.common.binary_path('ydb/tests/stress/olap_workload/olap_workload'),
+        yatest.common.binary_path('ydb/tests/stress/statistics_workload'),
     )
 
     @classmethod

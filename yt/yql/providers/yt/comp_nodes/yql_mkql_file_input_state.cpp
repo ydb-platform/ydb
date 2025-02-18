@@ -3,6 +3,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <util/system/fs.h>
+#include <util/string/builder.h>
 
 namespace NYql {
 
@@ -57,6 +58,10 @@ bool TFileInputState::NextValue() {
         ++CurrentRecord_;
         return true;
     }
+}
+
+TString TFileInputState::DebugInfo() const {
+    return TStringBuilder() << "TFileInputState{CurrentInput=" << CurrentInput_ << ", CurrentRecord=" << CurrentRecord_ << '}';
 }
 
 TVector<NYT::TRawTableReaderPtr> MakeMkqlFileInputs(const TVector<TString>& files, bool decompress) {

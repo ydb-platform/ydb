@@ -2,7 +2,7 @@
 #include "node_warden_impl.h"
 
 #include <ydb/library/yaml_config/yaml_config_parser.h>
-#include <library/cpp/streams/zstd/zstd.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
 
 namespace NKikimr::NStorage {
 
@@ -24,6 +24,12 @@ namespace NKikimr::NStorage {
         using TGatherCallback = std::function<std::optional<TString>(TEvGather*)>;
         ui64 NextScatterCookie = 1;
         THashMap<ui64, TGatherCallback> ScatterTasks;
+
+        std::shared_ptr<TLifetimeToken> RequestHandlerToken = std::make_shared<TLifetimeToken>();
+
+        NKikimrBlobStorage::TStorageConfig ProposedStorageConfig;
+
+        std::optional<TString> NewYaml;
 
     public:
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev)
@@ -108,23 +114,8 @@ namespace NKikimr::NStorage {
             auto& record = Event->Get()->Record;
             STLOG(PRI_DEBUG, BS_NODE, NWDC43, "ExecuteQuery", (SelfId, SelfId()), (Record, record));
             switch (record.GetRequestCase()) {
-                case TQuery::kUpdateConfig: {
-                    auto *request = record.MutableUpdateConfig();
-
-                    if (!RunCommonChecks()) {
-                        return;
-                    }
-
-                    auto *config = request->MutableConfig();
-
-                    if (auto error = ValidateConfig(*Self->StorageConfig)) {
-                        return FinishWithError(TResult::ERROR, TStringBuilder() << "current config validation failed: " << *error);
-                    } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, *config)) {
-                        return FinishWithError(TResult::ERROR, TStringBuilder() << "config validation failed: " << *error);
-                    }
-
-                    return StartProposition(config);
-                }
+                case TQuery::kUpdateConfig:
+                    return UpdateConfig(record.MutableUpdateConfig());
 
                 case TQuery::kQueryConfig: {
                     auto ev = PrepareResult(TResult::OK, std::nullopt);
@@ -158,7 +149,7 @@ namespace NKikimr::NStorage {
                     return FetchStorageConfig(record.GetFetchStorageConfig().GetManual());
 
                 case TQuery::kReplaceStorageConfig:
-                    return ReplaceStorageConfig(record.GetReplaceStorageConfig().GetYAML());
+                    return ReplaceStorageConfig(record.GetReplaceStorageConfig());
 
                 case TQuery::kBootstrapCluster:
                     return BootstrapCluster(record.GetBootstrapCluster().GetSelfAssemblyUUID());
@@ -196,6 +187,25 @@ namespace NKikimr::NStorage {
                 FinishWithError(TResult::ERROR, std::move(*error));
             }
         }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Configuration update
+
+        void UpdateConfig(TQuery::TUpdateConfig *request) {
+            if (!RunCommonChecks()) {
+                return;
+            }
+
+            auto *config = request->MutableConfig();
+
+            if (auto error = ValidateConfig(*Self->StorageConfig)) {
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "UpdateConfig current config validation failed: " << *error);
+            } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, *config)) {
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "UpdateConfig config validation failed: " << *error);
+            }
+
+            StartProposition(config);
+       }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Reassign group disk logic
@@ -249,7 +259,7 @@ namespace NKikimr::NStorage {
                 const TActorId actorId = GroupInfo->GetActorId(i);
                 const ui32 flags = IEventHandle::FlagTrackDelivery |
                     (actorId.NodeId() == SelfId().NodeId() ? 0 : IEventHandle::FlagSubscribeOnSession);
-                STLOG(PRI_DEBUG, BS_NODE, NW53, "sending TEvVStatus", (SelfId, SelfId()), (VDiskId, vdiskId),
+                STLOG(PRI_DEBUG, BS_NODE, NWDC73, "sending TEvVStatus", (SelfId, SelfId()), (VDiskId, vdiskId),
                     (ActorId, actorId));
                 Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId), flags);
                 if (actorId.NodeId() != SelfId().NodeId()) {
@@ -263,7 +273,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvBlobStorage::TEvVStatusResult::TPtr ev) {
             const auto& record = ev->Get()->Record;
             const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-            STLOG(PRI_DEBUG, BS_NODE, NW54, "TEvVStatusResult", (SelfId, SelfId()), (Record, record), (VDiskId, vdiskId));
+            STLOG(PRI_DEBUG, BS_NODE, NWDC74, "TEvVStatusResult", (SelfId, SelfId()), (Record, record), (VDiskId, vdiskId));
             if (!PendingVDiskIds.erase(vdiskId)) {
                 return FinishWithError(TResult::ERROR, TStringBuilder() << "TEvVStatusResult VDiskID# " << vdiskId
                     << " is unexpected");
@@ -301,13 +311,13 @@ namespace NKikimr::NStorage {
             const auto& record = Event->Get()->Record;
             const auto& cmd = record.GetReassignGroupDisk();
 
-            if (Scepter.expired()) {
-                return FinishWithError(TResult::ERROR, "scepter lost during query execution");
-            } else if (!RunCommonChecks()) {
+            if (!RunCommonChecks()) {
                 return;
+            } else if (!Self->SelfManagementEnabled) {
+                return FinishWithError(TResult::ERROR, "self-management is not enabled");
             }
 
-            STLOG(PRI_DEBUG, BS_NODE, NW55, "ReassignGroupDiskExecute", (SelfId, SelfId()));
+            STLOG(PRI_DEBUG, BS_NODE, NWDC75, "ReassignGroupDiskExecute", (SelfId, SelfId()));
 
             const auto& vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
 
@@ -373,9 +383,6 @@ namespace NKikimr::NStorage {
             }
             const auto& ss = bsConfig.GetServiceSet();
 
-            if (!config.HasSelfManagementConfig() || !config.GetSelfManagementConfig().GetEnabled()) {
-                return FinishWithError(TResult::ERROR, "self-management is not enabled");
-            }
             const auto& smConfig = config.GetSelfManagementConfig();
 
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
@@ -411,7 +418,7 @@ namespace NKikimr::NStorage {
                             &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
                             cmd.GetIsSelfHealReasonDecommit());
                     } catch (const TExConfigError& ex) {
-                        STLOG(PRI_NOTICE, BS_NODE, NW49, "ReassignGroupDisk failed to allocate group", (SelfId, SelfId()),
+                        STLOG(PRI_NOTICE, BS_NODE, NWDC76, "ReassignGroupDisk failed to allocate group", (SelfId, SelfId()),
                             (Config, config),
                             (BaseConfig, *BaseConfig),
                             (Error, ex.what()));
@@ -628,33 +635,98 @@ namespace NKikimr::NStorage {
         void FetchStorageConfig(bool manual) {
             if (!Self->StorageConfig) {
                 FinishWithError(TResult::ERROR, "no agreed StorageConfig");
-            } else if (!Self->StorageConfig->HasStorageConfigCompressedYAML()) {
+            } else if (!Self->MainConfigFetchYaml) {
                 FinishWithError(TResult::ERROR, "no stored YAML for storage config");
             } else {
                 auto ev = PrepareResult(TResult::OK, std::nullopt);
                 auto *record = &ev->Record;
-                TStringInput ss(Self->StorageConfig->GetStorageConfigCompressedYAML());
-                TString config = TZstdDecompress(&ss).ReadAll();
+                record->MutableFetchStorageConfig()->SetYAML(Self->MainConfigFetchYaml);
 
                 if (manual) {
                     // add BlobStorageConfig, NameserviceConfig, DomainsConfig
                 }
 
-                record->MutableFetchStorageConfig()->SetYAML(config);
                 Finish(Sender, SelfId(), ev.release(), 0, Cookie);
             }
         }
 
-        void ReplaceStorageConfig(const TString& yaml) {
+        void ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
             if (!RunCommonChecks()) {
                 return;
+            } else if (!Self->ConfigCommittedToConsole && Self->SelfManagementEnabled) {
+                return FinishWithError(TResult::ERROR, "previous config has not been committed to Console yet");
             }
 
+            NewYaml = request.HasYAML() ? std::make_optional(request.GetYAML()) : std::nullopt;
+
+            auto newStorageYaml = request.HasStorageYAML() ? std::make_optional(request.GetStorageYAML()) : std::nullopt;
+
+            auto switchDedicatedStorageSection = request.HasSwitchDedicatedStorageSection()
+                ? std::make_optional(request.GetSwitchDedicatedStorageSection())
+                : std::nullopt;
+
+            const TString *storageYamlPtr = newStorageYaml ? &newStorageYaml.value() :
+                Self->StorageConfigYaml ? &Self->StorageConfigYaml.value() : nullptr;
+
+            const bool targetDedicatedStorageSection = switchDedicatedStorageSection.value_or(Self->StorageConfigYaml.has_value());
+
+            if (request.GetDedicatedStorageSectionConfigMode() != targetDedicatedStorageSection) {
+                return FinishWithError(TResult::ERROR, "DedicatedStorageSectionConfigMode does not match target state");
+            } else if (newStorageYaml && !targetDedicatedStorageSection) {
+                // we are going to end up in single-config mode, but explicit storage yaml is provided
+                return FinishWithError(TResult::ERROR, "unexpected dedicated storage config section in request");
+            } else if (switchDedicatedStorageSection && *switchDedicatedStorageSection == Self->StorageConfigYaml.has_value()) {
+                // this enable/disable command does not change the state
+                return FinishWithError(TResult::ERROR, "dedicated storage config section is already in requested state");
+            } else if (targetDedicatedStorageSection && !storageYamlPtr) {
+                // we are going to turn on dual-config mode, but no storage config provided
+                return FinishWithError(TResult::ERROR, "no dedicated storage config section provided");
+            }
+
+            const TString *mainYamlPtr = NewYaml ? &NewYaml.value() : &Self->MainConfigYaml;
+
+            std::optional<ui64> newYamlVersion;
+            std::optional<ui64> newStorageYamlVersion;
+
             NKikimrConfig::TAppConfig appConfig;
+            const char *state = "";
+
             try {
-                appConfig = NKikimr::NYaml::Parse(yaml);
+                if (storageYamlPtr) { // parse the storage yaml first
+                    state = "loading storage YAML";
+                    auto json = NYaml::Yaml2Json(YAML::Load(*storageYamlPtr), true);
+                    state = "parsing storage YAML";
+                    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(), appConfig, true);
+                    state = "extracting storage YAML metadata";
+                    if (json.Has("metadata")) {
+                        if (auto& metadata = json["metadata"]; metadata.Has("version")) {
+                            newStorageYamlVersion = metadata["version"].GetUIntegerRobust();
+                        }
+                    }
+                }
+
+                state = "loading main YAML";
+                auto json = NYaml::Yaml2Json(YAML::Load(*mainYamlPtr), true);
+                state = "parsing main YAML";
+                NYaml::Parse(json, NYaml::GetJsonToProtoConfig(), appConfig, true);
+                state = "extracting main YAML metadata";
+                if (json.Has("metadata")) {
+                    if (auto& metadata = json["metadata"]; metadata.Has("version")) {
+                        newYamlVersion = metadata["version"].GetUIntegerRobust();
+                    }
+                }
             } catch (const std::exception& ex) {
-                return FinishWithError(TResult::ERROR, TStringBuilder() << "exception while parsing YAML: " << ex.what());
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "exception while " << state
+                    << ": " << ex.what());
+            }
+
+            if (newYamlVersion && *newYamlVersion != *Self->MainConfigYamlVersion + 1) {
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "version must be increasing by one"
+                    << " new version# " << *newYamlVersion << " expected version# " << *Self->MainConfigYamlVersion + 1);
+            } else if (newStorageYamlVersion && *newStorageYamlVersion != Self->StorageConfig->GetExpectedStorageYamlVersion()) {
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "version must be increasing by one"
+                    << " new version# " << *newStorageYamlVersion
+                    << " expected version# " << Self->StorageConfig->GetExpectedStorageYamlVersion());
             }
 
             TString errorReason;
@@ -665,15 +737,87 @@ namespace NKikimr::NStorage {
                     << errorReason);
             }
 
-            TStringStream ss;
-            {
-                TZstdCompress zstd(&ss);
-                zstd << yaml;
+            if (NewYaml) {
+                if (const auto& error = UpdateConfigComposite(config, *NewYaml, std::nullopt)) {
+                    return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to update config yaml: " << *error);
+                }
+            } else {
+                config.SetConfigComposite(Self->StorageConfig->GetConfigComposite());
             }
-            config.SetStorageConfigCompressedYAML(ss.Str());
 
+            if (newStorageYaml) {
+                // make new compressed storage yaml section
+                TString s;
+                if (TStringOutput output(s); true) {
+                    TZstdCompress zstd(&output);
+                    ::Save(&zstd, *newStorageYaml);
+                    ::Save(&zstd, *newStorageYamlVersion);
+                }
+                config.SetCompressedStorageYaml(s);
+                config.SetExpectedStorageYamlVersion(*newStorageYamlVersion + 1);
+            } else if (switchDedicatedStorageSection && !*switchDedicatedStorageSection) {
+                // delete compressed storage yaml section as this request turns off dedicated storage yaml
+            } else if (Self->StorageConfig->HasCompressedStorageYaml()) {
+                // retain current storage yaml
+                config.SetCompressedStorageYaml(Self->StorageConfig->GetCompressedStorageYaml());
+                config.SetExpectedStorageYamlVersion(Self->StorageConfig->GetExpectedStorageYamlVersion());
+            }
+
+            // advance the config generation
             config.SetGeneration(config.GetGeneration() + 1);
-            StartProposition(&config);
+
+            if (auto error = ValidateConfig(*Self->StorageConfig)) {
+                return FinishWithError(TResult::ERROR, TStringBuilder()
+                    << "ReplaceStorageConfig current config validation failed: " << *error);
+            } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, config)) {
+                return FinishWithError(TResult::ERROR, TStringBuilder()
+                    << "ReplaceStorageConfig config validation failed: " << *error);
+            }
+
+            const bool pushToConsole = true;
+
+            if (!pushToConsole || !request.GetSkipConsoleValidation()) {
+                return StartProposition(&config);
+            }
+
+            // whether we are enabling distconf right now
+            const bool enablingDistconf = Self->BaseConfig.GetSelfManagementConfig().GetEnabled() &&
+                !Self->SelfManagementEnabled &&
+                config.GetSelfManagementConfig().GetEnabled();
+
+            if (NewYaml && !Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml)) {
+                FinishWithError(TResult::ERROR, "console pipe is not available");
+            } else {
+                ProposedStorageConfig = std::move(config);
+            }
+        }
+
+        void Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev) {
+            const auto& record = ev->Get()->Record;
+            STLOG(PRI_DEBUG, BS_NODE, NWDC77, "received TEvControllerValidateConfigResponse", (SelfId, SelfId()),
+                (InternalError, ev->Get()->InternalError), (Status, record.GetStatus()));
+
+            if (ev->Get()->InternalError) {
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to validate config through console: "
+                    << *ev->Get()->InternalError);
+            }
+
+            switch (record.GetStatus()) {
+                case NKikimrBlobStorage::TEvControllerValidateConfigResponse::IdPipeServerMismatch:
+                    Self->DisconnectFromConsole();
+                    Self->ConnectToConsole();
+                    return FinishWithError(TResult::ERROR, TStringBuilder() << "console connection race detected");
+
+                case NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigNotValid:
+                    return FinishWithError(TResult::ERROR, TStringBuilder() << "console config validation failed: "
+                        << record.GetErrorReason());
+
+                case NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigIsValid:
+                    if (const auto& error = UpdateConfigComposite(ProposedStorageConfig, *NewYaml, record.GetYAML())) {
+                        return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to update config yaml: " << *error);
+                    }
+                    return StartProposition(&ProposedStorageConfig);
+            }
         }
 
         void BootstrapCluster(const TString& selfAssemblyUUID) {
@@ -748,9 +892,10 @@ namespace NKikimr::NStorage {
             }
 
             if (auto error = ValidateConfigUpdate(*Self->StorageConfig, *config)) {
-                STLOG(PRI_DEBUG, BS_NODE, NW51, "proposed config validation failed", (SelfId, SelfId()), (Error, *error),
-                    (Config, config));
-                return FinishWithError(TResult::ERROR, TStringBuilder() << "config validation failed: " << *error);
+                STLOG(PRI_DEBUG, BS_NODE, NWDC78, "StartProposition config validation failed", (SelfId, SelfId()),
+                    (Error, *error), (Config, config));
+                return FinishWithError(TResult::ERROR, TStringBuilder()
+                    << "StartProposition config validation failed: " << *error);
             }
 
             Self->CurrentProposedStorageConfig.emplace(std::move(*config));
@@ -789,6 +934,8 @@ namespace NKikimr::NStorage {
                 FinishWithError(TResult::ERROR, "something going on with default FSM");
             } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
                 FinishWithError(TResult::ERROR, TStringBuilder() << "current config validation failed: " << *error);
+            } else if (Scepter.expired()) {
+                FinishWithError(TResult::ERROR, "scepter lost during query execution");
             } else {
                 return true;
             }
@@ -844,6 +991,7 @@ namespace NKikimr::NStorage {
                 hFunc(TEvents::TEvUndelivered, Handle);
                 hFunc(TEvNodeWardenBaseConfig, Handle);
                 cFunc(TEvents::TSystem::Poison, PassAway);
+                hFunc(TEvBlobStorage::TEvControllerValidateConfigResponse, Handle);
             )
         }
     };

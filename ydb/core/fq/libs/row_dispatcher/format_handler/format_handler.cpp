@@ -17,6 +17,10 @@ namespace {
 class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public ITopicFormatHandler, public TTypeParser {
     using TBase = NActors::TActor<TTopicFormatHandler>;
 
+public:
+    static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_FORMAT_HANDLER";
+
+private:
     struct TCounters {
         TCountersDesc Desc;
 
@@ -186,7 +190,7 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
             return ColumnsIds;
         }
 
-        TMaybe<ui64> GetNextMessageOffset() const override {
+        std::optional<ui64> GetNextMessageOffset() const override {
             return Client->GetNextMessageOffset();
         }
 
@@ -333,8 +337,11 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvPoison::TPtr&) {
-        with_lock(Alloc) {
-            Clients.clear();
+        if (Filters) {
+            for (const auto& [clientId, _] : Clients) {
+                Filters->RemoveFilter(clientId);
+            }
+            Filters.Reset();
         }
         PassAway();
     }
@@ -345,8 +352,12 @@ public:
     }
 
 public:
-    void ParseMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
         LOG_ROW_DISPATCHER_TRACE("Send " << messages.size() << " messages to parser");
+
+        if (!messages.empty()) {
+            CurrentOffset = messages.back().GetOffset();
+        }
 
         if (Parser) {
             Parser->ParseMessages(messages);
@@ -366,6 +377,13 @@ public:
 
     TStatus AddClient(IClientDataConsumer::TPtr client) override {
         LOG_ROW_DISPATCHER_DEBUG("Add client with id " << client->GetClientId());
+
+        if (const auto clientOffset = client->GetNextMessageOffset()) {
+            if (Parser && CurrentOffset && *CurrentOffset > *clientOffset) {
+                LOG_ROW_DISPATCHER_DEBUG("Parser was flushed due to new historical offset " << *clientOffset << "(previous parser offset: " << *CurrentOffset << ")");
+                Parser->Refresh(true);
+            }
+        }
 
         auto clientHandler = MakeIntrusive<TClientHandler>(*this, client);
         if (!Clients.emplace(client->GetClientId(), clientHandler).second) {
@@ -439,6 +457,12 @@ public:
             statistics.FilterStats = Filters->GetStatistics();
         }
         return statistics;
+    }
+
+    void ForceRefresh() override {
+        if (Parser) {
+            Parser->Refresh(true);
+        }
     }
 
 protected:
@@ -553,6 +577,7 @@ private:
     ITopicParser::TPtr Parser;
     TParserHandler::TPtr ParserHandler;
     ITopicFilters::TPtr Filters;
+    std::optional<ui64> CurrentOffset;
 
     // Parsed data
     const TVector<ui64>* Offsets;

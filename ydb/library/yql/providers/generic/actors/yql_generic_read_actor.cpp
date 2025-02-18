@@ -17,7 +17,7 @@
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 namespace NYql::NDq {
 

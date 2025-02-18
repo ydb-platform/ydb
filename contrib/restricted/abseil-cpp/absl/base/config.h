@@ -118,7 +118,7 @@
 // LTS releases can be obtained from
 // https://github.com/abseil/abseil-cpp/releases.
 #define ABSL_LTS_RELEASE_VERSION 20240722
-#define ABSL_LTS_RELEASE_PATCH_LEVEL 0
+#define ABSL_LTS_RELEASE_PATCH_LEVEL 1
 
 // Helper macro to convert a CPP variable to a string literal.
 #define ABSL_INTERNAL_DO_TOKEN_STR(x) #x
@@ -968,7 +968,7 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #error ABSL_INTERNAL_EMSCRIPTEN_VERSION cannot be directly set
 #endif
 #ifdef __EMSCRIPTEN__
-#error #include <emscripten/version.h>
+#include <emscripten/version.h>
 #ifdef __EMSCRIPTEN_major__
 #if __EMSCRIPTEN_minor__ >= 1000
 #error __EMSCRIPTEN_minor__ is too big to fit in ABSL_INTERNAL_EMSCRIPTEN_VERSION

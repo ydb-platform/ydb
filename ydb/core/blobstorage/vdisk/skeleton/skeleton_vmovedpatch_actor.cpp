@@ -57,8 +57,9 @@ namespace NKikimr {
                 OriginalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
                 Y_ABORT_UNLESS(record.HasPatchedBlobId());
                 PatchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
+                Deadline = TInstant::Seconds(record.GetMsgQoS().HasDeadlineSeconds());
                 if (record.HasMsgQoS() && record.GetMsgQoS().HasDeadlineSeconds()) {
-                    Deadline = TInstant::Seconds(record.GetMsgQoS().GetDeadlineSeconds());
+                    Deadline = TInstant::Seconds(record.GetMsgQoS().HasDeadlineSeconds());
                 }
 
                 DiffCount = record.DiffsSize();
@@ -103,7 +104,7 @@ namespace NKikimr {
                         << " OriginalBlobId# " << OriginalId
                         << " PatchedBlobId# " << PatchedId
                         << " ErrorReason# " << ErrorReason
-                        << " Marker# BSVSP01");
+                        << " Marker# BSVSP00");
                 SendVDiskResponse(ctx, Event->Sender, vMovedPatchResult.release(), Event->Cookie, VCtx);
                 PassAway();
             }

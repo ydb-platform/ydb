@@ -10,6 +10,7 @@ import tempfile
 
 import yaml
 from ydb.core.fq.libs.config.protos.fq_config_pb2 import TConfig as TFederatedQueryConfig
+from ydb.core.protos import blobstorage_pdisk_config_pb2 as pdisk_config_pb
 from google.protobuf import json_format
 
 from ydb.core.protos import (
@@ -45,7 +46,7 @@ class StaticConfigGenerator(object):
         database=None,
         node_broker_port=2135,
         ic_port=19001,
-        walle_provider=None,
+        host_info_provider=None,
         grpc_port=2135,
         mon_port=8765,
         cfg_home="/Berkanavt/kikimr",
@@ -60,13 +61,17 @@ class StaticConfigGenerator(object):
         self.__binary_path = binary_path
         self.__local_binary_path = local_binary_path or binary_path
         self.__output_dir = output_dir
-        # collects and provides information about cluster hosts
-        self.__cluster_details = base.ClusterDetailsProvider(template, walle_provider, validator=schema_validator, database=database)
+
+        self._host_info_provider = host_info_provider
+
+        self.__cluster_details = base.ClusterDetailsProvider(template, host_info_provider, validator=schema_validator, database=database)
+        if self.__cluster_details.use_k8s_api:
+            self._host_info_provider._init_k8s_labels(self.__cluster_details.k8s_rack_label, self.__cluster_details.k8s_dc_label)
+
         self._enable_cores = template.get("enable_cores", enable_cores)
         self._yaml_config_enabled = template.get("yaml_config_enabled", False)
         self.__is_dynamic_node = True if database is not None else False
         self._database = database
-        self._walle_provider = walle_provider
         self._skip_location = skip_location
         self.__node_broker_port = node_broker_port
         self.__grpc_port = grpc_port
@@ -103,6 +108,8 @@ class StaticConfigGenerator(object):
             "pqcd.txt": None,
             "failure_injection.txt": None,
             "pdisk_key.txt": None,
+            "immediate_controls_config.txt": None,
+            "cms_config.txt": None,
         }
         self.__optional_config_files = set(
             (
@@ -112,19 +119,14 @@ class StaticConfigGenerator(object):
                 "fq.txt",
                 "failure_injection.txt",
                 "pdisk_key.txt",
+                "immediate_controls_config.txt",
             )
         )
         tracing = template.get("tracing_config")
         if tracing is not None:
-            self.__tracing = (
-                tracing["backend"],
-                tracing.get("uploader"),
-                tracing.get("sampling", []),
-                tracing.get("external_throttling", []),
-            )
+            self.__tracing = tracing
         else:
             self.__tracing = None
-        self.__write_mbus_settings_to_kikimr_cfg = False
 
     @property
     def auth_txt(self):
@@ -221,10 +223,6 @@ class StaticConfigGenerator(object):
         return self.__proto_config("sqs.txt", config_pb2.TSqsConfig, self.__cluster_details.get_service("sqs"))
 
     @property
-    def cms_txt(self):
-        return self.__proto_config("cms.txt", cms_pb2.TCmsConfig, self.__cluster_details.get_service("cms"))
-
-    @property
     def rb_txt(self):
         return self.__proto_config(
             "rb.txt", resource_broker_pb2.TResourceBrokerConfig, self.__cluster_details.get_service("resource_broker")
@@ -265,6 +263,28 @@ class StaticConfigGenerator(object):
     @property
     def pdisk_key_txt_enabled(self):
         return self.__proto_config("pdisk_key.txt").ByteSize() > 0
+
+    @property
+    def immediate_controls_config_txt(self):
+        return self.__proto_config("immediate_controls_config.txt", config_pb2.TImmediateControlsConfig, self.__cluster_details.immediate_controls_config)
+
+    @property
+    def immediate_controls_config_txt_enabled(self):
+        return self.__proto_config("immediate_controls_config.txt").ByteSize() > 0
+
+    # Old `template.yaml` CMS style
+    @property
+    def cms_txt(self):
+        return self.__proto_config("cms.txt", cms_pb2.TCmsConfig, self.__cluster_details.get_service("cms"))
+
+    # New `config.yaml` CMS style
+    @property
+    def cms_config_txt(self):
+        return self.__proto_config("cms_config.txt", cms_pb2.TCmsConfig, self.__cluster_details.cms_config)
+
+    @property
+    def cms_config_txt_enabled(self):
+        return self.__proto_config("cms_config.txt").ByteSize() > 0
 
     @property
     def mbus_enabled(self):
@@ -394,9 +414,34 @@ class StaticConfigGenerator(object):
         if self.host_configs:
             normalized_config["host_configs"] = copy.deepcopy(self.host_configs)
             for host_config in normalized_config["host_configs"]:
+                if 'generation' in host_config:
+                    # inside config.yaml we do not use section generation in host_configs
+                    host_config.pop('generation')
                 if 'drives' in host_config:
                     # inside config.yaml we should use field drive in host_configs section
                     host_config['drive'] = host_config.pop('drives')
+                    for drive in host_config['drive']:
+                        if 'expected_slot_count' in drive:
+                            # inside config.yaml we should use pdisk_config section for expected_slot_count
+                            drive['pdisk_config'] = {
+                                'expected_slot_count': drive.pop('expected_slot_count')
+                            }
+
+                        # support type-safe `pdisk_config` directly in `host_configs`, for example:
+                        # - path: /dev/disk/by-partlabel/ydb_disk_hdd_04
+                        #   type: ROT
+                        #   pdisk_config:
+                        #     expected_slot_count: 8
+                        #     drive_model_trim_speed_bps: 0
+                        #     drive_model_TYPO_speed_bps: 0 # will fail
+                        if 'pdisk_config' in drive:
+                            pd = pdisk_config_pb.TPDiskConfig()
+                            utils.apply_config_changes(
+                                pd,
+                                drive['pdisk_config'],
+                            )
+
+                            drive['pdisk_config'] = self.normalize_dictionary(json_format.MessageToDict(pd))
 
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
@@ -412,6 +457,12 @@ class StaticConfigGenerator(object):
 
         if self.__cluster_details.http_proxy_config is not None:
             normalized_config["http_proxy_config"] = self.__cluster_details.http_proxy_config
+
+        if self.__cluster_details.memory_controller_config is not None:
+            normalized_config["memory_controller_config"] = self.__cluster_details.memory_controller_config
+
+        if self.__cluster_details.s3_proxy_resolver_config is not None:
+            normalized_config["s3_proxy_resolver_config"] = self.__cluster_details.s3_proxy_resolver_config
 
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
@@ -510,10 +561,14 @@ class StaticConfigGenerator(object):
                             if 'pdisk_config' in vdisk_location:
                                 if 'expected_slot_count' in vdisk_location['pdisk_config']:
                                     vdisk_location['pdisk_config']['expected_slot_count'] = int(vdisk_location['pdisk_config']['expected_slot_count'])
-        if 'channel_profile_config' in normalized_config:
-            for profile in normalized_config['channel_profile_config']['profile']:
-                for channel in profile['channel']:
-                    channel['pdisk_category'] = int(channel['pdisk_category'])
+
+        if self.__cluster_details.channel_profile_config is not None:
+            normalized_config["channel_profile_config"] = self.__cluster_details.channel_profile_config
+        else:
+            if 'channel_profile_config' in normalized_config:
+                for profile in normalized_config['channel_profile_config']['profile']:
+                    for channel in profile['channel']:
+                        channel['pdisk_category'] = int(channel['pdisk_category'])
         if 'system_tablets' in normalized_config:
             for tablets in normalized_config['system_tablets'].values():
                 for tablet in tablets:
@@ -611,6 +666,10 @@ class StaticConfigGenerator(object):
         app_config.MergeFrom(self.tracing_txt)
         if self.pdisk_key_txt_enabled:
             app_config.PDiskKeyConfig.CopyFrom(self.pdisk_key_txt)
+        if self.immediate_controls_config_txt_enabled:
+            app_config.ImmediateControlsConfig.CopyFrom(self.immediate_controls_config_txt)
+        if self.cms_config_txt_enabled:
+            app_config.CmsConfig.CopyFrom(self.cms_config_txt)
         return app_config
 
     def __proto_config(self, config_file, config_class=None, cluster_details_for_field=None):
@@ -754,6 +813,8 @@ class StaticConfigGenerator(object):
         dc_enumeration = {}
 
         if not self.__cluster_details.get_service("static_groups"):
+            if self.__cluster_details.blob_storage_config:
+                return
             self.__proto_configs["bs.txt"] = self._read_generated_bs_config(
                 str(self.__cluster_details.static_erasure),
                 str(self.__cluster_details.min_fail_domains),
@@ -835,13 +896,17 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.nw_cache_file_path is not None:
             self.__proto_configs["bs.txt"].CacheFilePath = self.__cluster_details.nw_cache_file_path
 
-    def _read_generated_bs_config(self, static_erasure, min_fail_domains, static_pdisk_type, fail_domain_type, bs_format_config):
+    def _read_generated_bs_config(
+        self, static_erasure, min_fail_domains, static_pdisk_type, fail_domain_type, bs_format_config
+    ):
         result = config_pb2.TBlobStorageConfig()
 
-        with tempfile.NamedTemporaryFile(delete=True) as t_file:
+        with tempfile.NamedTemporaryFile(delete=False) as t_file:
             utils.write_proto_to_file(t_file.name, bs_format_config)
 
-            rx_begin, rx_end, dx_begin, dx_end = types.DistinctionLevels[types.FailDomainType.from_string(fail_domain_type)]
+            rx_begin, rx_end, dx_begin, dx_end = types.DistinctionLevels[
+                types.FailDomainType.from_string(fail_domain_type)
+            ]
 
             cmd_base = [
                 self.__local_binary_path,
@@ -950,24 +1015,37 @@ class StaticConfigGenerator(object):
 
         return min(5, n_to_select_candidate)
 
-    def __configure_security_settings(self, domains_config):
-        utils.apply_config_changes(
-            domains_config.SecurityConfig,
-            self.__cluster_details.security_settings,
-        )
+    def __configure_security_config(self, domains_config):
+        if self.__cluster_details.security_config != {}:  # consistent with `config.yaml`
+            utils.apply_config_changes(
+                domains_config.SecurityConfig,
+                self.__cluster_details.security_config,
+            )
+        else:
+            utils.apply_config_changes(  # backward compatibility for old templates
+                domains_config.SecurityConfig,
+                self.__cluster_details.security_settings,
+            )
 
     def __generate_domains_txt(self):
+        domains_config = self.__cluster_details.domains_config
+        if domains_config is None:
+            self.__generate_domains_from_old_domains_key()
+        else:
+            self.__generate_domains_from_proto(domains_config)
+
+    def __generate_domains_from_proto(self, domains_config):
+        self.__configure_security_config(domains_config)
+        self.__proto_configs["domains.txt"] = domains_config
+
+    def __generate_domains_from_old_domains_key(self):
         self.__proto_configs["domains.txt"] = config_pb2.TDomainsConfig()
 
         domains_config = self.__proto_configs["domains.txt"]
 
-        if self.__cluster_details.forbid_implicit_storage_pools:
-            domains_config.ForbidImplicitStoragePools = True
-
-        self.__configure_security_settings(domains_config)
+        self.__configure_security_config(domains_config)
 
         tablet_types = self.__tablet_types
-
         for domain_description in self.__cluster_details.domains:
             domain_id = domain_description.domain_id
             domain_name = domain_description.domain_name
@@ -1166,14 +1244,20 @@ class StaticConfigGenerator(object):
         state_storage_cfg.Ring.Node.extend(selected_ids)
 
     def __generate_log_txt(self):
-        self.__proto_configs["log.txt"] = config_pb2.TLogConfig()
-        utils.apply_config_changes(
-            self.__proto_configs["log.txt"],
-            self.__cluster_details.log_config,
-        )
+        log_config = self.__cluster_details.log_config
+        if isinstance(log_config, config_pb2.TLogConfig):
+            self.__proto_configs["log.txt"] = log_config
+        else:
+            self.__proto_configs["log.txt"] = config_pb2.TLogConfig()
+            utils.apply_config_changes(
+                self.__proto_configs["log.txt"],
+                self.__cluster_details.log_config,
+            )
 
     def __generate_names_txt(self):
         self.__proto_configs["names.txt"] = config_pb2.TStaticNameserviceConfig()
+        if self.__cluster_details.nameservice_config is not None:
+            utils.wrap_parse_dict(self.__cluster_details.nameservice_config, self.names_txt)
 
         for host in self.__cluster_details.hosts:
             node = self.names_txt.Node.add(
@@ -1188,6 +1272,10 @@ class StaticConfigGenerator(object):
                     node.WalleLocation.DataCenter = host.datacenter
                     node.WalleLocation.Rack = host.rack
                     node.WalleLocation.Body = int(host.body)
+                elif self.__cluster_details.use_k8s_api:
+                    node.Location.DataCenter = host.datacenter
+                    node.Location.Rack = host.rack
+                    node.Location.Body = int(host.body)
                 else:
                     node.Location.DataCenter = host.datacenter
                     node.Location.Rack = host.rack
@@ -1195,7 +1283,13 @@ class StaticConfigGenerator(object):
 
         if self.__cluster_details.use_cluster_uuid:
             accepted_uuids = self.__cluster_details.accepted_cluster_uuids
-            cluster_uuid = self.__cluster_details.cluster_uuid
+
+            # cluster_uuid can be initialized from `nameservice_config` proto, same as `config.yaml`,
+            # OR in the old manner, through `cluster_uuid: ...` key in `template.yaml`
+            cluster_uuid = self.names_txt.ClusterUUID  # already read from proto
+            if len(cluster_uuid) == 0:
+                cluster_uuid = self.__cluster_details.cluster_uuid  # fall back to `cluster_uuid: ...`
+
             cluster_uuid = "ydb:{}".format(utils.uuid()) if cluster_uuid is None else cluster_uuid
             self.names_txt.ClusterUUID = cluster_uuid
             self.names_txt.AcceptUUID.append(cluster_uuid)
@@ -1225,133 +1319,10 @@ class StaticConfigGenerator(object):
             self.__generate_sys_txt_advanced()
 
     def __generate_tracing_txt(self):
-        def get_selectors(selectors):
-            selectors_pb = config_pb2.TTracingConfig.TSelectors()
-
-            request_type = selectors["request_type"]
-            if request_type is not None:
-                selectors_pb.RequestType = request_type
-
-            return selectors_pb
-
-        def get_sampling_scope(sampling):
-            sampling_scope_pb = config_pb2.TTracingConfig.TSamplingRule()
-            selectors = sampling.get("scope")
-            if selectors is not None:
-                sampling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
-            sampling_scope_pb.Fraction = sampling['fraction']
-            sampling_scope_pb.Level = sampling['level']
-            sampling_scope_pb.MaxTracesPerMinute = sampling['max_traces_per_minute']
-            sampling_scope_pb.MaxTracesBurst = sampling.get('max_traces_burst', 0)
-            return sampling_scope_pb
-
-        def get_external_throttling(throttling):
-            throttling_scope_pb = config_pb2.TTracingConfig.TExternalThrottlingRule()
-            selectors = throttling.get("scope")
-            if selectors is not None:
-                throttling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
-            throttling_scope_pb.Level = throttling['level']
-            throttling_scope_pb.MaxTracesPerMinute = throttling['max_traces_per_minute']
-            throttling_scope_pb.MaxTracesBurst = throttling.get('max_traces_burst', 0)
-            return throttling_scope_pb
-
-        def get_auth_config(auth):
-            auth_pb = config_pb2.TTracingConfig.TBackendConfig.TAuthConfig()
-            tvm = auth.get("tvm")
-            if tvm is not None:
-                tvm_pb = auth_pb.Tvm
-
-                if "host" in tvm:
-                    tvm_pb.Host = tvm["host"]
-                if "port" in tvm:
-                    tvm_pb.Port = tvm["port"]
-                tvm_pb.SelfTvmId = tvm["self_tvm_id"]
-                tvm_pb.TracingTvmId = tvm["tracing_tvm_id"]
-                if "disk_cache_dir" in tvm:
-                    tvm_pb.DiskCacheDir = tvm["disk_cache_dir"]
-
-                if "plain_text_secret" in tvm:
-                    tvm_pb.PlainTextSecret = tvm["plain_text_secret"]
-                elif "secret_file" in tvm:
-                    tvm_pb.SecretFile = tvm["secret_file"]
-                elif "secret_environment_variable" in tvm:
-                    tvm_pb.SecretEnvironmentVariable = tvm["secret_environment_variable"]
-            return auth_pb
-
-        def get_opentelemetry(opentelemetry):
-            opentelemetry_pb = config_pb2.TTracingConfig.TBackendConfig.TOpentelemetryBackend()
-
-            opentelemetry_pb.CollectorUrl = opentelemetry["collector_url"]
-            opentelemetry_pb.ServiceName = opentelemetry["service_name"]
-
-            return opentelemetry_pb
-
-        def get_backend(backend):
-            backend_pb = config_pb2.TTracingConfig.TBackendConfig()
-
-            auth = backend.get("auth_config")
-            if auth is not None:
-                backend_pb.AuthConfig.CopyFrom(get_auth_config(auth))
-
-            opentelemetry = backend["opentelemetry"]
-            if opentelemetry is not None:
-                backend_pb.Opentelemetry.CopyFrom(get_opentelemetry(opentelemetry))
-
-            return backend_pb
-
-        def get_uploader(uploader):
-            uploader_pb = config_pb2.TTracingConfig.TUploaderConfig()
-
-            max_exported_spans_per_second = uploader.get("max_exported_spans_per_second")
-            if max_exported_spans_per_second is not None:
-                uploader_pb.MaxExportedSpansPerSecond = max_exported_spans_per_second
-
-            max_spans_in_batch = uploader.get("max_spans_in_batch")
-            if max_spans_in_batch is not None:
-                uploader_pb.MaxSpansInBatch = max_spans_in_batch
-
-            max_bytes_in_batch = uploader.get("max_bytes_in_batch")
-            if max_bytes_in_batch is not None:
-                uploader_pb.MaxBytesInBatch = max_bytes_in_batch
-
-            max_batch_accumulation_milliseconds = uploader.get("max_batch_accumulation_milliseconds")
-            if max_batch_accumulation_milliseconds is not None:
-                uploader_pb.MaxBatchAccumulationMilliseconds = max_batch_accumulation_milliseconds
-
-            span_export_timeout_seconds = uploader.get("span_export_timeout_seconds")
-            if span_export_timeout_seconds is not None:
-                uploader_pb.SpanExportTimeoutSeconds = span_export_timeout_seconds
-
-            max_export_requests_inflight = uploader.get("max_export_requests_inflight")
-            if max_export_requests_inflight is not None:
-                uploader_pb.MaxExportRequestsInflight = max_export_requests_inflight
-
-            return uploader_pb
-
         pb = config_pb2.TAppConfig()
         if self.__tracing:
             tracing_pb = pb.TracingConfig
-            (
-                backend,
-                uploader,
-                sampling,
-                external_throttling
-            ) = self.__tracing
-
-            assert isinstance(sampling, list)
-            assert isinstance(external_throttling, list)
-
-            tracing_pb.Backend.CopyFrom(get_backend(backend))
-
-            if uploader is not None:
-                tracing_pb.Uploader.CopyFrom(get_uploader(uploader))
-
-            for sampling_scope in sampling:
-                tracing_pb.Sampling.append(get_sampling_scope(sampling_scope))
-
-            for throttling_scope in external_throttling:
-                tracing_pb.ExternalThrottling.append(get_external_throttling(throttling_scope))
-
+            utils.wrap_parse_dict(self.__tracing, tracing_pb)
         self.__proto_configs["tracing.txt"] = pb
 
     def __generate_sys_txt_advanced(self):

@@ -5,6 +5,7 @@ SRCS(
     config.cpp
     abstract.cpp
     service.cpp
+    stage_features.cpp
 )
 
 PEERDIR(

@@ -62,7 +62,11 @@ namespace NKikimr {
             } else {
                 str << " ";
             }
-            item.Output(str);
+            if constexpr (requires { item.Output(str); }) {
+                item.Output(str);
+            } else {
+                str << item;
+            }
         }
         str << "]";
     }

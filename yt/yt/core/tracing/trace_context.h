@@ -70,7 +70,7 @@ DEFINE_ENUM(ETraceContextState,
  *
  *  By default, child objects inherit TraceId, RequestId and LoggingTag from the parent.
  *
- *  \note Thread affininty: any unless noted otherwise.
+ *  \note Thread affinity: any unless noted otherwise.
  */
 class TTraceContext
     : public TRefCounted
@@ -140,8 +140,8 @@ public:
     /*!
      *  Not thread-safe.
      */
-    void SetLoggingTag(const TString& loggingTag);
-    const TString& GetLoggingTag() const;
+    void SetLoggingTag(const std::string& loggingTag);
+    const std::string& GetLoggingTag() const;
 
     TInstant GetStartTime() const;
 
@@ -229,7 +229,7 @@ private:
     const TString SpanName_;
     TRequestId RequestId_;
     std::optional<TString> TargetEndpoint_;
-    TString LoggingTag_;
+    std::string LoggingTag_;
     const NProfiling::TCpuInstant StartTime_;
 
     std::atomic<bool> Finished_ = false;

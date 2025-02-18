@@ -42,10 +42,6 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     TErasureSplitContext ErasureSplitContext = TErasureSplitContext::Init(MaxBytesToSplitAtOnce);
     TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>> PartSets;
 
-    using TDeadlineMask = std::bitset<MaxBatchedPutRequests>;
-    std::map<TInstant, TDeadlineMask> PutDeadlineMasks;
-    TDeadlineMask DeadlineMask; 
-
     TStackVec<ui64, TypicalDisksInGroup> WaitingVDiskResponseCount;
     ui64 WaitingVDiskCount = 0;
 
@@ -455,25 +451,23 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             SendReply(std::move(result), blobIdx);
         }
 
-        if (AllowToReport(HandleClass)) {
-            if (TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) {
-                STLOG(PRI_WARN, BS_PROXY_PUT, BPP71, "Long TEvPut request detected",        \
-                        (LongRequestThreshold, LongRequestThreshold),                           \
-                        (GroupId, Info->GroupID),                                               \
-                        (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),   \
-                        (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),                   \
-                        (RestartCounter, RestartCounter),                                       \
-                        (History, PutImpl.PrintHistory()));
-            }
+        if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(HandleClass)) {
+            STLOG(PRI_WARN, BS_PROXY_PUT, BPP71, "Long TEvPut request detected",
+                    (LongRequestThreshold, LongRequestThreshold),
+                    (GroupId, Info->GroupID),
+                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
+                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
+                    (RestartCounter, RestartCounter),
+                    (History, PutImpl.PrintHistory()));
+        }
 
-            if (ResponsesSent == PutImpl.Blobs.size()) {
-                STLOG(PutImpl.WasNotOkResponses() ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_PUT, BPP72,
-                        "Query history",                                                            \
-                        (GroupId, Info->GroupID),                                                   \
-                        (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),       \
-                        (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),                       \
-                        (History, PutImpl.PrintHistory()));
-            }
+        if (ResponsesSent == PutImpl.Blobs.size()) {
+            STLOG(PutImpl.WasNotOkResponses() && PopAllowToken(HandleClass) ? PRI_NOTICE : PRI_DEBUG,
+                    BS_PROXY_PUT, BPP72, "Query history",
+                    (GroupId, Info->GroupID),
+                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
+                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
+                    (History, PutImpl.PrintHistory()));
         }
 
         if (ResponsesSent == PutImpl.Blobs.size()) {
@@ -651,7 +645,6 @@ public:
             << " RestartCounter# " << RestartCounter);
 
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            PutDeadlineMasks[PutImpl.Blobs[blobIdx].Deadline].set(blobIdx);
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }
 
@@ -672,8 +665,7 @@ public:
             getTotalSize()
         );
 
-        Become(&TBlobStorageGroupPutRequest::StateWait);
-        ScheduleWakeup(TInstant::Zero());
+        Become(&TBlobStorageGroupPutRequest::StateWait, TDuration::MilliSeconds(DsPutWakeupMs), new TKikimrEvents::TEvWakeup);
 
         PartSets.resize(PutImpl.Blobs.size());
         for (auto& partSet : PartSets) {
@@ -724,27 +716,15 @@ public:
             << " BlobIDs# " << BlobIdSequenceToString()
             << " Not answered in "
             << (TActivationContext::Monotonic() - RequestStartTime) << " seconds");
-
         const TInstant now = TActivationContext::Now();
-        while (!PutDeadlineMasks.empty()) {
-            auto [deadline, mask] = *PutDeadlineMasks.begin();
-            if (deadline <= now) {
-                DeadlineMask |= mask;
-                PutDeadlineMasks.erase(PutDeadlineMasks.begin());
-            } else {
-                break;
-            }
-        }
-
         TPutImpl::TPutResultVec putResults;
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            if (!PutImpl.Blobs[blobIdx].Replied && DeadlineMask[blobIdx]) {
+            if (!PutImpl.Blobs[blobIdx].Replied && now > PutImpl.Blobs[blobIdx].Deadline) {
                 PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, "Deadline timer hit", putResults);
             }
         }
-        if (!ReplyAndDieWithLastResponse(putResults)) {
-            ScheduleWakeup(now);
-        }
+        ReplyAndDieWithLastResponse(putResults);
+        Schedule(TDuration::MilliSeconds(DsPutWakeupMs), new TKikimrEvents::TEvWakeup);
     }
 
     void UpdatePengingVDiskResponseCount(const TDeque<TPutImpl::TPutEvent>& putEvents) {
@@ -809,21 +789,6 @@ public:
             << " ExpiredVDiskSet# " << ExpiredVDiskSet.ToString()
             << " IncarnationRecords# " << dumpIncarnationRecords()
             << " State# " << PutImpl.DumpFullState());
-    }
-
-    void ScheduleWakeup(TInstant lastWakeup) {
-        TInstant now = TActivationContext::Now();
-        TInstant deadline = lastWakeup + DsMinimumDelayBetweenPutWakeups;
-
-        // find first deadline after now
-        for (auto it = PutDeadlineMasks.begin(); it != PutDeadlineMasks.end(); ++it) {
-            deadline = std::max(deadline, it->first);
-            if (it->first > now) {
-                break;
-            }
-        }
-
-        Schedule(deadline, new TKikimrEvents::TEvWakeup);
     }
 
     STATEFN(StateWait) {

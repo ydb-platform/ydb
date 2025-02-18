@@ -19,12 +19,6 @@
                 },
                 {
                     "columns": [
-                        "Fk21",
-                        "Fk22",
-                        "Key",
-                        "Value"
-                    ],
-                    "lookup_by": [
                         "Key"
                     ],
                     "type": "Lookup"

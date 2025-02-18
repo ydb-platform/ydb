@@ -13,7 +13,7 @@
 #include <util/stream/file.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_ca.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 using NYdbGrpc::TGRpcClientLow;
 using NYdbGrpc::TServiceConnection;

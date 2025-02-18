@@ -755,10 +755,6 @@ private:
             }
         }
 
-        if (resultLeft == EFetchResult::Yield || resultRight == EFetchResult::Yield) {
-            return EFetchResult::Yield;
-        }
-
         if (resultLeft == EFetchResult::Finish ) {
             *HaveMoreLeftRows = false;
         }
@@ -766,6 +762,14 @@ private:
 
         if (resultRight == EFetchResult::Finish ) {
             *HaveMoreRightRows = false;
+        }
+
+        if (!*HaveMoreLeftRows && !*HaveMoreRightRows) {
+            return EFetchResult::Finish;
+        }
+
+        if ((resultLeft == EFetchResult::Yield || !*HaveMoreLeftRows) && (resultRight == EFetchResult::Yield || !*HaveMoreRightRows)) {
+            return EFetchResult::Yield;
         }
 
         return EFetchResult::Finish;
@@ -1126,7 +1130,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));

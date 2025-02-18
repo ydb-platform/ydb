@@ -6,6 +6,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/ast/yql_ast_annotation.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/cbo/simple/cbo_simple.h>
@@ -53,7 +54,13 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         NSQLTranslation::TTranslationSettings settings;
         settings.SyntaxVersion = 1;
 
-        TAstParseResult astRes = SqlToYql(program, settings);
+        NSQLTranslation::TTranslators translators(
+            nullptr,
+            NSQLTranslationV1::MakeTranslator(),
+            nullptr
+        );
+
+        TAstParseResult astRes = SqlToYql(translators, program, settings);
         UNIT_ASSERT(astRes.IsOk());
         TExprNode::TPtr exprRoot;
         UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));

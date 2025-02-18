@@ -37,6 +37,11 @@ items:
   include:
     mode: link
     path: recipes/toc_p.yaml
+- name: Диагностика проблем
+  href: troubleshooting/index.md
+  include:
+    mode: link
+    path: troubleshooting/toc_p.yaml
 - name: Вопросы и ответы
   href: faq/index.md
   include:

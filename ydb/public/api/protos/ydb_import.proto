@@ -72,6 +72,9 @@ message ImportFromS3Settings {
     // Prevent importing of ACL and owner. If true, objects are created with empty ACL
     // and their owner will be the user who started the import.
     bool no_acl = 11;
+
+    // Skip checksum validation during import
+    bool skip_checksum_validation = 12;
 }
 
 message ImportFromS3Result {

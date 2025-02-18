@@ -38,6 +38,8 @@ protected:
 
     TLead Lead;
 
+    ui64 BuildId = 0;
+
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
@@ -86,6 +88,7 @@ public:
         , K{static_cast<ui32>(request.ClustersSize())}
         , UploadState{request.GetUpload()}
         , Lead{std::move(lead)}
+        , BuildId{request.GetId()}
         , Clusters{request.GetClusters().begin(), request.GetClusters().end()}
         , TargetTable{request.GetPostingName()}
         , ResponseActorId{responseActorId}
@@ -103,7 +106,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_T("Prepare " << Debug());
+        LOG_D("Prepare " << Debug());
 
         Driver = driver;
         return {EScan::Feed, {}};
@@ -111,7 +114,7 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) noexcept final
     {
-        LOG_T("Seek " << Debug());
+        LOG_D("Seek " << Debug());
         if (seq == 0) {
             lead = std::move(Lead);
             lead.SetTags(UploadScan);
@@ -133,7 +136,7 @@ public:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final
     {
-        LOG_T("Finish " << Debug());
+        LOG_D("Finish " << Debug());
 
         if (Uploader) {
             Send(Uploader, new TEvents::TEvPoison);
@@ -167,13 +170,9 @@ public:
 
     TString Debug() const
     {
-        auto builder = TStringBuilder() << " TReshuffleKMeansScan";
-        if (Response) {
-            auto& r = Response->Record;
-            builder << " Id: " << r.GetId();
-        }
-        return builder << " Upload: " << UploadState << " ReadBuf size: " << ReadBuf.Size()
-                       << " WriteBuf size: " << WriteBuf.Size() << " ";
+        return TStringBuilder() << " TReshuffleKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
+            << " Target: " << TargetTable << " K: " << K << " Clusters: " << Clusters.size()
+            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
     }
 
     EScan PageFault() noexcept final
@@ -211,7 +210,7 @@ protected:
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev)
     {
-        LOG_T("Handle TEvUploadRowsResponse " << Debug() << " Uploader: " << Uploader.ToString()
+        LOG_D("Handle TEvUploadRowsResponse " << Debug() << " Uploader: " << Uploader.ToString()
                                               << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
@@ -286,6 +285,7 @@ public:
         : TReshuffleKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
+        LOG_D("Create " << Debug());
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
@@ -406,6 +406,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(error);
         ctx.Send(ev->Sender, std::move(response));
+        response.Reset();
     };
 
     if (const ui64 shardId = record.GetTabletId(); shardId != TabletID()) {
@@ -413,7 +414,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         return;
     }
 
-    const auto pathId = PathIdFromPathId(record.GetPathId());
+    const auto pathId = TPathId::FromProto(record.GetPathId());
     const auto* userTableIt = GetUserTables().FindPtr(pathId.LocalPathId);
     if (!userTableIt) {
         badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
@@ -428,7 +429,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
             return;
         }
 
-        CancelScan(userTable.LocalTid, recCard->ScanId);
+        for (auto scanId : recCard->ScanIds) {
+            CancelScan(userTable.LocalTid, scanId);
+        }
         ScanManager.Drop(id);
     }
 
@@ -453,7 +456,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
     }
 
     if (record.ClustersSize() < 1) {
-        badRequest(TStringBuilder() << "Should be requested at least single cluster");
+        badRequest("Should be requested at least single cluster");
         return;
     }
 
@@ -465,6 +468,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
     };
     MakeScan(record, createScan, badRequest);
     if (!scan) {
+        Y_ASSERT(!response);
         return;
     }
 
@@ -472,8 +476,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
     scanOpts.SetSnapshotRowVersion(rowVersion);
     scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
     const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), 0, scanOpts);
-    TScanRecord recCard = {scanId, seqNo};
-    ScanManager.Set(id, recCard);
+    ScanManager.Set(id, seqNo).push_back(scanId);
 }
 
 }

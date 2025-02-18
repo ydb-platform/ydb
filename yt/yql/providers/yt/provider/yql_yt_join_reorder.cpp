@@ -427,7 +427,7 @@ private:
         const TStructExprType* rightItemTypeBeforePremap = nullptr;
 
         {
-            if (leftLeaf && !labels.Inputs.empty()) {
+            if (leftLeaf) {
                 TYtSection section{leftLeaf->Section};
                 if (Y_UNLIKELY(!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test")) {
                     return;
@@ -438,10 +438,12 @@ private:
                     YQL_CLOG(WARN, ProviderYt) << "Unable to collect paths and labels: " << status;
                     return;
                 }
-                leftJoinKeys = BuildJoinKeys(labels.Inputs[0], *op->LeftLabel);
+                if (!labels.Inputs.empty()) {
+                    leftJoinKeys = BuildJoinKeys(labels.Inputs[0], *op->LeftLabel);
+                }
                 ++numLeaves;
             }
-            if (rightLeaf && labels.Inputs.size() > 1) {
+            if (rightLeaf) {
                 TYtSection section{rightLeaf->Section};
                 if (Y_UNLIKELY(!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test")) {
                     return;
@@ -451,7 +453,9 @@ private:
                     YQL_CLOG(WARN, ProviderYt) << "Unable to collect paths and labels: " << status;
                     return;
                 }
-                rightJoinKeys = BuildJoinKeys(labels.Inputs[1], *op->RightLabel);
+                if (labels.Inputs.size() > 1) {
+                    rightJoinKeys = BuildJoinKeys(labels.Inputs[1], *op->RightLabel);
+                }
                 ++numLeaves;
             }
         }

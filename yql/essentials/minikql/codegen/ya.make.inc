@@ -7,17 +7,20 @@ COPY_FILE(
     AUTO
     ../codegen_llvm_deps.h.txt ${ARCADIA_BUILD_ROOT}/${MODDIR}/codegen_llvm_deps.h
     OUTPUT_INCLUDES
+        llvm/BinaryFormat/Dwarf.h
         llvm/ExecutionEngine/ExecutionEngine.h
         llvm/ExecutionEngine/JITEventListener.h
         llvm/ExecutionEngine/MCJIT.h
         llvm/IR/DiagnosticInfo.h
         llvm/IR/DiagnosticPrinter.h
+        llvm/IR/PassManager.h
         llvm/IR/LegacyPassManager.h
         llvm/IR/LLVMContext.h
         llvm/IR/Module.h
         llvm/IR/Verifier.h
         llvm/IRReader/IRReader.h
         llvm/Linker/Linker.h
+        llvm/Passes/PassBuilder.h
         llvm-c/Disassembler.h
         llvm/Support/Host.h
         llvm/Support/ManagedStatic.h
@@ -35,7 +38,7 @@ COPY_FILE(
 )
 
 
-COPY_FILE(
+COPY_FILE_WITH_CONTEXT(
     AUTO
     ../codegen.cpp codegen.cpp
     OUTPUT_INCLUDES

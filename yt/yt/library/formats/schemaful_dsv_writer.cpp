@@ -51,7 +51,7 @@ protected:
 
     int FindMissingValueIndex() const
     {
-        for (int valueIndex = 0; valueIndex < static_cast<int>(CurrentRowValues_.size()); ++valueIndex) {
+        for (int valueIndex = 0; valueIndex < std::ssize(CurrentRowValues_); ++valueIndex) {
             const auto* value = CurrentRowValues_[valueIndex];
             if (!value || value->Type == EValueType::Null) {
                 return valueIndex;
@@ -317,7 +317,7 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForSchemafulDsv(
     ValidateDuplicateColumns(columns);
 
     try {
-        for (int columnIndex = 0; columnIndex < static_cast<int>(columns.size()); ++columnIndex) {
+        for (int columnIndex = 0; columnIndex < std::ssize(columns); ++columnIndex) {
             nameTable->GetIdOrRegisterName(columns[columnIndex]);
         }
     } catch (const std::exception& ex) {
@@ -326,7 +326,7 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForSchemafulDsv(
     }
 
     idToIndexInRow.resize(nameTable->GetSize(), -1);
-    for (int columnIndex = 0; columnIndex < static_cast<int>(columns.size()); ++columnIndex) {
+    for (int columnIndex = 0; columnIndex < std::ssize(columns); ++columnIndex) {
         idToIndexInRow[nameTable->GetId(columns[columnIndex])] = columnIndex;
     }
 

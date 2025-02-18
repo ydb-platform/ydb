@@ -52,6 +52,9 @@ void TTcpDispatcherConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("bus_certs_directory_path", &TThis::BusCertsDirectoryPath)
         .Default();
+
+    registrar.Parameter("enable_local_bypass", &TThis::EnableLocalBypass)
+        .Default(false);
 }
 
 TTcpDispatcherConfigPtr TTcpDispatcherConfig::ApplyDynamic(
@@ -63,6 +66,7 @@ TTcpDispatcherConfigPtr TTcpDispatcherConfig::ApplyDynamic(
     UpdateYsonStructField(mergedConfig->Networks, dynamicConfig->Networks);
     UpdateYsonStructField(mergedConfig->MultiplexingBands, dynamicConfig->MultiplexingBands);
     UpdateYsonStructField(mergedConfig->BusCertsDirectoryPath, dynamicConfig->BusCertsDirectoryPath);
+    UpdateYsonStructField(mergedConfig->EnableLocalBypass, dynamicConfig->EnableLocalBypass);
     mergedConfig->Postprocess();
     return mergedConfig;
 }
@@ -88,6 +92,9 @@ void TTcpDispatcherDynamicConfig::Register(TRegistrar registrar)
         .Optional();
 
     registrar.Parameter("bus_certs_directory_path", &TThis::BusCertsDirectoryPath)
+        .Default();
+
+    registrar.Parameter("enable_local_bypass", &TThis::EnableLocalBypass)
         .Default();
 }
 
@@ -119,6 +126,9 @@ TBusServerConfigPtr TBusServerConfig::CreateUds(const std::string& socketPath)
     return config;
 }
 
+void TBusServerDynamicConfig::Register(TRegistrar /*registrar*/)
+{ }
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TBusConfig::Register(TRegistrar registrar)
@@ -141,6 +151,8 @@ void TBusConfig::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("generate_checksums", &TThis::GenerateChecksums)
         .Default(true);
+    registrar.Parameter("enable_local_bypass", &TThis::EnableLocalBypass)
+        .Default(true);
     registrar.Parameter("encryption_mode", &TThis::EncryptionMode)
         .Default(EEncryptionMode::Optional);
     registrar.Parameter("verification_mode", &TThis::VerificationMode)
@@ -157,6 +169,14 @@ void TBusConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("peer_alternative_host_name", &TThis::PeerAlternativeHostName)
         .Optional();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TBusDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("need_reject_connection_due_memory_overcommit", &TThis::NeedRejectConnectionDueMemoryOvercommit)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -188,6 +208,9 @@ TBusClientConfigPtr TBusClientConfig::CreateUds(const std::string& socketPath)
     config->UnixDomainSocketPath = socketPath;
     return config;
 }
+
+void TBusClientDynamicConfig::Register(TRegistrar /*registrar*/)
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 

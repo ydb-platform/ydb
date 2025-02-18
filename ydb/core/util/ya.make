@@ -74,6 +74,7 @@ PEERDIR(
     library/cpp/random_provider
     ydb/core/base
     ydb/core/protos
+    ydb/core/mon
     library/cpp/deprecated/atomic
     ydb/library/yverify_stream
 )

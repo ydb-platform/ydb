@@ -1,3 +1,5 @@
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
@@ -15,8 +17,8 @@ using namespace NYql::NNodes;
 
 namespace {
 
-TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx) {
-    TSet<TString> columnsToSelect(table.Metadata->KeyColumnNames.begin(), table.Metadata->KeyColumnNames.end());
+TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& /* table */, TPositionHandle pos, TExprContext& ctx,
+                                const auto& columnsToSelect) {
     TVector<TExprBase> columnsList;
     columnsList.reserve(columnsToSelect.size());
     for (auto column : columnsToSelect) {
@@ -30,6 +32,10 @@ TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionH
     return Build<TCoAtomList>(ctx, pos)
         .Add(columnsList)
         .Done();
+}
+
+TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx) {
+    return BuildKeyColumnsList(table, pos, ctx, table.Metadata->KeyColumnNames);
 }
 
 TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx) {
@@ -137,6 +143,65 @@ bool IsTableExistsKeySelector(NNodes::TCoLambda keySelector, const TKikimrTableD
 
 bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& indexDesc, TVector<TString>* columns) {
     return IsTableExistsKeySelector(node.KeySelectorLambda(), indexDesc, columns);
+}
+
+bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top) {
+    Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+    // TODO(mbkkt) We need to account top.Count(), but not clear what to if it's value is runtime?
+    auto checkMember = [&] (const TExprBase& expr) {
+        auto member = expr.Maybe<TCoMember>();
+        return member && member.Cast().Name().Value() == indexDesc.KeyColumns[0];
+    };
+    auto checkUdf = [&] (const TExprBase& expr, bool checkMembers) {
+        auto apply = expr.Maybe<TCoApply>();
+        if (!apply || apply.Cast().Args().Count() != 3) {
+            return false;
+        }
+        if (checkMembers) {
+            auto args = apply.Cast().Args();
+            if (absl::c_none_of(args, [&] (const TExprBase& expr) { return checkMember(expr); })) {
+                return false;
+            }
+        }
+        auto udf = apply.Cast().Callable().Maybe<TCoUdf>();
+        if (!udf) {
+            return false;
+        }
+        auto directions = top.SortDirections().Maybe<TCoBool>();
+        if (!directions) {
+            return false;
+        }
+        const bool asc = directions.Cast().Literal().Value() == "true";
+        const auto methodName = udf.Cast().MethodName().Value();
+        auto& desc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
+        switch (desc.settings().settings().metric()) {
+            case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
+                return !asc && methodName == "Knn.InnerProductSimilarity";
+            case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
+            case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
+                if (asc) {
+                    return methodName == "Knn.CosineDistance";
+                } else {
+                    return methodName == "Knn.CosineSimilarity";
+                }
+            case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
+                return asc && methodName == "Knn.ManhattanDistance";
+            case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
+                return asc && methodName == "Knn.EuclideanDistance";
+            default:
+                Y_UNREACHABLE();
+        }
+    };
+    auto flatMap = lambdaBody.Maybe<TCoFlatMap>();
+    if (!flatMap) {
+        return checkUdf(lambdaBody, true);
+    }
+    auto flatMapInput = flatMap.Cast().Input();
+    if (!checkMember(flatMapInput)) {
+        return false;
+    }
+    auto flatMapLambdaBody = flatMap.Cast().Lambda().Body();
+    return checkUdf(flatMapLambdaBody, false);
 }
 
 struct TReadMatch {
@@ -258,7 +323,7 @@ TExprBase DoRewriteIndexRead(const TReadMatch& read, TExprContext& ctx,
     const bool needDataRead = CheckIndexCovering(read, indexMeta);
 
     if (read.FullScan()) {
-        TString indexName = read.Index().StringValue();
+        const auto indexName = read.Index().StringValue();
         auto issue = TIssue(ctx.GetPosition(read.Pos()), "Given predicate is not suitable for used index: " + indexName);
         SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, issue);
         ctx.AddWarning(issue);
@@ -334,15 +399,199 @@ TExprBase DoRewriteIndexRead(const TReadMatch& read, TExprContext& ctx,
     }
 }
 
+TExprBase DoRewriteTopSortOverKMeansTree(
+    const TReadMatch& read, const TMaybeNode<TCoFlatMap>& flatMap, const TExprNode& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
+    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
+{
+    Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+    const auto* levelTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Name);
+    const auto* postingTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Name);
+    YQL_ENSURE(!implTable.Next->Next);
+    YQL_ENSURE(levelTableDesc->Metadata->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable));
+    YQL_ENSURE(postingTableDesc->Metadata->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable));
+
+    // TODO(mbkkt) It's kind of strange that almost everything here have same position
+    const auto pos = read.Pos();
+
+    auto levelTable = BuildTableMeta(*levelTableDesc->Metadata, pos, ctx);
+    auto postingTable = BuildTableMeta(*postingTableDesc->Metadata, pos, ctx);
+    auto mainTable = BuildTableMeta(*tableDesc.Metadata, pos, ctx);
+
+    auto levelColumns = BuildKeyColumnsList(*levelTableDesc, pos, ctx,
+            std::initializer_list<std::string_view>{NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn});
+    auto postingColumns = BuildKeyColumnsList(*postingTableDesc, pos, ctx, tableDesc.Metadata->KeyColumnNames);
+    const auto& mainColumns = read.Columns();
+
+    // TODO(mbkkt) How to inline construction of these constants to construction of readLevel0?
+    auto fromValues = ctx.Builder(pos)
+        .Callable("Uint32").Atom(0, "0", TNodeFlags::Default).Seal()
+    .Build();
+    auto toValues = ctx.Builder(pos)
+        .Callable("Uint32").Atom(0, "1", TNodeFlags::Default).Seal()
+    .Build();
+
+    auto levelLambda = [&] {
+        const auto oldArgNodes = lambdaArgs.Children();
+        TNodeOnNodeOwnedMap replaces(oldArgNodes.size());
+        TExprNode::TListType newArgNodes;
+        newArgNodes.reserve(oldArgNodes.size());
+        for (const auto& arg : oldArgNodes) {
+            auto newArg = ctx.ShallowCopy(*arg);
+            YQL_ENSURE(replaces.emplace(arg.Get(), newArg).second);
+            newArgNodes.emplace_back(std::move(newArg));
+        }
+        auto newLambda = TExprBase{ctx.NewLambda(pos,
+            ctx.NewArguments(pos, std::move(newArgNodes)),
+            ctx.ReplaceNodes(TExprNode::TListType{lambdaBody.Ptr()}, replaces))}
+        .Cast<TCoLambda>();
+        auto args = newLambda.Args().Ptr();
+        replaces.clear();
+        auto flatMap = newLambda.Body().Maybe<TCoFlatMap>();
+        if (!flatMap) {
+            auto apply = newLambda.Body().Cast<TCoApply>();
+            for (auto arg : apply.Args()) {
+                auto oldMember = arg.Maybe<TCoMember>();
+                if (oldMember && oldMember.Cast().Name().Value() == indexDesc.KeyColumns[0]) {
+                    auto newMember = Build<TCoMember>(ctx, pos)
+                        .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn)
+                        .Struct(oldMember.Cast().Struct())
+                    .Done();
+                    replaces.emplace(oldMember.Raw(), newMember.Ptr());
+                    break;
+                }
+            }
+            return ctx.NewLambda(pos,
+                std::move(args),
+                ctx.ReplaceNodes(TExprNode::TListType{apply.Ptr()}, replaces));
+        }
+        auto apply = flatMap.Cast().Lambda().Body().Cast<TCoApply>();
+        for (auto arg : apply.Args()) {
+            if (arg.Ref().Type() == NYql::TExprNode::Argument) {
+                auto oldMember = flatMap.Cast().Input().Cast<TCoMember>();
+                auto newMember = Build<TCoMember>(ctx, pos)
+                    .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn)
+                    .Struct(oldMember.Struct())
+                .Done();
+                replaces.emplace(arg.Raw(), newMember.Ptr());
+                break;
+            }
+        }
+        return ctx.NewLambda(pos,
+            std::move(args),
+            ctx.ReplaceNodes(TExprNode::TListType{apply.Ptr()}, replaces));
+    }();
+
+    ui32 level = 1;
+    const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription)
+        .settings();
+    const auto clusters = std::max<ui32>(2, settings.clusters());
+    const auto levels = std::max<ui32>(1, settings.levels());
+    Y_ENSURE(level <= levels);
+    const auto levelTop = std::min<ui32>(kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1), clusters);
+
+    auto count = ctx.Builder(pos)
+        .Callable("Uint64").Atom(0, std::to_string(levelTop), TNodeFlags::Default).Seal()
+    .Build();
+
+    // TODO(mbkkt) Is it best way to do `SELECT FROM levelTable WHERE first_pk_column = 0`?
+    auto readLevel = Build<TKqlReadTable>(ctx, pos)
+        .Table(levelTable)
+        .Range<TKqlKeyRange>()
+            .From<TKqlKeyInc>()
+                .Add(fromValues)
+            .Build()
+            .To<TKqlKeyExc>()
+                .Add(toValues)
+            .Build()
+        .Build()
+        .Columns(levelColumns)
+        .Settings(read.Settings())
+    .Done().Ptr();
+
+    for (;; ++level) {
+        readLevel = Build<TCoTop>(ctx, pos)
+            .Input(readLevel)
+            .KeySelectorLambda(levelLambda)
+            .SortDirections(top.SortDirections())
+            .Count(count)
+        .Done().Ptr();
+
+        auto mapArg = Build<TCoArgument>(ctx, pos)
+            .Name("mapArg")
+        .Done();
+        TVector<TExprBase> mapMembers{
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn)
+                .Value<TCoMember>().Struct(mapArg)
+                    .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn)
+                .Build()
+            .Done()
+        };
+
+        readLevel = Build<TCoMap>(ctx, pos)
+            .Input(readLevel)
+            .Lambda()
+                .Args({mapArg})
+                .Body<TCoAsStruct>().Add(mapMembers).Build()
+            .Build()
+        .Done().Ptr();
+
+        if (level == levels) {
+            break;
+        }
+
+        readLevel = Build<TKqlLookupTable>(ctx, pos)
+            .Table(levelTable)
+            .LookupKeys(readLevel)
+            .Columns(levelColumns)
+        .Done().Ptr();
+    }
+
+    // TODO(mbkkt) handle covered index columns
+    auto postingRead = Build<TKqlLookupTable>(ctx, pos)
+        .Table(postingTable)
+        .LookupKeys(readLevel)
+        .Columns(postingColumns)
+    .Done().Ptr();
+
+    auto mainRead = Build<TKqlLookupTable>(ctx, pos)
+        .Table(mainTable)
+        .LookupKeys(postingRead)
+        .Columns(mainColumns)
+    .Done().Ptr();
+
+    if (flatMap) {
+        mainRead = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())
+            .Input(mainRead)
+            .Lambda(ctx.DeepCopyLambda(flatMap.Cast().Lambda().Ref()))
+        .Done().Ptr();
+    }
+
+    mainRead = Build<TCoTopBase>(ctx, top.Pos())
+        .CallableName(top.Ref().Content())
+        .Input(mainRead)
+        .KeySelectorLambda(ctx.DeepCopyLambda(top.KeySelectorLambda().Ref()))
+        .SortDirections(top.SortDirections())
+        .Count(top.Count())
+    .Done().Ptr();
+
+    return TExprBase{mainRead};
+}
+
 } // namespace
 
 TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (auto indexRead = TReadMatch::Match(node)) {
 
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, indexRead.Table().Path());
-        const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(TString(indexRead.Index().Value()));
+        const auto indexName = indexRead.Index().Value();
+        auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
+        // TODO(mbkkt) instead of ensure should be warning and main table read?
+        YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
+            "index read doesn't support vector index: " << indexName);
 
-        return DoRewriteIndexRead(indexRead, ctx, tableDesc, indexMeta, kqpCtx.IsScanQuery(), {});
+        return DoRewriteIndexRead(indexRead, ctx, tableDesc, implTable, kqpCtx.IsScanQuery(), {});
     }
 
     return node;
@@ -358,16 +607,20 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
         auto lookupIndex = maybeLookupIndex.Cast();
 
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, lookupIndex.Table().Path());
-        const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(lookupIndex.Index().StringValue());
+        const auto indexName = lookupIndex.Index().Value();
+        auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
+        // TODO(mbkkt) instead of ensure should be warning and main table lookup?
+        YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
+            "lookup doesn't support vector index: " << indexName);
 
-        const bool needDataRead = CheckIndexCovering(lookupIndex, indexMeta);
+        const bool needDataRead = CheckIndexCovering(lookupIndex, implTable);
 
         if (!needDataRead) {
             if (kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
                 TKqpStreamLookupSettings settings;
                 settings.Strategy = EStreamLookupStrategyType::LookupRows;
                 return Build<TKqlStreamLookupTable>(ctx, node.Pos())
-                    .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
+                    .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
                     .LookupKeys(lookupIndex.LookupKeys())
                     .Columns(lookupIndex.Columns())
                     .Settings(settings.BuildNode(ctx, node.Pos()))
@@ -375,7 +628,7 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
             }
 
             return Build<TKqlLookupTable>(ctx, node.Pos())
-                .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
+                .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
                 .LookupKeys(lookupIndex.LookupKeys())
                 .Columns(lookupIndex.Columns())
                 .Done();
@@ -387,7 +640,7 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
             TKqpStreamLookupSettings settings;
             settings.Strategy = EStreamLookupStrategyType::LookupRows;
             TExprBase lookupIndexTable = Build<TKqlStreamLookupTable>(ctx, node.Pos())
-                .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
+                .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
                 .LookupKeys(lookupIndex.LookupKeys())
                 .Columns(keyColumnsList)
                 .Settings(settings.BuildNode(ctx, node.Pos()))
@@ -402,7 +655,7 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
         }
 
         TExprBase lookupIndexTable = Build<TKqlLookupTable>(ctx, node.Pos())
-            .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
+            .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
             .LookupKeys(lookupIndex.LookupKeys())
             .Columns(keyColumnsList)
             .Done();
@@ -426,12 +679,16 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
     auto settings = TKqpStreamLookupSettings::Parse(streamLookupIndex);
 
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, streamLookupIndex.Table().Path());
-    const auto& [indexMeta, _] = tableDesc.Metadata->GetIndexMetadata(streamLookupIndex.Index().StringValue());
+    const auto indexName = streamLookupIndex.Index().Value();
+    auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
+    // TODO(mbkkt) instead of ensure should be warning and main table lookup?
+    YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
+        "stream lookup doesn't support vector index: " << indexName);
 
-    const bool needDataRead = CheckIndexCovering(streamLookupIndex, indexMeta);
+    const bool needDataRead = CheckIndexCovering(streamLookupIndex, implTable);
     if (!needDataRead) {
         return Build<TKqlStreamLookupTable>(ctx, node.Pos())
-            .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
+            .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
             .LookupKeys(streamLookupIndex.LookupKeys())
             .Columns(streamLookupIndex.Columns())
             .Settings(streamLookupIndex.Settings())
@@ -441,7 +698,7 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
     auto keyColumnsList = BuildKeyColumnsList(tableDesc, streamLookupIndex.Pos(), ctx);
 
     TExprBase lookupIndexTable = Build<TKqlStreamLookupTable>(ctx, node.Pos())
-        .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
+        .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
         .LookupKeys(streamLookupIndex.LookupKeys())
         .Columns(keyColumnsList)
         .Settings(streamLookupIndex.Settings())
@@ -465,8 +722,8 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
                         .Tuple("tuple")
                         .Index().Value("0").Build()
                         .Build()
-                    .Build()  
-                .Build()    
+                    .Build()
+                .Build()
             .Done();
     } else {
         lookupKeys = lookupIndexTable;
@@ -656,19 +913,72 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         return node;
 
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
-    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(TString(readTableIndex.Index().Value()));
-    const auto& indexDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, indexMeta->Name);
+    const auto indexName = readTableIndex.Index().Value();
+    auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
+    if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+        const auto* lambdaArgs = topBase.KeySelectorLambda().Args().Raw();
+        auto lambdaBody = topBase.KeySelectorLambda().Body();
+        bool canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase);
+        if (!canUseVectorIndex) {
+            auto argument = lambdaBody.Maybe<TCoMember>().Struct().Maybe<TCoArgument>();
+            if (!argument) {
+                // TODO(mbkkt) some warnings?
+                return node;
+            }
+            auto asStruct = maybeFlatMap.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
+            if (!asStruct) {
+                // TODO(mbkkt) some warnings?
+                return node;
+            }
+
+            // TODO(mbkkt) I think it shouldn't matter, but for my paranoia I will keep it for now
+            // In general I want to check that result of flat map used as argument for member access in top lambda
+            const auto argumentName = argument.Cast().Name();
+            if (absl::c_none_of(maybeFlatMap.Cast().Lambda().Args(),
+                    [&](const TCoArgument& argument) { return argumentName == argument.Name(); })) {
+                // TODO(mbkkt) some warnings?
+                return node;
+            }
+
+            const auto memberName = lambdaBody.Cast<TCoMember>().Name().Value();
+            for (const auto& arg : asStruct.Cast().Args()) {
+                if (!arg->IsList()) {
+                    continue;
+                }
+                auto argChildren = arg->Children();
+                if (argChildren.size() != 2) {
+                    continue;
+                }
+                auto atom = TExprBase{argChildren[0].Get()}.Maybe<TCoAtom>();
+                if (!atom || atom.Cast().Value() != memberName) {
+                    continue;
+                }
+                lambdaBody = TExprBase{argChildren[1]};
+                canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase);
+                break;
+            }
+            if (!canUseVectorIndex) {
+                // TODO(mbkkt) some warnings?
+                return node;
+            }
+            lambdaArgs = maybeFlatMap.Cast().Lambda().Args().Raw();
+        }
+        return DoRewriteTopSortOverKMeansTree(readTableIndex, maybeFlatMap, *lambdaArgs, lambdaBody, topBase,
+                                              ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
+    }
+    const auto& implTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Name);
+    YQL_ENSURE(implTableDesc.Metadata->Name.EndsWith(NTableIndex::ImplTable));
 
     TVector<TString> extraColumns;
 
-    if (maybeFlatMap && !CanPushFlatMap(maybeFlatMap.Cast(), indexDesc, parentsMap, extraColumns))
+    if (maybeFlatMap && !CanPushFlatMap(maybeFlatMap.Cast(), implTableDesc, parentsMap, extraColumns))
         return node;
 
-    if (!CanPushTopSort(topBase, indexDesc, &extraColumns)) {
+    if (!CanPushTopSort(topBase, implTableDesc, &extraColumns)) {
         return node;
     }
 
-    bool needSort = node.Maybe<TCoTopSort>() && !IsKeySelectorPkPrefix(topBase.KeySelectorLambda(), indexDesc);
+    bool needSort = node.Maybe<TCoTopSort>() && !IsKeySelectorPkPrefix(topBase.KeySelectorLambda(), implTableDesc);
 
     auto filter = [&](const TExprBase& in) mutable {
         auto sortInput = in;
@@ -692,7 +1002,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         return TExprBase(newTop);
     };
 
-    auto lookup = DoRewriteIndexRead(readTableIndex, ctx, tableDesc, indexMeta,
+    auto lookup = DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable,
         kqpCtx.IsScanQuery(), extraColumns, filter);
 
     return Build<TCoTopBase>(ctx, node.Pos())
@@ -720,11 +1030,16 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
         return node;
 
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
-    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(TString(readTableIndex.Index().Value()));
-    const auto& indexDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, indexMeta->Name);
+    const auto indexName = readTableIndex.Index().Value();
+    auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
+    if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+        // TODO(mbkkt) some warning?
+        return node;
+    }
+    const auto& implTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Name);
 
     TVector<TString> extraColumns;
-    if (maybeFlatMap && !CanPushFlatMap(maybeFlatMap.Cast(), indexDesc, parentsMap, extraColumns))
+    if (maybeFlatMap && !CanPushFlatMap(maybeFlatMap.Cast(), implTableDesc, parentsMap, extraColumns))
         return node;
 
     auto filter = [&](const TExprBase& in) mutable {
@@ -742,7 +1057,7 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
         return TExprBase(ctx.ChangeChild(*node.Ptr(), 0, takeChild.Ptr()));
     };
 
-    return DoRewriteIndexRead(readTableIndex, ctx, tableDesc, indexMeta, kqpCtx.IsScanQuery(), extraColumns, filter);
+    return DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable, kqpCtx.IsScanQuery(), extraColumns, filter);
 }
 
 } // namespace NKikimr::NKqp::NOpt

@@ -1023,35 +1023,43 @@ TEST(TYsonToProtobufTest, Entities)
 
 TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
 {
-    for (auto option: {EUtf8Check::Disable, EUtf8Check::LogOnFail, EUtf8Check::ThrowOnFail}) {
-        auto config = New<TProtobufInteropConfig>();
-        config->Utf8Check = option;
-        SetProtobufInteropConfig(config);
+    for (auto configOption : {EUtf8Check::Disable, EUtf8Check::LogOnFail, EUtf8Check::ThrowOnFail}) {
+        for (auto option: std::vector<std::optional<EUtf8Check>>{
+            std::nullopt, EUtf8Check::Disable, EUtf8Check::LogOnFail, EUtf8Check::ThrowOnFail})
+        {
+            auto config = New<TProtobufInteropConfig>();
+            config->Utf8Check = configOption;
+            SetProtobufInteropConfig(config);
+            auto effectiveOption = option.value_or(configOption);
 
-        TString invalidUtf8 = "\xc3\x28";
-
-        auto check = [&] {
-            TEST_PROLOGUE_WITH_OPTIONS(TMessage, {})
-                .BeginMap()
-                    .Item("string_field").Value(invalidUtf8)
-                .EndMap();
-        };
-        if (option == EUtf8Check::ThrowOnFail) {
-            EXPECT_THROW_WITH_SUBSTRING(check(), "Non UTF-8 value in string field");
-        } else {
-            EXPECT_NO_THROW(check());
-        }
-
-        NProto::TMessage message;
-        message.set_string_field(invalidUtf8);
-        TString newYsonString;
-        TStringOutput newYsonOutputStream(newYsonString);
-        TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
-        if (option == EUtf8Check::ThrowOnFail) {
-            EXPECT_THROW_WITH_SUBSTRING(
-                WriteProtobufMessage(&ysonWriter, message), "Non UTF-8 value in string field");
-        } else {
-            EXPECT_NO_THROW(WriteProtobufMessage(&ysonWriter, message));
+            TString invalidUtf8 = "\xc3\x28";
+            auto checkWrite = [&] {
+                TEST_PROLOGUE_WITH_OPTIONS(TMessage, TProtobufWriterOptions{.Utf8Check = option})
+                    .BeginMap()
+                        .Item("string_field").Value(invalidUtf8)
+                    .EndMap();
+            };
+            if (effectiveOption == EUtf8Check::ThrowOnFail) {
+                EXPECT_THROW_WITH_SUBSTRING(checkWrite(), "Non UTF-8 value in string field");
+            } else {
+                EXPECT_NO_THROW(checkWrite());
+            }
+            NProto::TMessage message;
+            message.set_string_field(invalidUtf8);
+            TString newYsonString;
+            TStringOutput newYsonOutputStream(newYsonString);
+            TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
+            auto checkParse = [&] {
+                WriteProtobufMessage(
+                    &ysonWriter,
+                    message,
+                    TProtobufParserOptions{.Utf8Check = option});
+            };
+            if (effectiveOption == EUtf8Check::ThrowOnFail) {
+                EXPECT_THROW_WITH_SUBSTRING(checkParse(), "Non UTF-8 value in string field");
+            } else {
+                EXPECT_NO_THROW(checkParse());
+            }
         }
     }
 }
@@ -2105,7 +2113,7 @@ void TestScalarByYPath(const TYPath& path, FieldDescriptor::Type type)
     EXPECT_EQ(path, result.HeadPath);
     EXPECT_EQ("", result.TailPath);
     EXPECT_EQ(
-        static_cast<TProtobufScalarElement::TType>(type),
+        static_cast<TProtobufElementType>(type),
         std::get<std::unique_ptr<TProtobufScalarElement>>(result.Element)->Type);
 }
 
@@ -2521,6 +2529,8 @@ TEST(TYsonToProtobufTest, YsonStringMerger)
     ASSERT_EQ(protobufStringBinary, protobufStringMerged);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 template <class T, class TNodeList, class TRepeated>
 void CopyToProto(const TNodeList& from, TRepeated& rep)
 {
@@ -2528,6 +2538,8 @@ void CopyToProto(const TNodeList& from, TRepeated& rep)
         rep.Add(child->template GetValue<T>());
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 TEST(TPackedRepeatedProtobufTest, TestSerializeDeserialize)
 {
@@ -2659,9 +2671,11 @@ TEST(TPackedRepeatedProtobufTest, TestSerializeDeserialize)
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TEnumYsonStorageTypeTest, TestDeserializeSerialize)
 {
-    for (auto storageType: {EEnumYsonStorageType::String, EEnumYsonStorageType::Int}) {
+    for (auto storageType : {EEnumYsonStorageType::String, EEnumYsonStorageType::Int}) {
         auto config = New<TProtobufInteropConfig>();
         config->DefaultEnumYsonStorageType = storageType;
         SetProtobufInteropConfig(config);
@@ -2774,6 +2788,8 @@ TEST(TEnumYsonStorageTypeTest, TestDeserializeSerialize)
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TYsonToProtobufTest, Casing)
 {
     auto ysonNode = BuildYsonNodeFluently()
@@ -2836,6 +2852,8 @@ TEST(TYsonToProtobufTest, ForceSnakeCaseNames)
             << "Actual: " << newYsonString << "\n\n";
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 TEST(TStrictEnumValueCheckTest, DeserializeSerializeUnknownUnchecked)
 {
@@ -2985,6 +3003,33 @@ TEST(TStrictEnumValueCheckTest, ProtoToYsonUnknownChecked)
             TErrorException);
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TProtobufWriterOptionsTest, CreateChildOptions)
+{
+    TProtobufWriterOptions options{
+        .UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) {
+            return path.StartsWith("/foo")
+                ? EUnknownYsonFieldsMode::Keep
+                : EUnknownYsonFieldsMode::Fail;
+        }
+    };
+
+    auto optionsCopy = options.CreateChildOptions("");
+    EXPECT_EQ(optionsCopy.UnknownYsonFieldModeResolver("/foo"), EUnknownYsonFieldsMode::Keep);
+    EXPECT_EQ(optionsCopy.UnknownYsonFieldModeResolver("/bar"), EUnknownYsonFieldsMode::Fail);
+
+    auto fooOptions = options.CreateChildOptions("/foo");
+    EXPECT_EQ(fooOptions.UnknownYsonFieldModeResolver(""), EUnknownYsonFieldsMode::Keep);
+    EXPECT_EQ(fooOptions.UnknownYsonFieldModeResolver("/baz"), EUnknownYsonFieldsMode::Keep);
+
+    auto barOptions = options.CreateChildOptions("/bar");
+    EXPECT_EQ(barOptions.UnknownYsonFieldModeResolver(""), EUnknownYsonFieldsMode::Fail);
+    EXPECT_EQ(barOptions.UnknownYsonFieldModeResolver("/foo"), EUnknownYsonFieldsMode::Fail);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NYson

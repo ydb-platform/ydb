@@ -11,6 +11,7 @@ class TStatsIteratorBase: public TScanIteratorBase {
 private:
     const NTable::TScheme::TTableSchema StatsSchema;
     std::shared_ptr<arrow::Schema> DataSchema;
+
 protected:
     virtual bool AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, TGranuleMetaView& granule) const = 0;
     virtual ui32 PredictRecordsCount(const TGranuleMetaView& granule) const = 0;
@@ -36,42 +37,7 @@ public:
         return IndexGranules.empty();
     }
 
-    virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() override {
-        while (!Finished()) {
-            if (!IsReadyForBatch()) {
-                return std::shared_ptr<TPartialReadResult>();
-            }
-            auto batchOpt = ExtractStatsBatch();
-            if (!batchOpt) {
-                AFL_VERIFY(Finished());
-                return std::shared_ptr<TPartialReadResult>();
-            }
-            auto originalBatch = *batchOpt;
-            if (originalBatch->num_rows() == 0) {
-                continue;
-            }
-            auto keyBatch = NArrow::TColumnOperator().VerifyIfAbsent().Adapt(originalBatch, KeySchema).DetachResult();
-            auto lastKey = keyBatch->Slice(keyBatch->num_rows() - 1, 1);
-
-            {
-                NArrow::TColumnFilter filter = ReadMetadata->GetPKRangesFilter().BuildFilter(originalBatch);
-                filter.Apply(originalBatch);
-            }
-
-            // Leave only requested columns
-            auto resultBatch = NArrow::TColumnOperator().Adapt(originalBatch, ResultSchema).DetachResult();
-            auto applyConclusion = ReadMetadata->GetProgram().ApplyProgram(resultBatch);
-            if (!applyConclusion.ok()) {
-                return TConclusionStatus::Fail(applyConclusion.ToString());
-            }
-            if (resultBatch->num_rows() == 0) {
-                continue;
-            }
-            auto table = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({resultBatch}));
-            return std::make_shared<TPartialReadResult>(table, std::make_shared<TPlainScanCursor>(lastKey), Context, std::nullopt);
-        }
-        return std::shared_ptr<TPartialReadResult>();
-    }
+    virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() override;
 
     std::optional<std::shared_ptr<arrow::RecordBatch>> ExtractStatsBatch() {
         while (IndexGranules.size()) {
@@ -89,22 +55,19 @@ public:
                     AFL_VERIFY(*count == i->length());
                 }
             }
-            auto result = arrow::RecordBatch::Make(DataSchema, columns.front()->length(), columns);
-            if (result->num_rows()) {
-                return result;
-            }
+            return arrow::RecordBatch::Make(DataSchema, columns.front()->length(), columns);
         }
         return std::nullopt;
     }
-
 
     TStatsIteratorBase(const std::shared_ptr<NReader::TReadContext>& context, const NTable::TScheme::TTableSchema& statsSchema);
 };
 
 template <class TSysViewSchema>
-class TStatsIterator : public TStatsIteratorBase {
+class TStatsIterator: public TStatsIteratorBase {
 private:
     using TBase = TStatsIteratorBase;
+
 public:
     static inline const NTable::TScheme::TTableSchema StatsSchema = []() {
         NTable::TScheme::TTableSchema schema;
@@ -112,7 +75,7 @@ public:
         return schema;
     }();
 
-    class TStatsColumnResolver: public IColumnResolver {
+    class TStatsColumnResolver: public NArrow::NSSA::IColumnResolver {
     public:
         TString GetColumnName(ui32 id, bool required) const override {
             auto it = StatsSchema.Columns.find(id);
@@ -132,16 +95,14 @@ public:
             }
         }
 
-        NSsa::TColumnInfo GetDefaultColumn() const override {
-            return NSsa::TColumnInfo::Original(1, "PathId");
+        NArrow::NSSA::TColumnInfo GetDefaultColumn() const override {
+            return NArrow::NSSA::TColumnInfo::Original(1, "PathId");
         }
     };
 
     TStatsIterator(const std::shared_ptr<NReader::TReadContext>& context)
-        : TBase(context, StatsSchema)
-    {
+        : TBase(context, StatsSchema) {
     }
-
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader::NSysView::NAbstract

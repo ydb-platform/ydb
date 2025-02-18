@@ -106,6 +106,7 @@ namespace NActors {
                 CoroTimeout,
                 InvokeQuery,
                 Wilson,
+                Preemption,
                 End,
 
                 // Compatibility section
@@ -126,6 +127,14 @@ namespace NActors {
             TEvWakeup(ui64 tag = 0) : Tag(tag) { }
 
             const ui64 Tag = 0;
+        };
+
+        struct TEvPreemption: public TEventLocal<TEvPreemption, TSystem::Preemption> {
+            bool ByEventCount = false;
+            bool ByCycles = false;
+            bool ByTailSend = false;
+            ui32 EventCount = 0;
+            ui64 Cycles = 0;
         };
 
         struct TEvSubscribe: public TEventLocal<TEvSubscribe, TSystem::Subscribe> {

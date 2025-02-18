@@ -1,6 +1,9 @@
 #pragma once
 
 #include <yt/yt/core/misc/public.h>
+#include <yt/yt/core/misc/configurable_singleton_decl.h>
+
+#include <library/cpp/yt/misc/enum.h>
 
 namespace NYT::NConcurrency {
 
@@ -126,6 +129,8 @@ DECLARE_REFCOUNTED_CLASS(TBucketThrottler)
 DECLARE_REFCOUNTED_STRUCT(ICallbackProvider)
 
 class TPropagatingStorage;
+
+YT_DECLARE_RECONFIGURABLE_SINGLETON(TFiberManagerConfig, TFiberManagerDynamicConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

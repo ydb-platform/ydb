@@ -29,10 +29,10 @@ public:
 
         const auto& params = schemeTx.GetAlterCdcStreamNotice();
         const auto& streamDesc = params.GetStreamDescription();
-        const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
+        const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
         const auto state = streamDesc.GetState();
 
-        const auto pathId = PathIdFromPathId(params.GetPathId());
+        const auto pathId = TPathId::FromProto(params.GetPathId());
         Y_ABORT_UNLESS(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();

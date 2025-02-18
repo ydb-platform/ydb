@@ -23,29 +23,6 @@ using namespace Aws::S3;
 using namespace Aws::S3::Model;
 using namespace Aws::Utils::Stream;
 
-namespace {
-
-static bool TryParseRange(const TString& str, std::pair<ui64, ui64>& range) {
-    TStringBuf buf(str);
-    if (!buf.SkipPrefix("bytes=")) {
-        return false;
-    }
-
-    ui64 start;
-    if (!TryFromString(buf.NextTok('-'), start)) {
-        return false;
-    }
-
-    ui64 end;
-    if (!TryFromString(buf, end)) {
-        return false;
-    }
-
-    range = std::make_pair(start, end);
-    return true;
-}
-}
-
 TEvListObjectsResponse::TResult TFakeExternalStorage::BuildListObjectsResult(const TEvListObjectsRequest::TRequest& request) const {
     auto& bucket = GetBucket(AwsToString(request.GetBucket()));
     auto& awsPrefix = request.GetPrefix();
@@ -84,7 +61,7 @@ void TFakeExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev, const TReplyAd
     auto awsRange = ev->Get()->GetRequest().GetRange();
     Y_ABORT_UNLESS(awsRange.size());
     const TString strRange(awsRange.data(), awsRange.size());
-    AFL_VERIFY(TryParseRange(strRange, range))("original", strRange);
+    AFL_VERIFY(TEvGetObjectResponse::TryParseRange(strRange, range))("original", strRange);
 
     if (!!object) {
         AFL_DEBUG(NKikimrServices::S3_WRAPPER)("method", "GetObject")("id", key)("range", strRange)("object_exists", true);

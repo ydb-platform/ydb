@@ -771,6 +771,8 @@ namespace NKikimr {
         // LWTrace doesn't support distributed shuttels yet
         mutable NLWTrace::TOrbit Orbit;
 
+        TDiskPart WrittenLocation;
+
         TEvVPutResult();
 
         TEvVPutResult(const NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, const TVDiskID &vdisk,
@@ -1109,7 +1111,7 @@ namespace NKikimr {
             ShowInternals = 2,
         };
 
-        using TForceBlockTabletData = TEvBlobStorage::TEvGet::TTabletData;
+        using TForceBlockTabletData = TEvBlobStorage::TEvGet::TForceBlockTabletData;
 
         struct TExtremeQuery : std::tuple<TLogoBlobID, ui32, ui32, const ui64*> {
             TExtremeQuery(const TLogoBlobID &logoBlobId, ui32 sh, ui32 sz, const ui64 *cookie = nullptr)
@@ -2996,14 +2998,35 @@ namespace NKikimr {
         }
     };
 
+    struct TNodeLayoutInfo : TThrRefBase {
+        // indexed by NodeId
+        TNodeLocation SelfLocation;
+        TVector<TNodeLocation> LocationPerOrderNumber;
+
+        TNodeLayoutInfo(const TNodeLocation& selfLocation, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+                THashMap<ui32, TNodeLocation>& map)
+            : SelfLocation(selfLocation)
+            , LocationPerOrderNumber(info->GetTotalVDisksNum())
+        {
+            for (ui32 i = 0; i < LocationPerOrderNumber.size(); ++i) {
+                LocationPerOrderNumber[i] = map[info->GetActorId(i).NodeId()];
+            }
+        }
+    };
+
+    using TNodeLayoutInfoPtr = TIntrusivePtr<TNodeLayoutInfo>;
+
     struct TEvBlobStorage::TEvConfigureProxy
         : public TEventLocal<TEvBlobStorage::TEvConfigureProxy, TEvBlobStorage::EvConfigureProxy>
     {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
+        TNodeLayoutInfoPtr NodeLayoutInfo;
         TIntrusivePtr<TStoragePoolCounters> StoragePoolCounters;
 
-        TEvConfigureProxy(TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = nullptr)
+        TEvConfigureProxy(TIntrusivePtr<TBlobStorageGroupInfo> info, TNodeLayoutInfoPtr nodeLayoutInfo,
+                TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = nullptr)
             : Info(std::move(info))
+            , NodeLayoutInfo(std::move(nodeLayoutInfo))
             , StoragePoolCounters(std::move(storagePoolCounters))
         {}
 

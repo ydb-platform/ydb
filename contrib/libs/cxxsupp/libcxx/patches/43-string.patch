@@ -1,5 +1,5 @@
 diff --git a/include/string b/include/string
-index fdffca5..cb7bac6 100644
+index a456f8c..804373b 100644
 --- a/include/string
 +++ b/include/string
 @@ -83,6 +83,7 @@ template <> struct char_traits<char32_t>;
@@ -10,7 +10,7 @@ index fdffca5..cb7bac6 100644
  public:
  // types:
      typedef traits traits_type;
-@@ -961,9 +962,10 @@ public:
+@@ -981,9 +982,10 @@ public:
      __init(__s, traits_type::length(__s));
    }
  
@@ -22,7 +22,7 @@ index fdffca5..cb7bac6 100644
  
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string(const _CharT* __s, size_type __n)
        : __r_(__default_init_tag(), __default_init_tag()) {
-@@ -971,6 +973,8 @@ public:
+@@ -991,6 +993,8 @@ public:
      __init(__s, __n);
    }
  
@@ -31,7 +31,7 @@ index fdffca5..cb7bac6 100644
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
    basic_string(const _CharT* __s, size_type __n, const _Allocator& __a)
        : __r_(__default_init_tag(), __a) {
-@@ -1135,7 +1139,7 @@ public:
+@@ -1155,7 +1159,7 @@ public:
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(const value_type* __s) {
      return assign(__s);
    }
@@ -39,8 +39,8 @@ index fdffca5..cb7bac6 100644
 +#if _LIBCPP_STD_VER >= 20
    basic_string& operator=(nullptr_t) = delete;
  #endif
-   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_STRING_INTERNAL_MEMORY_ACCESS basic_string& operator=(value_type __c);
-@@ -1192,6 +1196,10 @@ public:
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(value_type __c);
+@@ -1212,6 +1216,10 @@ public:
      return (__is_long() ? __get_long_cap() : static_cast<size_type>(__min_cap)) - 1;
    }
  
@@ -51,7 +51,7 @@ index fdffca5..cb7bac6 100644
    _LIBCPP_CONSTEXPR_SINCE_CXX20 void resize(size_type __n, value_type __c);
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 void resize(size_type __n) { resize(__n, value_type()); }
  
-@@ -1739,7 +1747,7 @@ public:
+@@ -1759,7 +1767,7 @@ public:
    }
  #endif
  

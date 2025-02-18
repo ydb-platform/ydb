@@ -83,8 +83,6 @@ BELONGS ya.make
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
         include/__cxxabi_config.h [3:4]
-        include/c++/v1/__cxxabi_config.h [3:4]
-        include/c++/v1/cxxabi.h [3:4]
         include/cxxabi.h [3:4]
         src/abort_message.cpp [3:4]
         src/abort_message.h [3:4]
@@ -105,7 +103,7 @@ BELONGS ya.make
         src/demangle/DemangleConfig.h [3:4]
         src/demangle/ItaniumDemangle.h [3:4]
         src/demangle/ItaniumNodes.def [3:4]
-        src/demangle/StringView.h [3:4]
+        src/demangle/StringViewExtras.h [3:4]
         src/demangle/Utility.h [3:4]
         src/fallback_malloc.cpp [3:4]
         src/fallback_malloc.h [3:4]
@@ -122,8 +120,6 @@ BELONGS ya.make
         Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
     Files with this license:
         include/__cxxabi_config.h [3:4]
-        include/c++/v1/__cxxabi_config.h [3:4]
-        include/c++/v1/cxxabi.h [3:4]
         include/cxxabi.h [3:4]
         src/abort_message.cpp [3:4]
         src/abort_message.h [3:4]
@@ -144,7 +140,7 @@ BELONGS ya.make
         src/demangle/DemangleConfig.h [3:4]
         src/demangle/ItaniumDemangle.h [3:4]
         src/demangle/ItaniumNodes.def [3:4]
-        src/demangle/StringView.h [3:4]
+        src/demangle/StringViewExtras.h [3:4]
         src/demangle/Utility.h [3:4]
         src/fallback_malloc.cpp [3:4]
         src/fallback_malloc.h [3:4]
@@ -201,8 +197,6 @@ BELONGS ya.make
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
         include/__cxxabi_config.h [5:5]
-        include/c++/v1/__cxxabi_config.h [5:5]
-        include/c++/v1/cxxabi.h [5:5]
         include/cxxabi.h [5:5]
         src/abort_message.cpp [5:5]
         src/abort_message.h [5:5]
@@ -223,7 +217,7 @@ BELONGS ya.make
         src/demangle/DemangleConfig.h [5:5]
         src/demangle/ItaniumDemangle.h [5:5]
         src/demangle/ItaniumNodes.def [5:5]
-        src/demangle/StringView.h [5:5]
+        src/demangle/StringViewExtras.h [5:5]
         src/demangle/Utility.h [5:5]
         src/fallback_malloc.cpp [5:5]
         src/fallback_malloc.h [5:5]
@@ -240,8 +234,6 @@ BELONGS ya.make
         Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
     Files with this license:
         include/__cxxabi_config.h [5:5]
-        include/c++/v1/__cxxabi_config.h [5:5]
-        include/c++/v1/cxxabi.h [5:5]
         include/cxxabi.h [5:5]
         src/abort_message.cpp [5:5]
         src/abort_message.h [5:5]
@@ -262,7 +254,7 @@ BELONGS ya.make
         src/demangle/DemangleConfig.h [5:5]
         src/demangle/ItaniumDemangle.h [5:5]
         src/demangle/ItaniumNodes.def [5:5]
-        src/demangle/StringView.h [5:5]
+        src/demangle/StringViewExtras.h [5:5]
         src/demangle/Utility.h [5:5]
         src/fallback_malloc.cpp [5:5]
         src/fallback_malloc.h [5:5]

@@ -75,7 +75,7 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
 }
 
 void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
-    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, nullptr));
+    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled));
     if (ev->Get()->Subscribe) {
         StorageConfigSubscribers.insert(ev->Sender);
     }
@@ -83,6 +83,8 @@ void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
 
 void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     ev->Get()->Config->Swap(&StorageConfig);
+    SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
+
     if (StorageConfig.HasBlobStorageConfig()) {
         if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
             const NKikimrBlobStorage::TNodeWardenServiceSet *proposed = nullptr;
@@ -98,15 +100,18 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             ApplyStorageConfig(bsConfig.GetServiceSet(), proposed);
         }
     }
+
     if (StorageConfig.HasStateStorageConfig() && StorageConfig.HasStateStorageBoardConfig() && StorageConfig.HasSchemeBoardConfig()) {
         ApplyStateStorageConfig(ev->Get()->ProposedConfig.get());
     } else {
         Y_ABORT_UNLESS(!StorageConfig.HasStateStorageConfig() && !StorageConfig.HasStateStorageBoardConfig() &&
             !StorageConfig.HasSchemeBoardConfig());
     }
+
     for (const TActorId& subscriber : StorageConfigSubscribers) {
-        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr));
+        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled));
     }
+
     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, 0, ev->Sender, SelfId(),
         nullptr, ev->Cookie));
 }
@@ -270,7 +275,7 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
     TActorId actorId = Register(CreateIncrHugeKeeper(settings), TMailboxType::HTSwap, AppData()->SystemPoolId);
 
     // bind it to service
-    TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(keeperId, actorId);
+    TActivationContext::ActorSystem()->RegisterLocalService(keeperId, actorId);
 
     // forward to just created service
     TActivationContext::Send(ev->Forward(keeperId));

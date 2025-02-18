@@ -75,7 +75,7 @@ public:
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
                 auto ev = MakeHolder<NReplication::TEvController::TEvAlterReplication>();
-                PathIdFromPathId(pathId, ev->Record.MutablePathId());
+                pathId.ToProto(ev->Record.MutablePathId());
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
@@ -314,7 +314,7 @@ public:
         const auto& op = Transaction.GetAlterReplication();
         const auto& name = op.GetName();
         const auto pathId = op.HasPathId()
-            ? PathIdFromPathId(op.GetPathId())
+            ? TPathId::FromProto(op.GetPathId())
             : InvalidPathId;
 
         LOG_N("TAlterReplication Propose"
@@ -368,7 +368,7 @@ public:
             return result;
         }
 
-        if (!op.HasConfig() && !op.HasState()) {
+        if (!op.HasConfig() && !op.HasState() && !op.HasTransferTransformLambda()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Empty alter");
             return result;
         }
@@ -430,6 +430,22 @@ public:
                     }
                 }
             }
+        }
+
+        if (op.HasTransferTransformLambda()) {
+            auto& oldConf = *(alterData->Description.MutableConfig());
+            if (!oldConf.HasTransferSpecific()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "Change TransformLambda allowed only for transfer");
+                return result;
+            }
+            auto& targets = *oldConf.MutableTransferSpecific()->MutableTargets();
+            if (targets.size() != 1) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "Only one transfer target allowed");
+                return result;
+            }
+            targets.begin()->SetTransformLambda(op.GetTransferTransformLambda());
         }
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));

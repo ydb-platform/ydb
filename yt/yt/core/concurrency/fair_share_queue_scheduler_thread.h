@@ -16,7 +16,8 @@ public:
         TFairShareInvokerQueuePtr queue,
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
         const TString& threadGroupName,
-        const TString& threadName);
+        const TString& threadName,
+        NThreading::TThreadOptions options = {});
 
 protected:
     const TFairShareInvokerQueuePtr Queue_;

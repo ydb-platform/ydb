@@ -117,7 +117,7 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, con
 
 } // namespace
 
-std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> MakeGetTaskUpdateQuery(
+std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>> MakeGetTaskUpdateQuery(
     const TTaskInternal& taskInternal,
     const std::shared_ptr<TResponseTasks>& responseTasks,
     const TInstant& nowTimestamp,
@@ -145,7 +145,7 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
         "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" ASSIGNED_UNTIL_COLUMN_NAME "` < $now;\n"
     );
 
-    auto prepareParams = [=, taskInternal=taskInternal, responseTasks=responseTasks, tenantInfo=tenantInfo](const TVector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [=, taskInternal=taskInternal, responseTasks=responseTasks, tenantInfo=tenantInfo](const std::vector<TResultSet>& resultSets) mutable {
         auto& task = taskInternal.Task;
         const auto shouldAbortTask = taskInternal.ShouldAbortTask;
         constexpr size_t expectedResultSetsSize = 2;
@@ -157,7 +157,7 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
         {
             TResultSetParser parser(resultSets[0]);
             while (parser.TryNextRow()) {
-                task.Generation = parser.ColumnParser(GENERATION_COLUMN_NAME).GetOptionalUint64().GetOrElse(0) + 1;
+                task.Generation = parser.ColumnParser(GENERATION_COLUMN_NAME).GetOptionalUint64().value_or(0) + 1;
 
                 if (!task.Query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
                     commonCounters->ParseProtobufError->Inc();
@@ -298,7 +298,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                              actorSystem=NActors::TActivationContext::ActorSystem(),
                              responseTasks=responseTasks,
                              tenantInfo=ev->Get()->TenantInfo
-                        ](const TVector<TResultSet>& resultSets) mutable {
+                        ](const std::vector<TResultSet>& resultSets) mutable {
         TVector<TTaskInternal> tasks;
         TVector<TPickTaskParams> pickTaskParams;
         const auto now = TInstant::Now();
@@ -321,13 +321,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             auto previousOwner = *parser.ColumnParser(OWNER_COLUMN_NAME).GetOptionalString();
 
             taskInternal.RetryLimiter.Assign(
-                parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().GetOrElse(0),
-                parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero()),
-                parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().GetOrElse(0.0)
+                parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().value_or(0),
+                parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Zero()),
+                parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().value_or(0.0)
             );
-            auto lastSeenAt = parser.ColumnParser(LAST_SEEN_AT_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero());
+            auto lastSeenAt = parser.ColumnParser(LAST_SEEN_AT_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Zero());
 
-            if (previousOwner) { // task lease timeout case only, other cases are updated at ping time
+            if (!previousOwner.empty()) { // task lease timeout case only, other cases are updated at ping time
                 CPS_LOG_AS_T(*actorSystem, "Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryLimiter.RetryCounterUpdatedAt
                     << " LastSeenAt: " << lastSeenAt);
                 taskInternal.ShouldAbortTask = !taskInternal.RetryLimiter.UpdateOnRetry(lastSeenAt, Config->TaskLeaseRetryPolicy, now);
@@ -393,7 +393,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                     debugInfo->insert(debugInfo->end(), info->begin(), info->end());
                 }
             }
-            NYql::TIssues issues;
+            NYdb::NIssue::TIssues issues;
             auto status = MakeFuture(TStatus{EStatus::SUCCESS, std::move(issues)});
             try {
                 future.GetValue();

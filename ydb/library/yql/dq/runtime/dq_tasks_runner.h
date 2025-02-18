@@ -20,6 +20,8 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_watermark.h>
 
+#include <yql/essentials/public/udf/udf_value_builder.h>
+
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
 #include <util/generic/size_literals.h>
@@ -31,6 +33,8 @@ namespace NActors {
 
 namespace NYql::NDq {
 
+// TBD: Add Running status and return PendingInput iff no data was consumed from inputs
+//      CA and KQP relies on PendingInput and require careful modifications
 enum class ERunStatus : ui32 {
     Finished,
     PendingInput,
@@ -45,10 +49,12 @@ struct TMkqlStat {
 struct TTaskRunnerStatsBase {
     // basic stats
     TDuration BuildCpuTime;
-    TInstant FinishTs;
+    TInstant CreateTs;
     TInstant StartTs;
+    TInstant FinishTs;
 
     TDuration ComputeCpuTime;
+    TDuration WaitStartTime;
     TDuration WaitInputTime;
     TDuration WaitOutputTime;
 
@@ -92,11 +98,12 @@ public:
     }
 
     TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats, THashMap<ui32, const IDqAsyncOutputBuffer*>&& sinks,
-        THashMap<ui32, const IDqAsyncInputBuffer*>&& inputTransforms)
+        THashMap<ui32, const IDqAsyncInputBuffer*>&& inputTransforms, ui64 actorElapsedTicks)
         : StatsPtr(stats)
         , IsDefined(true)
         , Sinks(std::move(sinks))
-        , InputTransforms(std::move(inputTransforms)) {
+        , InputTransforms(std::move(inputTransforms))
+        , ActorElapsedTicks(actorElapsedTicks) {
     }
 
     const TTaskRunnerStatsBase* Get() {
@@ -118,11 +125,16 @@ public:
         return InputTransforms.at(inputTransformId);
     }
 
+    ui64 GetActorElapsedTicks() {
+        return ActorElapsedTicks;
+    }
+
 private:
     const TDqTaskRunnerStats* StatsPtr;
     bool IsDefined;
     THashMap<ui32, const IDqAsyncOutputBuffer*> Sinks;
     THashMap<ui32, const IDqAsyncInputBuffer*> InputTransforms;
+    ui64 ActorElapsedTicks = 0;
 };
 
 struct TDqTaskRunnerContext {
@@ -145,7 +157,7 @@ public:
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        TVector<IDqOutput::TPtr>&& outputs) const = 0;
+        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const = 0;
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
@@ -162,7 +174,7 @@ public:
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        TVector<IDqOutput::TPtr>&& outputs) const override;
+        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const override;
 };
 
 class TDqTaskRunnerExecutionContextDefault : public TDqTaskRunnerExecutionContextBase {
@@ -210,7 +222,11 @@ struct TDqTaskRunnerMemoryLimits {
 };
 
 NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
-    TVector<IDqInputChannel::TPtr>&& channels, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
+    TVector<IDqInputChannel::TPtr>&& channels, const NKikimr::NMiniKQL::THolderFactory& holderFactory, NUdf::IPgBuilder* pgBuilder);
+
+IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    TVector<IDqOutput::TPtr>&& channels, NUdf::IPgBuilder* pgBuilder, TMaybe<ui8> minFillPercentage = {});
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
@@ -307,7 +323,7 @@ public:
     }
 
     bool EnableMetering() const {
-        return Task_->GetEnableMetering();
+        return !Task_->GetDisableMetering();
     }
 
     ui64 GetStageId() const {

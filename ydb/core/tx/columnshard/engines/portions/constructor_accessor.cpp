@@ -14,10 +14,12 @@ void TPortionAccessorConstructor::ChunksValidation() const {
     } else {
         std::set<ui32> blobIdxs;
         for (auto&& i : Records) {
+            TBlobRange::Validate(PortionInfo.MetaConstructor.BlobIds, i.GetBlobRange()).Validate();
             blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
         }
         for (auto&& i : Indexes) {
             if (i.HasBlobRange()) {
+                TBlobRange::Validate(PortionInfo.MetaConstructor.BlobIds, i.GetBlobRangeVerified()).Validate();
                 blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
             }
         }
@@ -119,7 +121,7 @@ void TPortionAccessorConstructor::LoadRecord(TColumnChunkLoadContextV1&& loadCon
 
 void TPortionAccessorConstructor::LoadIndex(TIndexChunkLoadContext&& loadContext) {
     if (loadContext.GetBlobRange()) {
-        const TBlobRangeLink16::TLinkId linkBlobId = RegisterBlobId(loadContext.GetBlobRange()->GetBlobId());
+        const TBlobRangeLink16::TLinkId linkBlobId = PortionInfo.GetMeta().GetBlobIdxVerified(loadContext.GetBlobRange()->GetBlobId());
         AddIndex(loadContext.BuildIndexChunk(linkBlobId));
     } else {
         AddIndex(loadContext.BuildIndexChunk());
@@ -154,7 +156,7 @@ TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(
         };
         bool needSort = false;
         for (auto&& i : indexes) {
-            auto chunk = i.BuildIndexChunk();
+            auto chunk = i.BuildIndexChunk(*portion);
             if (indexChunks.size() && !pred(indexChunks.back(), chunk)) {
                 needSort = true;
             }

@@ -25,7 +25,7 @@ IF (OS_LINUX)
 
         PEERDIR(
             library/python/type_info
-            yql/essentials/minikql/computation/llvm14
+            yql/essentials/minikql/computation/llvm16
             yql/essentials/public/udf/service/exception_policy
             yql/essentials/sql/pg_dummy
         )

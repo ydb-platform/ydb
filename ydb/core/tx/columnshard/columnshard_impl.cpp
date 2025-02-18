@@ -42,6 +42,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
+#include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/events.h>
@@ -77,13 +78,15 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TabletCountersHolder(new TProtobufTabletCounters<ESimpleCounters_descriptor, ECumulativeCounters_descriptor,
           EPercentileCounters_descriptor, ETxTypes_descriptor>())
     , Counters(*TabletCountersHolder)
+    , WriteTasksQueue(std::make_unique<TWriteTasksQueue>(this))
     , ProgressTxController(std::make_unique<TTxController>(*this))
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
     , DataLocksManager(std::make_shared<NOlap::NDataLocks::TManager>())
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , TablesManager(StoragesManager, std::make_shared<NOlap::NDataAccessorControl::TLocalManager>(nullptr), info->TabletID)
+    , TablesManager(StoragesManager, std::make_shared<NOlap::NDataAccessorControl::TLocalManager>(nullptr),
+          std::make_shared<NOlap::TSchemaObjectsCache>(), Counters.GetPortionIndexCounters(), info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
@@ -93,6 +96,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
     , SysLocks(this) {
+    AFL_VERIFY(TabletActivityImpl->Inc() == 1);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -405,7 +409,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     }
 
     {
-        THashSet<TString> usedTiers;
+        THashSet<NTiers::TExternalStorageId> usedTiers;
         TTableInfo table(pathId);
         if (tableProto.HasTtlSettings()) {
             const auto& ttlSettings = tableProto.GetTtlSettings();
@@ -451,16 +455,16 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
         schema = alterProto.GetSchema();
     }
 
-    THashSet<TString> usedTiers;
     if (alterProto.HasTtlSettings()) {
         const auto& ttlSettings = alterProto.GetTtlSettings();
         *tableVerProto.MutableTtlSettings() = ttlSettings;
 
+        THashSet<NTiers::TExternalStorageId> usedTiers;
         if (ttlSettings.HasEnabled()) {
             usedTiers = NOlap::TTiering::GetUsedTiers(ttlSettings.GetEnabled());
         }
+        ActivateTiering(pathId, usedTiers);
     }
-    ActivateTiering(pathId, usedTiers);
 
     tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
     TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db);
@@ -618,6 +622,9 @@ public:
 class TDataAccessorsSubscriberBase: public NOlap::IDataAccessorRequestsSubscriber {
 private:
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
 
     virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override final {
         AFL_VERIFY(ResourcesGuard);
@@ -891,6 +898,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     }
 
     auto compaction = dynamic_pointer_cast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>(indexChanges);
+    compaction->SetActivityFlag(GetTabletActivity());
     compaction->SetQueueGuard(guard);
     compaction->Start(*this);
 
@@ -1047,8 +1055,10 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
 
-    auto changes =
-        TablesManager.MutablePrimaryIndex().StartCleanupPortions(GetMinReadSnapshot(), TablesManager.GetPathsToDrop(), DataLocksManager);
+    const NOlap::TSnapshot minReadSnapshot = GetMinReadSnapshot();
+    THashSet<ui64> pathsToDrop = TablesManager.GetPathsToDrop(minReadSnapshot);
+
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(minReadSnapshot, pathsToDrop, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -1073,7 +1083,7 @@ void TColumnShard::SetupCleanupTables() {
     }
 
     THashSet<ui64> pathIdsEmptyInInsertTable;
-    for (auto&& i : TablesManager.GetPathsToDrop()) {
+    for (auto&& i : TablesManager.GetPathsToDrop(GetMinReadSnapshot())) {
         if (InsertTable->HasPathIdData(i)) {
             continue;
         }
@@ -1142,11 +1152,13 @@ void TColumnShard::SetupCleanupInsertTable() {
 }
 
 void TColumnShard::Die(const TActorContext& ctx) {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "tablet_die");
+    AFL_VERIFY(TabletActivityImpl->Dec() == 0);
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
-    return IActor::Die(ctx);
+    IActor::Die(ctx);
 }
 
 void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&) {
@@ -1421,13 +1433,13 @@ private:
 
 public:
     TTxAskPortionChunks(TColumnShard* self, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& fetchCallback,
-        THashMap<ui64, NOlap::TPortionInfo::TConstPtr>&& portions, const TString& consumer)
+        std::vector<NOlap::TPortionInfo::TConstPtr>&& portions, const TString& consumer)
         : TBase(self)
         , FetchCallback(fetchCallback)
         , Consumer(consumer)
     {
         for (auto&& i : portions) {
-            PortionsByPath[i.second->GetPathId()].emplace_back(i.second);
+            PortionsByPath[i->GetPathId()].emplace_back(i);
         }
     }
 
@@ -1581,14 +1593,9 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
     Execute(new TTxRemoveSharedBlobs(this, blobs, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), ev->Get()->Record.GetStorageId()), ctx);
 }
 
-void TColumnShard::ActivateTiering(const ui64 pathId, const THashSet<TString>& usedTiers) {
+void TColumnShard::ActivateTiering(const ui64 pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers) {
     AFL_VERIFY(Tiers);
-    if (!usedTiers.empty()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "activate_tiering")("path_id", pathId)("tiers", JoinStrings(usedTiers.begin(), usedTiers.end(), ","));
-        Tiers->EnablePathId(pathId, usedTiers);
-    } else {
-        Tiers->DisablePathId(pathId);
-    }
+    Tiers->ActivateTiers(usedTiers);
     OnTieringModified(pathId);
 }
 

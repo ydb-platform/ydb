@@ -5,6 +5,8 @@
 #include "compile_mkql.h"
 
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -104,7 +106,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     } else {
         ExprRoot_ = Compile(options.Query, options.TranslationMode_,
             options.ModuleResolver, options.SyntaxVersion_, options.Modules,
-            options.InputSpec, options.OutputSpec, processorMode);
+            options.InputSpec, options.OutputSpec, options.UseAntlr4, processorMode);
 
         RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
 
@@ -135,6 +137,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     const THashMap<TString, TString>& modules,
     const TInputSpecBase& inputSpec,
     const TOutputSpecBase& outputSpec,
+    bool useAntlr4,
     EProcessorMode processorMode
 ) {
     if (mode == ETranslationMode::PG && processorMode != EProcessorMode::PullList) {
@@ -178,6 +181,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
+        settings.EmitReadsForExists = true;
+        settings.Antlr4Parser = useAntlr4;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
         settings.DefaultCluster = PurecalcDefaultCluster;
         settings.ClusterMapping[settings.DefaultCluster] = PurecalcDefaultService;
@@ -203,7 +208,13 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             }
         }
 
-        astRes = SqlToYql(TString(query), settings);
+        NSQLTranslation::TTranslators translators(
+            nullptr,
+            NSQLTranslationV1::MakeTranslator(),
+            NSQLTranslationPG::MakeTranslator()
+        );
+
+        astRes = SqlToYql(translators, TString(query), settings);
     } else {
         astRes = ParseAst(TString(query));
     }

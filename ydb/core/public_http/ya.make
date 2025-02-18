@@ -24,8 +24,7 @@ PEERDIR(
     ydb/core/public_http/protos
     ydb/core/viewer/json
     yql/essentials/public/issue
-    ydb/public/sdk/cpp/client/ydb_types
-
+    ydb/public/sdk/cpp/src/client/types
 )
 
 RESOURCE(

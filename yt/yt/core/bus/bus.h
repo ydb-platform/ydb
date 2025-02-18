@@ -126,7 +126,7 @@ struct IBus
     /*!
      *  Does not block -- termination typically happens in background.
      *  It is safe to call this method multiple times.
-     *  On terminated the instance is no longer usable.
+     *  After termination the instance is no longer usable.
 
      *  \note Thread affinity: any.
      */

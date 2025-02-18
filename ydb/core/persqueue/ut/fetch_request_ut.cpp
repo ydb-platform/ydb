@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/fetch_request_actor.h>
 #include <ydb/core/tx/scheme_board/cache.h>
@@ -119,8 +119,8 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
 
         auto edgeId = runtime.AllocateEdgeActor();
         TPartitionFetchRequest p1{"Root/PQ/rt3.dc1--topic1", 1, 1, 10000};
-        NACLib::TUserToken goodToken("user1@staff", {});
-        NACLib::TUserToken badToken("bad-user@staff", {});
+        auto goodToken = MakeIntrusiveConst<NACLib::TUserToken>("user1@staff", TVector<TString>{});
+        auto badToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
         TFetchRequestSettings settings{{}, {p1}, 10000, 10000, {}, goodToken};
         auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
         runtime.EnableScheduleForActor(fetchId);

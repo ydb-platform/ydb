@@ -346,6 +346,9 @@ namespace TEvDataShard {
         EvInMemoryStateRequest,
         EvInMemoryStateResponse,
 
+        EvForceDataCleanup,
+        EvForceDataCleanupResult,
+
         EvEnd
     };
 
@@ -1558,6 +1561,26 @@ namespace TEvDataShard {
             Record.SetTabletId(tabletId);
             Record.MutablePathId()->SetOwnerId(ownerId);
             Record.MutablePathId()->SetLocalId(localId);
+            Record.SetStatus(status);
+        }
+    };
+
+    struct TEvForceDataCleanup : TEventPB<TEvForceDataCleanup, NKikimrTxDataShard::TEvForceDataCleanup,
+                                          TEvDataShard::EvForceDataCleanup> {
+        TEvForceDataCleanup() = default;
+
+        TEvForceDataCleanup(ui64 dataCleanupGeneration) {
+            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+        }
+    };
+
+    struct TEvForceDataCleanupResult : TEventPB<TEvForceDataCleanupResult, NKikimrTxDataShard::TEvForceDataCleanupResult,
+                                                TEvDataShard::EvForceDataCleanupResult> {
+        TEvForceDataCleanupResult() = default;
+
+        TEvForceDataCleanupResult(ui64 dataCleanupGeneration, ui64 tabletId, NKikimrTxDataShard::TEvForceDataCleanupResult::EStatus status) {
+            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+            Record.SetTabletId(tabletId);
             Record.SetStatus(status);
         }
     };

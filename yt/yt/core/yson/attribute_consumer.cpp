@@ -3,6 +3,8 @@
 
 namespace NYT::NYson {
 
+using namespace NYTree;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TAttributeFragmentConsumer::TAttributeFragmentConsumer(IAsyncYsonConsumer* underlyingConsumer)
@@ -121,7 +123,7 @@ void TAttributeFragmentConsumer::Finish()
 
 TAttributeValueConsumer::TAttributeValueConsumer(
     IAsyncYsonConsumer* underlyingConsumer,
-    TString key)
+    IAttributeDictionary::TKey key)
     : UnderlyingConsumer_(underlyingConsumer)
     , Key_(std::move(key))
 { }

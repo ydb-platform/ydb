@@ -61,7 +61,7 @@ public:
 
         NKikimrTxDataShard::TFlatSchemeTransaction txTemplate;
         auto initiate = txTemplate.MutableInitiateBuildIndex();
-        PathIdFromPathId(pathId, initiate->MutablePathId());
+        pathId.ToProto(initiate->MutablePathId());
         initiate->SetSnapshotName("Snapshot0");
         initiate->SetTableSchemaVersion(tableInfo->AlterVersion + 1);
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yt/yt/core/misc/configurable_singleton_decl.h>
+
 #include <yt/yt/core/logging/log.h>
 
 namespace NYT::NRpc::NGrpc {
@@ -43,6 +45,8 @@ extern const char* const ResponseCodecKey;
 const THashSet<TStringBuf>& GetNativeMetadataKeys();
 
 constexpr int GenericErrorStatusCode = 100;
+
+YT_DECLARE_CONFIGURABLE_SINGLETON(TDispatcherConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

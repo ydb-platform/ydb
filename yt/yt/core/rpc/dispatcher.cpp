@@ -161,7 +161,6 @@ void TDispatcher::SetServiceDiscovery(IServiceDiscoveryPtr serviceDiscovery)
     Impl_->SetServiceDiscovery(std::move(serviceDiscovery));
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpc

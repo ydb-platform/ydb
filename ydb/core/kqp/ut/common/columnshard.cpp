@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/testlib/cs_helper.h>
+#include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 
 extern "C" {
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
@@ -26,6 +27,8 @@ namespace NKqp {
         TableClient =
             std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")));
         Session = std::make_unique<NYdb::NTable::TSession>(TableClient->CreateSession().GetValueSync().GetSession());
+
+        NOlap::TSchemaCachesManager::DropCaches();
     }
 
     NKikimr::NKqp::TKikimrRunner& TTestHelper::GetKikimr() {
@@ -52,7 +55,7 @@ namespace NKqp {
             UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);
             CREATE EXTERNAL DATA SOURCE `)" + tierName + R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
-                LOCATION="http://fake.fake/fake",
+                LOCATION="http://fake.fake/olap-)" + tierName + R"(",
                 AUTH_METHOD="AWS",
                 AWS_ACCESS_KEY_ID_SECRET_NAME="accessKey",
                 AWS_SECRET_ACCESS_KEY_SECRET_NAME="secretKey",
@@ -154,7 +157,9 @@ namespace NKqp {
 
     TString TTestHelper::TCompression::BuildQuery() const {
         TStringBuilder str;
-        str << "COMPRESSION=\"" << NArrow::CompressionToString(CompressionType) << "\"";
+        if (CompressionType.has_value()) {
+            str << "COMPRESSION=\"" << NArrow::CompressionToString(CompressionType.value()) << "\"";
+        }
         if (CompressionLevel.has_value()) {
             str << ", COMPRESSION_LEVEL=" << CompressionLevel.value();
         }
@@ -167,9 +172,16 @@ namespace NKqp {
                                             << "` and in right value `" << rhs.GetSerializerClassName() << "`";
             return false;
         }
-        if (CompressionType != rhs.GetCompressionType()) {
-            errorMessage = TStringBuilder() << "different compression type: in left value `" << NArrow::CompressionToString(CompressionType)
-                                            << "` and in right value `" << NArrow::CompressionToString(rhs.GetCompressionType()) << "`";
+        if (CompressionType.has_value() && rhs.HasCompressionType() && CompressionType.value() != rhs.GetCompressionTypeUnsafe()) {
+            errorMessage = TStringBuilder() << "different compression type: in left value `"
+                                            << NArrow::CompressionToString(CompressionType.value()) << "` and in right value `"
+                                            << NArrow::CompressionToString(rhs.GetCompressionTypeUnsafe()) << "`";
+            return false;
+        } else if (CompressionType.has_value() && !rhs.HasCompressionType()) {
+            errorMessage = TStringBuilder() << "compression type is set in left value, but not set in right value";
+            return false;
+        } else if (!CompressionType.has_value() && rhs.HasCompressionType()) {
+            errorMessage = TStringBuilder() << "compression type is not set in left value, but set in right value";
             return false;
         }
         if (CompressionLevel.has_value() && rhs.GetCompressionLevel().has_value() &&
@@ -193,12 +205,15 @@ namespace NKqp {
     }
 
     bool TTestHelper::TColumnFamily::DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& family) {
-        if (!family.HasId() || !family.HasName() || !family.HasColumnCodec()) {
+        if (!family.HasId() || !family.HasName()) {
             return false;
         }
         Id = family.GetId();
         FamilyName = family.GetName();
-        Compression = TTestHelper::TCompression().SetCompressionType(family.GetColumnCodec());
+        Compression = TTestHelper::TCompression();
+        if (family.HasColumnCodec()) {
+            Compression.SetCompressionType(family.GetColumnCodec());
+        }
         if (family.HasColumnCodecLevel()) {
             Compression.SetCompressionLevel(family.GetColumnCodecLevel());
         }
@@ -290,9 +305,11 @@ namespace NKqp {
     TString TTestHelper::TColumnTableBase::BuildAlterCompressionQuery(const TString& columnName, const TCompression& compression) const {
         auto str = TStringBuilder() << "ALTER OBJECT `" << Name << "` (TYPE " << GetObjectType() << ") SET";
         str << " (ACTION=ALTER_COLUMN, NAME=" << columnName << ", `SERIALIZER.CLASS_NAME`=`" << compression.GetSerializerClassName() << "`,";
-        auto codec = NArrow::CompressionFromProto(compression.GetCompressionType());
-        Y_VERIFY(codec.has_value());
-        str << " `COMPRESSION.TYPE`=`" << NArrow::CompressionToString(codec.value()) << "`";
+        if (compression.HasCompressionType()) {
+            auto codec = NArrow::CompressionFromProto(compression.GetCompressionTypeUnsafe());
+            Y_VERIFY(codec.has_value());
+            str << " `COMPRESSION.TYPE`=`" << NArrow::CompressionToString(codec.value()) << "`";
+        }
         if (compression.GetCompressionLevel().has_value()) {
             str << "`COMPRESSION.LEVEL`=" << compression.GetCompressionLevel().value();
         }

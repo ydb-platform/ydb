@@ -308,6 +308,15 @@ public:
             }
 
             Self->ReadPDisk(it->first, *pdisk, Response.get(), entityStatus);
+
+            const TPDiskId pdiskId(it->first);
+            if (auto& shred = Self->ShredState; shred.ShouldShred(pdiskId, *pdisk)) {
+                const auto& generation = shred.GetCurrentGeneration();
+                Y_ABORT_UNLESS(generation);
+                auto *m = Response->Record.MutableShredRequest();
+                m->SetShredGeneration(*generation);
+                m->AddPDiskIds(pdiskId.PDiskId);
+            }
         }
 
         Response->Record.SetInstanceId(Self->InstanceId);
@@ -324,6 +333,47 @@ public:
             Self->GroupToNode.emplace(TGroupId::FromValue(groupId), nodeId);
         }
 
+        for (const auto& status : record.GetShredStatus()) {
+            const TPDiskId pdiskId(nodeId, status.GetPDiskId());
+
+            switch (status.GetShredStateCase()) {
+                case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::kShredGenerationFinished:
+                    Self->ShredState.OnRegisterNode(pdiskId, status.GetShredGenerationFinished(), false, txc);
+                    break;
+
+                case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::kShredAborted:
+                case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::SHREDSTATE_NOT_SET:
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN08, "shred aborted due to error", (PDiskId, pdiskId),
+                        (ErrorReason, status.GetShredAborted()));
+                    Self->ShredState.OnRegisterNode(pdiskId, std::nullopt, false, txc);
+                    break;
+
+                case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::kShredInProgress:
+                    Self->ShredState.OnRegisterNode(pdiskId, std::nullopt, true, txc);
+                    break;
+            }
+        }
+
+        // Check config version
+        if (Self->YamlConfig && !Self->StorageYamlConfig) {
+            const auto& configVersion = GetVersion(*Self->YamlConfig);
+            const auto& nodeId = record.GetNodeID();
+            if (record.GetConfigVersion() != configVersion) {
+                if (record.GetConfigVersion() > configVersion) {
+                    STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN09, "Version on node greater than BSC", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
+                }
+                STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN10, "Send update config", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
+                auto *yamlConfig = Response->Record.MutableYamlConfig();
+                yamlConfig->SetYAML(CompressSingleConfig(*Self->YamlConfig));
+                yamlConfig->SetConfigVersion(record.GetConfigVersion());
+            }
+            else if (record.GetConfigHash() != GetSingleConfigHash(*Self->YamlConfig)) {
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN11, "Config hash on node mismatch", (NodeId, nodeId));
+            }
+        } else {
+            // TODO(mregrock): Implement for double config mode
+        } 
+
         return true;
     }
 
@@ -332,6 +382,7 @@ public:
             Self->SendInReply(*Request, std::move(Response));
             Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
         }
+        Self->ShredState.OnNodeReportTxComplete();
     }
 };
 
@@ -421,6 +472,8 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
     pDisk->SetEntityStatus(entityStatus);
     if (pdisk.Mood == TPDiskMood::ReadOnly) {
         pDisk->SetReadOnly(true);
+    } else if (pdisk.Mood == TPDiskMood::Stop) {
+        pDisk->SetStop(true);
     }
 }
 
@@ -515,6 +568,8 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
     }
 
     node.LastConnectTimestamp = TInstant::Now();
+
+    ShredState.OnWardenConnected(nodeId);
 }
 
 void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serverId) {
@@ -608,3 +663,4 @@ void TBlobStorageController::SendInReply(const IEventHandle& query, std::unique_
 }
 
 } // NKikimr::NBsController
+

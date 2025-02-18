@@ -50,7 +50,7 @@ public:
 
         if (IsOptional) {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
-            BranchInst::Create(done, good, IsEmpty(var, block), block);
+            BranchInst::Create(done, good, IsEmpty(var, block, context), block);
             result->addIncoming(zero, block);
 
             block = good;

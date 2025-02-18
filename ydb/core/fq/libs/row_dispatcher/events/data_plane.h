@@ -3,13 +3,15 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/core/fq/libs/events/event_subspace.h>
-
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/purecalc/common/fwd.h>
+
+#include <util/generic/set.h>
+#include <util/generic/map.h>
 
 namespace NFq {
 
@@ -47,10 +49,12 @@ struct TEvRowDispatcher {
         EvCoordinatorResult,
         EvSessionStatistic,
         EvHeartbeat,
+        EvNoSession,
         EvGetInternalStateRequest,
         EvGetInternalStateResponse,
         EvPurecalcCompileRequest,
         EvPurecalcCompileResponse,
+        EvPurecalcCompileAbort,
         EvEnd,
     };
 
@@ -73,7 +77,7 @@ struct TEvRowDispatcher {
             const std::vector<ui64>& partitionIds) {
             *Record.MutableSource() = sourceParams;
             for (const auto& id : partitionIds) {
-                Record.AddPartitionId(id);
+                Record.AddPartitionIds(id);
             }
         }
     };
@@ -83,22 +87,28 @@ struct TEvRowDispatcher {
         TEvCoordinatorResult() = default;
     };
 
+// Session events (with seqNo checks)
+
     struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
         NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {
             
         TEvStartSession() = default;
         TEvStartSession(
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
-            ui64 partitionId,
+            const std::set<ui32>& partitionIds,
             const TString token,
-            TMaybe<ui64> readOffset,
+            const std::map<ui32, ui64>& readOffsets,
             ui64 startingMessageTimestampMs,
             const TString& queryId) {
             *Record.MutableSource() = sourceParams;
-            Record.SetPartitionId(partitionId);
+            for (auto partitionId : partitionIds) {
+                Record.AddPartitionIds(partitionId);
+            }
             Record.SetToken(token);
-            if (readOffset) {
-                Record.SetOffset(*readOffset);
+            for (const auto& [partitionId, offset] : readOffsets) {
+                auto* partitionOffset = Record.AddOffsets();
+                partitionOffset->SetPartitionId(partitionId);
+                partitionOffset->SetOffset(offset);
             }
             Record.SetStartingMessageTimestampMs(startingMessageTimestampMs);
             Record.SetQueryId(queryId);
@@ -139,7 +149,6 @@ struct TEvRowDispatcher {
     struct TEvStatistics : public NActors::TEventPB<TEvStatistics,
         NFq::NRowDispatcherProto::TEvStatistics, EEv::EvStatistics> {
         TEvStatistics() = default;
-        NActors::TActorId ReadActorId;
     };
 
     struct TEvSessionError : public NActors::TEventPB<TEvSessionError,
@@ -154,11 +163,15 @@ struct TEvRowDispatcher {
         TTopicSessionStatistic Stat;
     };
 
+    // two purposes: confirm seqNo and check the availability of the recipient actor (wait TEvUndelivered)
     struct TEvHeartbeat : public NActors::TEventPB<TEvHeartbeat, NFq::NRowDispatcherProto::TEvHeartbeat, EEv::EvHeartbeat> {
         TEvHeartbeat() = default;
-        TEvHeartbeat(ui32 partitionId) {
-            Record.SetPartitionId(partitionId);
-        }
+    };
+
+// Network events (without seqNo checks)
+
+    struct TEvNoSession : public NActors::TEventPB<TEvNoSession, NFq::NRowDispatcherProto::TEvNoSession, EEv::EvNoSession> {
+        TEvNoSession() = default;
     };
 
     struct TEvGetInternalStateRequest : public NActors::TEventPB<TEvGetInternalStateRequest,
@@ -197,6 +210,8 @@ struct TEvRowDispatcher {
         NYql::NDqProto::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
     };
+
+    struct TEvPurecalcCompileAbort : public NActors::TEventLocal<TEvPurecalcCompileAbort, EEv::EvPurecalcCompileAbort> {};
 };
 
 } // namespace NFq

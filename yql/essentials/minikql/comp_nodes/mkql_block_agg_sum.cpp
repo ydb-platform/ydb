@@ -45,7 +45,7 @@ public:
     using TStateType = TSumState<IsNullable, TSum>;
 
     TSumColumnBuilder(ui64 size, TType* dataType, TComputationContext& ctx)
-        : Builder_(TTypeInfoHelper(), dataType, ctx.ArrowMemoryPool, size)
+        : Builder_(dataType, TTypeInfoHelper(), ctx.ArrowMemoryPool, size)
         , Ctx_(ctx)
     {
     }

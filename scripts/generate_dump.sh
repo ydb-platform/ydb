@@ -24,7 +24,7 @@ cat <<'EOF'>$UNIX_TEMPLATE
   "params": {
     "c_compiler": "$$($platform)/bin/clang",
     "cxx_compiler": "$$($platform)/bin/clang++",
-    "gcc_version": "14.0",
+    "version": "14.0",
     "llvm-symbolizer": "$$($platform)/bin/llvm-symbolizer",
     "match_root": "$platform",
     "objcopy": "$$($platform)/bin/llvm-objcopy",

@@ -65,6 +65,12 @@ namespace NTabletFlatExecutor {
     XX(DB_FLAT_INDEX_BYTES, "DbFlatIndexBytes") \
     XX(DB_B_TREE_INDEX_BYTES, "DbBTreeIndexBytes") \
     XX(CACHE_TOTAL_USED, "CacheTotalUsed") \
+    XX(DB_OPEN_TX_COUNT, "DbOpenTxCount") \
+    XX(DB_TXS_WITH_DATA_COUNT, "DbTxsWithDataCount") \
+    XX(DB_COMMITTED_TX_COUNT, "DbCommittedTxCount") \
+    XX(DB_REMOVED_TX_COUNT, "DbRemovedTxCount") \
+    XX(DB_REMOVED_COMMITTED_TXS, "DbRemovedCommittedTxs") \
+    XX(TABLET_LAST_START_TIME_US, "LastStartTimeUs") \
 
 // don't change order!
 #define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \
@@ -135,7 +141,7 @@ namespace NTabletFlatExecutor {
     XX(TX_PERCENTILE_TABLET_BYTES_READ, "HIST(TabletBytesRead)") \
     XX(TX_PERCENTILE_CONSUMED_CPU, "HIST(ConsumedCPU)") \
     XX(TX_PERCENTILE_FOLLOWERSYNC_LATENCY, "FollowerSyncLatency") \
-    XX(TX_PERCENTILE_COMMIT_REDO_BYTES, "TxCommitRedoBytes")
+    XX(TX_PERCENTILE_COMMIT_REDO_BYTES, "TxCommitRedoBytes") \
 
 class TExecutorCounters : public TTabletCountersBase {
 public:

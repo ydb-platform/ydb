@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>

@@ -1,7 +1,7 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/experimental/ydb_logstore.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -51,6 +51,12 @@ TVector<TString> TestSchemaKey() {
     return {"timestamp", "resource_type", "resource_id", "uid"};
 }
 
+NKikimrConfig::TAppConfig GetAppConfig() {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableFeatureFlags()->SetEnableColumnStore(true);
+    return appConfig;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(YdbLogStore) {
@@ -69,8 +75,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     void CreateDropStore(EPrimitiveType pkField) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -96,7 +101,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
             const auto& schema = descr.GetSchemaPresets().begin()->second;
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
-            UNIT_ASSERT(schema.GetColumns()[0].ToString().StartsWith("{ name: \"timestamp\", type:"));
+            UNIT_ASSERT(schema.GetColumns()[0].ToString().starts_with("{ name: \"timestamp\", type:"));
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8 }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),
@@ -128,8 +133,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     Y_UNIT_TEST(LogStoreNegative) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -192,8 +196,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     Y_UNIT_TEST(Dirs) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -249,8 +252,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     void CreateDropTable(EPrimitiveType pkField) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -280,7 +282,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_VALUES_EQUAL(descr.GetShardsCount(), 4);
             const auto& schema = descr.GetSchema();
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
-            UNIT_ASSERT(schema.GetColumns()[0].ToString().StartsWith("{ name: \"timestamp\", type:"));
+            UNIT_ASSERT(schema.GetColumns()[0].ToString().starts_with("{ name: \"timestamp\", type:"));
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8 }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),
@@ -302,7 +304,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_VALUES_EQUAL(descr.GetShardsCount(), 4);
             const auto& schema = descr.GetSchema();
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
-            UNIT_ASSERT(schema.GetColumns()[0].ToString().StartsWith("{ name: \"timestamp\", type:"));
+            UNIT_ASSERT(schema.GetColumns()[0].ToString().starts_with("{ name: \"timestamp\", type:"));
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8 }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),
@@ -402,8 +404,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     Y_UNIT_TEST(AlterLogStore) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);

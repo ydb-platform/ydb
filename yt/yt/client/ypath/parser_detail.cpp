@@ -252,7 +252,7 @@ void ParseKeyPart(
     tokenizer.ParseNext();
 }
 
-// NB: since our final result while parsing YPath is an attribute dictionary, we intentionally refrain
+// NB: Since our final result while parsing YPath is an attribute dictionary, we intentionally refrain
 // from using TReadLimit (or even TLegacyReadLimit) as an intermediate structure here. YPath short
 // form is parsed using merely NYTree primitives and unversioned rows.
 

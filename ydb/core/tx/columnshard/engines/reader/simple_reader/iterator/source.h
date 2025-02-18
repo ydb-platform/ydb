@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -26,6 +27,7 @@ class TFetchingInterval;
 class TPlainReadData;
 class IFetchTaskConstructor;
 class IFetchingStep;
+class TBuildFakeSpec;
 
 class TPortionPage {
 private:
@@ -88,55 +90,38 @@ public:
     }
 };
 
-class IDataSource: public ICursorEntity {
+class IDataSource: public NCommon::IDataSource {
 private:
-    YDB_READONLY(ui32, SourceId, 0);
-    YDB_READONLY(ui32, SourceIdx, 0);
+    using TBase = NCommon::IDataSource;
     const TReplaceKeyAdapter Start;
     const TReplaceKeyAdapter Finish;
-    YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
-    YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
-    YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
-    YDB_READONLY(ui32, RecordsCount, 0);
-    YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
-    YDB_READONLY(bool, HasDeletions, false);
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     std::shared_ptr<TFetchingScript> FetchingPlan;
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);
     YDB_READONLY(TPKRangeFilter::EUsageClass, UsageClass, TPKRangeFilter::EUsageClass::PartialUsage);
     YDB_ACCESSOR(ui32, ResultRecordsCount, 0);
     bool ProcessingStarted = false;
     bool IsStartedByCursor = false;
-
-    virtual ui64 DoGetEntityId() const override {
-        return SourceId;
-    }
-
-    virtual ui64 DoGetEntityRecordsCount() const override {
-        return RecordsCount;
-    }
+    friend class TBuildFakeSpec;
 
     std::optional<TFetchingScriptCursor> ScriptCursor;
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
 
+    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
+    virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
+    virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
+
+    void Finalize(const std::optional<ui64> memoryLimit);
+
 protected:
     std::optional<ui64> UsedRawBytes;
-    std::optional<bool> IsSourceInMemoryFlag;
 
-    std::unique_ptr<TFetchedData> StageData;
-    std::unique_ptr<TFetchedResult> StageResult;
-
-    virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual bool DoStartFetchingIndexes(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
-    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
     virtual void DoAbort() = 0;
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
-    virtual bool DoAddTxConflict() = 0;
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
@@ -224,86 +209,11 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
-    bool AddTxConflict() {
-        if (!Context->GetCommonContext()->HasLock()) {
-            return false;
-        }
-        if (DoAddTxConflict()) {
-            StageData->Clear();
-            return true;
-        }
-        return false;
-    }
-
-    ui64 GetResourceGuardsMemory() const {
-        ui64 result = 0;
-        for (auto&& i : ResourceGuards) {
-            result += i->GetMemory();
-        }
-        return result;
-    }
-    void RegisterAllocationGuard(const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard) {
-        ResourceGuards.emplace_back(guard);
-    }
-    bool IsSourceInMemory() const {
-        AFL_VERIFY(IsSourceInMemoryFlag);
-        return *IsSourceInMemoryFlag;
-    }
-    void SetSourceInMemory(const bool value) {
-        AFL_VERIFY(!IsSourceInMemoryFlag);
-        IsSourceInMemoryFlag = value;
-        AFL_VERIFY(StageData);
-        if (!value) {
-            StageData->SetUseFilter(value);
-        }
-    }
-    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
-
     virtual ui64 GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
-    bool HasStageResult() const {
-        return !!StageResult;
-    }
-
-    const TFetchedResult& GetStageResult() const {
-        AFL_VERIFY(!!StageResult);
-        return *StageResult;
-    }
-
-    TFetchedResult& MutableStageResult() {
-        AFL_VERIFY(!!StageResult);
-        return *StageResult;
-    }
-
-    void Finalize(const std::optional<ui64> memoryLimit) {
-        AFL_VERIFY(!StageResult);
-        AFL_VERIFY(StageData);
-        TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-
-        if (memoryLimit) {
-            const auto accessor = StageData->GetPortionAccessor();
-            StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
-            StageResult->SetPages(accessor.BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
-        } else {
-            StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
-            StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
-        }
-    }
-
     void ApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) {
         return DoApplyIndex(indexMeta);
-    }
-
-    void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false) {
-        if (columns->IsEmpty()) {
-            return;
-        }
-        DoAssembleColumns(columns, sequential);
-    }
-
-    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
-        return DoStartFetchingColumns(sourcePtr, step, columns);
     }
 
     bool StartFetchingIndexes(
@@ -313,11 +223,7 @@ public:
     }
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
 
-    virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const = 0;
-
-    virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
-    virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const = 0;
 
     void Abort() {
         DoAbort();
@@ -326,13 +232,14 @@ public:
     NJson::TJsonValue DebugJsonForMemory() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("details", DoDebugJsonForMemory());
-        result.InsertValue("count", RecordsCount);
+        result.InsertValue("count", GetRecordsCount());
         return result;
     }
 
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
-        result.InsertValue("source_idx", SourceIdx);
+        result.InsertValue("source_id", GetSourceId());
+        result.InsertValue("source_idx", GetSourceIdx());
         result.InsertValue("start", Start.DebugString());
         result.InsertValue("finish", Finish.DebugString());
         result.InsertValue("specific", DoDebugJson());
@@ -341,41 +248,15 @@ public:
 
     bool OnIntervalFinished(const ui32 intervalIdx);
 
-    void OnEmptyStageData() {
-        ResourceGuards.clear();
-        Finalize(std::nullopt);
-    }
-
-    bool HasStageData() const {
-        return !!StageData;
-    }
-
-    const TFetchedData& GetStageData() const {
-        AFL_VERIFY(StageData);
-        return *StageData;
-    }
-
-    TFetchedData& MutableStageData() {
-        AFL_VERIFY(StageData);
-        return *StageData;
-    }
-
-    IDataSource(const ui32 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TReplaceKey& start,
+    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TReplaceKey& start,
         const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : SourceId(sourceId)
-        , SourceIdx(sourceIdx)
+        : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
         , Start(context->GetReadMetadata()->IsDescSorted() ? finish : start, context->GetReadMetadata()->IsDescSorted())
-        , Finish(context->GetReadMetadata()->IsDescSorted() ? start : finish, context->GetReadMetadata()->IsDescSorted())
-        , Context(context)
-        , RecordSnapshotMin(recordSnapshotMin)
-        , RecordSnapshotMax(recordSnapshotMax)
-        , RecordsCount(recordsCount)
-        , ShardingVersionOptional(shardingVersion)
-        , HasDeletions(hasDeletions) {
-        StageData = std::make_unique<TFetchedData>(true);
-        UsageClass = Context->GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(start, finish);
-        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::DontUsage);
+        , Finish(context->GetReadMetadata()->IsDescSorted() ? start : finish, context->GetReadMetadata()->IsDescSorted()) {
+        StageData = std::make_unique<TFetchedData>(true, recordsCount);
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start, finish);
+        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())(
             "finish", Finish.DebugString());
         Y_ABORT_UNLESS(Start.Compare(Finish) != std::partial_ordering::greater);
@@ -400,7 +281,7 @@ private:
 
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
     virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
+        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
     virtual bool DoStartFetchingIndexes(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
@@ -489,7 +370,6 @@ public:
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
-        return Portion->GetTotalRawBytes();
         return GetStageData().GetPortionAccessor().GetIndexRawBytes(indexIds, false);
     }
 

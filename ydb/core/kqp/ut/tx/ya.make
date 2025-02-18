@@ -17,6 +17,7 @@ SRCS(
     kqp_sink_locks_ut.cpp
     kqp_sink_mvcc_ut.cpp
     kqp_sink_tx_ut.cpp
+    kqp_snapshot_isolation_ut.cpp
     kqp_tx_ut.cpp
 )
 

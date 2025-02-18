@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 PY3TEST()
     TEST_SRCS(
         test_sql2yql.py
@@ -13,6 +15,7 @@ IF (SANITIZER_TYPE)
     TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat sb:ttl=2)
+    INCLUDE(${ARCADIA_ROOT}/devtools/large_on_multi_slots.inc)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -41,4 +44,6 @@ ENDIF()
 NO_CHECK_IMPORTS()
 
 END()
+
+ENDIF()
 

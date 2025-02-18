@@ -2,7 +2,7 @@ from typing import List, Sequence, Collection
 
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
 from clickhouse_connect.datatypes.registry import get_from_name
-from clickhouse_connect.driver.common import unescape_identifier, first_value
+from clickhouse_connect.driver.common import unescape_identifier, first_value, write_uint64
 from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.errors import handle_error
 from clickhouse_connect.driver.exceptions import DataError
@@ -13,6 +13,8 @@ from clickhouse_connect.json_impl import any_to_json
 
 SHARED_DATA_TYPE: ClickHouseType
 STRING_DATA_TYPE: ClickHouseType
+
+json_serialization_format = 0x1
 
 class Variant(ClickHouseType):
     _slots = 'element_types'
@@ -86,9 +88,11 @@ class Dynamic(ClickHouseType):
 
 
 def read_dynamic_prefix(source: ByteSource) -> List[ClickHouseType]:
-    if source.read_uint64() != 1:  # dynamic structure serialization version, currently only 1 is recognized
+    serialize_version = source.read_uint64()
+    if serialize_version == 1:
+        source.read_leb128()  # max dynamic types, we ignore this value
+    elif serialize_version != 2:
         raise DataError('Unrecognized dynamic structure version')
-    source.read_leb128()  # max dynamic types, we ignore this value
     num_variants = source.read_leb128()
     variant_types = [get_from_name(source.read_leb128_str()) for _ in range(num_variants)]
     variant_types.append(STRING_DATA_TYPE)
@@ -188,13 +192,23 @@ class JSON(ClickHouseType):
 
     @property
     def insert_name(self):
-        return 'String'
+        if json_serialization_format == 0:
+            return 'String'
+        return super().insert_name
+
+    def write_column_prefix(self, dest: bytearray):
+        if json_serialization_format > 0:
+            write_uint64(json_serialization_format, dest)
+
+    def read_column_prefix(self, source: ByteSource, ctx: QueryContext):
+        serialize_version = source.read_uint64()
+        if serialize_version == 0:
+            source.read_leb128()  # max dynamic types, we ignore this value
+        elif serialize_version != 2:
+            raise DataError(f'Unrecognized dynamic structure version: {serialize_version} column: `{ctx.column_name}`')
 
     # pylint: disable=too-many-locals
-    def read_column(self, source: ByteSource, num_rows: int, ctx: QueryContext):
-        if source.read_uint64() != 0: # object serialization version, currently only 0 is recognized
-            raise DataError(f'unrecognized object serialization version, column `{ctx.column_name}`')
-        source.read_leb128() # the max number of dynamic paths.  Used to preallocate storage in ClickHouse; we ignore it
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
         dynamic_path_cnt = source.read_leb128()
         dynamic_paths = [source.read_leb128_str() for _ in range(dynamic_path_cnt)]
         for typed in self.typed_types:

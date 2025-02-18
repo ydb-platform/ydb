@@ -92,6 +92,7 @@ THashMap<TStringBuf, THashSet<TStringBuf>> CollectEquiJoinKeyColumnsByLabel(cons
 
 bool IsLeftJoinSideOptional(const TStringBuf& joinType);
 bool IsRightJoinSideOptional(const TStringBuf& joinType);
+THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const NNodes::TCoEquiJoinTuple& joinTree);
 
 TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,
     const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx);

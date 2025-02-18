@@ -544,6 +544,7 @@ namespace NKikimr::NYaml {
 
         ui64 nextHostConfigID = 1;
 
+        // TODO: validate all host_configs exists (or better just drop this legacy and use yaml anchors)
         // Find the next available host_config_id
         if (ephemeralConfig.HostConfigsSize()) {
             for(const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {

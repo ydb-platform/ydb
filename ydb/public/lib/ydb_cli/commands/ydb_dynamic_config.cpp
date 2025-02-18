@@ -215,10 +215,7 @@ int TCommandConfigReplace::Run(TConfig& config) {
 
     // TODO absent database
 
-    auto status = client.ReplaceConfig(
-        DynamicConfig,
-        {},
-        settings).GetValueSync();
+    auto status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
 
     if (status.IsUnimplementedError()) {
         Cerr << "Warning: Fallback to DynamicConfig API" << Endl;

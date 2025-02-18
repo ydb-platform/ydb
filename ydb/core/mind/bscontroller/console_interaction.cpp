@@ -187,7 +187,7 @@ namespace NKikimr::NBsController {
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted:
                 STLOG(PRI_CRIT, BS_CONTROLLER, BSC28, "Console config not committed");
-                Y_DEBUG_ABORT_S(record.GetErrorReason());
+                Y_DEBUG_ABORT_S(record.GetErrorReason()); // FIXME: fails here on force
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed:

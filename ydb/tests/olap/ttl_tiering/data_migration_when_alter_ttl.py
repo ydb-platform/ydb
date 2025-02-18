@@ -24,9 +24,8 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
             f"SELECT count(*) as Rows from `{table_path}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromMinutes({past_minutes})"
         )[0].rows[0]["Rows"]
 
+    @pytest.mark.test_case("#13466")
     def test(self):
-        '''Implements https://github.com/ydb-platform/ydb/issues/13466'''
-
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/table"
         secret_prefix = self.test_name

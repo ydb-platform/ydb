@@ -302,6 +302,16 @@ Y_UNIT_TEST(ReturningSerial) {
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([[2;[2]];[3;[2]];[1;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    {
+        const auto query = Q_(R"(
+            --!syntax_v1
+            DELETE FROM ReturningTable10 WHERE key <= 3 RETURNING *;
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
+    }
 }
 
 Y_UNIT_TEST(ReturningColumnsOrder) {

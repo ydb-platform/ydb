@@ -27,6 +27,6 @@ This document outlines the detailed functional and non-functional requirements f
 - #14682
 
 
-## Federated Queries Support
+### Federated Queries Support
 
 - #14700

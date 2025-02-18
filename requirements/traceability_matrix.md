@@ -125,8 +125,7 @@
 | #14683 | При выполнении запросов происходит pushdown нужных типов данных-вычислений (проверяется, что pushdown был выполнен). В векторном варианте |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14683)](https://github.com/ydb-platform/ydb/issues/14683) | Pending |
 | #14684 | When queries are executed, a pushdown of the desired data-calculus types is performed (check that the pushdown has been executed). In the scalar variant |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14684)](https://github.com/ydb-platform/ydb/issues/14684) | Pending |
 
-## Federated Queries Support
-
+### Federated Queries Support
 #### [ISSUE-14700](https://github.com/ydb-platform/ydb/issues/14700): Test Suite: Federated Queries
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F2:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14700-test-suite-federated-queries)
 

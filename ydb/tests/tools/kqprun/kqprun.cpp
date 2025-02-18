@@ -427,6 +427,8 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistr
 
 
 class TMain : public TMainBase {
+    using EVerbose = TYdbSetupSettings::EVerbose;
+
     inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
     inline static IOutputStream* ProfileAllocationsOutput = nullptr;
     inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
@@ -475,6 +477,10 @@ protected:
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.ScriptQueries.emplace_back(LoadFile(option->CurVal()));
             });
+
+        options.AddLongOption("sql", "Script query SQL text to execute (typically DML query)")
+            .RequiredArgument("str")
+            .AppendTo(&ExecutionOptions.ScriptQueries);
 
         options.AddLongOption("templates", "Enable templates for -s and -p queries, such as ${YQL_TOKEN} and ${QUERY_ID}")
             .NoArgument()
@@ -663,11 +669,11 @@ protected:
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
 
-        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(TYdbSetupSettings::EVerbose::Max) - 1 << ")")
+        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(EVerbose::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EVerbose::Info))
+            .DefaultValue(static_cast<ui8>(EVerbose::Info))
             .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.VerboseLevel, [](ui8 value) {
-                return static_cast<TYdbSetupSettings::EVerbose>(std::min(value, static_cast<ui8>(TYdbSetupSettings::EVerbose::Max)));
+                return static_cast<EVerbose>(std::min(value, static_cast<ui8>(EVerbose::Max)));
             });
 
         TChoices<TAsyncQueriesSettings::EVerbose> verbose({

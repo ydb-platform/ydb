@@ -443,7 +443,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
         } else if (!portionInfo->HasCommitSnapshot()) {
             continue;
         }
-        const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
+        const bool skipPortion = !pkRangesFilter.IsUsed(*portionInfo);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
             "portion", portionInfo->DebugString());
         if (skipPortion) {
@@ -455,7 +455,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
         if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
             continue;
         }
-        const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
+        const bool skipPortion = !pkRangesFilter.IsUsed(*portionInfo);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
             "portion", portionInfo->DebugString());
         if (skipPortion) {

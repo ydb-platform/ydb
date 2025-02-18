@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
     }
 
     Y_UNIT_TEST(DecimalKeys) {
-        TEnv env;
+        TEnv env(TFeatureFlags().SetEnableParameterizedDecimal(true));
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{

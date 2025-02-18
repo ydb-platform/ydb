@@ -25,7 +25,6 @@ private:
     std::optional<TString> SerializedProgram;
     YDB_ACCESSOR(bool, Reverse, false);
     YDB_ACCESSOR(ui32, Limit, 0);
-    std::vector<TString> ReplyColumns;
     std::vector<TSerializedTableRange> Ranges;
 
     std::unique_ptr<TEvDataShard::TEvKqpScan> BuildStartEvent() const;
@@ -53,8 +52,6 @@ public:
         auto r = GetResult();
         return r ? r->num_rows() : 0;
     }
-
-    TShardReader& SetReplyColumns(const std::vector<TString>& replyColumns);
 
     TShardReader& SetReplyColumnIds(const std::vector<ui32>& replyColumnIds);
 

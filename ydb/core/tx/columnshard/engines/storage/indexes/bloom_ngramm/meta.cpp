@@ -245,17 +245,13 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
 }
 
 void TIndexMeta::DoFillIndexCheckers(
-    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {
+    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
     for (auto&& branch : info->GetBranches()) {
         std::map<ui32, NRequest::TLikeDescription> foundColumns;
         for (auto&& cId : ColumnIds) {
-            auto c = schema.GetColumns().GetById(cId);
-            if (!c) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect index column")("id", cId);
-                return;
-            }
-            auto it = branch->GetLikes().find(c->GetName());
+            auto it = branch->GetLikes().find(cId);
             if (it == branch->GetLikes().end()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("warn", "not found like for column")("id", cId);
                 break;
             }
             foundColumns.emplace(cId, it->second);

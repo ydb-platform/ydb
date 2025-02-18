@@ -3,6 +3,7 @@
 
 #include <util/datetime/base.h>
 
+#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/tests/tools/fqrun/src/fq_runner.h>
 #include <ydb/tests/tools/kqprun/runlib/application.h>
 #include <ydb/tests/tools/kqprun/runlib/utils.h>
@@ -15,6 +16,8 @@ namespace {
 
 struct TExecutionOptions {
     TString Query;
+    std::vector<FederatedQuery::ConnectionContent> Connections;
+    std::vector<FederatedQuery::BindingContent> Bindings;
 
     bool HasResults() const {
         return !Query.empty();
@@ -35,6 +38,20 @@ struct TExecutionOptions {
 
 void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& runner) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+
+    if (!executionOptions.Connections.empty()) {
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating connections..." << colors.Default() << Endl;
+        if (!runner.CreateConnections(executionOptions.Connections)) {
+            ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create connections";
+        }
+    }
+
+    if (!executionOptions.Bindings.empty()) {
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating bindings..." << colors.Default() << Endl;
+        if (!runner.CreateBindings(executionOptions.Bindings)) {
+            ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create bindings";
+        }
+    }
 
     if (executionOptions.Query) {
         Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing query..." << colors.Default() << Endl;
@@ -89,6 +106,8 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
 }
 
 class TMain : public TMainBase {
+    using EVerbose = TFqSetupSettings::EVerbose;
+
 protected:
     void RegisterOptions(NLastGetopt::TOpts& options) override {
         options.SetTitle("FqRun -- tool to execute stream queries through FQ proxy");
@@ -101,12 +120,57 @@ protected:
             .RequiredArgument("file")
             .StoreMappedResult(&ExecutionOptions.Query, &LoadFile);
 
+        options.AddLongOption('s', "sql", "Query SQL text to execute")
+            .RequiredArgument("str")
+            .StoreResult(&ExecutionOptions.Query);
+        options.MutuallyExclusive("query", "sql");
+
+        options.AddLongOption('c', "connection", "External datasource connection protobuf FederatedQuery::ConnectionContent")
+            .RequiredArgument("file")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                auto& connection = ExecutionOptions.Connections.emplace_back();
+                const TString file(TString(option->CurValOrDef()));
+                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &connection)) {
+                    ythrow yexception() << "Bad format of FQ connection in file '" << file << "'";
+                }
+                SetupAcl(connection.mutable_acl());
+            });
+
+        options.AddLongOption('b', "binding", "External datasource binding protobuf FederatedQuery::BindingContent")
+            .RequiredArgument("file")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                auto& binding = ExecutionOptions.Bindings.emplace_back();
+                const TString file(TString(option->CurValOrDef()));
+                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &binding)) {
+                    ythrow yexception() << "Bad format of FQ binding in file '" << file << "'";
+                }
+                SetupAcl(binding.mutable_acl());
+            });
+
         options.AddLongOption("fq-cfg", "File with FQ config (NFq::NConfig::TConfig for FQ proxy)")
             .RequiredArgument("file")
             .DefaultValue("./configuration/fq_config.conf")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 if (!google::protobuf::TextFormat::ParseFromString(LoadFile(TString(option->CurValOrDef())), &RunnerOptions.FqSettings.FqConfig)) {
                     ythrow yexception() << "Bad format of FQ configuration";
+                }
+            });
+
+        options.AddLongOption("emulate-s3", "Enable readings by s3 provider from files, `bucket` value in connection - path to folder with files")
+            .NoArgument()
+            .SetFlag(&RunnerOptions.FqSettings.EmulateS3);
+
+        options.AddLongOption("emulate-pq", "Emulate YDS with local file, accepts list of tables to emulate with following format: topic@file (can be used in query from cluster `pq`)")
+            .RequiredArgument("topic@file")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                TStringBuf topicName;
+                TStringBuf filePath;
+                TStringBuf(option->CurVal()).Split('@', topicName, filePath);
+                if (topicName.empty() || filePath.empty()) {
+                    ythrow yexception() << "Incorrect PQ file mapping, expected form topic@file";
+                }
+                if (!PqFilesMapping.emplace(topicName, filePath).second) {
+                    ythrow yexception() << "Got duplicated topic name: " << topicName;
                 }
             });
 
@@ -128,15 +192,41 @@ protected:
             .Choices(resultFormat.GetChoices())
             .StoreMappedResultT<TString>(&RunnerOptions.ResultOutputFormat, resultFormat);
 
+        // Pipeline settings
+
+        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(EVerbose::Max) - 1 << ")")
+            .RequiredArgument("uint")
+            .DefaultValue(static_cast<ui8>(EVerbose::Info))
+            .StoreMappedResultT<ui8>(&RunnerOptions.FqSettings.VerboseLevel, [](ui8 value) {
+                return static_cast<EVerbose>(std::min(value, static_cast<ui8>(EVerbose::Max)));
+            });
+
         RegisterKikimrOptions(options, RunnerOptions.FqSettings);
     }
 
     int DoRun(NLastGetopt::TOptsParseResult&&) override {
         ExecutionOptions.Validate(RunnerOptions);
 
+        RunnerOptions.FqSettings.YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
+
+        auto& gatewayConfig = *RunnerOptions.FqSettings.FqConfig.mutable_gateways();
+        FillTokens(gatewayConfig.mutable_pq());
+        FillTokens(gatewayConfig.mutable_s3());
+        FillTokens(gatewayConfig.mutable_generic());
+        FillTokens(gatewayConfig.mutable_ydb());
+        FillTokens(gatewayConfig.mutable_solomon());
+
         auto& logConfig = RunnerOptions.FqSettings.LogConfig;
         logConfig.SetDefaultLevel(NActors::NLog::EPriority::PRI_CRIT);
         FillLogConfig(logConfig);
+
+        if (!PqFilesMapping.empty()) {
+            auto fileGateway = MakeIntrusive<NYql::TDummyPqGateway>();
+            for (const auto& [topic, file] : PqFilesMapping) {
+                fileGateway->AddDummyTopic(NYql::TDummyTopic("pq", TString(topic), TString(file)));
+            }
+            RunnerOptions.FqSettings.PqGateway = std::move(fileGateway);
+        }
 
         RunScript(ExecutionOptions, RunnerOptions);
 
@@ -144,8 +234,19 @@ protected:
     }
 
 private:
+    template <typename TGatewayConfig>
+    void FillTokens(TGatewayConfig* gateway) const {
+        for (auto& cluster : *gateway->mutable_clustermapping()) {
+            if (!cluster.GetToken()) {
+                cluster.SetToken(RunnerOptions.FqSettings.YqlToken);
+            }
+        }
+    }
+
+private:
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
+    std::unordered_map<TString, TString> PqFilesMapping;
 };
 
 }  // anonymous namespace

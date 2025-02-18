@@ -1,27 +1,30 @@
+#include "aggr_common.h"
+#include "aggr_keys.h"
 #include "custom_registry.h"
 
-#include <ydb/library/arrow_kernels/functions.h>
 #include <ydb/library/arrow_kernels/func_common.h>
-#include "program.h"
+#include <ydb/library/arrow_kernels/functions.h>
 
-#include <util/system/yassert.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/registry_internal.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/registry_internal.h>
+#include <util/system/yassert.h>
 
 #ifndef WIN32
+#ifdef NO_SANITIZE_THREAD
+#undef NO_SANITIZE_THREAD
+#endif
+#include <AggregateFunctions/AggregateFunctionAvg.h>
 #include <AggregateFunctions/AggregateFunctionCount.h>
 #include <AggregateFunctions/AggregateFunctionMinMaxAny.h>
-#include <AggregateFunctions/AggregateFunctionSum.h>
-#include <AggregateFunctions/AggregateFunctionAvg.h>
 #include <AggregateFunctions/AggregateFunctionNumRows.h>
+#include <AggregateFunctions/AggregateFunctionSum.h>
 #endif
 
 namespace cp = ::arrow::compute;
 
 using namespace NKikimr::NKernels;
-using namespace NKikimr::NSsa;
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow::NSSA {
 
 static void RegisterMath(cp::FunctionRegistry* registry) {
     Y_ABORT_UNLESS(registry->AddFunction(MakeMathUnary<TAcosh>(TAcosh::Name)).ok());
@@ -64,21 +67,42 @@ static void RegisterYdbCast(cp::FunctionRegistry* registry) {
 }
 
 static void RegisterCustomAggregates(cp::FunctionRegistry* registry) {
-    Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<TNumRows>(GetFunctionName(EAggregate::NumRows))).ok());
+    Y_ABORT_UNLESS(
+        registry->AddFunction(std::make_shared<TNumRows>(NAggregation::TAggregateFunction::GetFunctionName(NAggregation::EAggregate::NumRows)))
+            .ok());
 }
 
 static void RegisterHouseAggregates(cp::FunctionRegistry* registry) {
 #ifndef WIN32
     try {
-        Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::WrappedAny>(GetHouseFunctionName(EAggregate::Some))).ok());
-        Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::WrappedCount>(GetHouseFunctionName(EAggregate::Count))).ok());
-        Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::WrappedMin>(GetHouseFunctionName(EAggregate::Min))).ok());
-        Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::WrappedMax>(GetHouseFunctionName(EAggregate::Max))).ok());
-        Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::WrappedSum>(GetHouseFunctionName(EAggregate::Sum))).ok());
-        //Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::WrappedAvg>(GetHouseFunctionName(EAggregate::Avg))).ok());
-        Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::WrappedNumRows>(GetHouseFunctionName(EAggregate::NumRows))).ok());
+        Y_ABORT_UNLESS(registry
+                           ->AddFunction(std::make_shared<CH::WrappedAny>(
+                               NAggregation::TAggregateFunction::GetHouseFunctionName(NAggregation::EAggregate::Some)))
+                           .ok());
+        Y_ABORT_UNLESS(registry
+                           ->AddFunction(std::make_shared<CH::WrappedCount>(
+                               NAggregation::TAggregateFunction::GetHouseFunctionName(NAggregation::EAggregate::Count)))
+                           .ok());
+        Y_ABORT_UNLESS(registry
+                           ->AddFunction(std::make_shared<CH::WrappedMin>(
+                               NAggregation::TAggregateFunction::GetHouseFunctionName(NAggregation::EAggregate::Min)))
+                           .ok());
+        Y_ABORT_UNLESS(registry
+                           ->AddFunction(std::make_shared<CH::WrappedMax>(
+                               NAggregation::TAggregateFunction::GetHouseFunctionName(NAggregation::EAggregate::Max)))
+                           .ok());
+        Y_ABORT_UNLESS(registry
+                           ->AddFunction(std::make_shared<CH::WrappedSum>(
+                               NAggregation::TAggregateFunction::GetHouseFunctionName(NAggregation::EAggregate::Sum)))
+                           .ok());
+        //Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::WrappedAvg>(NAggregation::TAggregateFunction::GetHouseFunctionName(NAggregation::EAggregate::Avg))).ok());
+        Y_ABORT_UNLESS(registry
+                           ->AddFunction(std::make_shared<CH::WrappedNumRows>(
+                               NAggregation::TAggregateFunction::GetHouseFunctionName(NAggregation::EAggregate::NumRows)))
+                           .ok());
 
-        Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::ArrowGroupBy>(GetHouseGroupByName())).ok());
+        Y_ABORT_UNLESS(
+            registry->AddFunction(std::make_shared<CH::ArrowGroupBy>(NAggregation::TWithKeysAggregationProcessor::GetHouseGroupByName())).ok());
     } catch (const std::exception& /*ex*/) {
         Y_ABORT_UNLESS(false);
     }
@@ -86,7 +110,6 @@ static void RegisterHouseAggregates(cp::FunctionRegistry* registry) {
     Y_UNUSED(registry);
 #endif
 }
-
 
 static std::unique_ptr<cp::FunctionRegistry> CreateCustomRegistry() {
     auto registry = cp::FunctionRegistry::Make();
@@ -111,4 +134,4 @@ cp::ExecContext* GetCustomExecContext() {
     return &context;
 }
 
-}
+}   // namespace NKikimr::NArrow::NSSA

@@ -842,6 +842,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedInitialScan(true)
                 .SetEnableUuidAsPrimaryKey(true)
                 .SetEnableTablePgTypes(true)
+                .SetEnableTableDatetime64(true)
                 .SetEnableParameterizedDecimal(true)
                 .SetEnablePgSyntax(true)
                 .SetEnableTopicSplitMerge(true)

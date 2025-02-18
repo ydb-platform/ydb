@@ -26,19 +26,11 @@ COPY --chmod=0644 /liblibaio-dynamic.so /lib/liblibaio-dynamic.so
 ###
 
 FROM ${BREAKPAD_INIT_IMAGE}:${BREAKPAD_INIT_IMAGE_TAG} AS breakpad_init
-FROM base AS breakpad-setuid
-COPY --from=breakpad_init /usr/lib/libbreakpad_init.so /usr/lib/libbreakpad_init.so
-# workaround for old docker versions
-# https://github.com/moby/buildkit/issues/3920
-RUN /usr/bin/chmod 4644 /usr/lib/libbreakpad_init.so
-
-
 FROM base AS base-breakpad
 RUN \
     apt-get -yqq update && \
     apt-get -yqq install --no-install-recommends binutils gdb strace linux-tools-generic && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
-ENV LD_PRELOAD=libbreakpad_init.so
 ENV BREAKPAD_MINIDUMPS_PATH=/opt/ydb/volumes/coredumps
 ENV BREAKPAD_MINIDUMPS_SCRIPT=/opt/ydb/bin/minidump_script.py
 # breakpad binaries
@@ -46,8 +38,6 @@ COPY --chmod=0755 --from=breakpad_init /usr/bin/minidump_stackwalk /usr/bin/mini
 COPY --chmod=0755 --from=breakpad_init /usr/bin/minidump-2-core /usr/bin/minidump-2-core
 # minidump callback script
 COPY --chmod=0755 --chown=ydb /minidump_script.py /opt/ydb/bin/minidump_script.py
-# minidump init library
-COPY --link --from=breakpad-setuid /usr/lib/libbreakpad_init.so /usr/lib/libbreakpad_init.so
 
 FROM base AS ydbd-setcap
 COPY --chmod=0755 --chown=ydb /ydbd /opt/ydb/bin/ydbd

@@ -28,7 +28,8 @@ protected:
     bool IsUnrecoverableAltruistic(TBlobStorageGroupInfo::EBlobState recoveryState);
     std::optional<EStrategyOutcome> SetAbsentForUnrecoverableAltruistic(TBlobStorageGroupInfo::EBlobState recoveryState, TBlobState &state);
     std::optional<EStrategyOutcome> ProcessOptimistic(TBlobStorageGroupInfo::EBlobState altruisticState,
-            TBlobStorageGroupInfo::EBlobState optimisticState, bool isDryRun, TBlobState &state);
+            TBlobStorageGroupInfo::EBlobState optimisticState, bool isDryRun, TBlobState &state,
+            const TBlobStorageGroupInfo& info);
     std::optional<EStrategyOutcome> ProcessPessimistic(const TBlobStorageGroupInfo &info, TBlobStorageGroupInfo::EBlobState pessimisticState,
             bool doVerify, TBlobState &state);
     void AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &groupDiskRequests, TLogoBlobID &fullId, ui32 partIdx,

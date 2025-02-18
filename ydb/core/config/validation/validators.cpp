@@ -4,6 +4,8 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 
+#include <library/cpp/protobuf/json/util.h>
+
 #include <util/string/builder.h>
 
 #include <map>
@@ -185,7 +187,9 @@ EValidationResult ValidateDatabaseConfig( const NKikimrConfig::TAppConfig& confi
             }
         }
 
-        msg.push_back(TStringBuilder() << "'" << field->lowercase_name() << "' "
+        auto fieldName = field->name();
+        NProtobufJson::ToSnakeCaseDense(&fieldName);
+        msg.push_back(TStringBuilder() << "'" << fieldName << "' "
             << "is not allowed to be used in the database configuration");
         return EValidationResult::Error;
     }

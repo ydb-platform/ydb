@@ -427,7 +427,7 @@ Y_UNIT_TEST_SUITE(DatabaseConfigValidation) {
         std::vector<TString> err;
         auto res = ValidateDatabaseConfig(config, err);
         UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(err[0], "'blobstorageconfig' is not allowed to be used in the database configuration");
+        UNIT_ASSERT_VALUES_EQUAL(err[0], "'blob_storage_config' is not allowed to be used in the database configuration");
         UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
     }
 }

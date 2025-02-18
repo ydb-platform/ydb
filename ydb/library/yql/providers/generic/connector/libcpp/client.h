@@ -1,7 +1,10 @@
 #pragma once
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include "error.h"
+
 #include <library/cpp/threading/future/core/future.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
@@ -28,7 +31,7 @@ namespace NYql::NConnector {
         TStreamer(TStreamProcessorPtr streamProcessor)
             : StreamProcessor_(streamProcessor)
             , Finished_(false)
-                  {};
+        {}
 
         TAsyncResult<TResponse> ReadNext(std::shared_ptr<TSelf> self) {
             auto promise = NThreading::NewPromise<TResult<TResponse>>();
@@ -67,11 +70,83 @@ namespace NYql::NConnector {
 
         virtual TAsyncResult<TResponse> ReadNext() = 0;
 
-        virtual ~IStreamIterator(){};
+        virtual ~IStreamIterator() {}
     };
 
     using IListSplitsStreamIterator = IStreamIterator<NApi::TListSplitsResponse>;
     using IReadSplitsStreamIterator = IStreamIterator<NApi::TReadSplitsResponse>;
+
+    template <class TResponse>
+    class IStreamIteratorDrainer: public std::enable_shared_from_this<IStreamIteratorDrainer<TResponse>> {
+    public:
+        using TPtr = std::shared_ptr<IStreamIteratorDrainer<TResponse>>;
+
+        struct TBuffer {
+            TVector<TResponse> Responses;
+            TIssues Issues;
+        };
+
+        IStreamIteratorDrainer(IStreamIterator<TResponse>::TPtr&& iterator)
+            : Iterator_(std::move(iterator))
+        {
+        }
+
+        NThreading::TFuture<TBuffer> Run() {
+            auto promise = NThreading::NewPromise<TBuffer>();
+            Next(promise);
+            return promise.GetFuture();
+        }
+
+        virtual ~IStreamIteratorDrainer() {
+        }
+
+    private:
+        IStreamIterator<TResponse>::TPtr Iterator_;
+
+        // Transport issues and stream messages received during stream flushing are accumulated here
+        TVector<TResponse> Responses_;
+        TIssues Issues_;
+
+        void Next(NThreading::TPromise<TBuffer> promise) {
+            TPtr self = this->shared_from_this();
+
+            Iterator_->ReadNext().Subscribe([self, promise](const TAsyncResult<TResponse>& f1) mutable {
+                TAsyncResult<TResponse> f2(f1);
+                auto result = f2.ExtractValue();
+
+                // Check transport error
+                if (!result.Status.Ok()) {
+                    // It could be either EOF (== success), or unexpected error
+                    if (!GrpcStatusEndOfStream(result.Status)) {
+                        self->Issues_.AddIssue(result.Status.ToDebugString());
+                    }
+
+                    promise.SetValue(TBuffer{std::move(self->Responses_), std::move(self->Issues_)});
+                    return;
+                }
+
+                // Check logic error
+                if (!NConnector::IsSuccess(*result.Response)) {
+                    self->Issues_.AddIssues(NConnector::ErrorToIssues(result.Response->error()));
+                    promise.SetValue(TBuffer{std::move(self->Responses_), std::move(self->Issues_)});
+                    return;
+                }
+
+                Y_ENSURE(result.Response);
+
+                self->Responses_.push_back(std::move(*result.Response));
+                self->Next(promise);
+            });
+        }
+    };
+
+    using TListSplitsStreamIteratorDrainer = IStreamIteratorDrainer<NApi::TListSplitsResponse>;
+    using TReadSplitsStreamIteratorDrainer = IStreamIteratorDrainer<NApi::TReadSplitsResponse>;
+
+    TListSplitsStreamIteratorDrainer::TPtr
+    MakeListSplitsStreamIteratorDrainer(IListSplitsStreamIterator::TPtr&& iterator);
+    TReadSplitsStreamIteratorDrainer::TPtr
+    MakeReadSplitsStreamIteratorDrainer(IReadSplitsStreamIterator::TPtr&& iterator);
 
     template <class TIterator>
     struct TIteratorResult {

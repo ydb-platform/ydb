@@ -163,13 +163,15 @@ protected:
         options.AddLongOption("emulate-pq", "Emulate YDS with local file, accepts list of tables to emulate with following format: topic@file (can be used in query from cluster `pq`)")
             .RequiredArgument("topic@file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                TStringBuf topicName;
-                TStringBuf filePath;
-                TStringBuf(option->CurVal()).Split('@', topicName, filePath);
-                if (topicName.empty() || filePath.empty()) {
-                    ythrow yexception() << "Incorrect PQ file mapping, expected form topic@file";
+                TStringBuf topicName, others;
+                TStringBuf(option->CurVal()).Split('@', topicName, others);
+                TStringBuf path, partitionCountStr;
+                TStringBuf(others).Split(':', path, partitionCountStr);
+                size_t partitionCount = !partitionCountStr.empty() ? FromString<size_t>(partitionCountStr) : 1;
+                if (topicName.empty() || path.empty()) {
+                    ythrow yexception() << "Incorrect table mapping, expected form topic@path[:partitions_count]" << Endl;
                 }
-                if (!PqFilesMapping.emplace(topicName, filePath).second) {
+                if (!PqFilesMapping.emplace(topicName, NYql::TDummyTopic("pq", TString(topicName), TString(path), partitionCount)  ).second) {
                     ythrow yexception() << "Got duplicated topic name: " << topicName;
                 }
             });
@@ -222,8 +224,8 @@ protected:
 
         if (!PqFilesMapping.empty()) {
             auto fileGateway = MakeIntrusive<NYql::TDummyPqGateway>();
-            for (const auto& [topic, file] : PqFilesMapping) {
-                fileGateway->AddDummyTopic(NYql::TDummyTopic("pq", TString(topic), TString(file)));
+            for (const auto& [_, topic] : PqFilesMapping) {
+                fileGateway->AddDummyTopic(topic);
             }
             RunnerOptions.FqSettings.PqGateway = std::move(fileGateway);
         }
@@ -246,7 +248,7 @@ private:
 private:
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
-    std::unordered_map<TString, TString> PqFilesMapping;
+    std::unordered_map<TString, NYql::TDummyTopic> PqFilesMapping;
 };
 
 }  // anonymous namespace

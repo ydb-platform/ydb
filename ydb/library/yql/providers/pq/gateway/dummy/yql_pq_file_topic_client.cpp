@@ -346,7 +346,6 @@ std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(
     Y_ENSURE(topicsIt != Topics_.end());
     auto filePath = topicsIt->second.Path;
     Y_ENSURE(filePath);
-    Cerr << "filePath " << filePath << Endl;
 
     TFsPath fsPath(*filePath);
     if (fsPath.IsDirectory()) {

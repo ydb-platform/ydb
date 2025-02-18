@@ -224,7 +224,7 @@ public:
                 continue;
             }
             if (auto tableTtl = Ttl.GetTableTtl(pathId, snapshot)) {
-                ttl.emplace(pathId, std::move(tableTtl));
+                ttl.emplace(pathId, std::move(*tableTtl));
             }
         }
         return ttl;

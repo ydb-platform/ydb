@@ -162,7 +162,7 @@ public:
         if (Options_.ResultOutput) {
             Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Writing script query results..." << CoutColors_.Default() << Endl;
             for (size_t i = 0; i < ResultSets_.size(); ++i) {
-                if (ResultSets_.size() > 1 && Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
+                if (ResultSets_.size() > 1 && VerboseLevel_ >= EVerbose::Info) {
                     *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
                 }
                 PrintResultSet(Options_.ResultOutputFormat, *Options_.ResultOutput, ResultSets_[i]);
@@ -244,7 +244,7 @@ private:
 
     void PrintSchemeQueryAst(const TString& ast) const {
         if (Options_.SchemeQueryAstOutput) {
-            if (Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
+            if (VerboseLevel_ >= EVerbose::Info) {
                 Cout << CoutColors_.Cyan() << "Writing scheme query ast" << CoutColors_.Default() << Endl;
             }
             Options_.SchemeQueryAstOutput->Write(ast);
@@ -253,7 +253,7 @@ private:
 
     void PrintScriptAst(size_t queryId, const TString& ast) const {
         if (const auto output = GetValue<IOutputStream*>(queryId, Options_.ScriptQueryAstOutputs, nullptr)) {
-            if (Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
+            if (VerboseLevel_ >= EVerbose::Info) {
                 Cout << CoutColors_.Cyan() << "Writing script query ast" << CoutColors_.Default() << Endl;
             }
             output->Write(ast);
@@ -262,7 +262,7 @@ private:
 
     void PrintScriptPlan(size_t queryId, const TString& plan) const {
         if (const auto output = GetValue<IOutputStream*>(queryId, Options_.ScriptQueryPlanOutputs, nullptr)) {
-            if (Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
+            if (VerboseLevel_ >= EVerbose::Info) {
                 Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
             }
             StatsPrinter_.PrintPlan(plan, *output);

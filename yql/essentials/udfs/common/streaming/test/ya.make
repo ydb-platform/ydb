@@ -1,5 +1,5 @@
 IF (OS_LINUX)
-YQL_UDF_TEST_CONTRIB()
+YQL_UDF_TEST()
     DEPENDS(
         yql/essentials/udfs/common/digest
         yql/essentials/udfs/common/string

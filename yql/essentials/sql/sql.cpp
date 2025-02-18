@@ -14,6 +14,14 @@
 
 namespace NSQLTranslation {
 
+    TTranslators MakeAllTranslators() {
+        return TTranslators(
+            NSQLTranslationV0::MakeTranslator(),
+            NSQLTranslationV1::MakeTranslator(),
+            NSQLTranslationPG::MakeTranslator()
+        );
+    }
+
     NYql::TAstParseResult SqlToYql(const TTranslators& translators, const TString& query, const TTranslationSettings& settings,
         NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo, TTranslationSettings* effectiveSettings)
     {
@@ -242,14 +250,6 @@ namespace NSQLTranslation {
     TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const TTranslationSettings& settings,
         NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion, TVector<NYql::TStmtParseInfo>* stmtParseInfo) {
         return SqlToAstStatements(MakeAllTranslators(), query, settings, warningRules, actualSyntaxVersion, stmtParseInfo);
-    }
-
-    TTranslators MakeAllTranslators() {
-        return TTranslators(
-            NSQLTranslationV0::MakeTranslator(),
-            NSQLTranslationV1::MakeTranslator(),
-            NSQLTranslationPG::MakeTranslator()
-        );
     }
 
     TTranslators::TTranslators(TTranslatorPtr v0, TTranslatorPtr v1, TTranslatorPtr pg)

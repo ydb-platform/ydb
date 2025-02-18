@@ -314,7 +314,7 @@ void TColumnShardScan::ContinueProcessing() {
             }
         }
     }
-    AFL_VERIFY(!ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting())("scan_actor_id", ScanActorId)("tx_id", TxId)(
+    AFL_VERIFY(!!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting())("scan_actor_id", ScanActorId)("tx_id", TxId)(
                                                             "scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)(
                                                             "debug", ScanIterator->DebugString())("counters", ScanCountersPool.DebugString());
 }
@@ -419,10 +419,10 @@ void TColumnShardScan::SendScanError(const TString& reason) {
 
 void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish status) {
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan " << ScanActorId << " finished for tablet " << TabletId);
-
     Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId));
     AFL_VERIFY(StartInstant);
-    ScanCountersPool.OnScanFinished(status, TMonotonic::Now() - *StartInstant);
+    FinishInstant = TMonotonic::Now();
+    ScanCountersPool.OnScanFinished(status, *FinishInstant - *StartInstant);
     ReportStats();
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_finish")("compute_actor_id", ScanComputeActorId)("stats", Stats->ToJson())(
         "iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO"));

@@ -2,7 +2,6 @@ import os
 from enum import auto, StrEnum
 from typing import Any, Literal, TYPE_CHECKING
 
-
 # noinspection PyUnresolvedReferences
 import ymake
 
@@ -466,7 +465,7 @@ def on_ts_configure(unit: NotsUnitType) -> None:
 
         tsconfig = TsConfig.load(abs_tsconfig_path)
         config_files = tsconfig.inline_extend(dep_paths)
-        config_files = _resolve_module_files(unit, mod_dir, config_files)
+        config_files = [rootrel_arc_src(path, unit) for path in config_files]
 
         use_tsconfig_outdir = unit.get("TS_CONFIG_USE_OUTDIR") == "yes"
         tsconfig.validate(use_tsconfig_outdir)
@@ -712,19 +711,6 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
         unit.set_property(["DART_DATA", data])
 
     unit.set(["TEST_RECIPES_VALUE", recipes_value])
-
-
-def _resolve_module_files(unit: NotsUnitType, mod_dir: str, file_paths: list[str]) -> list[str]:
-    mod_dir_with_sep_len = len(mod_dir) + 1
-    resolved_files = []
-
-    for path in file_paths:
-        resolved = rootrel_arc_src(path, unit)
-        if resolved.startswith(mod_dir):
-            resolved = resolved[mod_dir_with_sep_len:]
-        resolved_files.append(resolved)
-
-    return resolved_files
 
 
 def _set_resource_vars(
@@ -995,3 +981,6 @@ def on_run_javascript_after_build_add_js_script_as_input(unit: NotsUnitType, js_
         return
 
     __set_append(unit, "_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", js_script)
+
+
+# Zero-diff commit

@@ -200,6 +200,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
 
 TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<TString>& lineageOut, EYqlIssueCode issueCode) {
     AddCommonOptimization(issueCode);
+    AddCheckExecution(false, issueCode);
     Transformers_.push_back(TTransformStage(
         CreateFunctorTransformer(
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

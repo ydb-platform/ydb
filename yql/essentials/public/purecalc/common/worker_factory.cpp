@@ -5,6 +5,8 @@
 #include "compile_mkql.h"
 
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -206,7 +208,13 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             }
         }
 
-        astRes = SqlToYql(TString(query), settings);
+        NSQLTranslation::TTranslators translators(
+            nullptr,
+            NSQLTranslationV1::MakeTranslator(),
+            NSQLTranslationPG::MakeTranslator()
+        );
+
+        astRes = SqlToYql(translators, TString(query), settings);
     } else {
         astRes = ParseAst(TString(query));
     }

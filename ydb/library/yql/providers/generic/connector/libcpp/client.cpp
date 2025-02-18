@@ -20,6 +20,14 @@ namespace NYql::NConnector {
         std::shared_ptr<TStreamer<TResponse>> Streamer_;
     };
 
+    TListSplitsStreamIteratorDrainer::TPtr MakeListSplitsStreamIteratorDrainer(IListSplitsStreamIterator::TPtr&& iterator) {
+        return std::make_shared<TListSplitsStreamIteratorDrainer>(std::move(iterator));
+    }
+
+    TReadSplitsStreamIteratorDrainer::TPtr MakeReadSplitsStreamIteratorDrainer(IReadSplitsStreamIterator::TPtr&& iterator) {
+        return std::make_shared<TReadSplitsStreamIteratorDrainer>(std::move(iterator));
+    }
+
     class TClientGRPC: public IClient {
     public:
         TClientGRPC() = delete;
@@ -83,7 +91,7 @@ namespace NYql::NConnector {
             typename NYdbGrpc::TSimpleRequestProcessor<NApi::Connector::Stub, TRequest, TResponse>::TAsyncRequest rpc, TDuration timeout = {}) {
             auto context = GrpcClient_->CreateContext();
             if (!context) {
-                throw yexception() << "Client is being shutted down";
+                throw yexception() << "Client is being shutdown";
             }
 
             auto promise = NThreading::NewPromise<TResult<TResponse>>();
@@ -113,7 +121,7 @@ namespace NYql::NConnector {
 
             auto context = GrpcClient_->CreateContext();
             if (!context) {
-                throw yexception() << "Client is being shutted down";
+                throw yexception() << "Client is being shutdown";
             }
 
             GrpcConnection_->DoStreamRequest<TRequest, TResponse>(

@@ -8,7 +8,13 @@ from ydb.tests.stress.common.common import YdbClient
 class TestYdbWorkload(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator())
+        config = KikimrConfigGenerator(
+            extra_feature_flags={
+                "enable_parameterized_decimal": True,
+                "enable_table_datetime64" : True
+            }
+        )
+        cls.cluster = KiKiMR(config)
         cls.cluster.start()
 
     @classmethod

@@ -42,7 +42,7 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
     Script->OnExecute();
     AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     while (!Script->IsFinished(CurrentStepIdx)) {
-        if (source->HasStageData() && source->GetStageData().IsEmpty()) {
+        if (source->HasStageData() && source->GetStageData().IsEmptyFiltered()) {
             source->OnEmptyStageData(source);
             break;
         }
@@ -159,6 +159,14 @@ bool TColumnsAccumulator::AddAssembleStep(
     } else {
         script.Allocation(actualColumns.GetColumnIds(), stage, EMemType::Raw);
         script.AddStep<TAssemblerStep>(actualSet, purposeId);
+    }
+    return true;
+}
+
+TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    auto result = Step->Execute(source->GetStageData().GetTable());
+    if (result.IsFail()) {
+        return result;
     }
     return true;
 }

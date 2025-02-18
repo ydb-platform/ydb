@@ -23,6 +23,7 @@ PEERDIR(
     yql/essentials/sql/v1/format
     yql/essentials/sql/settings
     yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/sql/v1
 )
 
 GENERATE_ENUM_SERIALIZATION(linter.h)

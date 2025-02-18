@@ -159,6 +159,8 @@ class TErrorResponse
 public:
     TErrorResponse(int httpCode, const TString& requestId);
 
+    TErrorResponse(TYtError error, const TString& requestId);
+
     /// Get error object returned by server.
     const TYtError& GetError() const;
 
@@ -179,6 +181,9 @@ public:
 
     /// Check if error was caused by lack of permissions to execute request.
     bool IsAccessDenied() const;
+
+    /// Check if error was caused by authorization issues.
+    bool IsUnauthorized() const;
 
     /// Check if error was caused by failure to lock object because of another transaction is holding lock.
     bool IsConcurrentTransactionLockConflict() const;

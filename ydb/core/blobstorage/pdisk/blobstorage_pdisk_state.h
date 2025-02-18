@@ -24,7 +24,7 @@ enum class EInitPhase {
 
 enum EOwner {
     OwnerSystem = 0, // Chunk0, SysLog chunks and CommonLog + just common log tracking, means "for dynamic" in requests
-    OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands
+    OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands, common log records owned by OwnerUnallocated = padding 
     OwnerBeginUser = 2,
     OwnerEndUser = 241,
     OwnerMetadata = 250, // Metadata chunks, the real owner

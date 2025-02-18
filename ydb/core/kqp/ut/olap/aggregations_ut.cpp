@@ -907,6 +907,24 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         TestTableWithNulls({ testCase });
     }
 
+    Y_UNIT_TEST(Aggregation_Sum_Null_Count) {
+        TAggregationTestCase testCase;
+        testCase
+            .SetQuery(R"(
+                SELECT
+                    SUM(level), COUNT(*), AVG(level)
+                FROM `/Root/tableWithNulls`
+            )")
+            .SetExpectedReply("[[[15];10u;[3.]]]")
+#if SSA_RUNTIME_VERSION >= 2U
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
+
+        TestTableWithNulls({ testCase });
+    }
+
     Y_UNIT_TEST(Aggregation_Sum_NullMix) {
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(

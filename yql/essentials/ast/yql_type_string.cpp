@@ -91,6 +91,7 @@ enum EToken
     TOKEN_TZDATE32 = -56,
     TOKEN_TZDATETIME64 = -57,
     TOKEN_TZTIMESTAMP64 = -58,
+    TOKEN_MULTI = -59,
 
     // identifiers
     TOKEN_IDENTIFIER = -100,
@@ -121,6 +122,7 @@ EToken TokenTypeFromStr(TStringBuf str)
         { TStringBuf("Dict"), TOKEN_DICT },
         { TStringBuf("Tuple"), TOKEN_TUPLE },
         { TStringBuf("Struct"), TOKEN_STRUCT },
+        { TStringBuf("Multi"), TOKEN_MULTI },
         { TStringBuf("Resource"), TOKEN_RESOURCE },
         { TStringBuf("Void"), TOKEN_VOID },
         { TStringBuf("Callable"), TOKEN_CALLABLE },
@@ -265,6 +267,10 @@ private:
 
         case TOKEN_STRUCT:
             type = ParseStructType();
+            break;
+
+        case TOKEN_MULTI:
+            type = ParseMultiType();
             break;
 
         case TOKEN_RESOURCE:
@@ -752,9 +758,9 @@ private:
         return MakeDictType(keyType, MakeVoidType());
     }
 
-    TAstNode* ParseTupleTypeImpl() {
+    TAstNode* ParseTupleTypeImpl(TAstNode* (TTypeParser::*typeCreator)(TSmallVec<TAstNode*>&)) {
         TSmallVec<TAstNode*> items;
-        items.push_back(nullptr);  // reserve for TupleType
+        items.push_back(nullptr);  // reserve for type callable
 
         if (Token != '>') {
             for (;;) {
@@ -773,13 +779,13 @@ private:
             }
         }
 
-        return MakeTupleType(items);
+        return (this->*typeCreator)(items);
     }
 
     TAstNode* ParseTupleType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
-        TAstNode* tupleType = ParseTupleTypeImpl();
+        TAstNode* tupleType = ParseTupleTypeImpl(&TTypeParser::MakeTupleType);
         if (tupleType) {
             EXPECT_AND_SKIP_TOKEN('>', nullptr);
         }
@@ -836,6 +842,16 @@ private:
         return structType;
     }
 
+    TAstNode* ParseMultiType() {
+        GetNextToken(); // eat keyword
+        EXPECT_AND_SKIP_TOKEN('<', nullptr);
+        TAstNode* tupleType = ParseTupleTypeImpl(&TTypeParser::MakeMultiType);
+        if (tupleType) {
+            EXPECT_AND_SKIP_TOKEN('>', nullptr);
+        }
+        return tupleType;
+    }
+
     TAstNode* ParseVariantType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
@@ -844,7 +860,7 @@ private:
         if (Token == TOKEN_IDENTIFIER || Token == TOKEN_ESCAPED_IDENTIFIER) {
             underlyingType = ParseStructTypeImpl();
         } else if (IsTypeKeyword(Token) || Token == '(') {
-            underlyingType = ParseTupleTypeImpl();
+            underlyingType = ParseTupleTypeImpl(&TTypeParser::MakeTupleType);
         } else {
             return AddError("Expected type");
         }
@@ -992,6 +1008,11 @@ private:
             items.push_back(MakeQuote(MakeList(memberType, Y_ARRAY_SIZE(memberType))));
         }
 
+        return MakeList(items.data(), items.size());
+    }
+
+    TAstNode* MakeMultiType(TSmallVec<TAstNode*>& items) {
+        items[0] = MakeLiteralAtom(TStringBuf("MultiType"));
         return MakeList(items.data(), items.size());
     }
 

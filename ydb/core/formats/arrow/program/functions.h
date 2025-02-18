@@ -31,9 +31,7 @@ public:
     }
 
     IStepFunction(const bool needConcatenation)
-        : NeedConcatenation(needConcatenation)
-    {
-
+        : NeedConcatenation(needConcatenation) {
     }
 
     virtual ~IStepFunction() = default;
@@ -310,7 +308,8 @@ public:
         return ValidateArgumentsCount(OperationId, input.size());
     }
 
-    TSimpleFunction(const EOperation operationId, const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions = nullptr, const bool needConcatenation = false)
+    TSimpleFunction(const EOperation operationId, const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions = nullptr,
+        const bool needConcatenation = false)
         : TBase(functionOptions, needConcatenation)
         , OperationId(operationId) {
     }

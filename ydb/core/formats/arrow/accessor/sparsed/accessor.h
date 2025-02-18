@@ -268,6 +268,7 @@ public:
         }
 
         void AddChunk(const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& data);
+        void AddChunk(const ui32 recordsCount, const std::shared_ptr<arrow::Array>& indexes, const std::shared_ptr<arrow::Array>& values);
         void AddChunk(TSparsedArrayChunk&& chunk) {
             RecordsCount += chunk.GetRecordsCount();
             Chunks.emplace_back(std::move(chunk));

@@ -281,10 +281,6 @@ private:
         return Ctx_->Reply(resp, status);
     }
 
-    void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details) override {
-        return Ctx_->ReplyError(code, msg, details);
-    }
-
     TResonse* CreateResponseMessage() {
         return google::protobuf::Arena::CreateMessage<TResonse>(Ctx_->GetArena());
     }

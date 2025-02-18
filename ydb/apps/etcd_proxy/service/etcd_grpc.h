@@ -10,11 +10,6 @@
 
 namespace NEtcd {
 
-class IRequestCtx : public NKikimr::NGRpcService::IRequestCtx {
-public:
-    virtual void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details) = 0;
-};
-
 template<class TService>
 class TEtcdServiceBase
     : public NYdbGrpc::TGrpcServiceBase<TService>

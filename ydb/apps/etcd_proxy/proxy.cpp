@@ -152,9 +152,9 @@ TProxy::TProxy(int argc, char** argv)
     opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&useStdErr);
     opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&mlock);
 
-    opts.AddLongOption("ca", "SSL CA certificate file").Optional().RequiredArgument("CA").StoreResult(&Root);;
-    opts.AddLongOption("cert", "SSL certificate file").Optional().RequiredArgument("CERT").StoreResult(&Cert);;
-    opts.AddLongOption("key", "SSL key file").Optional().RequiredArgument("KEY").StoreResult(&Key);;
+    opts.AddLongOption("ca", "SSL CA certificate file").Optional().RequiredArgument("CA").StoreResult(&Root);
+    opts.AddLongOption("cert", "SSL certificate file").Optional().RequiredArgument("CERT").StoreResult(&Cert);
+    opts.AddLongOption("key", "SSL key file").Optional().RequiredArgument("KEY").StoreResult(&Key);
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 

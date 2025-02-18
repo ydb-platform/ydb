@@ -39,6 +39,8 @@ struct TOperation {
     size_t ResultIndex = 0ULL;
 };
 
+static constexpr auto NoEnd = "\0"sv;
+
 struct TRange : public TOperation {
     std::string Key, RangeEnd;
     bool KeysOnly, CountOnly;
@@ -76,7 +78,7 @@ struct TRange : public TOperation {
         return out;
     }
 
-    bool Parse(const etcdserverpb::RangeRequest& rec) {
+    std::string Parse(const etcdserverpb::RangeRequest& rec) {
         Key = rec.key();
         RangeEnd = DecrementKey(rec.range_end());
         KeysOnly = rec.keys_only();
@@ -93,7 +95,14 @@ struct TRange : public TOperation {
             case etcdserverpb::RangeRequest_SortOrder_DESCEND: SortOrder = false; break;
             default: break;
         }
-        return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
+
+        if (Key.empty())
+            return "key is not provided";
+
+        if (!RangeEnd.empty() && NoEnd != RangeEnd && RangeEnd < Key)
+            return "invalid range end";
+
+        return {};
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
@@ -200,14 +209,18 @@ struct TPut : public TOperation {
         return out;
     }
 
-    bool Parse(const etcdserverpb::PutRequest& rec) {
+    std::string Parse(const etcdserverpb::PutRequest& rec) {
         Key = rec.key();
         Value = rec.value();
         Lease = rec.lease();
         GetPrevious = rec.prev_kv();
         IgnoreValue = rec.ignore_value();
         IgnoreLease = rec.ignore_lease();
-        return !Key.empty();
+
+        if (Key.empty())
+            return "key is not provided";
+
+        return {};
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
@@ -306,11 +319,18 @@ struct TDeleteRange : public TOperation {
         return out;
     }
 
-    bool Parse(const etcdserverpb::DeleteRangeRequest& rec) {
+    std::string Parse(const etcdserverpb::DeleteRangeRequest& rec) {
         Key = rec.key();
         RangeEnd = DecrementKey(rec.range_end());
         GetPrevious = rec.prev_kv();
-        return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
+
+        if (Key.empty())
+            return "key is not provided";
+
+        if (!RangeEnd.empty() && NoEnd != RangeEnd && RangeEnd < Key)
+            return "invalid range end";
+
+        return {};
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
@@ -383,7 +403,7 @@ struct TCompare {
 
     size_t Result, Target;
 
-    bool Parse(const etcdserverpb::Compare& rec) {
+    std::string Parse(const etcdserverpb::Compare& rec) {
         Key = rec.key();
         RangeEnd = DecrementKey(rec.range_end());
         Result = rec.result();
@@ -408,7 +428,13 @@ struct TCompare {
                 break;
         }
 
-        return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
+        if (Key.empty())
+            return "key is not provided";
+
+        if (!RangeEnd.empty() && NoEnd != RangeEnd && RangeEnd < Key)
+            return "invalid range end";
+
+        return {};
     }
 
     static constexpr std::string_view Fields[] = {"version"sv, "created"sv, "modified"sv, "value"sv, "lease"sv};
@@ -498,52 +524,54 @@ struct TTxn : public TOperation {
     }
 
     template<class TOperation, class TSrc>
-    static bool Parse(std::vector<TRequestOp>& operations, const TSrc& src) {
+    static std::string Parse(std::vector<TRequestOp>& operations, const TSrc& src) {
         TOperation op;
-        if (!op.Parse(src))
-            return false;
+        if (const auto& error = op.Parse(src); !error.empty())
+            return error;
         operations.emplace_back(std::move(op));
-        return true;
+        return {};
     }
 
-    bool Parse(const etcdserverpb::TxnRequest& rec) {
+    std::string Parse(const etcdserverpb::TxnRequest& rec) {
         for (const auto& comp : rec.compare()) {
             Compares.emplace_back();
-            if (!Compares.back().Parse(comp))
-                return false;
+            if (const auto& error = Compares.back().Parse(comp); !error.empty())
+                return error;
         }
 
-        const auto fill = [](std::vector<TRequestOp>& operations, const auto& fields) {
+        const auto fill = [](std::vector<TRequestOp>& operations, const auto& fields) -> std::string {
             for (const auto& op : fields) {
                 switch (op.request_case()) {
                     case etcdserverpb::RequestOp::RequestCase::kRequestRange: {
-                        if (!Parse<TRange>(operations, op.request_range()))
-                            return false;
+                        if (const auto& error = Parse<TRange>(operations, op.request_range()); !error.empty())
+                            return error;
                         break;
                     }
                     case etcdserverpb::RequestOp::RequestCase::kRequestPut: {
-                        if (!Parse<TPut>(operations, op.request_put()))
-                            return false;
+                        if (const auto& error = Parse<TPut>(operations, op.request_put()); !error.empty())
+                            return error;
                         break;
                     }
                     case etcdserverpb::RequestOp::RequestCase::kRequestDeleteRange: {
-                        if (!Parse<TDeleteRange>(operations, op.request_delete_range()))
-                            return false;
+                        if (const auto& error = Parse<TDeleteRange>(operations, op.request_delete_range()); !error.empty())
+                            return error;
                         break;
                     }
                     case etcdserverpb::RequestOp::RequestCase::kRequestTxn: {
-                        if (!Parse<TTxn>(operations, op.request_txn()))
-                            return false;
+                        if (const auto& error = Parse<TTxn>(operations, op.request_txn()); !error.empty())
+                            return error;
                         break;
                     }
                     default:
-                        return false;
+                        return "invalid operation";
                 }
             }
-            return true;
+            return {};
         };
 
-        return !Compares.empty() && fill(Success, rec.success()) && fill(Failure, rec.failure());
+        if (Compares.empty())
+            return "compare is not provided";
+        return fill(Success, rec.success()) + fill(Failure, rec.failure());
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
@@ -638,7 +666,7 @@ using namespace NActors;
 
 class TBaseEtcdRequest {
 protected:
-    virtual bool ParseGrpcRequest() = 0;
+    virtual std::string ParseGrpcRequest() = 0;
     virtual void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) = 0;
     virtual void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) = 0;
 
@@ -647,21 +675,25 @@ protected:
 
 using namespace NKikimr::NGRpcService;
 
-template <typename TDerived, typename TRequest>
+template <typename TDerived, typename TRequest, bool ReadOnly = false>
 class TEtcdRequestGrpc
-    : public TActorBootstrapped<TEtcdRequestGrpc<TDerived, TRequest>>
+    : public TActorBootstrapped<TEtcdRequestGrpc<TDerived, TRequest, ReadOnly>>
     , public TBaseEtcdRequest
 {
     friend class TBaseEtcdRequest;
 public:
-    TEtcdRequestGrpc(std::unique_ptr<IRequestCtx> request, TSharedStuff::TPtr stuff)
+    TEtcdRequestGrpc(std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> request, TSharedStuff::TPtr stuff)
         : Request_(std::move(request)), Stuff(std::move(stuff))
     {}
 
-    void Bootstrap(const TActorContext&) {
-        this->ParseGrpcRequest();
-        this->Become(&TEtcdRequestGrpc::StateFunc);
-        SendDatabaseRequest();
+    void Bootstrap(const TActorContext& ctx) {
+        if (const auto& error = this->ParseGrpcRequest(); !error.empty()) {
+            this->Request_->ReplyWithRpcStatus(grpc::StatusCode::INVALID_ARGUMENT, TString(error));
+            this->Die(ctx);
+        } else {
+            this->Become(&TEtcdRequestGrpc::StateFunc);
+            SendDatabaseRequest();
+        }
     }
 private:
     void SendDatabaseRequest() {
@@ -693,9 +725,20 @@ private:
     }
 
     void Handle(NEtcd::TEvQueryError::TPtr &ev) {
-        std::cerr << __func__ << ' ' << ev->Get()->Issues.ToString() << std::endl;
+        TryToRollbackRevision();
+        std::ostringstream err;
+        err << "SQL error received:" << std::endl << ev->Get()->Issues.ToString() << std::endl;
+        std::cout << err.str();
+        this->Request_->ReplyWithRpcStatus(grpc::StatusCode::INTERNAL, err.str());
     }
 protected:
+    void TryToRollbackRevision() {
+        if constexpr (!ReadOnly) {
+            auto expected = Revision + 1U;
+            Stuff->Revision.compare_exchange_weak(expected, Revision);
+        }
+    }
+
     const typename TRequest::TRequest* GetProtoRequest() const {
         return TRequest::GetProtoRequest(Request_);
     }
@@ -705,7 +748,7 @@ protected:
         this->Die(ctx);
     }
 
-    const std::unique_ptr<IRequestCtx> Request_;
+    const std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> Request_;
     const TSharedStuff::TPtr Stuff;
 };
 
@@ -721,12 +764,12 @@ using TEvLeaseTimeToLiveRequest = TGrpcRequestNoOperationCall<etcdserverpb::Leas
 using TEvLeaseLeasesRequest = TGrpcRequestNoOperationCall<etcdserverpb::LeaseLeasesRequest, etcdserverpb::LeaseLeasesResponse>;
 
 class TRangeRequest
-    : public TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest> {
+    : public TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest, true> {
 public:
-    using TBase = TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest>;
+    using TBase = TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest, true>;
     using TBase::TBase;
 private:
-    bool ParseGrpcRequest() final {
+    std::string ParseGrpcRequest() final {
         Revision = Stuff->Revision.load();
         return Range.Parse(*GetProtoRequest());
     }
@@ -750,9 +793,11 @@ public:
     using TBase = TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest>;
     using TBase::TBase;
 private:
-    bool ParseGrpcRequest() final {
+    std::string ParseGrpcRequest() final {
+        if (const auto& error = Put.Parse(*GetProtoRequest()); !error.empty())
+            return error;
         Revision = Stuff->Revision.fetch_add(1L);
-        return Put.Parse(*GetProtoRequest());
+        return {};
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
@@ -780,9 +825,11 @@ public:
     using TBase = TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest>;
     using TBase::TBase;
 private:
-    bool ParseGrpcRequest() final {
+    std::string ParseGrpcRequest() final {
+        if (const auto& error = DeleteRange.Parse(*GetProtoRequest()); !error.empty())
+            return error;
         Revision = Stuff->Revision.fetch_add(1L);
-        return DeleteRange.Parse(*GetProtoRequest());
+        return {};
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
@@ -797,10 +844,8 @@ private:
         };
 
         auto response = DeleteRange.MakeResponse(Revision, results, notifier);
-        if (!response.deleted()) {
-            auto expected = Revision + 1U;
-            Stuff->Revision.compare_exchange_strong(expected, Revision);
-        }
+        if (!response.deleted())
+            TryToRollbackRevision();
 
         DeleteRange.Dump(std::cout) << '=' << response.deleted() << std::endl;
         return this->Reply(response, ctx);
@@ -815,9 +860,11 @@ public:
     using TBase = TEtcdRequestGrpc<TTxnRequest, TEvTxnKVRequest>;
     using TBase::TBase;
 private:
-    bool ParseGrpcRequest() final {
+    std::string ParseGrpcRequest() final {
+        if (const auto& error = Txn.Parse(*GetProtoRequest()); !error.empty())
+            return error;
         Revision = Stuff->Revision.fetch_add(1L);
-        return Txn.Parse(*GetProtoRequest());
+        return {};
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
@@ -852,12 +899,14 @@ public:
     using TBase = TEtcdRequestGrpc<TCompactRequest, TEvCompactKVRequest>;
     using TBase::TBase;
 private:
-    bool ParseGrpcRequest() final {
+    std::string ParseGrpcRequest() final {
         Revision = Stuff->Revision.load();
 
         const auto &rec = *GetProtoRequest();
         KeyRevision = rec.revision();
-        return KeyRevision > 0LL && KeyRevision < Revision;
+        if (KeyRevision <= 0LL | KeyRevision >= Revision)
+            return std::string("invalid revision:" ) += std::to_string(KeyRevision);
+        return {};
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
@@ -880,13 +929,16 @@ public:
     using TBase = TEtcdRequestGrpc<TLeaseGrantRequest, TEvLeaseGrantRequest>;
     using TBase::TBase;
 private:
-    bool ParseGrpcRequest() final {
+    std::string ParseGrpcRequest() final {
         Revision = Stuff->Revision.load();
-        Lease = Stuff->Lease.fetch_add(1L);
-
         const auto &rec = *GetProtoRequest();
         TTL = rec.ttl();
-        return !rec.id();
+
+        if (rec.id())
+            return "requested id isn't supported";
+
+        Lease = Stuff->Lease.fetch_add(1L);
+        return {};
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
@@ -912,12 +964,15 @@ public:
     using TBase = TEtcdRequestGrpc<TLeaseRevokeRequest, TEvLeaseRevokeRequest>;
     using TBase::TBase;
 private:
-    bool ParseGrpcRequest() final {
-        Revision = Stuff->Revision.fetch_add(1LL);
-
+    std::string ParseGrpcRequest() final {
         const auto &rec = *GetProtoRequest();
         Lease = rec.id();
-        return Lease != 0LL;
+
+        if (!Lease)
+            return "lease id isn't set";
+
+        Revision = Stuff->Revision.fetch_add(1LL);
+        return {};
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
@@ -951,10 +1006,8 @@ private:
                 ctx.Send(Stuff->Watchtower, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData)));
             }
 
-            if (!deleted) {
-                auto expected = Revision + 1U;
-                Stuff->Revision.compare_exchange_strong(expected, Revision);
-            }
+            if (!deleted)
+                TryToRollbackRevision();
         }
 
         etcdserverpb::LeaseRevokeResponse response;
@@ -972,13 +1025,15 @@ public:
     using TBase = TEtcdRequestGrpc<TLeaseTimeToLiveRequest, TEvLeaseTimeToLiveRequest>;
     using TBase::TBase;
 private:
-    bool ParseGrpcRequest() final {
+    std::string ParseGrpcRequest() final {
         Revision = Stuff->Revision.load();
 
         const auto &rec = *GetProtoRequest();
         Lease = rec.id();
         Keys = rec.keys();
-        return Lease != 0LL;
+        if (!Lease)
+            return "lease id isn't set";
+        return {};
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
@@ -1020,9 +1075,9 @@ public:
     using TBase = TEtcdRequestGrpc<TLeaseLeasesRequest, TEvLeaseLeasesRequest>;
     using TBase::TBase;
 private:
-    bool ParseGrpcRequest() final {
+    std::string ParseGrpcRequest() final {
         Revision = Stuff->Revision.load();
-        return true;
+        return {};
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder&) final {
@@ -1066,7 +1121,7 @@ void MakeSimplePredicate(const std::string_view& key, const std::string_view& ra
     const auto& keyParamName = AddParam("Key", params, key, paramsCounter);
     if (rangeEnd.empty())
         sql << keyParamName << " = `key`";
-    else if ("\0"sv == rangeEnd)
+    else if (NoEnd == rangeEnd)
         sql << keyParamName << " <= `key`";
     else if (rangeEnd == key)
         sql << "startswith(`key`, " << keyParamName << ')';
@@ -1074,39 +1129,39 @@ void MakeSimplePredicate(const std::string_view& key, const std::string_view& ra
         sql << "`key` between " << keyParamName << " and " << AddParam("RangeEnd", params, rangeEnd, paramsCounter);
 }
 
-NActors::IActor* MakeRange(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+NActors::IActor* MakeRange(std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> p, TSharedStuff::TPtr stuff) {
     return new TRangeRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakePut(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+NActors::IActor* MakePut(std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> p, TSharedStuff::TPtr stuff) {
     return new TPutRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeDeleteRange(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+NActors::IActor* MakeDeleteRange(std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> p, TSharedStuff::TPtr stuff) {
     return new TDeleteRangeRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeTxn(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+NActors::IActor* MakeTxn(std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> p, TSharedStuff::TPtr stuff) {
     return new TTxnRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeCompact(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+NActors::IActor* MakeCompact(std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> p, TSharedStuff::TPtr stuff) {
     return new TCompactRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeLeaseGrant(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+NActors::IActor* MakeLeaseGrant(std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> p, TSharedStuff::TPtr stuff) {
     return new TLeaseGrantRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeLeaseRevoke(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+NActors::IActor* MakeLeaseRevoke(std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> p, TSharedStuff::TPtr stuff) {
     return new TLeaseRevokeRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeLeaseTimeToLive(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+NActors::IActor* MakeLeaseTimeToLive(std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> p, TSharedStuff::TPtr stuff) {
     return new TLeaseTimeToLiveRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeLeaseLeases(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+NActors::IActor* MakeLeaseLeases(std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> p, TSharedStuff::TPtr stuff) {
     return new TLeaseLeasesRequest(std::move(p), std::move(stuff));
 }
 

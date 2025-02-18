@@ -842,6 +842,7 @@ public:
         UpdateConfig(db, "ScaleInWindowSize", configUpdates);
         UpdateConfig(db, "TargetTrackingCPUMargin", configUpdates);
         UpdateConfig(db, "DryRunTargetTrackingCPU", configUpdates);
+        UpdateConfig(db, "NodeRestartsForPenalty", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1195,6 +1196,7 @@ public:
         ShowConfig(out, "ScaleInWindowSize");
         ShowConfig(out, "TargetTrackingCPUMargin");
         ShowConfig(out, "DryRunTargetTrackingCPU");
+        ShowConfig(out, "NodeRestartsForPenalty");
 
         out << "<div class='row' style='margin-top:40px'>";
         out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'>AllowedMetrics:</label></div>";

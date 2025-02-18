@@ -103,7 +103,7 @@ namespace NKikimr::NStorage {
                 }
 
                 NTabletPipe::SendData(SelfId(), ConsolePipeId, new TEvBlobStorage::TEvControllerConsoleCommitRequest(
-                    MainConfigYaml), // FIXME
+                    MainConfigYaml), // FIXME: probably should propagate force here
                         ++CommitRequestCookie);
                 break;
             }

@@ -65,6 +65,8 @@ namespace NKikimr::NYaml {
 
     void TransformProtoConfig(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed = false);
 
+    // TODO: replace bools with something meaningful
+
     void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config, bool transform, bool relaxed = false);
     NKikimrConfig::TAppConfig Parse(const TString& data, bool transform = true);
 

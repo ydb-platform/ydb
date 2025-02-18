@@ -2,6 +2,7 @@
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/library/yaml_config/tools/util/defaults.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 #include "rpc_config_base.h"
 
 #include <ydb/core/base/path.h>
@@ -177,7 +178,8 @@ public:
         NKikimrConfig::TAppConfig newConfig;
         try {
             auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
-            newConfig = NYaml::Parse(shim.MainConfig.value_or(TString{})); // TODO: !imp check allow unknown fields
+            auto config = NFyaml::TDocument::Parse(shim.MainConfig.value_or(TString{"{}"}));
+            newConfig = NYamlConfig::YamlToProto(config.Root(), true, true);
         } catch (const std::exception&) {
             return false; // assuming no distconf enabled in this config
         }

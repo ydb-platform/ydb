@@ -640,7 +640,7 @@ protected:
 
     template <NKikimrConfig::THiveConfig::EHiveNodeSelectStrategy Strategy>
     TNodeInfo* SelectNode(const std::vector<TSelectedNode>& selectedNodes);
-    TVector<TSelectedNode> SelectMaxPriorityNodes(TVector<TSelectedNode> selectedNodes, const TTabletInfo& tablet) const;
+    TVector<TSelectedNode> SelectMaxPriorityNodes(TVector<TSelectedNode> selectedNodes, const TTabletInfo& tablet, TDataCenterPriority& dcPriority) const;
 
 public:
     void AssignTabletGroups(TLeaderTabletInfo& tablet);
@@ -1000,6 +1000,10 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
 
     ui64 GetMaxPingsInFlight() const {
         return CurrentConfig.GetMaxPingsInFlight();
+    }
+
+    ui64 GetNodeRestartsForPenalty() const {
+        return CurrentConfig.GetNodeRestartsForPenalty();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

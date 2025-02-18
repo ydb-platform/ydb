@@ -1763,6 +1763,7 @@ message THiveConfig {
     optional uint64 ScaleInWindowSize = 82 [default = 5]; // buckets
     optional double TargetTrackingCPUMargin = 83 [default = 0.1]; // percent
     optional double DryRunTargetTrackingCPU = 84; // percent
+    optional uint64 NodeRestartsForPenalty = 85 [default = 3];
 }
 
 message TBlobCacheConfig {

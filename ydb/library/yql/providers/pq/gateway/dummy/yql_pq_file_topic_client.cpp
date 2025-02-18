@@ -350,10 +350,8 @@ std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(
     TFsPath fsPath(*filePath);
     if (fsPath.IsDirectory()) {
         filePath = TStringBuilder() << *filePath << "/" << ToString(partitionId);
-    } else {
-        if (!fsPath.Exists()) {
-            filePath = TStringBuilder() << *filePath << "_" << partitionId;
-        }
+    } else if (!fsPath.Exists()) {
+        filePath = TStringBuilder() << *filePath << "_" << partitionId;
     }
 
     // TODO

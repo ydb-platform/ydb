@@ -285,6 +285,13 @@ TErrorResponse::TErrorResponse(int httpCode, const TString& requestId)
     , RequestId_(requestId)
 { }
 
+TErrorResponse::TErrorResponse(TYtError error, const TString& requestId)
+    : RequestId_(requestId)
+    , Error_(std::move(error))
+{
+    Setup();
+}
+
 bool TErrorResponse::IsOk() const
 {
     return Error_.GetCode() == 0;

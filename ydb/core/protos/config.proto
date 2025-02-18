@@ -2125,7 +2125,8 @@ message TKafkaProxyConfig {
     }
 
     optional TProxy Proxy = 7;
-    optional bool MeteringV2Enabled = 10 [default = false];
+    optional bool MeteringV2Enabled = 10 [default = true];
+    optional bool AuthViaApiKey = 11 [default = true];
 }
 
 message TAwsCompatibilityConfig {
@@ -2236,6 +2237,8 @@ message TAppConfig {
     repeated TLabel Labels = 103;
 
     optional string ConfigStorePath = 104;
+    optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
+    optional bool ConfigLoadedFromStore = 106;
 }
 
 message TYdbVersion {

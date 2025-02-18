@@ -123,6 +123,7 @@ private:
     TString TxMode;
     TString QueryType;
     bool BasicStats = false;
+    TString DiagnosticsFile;
 };
 
 class TCommandExplain : public TTableCommand, public TCommandWithOutput, TCommandQueryBase, TInterruptibleCommand {

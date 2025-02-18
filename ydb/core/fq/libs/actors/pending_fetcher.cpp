@@ -158,7 +158,7 @@ public:
         const TString& tenantName,
         NActors::TMon* monitoring,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-        const NYql::IPqGateway::TPtr& pqGateway
+        NYql::IPqGateway::TPtr defaultPqGateway
         )
         : YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
@@ -181,7 +181,7 @@ public:
         , Monitoring(monitoring)
         , ComputeConfig(config.GetCompute())
         , S3ActorsFactory(std::move(s3ActorsFactory))
-        , PqGateway(pqGateway)
+        , DefaultPqGateway(std::move(defaultPqGateway))
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -475,7 +475,7 @@ private:
             std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end()),
             S3ActorsFactory,
             ComputeConfig.GetWorkloadManagerConfig(task.scope()),
-            PqGateway
+            DefaultPqGateway
             );
 
         auto runActorId =
@@ -551,7 +551,7 @@ private:
     NActors::TMon* Monitoring;
     TComputeConfig ComputeConfig;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
-    NYql::IPqGateway::TPtr PqGateway;
+    NYql::IPqGateway::TPtr DefaultPqGateway;
 };
 
 
@@ -572,7 +572,7 @@ NActors::IActor* CreatePendingFetcher(
     const TString& tenantName,
     NActors::TMon* monitoring,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    NYql::IPqGateway::TPtr defaultPqGateway)
 {
     return new TPendingFetcher(
         yqSharedResources,
@@ -591,7 +591,7 @@ NActors::IActor* CreatePendingFetcher(
         tenantName,
         monitoring,
         std::move(s3ActorsFactory),
-        pqGateway);
+        defaultPqGateway);
 }
 
 TActorId MakePendingFetcherId(ui32 nodeId) {

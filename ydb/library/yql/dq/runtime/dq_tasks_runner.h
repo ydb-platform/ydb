@@ -323,7 +323,7 @@ public:
     }
 
     bool EnableMetering() const {
-        return Task_->GetEnableMetering();
+        return !Task_->GetDisableMetering();
     }
 
     ui64 GetStageId() const {

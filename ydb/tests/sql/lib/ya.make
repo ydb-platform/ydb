@@ -7,6 +7,7 @@ PY_SRCS(
     helpers.py
     test_query.py
     test_s3.py
+    conftest.py
 )
 
 PEERDIR(

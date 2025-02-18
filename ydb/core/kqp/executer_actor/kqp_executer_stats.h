@@ -66,6 +66,16 @@ struct TAsyncBufferStats {
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
 };
 
+struct TIngressStats : public TAsyncBufferStats {
+
+    TIngressStats() = default;
+    TIngressStats(ui32 taskCount) {
+        Resize(taskCount);
+    }
+
+    void Resize(ui32 taskCount);
+};
+
 struct TTableStats {
 
     TTableStats() = default;
@@ -125,8 +135,8 @@ struct TStageExecutionStats {
     std::vector<ui64> FinishTimeMs;
     std::vector<ui64> StartTimeMs;
     std::vector<ui64> DurationUs;
-    std::vector<ui64> WaitInputTimeUs;
-    std::vector<ui64> WaitOutputTimeUs;
+    TTimeSeriesStats WaitInputTimeUs;
+    TTimeSeriesStats WaitOutputTimeUs;
 
     TTimeSeriesStats SpillingComputeBytes;
     TTimeSeriesStats SpillingChannelBytes;
@@ -153,14 +163,34 @@ struct TStageExecutionStats {
     ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage, ui64 durationUs);
 };
 
+struct TExternalPartitionStat {
+    ui64 ExternalRows;
+    ui64 ExternalBytes;
+    ui64 FirstMessageMs;
+    ui64 LastMessageMs;
+    TExternalPartitionStat() = default;
+    TExternalPartitionStat(ui64 externalRows, ui64 externalBytes, ui64 firstMessageMs, ui64 lastMessageMs)
+    : ExternalRows(externalRows), ExternalBytes(externalBytes), FirstMessageMs(firstMessageMs), LastMessageMs(lastMessageMs)
+    {}
+};
+
+struct TIngressExternalPartitionStat {
+    TString Name;
+    std::map<TString, TExternalPartitionStat> Stat;
+    TIngressExternalPartitionStat() = default;
+    TIngressExternalPartitionStat(const TString& name) : Name(name) {}
+};
+
 struct TQueryExecutionStats {
 private:
     std::map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
     std::map<ui32, bool> UseLlvmByStageId;
     std::map<ui32, TStageExecutionStats> StageStats;
+    std::map<ui32, TIngressExternalPartitionStat> ExternalPartitionStats; // FIXME: several ingresses
     ui64 BaseTimeMs = 0;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
+    void AdjustExternalAggr(NYql::NDqProto::TDqExternalAggrStats& stats);
     void AdjustAsyncAggr(NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void AdjustAsyncBufferAggr(NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
     void AdjustDqStatsAggr(NYql::NDqProto::TDqStatsAggr& stats);

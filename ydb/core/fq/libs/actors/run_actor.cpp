@@ -1979,7 +1979,7 @@ private:
                 std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()),
                 Params.FunctionRegistry
             );
-            const auto pqGateway = NYql::CreatePqNativeGateway(pqServices);
+            const auto pqGateway = Params.DefaultPqGateway ? Params.DefaultPqGateway : NYql::CreatePqNativeGateway(pqServices);
             dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
         }
 

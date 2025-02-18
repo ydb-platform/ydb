@@ -187,7 +187,7 @@ struct TRspMetadataBroker
     i32 NodeId = 0;
     TString Host;
     i32 Port = 0;
-    TString Rack;
+    std::optional<TString> Rack;
     std::vector<TTaggedField> TagBuffer;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
@@ -225,7 +225,7 @@ struct TRspMetadata
 {
     i32 ThrottleTimeMs = 0;
     std::vector<TRspMetadataBroker> Brokers;
-    i32 ClusterId = 0;
+    std::optional<TString> ClusterId;
     i32 ControllerId = 0;
     std::vector<TRspMetadataTopic> Topics;
     std::vector<TTaggedField> TagBuffer;
@@ -617,6 +617,71 @@ struct TRspProduce
 {
     std::vector<TRspProduceResponse> Responses;
     i32 ThrottleTimeMs = 0;
+    std::vector<TTaggedField> TagBuffer;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReqListOffsetsTopicPartition
+{
+    i32 PartitionIndex = 0;
+    i64 Timestamp = 0;
+    i32 MaxNumOffsets = 0;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TReqListOffsetsTopic
+{
+    TString Name;
+    std::vector<TReqListOffsetsTopicPartition> Partitions;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TReqListOffsets
+{
+    static constexpr ERequestType RequestType = ERequestType::ListOffsets;
+
+    i32 ReplicaId = 0;
+    std::vector<TReqListOffsetsTopic> Topics;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TRspListOffsetsTopicPartition
+{
+    i32 PartitionIndex = 0;
+    NKafka::EErrorCode ErrorCode = EErrorCode::None;
+    i64 Offset = 0;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+struct TRspListOffsetsTopic
+{
+    TString Name;
+    std::vector<TRspListOffsetsTopicPartition> Partitions;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+struct TRspListOffsets
+{
+    std::vector<TRspListOffsetsTopic> Topics;
+
     std::vector<TTaggedField> TagBuffer;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;

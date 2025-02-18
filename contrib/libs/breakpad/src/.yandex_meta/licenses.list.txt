@@ -1194,27 +1194,6 @@ permissive licensing, and of not having licensing issues being an
 obstacle to adoption, that text has been removed.
 
 
-====================GPL-2.0-only====================
- ***   This header was automatically generated from a Linux kernel header
- ***   of the same name, to make information necessary for userspace to
- ***   call into the kernel available to libc.  It contains only constants,
- ***   structures, and macros generated from the original header, and thus,
- ***   contains no copyrightable information.
-
-
-====================LicenseRef-scancode-other-permissive====================
-Portions of this software are derived from third-party works licensed
-under terms compatible with the above MIT license:
-
-
-====================LicenseRef-scancode-unknown-license-reference====================
-have been licensed under extremely permissive terms.
-
-
-====================LicenseRef-scancode-unknown-license-reference====================
-licensed under following terms: "Permission to use, copy, modify,
-
-
 ====================MIT====================
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -1309,6 +1288,10 @@ all of whom have explicitly granted such permission.
 
 ====================MIT-Nagy====================
 licensed under following terms: "Permission to use, copy, modify,
+
+
+====================MIT-Nagy====================
+licensed under following terms: "Permission to use, copy, modify,
 and/or distribute this code for any purpose with or without fee is
 hereby granted. There is no warranty."
 
@@ -1318,10 +1301,12 @@ hereby granted. There is no warranty."
  * This code is in the public domain; do with it what you wish.
 
 
-====================Public-Domain AND LicenseRef-scancode-other-permissive====================
-originally written by Solar Designer and placed into the public
-domain. The code also comes with a fallback permissive license for use
-in jurisdictions that may not recognize the public domain.
+====================Public-Domain====================
+ ***   This header was automatically generated from a Linux kernel header
+ ***   of the same name, to make information necessary for userspace to
+ ***   call into the kernel available to libc.  It contains only constants,
+ ***   structures, and macros generated from the original header, and thus,
+ ***   contains no copyrightable information.
 
 
 ====================Unicode====================

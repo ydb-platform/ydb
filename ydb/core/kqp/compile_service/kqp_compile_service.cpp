@@ -610,7 +610,7 @@ private:
 
         if (compileResult->NeedToSplit) {
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
-                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
+                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
             ProcessQueue(ctx);
             return;
         }
@@ -635,7 +635,7 @@ private:
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     Reply(request.Sender, compileResult, compileStats, ctx,
-                        request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
+                        request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan));
                 }
             } else {
                 if (!hasTempTablesNameClashes) {
@@ -647,7 +647,7 @@ private:
 
             LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileActorId.ToString());
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
-                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
+                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
         }
         catch (const std::exception& e) {
             LogException("TEvCompileResponse", ev->Sender, e, ctx);
@@ -809,7 +809,8 @@ private:
         if (compileResult->GetAst() && QueryCache->FindByAst(query, *compileResult->GetAst(), keepInCache)) {
             return false;
         }
-        auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, std::move(query), compileResult->QueryAst);
+        auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, std::move(query), compileResult->QueryAst,
+            false, {}, compileResult->ReplayMessageUserView);
         newCompileResult->AllowCache = compileResult->AllowCache;
         newCompileResult->PreparedQuery = compileResult->PreparedQuery;
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Insert preparing query with params, queryId: " << query.SerializeToString());
@@ -865,7 +866,7 @@ private:
 
     void Reply(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
         const TKqpStatsCompile& compileStats, const TActorContext& ctx, ui64 cookie,
-        NLWTrace::TOrbit orbit, NWilson::TSpan span, const std::optional<TString>& replayMessage = std::nullopt)
+        NLWTrace::TOrbit orbit, NWilson::TSpan span)
     {
         const auto& query = compileResult->Query;
         LWTRACK(KqpCompileServiceReply,
@@ -878,7 +879,7 @@ private:
             << ", queryUid: " << compileResult->Uid
             << ", status:" << compileResult->Status);
 
-        auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit), replayMessage);
+        auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit));
         responseEv->Stats = compileStats;
 
         if (span) {

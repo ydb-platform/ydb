@@ -379,6 +379,68 @@ namespace NKikimr {
             AvailableBytes = std::min(AvailableBytes, WriteSpeedBps);
             CurrentTime = now;
         }
+
+        void RenderHtml(IOutputStream &str) {
+            HTML(str) {
+                TABLE_CLASS ("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { str << "Throttling"; }
+                            TABLEH() {}
+                        }
+                    }
+                    TABLEBODY() {
+                        TABLER() {
+                            TABLED() { str << "Is dry run enabled"; }
+                            TABLED() { str << (ui64)VCfg->ThrottlingDryRun; }
+                        }
+                        TABLER() {
+                            TABLED() { str << "Is active"; }
+                            TABLED() { str << (ui64)IsActive(); }
+                        }
+                    }
+                }
+                TABLE_CLASS ("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { str << "Property"; }
+                            TABLEH() { str << "Current"; }
+                            TABLEH() { str << "Activation range"; }
+                        }
+                    }
+                    TABLEBODY() {
+                        TABLER() {
+                            TABLED() { str << "Level 0 SST count"; }
+                            TABLED() { str << CurrentSstCount; }
+                            TABLED() { str << "[ "
+                                << (ui64)VCfg->ThrottlingMinLevel0SstCount << "; "
+                                << (ui64)VCfg->ThrottlingMaxLevel0SstCount << " ]"; }
+                        }
+                        TABLER() {
+                            TABLED() { str << "Inplaced size"; }
+                            TABLED() { str << CurrentInplacedSize; }
+                            TABLED() { str << "[ "
+                                << (ui64)ThrottlingMinInplacedSize << "; "
+                                << (ui64)ThrottlingMaxInplacedSize << " ]"; }
+                        }
+                        TABLER() {
+                            TABLED() { str << "Occupancy"; }
+                            TABLED() { str << CurrentOccupancy / 1000 << " / 1000"; }
+                            TABLED() { str << "[ "
+                                << (ui64)VCfg->ThrottlingMinOccupancyPerMille << "; "
+                                << (ui64)VCfg->ThrottlingMaxOccupancyPerMille << " ]"; }
+                        }
+                        TABLER() {
+                            TABLED() { str << "Log chunk count"; }
+                            TABLED() { str << CurrentLogChunkCount; }
+                            TABLED() { str << "[ "
+                                << (ui64)VCfg->ThrottlingMinLogChunkCount << "; "
+                                << (ui64)VCfg->ThrottlingMaxLogChunkCount << " ]"; }
+                        }
+                    }
+                }
+            }
+        }
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -519,6 +581,7 @@ namespace NKikimr {
 
     void TOverloadHandler::RenderHtml(IOutputStream &str) {
         DynamicPDiskWeightsManager->RenderHtml(str);
+        ThrottlingController->RenderHtml(str);
     }
 
     void TOverloadHandler::OnKickEmergencyPutQueue() {

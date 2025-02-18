@@ -156,8 +156,8 @@ namespace NKikimr {
     };
 
     struct TEvHullShredDefrag : TEventLocal<TEvHullShredDefrag, TEvBlobStorage::EvHullShredDefrag> {
-        std::vector<TChunkIdx> ChunksToShred;
-        TEvHullShredDefrag(std::vector<TChunkIdx> chunksToShred) : ChunksToShred(std::move(chunksToShred)) {}
+        THashSet<TChunkIdx> ChunksToShred;
+        TEvHullShredDefrag(THashSet<TChunkIdx> chunksToShred) : ChunksToShred(std::move(chunksToShred)) {}
     };
 
     struct TEvHullShredDefragResult : TEventLocal<TEvHullShredDefragResult, TEvBlobStorage::EvHullShredDefragResult> {
@@ -171,11 +171,16 @@ namespace NKikimr {
             : Lsn(lsn)
             , Chunks(std::move(chunks))
         {}
+    };
 
-        TEvNotifyChunksDeleted(const TEvNotifyChunksDeleted& x)
-            : Lsn(x.Lsn)
-            , Chunks(x.Chunks)
-        {}
+    struct TEvListChunks : TEventLocal<TEvListChunks, TEvBlobStorage::EvListChunks> {
+        THashSet<TChunkIdx> ChunksOfInterest;
+        TEvListChunks(THashSet<TChunkIdx> chunksOfInterest) : ChunksOfInterest(std::move(chunksOfInterest)) {}
+    };
+
+    struct TEvListChunksResult : TEventLocal<TEvListChunksResult, TEvBlobStorage::EvListChunksResult> {
+        THashSet<TChunkIdx> ChunksHuge;
+        THashSet<TChunkIdx> ChunksSyncLog;
     };
 
 } // NKikimr

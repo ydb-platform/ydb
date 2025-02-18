@@ -47,6 +47,18 @@ ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(TClientComman
     }
 }
 
+ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriorityChatty(TClientCommand::TConfig::EVerbosityLevel lvl) {
+    switch (lvl) {
+        case TClientCommand::TConfig::EVerbosityLevel::NONE:
+            return ELogPriority::TLOG_INFO;
+        case TClientCommand::TConfig::EVerbosityLevel::DEBUG:
+        case TClientCommand::TConfig::EVerbosityLevel::INFO:
+        case TClientCommand::TConfig::EVerbosityLevel::WARN:
+            return ELogPriority::TLOG_DEBUG;
+    }
+    return ELogPriority::TLOG_INFO;
+}
+
 size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {
     size_t cnt = 0;
     for (int i = 0; i < argc; ++i) {

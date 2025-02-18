@@ -1274,7 +1274,7 @@ message ExecuteScanQueryRequest {
     QueryStatsCollection.Mode collect_stats = 8;
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
-    bool collect_full_diagnostics = 9;
+    bool collect_full_diagnostics = 9 [deprecated=true];
 }
 
 message ExecuteScanQueryPartialResponse {
@@ -1292,7 +1292,7 @@ message ExecuteScanQueryPartialResult {
     Ydb.TableStats.QueryStats query_stats = 6;
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
-    string query_full_diagnostics = 7;
+    string query_full_diagnostics = 7 [deprecated = true];
 }
 
 // Returns information about an external data source with a given path.

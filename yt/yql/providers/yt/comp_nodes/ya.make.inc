@@ -23,7 +23,6 @@ PEERDIR(
     yql/essentials/providers/common/mkql
     yt/yql/providers/yt/codec
     yt/yql/providers/yt/expr_nodes
-    yt/yql/providers/yt/lib/errors
 )
 
 YQL_LAST_ABI_VERSION()

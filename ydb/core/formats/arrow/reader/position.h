@@ -154,13 +154,13 @@ public:
 
     [[nodiscard]] bool InitPosition(const ui64 position);
 
-    std::shared_ptr<arrow::Table> Slice(const ui64 offset, const ui64 count) const {
-        std::vector<std::shared_ptr<arrow::ChunkedArray>> slicedArrays;
-        for (auto&& i : Columns) {
-            slicedArrays.emplace_back(i->Slice(offset, count));
-        }
-        return arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), slicedArrays, count);
-    }
+     std::shared_ptr<arrow::Table> Slice(const ui64 offset, const ui64 count) const {
+         std::vector<std::shared_ptr<arrow::ChunkedArray>> slicedArrays;
+         for (auto&& i : Columns) {
+             slicedArrays.emplace_back(i->Slice(offset, count));
+         }
+         return arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), slicedArrays, count);
+     }
 
     bool IsSameSchema(const std::shared_ptr<arrow::Schema>& schema) const {
         if (Fields.size() != (size_t)schema->num_fields()) {

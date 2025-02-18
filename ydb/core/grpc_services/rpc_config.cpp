@@ -128,9 +128,7 @@ void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb
     auto& identity = *config.mutable_identity();
     identity.set_version(itemConfigGeneration);
     identity.set_cluster(AppData()->ClusterName);
-    identity.mutable_storage();
-    // TODO: !imp fill metadata ?
-    // are we sure that it is storage config?
+    identity.mutable_main();
     config.set_config(NYaml::ParseProtoToYaml(storageConfig));
 }
 
@@ -143,6 +141,7 @@ public:
     bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) override {
         return true;
     }
+
     NACLib::EAccessRights GetRequiredAccessRights() const {
         return NACLib::GenericManage;
     }
@@ -221,7 +220,7 @@ public:
         auto& identity = *config.mutable_identity();
         identity.set_version(*metadata.Version);
         identity.set_cluster(AppData()->ClusterName);
-        identity.mutable_main(); // TODO: is it really main ?
+        identity.mutable_main();
         config.set_config(conf);
     }
 

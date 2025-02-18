@@ -25,31 +25,54 @@ using TEvBootstrapClusterRequest =
 using namespace NActors;
 using namespace Ydb;
 
-bool CopyToConfigRequest(const Ydb::Config::ReplaceConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to) {
-    TString configStr;
+struct BSConfigApiShim {
+    std::optional<bool> SwitchDedicatedStorageSection;
+    std::optional<TString> MainConfig;
+    std::optional<TString> StorageConfig;
+    bool DedicatedConfigMode = false;
+};
+
+BSConfigApiShim ConvertConfigReplaceRequest(const auto& request) {
+    BSConfigApiShim result;
 
     auto fillConfigs = [&](const auto& configBundle) {
-        configStr = configBundle.main_config();
+        if (configBundle.has_main_config()) {
+            result.MainConfig = configBundle.main_config();
+        }
+
+        if (configBundle.has_storage_config()) {
+            result.StorageConfig = configBundle.storage_config();
+        }
     };
 
-    switch (from.action_case()) {
+    switch (request.action_case()) {
         case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceEnableDedicatedStorageSection:
-            fillConfigs(from.replace_enable_dedicated_storage_section());
+            result.SwitchDedicatedStorageSection = true;
+            result.DedicatedConfigMode = true;
+            fillConfigs(request.replace_enable_dedicated_storage_section());
             break;
         case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
-            configStr = from.replace_disable_dedicated_storage_section();
+            result.SwitchDedicatedStorageSection = false;
+            result.MainConfig = request.replace_disable_dedicated_storage_section();
             break;
         case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
-            fillConfigs(from.replace_with_dedicated_storage_section());
+            result.DedicatedConfigMode = true;
+            fillConfigs(request.replace_with_dedicated_storage_section());
             break;
         case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
-            configStr = from.replace();
+            result.MainConfig = request.replace();
             break;
         case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
             break; // TODO: handle as error?
     }
 
-    to->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(configStr));
+    return result;
+}
+
+bool CopyToConfigRequest(const Ydb::Config::ReplaceConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to) {
+    auto shim = ConvertConfigReplaceRequest(from);
+
+    to->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(shim.MainConfig.value_or(TString{})));
     return true;
 }
 
@@ -127,30 +150,9 @@ public:
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) {
         auto *cmd = ev.Record.MutableReplaceStorageConfig();
 
-        TString configStr;
+        auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
 
-        auto fillConfigs = [&](const auto& configBundle) {
-            configStr = configBundle.main_config();
-        };
-
-        switch (GetProtoRequest()->action_case()) {
-            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceEnableDedicatedStorageSection:
-                fillConfigs(GetProtoRequest()->replace_enable_dedicated_storage_section());
-                break;
-            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
-                configStr = GetProtoRequest()->replace_disable_dedicated_storage_section();
-                break;
-            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
-                fillConfigs(GetProtoRequest()->replace_with_dedicated_storage_section());
-                break;
-            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
-                configStr = GetProtoRequest()->replace();
-                break;
-            case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
-                break; // TODO: handle as error?
-        }
-
-        cmd->SetYAML(configStr);
+        cmd->SetYAML(shim.MainConfig.value_or(TString{}));
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
@@ -160,29 +162,8 @@ public:
     bool IsDistconfEnableQuery() const {
         NKikimrConfig::TAppConfig newConfig;
         try {
-            TString configStr;
-
-            auto fillConfigs = [&](const auto& configBundle) {
-                configStr = configBundle.main_config();
-            };
-
-            switch (GetProtoRequest()->action_case()) {
-                case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceEnableDedicatedStorageSection:
-                    fillConfigs(GetProtoRequest()->replace_enable_dedicated_storage_section());
-                    break;
-                case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
-                    configStr = GetProtoRequest()->replace_disable_dedicated_storage_section();
-                    break;
-                case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
-                    fillConfigs(GetProtoRequest()->replace_with_dedicated_storage_section());
-                    break;
-                case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
-                    configStr = GetProtoRequest()->replace();
-                    break;
-                case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
-                    break; // TODO: handle as error?
-            }
-            newConfig = NYaml::Parse(configStr); // check allow unknown fields
+            auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
+            newConfig = NYaml::Parse(shim.MainConfig.value_or(TString{})); // TODO: !imp check allow unknown fields
         } catch (const std::exception&) {
             return false; // assuming no distconf enabled in this config
         }
@@ -192,47 +173,13 @@ public:
     std::unique_ptr<IEventBase> ProcessControllerQuery() override {
         auto *request = GetProtoRequest();
 
-        std::optional<bool> switch_dedicated_storage_section;
-        std::optional<TString> mainConfig;
-        std::optional<TString> storageConfig;
-        bool dedicated_config_mode = false;
-
-        auto fillConfigs = [&](const auto& configBundle) {
-            if (configBundle.has_main_config()) {
-                mainConfig = configBundle.main_config();
-            }
-
-            if (configBundle.has_storage_config()) {
-                storageConfig = configBundle.storage_config();
-            }
-        };
-
-        switch (request->action_case()) {
-            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceEnableDedicatedStorageSection:
-                switch_dedicated_storage_section = true;
-                dedicated_config_mode = true;
-                fillConfigs(request->replace_enable_dedicated_storage_section());
-                break;
-            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
-                switch_dedicated_storage_section = false;
-                mainConfig = request->replace_disable_dedicated_storage_section();
-                break;
-            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
-                dedicated_config_mode = true;
-                fillConfigs(request->replace_with_dedicated_storage_section());
-                break;
-            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
-                mainConfig = request->replace();
-                break;
-            case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
-                break; // TODO: handle as error?
-        }
+        auto shim = ConvertConfigReplaceRequest(*request);
 
         return std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigRequest>(
-            mainConfig,
-            storageConfig,
-            switch_dedicated_storage_section,
-            dedicated_config_mode,
+            shim.MainConfig,
+            shim.StorageConfig,
+            shim.SwitchDedicatedStorageSection,
+            shim.DedicatedConfigMode,
             request->allow_unknown_fields() || request->bypass_checks(),
             request->bypass_checks(),
             request->bypass_checks());

@@ -1115,18 +1115,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 };
 
                 const auto& alter = modifyScheme.GetAlterLogin();
-
-                bool isDbAdminManagesUser = 
-                    checkAdmin
-                    &&
-                    IsDatabaseAdministrator
-                    &&
-                    (
-                        alter.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser
-                        ||
-                        alter.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kRemoveUser
-                    )
-                ;
+                bool isManageUser = (alter.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser || alter.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kRemoveUser);
+                bool isDbAdminManagesUser = checkAdmin && IsDatabaseAdministrator && isManageUser;
 
                 if (isDbAdminManagesUser) {
                     const auto& targetUser = (alter.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser ? 

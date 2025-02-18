@@ -1223,6 +1223,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 86400000,
             DefaultValue: 50 }];
+        optional uint64 MinPlanResolutionMs = 5 [(ControlOptions) = {
+            Description: "Minimum plan resolution override in milliseconds, which includes volatile planning (0 when not overridden)",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 0 }];
     }
 
     message TSchemeShardControls {
@@ -1597,6 +1602,11 @@ message THiveConfig {
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
     optional bool LessSystemTabletsMoves = 77 [default = true];
     optional uint64 MaxPingsInFlight = 78 [default = 1000];
+    optional uint64 ScaleRecommendationRefreshFrequency = 80 [default = 60000]; // calculate scale recommendation every x milliseconds
+    optional uint64 ScaleOutWindowSize = 81 [default = 15]; // buckets
+    optional uint64 ScaleInWindowSize = 82 [default = 5]; // buckets
+    optional double TargetTrackingCPUMargin = 83 [default = 0.1]; // percent
+    optional double DryRunTargetTrackingCPU = 84; // percent
 }
 
 message TBlobCacheConfig {

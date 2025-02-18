@@ -77,8 +77,14 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             copyAlter.ColumnsSize() != 0 ||
             copyAlter.DropColumnsSize() != 0);
 
-    if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() !=  table->IsBackup) {
+    if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() != table->IsBackup) {
         errStr = Sprintf("Cannot add/remove 'IsBackup' property");
+        status = NKikimrScheme::StatusInvalidParameter;
+        return nullptr;
+    }
+
+    if (copyAlter.HasIsRestore() && copyAlter.GetIsRestore() != table->IsRestore) {
+        errStr = Sprintf("Cannot add/remove 'IsRestore' property");
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
     }
@@ -144,11 +150,16 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     const TSubDomainInfo& subDomain = *path.DomainInfo();
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
+    const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
+        .EnableTablePgTypes = context.SS->EnableTablePgTypes,
+        .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
+        .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
+    };
 
 
     TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
         table, copyAlter, *appData->TypeRegistry, limits, subDomain,
-        context.SS->EnableTablePgTypes, context.SS->EnableTableDatetime64, errStr, localSequences);
+        featureFlags, errStr, localSequences);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;

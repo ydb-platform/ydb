@@ -29,8 +29,8 @@ TType* ValidateColumns(
         TType* dataType;
         if (col.SchemeType.GetTypeId() == NYql::NProto::TypeIds::Decimal)
             dataType = TDataDecimalType::Create(
-                NScheme::DECIMAL_PRECISION,
-                NScheme::DECIMAL_SCALE,
+                col.SchemeType.GetDecimalType().GetPrecision(),
+                col.SchemeType.GetDecimalType().GetScale(),
                 builder->GetTypeEnvironment());
         else
             dataType = TDataType::Create(col.SchemeType.GetTypeId(), builder->GetTypeEnvironment());

@@ -2,6 +2,7 @@
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
@@ -192,27 +193,13 @@ void ReplaceReadAttributes(TExprNode& node,
     TraverseReadAttributes(visitor, node, ctx);
 }
 
-static Ydb::Type CreateYdbType(const NKikimr::NScheme::TTypeInfo& typeInfo, bool notNull) {
-    Ydb::Type ydbType;
-    if (typeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Pg) {
-        auto* typeDesc = typeInfo.GetTypeDesc();
-        auto* pg = ydbType.mutable_pg_type();
-        pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
-    } else {
-        auto& item = notNull
-            ? ydbType
-            : *ydbType.mutable_optional_type()->mutable_item();
-        item.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
-    }
-    return ydbType;
-}
-
 TExprNode::TPtr BuildSchemaFromMetadata(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns) {
     TVector<std::pair<TString, const NYql::TTypeAnnotationNode*>> typedColumns;
     typedColumns.reserve(columns.size());
     for (const auto& [n, c] : columns) {
-        NYdb::TTypeParser parser(NYdb::TType(CreateYdbType(c.TypeInfo, c.NotNull)));
+        Ydb::Type typeProto;
+        NKikimr::NScheme::ProtoFromTypeInfo(c.TypeInfo, typeProto, c.NotNull);
+        NYdb::TTypeParser parser(typeProto);
         auto type = NFq::MakeType(parser, ctx);
         typedColumns.emplace_back(n, type);
     }

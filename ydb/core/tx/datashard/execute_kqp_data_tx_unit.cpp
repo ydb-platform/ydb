@@ -146,6 +146,15 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         }
 
         if (guardLocks.LockTxId) {
+            auto abortLock = [&]() {
+                LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
+                    << " aborting because it cannot acquire locks");
+
+                op->SetAbortedFlag();
+                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+                return EExecutionStatus::Executed;
+            };
+
             switch (DataShard.SysLocksTable().EnsureCurrentLock()) {
                 case EEnsureCurrentLock::Success:
                     // Lock is valid, we may continue with reads and side-effects
@@ -153,27 +162,26 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
                 case EEnsureCurrentLock::Broken:
                     // Lock is valid, but broken, we could abort early in some
-                    // cases, but it doesn't affect correctness.
+                    // cases, but it doesn't affect correctness. For write
+                    // transactions we need to abort, since we may otherwise
+                    // perform writes that are not attached to any lock.
+                    if (!op->IsReadOnly()) {
+                        return abortLock();
+                    }
                     break;
 
                 case EEnsureCurrentLock::TooMany:
                     // Lock cannot be created, it's not necessarily a problem
                     // for read-only transactions, for non-readonly we need to
                     // abort;
-                    if (op->IsReadOnly()) {
-                        break;
+                    if (!op->IsReadOnly()) {
+                        return abortLock();
                     }
-
-                    [[fallthrough]];
+                    break;
 
                 case EEnsureCurrentLock::Abort:
                     // Lock cannot be created and we must abort
-                    LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
-                        << " aborting because it cannot acquire locks");
-
-                    op->SetAbortedFlag();
-                    BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-                    return EExecutionStatus::Executed;
+                    return abortLock();
             }
         }
 

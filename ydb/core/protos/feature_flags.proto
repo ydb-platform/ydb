@@ -160,4 +160,6 @@ message TFeatureFlags {
     optional bool EnableImmediateWritingOnBulkUpsert = 146 [default = false];
     optional bool EnableInsertWriteIdSpecialColumnCompatibility = 147 [default = false];
     optional bool EnableDriveSerialsDiscovery = 152 [default = false];
+    optional bool EnableScaleRecommender = 157 [default = false];
+    optional bool DisableLocalDBEraseCache = 161 [default = false];
 }

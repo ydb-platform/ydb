@@ -190,12 +190,11 @@ namespace NKikimr::NFlatTxCoordinator {
 
         auto* msg = ev->Get();
         for (ui64 step : msg->Record.GetPlanSteps()) {
-            if (!usesVolatilePlanning) {
-                // Note: we want to align requested steps to plan resolution
-                // when volatile planning is not used. Otherwise extra steps
-                // are cheap and reduce latency.
-                step = AlignPlanStep(step);
-            }
+            // Note: we want to align requested steps to plan resolution when
+            // volatile planning is not used. Otherwise extra steps are cheap
+            // and reduce latency, but may still be aligned to the minimum
+            // resolution.
+            step = AlignPlanStep(step, usesVolatilePlanning);
             // Note: this is not a sibling step, but it behaves similar enough
             // so we reuse the same queue here.
             if (step > VolatileState.LastPlanned && PendingSiblingSteps.insert(step).second) {

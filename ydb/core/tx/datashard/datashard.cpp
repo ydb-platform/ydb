@@ -409,6 +409,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     NotifySchemeshard(ctx);
     CheckInitiateBorrowedPartsReturn(ctx);
     CheckStateChange(ctx);
+    CleanupUncommitted(ctx);
 }
 
 void TDataShard::SyncConfig() {
@@ -538,7 +539,7 @@ void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEven
     delayedAcks.clear();
 }
 
-void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
+void TDataShard::GetCleanupReplies(TOperation* op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
     if (!op->HasOutputData()) {
         // There are no replies
         return;
@@ -560,6 +561,10 @@ void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::
         }
     }
     expectedReadSets.clear();
+}
+
+void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
+    GetCleanupReplies(op.Get(), cleanupReplies);
 }
 
 void TDataShard::SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr<IEventHandle>>&& replies) {
@@ -3677,12 +3682,13 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& e
     auto it = CoordinatorSubscriptionById.find(msg->CoordinatorId);
     Y_VERIFY_S(it != CoordinatorSubscriptionById.end(),
         "Unexpected TEvSubscribeReadStepResult for coordinator " << msg->CoordinatorId);
-    size_t index = it->second;
-    auto& subscription = CoordinatorSubscriptions.at(index);
-    subscription.ReadStep = msg->ReadStep;
     CoordinatorPrevReadStepMin = Max(CoordinatorPrevReadStepMin, msg->LastReadStep);
     CoordinatorPrevReadStepMax = Min(CoordinatorPrevReadStepMax, msg->NextReadStep);
     --CoordinatorSubscriptionsPending;
+
+    // Note: we don't use the subscription and unsubscribe immediately
+    ctx.Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvUnsubscribeReadStep(msg->CoordinatorId));
+
     CheckMediatorStateRestored();
 }
 

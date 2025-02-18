@@ -49,6 +49,7 @@ SRCS(
     datashard__cleanup_borrowed.cpp
     datashard__cleanup_in_rs.cpp
     datashard__cleanup_tx.cpp
+    datashard__cleanup_uncommitted.cpp
     datashard__conditional_erase_rows.cpp
     datashard__engine_host.cpp
     datashard__engine_host.h
@@ -202,6 +203,8 @@ SRCS(
     store_distributed_erase_tx_unit.cpp
     store_scheme_tx_unit.cpp
     store_snapshot_tx_unit.cpp
+    stream_scan_common.cpp    
+    type_serialization.cpp
     volatile_tx.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp

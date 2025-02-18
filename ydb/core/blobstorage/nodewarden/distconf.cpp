@@ -19,10 +19,11 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
 
         auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
-        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>();
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
         for (const auto& [nodeId, item] : ns->StaticNodeTable) {
-            ev->Nodes.emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
+            nodes->emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
         }
+        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>(nodes);
         Send(SelfId(), ev.release());
 
         // and subscribe for the node list too
@@ -252,10 +253,10 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::StartDistributedConfigKeeper() {
-        // disabled due to problems seen during cluster expansion (distconf fails on BindQueue integrity checks)
-        // auto *appData = AppData();
-        // const bool isSelfStatic = !appData->DynamicNameserviceConfig || SelfId().NodeId() <= appData->DynamicNameserviceConfig->MaxStaticNodeId;
-        // DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg, StorageConfig, isSelfStatic));
+        return; // distconf is disabled until 25.1
+        auto *appData = AppData();
+        const bool isSelfStatic = !appData->DynamicNameserviceConfig || SelfId().NodeId() <= appData->DynamicNameserviceConfig->MaxStaticNodeId;
+        DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg, StorageConfig, isSelfStatic));
     }
 
     void TNodeWarden::ForwardToDistributedConfigKeeper(STATEFN_SIG) {

@@ -183,7 +183,6 @@ private:
                     case NKqpProto::TKqpSource::kReadRangesSource:
                         BuildScanTasksFromSource(
                             stageInfo,
-                            /* shardsResolved */ true,
                             /* limitTasksPerNode */ false);
                         break;
                     default:

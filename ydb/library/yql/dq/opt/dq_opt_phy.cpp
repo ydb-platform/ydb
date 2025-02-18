@@ -748,8 +748,6 @@ TExprBase DqBuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
 TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    Y_UNUSED(optCtx);
-    
     if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }
@@ -781,25 +779,14 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
             return TExprBase(ctx.ChangeChild(*node.Raw(), TCoFlatMapBase::idx_Input, std::move(connToPushableStage)));
         }
 
-        TCoLambda lambda = flatmap.Lambda();
-
-        if (flatmap.Maybe<TCoFlatMap>()) {
-            lambda = Build<TCoLambda>(ctx, flatmap.Lambda().Pos())
-                .Args({"stream"})
-                .Body<TCoFlatMap>()
-                    .Input("stream")
-                    .Lambda(ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
-                .Build()
-                .Done();
-        } else {
-            lambda = Build<TCoLambda>(ctx, flatmap.Lambda().Pos())
-                .Args({"stream"})
-                .Body<TCoOrderedFlatMap>()
-                    .Input("stream")
-                    .Lambda(ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
-                .Build()
-                .Done();
-        }
+        auto lambda = TCoLambda(ctx.Builder(flatmap.Lambda().Pos())
+            .Lambda()
+                .Param("stream")
+                .Callable(flatmap.Ref().Content())
+                    .Arg(0, "stream")
+                    .Add(1, ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
+                .Seal()
+            .Seal().Build());
 
         auto pushResult = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
         if (pushResult) {
@@ -823,66 +810,6 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
             .Index().Build("0")
             .Build()
         .Done();
-}
-
-TExprBase DqPushFlatmapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, bool allowStageMultiUsage)
-{
-    if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) {
-        return node;
-    }
-
-    auto flatmap = node.Cast<TCoFlatMapBase>();
-    if (!IsDqSelfContainedExpr(flatmap.Lambda())) {
-        return node;
-    }
-    auto dqUnion = flatmap.Input().Cast<TDqCnUnionAll>();
-    if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
-        return node;
-    }
-
-    bool isPure;
-    TVector<TDqConnection> innerConnections;
-    FindDqConnections(flatmap.Lambda(), innerConnections, isPure);
-    if (!isPure) {
-        return node;
-    }
-
-    TMaybeNode<TDqStage> flatmapStage;
-    if (!innerConnections.empty()) {
-        return node;
-    } else {
-        if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
-            return TExprBase(ctx.ChangeChild(*node.Raw(), TCoFlatMapBase::idx_Input, std::move(connToPushableStage)));
-        }
-
-        TCoLambda lambda = flatmap.Lambda();
-
-        if (flatmap.Maybe<TCoFlatMap>()) {
-            lambda = Build<TCoLambda>(ctx, flatmap.Lambda().Pos())
-                .Args({"stream"})
-                .Body<TCoFlatMap>()
-                    .Input("stream")
-                    .Lambda(ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
-                .Build()
-                .Done();
-        } else {
-            lambda = Build<TCoLambda>(ctx, flatmap.Lambda().Pos())
-                .Args({"stream"})
-                .Body<TCoOrderedFlatMap>()
-                    .Input("stream")
-                    .Lambda(ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
-                .Build()
-                .Done();
-        }
-
-        auto pushResult = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
-        if (pushResult) {
-            return pushResult.Cast();
-        }
-    }
-
-    return node;
 }
 
 template <typename BaseLMap>

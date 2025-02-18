@@ -990,8 +990,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             schema.reserve(pqConfig.PartitionKeySchemaSize());
             for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
-                // TODO: support pg types
-                schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
+                auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(keySchema.GetTypeId(),
+                    keySchema.HasTypeInfo() ? &keySchema.GetTypeInfo() : nullptr);
+                schema.push_back(NScheme::TTypeInfo(typeInfoMod.TypeInfo));
             }
 
             partitioning.reserve(pqDesc.PartitionsSize());
@@ -1232,7 +1233,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     columns.BeginObject()
                         .WriteKey("Id").WriteULongLong(column.Id)
                         .WriteKey("Name").WriteString(column.Name)
-                        .WriteKey("Type").WriteULongLong(column.PType.GetTypeId()) // TODO: support pg types
+                        .WriteKey("Type").WriteULongLong(column.PType.GetTypeId())
+                        .WriteKey("TypeName").WriteString(NScheme::TypeName(column.PType, column.PTypeMod))
                         .WriteKey("KeyOrder").WriteInt(column.KeyOrder)
                     .EndObject();
                 }

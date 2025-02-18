@@ -228,7 +228,7 @@ std::vector<TRawTypeValue> ToRawTypeValue(
     result.reserve(keyCells.size());
 
     for (ui32 i = 0; i < keyCells.size(); ++i) {
-        result.push_back(TRawTypeValue(keyCells[i].AsRef(), tableInfo.KeyColumnTypes[i]));
+        result.push_back(TRawTypeValue(keyCells[i].AsRef(), tableInfo.KeyColumnTypes[i].GetTypeId()));
     }
 
     // note that currently without nulls it is [prefix, +inf, +inf],
@@ -2360,10 +2360,29 @@ public:
             return true;
         }
 
+        Result = MakeEvReadResult(ctx.SelfID.NodeId());
+
+        if (Self->IsFollower()) {
+            NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK;
+            TString errMessage;
+
+            if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)) {
+                return false;
+            }
+
+            if (status != NKikimrTxDataShard::TError::OK) {
+                SetStatusError(
+                    Result->Record,
+                    Ydb::StatusIds::INTERNAL_ERROR,
+                    TStringBuilder() << "Failed to sync follower: " << errMessage
+                        << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
+                SendResult(ctx);
+                return true;
+            }
+        }
+
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ReadContinue for iterator# " << ReadId
             << ", firstUnprocessedQuery# " << state.FirstUnprocessedQuery);
-
-        Result = MakeEvReadResult(ctx.SelfID.NodeId());
 
         const auto& tableId = state.PathId.LocalPathId;
         if (state.PathId.OwnerId == Self->GetPathOwnerId()) {

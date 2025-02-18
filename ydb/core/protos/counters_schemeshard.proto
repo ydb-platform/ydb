@@ -574,4 +574,6 @@ enum ETxTypes {
     TXTYPE_UPDATE_DOMAIN_REPLY = 85                       [(TxTypeOpts) = {Name: "TxUpdateDomainReply"}];
 
     TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT = 86    [(TxTypeOpts) = {Name: "TxSequenceShardGetSequenceResult"}];
+
+    TXTYPE_UNMARK_RESTORE_TABLES = 87                     [(TxTypeOpts) = {Name: "TxUnmarkRestoreTables"}];
 }

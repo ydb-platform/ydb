@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import random
 import ydb
-import pytest
 
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.sql.lib.test_base import TpchTestBaseH1

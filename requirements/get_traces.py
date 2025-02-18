@@ -184,18 +184,18 @@ def fetch_sub_issues_by_id(issue_id, github_token):
                     'status': "Pending",
                     'bage': f"[![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/{node['number']})](https://github.com/ydb-platform/ydb/issues/{node['number']})"
                 })
-            
+
             if not sub_issues_data['pageInfo']['hasNextPage']:
                 break
             variables['after'] = sub_issues_data['pageInfo']['endCursor']
         else:
             print(f"GraphQL query failed: {response.status_code} {response.text}")
             break
-    
+
     return sub_issues
 
 def to_anchor(s):
-    return '#' + re.sub(r'[\s/:()]+', '-', s.lower()).strip('-')
+    return '#' + re.sub(r'[\s/:()]+', '-', s.lower().replace('/', '')).strip('-')
 
 
 def generate_traceability_matrix(requirements, output_path):
@@ -210,7 +210,7 @@ def generate_traceability_matrix(requirements, output_path):
             if subsection != req['subsection']:
                 file.write(f"### {req['subsection']}\n")
                 subsection = req['subsection']
-            
+
             if req.get('url'):
                 file.write(f"#### [{req['id']}]({req['url']}): {req['title']}\n")
             else:

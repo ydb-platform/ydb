@@ -3,7 +3,7 @@
 #include <yt/yql/providers/yt/fmr/coordinator/interface/yql_yt_coordinator.h>
 #include <yt/yql/providers/yt/provider/yql_yt_forwarding_gateway.h>
 
-namespace NYql {
+namespace NYql::NFmr {
 
 struct TFmrYtGatewaySettings {
     TIntrusivePtr<IRandomProvider> RandomProvider;
@@ -19,4 +19,4 @@ IYtGateway::TPtr CreateYtFmrGateway(
     }
 );
 
-} // namspace NYql
+} // namespace NYql::NFmr

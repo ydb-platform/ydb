@@ -41,7 +41,7 @@ public:
             EvaluateCurrentLayout(logCtx, state, info, &pessimisticState, &optimisticState, &altruisticState, false);
             if (auto res = SetAbsentForUnrecoverableAltruistic(altruisticState, state)) {
                 return *res;
-            } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state)) {
+            } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state, info)) {
                 return *res;
             } else if (auto res = ProcessPessimistic(info, pessimisticState, true, state)) {
                 return *res;

@@ -1,13 +1,12 @@
 LIBRARY()
 
 SRCS(
-    rewrite_query.cpp
+    query_utils.cpp
     util.cpp
     view_utils.cpp
 )
 
 PEERDIR(
-    library/cpp/protobuf/util
     ydb/public/lib/ydb_cli/common
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
@@ -17,6 +16,7 @@ PEERDIR(
     yql/essentials/sql/settings
     yql/essentials/sql/v1/format
     yql/essentials/sql/v1/proto_parser
+    library/cpp/protobuf/util
 )
 
 END()

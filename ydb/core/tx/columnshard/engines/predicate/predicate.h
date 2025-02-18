@@ -1,7 +1,9 @@
 #pragma once
 
-#include <ydb/core/formats/arrow/program.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+
+#include <ydb/library/arrow_kernels/operations.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
@@ -9,7 +11,7 @@ namespace NKikimr::NOlap {
 
 struct TPredicate {
 private:
-    using EOperation = NArrow::EOperation;
+    using EOperation = NKernels::EOperation;
     EOperation Operation{ EOperation::Unspecified };
 
 public:

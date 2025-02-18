@@ -10,7 +10,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSignaturePtr TSignatureGeneratorBase::Sign(TYsonString data)
+TSignaturePtr ISignatureGenerator::Sign(TYsonString data)
 {
     auto signature = New<TSignature>();
     signature->Payload_ = std::move(data);
@@ -21,7 +21,7 @@ TSignaturePtr TSignatureGeneratorBase::Sign(TYsonString data)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDummySignatureGenerator
-    : public TSignatureGeneratorBase
+    : public ISignatureGenerator
 {
 public:
     void Sign(const TSignaturePtr& signature) override
@@ -30,7 +30,7 @@ public:
     }
 };
 
-TSignatureGeneratorBasePtr CreateDummySignatureGenerator()
+ISignatureGeneratorPtr CreateDummySignatureGenerator()
 {
     return New<TDummySignatureGenerator>();
 }
@@ -38,7 +38,7 @@ TSignatureGeneratorBasePtr CreateDummySignatureGenerator()
 ////////////////////////////////////////////////////////////////////////////////
 
 class TAlwaysThrowingSignatureGenerator
-    : public TSignatureGeneratorBase
+    : public ISignatureGenerator
 {
 public:
     void Sign(const TSignaturePtr& /*signature*/) override
@@ -47,7 +47,7 @@ public:
     }
 };
 
-TSignatureGeneratorBasePtr CreateAlwaysThrowingSignatureGenerator()
+ISignatureGeneratorPtr CreateAlwaysThrowingSignatureGenerator()
 {
     return New<TAlwaysThrowingSignatureGenerator>();
 }

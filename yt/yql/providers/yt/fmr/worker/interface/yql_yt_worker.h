@@ -3,7 +3,7 @@
 #include <yt/yql/providers/yt/fmr/coordinator/interface/yql_yt_coordinator.h>
 #include <yt/yql/providers/yt/fmr/job_factory/interface/yql_yt_job_factory.h>
 
-namespace NYql {
+namespace NYql::NFmr {
 
 class IFmrWorker: public TThrRefBase {
 public:
@@ -16,4 +16,4 @@ public:
     virtual void Stop() = 0;
 };
 
-} // namspace NYql
+} // namespace NYql::NFmr

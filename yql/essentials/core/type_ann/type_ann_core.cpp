@@ -8786,6 +8786,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
                 TStringBuilder() << "Mismatch item type, expected: " << *firstType << ", got: " << *input->Child(0)->GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
+        } else if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
+            return convertStatus;
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(variantType));
@@ -12985,10 +12987,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockDecimalMul"] = &BlockDecimalBinaryWrapper;
         Functions["BlockDecimalMod"] = &BlockDecimalBinaryWrapper;
         Functions["BlockDecimalDiv"] = &BlockDecimalBinaryWrapper;
+        Functions["BlockStorage"] = &BlockStorageWrapper;
 
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
-
-        Functions["BlockMapJoinCore"] = &BlockMapJoinCoreWrapper;
 
         ExtFunctions["AsScalar"] = &AsScalarWrapper;
         ExtFunctions["WideToBlocks"] = &WideToBlocksWrapper;
@@ -12996,6 +12997,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["BlockCombineHashed"] = &BlockCombineHashedWrapper;
         ExtFunctions["BlockMergeFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
         ExtFunctions["BlockMergeManyFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
+        ExtFunctions["BlockMapJoinIndex"] = &BlockMapJoinIndexWrapper;
+        ExtFunctions["BlockMapJoinCore"] = &BlockMapJoinCoreWrapper;
 
         ExtFunctions["SqlRename"] = &SqlRenameWrapper;
         ExtFunctions["OrderedSqlRename"] = &SqlRenameWrapper;
@@ -13016,7 +13019,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["NextValue"] = &NextValueWrapper;
 
         Functions["MatchRecognize"] = &MatchRecognizeWrapper;
-        Functions["MatchRecognizeMeasuresAggregates"] = &MatchRecognizeMeasuresAggregatesWrapper;
+        Functions["MatchRecognizeMeasuresCallables"] = &MatchRecognizeMeasuresCallablesWrapper;
+        Functions["MatchRecognizeMeasuresCallable"] = &MatchRecognizeMeasuresCallableWrapper;
         Functions["MatchRecognizeParams"] = &MatchRecognizeParamsWrapper;
         Functions["MatchRecognizeMeasures"] = &MatchRecognizeMeasuresWrapper;
         Functions["MatchRecognizePattern"] = &MatchRecognizePatternWrapper;

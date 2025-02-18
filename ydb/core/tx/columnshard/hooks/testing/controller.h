@@ -263,6 +263,11 @@ public:
         DisabledBackgrounds.emplace(id);
     }
 
+    bool IsBackgroundEnable(const EBackground id) {
+        TGuard<TMutex> g(Mutex);
+        return !DisabledBackgrounds.contains(id);
+    }
+
     void EnableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);
         DisabledBackgrounds.erase(id);

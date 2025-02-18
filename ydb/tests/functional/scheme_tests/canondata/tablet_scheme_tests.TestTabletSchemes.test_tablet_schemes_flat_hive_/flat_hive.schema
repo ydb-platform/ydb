@@ -8,11 +8,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "ScaleRecommenderPolicies",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "SchemeshardId",
                 "ColumnType": "Uint64"
@@ -41,19 +36,30 @@
                 "ColumnId": 6,
                 "ColumnName": "ServerlessComputeResourcesMode",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "ScaleRecommenderPolicies",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "Stopped",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -245,6 +251,11 @@
                 "ColumnType": "String"
             },
             {
+                "ColumnId": 124,
+                "ColumnName": "StoppedByTenant",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 11,
                 "ColumnName": "ActorToNotify",
                 "ColumnType": "ActorID"
@@ -314,6 +325,7 @@
                     122,
                     123,
                     7,
+                    124,
                     11,
                     13,
                     17,

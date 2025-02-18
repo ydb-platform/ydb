@@ -33,7 +33,7 @@ protected:
     size_t NumThreads_ = 1;
     bool KeepTemp_ = false;
     TString DefYtServer_;
-    IFmrWorker::TPtr FmrWorker_;
+    NFmr::IFmrWorker::TPtr FmrWorker_;
 };
 
 } // NYql

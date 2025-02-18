@@ -11,7 +11,7 @@ namespace NYql {
 NThreading::TFuture<void> TDummyPqGateway::OpenSession(const TString& sessionId, const TString& username) {
     with_lock (Mutex) {
         Y_ENSURE(sessionId);
-        Y_ENSURE(username);
+        Y_UNUSED(username);
 
         Y_ENSURE(!IsIn(OpenedSessions, sessionId), "Session " << sessionId << " is already opened in pq gateway");
         OpenedSessions.insert(sessionId);

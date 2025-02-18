@@ -23,6 +23,8 @@
 #include <yql/essentials/core/yql_udf_index.h>
 #include <yql/essentials/core/yql_library_compiler.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/logger/stream.h>
@@ -207,6 +209,12 @@ int RunUI(int argc, const char* argv[])
 
     CommonInit(res, udfResolverPath, udfResolverFilterSyscalls, udfsPaths, fileStorage, udfResolver, funcRegistry, udfIndex);
 
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
     TExprContext ctx;
     ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
@@ -216,13 +224,13 @@ int RunUI(int argc, const char* argv[])
         Y_ABORT_UNLESS(mount);
         FillUserDataTableFromFileSystem(*mount, userData);
 
-        if (!CompileLibraries(userData, ctx, modules)) {
+        if (!CompileLibraries(translators, userData, ctx, modules)) {
             Cerr << "Errors on compile libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(Cerr);
             return -1;
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(std::move(modules), ctx.NextUniqueId, clusterMapping, sqlFlags);
+        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId, clusterMapping, sqlFlags);
     } else {
         if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusterMapping)) {
             Cerr << "Errors loading default YQL libraries:" << Endl;

@@ -11,6 +11,7 @@ PEERDIR(
     yql/essentials/core/issue/protos
     yql/essentials/parser/proto_ast/collect_issues
     yql/essentials/parser/proto_ast/gen/v0
+    yql/essentials/sql/v0/lexer
 )
 
 SRCS(

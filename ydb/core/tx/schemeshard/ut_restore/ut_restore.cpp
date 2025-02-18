@@ -1725,7 +1725,7 @@ value {
 
     Y_UNIT_TEST(ExportImportDecimalKey) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
@@ -1738,7 +1738,7 @@ value {
 
         const std::pair<ui64, ui64> decimal2 = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("32.1", 2, 1));
         const std::pair<ui64, ui64> decimal35 = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("555555555555555.123456789", 35, 10));
-        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, 
+        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2},
             {TCell::Make<std::pair<ui64, ui64>>(decimal2)}, {TCell::Make<std::pair<ui64, ui64>>(decimal35)});
 
         TPortManager portManager;
@@ -4964,6 +4964,45 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
+    Y_UNIT_TEST(ShouldSucceedOnDependentView) {
+        ShouldSucceed(
+            {
+                {
+                    "/DependentView",
+                    {
+                        EPathTypeView,
+                        R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `DependentView` WITH security_invoker = TRUE AS SELECT * FROM `BaseView`;
+                        )"
+                    }
+                }, {
+                    "/BaseView",
+                    {
+                        EPathTypeView,
+                        R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `BaseView` WITH security_invoker = TRUE AS SELECT 1;
+                        )"
+                    }
+                }
+            }, R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "DependentView"
+                        destination_path: "/MyRoot/DependentView"
+                    }
+                    items {
+                        source_prefix: "BaseView"
+                        destination_path: "/MyRoot/BaseView"
+                    }
+                }
+            )"
+        );
+    }
+
     void CancelShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -5107,6 +5146,45 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     items {
                         source_prefix: "table"
                         destination_path: "/MyRoot/Table"
+                    }
+                }
+            )"
+        );
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnDependentView) {
+        CancelShouldSucceed(
+            {
+                {
+                    "/DependentView",
+                    {
+                        EPathTypeView,
+                        R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `DependentView` WITH security_invoker = TRUE AS SELECT * FROM `BaseView`;
+                        )"
+                    }
+                }, {
+                    "/BaseView",
+                    {
+                        EPathTypeView,
+                        R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `BaseView` WITH security_invoker = TRUE AS SELECT 1;
+                        )"
+                    }
+                }
+            }, R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "DependentView"
+                        destination_path: "/MyRoot/DependentView"
+                    }
+                    items {
+                        source_prefix: "BaseView"
+                        destination_path: "/MyRoot/BaseView"
                     }
                 }
             )"

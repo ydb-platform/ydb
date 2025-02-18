@@ -1,0 +1,71 @@
+name: Weekly Changelog Update
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Every Sunday at 00:00
+      branches:
+        - main
+        - stable-*
+  workflow_dispatch:
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  gather-prs:
+    runs-on: ubuntu-latest
+    outputs:
+      prs: ${{ steps.pr-list.outputs.prs }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up date range
+        id: date-setup
+        run: |
+          LAST_WEEK_DATE=$(date -d "7 days ago" '+%Y-%m-%dT%H:%M:%SZ')
+          echo "LAST_WEEK_DATE=$LAST_WEEK_DATE" >> $GITHUB_ENV
+
+      - name: Get merged PRs
+        id: pr-list
+        run: |
+          echo "::notice:: branch = ${GITHUB_REF_NAME}, date = $LAST_WEEK_DATE"
+          PRS=$(gh pr list --state merged --json number,title,baseRefName,mergedAt --jq ".[] | select(.baseRefName == \"${GITHUB_REF_NAME}\" and .mergedAt >= \"$LAST_WEEK_DATE\") | {id: .number}" | jq -c -s ".")
+
+          if [ -z "$PRS" ]; then
+            PRS="[]"
+          fi
+          echo "$PRS" > prs.json
+          echo "prs=$PRS" >> "$GITHUB_OUTPUT"
+
+      - name: Debug PR list output
+        run: |
+          cat prs.json
+
+      - name: Upload PRs JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: prs-json
+          path: prs.json
+
+  update-changelog:
+    needs: gather-prs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Get current date
+        id: get-date
+        shell: bash
+        run: echo "suffix=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+
+      - name: Update Changelog
+        uses: ./.github/actions/update_changelog 
+        env:
+          UPDATE_REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          pr_data: "${{ needs.gather-prs.outputs.prs }}"
+          changelog_path: "./CHANGELOG.md" # RODO: Use the correct path to your CHANGELOG.md file
+          base_branch: "${{ github.ref_name }}"
+          suffix: "${{ env.suffix }}"

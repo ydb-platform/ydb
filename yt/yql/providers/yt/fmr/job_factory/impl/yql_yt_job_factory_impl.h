@@ -4,7 +4,7 @@
 #include <util/thread/pool.h>
 #include <yt/yql/providers/yt/fmr/job_factory/interface/yql_yt_job_factory.h>
 
-namespace NYql {
+namespace NYql::NFmr {
 
 struct TFmrJobFactorySettings {
     ui32 NumThreads = 3;
@@ -13,4 +13,4 @@ struct TFmrJobFactorySettings {
 
 IFmrJobFactory::TPtr MakeFmrJobFactory(const TFmrJobFactorySettings& settings);
 
-} // namepspace NYql
+} // namespace NYql::NFmr

@@ -10,6 +10,9 @@
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_eval_params.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/utils/log/profile.h>
 #include <yql/essentials/utils/limiting_allocator.h>
@@ -728,7 +731,13 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     }
 
     currentSettings->EmitReadsForExists = true;
-    return FillParseResult(SqlToYql(sourceCode, *currentSettings, &warningRules), &warningRules);
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
+    return FillParseResult(SqlToYql(translators, sourceCode, *currentSettings, &warningRules), &warningRules);
 }
 
 bool TProgram::Compile(const TString& username, bool skipLibraries) {
@@ -886,7 +895,6 @@ TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputS
         .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
-        .AddCheckExecution(false)
         .AddLineageOptimization(LineageStr_)
         .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
         .Build();
@@ -1152,7 +1160,6 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
-    pipeline.AddCheckExecution(false);
     pipeline.AddLineageOptimization(LineageStr_);
 
     Transformer_ = pipeline.Build();

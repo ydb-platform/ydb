@@ -19,7 +19,6 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
             insertedPortionsBytes += i->GetTotalBlobBytes();
         }
 
-        std::make_shared<TPortionDataSource>(sourceIdx++, i, SpecialReadContext);
         sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, i, SpecialReadContext));
     }
     std::sort(sources.begin(), sources.end(), IDataSource::TCompareStartForScanSequence());

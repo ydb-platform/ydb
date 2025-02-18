@@ -285,6 +285,13 @@ TErrorResponse::TErrorResponse(int httpCode, const TString& requestId)
     , RequestId_(requestId)
 { }
 
+TErrorResponse::TErrorResponse(TYtError error, const TString& requestId)
+    : RequestId_(requestId)
+    , Error_(std::move(error))
+{
+    Setup();
+}
+
 bool TErrorResponse::IsOk() const
 {
     return Error_.GetCode() == 0;
@@ -325,7 +332,7 @@ bool TErrorResponse::IsFromTrailers() const
 
 bool TErrorResponse::IsTransportError() const
 {
-    return HttpCode_ == 503;
+    return Error_.ContainsErrorCode(NClusterErrorCodes::NBus::TransportError);
 }
 
 TString TErrorResponse::GetRequestId() const
@@ -346,6 +353,22 @@ bool TErrorResponse::IsResolveError() const
 bool TErrorResponse::IsAccessDenied() const
 {
     return Error_.ContainsErrorCode(NClusterErrorCodes::NSecurityClient::AuthorizationError);
+}
+
+bool TErrorResponse::IsUnauthorized() const
+{
+    const auto allCodes = Error_.GetAllErrorCodes();
+    for (auto code : {
+        NClusterErrorCodes::NRpc::AuthenticationError,
+        NClusterErrorCodes::NRpc::InvalidCsrfToken,
+        NClusterErrorCodes::NRpc::InvalidCredentials,
+        NClusterErrorCodes::NSecurityClient::AuthenticationError,
+    }) {
+        if (allCodes.contains(code)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool TErrorResponse::IsConcurrentTransactionLockConflict() const

@@ -25,6 +25,10 @@ public:
 
     TRequestResult FetchQueryResults(const TString& queryId, i32 resultSetId, Ydb::ResultSet& resultSet) const;
 
+    TRequestResult CreateConnection(const FederatedQuery::ConnectionContent& connection, TString& connectionId) const;
+
+    TRequestResult CreateBinding(const FederatedQuery::BindingContent& binding) const;
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl;

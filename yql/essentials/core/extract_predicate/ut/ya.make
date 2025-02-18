@@ -21,6 +21,8 @@ PEERDIR(
     yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+    yql/essentials/sql
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

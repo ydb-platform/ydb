@@ -5,7 +5,7 @@
 
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 
-namespace NYql {
+namespace NYql::NFmr {
 
 struct THeartbeatRequest {
     ui32 WorkerId;
@@ -65,4 +65,4 @@ public:
     virtual NThreading::TFuture<THeartbeatResponse> SendHeartbeatResponse(const THeartbeatRequest& request) = 0;
 };
 
-} // namspace NYql
+} // namespace NYql::NFmr

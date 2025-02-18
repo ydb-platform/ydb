@@ -1,8 +1,9 @@
 #include "accessor.h"
 
+#include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
-#include <ydb/core/formats/arrow/save_load/saver.h>
+
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NArrow::NAccessor {
@@ -69,46 +70,6 @@ TSparsedArray::TSparsedArray(const IChunkedArray& defaultArray, const std::share
     Records.emplace_back(0, GetRecordsCount(), records, DefaultValue);
 }
 
-std::vector<NKikimr::NArrow::NAccessor::TChunkedArraySerialized> TSparsedArray::DoSplitBySizes(
-    const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
-    AFL_VERIFY(Records.size() == 1)("size", Records.size());
-    auto chunks = NArrow::NSplitter::TSimpleSplitter(saver).SplitBySizes(Records.front().GetRecords(), fullSerializedData, splitSizes);
-
-    std::vector<TChunkedArraySerialized> result;
-    ui32 idx = 0;
-    ui32 startIdx = 0;
-    for (auto&& i : chunks) {
-        AFL_VERIFY(i.GetSlicedBatch()->num_columns() == 2);
-        AFL_VERIFY(i.GetSlicedBatch()->column(0)->type()->id() == arrow::uint32()->id());
-        auto UI32Column = static_pointer_cast<arrow::UInt32Array>(i.GetSlicedBatch()->column(0));
-        ui32 nextStartIdx = NArrow::NAccessor::TSparsedArray::GetLastIndex(i.GetSlicedBatch()) + 1;
-        if (idx + 1 == chunks.size()) {
-            nextStartIdx = GetRecordsCount();
-        }
-        std::shared_ptr<arrow::RecordBatch> batch;
-        {
-            std::unique_ptr<arrow::ArrayBuilder> builder = NArrow::MakeBuilder(arrow::uint32());
-            arrow::UInt32Builder* builderImpl = (arrow::UInt32Builder*)builder.get();
-            for (ui32 rowIdx = 0; rowIdx < UI32Column->length(); ++rowIdx) {
-                TStatusValidator::Validate(builderImpl->Append(UI32Column->Value(rowIdx) - startIdx));
-            }
-            auto colIndex = TStatusValidator::GetValid(builder->Finish());
-            batch = arrow::RecordBatch::Make(
-                i.GetSlicedBatch()->schema(), i.GetSlicedBatch()->num_rows(), { colIndex, i.GetSlicedBatch()->column(1) });
-        }
-
-        ++idx;
-        {
-            TBuilder builder(DefaultValue, GetDataType());
-            builder.AddChunk(nextStartIdx - startIdx, batch);
-            result.emplace_back(builder.Finish(), saver.Apply(batch));
-        }
-        startIdx = nextStartIdx;
-    }
-
-    return result;
-}
-
 std::shared_ptr<arrow::Scalar> TSparsedArray::DoGetMaxScalar() const {
     std::shared_ptr<arrow::Scalar> result;
     for (auto&& i : Records) {
@@ -137,7 +98,7 @@ namespace {
 static thread_local THashMap<TString, std::shared_ptr<arrow::RecordBatch>> SimpleBatchesCache;
 }
 
-NKikimr::NArrow::NAccessor::TSparsedArrayChunk TSparsedArray::MakeDefaultChunk(
+TSparsedArrayChunk TSparsedArray::MakeDefaultChunk(
     const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount) {
     auto it = SimpleBatchesCache.find(type->ToString());
     if (it == SimpleBatchesCache.end()) {
@@ -159,21 +120,8 @@ IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
         return IChunkedArray::TLocalDataAddress(
             NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, it->GetSize()), StartPosition + it->GetStartExt(), chunkIdx);
     } else {
-        return IChunkedArray::TLocalDataAddress(
-            ColValue->Slice(it->GetStartInt(), it->GetSize()), StartPosition + it->GetStartExt(), chunkIdx);
+        return IChunkedArray::TLocalDataAddress(ColValue->Slice(it->GetStartInt(), it->GetSize()), StartPosition + it->GetStartExt(), chunkIdx);
     }
-}
-
-std::vector<std::shared_ptr<arrow::Array>> TSparsedArrayChunk::GetChunkedArray() const {
-    std::vector<std::shared_ptr<arrow::Array>> chunks;
-    for (auto&& i : RemapExternalToInternal) {
-        if (i.GetIsDefault()) {
-            chunks.emplace_back(NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, i.GetSize()));
-        } else {
-            chunks.emplace_back(ColValue->Slice(i.GetStartInt(), i.GetSize()));
-        }
-    }
-    return chunks;
 }
 
 TSparsedArrayChunk::TSparsedArrayChunk(const ui32 posStart, const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& records,
@@ -268,12 +216,31 @@ void TSparsedArray::TBuilder::AddChunk(const ui32 recordsCount, const std::share
     AFL_VERIFY(data->num_rows() <= recordsCount)("rows", data->num_rows())("count", recordsCount);
     AFL_VERIFY(data->num_columns() == 2)("count", data->num_columns());
     AFL_VERIFY(data->column(0)->type_id() == arrow::uint32()->id())("type", data->column(0)->type()->ToString());
+    AFL_VERIFY(data->column(1)->type_id() == Type->id())("type", Type->ToString())("ext_type", data->column(0)->type()->ToString());
     AFL_VERIFY_DEBUG(data->schema()->field(0)->name() == "index")("name", data->schema()->field(0)->name());
     if (data->num_rows()) {
         auto* arr = static_cast<const arrow::UInt32Array*>(data->column(0).get());
         AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount)("val", arr->Value(arr->length() - 1))("count", recordsCount);
     }
     Chunks.emplace_back(RecordsCount, recordsCount, data, DefaultValue);
+    RecordsCount += recordsCount;
+}
+
+void TSparsedArray::TBuilder::AddChunk(
+    const ui32 recordsCount, const std::shared_ptr<arrow::Array>& indexes, const std::shared_ptr<arrow::Array>& values) {
+    AFL_VERIFY(indexes);
+    AFL_VERIFY(values);
+    AFL_VERIFY(recordsCount);
+    AFL_VERIFY(indexes->length() == values->length())("indexes", indexes->length())("values", values->length());
+    AFL_VERIFY(indexes->length() <= recordsCount)("indexes", indexes->length())("count", recordsCount);
+    AFL_VERIFY(indexes->type_id() == arrow::uint32()->id())("type", indexes->type()->ToString());
+    AFL_VERIFY(values->type_id() == Type->id())("type", Type->ToString())("ext_type", values->type()->ToString());
+    if (indexes->length()) {
+        auto* arr = static_cast<const arrow::UInt32Array*>(indexes.get());
+        AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount)("val", arr->Value(arr->length() - 1))("count", recordsCount);
+    }
+    Chunks.emplace_back(
+        RecordsCount, recordsCount, arrow::RecordBatch::Make(BuildSchema(Type), indexes->length(), { indexes, values }), DefaultValue);
     RecordsCount += recordsCount;
 }
 

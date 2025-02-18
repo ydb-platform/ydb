@@ -33,6 +33,8 @@ namespace NActors {
 
 namespace NYql::NDq {
 
+// TBD: Add Running status and return PendingInput iff no data was consumed from inputs
+//      CA and KQP relies on PendingInput and require careful modifications
 enum class ERunStatus : ui32 {
     Finished,
     PendingInput,
@@ -47,10 +49,12 @@ struct TMkqlStat {
 struct TTaskRunnerStatsBase {
     // basic stats
     TDuration BuildCpuTime;
-    TInstant FinishTs;
+    TInstant CreateTs;
     TInstant StartTs;
+    TInstant FinishTs;
 
     TDuration ComputeCpuTime;
+    TDuration WaitStartTime;
     TDuration WaitInputTime;
     TDuration WaitOutputTime;
 
@@ -319,7 +323,7 @@ public:
     }
 
     bool EnableMetering() const {
-        return Task_->GetEnableMetering();
+        return !Task_->GetDisableMetering();
     }
 
     ui64 GetStageId() const {

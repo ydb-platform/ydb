@@ -99,6 +99,8 @@ protected:
     }
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
+    virtual void DoOnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& /*result*/) {
+    }
 
     virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
         return defaultValue;
@@ -280,6 +282,10 @@ public:
 
     void OnAfterGCAction(const NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) {
         DoOnAfterGCAction(shard, action);
+    }
+
+    void OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& result) {
+        DoOnCollectGarbageResult(result);
     }
 
     bool OnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {

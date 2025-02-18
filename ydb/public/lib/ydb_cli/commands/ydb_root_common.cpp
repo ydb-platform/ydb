@@ -350,11 +350,11 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     ParseProfile();
 
     ParseDatabase(config);
+    ParseAddress(config);
     ParseCaCerts(config);
     ParseIamEndpoint(config);
 
     ParseCredentials(config);
-    ParseAddress(config);
 }
 
 namespace {

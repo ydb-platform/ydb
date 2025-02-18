@@ -141,7 +141,7 @@ TConfigurator<TStruct>::TConfigurator(NDetail::TRegisteredFieldDirectoryPtr regi
 
 template <CYsonStructDerived TStruct>
 template <class TValue>
-NDetail::TFieldRegistrar<TValue>& TConfigurator<TStruct>::Field(const TString& name, TYsonStructField<TStruct, TValue> field)
+NDetail::TFieldRegistrar<TValue>& TConfigurator<TStruct>::Field(const std::string& name, TYsonStructField<TStruct, TValue> field)
 {
     IYsonStructParameterPtr parameter;
 

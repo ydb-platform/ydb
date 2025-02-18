@@ -7,7 +7,7 @@
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 #include <yt/yql/providers/yt/fmr/coordinator/interface/yql_yt_coordinator.h>
 
-namespace NYql {
+namespace NYql::NFmr {
 
 Y_UNIT_TEST_SUITE(FmrFactoryTests) {
     Y_UNIT_TEST(GetSuccessfulTaskResult) {
@@ -61,4 +61,4 @@ Y_UNIT_TEST_SUITE(FmrFactoryTests) {
     }
 }
 
-} // namspace NYql
+} // namespace NYql::NFmr

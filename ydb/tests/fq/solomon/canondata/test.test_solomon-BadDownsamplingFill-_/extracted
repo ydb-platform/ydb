@@ -7,4 +7,4 @@ Issues:
     <main>:1:15: Error: downsampling.fill must be one of NONE, NULL, PREVIOUS, but has ABC
 
 
-(yexception) ydb/tests/tools/kqprun/kqprun.cpp:xxx: ISOTIME Query execution failed
+

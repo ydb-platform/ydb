@@ -72,6 +72,8 @@
 #include <yql/essentials/core/url_lister/url_lister_manager.h>
 #include <yql/essentials/core/yql_library_compiler.h>
 #include <yql/essentials/core/pg_ext/yql_pg_ext.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/log/tls_backend.h>
 #include <yql/essentials/utils/log/log.h>
@@ -1124,6 +1126,12 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));
     }
 
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
     TExprContext ctx;
     ctx.NextUniqueId = NYql::NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
@@ -1133,13 +1141,13 @@ int RunMain(int argc, const char* argv[])
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(mountConfig, &mount));
         FillUserDataTableFromFileSystem(mount, dataTable);
 
-        if (!CompileLibraries(dataTable, ctx, modules)) {
+        if (!CompileLibraries(translators, dataTable, ctx, modules)) {
             *runOptions.ErrStream << "Errors on compile libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*runOptions.ErrStream);
             return -1;
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(std::move(modules), ctx.NextUniqueId, clusterMapping, sqlFlags, hasValidate);
+        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId, clusterMapping, sqlFlags, hasValidate);
     } else {
         if (GetYqlModuleResolver(ctx, moduleResolver, {}, clusters, sqlFlags).empty()) {
             *runOptions.ErrStream << "Errors loading default YQL libraries:" << Endl;

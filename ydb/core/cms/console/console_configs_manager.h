@@ -193,6 +193,7 @@ private:
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
+    void Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr & ev, const TActorContext & ctx);
     void HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void HandleUnauthorized(TEvConsole::TEvSetYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvDropConfigRequest::TPtr & ev, const TActorContext & ctx);
@@ -248,6 +249,7 @@ private:
             HFunc(TEvConsole::TEvGetAllConfigsRequest, HandleWithRights);
             HFunc(TEvConsole::TEvGetNodeLabelsRequest, HandleWithRights);
             HFunc(TEvConsole::TEvGetAllMetadataRequest, HandleWithRights);
+            HFunc(TEvConsole::TEvFetchStartupConfigRequest, HandleWithRights);
             HFunc(TEvConsole::TEvAddVolatileConfigRequest, HandleWithRights);
             HFunc(TEvConsole::TEvRemoveVolatileConfigRequest, HandleWithRights);
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsProvider);

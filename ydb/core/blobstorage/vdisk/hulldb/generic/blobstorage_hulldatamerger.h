@@ -133,8 +133,18 @@ namespace NKikimr {
             }
         }
 
-        void Finish(bool targetingHugeBlob, const TLogoBlobID& fullId) {
+        void Finish(bool targetingHugeBlob, const TLogoBlobID& fullId, bool keepData) {
             Y_DEBUG_ABORT_UNLESS(!Finished);
+
+            if (!keepData) {
+                Y_DEBUG_ABORT_UNLESS(SavedHugeBlobs.empty());
+                for (ui8 partIdx : PartsMask) {
+                    if (TPart& part = Parts[partIdx]; !part.HugeBlob.Empty()) {
+                        DeletedHugeBlobs.push_back(part.HugeBlob);
+                    }
+                }
+                PartsMask.Clear();
+            }
 
             if (!Empty()) {
                 // scan through all the parts, see what we got
@@ -315,19 +325,6 @@ namespace NKikimr {
             Y_DEBUG_ABORT_UNLESS(index == allocatedSlots.size());
         }
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // THandoffMap transformations; called before any reads were done, metadata-only processing (but within Fresh
-        // compation some data might be already available)
-
-        void MakeEmpty() {
-            Y_DEBUG_ABORT_UNLESS(Finished);
-            DeletedHugeBlobs.insert(DeletedHugeBlobs.end(), SavedHugeBlobs.begin(), SavedHugeBlobs.end());
-            auto deletedHugeBlobs = std::move(DeletedHugeBlobs);
-            Clear();
-            DeletedHugeBlobs = std::move(deletedHugeBlobs);
-            Finished = true;
-        }
-
         void FilterLocalParts(NMatrix::TVectorType remainingLocalParts) {
             Y_DEBUG_ABORT_UNLESS(Finished);
             const NMatrix::TVectorType partsToRemove = PartsMask & ~remainingLocalParts;
@@ -357,20 +354,27 @@ namespace NKikimr {
 
             TDiskDataExtractor extr;
             memRec.GetDiskData(&extr, outbound);
+
             const NMatrix::TVectorType parts = memRec.GetLocalParts(GType);
             Y_DEBUG_ABORT_UNLESS(parts.CountBits() == extr.End - extr.Begin);
+
             const TDiskPart *location = extr.Begin;
             for (ui8 partIdx : parts) {
                 Y_DEBUG_ABORT_UNLESS(partIdx < Parts.size());
-                if (auto& part = Parts[partIdx]; !part.HugeBlob.Empty() && part.HugeBlobCircaLsn < lsn && location->ChunkIdx) {
-                    PartsToDelete.Set(partIdx);
+                const TDiskPart& extPart = *location++;
+                if (!PartsMask.Get(partIdx)) {
+                    continue; // we don't have such part in current slice
+                } else if (extPart.Empty()) {
+                    continue; // metadata part
                 }
-                ++location;
+                TPart& part = Parts[partIdx];
+                if (!part.HugeBlob.Empty() && part.HugeBlobCircaLsn < lsn) {
+                    DeletedHugeBlobs.push_back(part.HugeBlob);
+                    part = {};
+                    PartsMask.Clear(partIdx);
+                }
             }
-        }
-
-        NMatrix::TVectorType GetRemainingParts() const {
-            return PartsMask - PartsToDelete;
+            Y_DEBUG_ABORT_UNLESS(location == extr.End);
         }
 
     };

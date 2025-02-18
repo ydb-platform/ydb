@@ -18,63 +18,85 @@ extern "C" {
 
 #define FL_LOADED    0x01
 
-extern "C" int di_compare(const void *op1, const void *op2) {
-    d_idx_t *ie1 = (d_idx_t *)op1,
-        *ie2 = (d_idx_t *)op2;
-    
-    return strcasecmp(ie1->name, ie2->name);
-}
+struct TDist: public dist_t {
+    TVector<int> TypeVector;
+    TVector<int> WeightSets;
+    TVector<int*> WeightSetIndex;
+    TVector<int> Maximums;
+    TVector<int> ValueSets;
+    TVector<int*> ValueSetIndex;
+    TString Strings;
+    TString Names;
+};
 
-int load_dist(d_idx_t *di) {
-    int res = 0;
-    int32_t temp;
+struct TDIdx: public d_idx_t {
+    explicit TDIdx(IInputStream& mi) {
+        memset(this, 0, sizeof(d_idx_t));
+        mi.Read(name, D_NAME_LEN);
+        name[D_NAME_LEN] = '\0';
+        index = ReadInt(mi);
+        offset = ReadInt(mi);
+        str_space = ReadInt(mi);
+        length = ReadInt(mi);
+        w_width = ReadInt(mi);
+        v_width = ReadInt(mi);
+        name_space = ReadInt(mi);
+        dist = nullptr;
+    }
 
-    if (di->flags != FL_LOADED) {
+    void Load() {
+        dist = &Dist;
         auto resource = NResource::Find("tpcds.idx");
         TStringInput mi(resource);
-        mi.Skip(di->offset);
-        di->dist = (dist_t *)malloc(sizeof(struct DIST_T));
-        auto d = di->dist;
-        d->type_vector = (int *)malloc(sizeof(int32_t) * di->v_width);
-        for (int i = 0; i < di->v_width; i++) {
-            mi.Read(&temp, sizeof(int32_t));
-            d->type_vector[i] = ntohl(temp);
+        mi.Skip(offset);
+        Dist.TypeVector.resize(v_width);
+        Dist.type_vector = Dist.TypeVector.data();
+        for (int i = 0; i < v_width; i++) {
+            Dist.TypeVector[i] = ReadInt(mi);
         }
-        
-        d->weight_sets = (int **)malloc(sizeof(int *) * di->w_width);
-        d->maximums = (int *)malloc(sizeof(int32_t) * di->w_width);
-        for (int i = 0; i < di->w_width; i++) {
-            *(d->weight_sets + i) = (int *)malloc(di->length * sizeof(int32_t));
-            d->maximums[i] = 0;
-            for (int j = 0; j < di->length; j++) {
-                mi.Read(&temp, sizeof(int32_t));
-                *(*(d->weight_sets + i) + j) = ntohl(temp);
-                d->maximums[i] += d->weight_sets[i][j];
-                d->weight_sets[i][j] = d->maximums[i];
-            }
-        }
-        
-        d->value_sets = (int **)malloc(sizeof(int *) * di->v_width);
-        MALLOC_CHECK(d->value_sets);
-        for (int i = 0; i < di->v_width; i++) {
-            *(d->value_sets + i) = (int *)malloc(di->length * sizeof(int32_t));
-            for (int j = 0; j < di->length; j++) {
-                mi.Read(&temp, sizeof(int32_t));
-                *(*(d->value_sets + i) + j) = ntohl(temp);
+        Dist.WeightSetIndex.resize(w_width);
+        Dist.WeightSets.resize(w_width * length);
+        Dist.weight_sets = Dist.WeightSetIndex.data();
+        Dist.Maximums.resize(w_width);
+        Dist.maximums = Dist.Maximums.data();
+        for (int i = 0; i < w_width; i++) {
+            Dist.Maximums[i] = 0;
+            Dist.WeightSetIndex[i] = Dist.WeightSets.data() + i * length;
+            for (int j = 0; j < length; j++) {
+                Dist.maximums[i] += ReadInt(mi);
+                Dist.weight_sets[i][j] = Dist.maximums[i];
             }
         }
 
-        if (di->name_space) {
-            d->names = (char *)malloc(di->name_space);
-            mi.Read(d->names, di->name_space * sizeof(char));
+        Dist.ValueSetIndex.resize(v_width);
+        Dist.ValueSets.resize(v_width * length);
+        Dist.value_sets = Dist.ValueSetIndex.data();
+        for (int i = 0; i < v_width; i++) {
+            Dist.ValueSetIndex[i] = Dist.ValueSets.data() + i * length;
+            for (int j = 0; j < length; j++) {
+                Dist.value_sets[i][j] = ReadInt(mi);
+            }
         }
 
-        d->strings = (char *)malloc(sizeof(char) * di->str_space);
-        mi.Read(d->strings, di->str_space * sizeof(char));
-        di->flags = FL_LOADED;
+        if (name_space) {
+            Dist.Names.resize(name_space);
+            Dist.names = Dist.Names.begin();
+            mi.Read(Dist.names, name_space * sizeof(char));
+        }
+
+        Dist.Strings.resize(str_space);
+        Dist.strings = Dist.Strings.begin();
+        mi.Read(Dist.strings, str_space * sizeof(char));
+        flags = FL_LOADED;
     }
-    return(res);
-}
+
+    static inline int ReadInt(IInputStream& mi) {
+        int temp;
+        mi.Read(&temp, sizeof(int32_t));
+        return ntohl(temp);
+    };
+    TDist Dist;
+};
 
 
 class TDists {
@@ -85,44 +107,25 @@ public:
         memcpy(&temp, resource.data(), sizeof(int32_t));
         int entry_count = ntohl(temp);
         TMemoryInput mi(resource.end() - entry_count * IDX_SIZE, entry_count * IDX_SIZE);
-        Idxs.resize(entry_count);
-        for (auto& current_idx: Idxs) {
-            memset(&current_idx, 0, sizeof(d_idx_t));
-            mi.Read(current_idx.name, D_NAME_LEN);
-            current_idx.name[D_NAME_LEN] = '\0';
-            mi.Read(&temp, sizeof(int32_t));
-            current_idx.index = ntohl(temp);
-            mi.Read(&temp, sizeof(int32_t));
-            current_idx.offset = ntohl(temp);
-            mi.Read(&temp, sizeof(int32_t));
-            current_idx.str_space = ntohl(temp);
-            mi.Read(&temp, sizeof(int32_t));
-            current_idx.length = ntohl(temp);
-            mi.Read(&temp, sizeof(int32_t));
-            current_idx.w_width = ntohl(temp);
-            mi.Read(&temp, sizeof(int32_t));
-            current_idx.v_width = ntohl(temp);
-            mi.Read(&temp, sizeof(int32_t));
-            current_idx.name_space = ntohl(temp);
-            current_idx.dist = NULL;
+        for (auto i = 0; i < entry_count; ++i) {
+            TDIdx current_idx(mi);
+            TString name(current_idx.name);
+            name.to_lower();
+            Idxs.emplace(name, std::move(current_idx));
         }
-        qsort(Idxs.begin(), entry_count, sizeof(d_idx_t), di_compare);
     }
 
-    d_idx_t* operator[](char* name) {
-        d_idx_t key;
-        strcpy(key.name, name);
-        auto id = (d_idx_t *)bsearch(&key, Idxs.begin(), Idxs.size(), sizeof(d_idx_t), di_compare);
-        if (id != NULL) {
-            if (id->flags != FL_LOADED) {
-                load_dist(id);
-            }
+    d_idx_t* operator[](TString name) {
+        name.to_lower();
+        auto id = MapFindPtr(Idxs, name);
+        if (id != NULL && id->flags != FL_LOADED) {
+            id->Load();
         }
         return id;
     }
 
 private:
-    TVector<d_idx_t> Idxs;
+    TMap<TString, TDIdx> Idxs;
 };
 
 extern "C" d_idx_t* find_dist(char *name) {

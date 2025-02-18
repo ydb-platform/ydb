@@ -34,7 +34,10 @@ bool TRecordBatchBuilder::IsSameFieldsSequence(const std::vector<std::shared_ptr
         return false;
     }
     for (ui32 i = 0; i < f1.size(); ++i) {
-        if (!f1[i]->Equals(f2[i])) {
+        if (f1[i]->name() != f2[i]->name()) {
+            return false;
+        }
+        if (!f1[i]->type()->Equals(f2[i]->type())) {
             return false;
         }
     }

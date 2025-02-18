@@ -1,5 +1,6 @@
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/security/util.h>
+#include <ydb/mvp/core/mvp_tokens.h>
 #include "openid_connect.h"
 #include "oidc_session_create_nebius.h"
 #include <library/cpp/string_utils/base64/base64.h>
@@ -19,6 +20,7 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code) {
     TCgiParameters params;
     params.emplace("code", code);
     params.emplace("client_id", code);
+    params.emplace("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:access_token_bearer");
     params.emplace("grant_type", "authorization_code");
     params.emplace("redirect_uri", TStringBuilder() << (Request->Endpoint->Secure ? "https://" : "http://")
                                                           << host
@@ -26,7 +28,13 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code) {
 
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
-    httpRequest->Set("Authorization", Settings.GetAuthorizationString());
+
+    TMvpTokenator* tokenator = MVPAppData()->Tokenator;
+    TString token = "";
+    if (tokenator) {
+        token = tokenator->GetToken(Settings.SessionServiceTokenName);
+    }
+    httpRequest->Set("Authorization", token); // Bearer included
     httpRequest->Set<&NHttp::THttpRequest::Body>(params());
 
     Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));

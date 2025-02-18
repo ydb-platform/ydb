@@ -4825,7 +4825,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
-    struct GeneratedChangefeed {
+    struct TGeneratedChangefeed {
         std::pair<TString, TTestDataWithScheme> Changefeed;
         std::function<void(TTestBasicRuntime&)> Checker;
     };
@@ -4894,14 +4894,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         NAttr::TAttributes attr;
         attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
         return {
-                {changefeedPath, GenerateTestData(
-                {
-                    EPathTypeCdcStream,
-                    changefeedDesc,
-                    std::move(attr)
-                }
-            )},
-            [changefeedPath = TString(changefeedPath)](TTestBasicRuntime& runtime){
+            {changefeedPath, GenerateTestData({EPathTypeCdcStream, changefeedDesc, std::move(attr)})},
+            [changefeedPath = TString(changefeedPath)](TTestBasicRuntime& runtime) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath, false, false, true), {
                     NLs::PathExist
                 });
@@ -4934,7 +4928,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", {{"a", 1}}, permissions);
 
         bucketContent.emplace("", data);
-        return [](TTestBasicRuntime& runtime){
+        return [](TTestBasicRuntime& runtime) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
                 NLs::PathExist
             });

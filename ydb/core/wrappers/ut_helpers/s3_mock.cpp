@@ -170,7 +170,6 @@ TString BuildContentListXML(const TVector<TString>& paths) {
 }
 
 TString BuildListObjectsXML(const TVector<TString>& paths, const TStringBuf bucketName) {
-    
     return Sprintf(R"(
             <?xml version="1.0" encoding="UTF-8"?>
             <ListBucketResult>
@@ -184,9 +183,9 @@ TString BuildListObjectsXML(const TVector<TString>& paths, const TStringBuf buck
 bool TS3Mock::TRequest::HttpServeList(const TReplyParams& params, TStringBuf bucketName, const TString& prefix) {
     Cerr << "S3_MOCK::HttpServeList: " << prefix << Endl;
     params.Output << "HTTP/1.1 200 Ok\r\n";
-    TVector<TString> paths;
     THttpHeaders headers;
 
+    TVector<TString> paths;
     for (const auto& [key, value] : Parent->Data) {
         TFsPath path = key;
         if (path.IsSubpathOf(TStringBuilder() << bucketName << "/" << prefix)) {

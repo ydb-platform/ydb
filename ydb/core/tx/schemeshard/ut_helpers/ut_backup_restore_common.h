@@ -23,6 +23,7 @@ namespace NAttr {
 enum class EKeys {
     TOPIC_DESCRIPTION,
 };
+
 class TAttributes : public THashMap<EKeys, TString> {
 public:
     const TString& GetTopicDescription() const {

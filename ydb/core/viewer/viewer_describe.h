@@ -150,6 +150,8 @@ public:
                 return NKikimrSchemeOp::EPathTypeSequence;
             case TNavigate::KindReplication:
                 return NKikimrSchemeOp::EPathTypeReplication;
+            case TNavigate::KindTransfer:
+                return NKikimrSchemeOp::EPathTypeTransfer;
             case TNavigate::KindBlobDepot:
                 return NKikimrSchemeOp::EPathTypeBlobDepot;
             case TNavigate::KindExternalTable:

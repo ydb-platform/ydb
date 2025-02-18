@@ -1319,6 +1319,7 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TS
                         actualVersion = pathVersion.GetSequenceVersion();
                         break;
                     case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+                    case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
                         actualVersion = pathVersion.GetReplicationVersion();
                         break;
                     case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:

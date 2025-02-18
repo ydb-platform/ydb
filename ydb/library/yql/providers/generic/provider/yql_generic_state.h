@@ -19,7 +19,7 @@ namespace NYql {
             TString ClusterName;
             TString TableName;
 
-            TString ToString() const { 
+            TString ToString() const {
                 return TStringBuilder() << "`" << ClusterName << "`.`" << TableName << "`";
             }
 
@@ -28,20 +28,20 @@ namespace NYql {
             }
 
             explicit operator size_t() const {
-                return CombineHashes(std::hash<TString>()(ClusterName),  std::hash<TString>()(TableName));
+                return CombineHashes(std::hash<TString>()(ClusterName), std::hash<TString>()(TableName));
             }
         };
 
         struct TTableMeta {
             const TStructExprType* ItemType = nullptr;
             // TODO: check why is it important
-            TVector<TString> ColumnOrder; 
+            TVector<TString> ColumnOrder;
             // External datasource description
-            NYql::TGenericDataSourceInstance DataSourceInstance; 
+            NYql::TGenericDataSourceInstance DataSourceInstance;
             // External table schema
-            NYql::NConnector::NApi::TSchema Schema; 
+            NYql::NConnector::NApi::TSchema Schema;
             // Contains some binary description of table splits (partitions) produced by Connector
-            std::vector<NYql::NConnector::NApi::TSplit> Splits; 
+            std::vector<NYql::NConnector::NApi::TSplit> Splits;
         };
 
         using TGetTableResult = std::pair<const TTableMeta*, TIssues>;

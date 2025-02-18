@@ -81,22 +81,19 @@ public:
     NConnector::TAsyncResult<NConnector::NApi::TListSplitsResponse> ReadNext() override {
         NConnector::TResult<NConnector::NApi::TListSplitsResponse> result;
 
-        if (!responded) {
+        if (!Responded_) {
             result.Status = NYdbGrpc::TGrpcStatus(); // OK
             result.Response = NConnector::NApi::TListSplitsResponse(); 
             result.Response->add_splits();
-            responded = true;  
+            Responded_ = true;  
         } else {
             result.Status = NYdbGrpc::TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
         }
 
-        auto promise = NThreading::NewPromise<NConnector::TResult<NConnector::NApi::TListSplitsResponse>>();
-        promise.SetValue(result);
-
-        return promise.GetFuture();
+        return NThreading::MakeFuture<NConnector::TResult<NConnector::NApi::TListSplitsResponse>>(std::move(result));
     }
 private:
-    bool responded = false;
+    bool Responded_ = false;
 };
 
 struct TFakeGenericClient: public NConnector::IClient {
@@ -152,15 +149,12 @@ struct TFakeGenericClient: public NConnector::IClient {
     NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request, TDuration) override {
         Y_UNUSED(request);
 
-        auto promise = NThreading::NewPromise<NConnector::TIteratorResult<NConnector::IListSplitsStreamIterator>>();
-
         NConnector::TIteratorResult<NConnector::IListSplitsStreamIterator> iteratorResult{
             NYdbGrpc::TGrpcStatus(),
             std::make_shared<TListSplitsIteratorMock>(),
         };
 
-        promise.SetValue(std::move(iteratorResult));
-        return promise.GetFuture();
+        return NThreading::MakeFuture<NConnector::TIteratorResult<NConnector::IListSplitsStreamIterator>>(std::move(iteratorResult));
     }
 
     NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request, TDuration) override {

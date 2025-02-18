@@ -421,7 +421,7 @@ namespace NYql::NDq {
                            ui64 inputIndex,
                            TCollectStatsLevel statsLevel,
                            const THashMap<TString, TString>& /*secureParams*/,
-                           const ui64 taskId,
+                           ui64 taskId,
                            const THashMap<TString, TString>& taskParams,
                            const TVector<TString>& readRanges,
                            const NActors::TActorId& computeActorId,

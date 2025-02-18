@@ -18,9 +18,10 @@
     ```bash
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
     ```
+
     В случае отсутствия файла динамической конфигурации на кластере, команда выдаст сообщение:
 
-    ```
+    ```bash
     YAML config is absent on this cluster.
     ```
 
@@ -39,6 +40,7 @@
     ```bash
     ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
     ```
+
     После выполнения команды, конфигурационный файл будет загружен на кластер и сохранён на всех узлах в директории, указанной в опции `ydbd --config-store`.
 
 

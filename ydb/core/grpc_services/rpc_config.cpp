@@ -152,7 +152,16 @@ public:
 
         auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
 
-        cmd->SetYAML(shim.MainConfig.value_or(TString{}));
+        if (shim.MainConfig) {
+            cmd->SetYAML(*shim.MainConfig);
+        }
+        if (shim.StorageConfig) {
+            cmd->SetStorageYAML(*shim.StorageConfig);
+        }
+        if (shim.SwitchDedicatedStorageSection) {
+            cmd->SetSwitchDedicatedStorageSection(*shim.SwitchDedicatedStorageSection);
+        }
+        cmd->SetDedicatedStorageSectionConfigMode(shim.DedicatedConfigMode);
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,

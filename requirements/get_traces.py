@@ -194,6 +194,10 @@ def fetch_sub_issues_by_id(issue_id, github_token):
     
     return sub_issues
 
+def to_anchor(s):
+    return '#' + re.sub(r'[\s/:()]+', '-', s.lower()).strip('-')
+
+
 def generate_traceability_matrix(requirements, output_path):
     with open(output_path, 'w', encoding='utf-8') as file:
         file.write("# Traceability Matrix\n\n")
@@ -212,7 +216,8 @@ def generate_traceability_matrix(requirements, output_path):
             else:
                 file.write(f"#### {req['id']}: {req['title']}\n")
             if req.get('badge'):
-                 file.write(f"{req['badge']}\n\n")
+                linq = to_anchor(f"{req['id']}: {req['title']}")
+                file.write(f"[{req['badge']}](./summary.md{linq})\n\n")
             if req['description']:
                 file.write(f"**Description**: {req['description']}\n\n")
             if req.get('issues'):
@@ -254,7 +259,8 @@ def generate_summary(requirements, output_path):
                 else:
                     file.write(f"#### {req['id']}: {req['title']}\n")
                 if req.get('badge'):
-                    file.write(f"[{req['badge']}](./traceability_matrix.md)\n\n")
+                    linq = to_anchor(f"{req['id']}: {req['title']}")
+                    file.write(f"[{req['badge']}](./traceability_matrix.md{linq})\n\n")
                 if req['description']:
                     file.write(f"**Description**: {req['description']}\n\n")
                 if req.get('issues'):

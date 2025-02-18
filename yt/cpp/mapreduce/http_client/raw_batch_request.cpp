@@ -609,7 +609,7 @@ TFuture<TRichYPath> THttpRawBatchRequest::CanonizeYPath(const TRichYPath& path)
         result.Path_ = AddPathPrefix(result.Path_, Context_.Config->Prefix);
     }
 
-    if (result.Path_.find_first_of("<>{}[]") != TString::npos) {
+    if (result.Path_.find_first_of("<>{}[]:") != TString::npos) {
         return AddRequest<TCanonizeYPathResponseParser>(
             "parse_ypath",
             SerializeParamsForParseYPath(result),

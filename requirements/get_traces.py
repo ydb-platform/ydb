@@ -259,7 +259,7 @@ def generate_summary(requirements, output_path):
                 else:
                     file.write(f"#### {req['id']}: {req['title']}\n")
                 if req['description']:
-                    file.write(f"**Description**: {req['description']}\n")
+                    file.write(f"**Description**: {req['description']}\n\n")
                 if req.get('badge'):
                     linq = to_anchor(f"{req['id']}: {req['title']}")
                     file.write(f"[{req['badge']}](./traceability_matrix.md{linq})\n\n")

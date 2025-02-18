@@ -1958,7 +1958,7 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
 - Python
 
-  Autoscaling of a topic is could be enabled during its creation using the `auto_partitioning_settings` field:
+  Autoscaling of a topic can be enabled during its creation using the `auto_partitioning_settings` argument of `create_topic`:
 
   ```python
       driver.topic_client.create_topic(
@@ -1975,7 +1975,7 @@ In case of a _hard interruption_, the client receives a notification that it is 
       )
   ```
 
-  Changes to an existing topic are could be made using the `alter_auto_partitioning_settings` field:
+  Changes to an existing topic can be made using the `alter_auto_partitioning_settings` argument of `alter_topic`:
 
   ```python
       driver.topic_client.alter_topic(
@@ -1989,7 +1989,7 @@ In case of a _hard interruption_, the client receives a notification that it is 
       )
   ```
 
-  The SDK supports two topic reading modes with autoscaling enabled: full support mode and compatibility mode. The reading mode could be set in the `auto_partitioning_support` field while creating the reader. Full support mode is used by default.
+  The SDK supports two topic reading modes with autoscaling enabled: full support mode and compatibility mode. The reading mode can be set in the `auto_partitioning_support` argument when creating the reader. Full support mode is used by default.
 
   ```python
   reader = driver.topic_client.reader(
@@ -2007,7 +2007,6 @@ In case of a _hard interruption_, the client receives a notification that it is 
   )
   ```
 
-  From a practical point of view, the modes do not differ for the end user.
-  The full support mode differs from the compatibility mode in terms of who will guarantee the order of reading - the client or the server. Compatibility mode is achieved by server-side processing and, as a rule, runs slower.
+  From a practical perspective, these modes do not differ for the end user. However, the full support mode differs from the compatibility mode in terms of who guarantees the order of reading—the client or the server. Compatibility mode is achieved through server-side processing and generally operates slower.
 
 {% endlist %}

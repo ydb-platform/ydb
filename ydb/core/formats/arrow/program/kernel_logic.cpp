@@ -44,7 +44,7 @@ TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& i
         resources->AddVerified(output.front().GetColumnId(), builder.Finish());
         return true;
     }
-    if (accJson->GetType() == IChunkedArray::EType::SubColumnsArray) {
+    if (accJson->GetType() != IChunkedArray::EType::SubColumnsArray) {
         return false;
     }
     resources->AddVerified(output.front().GetColumnId(), ExtractArray(accJson, svPath));

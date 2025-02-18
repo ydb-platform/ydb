@@ -3984,6 +3984,18 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         const TIntrusiveConstPtr<TCompactionPolicy> Policy;
     };
 
+    struct TTxWaitCompleted : public ITransaction {
+        TTxWaitCompleted() = default;
+
+        bool Execute(TTransactionContext&, const TActorContext&) override {
+            return true;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
     struct TTxCommitLongTx : public ITransaction {
         ui64 TxId;
         TRowVersion RowVersion;
@@ -3995,6 +4007,26 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
 
         bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
             txc.DB.CommitTx(TableId, TxId, RowVersion);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            // nothing
+        }
+    };
+
+    struct TTxHasTxData : public ITransaction {
+        const ui64 TxId;
+        bool& Result;
+
+        explicit TTxHasTxData(ui64 txId, bool& result)
+            : TxId(txId)
+            , Result(result)
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+            Result = txc.DB.HasTxData(TableId, TxId);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
             return true;
         }
@@ -4709,6 +4741,68 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
                 "Key 1 = Upsert value = Set foo value2 = Set def\n"
                 "Key 2 = Upsert value = Empty NULL value2 = Set ghi\n"
                 "Key 3 = Upsert value = Set abc value2 = Empty NULL\n");
+        }
+    }
+
+    Y_UNIT_TEST(CompactedTxIdReuse) {
+        TMyEnvBase env;
+
+        env->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "foo", 123) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWaitCompleted() });
+
+        bool hasTxData = false;
+        env.SendSync(new NFake::TEvExecute{ new TTxHasTxData(123, hasTxData) });
+        UNIT_ASSERT_C(hasTxData, "Expected HasTxData = true before compaction");
+
+        // Compact until executor tells us txId no longer has any data
+        for (int i = 0; i < 2 && hasTxData; ++i) {
+            // Force a mem table compaction
+            Cerr << "...compacting" << Endl;
+            env.SendSync(new NFake::TEvCompact(TableId, true));
+            Cerr << "...waiting until compacted" << Endl;
+            env.WaitFor<NFake::TEvCompacted>();
+            env.SendSync(new NFake::TEvExecute{ new TTxHasTxData(123, hasTxData) });
+            Cerr << "...hasTxData = " << hasTxData << Endl;
+        }
+        UNIT_ASSERT_C(!hasTxData, "Expected HasTxData = false after multiple compactions");
+
+        // Add an additional row
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "bar", 123) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWaitCompleted() });
+
+        // We must not see the uncommitted row
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set foo value2 = Empty NULL\n");
+        }
+
+        Cerr << "...restarting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        // We shouldn't see uncommitted row after a reboot as well
+        {
+            Cerr << "... checking rows" << Endl;
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set foo value2 = Empty NULL\n");
         }
     }
 

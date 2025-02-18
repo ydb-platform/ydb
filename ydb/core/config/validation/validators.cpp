@@ -166,7 +166,7 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
     return EValidationResult::Ok;
 }
 
-EValidationResult ValidateDatabaseConfig( const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
+EValidationResult ValidateDatabaseConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
     const auto* desc = config.GetDescriptor();
     const auto* reflection = config.GetReflection();
 

@@ -56,6 +56,3 @@ def pytest_runtest_makereport(item, call):
                     json.dump(user_properties, upf, indent=4)
 
     return outcome
-
-
-test_case_link = pytest.mark.test_case

@@ -40,6 +40,7 @@ public:
 private:
     std::shared_ptr<TColumnLoader> Loader;
     std::vector<TChunk> Chunks;
+    const bool ForLazyInitialization = false;
 
 protected:
     virtual ui32 DoGetNullsCount() const override {
@@ -67,15 +68,21 @@ protected:
         return nullptr;
     }
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const override {
-        AFL_VERIFY(false);
-        return nullptr;
+        if (!ForLazyInitialization) {
+            AFL_VERIFY(false);
+            return nullptr;
+        } else {
+            return TBase::GetChunkedArray();
+        }
     }
 
 public:
-    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, std::vector<TChunk>&& chunks)
+    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, std::vector<TChunk>&& chunks, const bool forLazyInitialization = false)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
-        , Chunks(std::move(chunks)) {
+        , Chunks(std::move(chunks))
+        , ForLazyInitialization(forLazyInitialization)
+    {
         AFL_VERIFY(Loader);
     }
 };

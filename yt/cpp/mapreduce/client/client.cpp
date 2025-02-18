@@ -1178,7 +1178,7 @@ void TClient::InsertRows(
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &rows, &options] (TMutationId /*mutationId*/) {
-            RawClient_->InsertRows(path, rows, options);
+            NRawClient::InsertRows(Context_, path, rows, options);
         });
 }
 
@@ -1191,7 +1191,7 @@ void TClient::DeleteRows(
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
-            RawClient_->DeleteRows(path, keys, options);
+            NRawClient::DeleteRows(Context_, path, keys, options);
         });
 }
 
@@ -1218,7 +1218,7 @@ TNode::TListType TClient::LookupRows(
     return RequestWithRetry<TNode::TListType>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
-            return RawClient_->LookupRows(path, keys, options);
+            return NRawClient::LookupRows(Context_, path, keys, options);
         });
 }
 

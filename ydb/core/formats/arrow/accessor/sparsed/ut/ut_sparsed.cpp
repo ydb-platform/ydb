@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             TColumnFilter filter = TColumnFilter::BuildAllowFilter();
             filter.Add(true, 6);
             filter.Add(false, 4);
-            auto arrFiltered = Filter.Apply(arr)->GetChunkedArray();
+            auto arrFiltered = filter.Apply(arr)->GetChunkedArray();
             auto arrSlice = PrepareToCompare(arrFiltered->ToString());
             AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null,null,null,null],["abc5"]])")(
                 "string", PrepareToCompare(arrFiltered->ToString()));

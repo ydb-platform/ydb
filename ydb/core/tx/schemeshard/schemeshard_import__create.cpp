@@ -1061,10 +1061,6 @@ private:
             
             case EState::CreateChangefeed:
                 CreateChangefeed(importInfo, i, txId);
-                itemIdx = i;
-                break;
-            
-            case EState::CreateConsumers:
                 CreateConsumers(importInfo, i, txId);
                 itemIdx = i;
                 break;
@@ -1312,19 +1308,10 @@ private:
         case EState::CreateChangefeed:
             if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
                 AllocateTxId(importInfo, itemIdx);
-                item.State = EState::CreateConsumers;
             } else {
                 item.State = EState::Done;
             }
             break;
-        
-        case EState::CreateConsumers:
-            if (item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
-                AllocateTxId(importInfo, itemIdx);
-                item.State = EState::CreateChangefeed;
-            } else {
-                item.State = EState::Done;
-            }
 
         default:
             return SendNotificationsIfFinished(importInfo);

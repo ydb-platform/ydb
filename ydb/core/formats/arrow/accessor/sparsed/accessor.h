@@ -4,6 +4,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/size_calcer.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>

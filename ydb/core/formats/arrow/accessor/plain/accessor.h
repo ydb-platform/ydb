@@ -2,6 +2,7 @@
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 
 namespace NKikimr::NArrow::NAccessor {

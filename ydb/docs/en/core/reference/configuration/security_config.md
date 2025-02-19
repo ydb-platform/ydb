@@ -1,4 +1,4 @@
-# Configuring security
+# Section `security_config`
 
 The `domains_config.security_config` section defines [authentication](../../security/authentication.md) modes, initial configuration of local [users](../../concepts/glossary.md#access-user) and [groups](../../concepts/glossary.md#access-group), and their [access rights](../../concepts/glossary.md#access-right).
 

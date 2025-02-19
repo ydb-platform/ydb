@@ -529,7 +529,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(ShowCreateTableDefaultLiteral) {
-        TTestEnv env(1, 4, {.StoragePools = 3});
+        TTestEnv env(1, 4, {.StoragePools = 3}, true);
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -693,7 +693,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(ShowCreateTablePartitionAtKeys) {
-        TTestEnv env(1, 4, {.StoragePools = 3});
+        TTestEnv env(1, 4, {.StoragePools = 3}, true);
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -716,7 +716,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(ShowCreateTablePartitionSettings) {
-        TTestEnv env(1, 4, {.StoragePools = 3});
+        TTestEnv env(1, 4, {.StoragePools = 3}, true);
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -740,7 +740,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(ShowCreateTableReadReplicas) {
-        TTestEnv env(1, 4, {.StoragePools = 3});
+        TTestEnv env(1, 4, {.StoragePools = 3}, true);
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -773,7 +773,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(ShowCreateTableKeyBloomFilter) {
-        TTestEnv env(1, 4, {.StoragePools = 3});
+        TTestEnv env(1, 4, {.StoragePools = 3}, true);
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -806,7 +806,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(ShowCreateTable) {
-        TTestEnv env(1, 4, {.StoragePools = 3});
+        TTestEnv env(1, 4, {.StoragePools = 3}, true);
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);

@@ -26,7 +26,7 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString 
     return subdomain;
 }
 
-TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& settings) {
+TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& settings, bool showCreateTable) {
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -78,7 +78,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
     Tenants = MakeHolder<Tests::TTenants>(Server);
 
-    Client->InitRootScheme("Root");
+    if (showCreateTable) {
+        Client->InitRootScheme("Root");
+    }
 
     if (settings.PqTabletsN) {
         NKikimr::NPQ::FillPQConfig(Settings->PQConfig, "/Root/PQ", true);
@@ -86,7 +88,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     }
 
     Endpoint = "localhost:" + ToString(grpcPort);
-    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
+    if (showCreateTable) {
+        DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
+    }
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);

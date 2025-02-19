@@ -92,9 +92,6 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             if (poolConfig.HasMaxLocalQueueSize()) {
                 basic.MaxLocalQueueSize = poolConfig.GetMaxLocalQueueSize();
             }
-            if (poolConfig.HasFixedLocalQueueSize()) {
-                basic.FixedLocalQueueSize = poolConfig.GetFixedLocalQueueSize();
-            }
             cpuManager.Basic.emplace_back(std::move(basic));
             
             break;

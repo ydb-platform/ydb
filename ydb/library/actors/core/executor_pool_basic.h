@@ -176,7 +176,6 @@ namespace NActors {
         bool HasOwnSharedThread = false;
         ui16 MaxLocalQueueSize = 0;
         ui16 MinLocalQueueSize = 0;
-        std::optional<ui16> FixedLocalQueueSize = 0;
 
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();

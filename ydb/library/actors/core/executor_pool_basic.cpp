@@ -115,7 +115,6 @@ namespace NActors {
         , HasOwnSharedThread(cfg.HasSharedThread)
         , MaxLocalQueueSize(cfg.MaxLocalQueueSize)
         , MinLocalQueueSize(cfg.MinLocalQueueSize)
-        , FixedLocalQueueSize(cfg.FixedLocalQueueSize)
         , Priority(cfg.Priority)
         , Jail(jail)
         , ActorSystemProfile(cfg.ActorSystemProfile)
@@ -129,11 +128,7 @@ namespace NActors {
 
         if (MaxLocalQueueSize) {
             LocalQueues.Reset(new NThreading::TPadded<std::queue<ui32>>[threads]);
-            if (FixedLocalQueueSize) {
-                LocalQueueSize = *FixedLocalQueueSize;
-            } else {
-                LocalQueueSize = MinLocalQueueSize;
-            }
+            LocalQueueSize = MinLocalQueueSize;
         }
         if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
             for (ui32 idx = 0; idx < threads; ++idx) {
@@ -632,11 +627,7 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::SetLocalQueueSize(ui16 size) {
-        if (FixedLocalQueueSize) {
-            size = FixedLocalQueueSize.value();
-        } else {
-            size = std::min(size, MaxLocalQueueSize);
-        }
+        size = std::min(size, MaxLocalQueueSize);
         LocalQueueSize.store(size, std::memory_order_relaxed);
     }
 
@@ -757,6 +748,18 @@ namespace NActors {
 
     ui32 TBasicExecutorPool::EventsPerMailbox() const {
         return EventsPerMailboxValue;
+    }
+
+    ui16 TBasicExecutorPool::GetLocalQueueSize() const {
+        return LocalQueueSize.load(std::memory_order_relaxed);
+    }
+
+    ui16 TBasicExecutorPool::GetMaxLocalQueueSize() const {
+        return MaxLocalQueueSize;
+    }
+
+    ui16 TBasicExecutorPool::GetMinLocalQueueSize() const {
+        return MinLocalQueueSize;
     }
 
 }

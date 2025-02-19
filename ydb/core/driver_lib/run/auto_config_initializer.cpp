@@ -335,9 +335,6 @@ namespace NKikimr::NAutoConfigInitializer {
             if (config->HasMaxLocalQueueSize()) {
                 executor->SetMaxLocalQueueSize(config->GetMaxLocalQueueSize());
             }
-            if (config->HasFixedLocalQueueSize()) {
-                executor->SetFixedLocalQueueSize(config->GetFixedLocalQueueSize());
-            }
         }
     }
 

@@ -21,17 +21,17 @@ public:
     TImpl(const TSession& session, const std::string& text, bool keepText, const std::string& id, bool allowMigration);
 
     TImpl(const TSession& session, const std::string& text, bool keepText, const std::string& id, bool allowMigration,
-        const ::google::protobuf::Map<TStringType, Ydb::Type>& types);
+        const ::google::protobuf::Map<TStringType, NYdbProtos::Type>& types);
 
     const std::string& GetId() const;
-    const ::google::protobuf::Map<TStringType, Ydb::Type>& GetParameterTypes() const;
+    const ::google::protobuf::Map<TStringType, NYdbProtos::Type>& GetParameterTypes() const;
     const std::string& GetTextHash() const;
     const std::optional<std::string>& GetText() const;
 
 private:
     NTable::TSession Session_;
     std::string Id_;
-    ::google::protobuf::Map<TStringType, Ydb::Type> ParameterTypes_;
+    ::google::protobuf::Map<TStringType, NYdbProtos::Type> ParameterTypes_;
     std::string TextHash_;
     std::optional<std::string> Text_;
 };

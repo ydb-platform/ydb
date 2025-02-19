@@ -62,16 +62,16 @@ std::shared_ptr<ISimpleBlockingWriteSession> TTopicClient::TImpl::CreateSimpleWr
 }
 
 std::shared_ptr<TTopicClient::TImpl::IReadSessionConnectionProcessorFactory> TTopicClient::TImpl::CreateReadSessionConnectionProcessorFactory() {
-    using TService = Ydb::Topic::V1::TopicService;
-    using TRequest = Ydb::Topic::StreamReadMessage::FromClient;
-    using TResponse = Ydb::Topic::StreamReadMessage::FromServer;
+    using TService = NYdbProtos::Topic::V1::TopicService;
+    using TRequest = NYdbProtos::Topic::StreamReadMessage::FromClient;
+    using TResponse = NYdbProtos::Topic::StreamReadMessage::FromServer;
     return CreateConnectionProcessorFactory<TService, TRequest, TResponse>(&TService::Stub::AsyncStreamRead, Connections_, DbDriverState_);
 }
 
 std::shared_ptr<TTopicClient::TImpl::IWriteSessionConnectionProcessorFactory> TTopicClient::TImpl::CreateWriteSessionConnectionProcessorFactory() {
-    using TService = Ydb::Topic::V1::TopicService;
-    using TRequest = Ydb::Topic::StreamWriteMessage::FromClient;
-    using TResponse = Ydb::Topic::StreamWriteMessage::FromServer;
+    using TService = NYdbProtos::Topic::V1::TopicService;
+    using TRequest = NYdbProtos::Topic::StreamWriteMessage::FromClient;
+    using TResponse = NYdbProtos::Topic::StreamWriteMessage::FromServer;
     return CreateConnectionProcessorFactory<TService, TRequest, TResponse>(&TService::Stub::AsyncStreamWrite, Connections_, DbDriverState_);
 }
 

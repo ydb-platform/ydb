@@ -35,10 +35,10 @@ std::string_view StatsModeToString(const EStatsMode statsMode) {
     }
 }
 
-TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, Ydb::Operations::Operation&& operation)
+TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, NYdbProtos::Operations::Operation&& operation)
     : TOperation(std::move(status), std::move(operation))
 {
-    Ydb::Query::ExecuteScriptMetadata metadata;
+    NYdbProtos::Query::ExecuteScriptMetadata metadata;
     GetProto().metadata().UnpackTo(&metadata);
 
     Metadata_.ExecutionId = metadata.execution_id();

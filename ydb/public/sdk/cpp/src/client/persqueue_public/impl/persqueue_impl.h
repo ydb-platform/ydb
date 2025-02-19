@@ -34,14 +34,14 @@ public:
     }
 
     template<class TReadRule>
-    static void ConvertToProtoReadRule(const TReadRule& readRule, Ydb::PersQueue::V1::TopicSettings::ReadRule& rrProps) {
+    static void ConvertToProtoReadRule(const TReadRule& readRule, NYdbProtos::PersQueue::V1::TopicSettings::ReadRule& rrProps) {
         rrProps.set_consumer_name(TStringType{readRule.ConsumerName_});
         rrProps.set_important(readRule.Important_);
         rrProps.set_starting_message_timestamp_ms(readRule.StartingMessageTimestamp_.MilliSeconds());
         rrProps.set_version(readRule.Version_);
-        rrProps.set_supported_format(static_cast<Ydb::PersQueue::V1::TopicSettings::Format>(readRule.SupportedFormat_));
+        rrProps.set_supported_format(static_cast<NYdbProtos::PersQueue::V1::TopicSettings::Format>(readRule.SupportedFormat_));
         for (const auto& codec : readRule.SupportedCodecs_) {
-            rrProps.add_supported_codecs((static_cast<Ydb::PersQueue::V1::Codec>(codec)));
+            rrProps.add_supported_codecs((static_cast<NYdbProtos::PersQueue::V1::Codec>(codec)));
         }
         rrProps.set_service_type(TStringType{readRule.ServiceType_});
     }
@@ -51,7 +51,7 @@ public:
         TRequest request = MakeOperationRequest<TRequest>(settings);
         request.set_path(TStringType{path});
 
-        Ydb::PersQueue::V1::TopicSettings& props = *request.mutable_settings();
+        NYdbProtos::PersQueue::V1::TopicSettings& props = *request.mutable_settings();
 
         props.set_partitions_count(settings.PartitionsCount_);
 
@@ -82,9 +82,9 @@ public:
         }
 
         props.set_retention_period_ms(settings.RetentionPeriod_.MilliSeconds());
-        props.set_supported_format(static_cast<Ydb::PersQueue::V1::TopicSettings::Format>(settings.SupportedFormat_));
+        props.set_supported_format(static_cast<NYdbProtos::PersQueue::V1::TopicSettings::Format>(settings.SupportedFormat_));
         for (const auto& codec : settings.SupportedCodecs_) {
-            props.add_supported_codecs((static_cast<Ydb::PersQueue::V1::Codec>(codec)));
+            props.add_supported_codecs((static_cast<NYdbProtos::PersQueue::V1::Codec>(codec)));
         }
         props.set_max_partition_storage_size(settings.MaxPartitionStorageSize_);
         props.set_max_partition_write_speed(settings.MaxPartitionWriteSpeed_);
@@ -98,7 +98,7 @@ public:
         if (settings.FederationAccount_) (*props.mutable_attributes())["_federation_account"] = ToString(*settings.FederationAccount_);
 
         for (const auto& readRule : settings.ReadRules_) {
-            Ydb::PersQueue::V1::TopicSettings::ReadRule& rrProps = *props.add_read_rules();
+            NYdbProtos::PersQueue::V1::TopicSettings::ReadRule& rrProps = *props.add_read_rules();
             ConvertToProtoReadRule(readRule, rrProps);
         }
 
@@ -164,66 +164,66 @@ public:
     }
 
     TAsyncStatus CreateTopic(const std::string& path, const TCreateTopicSettings& settings) {
-        auto request = MakePropsCreateOrAlterRequest<Ydb::PersQueue::V1::CreateTopicRequest>(path,
+        auto request = MakePropsCreateOrAlterRequest<NYdbProtos::PersQueue::V1::CreateTopicRequest>(path,
             settings.PartitionsPerTablet_ ? settings : TCreateTopicSettings(settings).PartitionsPerTablet(2));
 
-        return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        return RunSimple<NYdbProtos::PersQueue::V1::PersQueueService, NYdbProtos::PersQueue::V1::CreateTopicRequest, NYdbProtos::PersQueue::V1::CreateTopicResponse>(
             std::move(request),
-            &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncCreateTopic,
+            &NYdbProtos::PersQueue::V1::PersQueueService::Stub::AsyncCreateTopic,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus AlterTopic(const std::string& path, const TAlterTopicSettings& settings) {
-        auto request = MakePropsCreateOrAlterRequest<Ydb::PersQueue::V1::AlterTopicRequest>(path, settings);
+        auto request = MakePropsCreateOrAlterRequest<NYdbProtos::PersQueue::V1::AlterTopicRequest>(path, settings);
 
-        return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::AlterTopicRequest, Ydb::PersQueue::V1::AlterTopicResponse>(
+        return RunSimple<NYdbProtos::PersQueue::V1::PersQueueService, NYdbProtos::PersQueue::V1::AlterTopicRequest, NYdbProtos::PersQueue::V1::AlterTopicResponse>(
             std::move(request),
-            &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncAlterTopic,
+            &NYdbProtos::PersQueue::V1::PersQueueService::Stub::AsyncAlterTopic,
             TRpcRequestSettings::Make(settings));
     }
 
 
     TAsyncStatus DropTopic(const std::string& path, const TDropTopicSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::PersQueue::V1::DropTopicRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::PersQueue::V1::DropTopicRequest>(settings);
         request.set_path(TStringType{path});
 
-        return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::DropTopicRequest, Ydb::PersQueue::V1::DropTopicResponse>(
+        return RunSimple<NYdbProtos::PersQueue::V1::PersQueueService, NYdbProtos::PersQueue::V1::DropTopicRequest, NYdbProtos::PersQueue::V1::DropTopicResponse>(
             std::move(request),
-            &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncDropTopic,
+            &NYdbProtos::PersQueue::V1::PersQueueService::Stub::AsyncDropTopic,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus AddReadRule(const std::string& path, const TAddReadRuleSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::PersQueue::V1::AddReadRuleRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::PersQueue::V1::AddReadRuleRequest>(settings);
         request.set_path(TStringType{path});
         ConvertToProtoReadRule(settings.ReadRule_, *request.mutable_read_rule());
-        return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::AddReadRuleRequest, Ydb::PersQueue::V1::AddReadRuleResponse>(
+        return RunSimple<NYdbProtos::PersQueue::V1::PersQueueService, NYdbProtos::PersQueue::V1::AddReadRuleRequest, NYdbProtos::PersQueue::V1::AddReadRuleResponse>(
                 std::move(request),
-                &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncAddReadRule,
+                &NYdbProtos::PersQueue::V1::PersQueueService::Stub::AsyncAddReadRule,
                 TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus RemoveReadRule(const std::string& path, const TRemoveReadRuleSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::PersQueue::V1::RemoveReadRuleRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::PersQueue::V1::RemoveReadRuleRequest>(settings);
         request.set_path(TStringType{path});
 
         request.set_consumer_name(TStringType{settings.ConsumerName_});
-        return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::RemoveReadRuleRequest, Ydb::PersQueue::V1::RemoveReadRuleResponse>(
+        return RunSimple<NYdbProtos::PersQueue::V1::PersQueueService, NYdbProtos::PersQueue::V1::RemoveReadRuleRequest, NYdbProtos::PersQueue::V1::RemoveReadRuleResponse>(
                 std::move(request),
-                &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncRemoveReadRule,
+                &NYdbProtos::PersQueue::V1::PersQueueService::Stub::AsyncRemoveReadRule,
                 TRpcRequestSettings::Make(settings));
     }
 
 
     TAsyncDescribeTopicResult DescribeTopic(const std::string& path, const TDescribeTopicSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::PersQueue::V1::DescribeTopicRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::PersQueue::V1::DescribeTopicRequest>(settings);
         request.set_path(TStringType{path});
 
         auto promise = NThreading::NewPromise<TDescribeTopicResult>();
 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::PersQueue::V1::DescribeTopicResult result;
+                NYdbProtos::PersQueue::V1::DescribeTopicResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
@@ -232,10 +232,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::DescribeTopicRequest, Ydb::PersQueue::V1::DescribeTopicResponse>(
+        Connections_->RunDeferred<NYdbProtos::PersQueue::V1::PersQueueService, NYdbProtos::PersQueue::V1::DescribeTopicRequest, NYdbProtos::PersQueue::V1::DescribeTopicResponse>(
             std::move(request),
             extractor,
-            &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncDescribeTopic,
+            &NYdbProtos::PersQueue::V1::PersQueueService::Stub::AsyncDescribeTopic,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -250,13 +250,13 @@ public:
 
     std::shared_ptr<TImpl> GetClientForEndpoint(const std::string& clusterEndoint);
 
-    using IReadSessionConnectionProcessorFactory = ISessionConnectionProcessorFactory<Ydb::PersQueue::V1::MigrationStreamingReadClientMessage, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>;
+    using IReadSessionConnectionProcessorFactory = ISessionConnectionProcessorFactory<NYdbProtos::PersQueue::V1::MigrationStreamingReadClientMessage, NYdbProtos::PersQueue::V1::MigrationStreamingReadServerMessage>;
 
     std::shared_ptr<IReadSessionConnectionProcessorFactory> CreateReadSessionConnectionProcessorFactory();
 
     using IWriteSessionConnectionProcessorFactory = ISessionConnectionProcessorFactory<
-            Ydb::PersQueue::V1::StreamingWriteClientMessage,
-            Ydb::PersQueue::V1::StreamingWriteServerMessage>;
+            NYdbProtos::PersQueue::V1::StreamingWriteClientMessage,
+            NYdbProtos::PersQueue::V1::StreamingWriteServerMessage>;
 
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> CreateWriteSessionConnectionProcessorFactory();
 

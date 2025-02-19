@@ -21,7 +21,7 @@ using namespace NThreading;
 class TTablePartIterator::TReaderImpl {
 public:
     using TSelf = TTablePartIterator::TReaderImpl;
-    using TResponse = Ydb::Table::ReadTableResponse;
+    using TResponse = NYdbProtos::Table::ReadTableResponse;
     using TStreamProcessorPtr = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
     using TReadCallback = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TReadCallback;
     using TGRpcStatus = NYdbGrpc::TGrpcStatus;
@@ -43,7 +43,7 @@ private:
 class TScanQueryPartIterator::TReaderImpl {
 public:
     using TSelf = TScanQueryPartIterator::TReaderImpl;
-    using TResponse = Ydb::Table::ExecuteScanQueryPartialResponse;
+    using TResponse = NYdbProtos::Table::ExecuteScanQueryPartialResponse;
     using TStreamProcessorPtr = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
     using TReadCallback = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TReadCallback;
     using TGRpcStatus = NYdbGrpc::TGrpcStatus;

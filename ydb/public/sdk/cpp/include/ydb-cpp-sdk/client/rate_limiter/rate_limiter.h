@@ -1,19 +1,22 @@
 #pragma once
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
 #include <chrono>
 #include <unordered_map>
 #include <variant>
 
-namespace Ydb::RateLimiter {
+YDB_PROTOS_NAMESPACE {
+namespace RateLimiter {
     class CreateResourceRequest;
     class DescribeResourceResult;
     class HierarchicalDrrSettings;
     class ReplicatedBucketSettings;
     class MeteringConfig;
     class MeteringConfig_Metric;
-} // namespace Ydb::RateLimiter
+} // namespace RateLimiter
+}
 
 namespace NYdb::inline V3::NRateLimiter {
 
@@ -21,9 +24,9 @@ struct TReplicatedBucketSettings {
     using TSelf = TReplicatedBucketSettings;
 
     TReplicatedBucketSettings() = default;
-    TReplicatedBucketSettings(const Ydb::RateLimiter::ReplicatedBucketSettings&);
+    TReplicatedBucketSettings(const NYdbProtos::RateLimiter::ReplicatedBucketSettings&);
 
-    void SerializeTo(Ydb::RateLimiter::ReplicatedBucketSettings&) const;
+    void SerializeTo(NYdbProtos::RateLimiter::ReplicatedBucketSettings&) const;
 
     // Interval between syncs from kesus and between consumption reports.
     // Default value equals 5000 ms and not inherited.
@@ -39,10 +42,10 @@ public:
     EBehavior GetBehavior() const;
 
     TLeafBehavior(const TReplicatedBucketSettings&);
-    TLeafBehavior(const Ydb::RateLimiter::ReplicatedBucketSettings&);
+    TLeafBehavior(const NYdbProtos::RateLimiter::ReplicatedBucketSettings&);
     const TReplicatedBucketSettings& GetReplicatedBucket() const;
 
-    void SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings&) const;
+    void SerializeTo(NYdbProtos::RateLimiter::HierarchicalDrrSettings&) const;
 
 private:
     std::variant<TReplicatedBucketSettings> BehaviorSettings_;
@@ -54,9 +57,9 @@ struct THierarchicalDrrSettings {
     using TSelf = TDerived;
 
     THierarchicalDrrSettings() = default;
-    THierarchicalDrrSettings(const Ydb::RateLimiter::HierarchicalDrrSettings&);
+    THierarchicalDrrSettings(const NYdbProtos::RateLimiter::HierarchicalDrrSettings&);
 
-    void SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings&) const;
+    void SerializeTo(NYdbProtos::RateLimiter::HierarchicalDrrSettings&) const;
 
     // Resource consumption speed limit.
     // Value is required for root resource.
@@ -101,9 +104,9 @@ struct TMetric {
     using TLabels = std::unordered_map<std::string, std::string>;
 
     TMetric() = default;
-    TMetric(const Ydb::RateLimiter::MeteringConfig_Metric&);
+    TMetric(const NYdbProtos::RateLimiter::MeteringConfig_Metric&);
 
-    void SerializeTo(Ydb::RateLimiter::MeteringConfig_Metric&) const;
+    void SerializeTo(NYdbProtos::RateLimiter::MeteringConfig_Metric&) const;
 
     // Send this metric to billing.
     // Default value is false (not inherited).
@@ -124,9 +127,9 @@ struct TMeteringConfig {
     using TSelf = TMeteringConfig;
 
     TMeteringConfig() = default;
-    TMeteringConfig(const Ydb::RateLimiter::MeteringConfig&);
+    TMeteringConfig(const NYdbProtos::RateLimiter::MeteringConfig&);
 
-    void SerializeTo(Ydb::RateLimiter::MeteringConfig&) const;
+    void SerializeTo(NYdbProtos::RateLimiter::MeteringConfig&) const;
 
     // Meter consumed resources and send billing metrics.
     FLUENT_SETTING_DEFAULT(bool, Enabled, false);
@@ -177,7 +180,7 @@ struct TCreateResourceSettings
     , public THierarchicalDrrSettings<TCreateResourceSettings>
 {
     TCreateResourceSettings() = default;
-    TCreateResourceSettings(const Ydb::RateLimiter::CreateResourceRequest&);
+    TCreateResourceSettings(const NYdbProtos::RateLimiter::CreateResourceRequest&);
 
     FLUENT_SETTING_OPTIONAL(TMeteringConfig, MeteringConfig);
 };
@@ -232,7 +235,7 @@ struct TDescribeResourceResult : public TStatus {
     // Note for YDB developers: THierarchicalDrrProps wrapper class exists for compatibility with older client code.
     // Newer code should use the THierarchicalDrrSettings class directly.
     struct THierarchicalDrrProps : public THierarchicalDrrSettings<THierarchicalDrrProps> {
-        THierarchicalDrrProps(const Ydb::RateLimiter::HierarchicalDrrSettings&);
+        THierarchicalDrrProps(const NYdbProtos::RateLimiter::HierarchicalDrrSettings&);
 
         // Resource consumption speed limit.
         std::optional<double> GetMaxUnitsPerSecond() const {
@@ -264,7 +267,7 @@ struct TDescribeResourceResult : public TStatus {
         }
     };
 
-    TDescribeResourceResult(TStatus status, const Ydb::RateLimiter::DescribeResourceResult& result);
+    TDescribeResourceResult(TStatus status, const NYdbProtos::RateLimiter::DescribeResourceResult& result);
 
     // Path of resource inside a coordination node.
     const std::string& GetResourcePath() const {

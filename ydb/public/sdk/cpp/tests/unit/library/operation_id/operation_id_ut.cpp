@@ -11,8 +11,8 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
     const std::string PreparedQueryId = "9d629c27-2c3036b3-4b180476-64435bca";
 
     Y_UNIT_TEST(ConvertKindOnly) {
-        Ydb::TOperationId proto;
-        proto.set_kind(Ydb::TOperationId::OPERATION_DDL);
+        NYdbProtos::TOperationId proto;
+        proto.set_kind(NYdbProtos::TOperationId::OPERATION_DDL);
         auto str = ProtoToString(proto);
         UNIT_ASSERT_EQUAL(str, "ydb://operation/1");
         auto newProto = TOperationId(str);
@@ -21,8 +21,8 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
     }
 
     Y_UNIT_TEST(PreparedQueryIdCompatibleFormatter) {
-        Ydb::TOperationId opId;
-        opId.set_kind(Ydb::TOperationId::PREPARED_QUERY_ID);
+        NYdbProtos::TOperationId opId;
+        opId.set_kind(NYdbProtos::TOperationId::PREPARED_QUERY_ID);
         AddOptionalValue(opId, "id", PreparedQueryId);
         auto result = ProtoToString(opId);
         UNIT_ASSERT_VALUES_EQUAL(FormatPreparedQueryIdCompat(PreparedQueryId), result);
@@ -80,8 +80,8 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
     Y_UNIT_TEST(PreparedQueryIdOldFormatterPerf) {
         ui64 x = 0;
         for (int i = 0; i < 10000000; i++) {
-            Ydb::TOperationId opId;
-            opId.SetKind(Ydb::TOperationId::PREPARED_QUERY_ID);
+            NYdbProtos::TOperationId opId;
+            opId.SetKind(NYdbProtos::TOperationId::PREPARED_QUERY_ID);
             AddOptionalValue(opId, "id", PreparedQueryId);
             auto result = ProtoToString(opId);
             x += result.size();
@@ -90,8 +90,8 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
     }
 #endif
     Y_UNIT_TEST(ConvertKindAndValues) {
-        Ydb::TOperationId proto;
-        proto.set_kind(Ydb::TOperationId::OPERATION_DDL);
+        NYdbProtos::TOperationId proto;
+        proto.set_kind(NYdbProtos::TOperationId::OPERATION_DDL);
         {
             auto data = proto.add_data();
             data->set_key("key1");

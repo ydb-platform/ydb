@@ -18,7 +18,7 @@ public:
 
 public:
     using TOperation::TOperation;
-    TBackgroundProcessesResponse(TStatus&& status, Ydb::Operations::Operation&& operation);
+    TBackgroundProcessesResponse(TStatus&& status, NYdbProtos::Operations::Operation&& operation);
 
     const TMetadata& Metadata() const;
 

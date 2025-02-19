@@ -14,7 +14,7 @@
 
 #include <variant>
 
-namespace Ydb {
+YDB_PROTOS_NAMESPACE {
 namespace Table {
 
 class StorageSettings;
@@ -39,7 +39,7 @@ class ValueSinceUnixEpochModeSettings;
 class EvictionToExternalStorageSettings;
 
 } // namespace Table
-} // namespace Ydb
+}
 
 namespace NYdb::inline V3 {
 
@@ -174,9 +174,9 @@ struct TAlterTableColumn {
 class TPartitioningSettings {
 public:
     TPartitioningSettings();
-    explicit TPartitioningSettings(const Ydb::Table::PartitioningSettings& proto);
+    explicit TPartitioningSettings(const NYdbProtos::Table::PartitioningSettings& proto);
 
-    const Ydb::Table::PartitioningSettings& GetProto() const;
+    const NYdbProtos::Table::PartitioningSettings& GetProto() const;
 
     std::optional<bool> GetPartitioningBySize() const;
     std::optional<bool> GetPartitioningByLoad() const;
@@ -194,9 +194,9 @@ struct TExplicitPartitions {
 
     FLUENT_SETTING_VECTOR(TValue, SplitPoints);
 
-    static TExplicitPartitions FromProto(const Ydb::Table::ExplicitPartitions& proto);
+    static TExplicitPartitions FromProto(const NYdbProtos::Table::ExplicitPartitions& proto);
 
-    void SerializeTo(Ydb::Table::ExplicitPartitions& proto) const;
+    void SerializeTo(NYdbProtos::Table::ExplicitPartitions& proto) const;
 };
 
 struct TGlobalIndexSettings {
@@ -205,9 +205,9 @@ struct TGlobalIndexSettings {
     TPartitioningSettings PartitioningSettings;
     TUniformOrExplicitPartitions Partitions;
 
-    static TGlobalIndexSettings FromProto(const Ydb::Table::GlobalIndexSettings& proto);
+    static TGlobalIndexSettings FromProto(const NYdbProtos::Table::GlobalIndexSettings& proto);
 
-    void SerializeTo(Ydb::Table::GlobalIndexSettings& proto) const;
+    void SerializeTo(NYdbProtos::Table::GlobalIndexSettings& proto) const;
 };
 
 struct TVectorIndexSettings {
@@ -233,9 +233,9 @@ public:
     EVectorType VectorType = EVectorType::Unspecified;
     uint32_t VectorDimension = 0;
 
-    static TVectorIndexSettings FromProto(const Ydb::Table::VectorIndexSettings& proto);
+    static TVectorIndexSettings FromProto(const NYdbProtos::Table::VectorIndexSettings& proto);
 
-    void SerializeTo(Ydb::Table::VectorIndexSettings& settings) const;
+    void SerializeTo(NYdbProtos::Table::VectorIndexSettings& settings) const;
 
     void Out(IOutputStream &o) const;
 };
@@ -263,9 +263,9 @@ public:
     uint32_t Clusters = 0;
     uint32_t Levels = 0;
 
-    static TKMeansTreeSettings FromProto(const Ydb::Table::KMeansTreeSettings& proto);
+    static TKMeansTreeSettings FromProto(const NYdbProtos::Table::KMeansTreeSettings& proto);
 
-    void SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const;
+    void SerializeTo(NYdbProtos::Table::KMeansTreeSettings& settings) const;
 
     void Out(IOutputStream &o) const;
 };
@@ -298,13 +298,13 @@ public:
     const std::variant<std::monostate, TKMeansTreeSettings>& GetIndexSettings() const;
     uint64_t GetSizeBytes() const;
 
-    void SerializeTo(Ydb::Table::TableIndex& proto) const;
+    void SerializeTo(NYdbProtos::Table::TableIndex& proto) const;
     std::string ToString() const;
     void Out(IOutputStream& o) const;
 
 private:
-    explicit TIndexDescription(const Ydb::Table::TableIndex& tableIndex);
-    explicit TIndexDescription(const Ydb::Table::TableIndexDescription& tableIndexDesc);
+    explicit TIndexDescription(const NYdbProtos::Table::TableIndex& tableIndex);
+    explicit TIndexDescription(const NYdbProtos::Table::TableIndexDescription& tableIndexDesc);
 
     template <typename TProto>
     static TIndexDescription FromProto(const TProto& proto);
@@ -331,7 +331,7 @@ bool operator!=(const TIndexDescription& lhs, const TIndexDescription& rhs);
 class TBuildIndexOperation : public TOperation {
 public:
     using TOperation::TOperation;
-    TBuildIndexOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+    TBuildIndexOperation(TStatus&& status, NYdbProtos::Operations::Operation&& operation);
 
     struct TMetadata {
         EBuildIndexState State;
@@ -397,8 +397,8 @@ public:
     const std::string& GetAwsRegion() const;
     const std::optional<TInitialScanProgress>& GetInitialScanProgress() const;
 
-    void SerializeTo(Ydb::Table::Changefeed& proto) const;
-    void SerializeTo(Ydb::Table::ChangefeedDescription& proto) const;
+    void SerializeTo(NYdbProtos::Table::Changefeed& proto) const;
+    void SerializeTo(NYdbProtos::Table::ChangefeedDescription& proto) const;
     std::string ToString() const;
     void Out(IOutputStream& o) const;
 
@@ -406,8 +406,8 @@ public:
     void SerializeCommonFields(TProto& proto) const;
 
 private:
-    explicit TChangefeedDescription(const Ydb::Table::Changefeed& proto);
-    explicit TChangefeedDescription(const Ydb::Table::ChangefeedDescription& proto);
+    explicit TChangefeedDescription(const NYdbProtos::Table::Changefeed& proto);
+    explicit TChangefeedDescription(const NYdbProtos::Table::ChangefeedDescription& proto);
 
     template <typename TProto>
     static TChangefeedDescription FromProto(const TProto& proto);
@@ -440,7 +440,7 @@ struct TPartitionStats {
 class TDateTypeColumnModeSettings {
 public:
     explicit TDateTypeColumnModeSettings(const std::string& columnName, const TDuration& applyAfter);
-    void SerializeTo(Ydb::Table::DateTypeColumnModeSettings& proto) const;
+    void SerializeTo(NYdbProtos::Table::DateTypeColumnModeSettings& proto) const;
 
     const std::string& GetColumnName() const;
     const TDuration& GetExpireAfter() const;
@@ -463,7 +463,7 @@ public:
 
 public:
     explicit TValueSinceUnixEpochModeSettings(const std::string& columnName, EUnit columnUnit, const TDuration& applyAfter);
-    void SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettings& proto) const;
+    void SerializeTo(NYdbProtos::Table::ValueSinceUnixEpochModeSettings& proto) const;
 
     const std::string& GetColumnName() const;
     EUnit GetColumnUnit() const;
@@ -483,7 +483,7 @@ class TTtlDeleteAction {};
 class TTtlEvictToExternalStorageAction {
 public:
     TTtlEvictToExternalStorageAction(const std::string& storageName);
-    void SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const;
+    void SerializeTo(NYdbProtos::Table::EvictionToExternalStorageSettings& proto) const;
 
     std::string GetStorage() const;
 
@@ -506,8 +506,8 @@ public:
 public:
     explicit TTtlTierSettings(const TExpression& expression, const TAction& action);
 
-    static std::optional<TTtlTierSettings> FromProto(const Ydb::Table::TtlTier& tier);
-    void SerializeTo(Ydb::Table::TtlTier& proto) const;
+    static std::optional<TTtlTierSettings> FromProto(const NYdbProtos::Table::TtlTier& tier);
+    void SerializeTo(NYdbProtos::Table::TtlTier& proto) const;
 
     const TExpression& GetExpression() const;
     const TAction& GetAction() const;
@@ -537,14 +537,14 @@ public:
 
     explicit TTtlSettings(const std::string& columnName, const TDuration& expireAfter);
     const TDateTypeColumnModeSettings& GetDateTypeColumn() const;
-    explicit TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, uint32_t runIntervalSeconds);
+    explicit TTtlSettings(const NYdbProtos::Table::DateTypeColumnModeSettings& mode, uint32_t runIntervalSeconds);
 
     explicit TTtlSettings(const std::string& columnName, EUnit columnUnit, const TDuration& expireAfter);
     const TValueSinceUnixEpochModeSettings& GetValueSinceUnixEpoch() const;
-    explicit TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, uint32_t runIntervalSeconds);
+    explicit TTtlSettings(const NYdbProtos::Table::ValueSinceUnixEpochModeSettings& mode, uint32_t runIntervalSeconds);
 
-    static std::optional<TTtlSettings> FromProto(const Ydb::Table::TtlSettings& proto);
-    void SerializeTo(Ydb::Table::TtlSettings& proto) const;
+    static std::optional<TTtlSettings> FromProto(const NYdbProtos::Table::TtlSettings& proto);
+    void SerializeTo(NYdbProtos::Table::TtlSettings& proto) const;
     EMode GetMode() const;
 
     TTtlSettings& SetRunInterval(const TDuration& value);
@@ -598,9 +598,9 @@ private:
 class TStorageSettings {
 public:
     TStorageSettings();
-    explicit TStorageSettings(const Ydb::Table::StorageSettings& proto);
+    explicit TStorageSettings(const NYdbProtos::Table::StorageSettings& proto);
 
-    const Ydb::Table::StorageSettings& GetProto() const;
+    const NYdbProtos::Table::StorageSettings& GetProto() const;
 
     std::optional<std::string> GetTabletCommitLog0() const;
     std::optional<std::string> GetTabletCommitLog1() const;
@@ -615,9 +615,9 @@ private:
 //! Represents column family description
 class TColumnFamilyDescription {
 public:
-    explicit TColumnFamilyDescription(const Ydb::Table::ColumnFamily& desc);
+    explicit TColumnFamilyDescription(const NYdbProtos::Table::ColumnFamily& desc);
 
-    const Ydb::Table::ColumnFamily& GetProto() const;
+    const NYdbProtos::Table::ColumnFamily& GetProto() const;
 
     const std::string& GetName() const;
     std::optional<std::string> GetData() const;
@@ -660,7 +660,7 @@ class TTableDescription {
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
 public:
-    TTableDescription(Ydb::Table::DescribeTableResult&& desc, const TDescribeTableSettings& describeSettings);
+    TTableDescription(NYdbProtos::Table::DescribeTableResult&& desc, const TDescribeTableSettings& describeSettings);
 
     const std::vector<std::string>& GetPrimaryKeyColumns() const;
     // DEPRECATED: use GetTableColumns()
@@ -717,13 +717,13 @@ public:
     std::optional<TReadReplicasSettings> GetReadReplicasSettings() const;
 
     // Fills CreateTableRequest proto from this description
-    void SerializeTo(Ydb::Table::CreateTableRequest& request) const;
+    void SerializeTo(NYdbProtos::Table::CreateTableRequest& request) const;
 
 private:
     TTableDescription();
-    explicit TTableDescription(const Ydb::Table::CreateTableRequest& request);
+    explicit TTableDescription(const NYdbProtos::Table::CreateTableRequest& request);
 
-    void AddColumn(const std::string& name, const Ydb::Type& type, const std::string& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription);
+    void AddColumn(const std::string& name, const NYdbProtos::Type& type, const std::string& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription);
     void SetPrimaryKeyColumns(const std::vector<std::string>& primaryKeyColumns);
 
     // common
@@ -762,7 +762,7 @@ private:
     void SetKeyBloomFilter(bool enabled);
     void SetReadReplicasSettings(TReadReplicasSettings::EMode mode, uint64_t readReplicasCount);
     void SetStoreType(EStoreType type);
-    const Ydb::Table::DescribeTableResult& GetProto() const;
+    const NYdbProtos::Table::DescribeTableResult& GetProto() const;
 
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
@@ -1150,7 +1150,7 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
 
 struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSettings> {
     // Format setting proto serialized into string. If not set format defaults are used.
-    // I.e. it's Ydb.Table.CsvSettings for CSV.
+    // I.e. it's NYdbProtos.Table.CsvSettings for CSV.
     FLUENT_SETTING_DEFAULT(std::string, FormatSettings, "");
 };
 
@@ -1968,7 +1968,7 @@ public:
 private:
     TDataQuery(const TSession& session, const std::string& text, const std::string& id);
     TDataQuery(const TSession& session, const std::string& text, const std::string& id,
-        const ::google::protobuf::Map<TStringType, Ydb::Type>& types);
+        const ::google::protobuf::Map<TStringType, NYdbProtos::Type>& types);
 
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
@@ -2009,7 +2009,7 @@ private:
 //! Represents result of DescribeTable call
 class TDescribeTableResult : public NScheme::TDescribePathResult {
 public:
-    TDescribeTableResult(TStatus&& status, Ydb::Table::DescribeTableResult&& desc,
+    TDescribeTableResult(TStatus&& status, NYdbProtos::Table::DescribeTableResult&& desc,
         const TDescribeTableSettings& describeSettings);
 
     TTableDescription GetTableDescription() const;
@@ -2215,14 +2215,14 @@ class TReadRowsResult : public TStatus {
 
 class TExternalDataSourceDescription {
 public:
-    TExternalDataSourceDescription(Ydb::Table::DescribeExternalDataSourceResult&& description);
+    TExternalDataSourceDescription(NYdbProtos::Table::DescribeExternalDataSourceResult&& description);
 
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
 
     friend class NYdb::V3::TProtoAccessor;
-    const Ydb::Table::DescribeExternalDataSourceResult& GetProto() const;
+    const NYdbProtos::Table::DescribeExternalDataSourceResult& GetProto() const;
 };
 
 //! Represents the result of a DescribeExternalDataSource call.
@@ -2230,7 +2230,7 @@ class TDescribeExternalDataSourceResult : public NScheme::TDescribePathResult {
 public:
     TDescribeExternalDataSourceResult(
         TStatus&& status,
-        Ydb::Table::DescribeExternalDataSourceResult&& description
+        NYdbProtos::Table::DescribeExternalDataSourceResult&& description
     );
 
     TExternalDataSourceDescription GetExternalDataSourceDescription() const;
@@ -2241,14 +2241,14 @@ private:
 
 class TExternalTableDescription {
 public:
-    TExternalTableDescription(Ydb::Table::DescribeExternalTableResult&& description);
+    TExternalTableDescription(NYdbProtos::Table::DescribeExternalTableResult&& description);
 
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
 
     friend class NYdb::V3::TProtoAccessor;
-    const Ydb::Table::DescribeExternalTableResult& GetProto() const;
+    const NYdbProtos::Table::DescribeExternalTableResult& GetProto() const;
 };
 
 //! Represents the result of a DescribeExternalTable call.
@@ -2256,7 +2256,7 @@ class TDescribeExternalTableResult : public NScheme::TDescribePathResult {
 public:
     TDescribeExternalTableResult(
         TStatus&& status,
-        Ydb::Table::DescribeExternalTableResult&& description
+        NYdbProtos::Table::DescribeExternalTableResult&& description
     );
 
     TExternalTableDescription GetExternalTableDescription() const;

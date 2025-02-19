@@ -5,7 +5,7 @@
 namespace NYdb::inline V3 {
 namespace NDiscovery {
 
-TListEndpointsResult::TListEndpointsResult(TStatus&& status, const Ydb::Discovery::ListEndpointsResult& proto)
+TListEndpointsResult::TListEndpointsResult(TStatus&& status, const NYdbProtos::Discovery::ListEndpointsResult& proto)
     : TStatus(std::move(status))
 {
     const auto& endpoints = proto.endpoints();
@@ -38,7 +38,7 @@ const std::vector<TEndpointInfo>& TListEndpointsResult::GetEndpointsInfo() const
     return Info_;
 }
 
-TWhoAmIResult::TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResult& proto)
+TWhoAmIResult::TWhoAmIResult(TStatus&& status, const NYdbProtos::Discovery::WhoAmIResult& proto)
     : TStatus(std::move(status))
 {
     UserName_ = proto.user();
@@ -57,7 +57,7 @@ const std::vector<std::string>& TWhoAmIResult::GetGroups() const {
     return Groups_;
 }
 
-TNodeLocation::TNodeLocation(const Ydb::Discovery::NodeLocation& location)
+TNodeLocation::TNodeLocation(const NYdbProtos::Discovery::NodeLocation& location)
     : DataCenterNum(location.has_data_center_num() ? std::make_optional(location.data_center_num()) : std::nullopt)
     , RoomNum(location.has_room_num() ? std::make_optional(location.room_num()) : std::nullopt)
     , RackNum(location.has_rack_num() ? std::make_optional(location.rack_num()) : std::nullopt)
@@ -69,7 +69,7 @@ TNodeLocation::TNodeLocation(const Ydb::Discovery::NodeLocation& location)
     , Unit(location.has_unit() ? std::make_optional(location.unit()) : std::nullopt)
     {}
 
-TNodeInfo::TNodeInfo(const Ydb::Discovery::NodeInfo& info)
+TNodeInfo::TNodeInfo(const NYdbProtos::Discovery::NodeInfo& info)
     : NodeId(info.node_id())
     , Host(info.host())
     , Port(info.port())
@@ -79,7 +79,7 @@ TNodeInfo::TNodeInfo(const Ydb::Discovery::NodeInfo& info)
     , Expire(info.expire())
     {}
 
-TNodeRegistrationResult::TNodeRegistrationResult(TStatus&& status, const Ydb::Discovery::NodeRegistrationResult& proto)
+TNodeRegistrationResult::TNodeRegistrationResult(TStatus&& status, const NYdbProtos::Discovery::NodeRegistrationResult& proto)
     : TStatus(std::move(status))
     , NodeId_(proto.node_id())
     , DomainPath_(proto.domain_path())
@@ -142,14 +142,14 @@ public:
     { }
 
     TAsyncListEndpointsResult ListEndpoints(const TListEndpointsSettings& settings) {
-        Ydb::Discovery::ListEndpointsRequest request;
+        NYdbProtos::Discovery::ListEndpointsRequest request;
         request.set_database(TStringType{DbDriverState_->Database});
 
         auto promise = NThreading::NewPromise<TListEndpointsResult>();
 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::Discovery::ListEndpointsResult result;
+                NYdbProtos::Discovery::ListEndpointsResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
@@ -157,10 +157,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
+        Connections_->RunDeferred<NYdbProtos::Discovery::V1::DiscoveryService, NYdbProtos::Discovery::ListEndpointsRequest, NYdbProtos::Discovery::ListEndpointsResponse>(
             std::move(request),
             extractor,
-            &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncListEndpoints,
+            &NYdbProtos::Discovery::V1::DiscoveryService::Stub::AsyncListEndpoints,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -169,7 +169,7 @@ public:
     }
 
     TAsyncWhoAmIResult WhoAmI(const TWhoAmISettings& settings) {
-        Ydb::Discovery::WhoAmIRequest request;
+        NYdbProtos::Discovery::WhoAmIRequest request;
         if (settings.WithGroups_) {
             request.set_include_groups(true);
         }
@@ -178,7 +178,7 @@ public:
 
         auto extractor = [promise]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
-            Ydb::Discovery::WhoAmIResult result;
+            NYdbProtos::Discovery::WhoAmIResult result;
             if (any) {
                 any->UnpackTo(&result);
             }
@@ -186,10 +186,10 @@ public:
             promise.SetValue(std::move(val));
         };
 
-        Connections_->RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::WhoAmIRequest, Ydb::Discovery::WhoAmIResponse>(
+        Connections_->RunDeferred<NYdbProtos::Discovery::V1::DiscoveryService, NYdbProtos::Discovery::WhoAmIRequest, NYdbProtos::Discovery::WhoAmIResponse>(
             std::move(request),
             extractor,
-            &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncWhoAmI,
+            &NYdbProtos::Discovery::V1::DiscoveryService::Stub::AsyncWhoAmI,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -198,7 +198,7 @@ public:
     }
 
     TAsyncNodeRegistrationResult NodeRegistration(const TNodeRegistrationSettings& settings) {
-        Ydb::Discovery::NodeRegistrationRequest request;
+        NYdbProtos::Discovery::NodeRegistrationRequest request;
         request.set_host(TStringType{settings.Host_});
         request.set_port(settings.Port_);
         request.set_resolve_host(TStringType{settings.ResolveHost_});
@@ -244,7 +244,7 @@ public:
         auto promise = NThreading::NewPromise<TNodeRegistrationResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
-            Ydb::Discovery::NodeRegistrationResult result;
+            NYdbProtos::Discovery::NodeRegistrationResult result;
             if (any) {
                 any->UnpackTo(&result);
             }
@@ -252,10 +252,10 @@ public:
             promise.SetValue(std::move(val));
         };
 
-        Connections_->RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::NodeRegistrationRequest, Ydb::Discovery::NodeRegistrationResponse>(
+        Connections_->RunDeferred<NYdbProtos::Discovery::V1::DiscoveryService, NYdbProtos::Discovery::NodeRegistrationRequest, NYdbProtos::Discovery::NodeRegistrationResponse>(
             std::move(request),
             extractor,
-            &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncNodeRegistration,
+            &NYdbProtos::Discovery::V1::DiscoveryService::Stub::AsyncNodeRegistration,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));

@@ -73,7 +73,7 @@ public:
 void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISessionClient> client,
     std::shared_ptr<TSafeTSessionImplHolder> holder)
 {
-    auto resp = std::make_shared<Ydb::Query::SessionState>();
+    auto resp = std::make_shared<NYdbProtos::Query::SessionState>();
     ptr->Read(resp.get(), [resp, ptr, client, holder](NYdbGrpc::TGrpcStatus grpcStatus) mutable {
         switch (grpcStatus.GRpcStatusCode) {
             case grpc::StatusCode::OK:
@@ -116,14 +116,14 @@ TSession::TImpl::~TImpl()
 void TSession::TImpl::MakeImplAsync(TStreamProcessorPtr ptr,
     std::shared_ptr<TAttachSessionArgs> args)
 {
-    auto resp = std::make_shared<Ydb::Query::SessionState>();
+    auto resp = std::make_shared<NYdbProtos::Query::SessionState>();
     ptr->Read(resp.get(), [args, resp, ptr](NYdbGrpc::TGrpcStatus grpcStatus) mutable {
         if (grpcStatus.GRpcStatusCode != grpc::StatusCode::OK) {
             TStatus st(TPlainStatus(grpcStatus, args->Endpoint));
             args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession(args->Client)));
 
         } else {
-            if (resp->status() == Ydb::StatusIds::SUCCESS) {
+            if (resp->status() == NYdbProtos::StatusIds::SUCCESS) {
                 NYdb::TStatus st(TPlainStatus(grpcStatus, args->Endpoint));
                 TSession::TImpl::NewSmartShared(ptr, std::move(args), st);
 

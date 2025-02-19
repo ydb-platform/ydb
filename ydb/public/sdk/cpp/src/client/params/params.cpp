@@ -12,14 +12,14 @@ namespace NYdb::inline V3 {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TParams::TParams(::google::protobuf::Map<TStringType, Ydb::TypedValue>&& protoMap)
+TParams::TParams(::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>&& protoMap)
     : Impl_(new TImpl(std::move(protoMap))) {}
 
-::google::protobuf::Map<TStringType, Ydb::TypedValue>* TParams::GetProtoMapPtr() {
+::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>* TParams::GetProtoMapPtr() {
     return Impl_->GetProtoMapPtr();
 }
 
-const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& TParams::GetProtoMap() const {
+const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>& TParams::GetProtoMap() const {
     return Impl_->GetProtoMap();
 }
 
@@ -41,7 +41,7 @@ class TParamsBuilder::TImpl {
 public:
     TImpl() = default;
 
-    TImpl(const ::google::protobuf::Map<TStringType, Ydb::Type>& typeInfo)
+    TImpl(const ::google::protobuf::Map<TStringType, NYdbProtos::Type>& typeInfo)
         : HasTypeInfo_(true)
     {
         for (const auto& pair : typeInfo) {
@@ -97,13 +97,13 @@ public:
 
         ValueBuildersMap_.clear();
 
-        ::google::protobuf::Map<TStringType, Ydb::TypedValue> paramsMap;
+        ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue> paramsMap;
         paramsMap.swap(ParamsMap_);
         return TParams(std::move(paramsMap));
     }
 
 private:
-    Ydb::TypedValue* GetParam(const std::string& name) {
+    NYdbProtos::TypedValue* GetParam(const std::string& name) {
         if (HasTypeInfo()) {
             auto it = ParamsMap_.find(name);
             if (it == ParamsMap_.end()) {
@@ -123,13 +123,13 @@ private:
 
 private:
     bool HasTypeInfo_ = false;
-    ::google::protobuf::Map<TStringType, Ydb::TypedValue> ParamsMap_;
+    ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue> ParamsMap_;
     std::map<std::string, TParamValueBuilder> ValueBuildersMap_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TParamValueBuilder::TParamValueBuilder(TParamsBuilder& owner, Ydb::Type& typeProto, Ydb::Value& valueProto)
+TParamValueBuilder::TParamValueBuilder(TParamsBuilder& owner, NYdbProtos::Type& typeProto, NYdbProtos::Value& valueProto)
     : TValueBuilderBase(typeProto, valueProto)
     , Owner_(owner)
     , Finished_(false) {}
@@ -156,7 +156,7 @@ TParamsBuilder::TParamsBuilder()
 TParamsBuilder::TParamsBuilder(const std::map<std::string, TType>& typeInfo)
     : Impl_(new TImpl(typeInfo)) {}
 
-TParamsBuilder::TParamsBuilder(const ::google::protobuf::Map<TStringType, Ydb::Type>& typeInfo)
+TParamsBuilder::TParamsBuilder(const ::google::protobuf::Map<TStringType, NYdbProtos::Type>& typeInfo)
     : Impl_(new TImpl(typeInfo)) {}
 
 bool TParamsBuilder::HasTypeInfo() const {

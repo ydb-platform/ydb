@@ -1,8 +1,9 @@
 #pragma once
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
-namespace Ydb {
+YDB_PROTOS_NAMESPACE {
 namespace Discovery {
     class ListEndpointsResult;
     class WhoAmIResult;
@@ -10,7 +11,7 @@ namespace Discovery {
     class NodeLocation;
     class NodeInfo;
 } // namespace Discovery
-} // namespace Ydb
+}
 
 namespace NYdb::inline V3 {
 namespace NDiscovery {
@@ -25,7 +26,7 @@ struct TWhoAmISettings : public TSimpleRequestSettings<TWhoAmISettings> {
 
 struct TNodeLocation {
     TNodeLocation() = default;
-    TNodeLocation(const Ydb::Discovery::NodeLocation& location);
+    TNodeLocation(const NYdbProtos::Discovery::NodeLocation& location);
 
     std::optional<uint32_t> DataCenterNum;
     std::optional<uint32_t> RoomNum;
@@ -65,7 +66,7 @@ struct TEndpointInfo {
 
 class TListEndpointsResult : public TStatus {
 public:
-    TListEndpointsResult(TStatus&& status, const Ydb::Discovery::ListEndpointsResult& endpoints);
+    TListEndpointsResult(TStatus&& status, const NYdbProtos::Discovery::ListEndpointsResult& endpoints);
     const std::vector<TEndpointInfo>& GetEndpointsInfo() const;
 private:
     std::vector<TEndpointInfo> Info_;
@@ -75,7 +76,7 @@ using TAsyncListEndpointsResult = NThreading::TFuture<TListEndpointsResult>;
 
 class TWhoAmIResult : public TStatus {
 public:
-    TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResult& proto);
+    TWhoAmIResult(TStatus&& status, const NYdbProtos::Discovery::WhoAmIResult& proto);
     const std::string& GetUserName() const;
     const std::vector<std::string>& GetGroups() const;
 private:
@@ -87,7 +88,7 @@ using TAsyncWhoAmIResult = NThreading::TFuture<TWhoAmIResult>;
 
 struct TNodeInfo {
     TNodeInfo() = default;
-    TNodeInfo(const Ydb::Discovery::NodeInfo& info);
+    TNodeInfo(const NYdbProtos::Discovery::NodeInfo& info);
 
     uint32_t NodeId;
     std::string Host;
@@ -101,7 +102,7 @@ struct TNodeInfo {
 class TNodeRegistrationResult : public TStatus {
 public:
     TNodeRegistrationResult() : TStatus(EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues()) {}
-    TNodeRegistrationResult(TStatus&& status, const Ydb::Discovery::NodeRegistrationResult& proto);
+    TNodeRegistrationResult(TStatus&& status, const NYdbProtos::Discovery::NodeRegistrationResult& proto);
     uint32_t GetNodeId() const;
     const std::string& GetDomainPath() const;
     uint64_t GetExpire() const;

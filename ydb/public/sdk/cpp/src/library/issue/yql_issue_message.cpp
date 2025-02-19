@@ -10,9 +10,9 @@
 
 namespace NYdb::NIssue {
 
-TIssue IssueFromMessage(const Ydb::Issue::IssueMessage& issueMessage) {
+TIssue IssueFromMessage(const NYdbProtos::Issue::IssueMessage& issueMessage) {
     TIssue topIssue;
-    std::deque<std::pair<TIssue*, const Ydb::Issue::IssueMessage*>> queue;
+    std::deque<std::pair<TIssue*, const NYdbProtos::Issue::IssueMessage*>> queue;
     queue.push_front(std::make_pair(&topIssue, &issueMessage));
     while (!queue.empty()) {
         TIssue& issue = *queue.back().first;
@@ -41,7 +41,7 @@ TIssue IssueFromMessage(const Ydb::Issue::IssueMessage& issueMessage) {
     return topIssue;
 }
 
-void IssuesFromMessage(const ::google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> &message, TIssues &issues) {
+void IssuesFromMessage(const ::google::protobuf::RepeatedPtrField<NYdbProtos::Issue::IssueMessage> &message, TIssues &issues) {
     issues.Clear();
     if (message.size()) {
         issues.Reserve(message.size());
@@ -51,8 +51,8 @@ void IssuesFromMessage(const ::google::protobuf::RepeatedPtrField<Ydb::Issue::Is
     }
 }
 
-void IssueToMessage(const TIssue& topIssue, Ydb::Issue::IssueMessage* issueMessage) {
-    std::deque<std::pair<const TIssue*, Ydb::Issue::IssueMessage*>> queue;
+void IssueToMessage(const TIssue& topIssue, NYdbProtos::Issue::IssueMessage* issueMessage) {
+    std::deque<std::pair<const TIssue*, NYdbProtos::Issue::IssueMessage*>> queue;
     queue.push_front(std::make_pair(&topIssue, issueMessage));
     while (!queue.empty()) {
         const TIssue& issue = *queue.back().first;
@@ -74,13 +74,13 @@ void IssueToMessage(const TIssue& topIssue, Ydb::Issue::IssueMessage* issueMessa
         message.set_severity(static_cast<uint32_t>(issue.GetSeverity()));
 
         for (auto subIssue : issue.GetSubIssues()) {
-            Ydb::Issue::IssueMessage* subMessage = message.add_issues();
+            NYdbProtos::Issue::IssueMessage* subMessage = message.add_issues();
             queue.push_front(std::make_pair(subIssue.Get(), subMessage));
         }
     }
 }
 
-void IssuesToMessage(const TIssues& issues, ::google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> *message) {
+void IssuesToMessage(const TIssues& issues, ::google::protobuf::RepeatedPtrField<NYdbProtos::Issue::IssueMessage> *message) {
     message->Clear();
     if (!issues)
         return;

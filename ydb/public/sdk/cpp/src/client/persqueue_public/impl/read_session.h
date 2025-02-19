@@ -85,9 +85,9 @@ private:
     bool ValidateSettings();
 
     // Cluster discovery
-    Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest MakeClusterDiscoveryRequest() const;
+    NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersRequest MakeClusterDiscoveryRequest() const;
     void StartClusterDiscovery();
-    void OnClusterDiscovery(const TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result);
+    void OnClusterDiscovery(const TStatus& status, const NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersResult& result);
     void ProceedWithoutClusterDiscovery();
     void RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions& deferred);
     void CreateClusterSessionsImpl(TDeferredActions& deferred);

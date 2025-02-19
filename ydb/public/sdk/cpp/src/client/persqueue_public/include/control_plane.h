@@ -5,6 +5,7 @@
 #include <ydb-cpp-sdk/client/topic/codecs.h>
 #include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 
@@ -29,7 +30,7 @@ struct TCredentials {
     };
 
     TCredentials() = default;
-    TCredentials(const Ydb::PersQueue::V1::Credentials& credentials);
+    TCredentials(const NYdbProtos::PersQueue::V1::Credentials& credentials);
     EMode GetMode() const;
     std::string GetOauthToken() const;
     std::string GetJwtParams() const;
@@ -39,7 +40,7 @@ struct TCredentials {
 
 private:
     EMode Mode_;
-    Ydb::PersQueue::V1::Credentials Credentials_;
+    NYdbProtos::PersQueue::V1::Credentials Credentials_;
 };
 
 
@@ -48,12 +49,12 @@ struct TDescribeTopicResult : public TStatus {
     friend class NYdb::V3::TProtoAccessor;
 
     struct TTopicSettings {
-        TTopicSettings(const Ydb::PersQueue::V1::TopicSettings&);
+        TTopicSettings(const NYdbProtos::PersQueue::V1::TopicSettings&);
 
         #define GETTER(TYPE, NAME) TYPE NAME() const { return NAME##_; }
 
         struct TReadRule {
-            TReadRule(const Ydb::PersQueue::V1::TopicSettings::ReadRule&);
+            TReadRule(const NYdbProtos::PersQueue::V1::TopicSettings::ReadRule&);
 
             GETTER(std::string, ConsumerName);
             GETTER(bool, Important);
@@ -76,7 +77,7 @@ struct TDescribeTopicResult : public TStatus {
         };
 
         struct TRemoteMirrorRule {
-            TRemoteMirrorRule(const Ydb::PersQueue::V1::TopicSettings::RemoteMirrorRule&);
+            TRemoteMirrorRule(const NYdbProtos::PersQueue::V1::TopicSettings::RemoteMirrorRule&);
             GETTER(std::string, Endpoint);
             GETTER(std::string, TopicPath);
             GETTER(std::string, ConsumerName);
@@ -121,7 +122,7 @@ struct TDescribeTopicResult : public TStatus {
         GETTER(std::optional<TDuration>, StabilizationWindow);
         GETTER(std::optional<uint64_t>, UpUtilizationPercent);
         GETTER(std::optional<uint64_t>, DownUtilizationPercent);
-        GETTER(std::optional<Ydb::PersQueue::V1::AutoPartitioningStrategy>, AutoPartitioningStrategy);
+        GETTER(std::optional<NYdbProtos::PersQueue::V1::AutoPartitioningStrategy>, AutoPartitioningStrategy);
 
 
 #undef GETTER
@@ -149,10 +150,10 @@ struct TDescribeTopicResult : public TStatus {
         std::optional<TDuration> StabilizationWindow_;
         std::optional<uint64_t> UpUtilizationPercent_;
         std::optional<uint64_t> DownUtilizationPercent_;
-        std::optional<Ydb::PersQueue::V1::AutoPartitioningStrategy> AutoPartitioningStrategy_;
+        std::optional<NYdbProtos::PersQueue::V1::AutoPartitioningStrategy> AutoPartitioningStrategy_;
     };
 
-    TDescribeTopicResult(TStatus status, const Ydb::PersQueue::V1::DescribeTopicResult& result);
+    TDescribeTopicResult(TStatus status, const NYdbProtos::PersQueue::V1::DescribeTopicResult& result);
 
     const TTopicSettings& TopicSettings() const {
         return TopicSettings_;
@@ -160,10 +161,10 @@ struct TDescribeTopicResult : public TStatus {
 
 private:
     TTopicSettings TopicSettings_;
-    [[nodiscard]] const Ydb::PersQueue::V1::DescribeTopicResult& GetProto() const {
+    [[nodiscard]] const NYdbProtos::PersQueue::V1::DescribeTopicResult& GetProto() const {
         return Proto_;
     }
-    const Ydb::PersQueue::V1::DescribeTopicResult Proto_;
+    const NYdbProtos::PersQueue::V1::DescribeTopicResult Proto_;
 };
 
 using TAsyncDescribeTopicResult = NThreading::TFuture<TDescribeTopicResult>;
@@ -294,7 +295,7 @@ private:
     std::optional<TDuration> StabilizationWindow_;
     std::optional<uint64_t> UpUtilizationPercent_;
     std::optional<uint64_t> DownUtilizationPercent_;
-    std::optional<Ydb::PersQueue::V1::AutoPartitioningStrategy> AutoPartitioningStrategy_;
+    std::optional<NYdbProtos::PersQueue::V1::AutoPartitioningStrategy> AutoPartitioningStrategy_;
 };
 
 

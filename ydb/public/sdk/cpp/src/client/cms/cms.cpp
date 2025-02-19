@@ -11,19 +11,19 @@
 namespace NYdb::inline V3::NCms {
 
 namespace {
-    EState ConvertState(Ydb::Cms::GetDatabaseStatusResult_State protoState) {
+    EState ConvertState(NYdbProtos::Cms::GetDatabaseStatusResult_State protoState) {
         switch (protoState) {
-            case Ydb::Cms::GetDatabaseStatusResult_State_STATE_UNSPECIFIED:
+            case NYdbProtos::Cms::GetDatabaseStatusResult_State_STATE_UNSPECIFIED:
                 return EState::StateUnspecified;
-            case Ydb::Cms::GetDatabaseStatusResult_State_CREATING:
+            case NYdbProtos::Cms::GetDatabaseStatusResult_State_CREATING:
                 return EState::Creating;
-            case Ydb::Cms::GetDatabaseStatusResult_State_RUNNING:
+            case NYdbProtos::Cms::GetDatabaseStatusResult_State_RUNNING:
                 return EState::Running;
-            case Ydb::Cms::GetDatabaseStatusResult_State_REMOVING:
+            case NYdbProtos::Cms::GetDatabaseStatusResult_State_REMOVING:
                 return EState::Removing;
-            case Ydb::Cms::GetDatabaseStatusResult_State_PENDING_RESOURCES:
+            case NYdbProtos::Cms::GetDatabaseStatusResult_State_PENDING_RESOURCES:
                 return EState::PendingResources;
-            case Ydb::Cms::GetDatabaseStatusResult_State_CONFIGURING:
+            case NYdbProtos::Cms::GetDatabaseStatusResult_State_CONFIGURING:
                 return EState::Configuring;
             default:
                 return EState::StateUnspecified;
@@ -35,7 +35,7 @@ namespace {
         const TSchemaOperationQuotas& schemaQuotas,
         const TDatabaseQuotas& dbQuotas,
         const TScaleRecommenderPolicies& scaleRecommenderPolicies,
-        Ydb::Cms::CreateDatabaseRequest& out)
+        NYdbProtos::Cms::CreateDatabaseRequest& out)
     {
         if (std::holds_alternative<NCms::TResources>(resourcesKind)) {
             const auto& resources = std::get<NCms::TResources>(resourcesKind);
@@ -107,7 +107,7 @@ namespace {
     }
 } // anonymous namespace
 
-TListDatabasesResult::TListDatabasesResult(TStatus&& status, const Ydb::Cms::ListDatabasesResult& proto)
+TListDatabasesResult::TListDatabasesResult(TStatus&& status, const NYdbProtos::Cms::ListDatabasesResult& proto)
     : TStatus(std::move(status))
     , Paths_(proto.paths().begin(), proto.paths().end())
 {}
@@ -116,48 +116,48 @@ const std::vector<std::string>& TListDatabasesResult::GetPaths() const {
     return Paths_;
 }
 
-TStorageUnits::TStorageUnits(const Ydb::Cms::StorageUnits& proto)
+TStorageUnits::TStorageUnits(const NYdbProtos::Cms::StorageUnits& proto)
     : UnitKind(proto.unit_kind())
     , Count(proto.count())
 {}
 
-TComputationalUnits::TComputationalUnits(const Ydb::Cms::ComputationalUnits& proto) 
+TComputationalUnits::TComputationalUnits(const NYdbProtos::Cms::ComputationalUnits& proto) 
     : UnitKind(proto.unit_kind())
     , AvailabilityZone(proto.availability_zone())
     , Count(proto.count())
 {}
 
-TAllocatedComputationalUnit::TAllocatedComputationalUnit(const Ydb::Cms::AllocatedComputationalUnit& proto)
+TAllocatedComputationalUnit::TAllocatedComputationalUnit(const NYdbProtos::Cms::AllocatedComputationalUnit& proto)
     : Host(proto.host())
     , Port(proto.port())
     , UnitKind(proto.unit_kind())
 {}
 
-TResources::TResources(const Ydb::Cms::Resources& proto)
+TResources::TResources(const NYdbProtos::Cms::Resources& proto)
     : StorageUnits(proto.storage_units().begin(), proto.storage_units().end())
     , ComputationalUnits(proto.computational_units().begin(), proto.computational_units().end())
 {}
 
-TServerlessResources::TServerlessResources(const Ydb::Cms::ServerlessResources& proto)
+TServerlessResources::TServerlessResources(const NYdbProtos::Cms::ServerlessResources& proto)
     : SharedDatabasePath(proto.shared_database_path())
 {}
 
-TSchemaOperationQuotas::TLeakyBucket::TLeakyBucket(const Ydb::Cms::SchemaOperationQuotas_LeakyBucket& proto)
+TSchemaOperationQuotas::TLeakyBucket::TLeakyBucket(const NYdbProtos::Cms::SchemaOperationQuotas_LeakyBucket& proto)
     : BucketSize(proto.bucket_size())
     , BucketSeconds(proto.bucket_seconds())
 {}
 
-TSchemaOperationQuotas::TSchemaOperationQuotas(const Ydb::Cms::SchemaOperationQuotas& proto)
+TSchemaOperationQuotas::TSchemaOperationQuotas(const NYdbProtos::Cms::SchemaOperationQuotas& proto)
     : LeakyBucketQuotas(proto.leaky_bucket_quotas().begin(), proto.leaky_bucket_quotas().end())
 {}
 
-TDatabaseQuotas::TStorageQuotas::TStorageQuotas(const Ydb::Cms::DatabaseQuotas_StorageQuotas& proto)
+TDatabaseQuotas::TStorageQuotas::TStorageQuotas(const NYdbProtos::Cms::DatabaseQuotas_StorageQuotas& proto)
     : UnitKind(proto.unit_kind()) 
     , DataSizeHardQuota(proto.data_size_hard_quota())
     , DataSizeSoftQuota(proto.data_size_soft_quota())
 {}
 
-TDatabaseQuotas::TDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& proto)
+TDatabaseQuotas::TDatabaseQuotas(const NYdbProtos::Cms::DatabaseQuotas& proto)
     : DataSizeHardQuota(proto.data_size_hard_quota())
     , DataSizeSoftQuota(proto.data_size_soft_quota())
     , DataStreamShardsQuota(proto.data_stream_shards_quota())
@@ -166,35 +166,35 @@ TDatabaseQuotas::TDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& proto)
     , StorageQuotas(proto.storage_quotas().begin(), proto.storage_quotas().end())
 {}
 
-TTargetTrackingPolicy::TTargetTrackingPolicy(const Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy& proto)
+TTargetTrackingPolicy::TTargetTrackingPolicy(const NYdbProtos::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy& proto)
 {
     switch (proto.target_case()) {
-        case Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy::kAverageCpuUtilizationPercent:
+        case NYdbProtos::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy::kAverageCpuUtilizationPercent:
             Target = proto.average_cpu_utilization_percent();
             break;
-        case Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy::TARGET_NOT_SET:
+        case NYdbProtos::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy::TARGET_NOT_SET:
             Target = std::monostate();
             break;
     }
 }
 
-TScaleRecommenderPolicy::TScaleRecommenderPolicy(const Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy& proto)
+TScaleRecommenderPolicy::TScaleRecommenderPolicy(const NYdbProtos::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy& proto)
 {
     switch (proto.policy_case()) {
-        case Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy::kTargetTrackingPolicy:
+        case NYdbProtos::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy::kTargetTrackingPolicy:
             Policy = proto.target_tracking_policy();
             break;
-        case Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy::POLICY_NOT_SET:
+        case NYdbProtos::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy::POLICY_NOT_SET:
             Policy = std::monostate();
             break;
     }
 }
 
-TScaleRecommenderPolicies::TScaleRecommenderPolicies(const Ydb::Cms::ScaleRecommenderPolicies& proto) 
+TScaleRecommenderPolicies::TScaleRecommenderPolicies(const NYdbProtos::Cms::ScaleRecommenderPolicies& proto) 
     : Policies(proto.policies().begin(), proto.policies().end())
 {}
 
-TGetDatabaseStatusResult::TGetDatabaseStatusResult(TStatus&& status, const Ydb::Cms::GetDatabaseStatusResult& proto)
+TGetDatabaseStatusResult::TGetDatabaseStatusResult(TStatus&& status, const NYdbProtos::Cms::GetDatabaseStatusResult& proto)
     : TStatus(std::move(status))
     , Path_(proto.path())
     , State_(ConvertState(proto.state()))
@@ -206,16 +206,16 @@ TGetDatabaseStatusResult::TGetDatabaseStatusResult(TStatus&& status, const Ydb::
     , ScaleRecommenderPolicies_(proto.scale_recommender_policies())
 {
     switch (proto.resources_kind_case()) {
-        case Ydb::Cms::GetDatabaseStatusResult::kRequiredResources:
+        case NYdbProtos::Cms::GetDatabaseStatusResult::kRequiredResources:
             ResourcesKind_ = TResources(proto.required_resources());
             break;
-        case Ydb::Cms::GetDatabaseStatusResult::kRequiredSharedResources:
+        case NYdbProtos::Cms::GetDatabaseStatusResult::kRequiredSharedResources:
             ResourcesKind_ = TSharedResources(proto.required_shared_resources());
             break;
-        case Ydb::Cms::GetDatabaseStatusResult::kServerlessResources:
+        case NYdbProtos::Cms::GetDatabaseStatusResult::kServerlessResources:
             ResourcesKind_ = proto.serverless_resources();
             break;
-        case Ydb::Cms::GetDatabaseStatusResult::RESOURCES_KIND_NOT_SET:
+        case NYdbProtos::Cms::GetDatabaseStatusResult::RESOURCES_KIND_NOT_SET:
             ResourcesKind_ = std::monostate();
             break;
     }
@@ -257,33 +257,33 @@ const TScaleRecommenderPolicies& TGetDatabaseStatusResult::GetScaleRecommenderPo
     return ScaleRecommenderPolicies_;
 }
 
-void TGetDatabaseStatusResult::SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const {
+void TGetDatabaseStatusResult::SerializeTo(NYdbProtos::Cms::CreateDatabaseRequest& request) const {
     request.set_path(Path_);
     SerializeToImpl(ResourcesKind_, SchemaOperationQuotas_, DatabaseQuotas_, ScaleRecommenderPolicies_, request);
 }
 
-TCreateDatabaseSettings::TCreateDatabaseSettings(const Ydb::Cms::CreateDatabaseRequest& request)
+TCreateDatabaseSettings::TCreateDatabaseSettings(const NYdbProtos::Cms::CreateDatabaseRequest& request)
   : SchemaOperationQuotas_(request.schema_operation_quotas())
   , DatabaseQuotas_(request.database_quotas())
   , ScaleRecommenderPolicies_(request.scale_recommender_policies())
 {
   switch (request.resources_kind_case()) {
-      case Ydb::Cms::CreateDatabaseRequest::kResources:
+      case NYdbProtos::Cms::CreateDatabaseRequest::kResources:
           ResourcesKind_ = TResources(request.resources());
           break;
-      case Ydb::Cms::CreateDatabaseRequest::kSharedResources:
+      case NYdbProtos::Cms::CreateDatabaseRequest::kSharedResources:
           ResourcesKind_ = TSharedResources(request.shared_resources());
           break;
-      case Ydb::Cms::CreateDatabaseRequest::kServerlessResources:
+      case NYdbProtos::Cms::CreateDatabaseRequest::kServerlessResources:
           ResourcesKind_ = request.serverless_resources();
           break;
-      case Ydb::Cms::CreateDatabaseRequest::RESOURCES_KIND_NOT_SET:
+      case NYdbProtos::Cms::CreateDatabaseRequest::RESOURCES_KIND_NOT_SET:
           ResourcesKind_ = std::monostate();
           break;
   }
 }
 
-void TCreateDatabaseSettings::SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const {
+void TCreateDatabaseSettings::SerializeTo(NYdbProtos::Cms::CreateDatabaseRequest& request) const {
     SerializeToImpl(ResourcesKind_, SchemaOperationQuotas_, DatabaseQuotas_, ScaleRecommenderPolicies_, request);
 }
 
@@ -294,13 +294,13 @@ public:
     { }
 
     TAsyncListDatabasesResult ListDatabases(const TListDatabasesSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Cms::ListDatabasesRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Cms::ListDatabasesRequest>(settings);
 
         auto promise = NThreading::NewPromise<TListDatabasesResult>();
 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::Cms::ListDatabasesResult result;
+                NYdbProtos::Cms::ListDatabasesResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
@@ -308,10 +308,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::Cms::V1::CmsService, Ydb::Cms::ListDatabasesRequest, Ydb::Cms::ListDatabasesResponse>(
+        Connections_->RunDeferred<NYdbProtos::Cms::V1::CmsService, NYdbProtos::Cms::ListDatabasesRequest, NYdbProtos::Cms::ListDatabasesResponse>(
             std::move(request),
             extractor,
-            &Ydb::Cms::V1::CmsService::Stub::AsyncListDatabases,
+            &NYdbProtos::Cms::V1::CmsService::Stub::AsyncListDatabases,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -320,14 +320,14 @@ public:
     }
 
     TAsyncGetDatabaseStatusResult GetDatabaseStatus(const std::string& path, const TGetDatabaseStatusSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Cms::GetDatabaseStatusRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Cms::GetDatabaseStatusRequest>(settings);
         request.set_path(path);
 
         auto promise = NThreading::NewPromise<TGetDatabaseStatusResult>();
 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::Cms::GetDatabaseStatusResult result;
+                NYdbProtos::Cms::GetDatabaseStatusResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
@@ -335,10 +335,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::Cms::V1::CmsService, Ydb::Cms::GetDatabaseStatusRequest, Ydb::Cms::GetDatabaseStatusResponse>(
+        Connections_->RunDeferred<NYdbProtos::Cms::V1::CmsService, NYdbProtos::Cms::GetDatabaseStatusRequest, NYdbProtos::Cms::GetDatabaseStatusResponse>(
             std::move(request),
             extractor,
-            &Ydb::Cms::V1::CmsService::Stub::AsyncGetDatabaseStatus,
+            &NYdbProtos::Cms::V1::CmsService::Stub::AsyncGetDatabaseStatus,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -347,13 +347,13 @@ public:
     }
 
     TAsyncStatus CreateDatabase(const std::string& path, const TCreateDatabaseSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Cms::CreateDatabaseRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Cms::CreateDatabaseRequest>(settings);
         request.set_path(path);
         settings.SerializeTo(request);
 
-        return RunSimple<Ydb::Cms::V1::CmsService, Ydb::Cms::CreateDatabaseRequest, Ydb::Cms::CreateDatabaseResponse>(
+        return RunSimple<NYdbProtos::Cms::V1::CmsService, NYdbProtos::Cms::CreateDatabaseRequest, NYdbProtos::Cms::CreateDatabaseResponse>(
             std::move(request),
-            &Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase,
+            &NYdbProtos::Cms::V1::CmsService::Stub::AsyncCreateDatabase,
             TRpcRequestSettings::Make(settings));
     }
 };

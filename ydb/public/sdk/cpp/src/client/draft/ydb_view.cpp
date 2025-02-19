@@ -12,7 +12,7 @@
 namespace NYdb::inline V3 {
 namespace NView {
 
-TViewDescription::TViewDescription(const Ydb::View::DescribeViewResult& desc)
+TViewDescription::TViewDescription(const NYdbProtos::View::DescribeViewResult& desc)
     : QueryText_(desc.query_text())
 {
 }
@@ -21,9 +21,9 @@ const std::string& TViewDescription::GetQueryText() const {
     return QueryText_;
 }
 
-TDescribeViewResult::TDescribeViewResult(TStatus&& status, Ydb::View::DescribeViewResult&& desc)
+TDescribeViewResult::TDescribeViewResult(TStatus&& status, NYdbProtos::View::DescribeViewResult&& desc)
     : NScheme::TDescribePathResult(std::move(status), desc.self())
-    , Proto_(std::make_unique<Ydb::View::DescribeViewResult>(std::move(desc)))
+    , Proto_(std::make_unique<NYdbProtos::View::DescribeViewResult>(std::move(desc)))
 {
 }
 
@@ -31,7 +31,7 @@ TViewDescription TDescribeViewResult::GetViewDescription() const {
     return TViewDescription(*Proto_);
 }
 
-const Ydb::View::DescribeViewResult& TDescribeViewResult::GetProto() const {
+const NYdbProtos::View::DescribeViewResult& TDescribeViewResult::GetProto() const {
     return *Proto_;
 }
 
@@ -43,7 +43,7 @@ public:
     }
 
     TAsyncDescribeViewResult DescribeView(const std::string& path, const TDescribeViewSettings& settings) {
-        using namespace Ydb::View;
+        using namespace NYdbProtos::View;
 
         auto request = MakeOperationRequest<DescribeViewRequest>(settings);
         request.set_path(TStringType{path});
@@ -85,7 +85,7 @@ TAsyncDescribeViewResult TViewClient::DescribeView(const std::string& path, cons
 
 } // NView
 
-const Ydb::View::DescribeViewResult& TProtoAccessor::GetProto(const NView::TDescribeViewResult& result) {
+const NYdbProtos::View::DescribeViewResult& TProtoAccessor::GetProto(const NView::TDescribeViewResult& result) {
     return result.GetProto();
 }
 

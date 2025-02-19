@@ -17,7 +17,7 @@ namespace NYdb::inline V3::NQuery {
 
 using namespace NThreading;
 
-static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::TransactionSettings* proto) {
+static void SetTxSettings(const TTxSettings& txSettings, NYdbProtos::Query::TransactionSettings* proto) {
     switch (txSettings.GetMode()) {
         case TTxSettings::TS_SERIALIZABLE_RW:
             proto->mutable_serializable_read_write();
@@ -43,7 +43,7 @@ static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::Transaction
 class TExecuteQueryIterator::TReaderImpl {
 public:
     using TSelf = TExecuteQueryIterator::TReaderImpl;
-    using TResponse = Ydb::Query::ExecuteQueryResponsePart;
+    using TResponse = NYdbProtos::Query::ExecuteQueryResponsePart;
     using TStreamProcessorPtr = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
     using TReadCallback = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TReadCallback;
     using TGRpcStatus = NYdbGrpc::TGrpcStatus;
@@ -145,7 +145,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     TPromise<TExecuteQueryResult> Promise_;
     TExecuteQueryIterator Iterator_;
     std::vector<NYdb::NIssue::TIssue> Issues_;
-    std::vector<Ydb::ResultSet> ResultSets_;
+    std::vector<NYdbProtos::ResultSet> ResultSets_;
     std::optional<TExecStats> Stats_;
     std::optional<TTransaction> Tx_;
 
@@ -165,7 +165,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
 
                 if (part.EOS()) {
                     std::vector<NYdb::NIssue::TIssue> issues;
-                    std::vector<Ydb::ResultSet> resultProtos;
+                    std::vector<NYdbProtos::ResultSet> resultProtos;
                     std::optional<TTransaction> tx;
 
                     std::swap(self->Issues_, issues);
@@ -223,15 +223,15 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
 
 TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryImpl(
     const std::shared_ptr<TGRpcConnectionsImpl>& connections, const TDbDriverStatePtr& driverState,
-    const std::string& query, const TTxControl& txControl, const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
+    const std::string& query, const TTxControl& txControl, const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>* params,
     const TExecuteQuerySettings& settings, const std::optional<TSession>& session)
 {
-    auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
-    request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
-    request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
+    auto request = MakeRequest<NYdbProtos::Query::ExecuteQueryRequest>();
+    request.set_exec_mode(::NYdbProtos::Query::ExecMode(settings.ExecMode_));
+    request.set_stats_mode(::NYdbProtos::Query::StatsMode(settings.StatsMode_));
     request.set_pool_id(TStringType{settings.ResourcePool_});
     request.mutable_query_content()->set_text(TStringType{query});
-    request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
+    request.mutable_query_content()->set_syntax(::NYdbProtos::Query::Syntax(settings.Syntax_));
     if (session.has_value()) {
         request.set_session_id(TStringType{session->GetId()});
     } else if ((txControl.TxSettings_.has_value() && !txControl.CommitTx_) || txControl.TxId_.has_value()) {
@@ -275,15 +275,15 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     }
 
     connections->StartReadStream<
-        Ydb::Query::V1::QueryService,
-        Ydb::Query::ExecuteQueryRequest,
-        Ydb::Query::ExecuteQueryResponsePart>
+        NYdbProtos::Query::V1::QueryService,
+        NYdbProtos::Query::ExecuteQueryRequest,
+        NYdbProtos::Query::ExecuteQueryResponsePart>
     (
         std::move(request),
         [promise] (TPlainStatus status, TExecuteQueryProcessorPtr processor) mutable {
             promise.SetValue(std::make_pair(status, processor));
         },
-        &Ydb::Query::V1::QueryService::Stub::AsyncExecuteQuery,
+        &NYdbProtos::Query::V1::QueryService::Stub::AsyncExecuteQuery,
         driverState,
         rpcSettings
     );

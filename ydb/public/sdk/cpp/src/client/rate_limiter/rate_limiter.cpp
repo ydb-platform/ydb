@@ -11,13 +11,13 @@
 
 namespace NYdb::inline V3::NRateLimiter {
 
-TReplicatedBucketSettings::TReplicatedBucketSettings(const Ydb::RateLimiter::ReplicatedBucketSettings& proto) {
+TReplicatedBucketSettings::TReplicatedBucketSettings(const NYdbProtos::RateLimiter::ReplicatedBucketSettings& proto) {
     if (proto.has_report_interval_ms()) {
         ReportInterval_ = std::chrono::milliseconds(proto.report_interval_ms());
     }
 }
 
-void TReplicatedBucketSettings::SerializeTo(Ydb::RateLimiter::ReplicatedBucketSettings& proto) const {
+void TReplicatedBucketSettings::SerializeTo(NYdbProtos::RateLimiter::ReplicatedBucketSettings& proto) const {
     if (ReportInterval_) {
         proto.set_report_interval_ms(ReportInterval_->count());
     }
@@ -32,7 +32,7 @@ TLeafBehavior::TLeafBehavior(const TReplicatedBucketSettings& replicatedBucket)
 {
 }
 
-TLeafBehavior::TLeafBehavior(const Ydb::RateLimiter::ReplicatedBucketSettings& replicatedBucket)
+TLeafBehavior::TLeafBehavior(const NYdbProtos::RateLimiter::ReplicatedBucketSettings& replicatedBucket)
     : BehaviorSettings_(replicatedBucket)
 {
 }
@@ -41,7 +41,7 @@ const TReplicatedBucketSettings& TLeafBehavior::GetReplicatedBucket() const {
     return std::get<TReplicatedBucketSettings>(BehaviorSettings_);
 }
 
-void TLeafBehavior::SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings& proto) const {
+void TLeafBehavior::SerializeTo(NYdbProtos::RateLimiter::HierarchicalDrrSettings& proto) const {
     switch (GetBehavior()) {
         case REPLICATED_BUCKET:
             return GetReplicatedBucket().SerializeTo(*proto.mutable_replicated_bucket());
@@ -49,7 +49,7 @@ void TLeafBehavior::SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings& proto
 }
 
 template <class TDerived>
-THierarchicalDrrSettings<TDerived>::THierarchicalDrrSettings(const Ydb::RateLimiter::HierarchicalDrrSettings& proto) {
+THierarchicalDrrSettings<TDerived>::THierarchicalDrrSettings(const NYdbProtos::RateLimiter::HierarchicalDrrSettings& proto) {
     if (proto.max_units_per_second()) {
         MaxUnitsPerSecond_ = proto.max_units_per_second();
     }
@@ -71,16 +71,16 @@ THierarchicalDrrSettings<TDerived>::THierarchicalDrrSettings(const Ydb::RateLimi
     }
 
     switch (proto.leaf_behavior_case()) {
-        case Ydb::RateLimiter::HierarchicalDrrSettings::kReplicatedBucket:
+        case NYdbProtos::RateLimiter::HierarchicalDrrSettings::kReplicatedBucket:
             LeafBehavior_.emplace(proto.replicated_bucket());
             break;
-        case Ydb::RateLimiter::HierarchicalDrrSettings::LEAF_BEHAVIOR_NOT_SET:
+        case NYdbProtos::RateLimiter::HierarchicalDrrSettings::LEAF_BEHAVIOR_NOT_SET:
             break;
     }
 }
 
 template <class TDerived>
-void THierarchicalDrrSettings<TDerived>::SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings& proto) const {
+void THierarchicalDrrSettings<TDerived>::SerializeTo(NYdbProtos::RateLimiter::HierarchicalDrrSettings& proto) const {
     if (MaxUnitsPerSecond_) {
         proto.set_max_units_per_second(*MaxUnitsPerSecond_);
     }
@@ -106,7 +106,7 @@ void THierarchicalDrrSettings<TDerived>::SerializeTo(Ydb::RateLimiter::Hierarchi
     }
 }
 
-TMetric::TMetric(const Ydb::RateLimiter::MeteringConfig_Metric& proto) {
+TMetric::TMetric(const NYdbProtos::RateLimiter::MeteringConfig_Metric& proto) {
     Enabled_ = proto.enabled();
     if (proto.billing_period_sec()) {
         BillingPeriod_ = std::chrono::seconds(proto.billing_period_sec());
@@ -122,7 +122,7 @@ TMetric::TMetric(const Ydb::RateLimiter::MeteringConfig_Metric& proto) {
     }
 }
 
-void TMetric::SerializeTo(Ydb::RateLimiter::MeteringConfig_Metric& proto) const {
+void TMetric::SerializeTo(NYdbProtos::RateLimiter::MeteringConfig_Metric& proto) const {
     proto.set_enabled(Enabled_);
     if (BillingPeriod_) {
         proto.set_billing_period_sec(BillingPeriod_->count());
@@ -135,7 +135,7 @@ void TMetric::SerializeTo(Ydb::RateLimiter::MeteringConfig_Metric& proto) const 
     }
 }
 
-TMeteringConfig::TMeteringConfig(const Ydb::RateLimiter::MeteringConfig& proto) {
+TMeteringConfig::TMeteringConfig(const NYdbProtos::RateLimiter::MeteringConfig& proto) {
     Enabled_ = proto.enabled();
     if (proto.report_period_ms()) {
         ReportPeriod_ = std::chrono::milliseconds(proto.report_period_ms());
@@ -166,7 +166,7 @@ TMeteringConfig::TMeteringConfig(const Ydb::RateLimiter::MeteringConfig& proto) 
     }
 }
 
-void TMeteringConfig::SerializeTo(Ydb::RateLimiter::MeteringConfig& proto) const {
+void TMeteringConfig::SerializeTo(NYdbProtos::RateLimiter::MeteringConfig& proto) const {
     proto.set_enabled(Enabled_);
     if (ReportPeriod_) {
         proto.set_report_period_ms(ReportPeriod_->count());
@@ -201,7 +201,7 @@ template struct THierarchicalDrrSettings<TCreateResourceSettings>;
 template struct THierarchicalDrrSettings<TAlterResourceSettings>;
 template struct THierarchicalDrrSettings<TDescribeResourceResult::THierarchicalDrrProps>;
 
-TCreateResourceSettings::TCreateResourceSettings(const Ydb::RateLimiter::CreateResourceRequest& proto)
+TCreateResourceSettings::TCreateResourceSettings(const NYdbProtos::RateLimiter::CreateResourceRequest& proto)
     : THierarchicalDrrSettings(proto.resource().hierarchical_drr())
 {
     if (proto.resource().has_metering_config()) {
@@ -215,7 +215,7 @@ TListResourcesResult::TListResourcesResult(TStatus status, std::vector<std::stri
 {
 }
 
-TDescribeResourceResult::TDescribeResourceResult(TStatus status, const Ydb::RateLimiter::DescribeResourceResult& result)
+TDescribeResourceResult::TDescribeResourceResult(TStatus status, const NYdbProtos::RateLimiter::DescribeResourceResult& result)
     : TStatus(std::move(status))
     , ResourcePath_(result.resource().resource_path())
     , HierarchicalDrrProps_(result.resource().hierarchical_drr())
@@ -225,7 +225,7 @@ TDescribeResourceResult::TDescribeResourceResult(TStatus status, const Ydb::Rate
     }
 }
 
-TDescribeResourceResult::THierarchicalDrrProps::THierarchicalDrrProps(const Ydb::RateLimiter::HierarchicalDrrSettings& settings)
+TDescribeResourceResult::THierarchicalDrrProps::THierarchicalDrrProps(const NYdbProtos::RateLimiter::HierarchicalDrrSettings& settings)
     : THierarchicalDrrSettings<THierarchicalDrrProps>(settings)
 {
 }
@@ -242,10 +242,10 @@ public:
         TRequest request = MakeOperationRequest<TRequest>(settings);
         request.set_coordination_node_path(TStringType{coordinationNodePath});
 
-        Ydb::RateLimiter::Resource& resource = *request.mutable_resource();
+        NYdbProtos::RateLimiter::Resource& resource = *request.mutable_resource();
         resource.set_resource_path(TStringType{resourcePath});
 
-        Ydb::RateLimiter::HierarchicalDrrSettings& hdrr = *resource.mutable_hierarchical_drr();
+        NYdbProtos::RateLimiter::HierarchicalDrrSettings& hdrr = *resource.mutable_hierarchical_drr();
         if (settings.MaxUnitsPerSecond_) {
             hdrr.set_max_units_per_second(*settings.MaxUnitsPerSecond_);
         }
@@ -272,36 +272,36 @@ public:
     }
 
     TAsyncStatus CreateResource(const std::string& coordinationNodePath, const std::string& resourcePath, const TCreateResourceSettings& settings) {
-        auto request = MakePropsCreateOrAlterRequest<Ydb::RateLimiter::CreateResourceRequest>(coordinationNodePath, resourcePath, settings);
+        auto request = MakePropsCreateOrAlterRequest<NYdbProtos::RateLimiter::CreateResourceRequest>(coordinationNodePath, resourcePath, settings);
 
-        return RunSimple<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::CreateResourceRequest, Ydb::RateLimiter::CreateResourceResponse>(
+        return RunSimple<NYdbProtos::RateLimiter::V1::RateLimiterService, NYdbProtos::RateLimiter::CreateResourceRequest, NYdbProtos::RateLimiter::CreateResourceResponse>(
             std::move(request),
-            &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncCreateResource,
+            &NYdbProtos::RateLimiter::V1::RateLimiterService::Stub::AsyncCreateResource,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus AlterResource(const std::string& coordinationNodePath, const std::string& resourcePath, const TAlterResourceSettings& settings) {
-        auto request = MakePropsCreateOrAlterRequest<Ydb::RateLimiter::AlterResourceRequest>(coordinationNodePath, resourcePath, settings);
+        auto request = MakePropsCreateOrAlterRequest<NYdbProtos::RateLimiter::AlterResourceRequest>(coordinationNodePath, resourcePath, settings);
 
-        return RunSimple<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::AlterResourceRequest, Ydb::RateLimiter::AlterResourceResponse>(
+        return RunSimple<NYdbProtos::RateLimiter::V1::RateLimiterService, NYdbProtos::RateLimiter::AlterResourceRequest, NYdbProtos::RateLimiter::AlterResourceResponse>(
             std::move(request),
-            &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncAlterResource,
+            &NYdbProtos::RateLimiter::V1::RateLimiterService::Stub::AsyncAlterResource,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus DropResource(const std::string& coordinationNodePath, const std::string& resourcePath, const TDropResourceSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::RateLimiter::DropResourceRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::RateLimiter::DropResourceRequest>(settings);
         request.set_coordination_node_path(TStringType{coordinationNodePath});
         request.set_resource_path(TStringType{resourcePath});
 
-        return RunSimple<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::DropResourceRequest, Ydb::RateLimiter::DropResourceResponse>(
+        return RunSimple<NYdbProtos::RateLimiter::V1::RateLimiterService, NYdbProtos::RateLimiter::DropResourceRequest, NYdbProtos::RateLimiter::DropResourceResponse>(
             std::move(request),
-            &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncDropResource,
+            &NYdbProtos::RateLimiter::V1::RateLimiterService::Stub::AsyncDropResource,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncListResourcesResult ListResources(const std::string& coordinationNodePath, const std::string& resourcePath, const TListResourcesSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::RateLimiter::ListResourcesRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::RateLimiter::ListResourcesRequest>(settings);
         request.set_coordination_node_path(TStringType{coordinationNodePath});
         request.set_resource_path(TStringType{resourcePath});
         request.set_recursive(settings.Recursive_);
@@ -312,7 +312,7 @@ public:
             (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::vector<std::string> list;
                 if (any) {
-                    Ydb::RateLimiter::ListResourcesResult result;
+                    NYdbProtos::RateLimiter::ListResourcesResult result;
                     any->UnpackTo(&result);
                     list.reserve(result.resource_paths_size());
                     for (const std::string& path : result.resource_paths()) {
@@ -324,10 +324,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::ListResourcesRequest, Ydb::RateLimiter::ListResourcesResponse>(
+        Connections_->RunDeferred<NYdbProtos::RateLimiter::V1::RateLimiterService, NYdbProtos::RateLimiter::ListResourcesRequest, NYdbProtos::RateLimiter::ListResourcesResponse>(
             std::move(request),
             extractor,
-            &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncListResources,
+            &NYdbProtos::RateLimiter::V1::RateLimiterService::Stub::AsyncListResources,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -336,7 +336,7 @@ public:
     }
 
     TAsyncDescribeResourceResult DescribeResource(const std::string& coordinationNodePath, const std::string& resourcePath, const TDescribeResourceSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::RateLimiter::DescribeResourceRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::RateLimiter::DescribeResourceRequest>(settings);
         request.set_coordination_node_path(TStringType{coordinationNodePath});
         request.set_resource_path(TStringType{resourcePath});
 
@@ -344,7 +344,7 @@ public:
 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::RateLimiter::DescribeResourceResult result;
+                NYdbProtos::RateLimiter::DescribeResourceResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
@@ -353,10 +353,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::DescribeResourceRequest, Ydb::RateLimiter::DescribeResourceResponse>(
+        Connections_->RunDeferred<NYdbProtos::RateLimiter::V1::RateLimiterService, NYdbProtos::RateLimiter::DescribeResourceRequest, NYdbProtos::RateLimiter::DescribeResourceResponse>(
             std::move(request),
             extractor,
-            &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncDescribeResource,
+            &NYdbProtos::RateLimiter::V1::RateLimiterService::Stub::AsyncDescribeResource,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -365,7 +365,7 @@ public:
     }
 
     TAsyncStatus AcquireResource(const std::string& coordinationNodePath, const std::string& resourcePath, const TAcquireResourceSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::RateLimiter::AcquireResourceRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::RateLimiter::AcquireResourceRequest>(settings);
         request.set_coordination_node_path(TStringType{coordinationNodePath});
         request.set_resource_path(TStringType{resourcePath});
 
@@ -375,9 +375,9 @@ public:
             request.set_required(settings.Amount_.value());
         }
 
-        return RunSimple<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::AcquireResourceRequest, Ydb::RateLimiter::AcquireResourceResponse>(
+        return RunSimple<NYdbProtos::RateLimiter::V1::RateLimiterService, NYdbProtos::RateLimiter::AcquireResourceRequest, NYdbProtos::RateLimiter::AcquireResourceResponse>(
             std::move(request),
-            &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncAcquireResource,
+            &NYdbProtos::RateLimiter::V1::RateLimiterService::Stub::AsyncAcquireResource,
             TRpcRequestSettings::Make(settings));
     }
 };

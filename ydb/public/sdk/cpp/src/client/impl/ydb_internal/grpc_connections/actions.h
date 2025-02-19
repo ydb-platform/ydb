@@ -24,7 +24,7 @@ struct TPlainStatus;
 
 template<typename TResponse>
 using TResponseCb = std::function<void(TResponse*, TPlainStatus status)>;
-using TDeferredOperationCb = std::function<void(Ydb::Operations::Operation*, TPlainStatus status)>;
+using TDeferredOperationCb = std::function<void(NYdbProtos::Operations::Operation*, TPlainStatus status)>;
 
 template<typename TCb>
 class TGenericCbHolder {

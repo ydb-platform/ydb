@@ -1,10 +1,11 @@
 #pragma once
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
 #include <library/cpp/monlib/metrics/metric_registry.h>
 
-namespace Ydb {
+YDB_PROTOS_NAMESPACE {
 namespace Discovery {
 
 class ListEndpointsResult;
@@ -52,7 +53,7 @@ public:
         std::string_view Database;
         std::string_view DiscoveryEndpoint;
     };
-    using TMutatorCb = std::function<TStatus(Ydb::Discovery::ListEndpointsResult* proto, TStatus status, const TAuxInfo& aux)>;
+    using TMutatorCb = std::function<TStatus(NYdbProtos::Discovery::ListEndpointsResult* proto, TStatus status, const TAuxInfo& aux)>;
 
     static IDiscoveryMutatorApi* Create(TDriver driver);
 public:

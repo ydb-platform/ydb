@@ -22,12 +22,12 @@ using namespace NYdb::NTable;
 
 namespace {
 
-    class TMockDiscoveryService : public Ydb::Discovery::V1::DiscoveryService::Service {
+    class TMockDiscoveryService : public NYdbProtos::Discovery::V1::DiscoveryService::Service {
     public:
         grpc::Status ListEndpoints(
                 grpc::ServerContext* context,
-                const Ydb::Discovery::ListEndpointsRequest* request,
-                Ydb::Discovery::ListEndpointsResponse* response) override
+                const NYdbProtos::Discovery::ListEndpointsRequest* request,
+                NYdbProtos::Discovery::ListEndpointsResponse* response) override
         {
             Y_UNUSED(context);
 
@@ -38,32 +38,32 @@ namespace {
 
             auto* op = response->mutable_operation();
             op->set_ready(true);
-            op->set_status(Ydb::StatusIds::SUCCESS);
+            op->set_status(NYdbProtos::StatusIds::SUCCESS);
             op->mutable_result()->PackFrom(*result);
             return grpc::Status::OK;
         }
 
         // From database name to result
-        std::unordered_map<std::string, Ydb::Discovery::ListEndpointsResult> MockResults;
+        std::unordered_map<std::string, NYdbProtos::Discovery::ListEndpointsResult> MockResults;
     };
 
-    class TMockTableService : public Ydb::Table::V1::TableService::Service {
+    class TMockTableService : public NYdbProtos::Table::V1::TableService::Service {
     public:
         grpc::Status CreateSession(
                 grpc::ServerContext* context,
-                const Ydb::Table::CreateSessionRequest* request,
-                Ydb::Table::CreateSessionResponse* response) override
+                const NYdbProtos::Table::CreateSessionRequest* request,
+                NYdbProtos::Table::CreateSessionResponse* response) override
         {
             Y_UNUSED(context);
 
             std::cerr << "CreateSession: " << request->ShortDebugString() << std::endl;
 
-            Ydb::Table::CreateSessionResult result;
+            NYdbProtos::Table::CreateSessionResult result;
             result.set_session_id("my-session-id");
 
             auto* op = response->mutable_operation();
             op->set_ready(true);
-            op->set_status(Ydb::StatusIds::SUCCESS);
+            op->set_status(NYdbProtos::StatusIds::SUCCESS);
             op->mutable_result()->PackFrom(result);
             return grpc::Status::OK;
         }

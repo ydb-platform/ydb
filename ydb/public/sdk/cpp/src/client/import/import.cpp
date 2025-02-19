@@ -14,12 +14,12 @@ namespace NYdb::inline V3 {
 namespace NImport {
 
 using namespace NThreading;
-using namespace Ydb::Import;
+using namespace NYdbProtos::Import;
 
 /// Common
 namespace {
 
-std::vector<TImportItemProgress> ItemsProgressFromProto(const google::protobuf::RepeatedPtrField<Ydb::Import::ImportItemProgress>& proto) {
+std::vector<TImportItemProgress> ItemsProgressFromProto(const google::protobuf::RepeatedPtrField<NYdbProtos::Import::ImportItemProgress>& proto) {
     std::vector<TImportItemProgress> result;
     result.reserve(proto.size());
 
@@ -37,7 +37,7 @@ std::vector<TImportItemProgress> ItemsProgressFromProto(const google::protobuf::
 } // anonymous
 
 /// S3
-TImportFromS3Response::TImportFromS3Response(TStatus&& status, Ydb::Operations::Operation&& operation)
+TImportFromS3Response::TImportFromS3Response(TStatus&& status, NYdbProtos::Operations::Operation&& operation)
     : TOperation(std::move(status), std::move(operation))
 {
     ImportFromS3Metadata metadata;

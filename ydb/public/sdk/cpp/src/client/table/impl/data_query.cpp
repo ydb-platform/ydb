@@ -33,7 +33,7 @@ TDataQuery::TImpl::TImpl(const TSession& session, const std::string& text, bool 
 {}
 
 TDataQuery::TImpl::TImpl(const TSession& session, const std::string& text, bool keepText, const std::string& id, bool allowMigration,
-    const ::google::protobuf::Map<TStringType, Ydb::Type>& types)
+    const ::google::protobuf::Map<TStringType, NYdbProtos::Type>& types)
     : Session_(session)
     , Id_(id)
     , ParameterTypes_(types)
@@ -45,7 +45,7 @@ const std::string& TDataQuery::TImpl::GetId() const {
     return Id_;
 }
 
-const ::google::protobuf::Map<TStringType, Ydb::Type>& TDataQuery::TImpl::GetParameterTypes() const {
+const ::google::protobuf::Map<TStringType, NYdbProtos::Type>& TDataQuery::TImpl::GetParameterTypes() const {
     return ParameterTypes_;
 }
 

@@ -41,16 +41,16 @@ TDeferredAction::TDeferredAction(const std::string& operationId,
 void TDeferredAction::OnAlarm() {
     Y_ABORT_UNLESS(Connection_);
 
-    Ydb::Operations::GetOperationRequest getOperationRequest;
+    NYdbProtos::Operations::GetOperationRequest getOperationRequest;
     getOperationRequest.set_id(TStringType{OperationId_});
 
     TRpcRequestSettings settings;
     settings.PreferredEndpoint = TEndpointKey(Endpoint_, 0);
     
-    Connection_->RunDeferred<Ydb::Operation::V1::OperationService, Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>(
+    Connection_->RunDeferred<NYdbProtos::Operation::V1::OperationService, NYdbProtos::Operations::GetOperationRequest, NYdbProtos::Operations::GetOperationResponse>(
         std::move(getOperationRequest),
         std::move(UserResponseCb_),
-        &Ydb::Operation::V1::OperationService::Stub::AsyncGetOperation,
+        &NYdbProtos::Operation::V1::OperationService::Stub::AsyncGetOperation,
         DbDriverState_,
         NextDelay_,
         settings,
@@ -63,7 +63,7 @@ void TDeferredAction::OnError() {
     NYdbGrpc::TGrpcStatus status = {"Deferred timer interrupted", -1, true};
     DbDriverState_->StatCollector.IncDiscoveryFailDueTransportError();
 
-    auto resp = new TGRpcErrorResponse<Ydb::Operations::Operation>(
+    auto resp = new TGRpcErrorResponse<NYdbProtos::Operations::Operation>(
         std::move(status),
         std::move(UserResponseCb_),
         Connection_,

@@ -57,7 +57,7 @@ bool TFederatedDbObserverImpl::IsStale() const {
     return PromiseToInitState.HasValue() && !FederatedDbState->Status.IsSuccess();
 }
 
-Ydb::FederationDiscovery::ListFederationDatabasesRequest TFederatedDbObserverImpl::ComposeRequest() const {
+NYdbProtos::FederationDiscovery::ListFederationDatabasesRequest TFederatedDbObserverImpl::ComposeRequest() const {
     return {};
 }
 
@@ -74,7 +74,7 @@ void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
     auto extractor = [selfCtx = SelfContext]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
         if (auto self = selfCtx->LockShared()) {
-            Ydb::FederationDiscovery::ListFederationDatabasesResult result;
+            NYdbProtos::FederationDiscovery::ListFederationDatabasesResult result;
             if (any) {
                 any->UnpackTo(&result);
             }
@@ -82,12 +82,12 @@ void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
         }
     };
 
-    Connections_->RunDeferred<Ydb::FederationDiscovery::V1::FederationDiscoveryService,
-                             Ydb::FederationDiscovery::ListFederationDatabasesRequest,
-                             Ydb::FederationDiscovery::ListFederationDatabasesResponse>(
+    Connections_->RunDeferred<NYdbProtos::FederationDiscovery::V1::FederationDiscoveryService,
+                             NYdbProtos::FederationDiscovery::ListFederationDatabasesRequest,
+                             NYdbProtos::FederationDiscovery::ListFederationDatabasesResponse>(
         ComposeRequest(),
         std::move(extractor),
-        &Ydb::FederationDiscovery::V1::FederationDiscoveryService::Stub::AsyncListFederationDatabases,
+        &NYdbProtos::FederationDiscovery::V1::FederationDiscoveryService::Stub::AsyncListFederationDatabases,
         DbDriverState_,
         {},  // no polling unready operations, so no need in delay parameter
         RpcSettings,
@@ -120,7 +120,7 @@ void TFederatedDbObserverImpl::ScheduleFederationDiscoveryImpl(TDuration delay) 
 
 }
 
-void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::FederationDiscovery::ListFederationDatabasesResult&& result) {
+void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, NYdbProtos::FederationDiscovery::ListFederationDatabasesResult&& result) {
     {
         std::lock_guard guard(Lock);
         if (Stopping) {
@@ -139,10 +139,10 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
             auto dbState = Connections_->GetDriverState(std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt);
             FederatedDbState->ControlPlaneEndpoint = dbState->DiscoveryEndpoint;
             // FederatedDbState->SelfLocation = ???;
-            auto db = std::make_shared<Ydb::FederationDiscovery::DatabaseInfo>();
+            auto db = std::make_shared<NYdbProtos::FederationDiscovery::DatabaseInfo>();
             db->set_path(TStringType{DbDriverState_->Database});
             db->set_endpoint(TStringType{DbDriverState_->DiscoveryEndpoint});
-            db->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
+            db->set_status(NYdbProtos::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
             db->set_weight(100);
             FederatedDbState->DbInfos.emplace_back(std::move(db));
 

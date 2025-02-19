@@ -30,7 +30,7 @@ public:
         std::weak_ptr<ISessionClient> SessionClient;
     };
 
-    using TResponse = Ydb::Query::SessionState;
+    using TResponse = NYdbProtos::Query::SessionState;
     using TStreamProcessorPtr = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
     TImpl(TStreamProcessorPtr ptr, const std::string& id, const std::string& endpoint, std::weak_ptr<ISessionClient> client);
     ~TImpl();

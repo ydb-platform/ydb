@@ -4,7 +4,7 @@
 
 class TDuration;
 
-namespace Ydb {
+YDB_PROTOS_NAMESPACE {
     namespace TableStats {
         class QueryStats;
     }

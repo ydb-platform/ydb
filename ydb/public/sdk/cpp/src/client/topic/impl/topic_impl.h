@@ -42,7 +42,7 @@ public:
     {
     }
 
-    static void ConvertAlterConsumerToProto(const TAlterConsumerSettings& settings, Ydb::Topic::AlterConsumer& consumerProto) {
+    static void ConvertAlterConsumerToProto(const TAlterConsumerSettings& settings, NYdbProtos::Topic::AlterConsumer& consumerProto) {
         consumerProto.set_name(TStringType{settings.ConsumerName_});
         if (settings.SetImportant_)
             consumerProto.set_set_important(*settings.SetImportant_);
@@ -51,7 +51,7 @@ public:
 
         if (settings.SetSupportedCodecs_) {
             for (const auto& codec : *settings.SetSupportedCodecs_) {
-                consumerProto.mutable_set_supported_codecs()->add_codecs((static_cast<Ydb::Topic::Codec>(codec)));
+                consumerProto.mutable_set_supported_codecs()->add_codecs((static_cast<NYdbProtos::Topic::Codec>(codec)));
             }
         }
 
@@ -61,8 +61,8 @@ public:
     }
 
 
-    static Ydb::Topic::CreateTopicRequest MakePropsCreateRequest(const std::string& path, const TCreateTopicSettings& settings) {
-        Ydb::Topic::CreateTopicRequest request = MakeOperationRequest<Ydb::Topic::CreateTopicRequest>(settings);
+    static NYdbProtos::Topic::CreateTopicRequest MakePropsCreateRequest(const std::string& path, const TCreateTopicSettings& settings) {
+        NYdbProtos::Topic::CreateTopicRequest request = MakeOperationRequest<NYdbProtos::Topic::CreateTopicRequest>(settings);
         request.set_path(TStringType{path});
         settings.SerializeTo(request);
         return request;
@@ -71,15 +71,15 @@ public:
     TAsyncStatus CreateTopic(const std::string& path, const TCreateTopicSettings& settings) {
         auto request = MakePropsCreateRequest(path, settings);
 
-        return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+        return RunSimple<NYdbProtos::Topic::V1::TopicService, NYdbProtos::Topic::CreateTopicRequest, NYdbProtos::Topic::CreateTopicResponse>(
             std::move(request),
-            &Ydb::Topic::V1::TopicService::Stub::AsyncCreateTopic,
+            &NYdbProtos::Topic::V1::TopicService::Stub::AsyncCreateTopic,
             TRpcRequestSettings::Make(settings));
     }
 
 
-    static Ydb::Topic::AlterTopicRequest MakePropsAlterRequest(const std::string& path, const TAlterTopicSettings& settings) {
-        Ydb::Topic::AlterTopicRequest request = MakeOperationRequest<Ydb::Topic::AlterTopicRequest>(settings);
+    static NYdbProtos::Topic::AlterTopicRequest MakePropsAlterRequest(const std::string& path, const TAlterTopicSettings& settings) {
+        NYdbProtos::Topic::AlterTopicRequest request = MakeOperationRequest<NYdbProtos::Topic::AlterTopicRequest>(settings);
         request.set_path(TStringType{path});
 
         if (settings.AlterPartitioningSettings_) {
@@ -91,7 +91,7 @@ public:
             }
             if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_) {
                 if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->Strategy_) {
-                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->set_set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(*settings.AlterPartitioningSettings_->AutoPartitioningSettings_->Strategy_));
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->set_set_strategy(static_cast<NYdbProtos::Topic::AutoPartitioningStrategy>(*settings.AlterPartitioningSettings_->AutoPartitioningSettings_->Strategy_));
                 }
                 if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->DownUtilizationPercent_) {
                     request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_down_utilization_percent(*settings.AlterPartitioningSettings_->AutoPartitioningSettings_->DownUtilizationPercent_);
@@ -109,7 +109,7 @@ public:
         }
         if (settings.SetSupportedCodecs_) {
             for (const auto& codec : *settings.SetSupportedCodecs_) {
-                request.mutable_set_supported_codecs()->add_codecs((static_cast<Ydb::Topic::Codec>(codec)));
+                request.mutable_set_supported_codecs()->add_codecs((static_cast<NYdbProtos::Topic::Codec>(codec)));
             }
         }
         if (settings.SetPartitionWriteSpeedBytesPerSecond_) {
@@ -138,7 +138,7 @@ public:
         }
 
         for (const auto& consumer : settings.AlterConsumers_) {
-            Ydb::Topic::AlterConsumer& consumerProto = *request.add_alter_consumers();
+            NYdbProtos::Topic::AlterConsumer& consumerProto = *request.add_alter_consumers();
             ConvertAlterConsumerToProto(consumer, consumerProto);
         }
 
@@ -149,25 +149,25 @@ public:
     TAsyncStatus AlterTopic(const std::string& path, const TAlterTopicSettings& settings) {
         auto request = MakePropsAlterRequest(path, settings);
 
-        return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+        return RunSimple<NYdbProtos::Topic::V1::TopicService, NYdbProtos::Topic::AlterTopicRequest, NYdbProtos::Topic::AlterTopicResponse>(
             std::move(request),
-            &Ydb::Topic::V1::TopicService::Stub::AsyncAlterTopic,
+            &NYdbProtos::Topic::V1::TopicService::Stub::AsyncAlterTopic,
             TRpcRequestSettings::Make(settings));
     }
 
 
     TAsyncStatus DropTopic(const std::string& path, const TDropTopicSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Topic::DropTopicRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Topic::DropTopicRequest>(settings);
         request.set_path(TStringType{path});
 
-        return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::DropTopicRequest, Ydb::Topic::DropTopicResponse>(
+        return RunSimple<NYdbProtos::Topic::V1::TopicService, NYdbProtos::Topic::DropTopicRequest, NYdbProtos::Topic::DropTopicResponse>(
             std::move(request),
-            &Ydb::Topic::V1::TopicService::Stub::AsyncDropTopic,
+            &NYdbProtos::Topic::V1::TopicService::Stub::AsyncDropTopic,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncDescribeTopicResult DescribeTopic(const std::string& path, const TDescribeTopicSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Topic::DescribeTopicRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Topic::DescribeTopicRequest>(settings);
         request.set_path(TStringType{path});
 
         if (settings.IncludeStats_) {
@@ -182,7 +182,7 @@ public:
 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::Topic::DescribeTopicResult result;
+                NYdbProtos::Topic::DescribeTopicResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
@@ -191,10 +191,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::Topic::V1::TopicService, Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+        Connections_->RunDeferred<NYdbProtos::Topic::V1::TopicService, NYdbProtos::Topic::DescribeTopicRequest, NYdbProtos::Topic::DescribeTopicResponse>(
             std::move(request),
             extractor,
-            &Ydb::Topic::V1::TopicService::Stub::AsyncDescribeTopic,
+            &NYdbProtos::Topic::V1::TopicService::Stub::AsyncDescribeTopic,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -203,7 +203,7 @@ public:
     }
 
     TAsyncDescribeConsumerResult DescribeConsumer(const std::string& path, const std::string& consumer, const TDescribeConsumerSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Topic::DescribeConsumerRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Topic::DescribeConsumerRequest>(settings);
         request.set_path(TStringType{path});
         request.set_consumer(TStringType{consumer});
 
@@ -219,7 +219,7 @@ public:
 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::Topic::DescribeConsumerResult result;
+                NYdbProtos::Topic::DescribeConsumerResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
@@ -228,10 +228,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::Topic::V1::TopicService, Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+        Connections_->RunDeferred<NYdbProtos::Topic::V1::TopicService, NYdbProtos::Topic::DescribeConsumerRequest, NYdbProtos::Topic::DescribeConsumerResponse>(
             std::move(request),
             extractor,
-            &Ydb::Topic::V1::TopicService::Stub::AsyncDescribeConsumer,
+            &NYdbProtos::Topic::V1::TopicService::Stub::AsyncDescribeConsumer,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -240,7 +240,7 @@ public:
     }
 
     TAsyncDescribePartitionResult DescribePartition(const std::string& path, i64 partitionId, const TDescribePartitionSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Topic::DescribePartitionRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Topic::DescribePartitionRequest>(settings);
         request.set_path(TStringType{path});
         request.set_partition_id(partitionId);
 
@@ -255,7 +255,7 @@ public:
         auto promise = NThreading::NewPromise<TDescribePartitionResult>();
 
         auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
-            Ydb::Topic::DescribePartitionResult result;
+            NYdbProtos::Topic::DescribePartitionResult result;
             if (any) {
                 any->UnpackTo(&result);
             }
@@ -264,10 +264,10 @@ public:
             promise.SetValue(std::move(val));
         };
 
-        Connections_->RunDeferred<Ydb::Topic::V1::TopicService, Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+        Connections_->RunDeferred<NYdbProtos::Topic::V1::TopicService, NYdbProtos::Topic::DescribePartitionRequest, NYdbProtos::Topic::DescribePartitionResponse>(
             std::move(request),
             extractor,
-            &Ydb::Topic::V1::TopicService::Stub::AsyncDescribePartition,
+            &NYdbProtos::Topic::V1::TopicService::Stub::AsyncDescribePartition,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -277,15 +277,15 @@ public:
 
     TAsyncStatus CommitOffset(const std::string& path, ui64 partitionId, const std::string& consumerName, ui64 offset,
         const TCommitOffsetSettings& settings) {
-        Ydb::Topic::CommitOffsetRequest request = MakeOperationRequest<Ydb::Topic::CommitOffsetRequest>(settings);
+        NYdbProtos::Topic::CommitOffsetRequest request = MakeOperationRequest<NYdbProtos::Topic::CommitOffsetRequest>(settings);
         request.set_path(TStringType{path});
         request.set_partition_id(partitionId);
         request.set_consumer(TStringType{consumerName});
         request.set_offset(offset);
 
-        return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::CommitOffsetRequest, Ydb::Topic::CommitOffsetResponse>(
+        return RunSimple<NYdbProtos::Topic::V1::TopicService, NYdbProtos::Topic::CommitOffsetRequest, NYdbProtos::Topic::CommitOffsetResponse>(
             std::move(request),
-            &Ydb::Topic::V1::TopicService::Stub::AsyncCommitOffset,
+            &NYdbProtos::Topic::V1::TopicService::Stub::AsyncCommitOffset,
             TRpcRequestSettings::Make(settings));
     }
 
@@ -294,7 +294,7 @@ public:
                                             const std::string& consumerName,
                                             const TUpdateOffsetsInTransactionSettings& settings)
     {
-        auto request = MakeOperationRequest<Ydb::Topic::UpdateOffsetsInTransactionRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Topic::UpdateOffsetsInTransactionRequest>(settings);
 
         request.mutable_tx()->set_id(TStringType{GetTxId(tx)});
         request.mutable_tx()->set_session(TStringType{GetSessionId(tx)});
@@ -317,9 +317,9 @@ public:
 
         request.set_consumer(TStringType{consumerName});
 
-        return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::UpdateOffsetsInTransactionRequest, Ydb::Topic::UpdateOffsetsInTransactionResponse>(
+        return RunSimple<NYdbProtos::Topic::V1::TopicService, NYdbProtos::Topic::UpdateOffsetsInTransactionRequest, NYdbProtos::Topic::UpdateOffsetsInTransactionResponse>(
             std::move(request),
-            &Ydb::Topic::V1::TopicService::Stub::AsyncUpdateOffsetsInTransaction,
+            &NYdbProtos::Topic::V1::TopicService::Stub::AsyncUpdateOffsetsInTransaction,
             TRpcRequestSettings::Make(settings)
         );
     }
@@ -330,14 +330,14 @@ public:
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
 
     using IReadSessionConnectionProcessorFactory =
-        ISessionConnectionProcessorFactory<Ydb::Topic::StreamReadMessage::FromClient,
-                                           Ydb::Topic::StreamReadMessage::FromServer>;
+        ISessionConnectionProcessorFactory<NYdbProtos::Topic::StreamReadMessage::FromClient,
+                                           NYdbProtos::Topic::StreamReadMessage::FromServer>;
 
     std::shared_ptr<IReadSessionConnectionProcessorFactory> CreateReadSessionConnectionProcessorFactory();
 
     using IWriteSessionConnectionProcessorFactory =
-        ISessionConnectionProcessorFactory<Ydb::Topic::StreamWriteMessage::FromClient,
-                                           Ydb::Topic::StreamWriteMessage::FromServer>;
+        ISessionConnectionProcessorFactory<NYdbProtos::Topic::StreamWriteMessage::FromClient,
+                                           NYdbProtos::Topic::StreamWriteMessage::FromServer>;
 
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> CreateWriteSessionConnectionProcessorFactory();
 

@@ -84,13 +84,13 @@ private:
 
 class TExplainYqlResult : public TStatus {
 public:
-    TExplainYqlResult(TStatus&& status, const ::google::protobuf::Map<TStringType, Ydb::Type>&& types, std::string&& plan);
+    TExplainYqlResult(TStatus&& status, const ::google::protobuf::Map<TStringType, NYdbProtos::Type>&& types, std::string&& plan);
 
     std::map<std::string, TType> GetParameterTypes() const;
     const std::string& GetPlan() const;
 
 private:
-    ::google::protobuf::Map<TStringType, Ydb::Type> ParameterTypes_;
+    ::google::protobuf::Map<TStringType, NYdbProtos::Type> ParameterTypes_;
     std::string Plan_;
 };
 
@@ -101,7 +101,7 @@ using TAsyncExplainYqlResult = NThreading::TFuture<TExplainYqlResult>;
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TExecuteYqlRequestSettings : public TOperationRequestSettings<TExecuteYqlRequestSettings> {
-    FLUENT_SETTING_DEFAULT(Ydb::Query::Syntax, Syntax, Ydb::Query::SYNTAX_YQL_V1);
+    FLUENT_SETTING_DEFAULT(NYdbProtos::Query::Syntax, Syntax, NYdbProtos::Query::SYNTAX_YQL_V1);
     FLUENT_SETTING_DEFAULT(NTable::ECollectQueryStatsMode, CollectQueryStats, NTable::ECollectQueryStatsMode::None);
 };
 

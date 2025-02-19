@@ -55,8 +55,8 @@ size_t CalcDataSize(const typename TEvent::TEvent& event) {
 
 template <class TMessage>
 bool IsErrorMessage(const TMessage& serverMessage) {
-    const Ydb::StatusIds::StatusCode status = serverMessage.status();
-    return status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    const NYdbProtos::StatusIds::StatusCode status = serverMessage.status();
+    return status != NYdbProtos::StatusIds::SUCCESS && status != NYdbProtos::StatusIds::STATUS_CODE_UNSPECIFIED;
 }
 
 template <class TMessage>

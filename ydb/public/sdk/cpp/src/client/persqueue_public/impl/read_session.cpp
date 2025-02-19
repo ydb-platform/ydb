@@ -69,8 +69,8 @@ TReadSession::~TReadSession() {
     }
 }
 
-Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest TReadSession::MakeClusterDiscoveryRequest() const {
-    Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest req;
+NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersRequest TReadSession::MakeClusterDiscoveryRequest() const {
+    NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersRequest req;
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* params = req.add_read_sessions();
         params->set_topic(TStringType{topic.Path_});
@@ -138,7 +138,7 @@ void TReadSession::StartClusterDiscovery() {
             return;
         }
 
-        Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult result;
+        NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersResult result;
         if (any) {
             any->UnpackTo(&result);
         }
@@ -148,12 +148,12 @@ void TReadSession::StartClusterDiscovery() {
 
     auto rpcSettings = TRpcRequestSettings::Make(Settings);
     rpcSettings.ClientTimeout = TDuration::Seconds(5); // TODO: make client timeout setting
-    Connections->RunDeferred<Ydb::PersQueue::V1::ClusterDiscoveryService,
-                             Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest,
-                             Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResponse>(
+    Connections->RunDeferred<NYdbProtos::PersQueue::V1::ClusterDiscoveryService,
+                             NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersRequest,
+                             NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersResponse>(
         MakeClusterDiscoveryRequest(),
         std::move(extractor),
-        &Ydb::PersQueue::V1::ClusterDiscoveryService::Stub::AsyncDiscoverClusters,
+        &NYdbProtos::PersQueue::V1::ClusterDiscoveryService::Stub::AsyncDiscoverClusters,
         DbDriverState,
         INITIAL_DEFERRED_CALL_DELAY,
         rpcSettings); // TODO: make client timeout setting
@@ -218,7 +218,7 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions& deferred) {
     }
 }
 
-void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result) {
+void TReadSession::OnClusterDiscovery(const TStatus& status, const NYdbProtos::PersQueue::ClusterDiscovery::DiscoverClustersResult& result) {
     TDeferredActions deferred;
     with_lock(Lock) {
         if (Aborting) {
@@ -268,8 +268,8 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
         EStatus errorStatus = EStatus::INTERNAL_ERROR;
         for (size_t topicIndex = 0; topicIndex < Settings.Topics_.size(); ++topicIndex) {
             const TTopicReadSettings& topicSettings = Settings.Topics_[topicIndex];
-            const Ydb::PersQueue::ClusterDiscovery::ReadSessionClusters& readSessionClusters = result.read_sessions_clusters(topicIndex);
-            for (const Ydb::PersQueue::ClusterDiscovery::ClusterInfo& cluster : readSessionClusters.clusters()) {
+            const NYdbProtos::PersQueue::ClusterDiscovery::ReadSessionClusters& readSessionClusters = result.read_sessions_clusters(topicIndex);
+            for (const NYdbProtos::PersQueue::ClusterDiscovery::ClusterInfo& cluster : readSessionClusters.clusters()) {
                 std::string normalizedName = cluster.name();
                 NUtils::ToLower(normalizedName);
                 decltype(ClusterSessions)::iterator clusterSessionInfoIter;

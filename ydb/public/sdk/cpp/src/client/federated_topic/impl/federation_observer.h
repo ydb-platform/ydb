@@ -20,7 +20,7 @@ namespace NYdb::inline V3::NFederatedTopic {
 
 struct TFederatedDbState {
 public:
-    using TDbInfo = Ydb::FederationDiscovery::DatabaseInfo;
+    using TDbInfo = NYdbProtos::FederationDiscovery::DatabaseInfo;
 
     TStatus Status;
     std::string ControlPlaneEndpoint;
@@ -29,7 +29,7 @@ public:
 
 public:
     TFederatedDbState() : Status(EStatus::STATUS_UNDEFINED, {}) {}
-    TFederatedDbState(Ydb::FederationDiscovery::ListFederationDatabasesResult result, TStatus status)
+    TFederatedDbState(NYdbProtos::FederationDiscovery::ListFederationDatabasesResult result, TStatus status)
         : Status(std::move(status))
         , ControlPlaneEndpoint(result.control_plane_endpoint())
         , SelfLocation(result.self_location())
@@ -75,10 +75,10 @@ public:
     bool IsStale() const;
 
 private:
-    Ydb::FederationDiscovery::ListFederationDatabasesRequest ComposeRequest() const;
+    NYdbProtos::FederationDiscovery::ListFederationDatabasesRequest ComposeRequest() const;
     void RunFederationDiscoveryImpl();
     void ScheduleFederationDiscoveryImpl(TDuration delay);
-    void OnFederationDiscovery(TStatus&& status, Ydb::FederationDiscovery::ListFederationDatabasesResult&& result);
+    void OnFederationDiscovery(TStatus&& status, NYdbProtos::FederationDiscovery::ListFederationDatabasesResult&& result);
 
 private:
     std::shared_ptr<TFederatedDbState> FederatedDbState;

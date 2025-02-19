@@ -35,7 +35,7 @@ TCreateSessionSettings::TCreateSessionSettings() {
     ClientTimeout_ = TDuration::Seconds(5);
 };
 
-static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::TransactionSettings* proto)
+static void SetTxSettings(const TTxSettings& txSettings, NYdbProtos::Query::TransactionSettings* proto)
 {
     switch (txSettings.GetMode()) {
         case TTxSettings::TS_SERIALIZABLE_RW:
@@ -89,12 +89,12 @@ public:
     }
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script, const std::optional<TParams>& params, const TExecuteScriptSettings& settings) {
-        using namespace Ydb::Query;
+        using namespace NYdbProtos::Query;
         auto request = MakeOperationRequest<ExecuteScriptRequest>(settings);
-        request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
-        request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
+        request.set_exec_mode(::NYdbProtos::Query::ExecMode(settings.ExecMode_));
+        request.set_stats_mode(::NYdbProtos::Query::StatsMode(settings.StatsMode_));
         request.set_pool_id(TStringType{settings.ResourcePool_});
-        request.mutable_script_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
+        request.mutable_script_content()->set_syntax(::NYdbProtos::Query::Syntax(settings.Syntax_));
         request.mutable_script_content()->set_text(TStringType{script});
         SetDuration(settings.ResultsTtl_, *request.mutable_results_ttl());
     
@@ -105,7 +105,7 @@ public:
         auto promise = NThreading::NewPromise<TScriptExecutionOperation>();
 
         auto responseCb = [promise]
-            (Ydb::Operations::Operation* response, TPlainStatus status) mutable {
+            (NYdbProtos::Operations::Operation* response, TPlainStatus status) mutable {
                 try {
                     if (response) {
                         NYdb::NIssue::TIssues opIssues;
@@ -121,7 +121,7 @@ public:
                 }
             };
 
-        Connections_->Run<V1::QueryService, ExecuteScriptRequest, Ydb::Operations::Operation>(
+        Connections_->Run<V1::QueryService, ExecuteScriptRequest, NYdbProtos::Operations::Operation>(
             std::move(request),
             responseCb,
             &V1::QueryService::Stub::AsyncExecuteScript,
@@ -132,22 +132,22 @@ public:
     }
 
     TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex, const TFetchScriptResultsSettings& settings) {
-        auto request = MakeRequest<Ydb::Query::FetchScriptResultsRequest>();
+        auto request = MakeRequest<NYdbProtos::Query::FetchScriptResultsRequest>();
         request.set_operation_id(TStringType{operationId.ToString()});
         request.set_result_set_index(resultSetIndex);
         return FetchScriptResultsImpl(std::move(request), settings);
     }
 
     TAsyncStatus RollbackTransaction(const std::string& txId, const NYdb::NQuery::TRollbackTxSettings& settings, const TSession& session) {
-        using namespace Ydb::Query;
-        auto request = MakeRequest<Ydb::Query::RollbackTransactionRequest>();
+        using namespace NYdbProtos::Query;
+        auto request = MakeRequest<NYdbProtos::Query::RollbackTransactionRequest>();
         request.set_session_id(TStringType{session.GetId()});
         request.set_tx_id(TStringType{txId});
 
         auto promise = NThreading::NewPromise<TStatus>();
 
         auto responseCb = [promise, session]
-            (Ydb::Query::RollbackTransactionResponse* response, TPlainStatus status) mutable {
+            (NYdbProtos::Query::RollbackTransactionResponse* response, TPlainStatus status) mutable {
                 try {
                     if (response) {
                         NYdb::NIssue::TIssues opIssues;
@@ -175,15 +175,15 @@ public:
     }
 
     TAsyncCommitTransactionResult CommitTransaction(const std::string& txId, const NYdb::NQuery::TCommitTxSettings& settings, const TSession& session) {
-        using namespace Ydb::Query;
-        auto request = MakeRequest<Ydb::Query::CommitTransactionRequest>();
+        using namespace NYdbProtos::Query;
+        auto request = MakeRequest<NYdbProtos::Query::CommitTransactionRequest>();
         request.set_session_id(TStringType{session.GetId()});
         request.set_tx_id(TStringType{txId});
 
         auto promise = NThreading::NewPromise<TCommitTransactionResult>();
 
         auto responseCb = [promise, session]
-            (Ydb::Query::CommitTransactionResponse* response, TPlainStatus status) mutable {
+            (NYdbProtos::Query::CommitTransactionResponse* response, TPlainStatus status) mutable {
                 try {
                     if (response) {
                         NYdb::NIssue::TIssues opIssues;
@@ -214,15 +214,15 @@ public:
     TAsyncBeginTransactionResult BeginTransaction(const TTxSettings& txSettings,
         const TBeginTxSettings& settings, const TSession& session)
     {
-        using namespace Ydb::Query;
-        auto request = MakeRequest<Ydb::Query::BeginTransactionRequest>();
+        using namespace NYdbProtos::Query;
+        auto request = MakeRequest<NYdbProtos::Query::BeginTransactionRequest>();
         request.set_session_id(TStringType{session.GetId()});
         SetTxSettings(txSettings, request.mutable_tx_settings());
 
         auto promise = NThreading::NewPromise<TBeginTransactionResult>();
 
         auto responseCb = [promise, session]
-            (Ydb::Query::BeginTransactionResponse* response, TPlainStatus status) mutable {
+            (NYdbProtos::Query::BeginTransactionResponse* response, TPlainStatus status) mutable {
                 try {
                     if (response) {
                         NYdb::NIssue::TIssues opIssues;
@@ -252,8 +252,8 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncFetchScriptResultsResult FetchScriptResultsImpl(Ydb::Query::FetchScriptResultsRequest&& request, const TFetchScriptResultsSettings& settings) {
-        using namespace Ydb::Query;
+    TAsyncFetchScriptResultsResult FetchScriptResultsImpl(NYdbProtos::Query::FetchScriptResultsRequest&& request, const TFetchScriptResultsSettings& settings) {
+        using namespace NYdbProtos::Query;
         if (!settings.FetchToken_.empty()) {
             request.set_fetch_token(TStringType{settings.FetchToken_});
         }
@@ -335,12 +335,12 @@ public:
         return true;
     }
 
-    void DoAttachSession(Ydb::Query::CreateSessionResponse* resp,
+    void DoAttachSession(NYdbProtos::Query::CreateSessionResponse* resp,
         NThreading::TPromise<TCreateSessionResult> promise, const std::string& endpoint,
         std::shared_ptr<TQueryClient::TImpl> client)
     {
         using TStreamProcessorPtr = TSession::TImpl::TStreamProcessorPtr;
-        Ydb::Query::AttachSessionRequest request;
+        NYdbProtos::Query::AttachSessionRequest request;
         const auto sessionId = resp->session_id();
         request.set_session_id(sessionId);
 
@@ -351,9 +351,9 @@ public:
         rpcSettings.PreferredEndpoint = TEndpointKey(endpoint, GetNodeIdFromSession(sessionId));
 
         Connections_->StartReadStream<
-            Ydb::Query::V1::QueryService,
-            Ydb::Query::AttachSessionRequest,
-            Ydb::Query::SessionState>
+            NYdbProtos::Query::V1::QueryService,
+            NYdbProtos::Query::AttachSessionRequest,
+            NYdbProtos::Query::SessionState>
         (
             std::move(request),
             [args] (TPlainStatus status, TStreamProcessorPtr processor) mutable {
@@ -364,23 +364,23 @@ public:
                 args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession(args->Client)));
             }
         },
-        &Ydb::Query::V1::QueryService::Stub::AsyncAttachSession,
+        &NYdbProtos::Query::V1::QueryService::Stub::AsyncAttachSession,
         DbDriverState_,
         rpcSettings);
     }
 
     TAsyncCreateSessionResult CreateAttachedSession(TDuration timeout) {
-        using namespace Ydb::Query;
+        using namespace NYdbProtos::Query;
 
-        Ydb::Query::CreateSessionRequest request;
+        NYdbProtos::Query::CreateSessionRequest request;
 
         auto promise = NThreading::NewPromise<TCreateSessionResult>();
 
         auto self = shared_from_this();
 
-        auto extractor = [promise, self] (Ydb::Query::CreateSessionResponse* resp, TPlainStatus status) mutable {
+        auto extractor = [promise, self] (NYdbProtos::Query::CreateSessionResponse* resp, TPlainStatus status) mutable {
             if (resp) {
-                if (resp->status() != Ydb::StatusIds::SUCCESS) {
+                if (resp->status() != NYdbProtos::StatusIds::SUCCESS) {
                     NYdb::NIssue::TIssues opIssues;
                     NYdb::NIssue::IssuesFromMessage(resp->issues(), opIssues);
                     TStatus st(static_cast<EStatus>(resp->status()), std::move(opIssues));

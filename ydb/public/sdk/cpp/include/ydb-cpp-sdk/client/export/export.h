@@ -52,7 +52,7 @@ public:
 
 public:
     using TOperation::TOperation;
-    TExportToYtResponse(TStatus&& status, Ydb::Operations::Operation&& operation);
+    TExportToYtResponse(TStatus&& status, NYdbProtos::Operations::Operation&& operation);
 
     const TMetadata& Metadata() const;
 
@@ -101,7 +101,7 @@ public:
 
 public:
     using TOperation::TOperation;
-    TExportToS3Response(TStatus&& status, Ydb::Operations::Operation&& operation);
+    TExportToS3Response(TStatus&& status, NYdbProtos::Operations::Operation&& operation);
 
     const TMetadata& Metadata() const;
 

@@ -407,11 +407,11 @@ namespace NYdb::NTopic::NTests {
             };
 
             std::vector<Expectation> expectations{
-                {0, 0, 0, EStatus::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ACCESS_DENIED},
-                {0, 0, 1, EStatus::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ACCESS_DENIED},
-                {0, 1, 0, EStatus::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ACCESS_DENIED},
-                {0, 1, 1, EStatus::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ACCESS_DENIED},
-                {1, 0, 0, EStatus::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ACCESS_DENIED},
+                {0, 0, 0, EStatus::SCHEME_ERROR, NYdbProtos::PersQueue::ErrorCode::ACCESS_DENIED},
+                {0, 0, 1, EStatus::SCHEME_ERROR, NYdbProtos::PersQueue::ErrorCode::ACCESS_DENIED},
+                {0, 1, 0, EStatus::SCHEME_ERROR, NYdbProtos::PersQueue::ErrorCode::ACCESS_DENIED},
+                {0, 1, 1, EStatus::SCHEME_ERROR, NYdbProtos::PersQueue::ErrorCode::ACCESS_DENIED},
+                {1, 0, 0, EStatus::SCHEME_ERROR, NYdbProtos::PersQueue::ErrorCode::ACCESS_DENIED},
                 {1, 0, 1, EStatus::SUCCESS, 0},
                 {1, 1, 0, EStatus::SUCCESS, 0},
                 {1, 1, 1, EStatus::SUCCESS, 0},

@@ -57,13 +57,13 @@ public:
         std::string preferredLocation = std::string());
     TAsyncKeepAliveResult KeepAlive(const TSession::TImpl* session, const TKeepAliveSettings& settings);
 
-    TFuture<TStatus> CreateTable(Ydb::Table::CreateTableRequest&& request, const TCreateTableSettings& settings);
-    TFuture<TStatus> AlterTable(Ydb::Table::AlterTableRequest&& request, const TAlterTableSettings& settings);
-    TAsyncOperation AlterTableLong(Ydb::Table::AlterTableRequest&& request, const TAlterTableSettings& settings);
+    TFuture<TStatus> CreateTable(NYdbProtos::Table::CreateTableRequest&& request, const TCreateTableSettings& settings);
+    TFuture<TStatus> AlterTable(NYdbProtos::Table::AlterTableRequest&& request, const TAlterTableSettings& settings);
+    TAsyncOperation AlterTableLong(NYdbProtos::Table::AlterTableRequest&& request, const TAlterTableSettings& settings);
     TFuture<TStatus> CopyTable(const std::string& sessionId, const std::string& src, const std::string& dst,
         const TCopyTableSettings& settings);
-    TFuture<TStatus> CopyTables(Ydb::Table::CopyTablesRequest&& request, const TCopyTablesSettings& settings);
-    TFuture<TStatus> RenameTables(Ydb::Table::RenameTablesRequest&& request, const TRenameTablesSettings& settings);
+    TFuture<TStatus> CopyTables(NYdbProtos::Table::CopyTablesRequest&& request, const TCopyTablesSettings& settings);
+    TFuture<TStatus> RenameTables(NYdbProtos::Table::RenameTablesRequest&& request, const TRenameTablesSettings& settings);
     TFuture<TStatus> DropTable(const std::string& sessionId, const std::string& path, const TDropTableSettings& settings);
     TAsyncDescribeTableResult DescribeTable(const std::string& sessionId, const std::string& path, const TDescribeTableSettings& settings);
     TAsyncDescribeExternalDataSourceResult DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings);
@@ -119,7 +119,7 @@ public:
     TAsyncExplainDataQueryResult ExplainDataQuery(const TSession& session, const std::string& query,
         const TExplainDataQuerySettings& settings);
 
-    static void SetTypedValue(Ydb::TypedValue* protoValue, const TValue& value);
+    static void SetTypedValue(NYdbProtos::TypedValue* protoValue, const TValue& value);
 
     NThreading::TFuture<std::pair<TPlainStatus, TReadTableStreamProcessorPtr>> ReadTable(
         const std::string& sessionId,
@@ -141,10 +141,10 @@ public:
         const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings);
 
     TFuture<std::pair<TPlainStatus, TScanQueryProcessorPtr>> StreamExecuteScanQueryInternal(const std::string& query,
-        const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
+        const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>* params,
         const TStreamExecScanQuerySettings& settings);
     TAsyncScanQueryPartIterator StreamExecuteScanQuery(const std::string& query,
-        const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
+        const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>* params,
         const TStreamExecScanQuerySettings& settings);
     void CollectRetryStatAsync(EStatus status);
     void CollectRetryStatSync(EStatus status);
@@ -154,19 +154,19 @@ public:
 
 private:
     static void SetParams(
-        ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
-        Ydb::Table::ExecuteDataQueryRequest* request);
+        ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>* params,
+        NYdbProtos::Table::ExecuteDataQueryRequest* request);
 
     static void SetParams(
-        const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& params,
-        Ydb::Table::ExecuteDataQueryRequest* request);
+        const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>& params,
+        NYdbProtos::Table::ExecuteDataQueryRequest* request);
 
     static void CollectParams(
-        ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
+        ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>* params,
         NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> histgoram);
 
     static void CollectParams(
-        const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& params,
+        const ::google::protobuf::Map<TStringType, NYdbProtos::TypedValue>& params,
         NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> histgoram);
 
     static void CollectQuerySize(const std::string& query, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>& querySizeHistogram);
@@ -204,7 +204,7 @@ private:
         const TTxControl& txControl, TParamsType params,
         const TExecDataQuerySettings& settings, bool fromCache
     ) {
-        auto request = MakeOperationRequest<Ydb::Table::ExecuteDataQueryRequest>(settings);
+        auto request = MakeOperationRequest<NYdbProtos::Table::ExecuteDataQueryRequest>(settings);
         request.set_session_id(TStringType{session.GetId()});
         auto txControlProto = request.mutable_tx_control();
         txControlProto->set_commit_tx(txControl.CommitTx_);
@@ -245,7 +245,7 @@ private:
 
                 auto queryText = GetQueryText(query);
                 if (any) {
-                    Ydb::Table::ExecuteQueryResult result;
+                    NYdbProtos::Table::ExecuteQueryResult result;
                     any->UnpackTo(&result);
 
                     for (size_t i = 0; i < static_cast<size_t>(result.result_sets_size()); i++) {
@@ -281,10 +281,10 @@ private:
                 promise.SetValue(std::move(dataQueryResult));
             };
 
-        Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse>(
+        Connections_->RunDeferred<NYdbProtos::Table::V1::TableService, NYdbProtos::Table::ExecuteDataQueryRequest, NYdbProtos::Table::ExecuteDataQueryResponse>(
             std::move(request),
             extractor,
-            &Ydb::Table::V1::TableService::Stub::AsyncExecuteDataQuery,
+            &NYdbProtos::Table::V1::TableService::Stub::AsyncExecuteDataQuery,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
@@ -293,17 +293,17 @@ private:
         return promise.GetFuture();
     }
 
-    static void SetTxSettings(const TTxSettings& txSettings, Ydb::Table::TransactionSettings* proto);
+    static void SetTxSettings(const TTxSettings& txSettings, NYdbProtos::Table::TransactionSettings* proto);
 
-    static void SetQuery(const std::string& queryText, Ydb::Table::Query* query);
+    static void SetQuery(const std::string& queryText, NYdbProtos::Table::Query* query);
 
-    static void SetQuery(const TDataQuery& queryData, Ydb::Table::Query* query);
+    static void SetQuery(const TDataQuery& queryData, NYdbProtos::Table::Query* query);
 
     static void SetQueryCachePolicy(const std::string&, const TExecDataQuerySettings& settings,
-        Ydb::Table::QueryCachePolicy* queryCachePolicy);
+        NYdbProtos::Table::QueryCachePolicy* queryCachePolicy);
 
     static void SetQueryCachePolicy(const TDataQuery&, const TExecDataQuerySettings& settings,
-        Ydb::Table::QueryCachePolicy* queryCachePolicy);
+        NYdbProtos::Table::QueryCachePolicy* queryCachePolicy);
 
     static std::optional<std::string> GetQueryText(const std::string& queryText);
 

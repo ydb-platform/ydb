@@ -317,14 +317,14 @@ void TGRpcConnectionsImpl::SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config,
 }
 
 TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr dbState) {
-    Ydb::Discovery::ListEndpointsRequest request;
+    NYdbProtos::Discovery::ListEndpointsRequest request;
     request.set_database(TStringType{dbState->Database});
 
     auto promise = NThreading::NewPromise<TListEndpointsResult>();
 
     auto extractor = [promise]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
-            Ydb::Discovery::ListEndpointsResult result;
+            NYdbProtos::Discovery::ListEndpointsResult result;
             if (any) {
                 any->UnpackTo(&result);
             }
@@ -335,10 +335,10 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
     TRpcRequestSettings rpcSettings;
     rpcSettings.ClientTimeout = GET_ENDPOINTS_TIMEOUT;
 
-    RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
+    RunDeferred<NYdbProtos::Discovery::V1::DiscoveryService, NYdbProtos::Discovery::ListEndpointsRequest, NYdbProtos::Discovery::ListEndpointsResponse>(
         std::move(request),
         extractor,
-        &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncListEndpoints,
+        &NYdbProtos::Discovery::V1::DiscoveryService::Stub::AsyncListEndpoints,
         dbState->shared_from_this(),
         INITIAL_DEFERRED_CALL_DELAY,
         rpcSettings);

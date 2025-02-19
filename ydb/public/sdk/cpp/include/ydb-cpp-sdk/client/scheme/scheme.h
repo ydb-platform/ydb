@@ -1,8 +1,9 @@
 #pragma once
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
-namespace Ydb {
+YDB_PROTOS_NAMESPACE {
     class VirtualTimestamp;
     namespace Scheme {
         class Entry;
@@ -24,12 +25,12 @@ struct TPermissions {
         : Subject(subject)
         , PermissionNames(names)
     {}
-    TPermissions(const ::Ydb::Scheme::Permissions& proto);
+    TPermissions(const ::NYdbProtos::Scheme::Permissions& proto);
 
     std::string Subject;
     std::vector<std::string> PermissionNames;
 
-    void SerializeTo(::Ydb::Scheme::Permissions& proto) const;
+    void SerializeTo(::NYdbProtos::Scheme::Permissions& proto) const;
 };
 
 enum class ESchemeEntryType : i32 {
@@ -58,7 +59,7 @@ struct TVirtualTimestamp {
 
     TVirtualTimestamp() = default;
     TVirtualTimestamp(uint64_t planStep, uint64_t txId);
-    TVirtualTimestamp(const ::Ydb::VirtualTimestamp& proto);
+    TVirtualTimestamp(const ::NYdbProtos::VirtualTimestamp& proto);
 
     std::string ToString() const;
     void Out(IOutputStream& out) const;
@@ -81,12 +82,12 @@ struct TSchemeEntry {
     TVirtualTimestamp CreatedAt;
 
     TSchemeEntry() = default;
-    TSchemeEntry(const ::Ydb::Scheme::Entry& proto);
+    TSchemeEntry(const ::NYdbProtos::Scheme::Entry& proto);
 
     void Out(IOutputStream& out) const;
 
     // Fills ModifyPermissionsRequest proto from this entry
-    void SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request) const;
+    void SerializeTo(::NYdbProtos::Scheme::ModifyPermissionsRequest& request) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -155,7 +156,7 @@ struct TModifyPermissionsSettings : public TOperationRequestSettings<TModifyPerm
     }
 
     TModifyPermissionsSettings() = default;
-    explicit TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request);
+    explicit TModifyPermissionsSettings(const ::NYdbProtos::Scheme::ModifyPermissionsRequest& request);
 };
 
 class TSchemeClient {

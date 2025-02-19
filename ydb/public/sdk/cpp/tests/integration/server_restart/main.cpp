@@ -16,7 +16,7 @@ using namespace NYdb::NQuery;
 
 using namespace std::chrono_literals;
 
-class TDiscoveryProxy final : public Ydb::Discovery::V1::DiscoveryService::Service {
+class TDiscoveryProxy final : public NYdbProtos::Discovery::V1::DiscoveryService::Service {
 public:
     TDiscoveryProxy(std::atomic_bool& paused)
         :  Paused_(paused)
@@ -24,13 +24,13 @@ public:
     }
 
     grpc::Status ListEndpoints([[maybe_unused]] grpc::ServerContext* context,
-                               [[maybe_unused]] const Ydb::Discovery::ListEndpointsRequest* request,
-                               Ydb::Discovery::ListEndpointsResponse* response) override {
+                               [[maybe_unused]] const NYdbProtos::Discovery::ListEndpointsRequest* request,
+                               NYdbProtos::Discovery::ListEndpointsResponse* response) override {
         if (Paused_.load()) {
             return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Server is paused");
         }
 
-        Ydb::Discovery::ListEndpointsResult result;
+        NYdbProtos::Discovery::ListEndpointsResult result;
         auto info = result.add_endpoints();
         info->set_address("localhost");
         info->set_port(Port_);
@@ -39,7 +39,7 @@ public:
         response->mutable_operation()->mutable_result()->PackFrom(result);
         response->mutable_operation()->set_id("ydb://operation/1");
         response->mutable_operation()->set_ready(true);
-        response->mutable_operation()->set_status(Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS);
+        response->mutable_operation()->set_status(NYdbProtos::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS);
         return grpc::Status::OK;
     }
 
@@ -52,7 +52,7 @@ private:
     std::atomic_bool& Paused_;
 };
 
-class TQueryProxy final : public Ydb::Query::V1::QueryService::Service {
+class TQueryProxy final : public NYdbProtos::Query::V1::QueryService::Service {
 public:
     TQueryProxy(std::shared_ptr<grpc::Channel> channel, std::atomic_bool& paused)
         : Stub_(channel)
@@ -62,11 +62,11 @@ public:
 
     template <typename TRequest, typename TResponse>
     using TGrpcCall =
-        grpc::Status(Ydb::Query::V1::QueryService::Stub::*)(grpc::ClientContext*, const TRequest& request, TResponse* response);
+        grpc::Status(NYdbProtos::Query::V1::QueryService::Stub::*)(grpc::ClientContext*, const TRequest& request, TResponse* response);
 
     template <typename TRequest, typename TResponse>
     using TGrpcStreamCall =
-        std::unique_ptr<grpc::ClientReader<TResponse>>(Ydb::Query::V1::QueryService::Stub::*)(grpc::ClientContext*, const TRequest& request);
+        std::unique_ptr<grpc::ClientReader<TResponse>>(NYdbProtos::Query::V1::QueryService::Stub::*)(grpc::ClientContext*, const TRequest& request);
 
     template <typename TRequest, typename TResponse>
     grpc::Status Run(TGrpcCall<TRequest, TResponse> call, grpc::ServerContext *context,
@@ -97,28 +97,28 @@ public:
         return reader->Finish();
     }
 
-    grpc::Status CreateSession(grpc::ServerContext *context, const Ydb::Query::CreateSessionRequest* request,
-                               Ydb::Query::CreateSessionResponse* response) override {
-        return Run(&Ydb::Query::V1::QueryService::Stub::CreateSession, context, request, response);
+    grpc::Status CreateSession(grpc::ServerContext *context, const NYdbProtos::Query::CreateSessionRequest* request,
+                               NYdbProtos::Query::CreateSessionResponse* response) override {
+        return Run(&NYdbProtos::Query::V1::QueryService::Stub::CreateSession, context, request, response);
     }
 
-    grpc::Status DeleteSession(grpc::ServerContext *context, const Ydb::Query::DeleteSessionRequest *request,
-                               Ydb::Query::DeleteSessionResponse *response) override {
-        return Run(&Ydb::Query::V1::QueryService::Stub::DeleteSession, context, request, response);
+    grpc::Status DeleteSession(grpc::ServerContext *context, const NYdbProtos::Query::DeleteSessionRequest *request,
+                               NYdbProtos::Query::DeleteSessionResponse *response) override {
+        return Run(&NYdbProtos::Query::V1::QueryService::Stub::DeleteSession, context, request, response);
     }
 
-    grpc::Status AttachSession(grpc::ServerContext *context, const Ydb::Query::AttachSessionRequest *request,
-                               grpc::ServerWriter<Ydb::Query::SessionState> *writer) override {
-        return RunStream(&Ydb::Query::V1::QueryService::Stub::AttachSession, context, request, writer);
+    grpc::Status AttachSession(grpc::ServerContext *context, const NYdbProtos::Query::AttachSessionRequest *request,
+                               grpc::ServerWriter<NYdbProtos::Query::SessionState> *writer) override {
+        return RunStream(&NYdbProtos::Query::V1::QueryService::Stub::AttachSession, context, request, writer);
     }
 
-    grpc::Status ExecuteQuery(grpc::ServerContext *context, const Ydb::Query::ExecuteQueryRequest *request,
-                              grpc::ServerWriter<Ydb::Query::ExecuteQueryResponsePart> *writer) override {
-        return RunStream(&Ydb::Query::V1::QueryService::Stub::ExecuteQuery, context, request, writer);
+    grpc::Status ExecuteQuery(grpc::ServerContext *context, const NYdbProtos::Query::ExecuteQueryRequest *request,
+                              grpc::ServerWriter<NYdbProtos::Query::ExecuteQueryResponsePart> *writer) override {
+        return RunStream(&NYdbProtos::Query::V1::QueryService::Stub::ExecuteQuery, context, request, writer);
     }
 
 private:
-    Ydb::Query::V1::QueryService::Stub Stub_;
+    NYdbProtos::Query::V1::QueryService::Stub Stub_;
     std::atomic_bool& Paused_;
 };
 

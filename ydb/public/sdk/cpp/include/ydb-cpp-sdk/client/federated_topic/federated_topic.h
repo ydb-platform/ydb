@@ -11,7 +11,7 @@
 namespace NYdb::inline V3::NFederatedTopic {
 
 using NTopic::TPrintable;
-using TDbInfo = Ydb::FederationDiscovery::DatabaseInfo;
+using TDbInfo = NYdbProtos::FederationDiscovery::DatabaseInfo;
 
 using TSessionClosedEvent = NTopic::TSessionClosedEvent;
 

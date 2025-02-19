@@ -2,9 +2,12 @@
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
-namespace Ydb::View {
+YDB_PROTOS_NAMESPACE {
+namespace View {
     class DescribeViewResult;
+}
 }
 
 namespace NYdb::inline V3 {
@@ -22,7 +25,7 @@ struct TDescribeViewSettings : public TOperationRequestSettings<TDescribeViewSet
 
 class TViewDescription {
 public:
-    explicit TViewDescription(const Ydb::View::DescribeViewResult& desc);
+    explicit TViewDescription(const NYdbProtos::View::DescribeViewResult& desc);
 
     const std::string& GetQueryText() const;
 
@@ -32,14 +35,14 @@ private:
 
 class TDescribeViewResult : public NScheme::TDescribePathResult {
     friend class NYdb::V3::TProtoAccessor;
-    const Ydb::View::DescribeViewResult& GetProto() const;
+    const NYdbProtos::View::DescribeViewResult& GetProto() const;
 
 public:
-    TDescribeViewResult(TStatus&& status, Ydb::View::DescribeViewResult&& desc);
+    TDescribeViewResult(TStatus&& status, NYdbProtos::View::DescribeViewResult&& desc);
     TViewDescription GetViewDescription() const;
 
 private:
-    std::unique_ptr<Ydb::View::DescribeViewResult> Proto_;
+    std::unique_ptr<NYdbProtos::View::DescribeViewResult> Proto_;
 };
 
 class TViewClient {

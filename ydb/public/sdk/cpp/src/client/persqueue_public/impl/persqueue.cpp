@@ -27,23 +27,23 @@ const std::vector<ECodec>& GetDefaultCodecs() {
 using TTopicSettingsCreate = TTopicSettings<TCreateTopicSettings>;
 using TTopicSettingsAlter = TTopicSettings<TAlterTopicSettings>;
 
-TCredentials::TCredentials(const Ydb::PersQueue::V1::Credentials& settings)
+TCredentials::TCredentials(const NYdbProtos::PersQueue::V1::Credentials& settings)
     : Credentials_(settings)
 {
     switch (Credentials_.credentials_case()) {
-        case Ydb::PersQueue::V1::Credentials::kOauthToken: {
+        case NYdbProtos::PersQueue::V1::Credentials::kOauthToken: {
             Mode_ = EMode::OAUTH_TOKEN;
             break;
         }
-        case Ydb::PersQueue::V1::Credentials::kJwtParams: {
+        case NYdbProtos::PersQueue::V1::Credentials::kJwtParams: {
             Mode_ = EMode::JWT_PARAMS;
             break;
         }
-        case Ydb::PersQueue::V1::Credentials::kIam: {
+        case NYdbProtos::PersQueue::V1::Credentials::kIam: {
             Mode_ = EMode::IAM;
             break;
         }
-        case Ydb::PersQueue::V1::Credentials::CREDENTIALS_NOT_SET: {
+        case NYdbProtos::PersQueue::V1::Credentials::CREDENTIALS_NOT_SET: {
             Mode_ = EMode::NOT_SET;
             break;
         }
@@ -77,14 +77,14 @@ std::string TCredentials::GetIamServiceAccountKey() const {
     return Credentials_.iam().service_account_key();
 }
 
-TDescribeTopicResult::TDescribeTopicResult(TStatus status, const Ydb::PersQueue::V1::DescribeTopicResult& result)
+TDescribeTopicResult::TDescribeTopicResult(TStatus status, const NYdbProtos::PersQueue::V1::DescribeTopicResult& result)
     : TStatus(std::move(status))
     , TopicSettings_(result.settings())
     , Proto_(result)
 {
 }
 
-TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::TopicSettings& settings) {
+TDescribeTopicResult::TTopicSettings::TTopicSettings(const NYdbProtos::PersQueue::V1::TopicSettings& settings) {
     RetentionPeriod_ = TDuration::MilliSeconds(settings.retention_period_ms());
     SupportedFormat_ = static_cast<EFormat>(settings.supported_format());
 
@@ -132,7 +132,7 @@ TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::T
 }
 
 
-TDescribeTopicResult::TTopicSettings::TReadRule::TReadRule(const Ydb::PersQueue::V1::TopicSettings::ReadRule& settings) {
+TDescribeTopicResult::TTopicSettings::TReadRule::TReadRule(const NYdbProtos::PersQueue::V1::TopicSettings::ReadRule& settings) {
 
     ConsumerName_ = settings.consumer_name();
     Important_ = settings.important();
@@ -146,7 +146,7 @@ TDescribeTopicResult::TTopicSettings::TReadRule::TReadRule(const Ydb::PersQueue:
     ServiceType_ = settings.service_type();
 }
 
-TDescribeTopicResult::TTopicSettings::TRemoteMirrorRule::TRemoteMirrorRule(const Ydb::PersQueue::V1::TopicSettings::RemoteMirrorRule& settings)
+TDescribeTopicResult::TTopicSettings::TRemoteMirrorRule::TRemoteMirrorRule(const NYdbProtos::PersQueue::V1::TopicSettings::RemoteMirrorRule& settings)
     : Credentials_(settings.credentials())
 {
     Endpoint_ = settings.endpoint();

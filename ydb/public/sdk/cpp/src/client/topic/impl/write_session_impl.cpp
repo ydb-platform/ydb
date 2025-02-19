@@ -23,7 +23,7 @@ namespace {
 using TTxId = std::pair<std::string_view, std::string_view>;
 using TTxIdOpt = std::optional<TTxId>;
 
-TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& request)
+TTxIdOpt GetTransactionId(const NYdbProtos::Topic::StreamWriteMessage_WriteRequest& request)
 {
     Y_ABORT_UNLESS(request.messages_size());
 
@@ -31,7 +31,7 @@ TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& req
         return std::nullopt;
     }
 
-    const Ydb::Topic::TransactionIdentity& tx = request.tx();
+    const NYdbProtos::Topic::TransactionIdentity& tx = request.tx();
     return TTxId(tx.session(), tx.id());
 }
 
@@ -246,7 +246,7 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
     Y_ASSERT(DescribePartitionContext);
     Cancel(prevDescribePartitionContext);
 
-    Ydb::Topic::DescribePartitionRequest request;
+    NYdbProtos::Topic::DescribePartitionRequest request;
     // Currently, the whole topic path needs to be sent in the DescribePartitionRequest.
     request.set_path(FullTopicPath(DbDriverState->Database, Settings.Path_));
     request.set_partition_id(partition_id);
@@ -256,8 +256,8 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
         TRACE_KV("path", request.path()),
         TRACE_KV("partition_id", request.partition_id()));
 
-    auto extractor = [cbContext = SelfContext, context = describePartitionContext](Ydb::Topic::DescribePartitionResponse* response, TPlainStatus status) mutable {
-        Ydb::Topic::DescribePartitionResult result;
+    auto extractor = [cbContext = SelfContext, context = describePartitionContext](NYdbProtos::Topic::DescribePartitionResponse* response, TPlainStatus status) mutable {
+        NYdbProtos::Topic::DescribePartitionResult result;
         if (response)
             response->operation().result().UnpackTo(&result);
 
@@ -272,10 +272,10 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
                      context = describePartitionContext, prefix = std::string(LogPrefixImpl()),
                      partId = partition_id]() mutable {
         LOG_LAZY(dbState->Log, TLOG_DEBUG, prefix + " Getting partition location, partition " + ToString(partId));
-        connections->Run<Ydb::Topic::V1::TopicService, Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+        connections->Run<NYdbProtos::Topic::V1::TopicService, NYdbProtos::Topic::DescribePartitionRequest, NYdbProtos::Topic::DescribePartitionResponse>(
             std::move(req),
             std::move(extr),
-            &Ydb::Topic::V1::TopicService::Stub::AsyncDescribePartition,
+            &NYdbProtos::Topic::V1::TopicService::Stub::AsyncDescribePartition,
             dbState,
             {},
             context);
@@ -284,11 +284,11 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
     Connections->ScheduleOneTimeTask(std::move(callback), delay);
 }
 
-void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::Topic::DescribePartitionResult& proto, const NYdbGrpc::IQueueClientContextPtr& describePartitionContext)
+void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const NYdbProtos::Topic::DescribePartitionResult& proto, const NYdbGrpc::IQueueClientContextPtr& describePartitionContext)
 {
     THandleResult handleResult;
 
-    const Ydb::Topic::DescribeTopicResult_PartitionInfo& partition = proto.partition();
+    const NYdbProtos::Topic::DescribeTopicResult_PartitionInfo& partition = proto.partition();
 
     with_lock(Lock) {
         LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefixImpl() << "Got PartitionLocation response. Status " << status.GetStatus() << ", proto:\n" << proto.DebugString());
@@ -861,8 +861,8 @@ void TWriteSessionImpl::InitImpl() {
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: send init request: "<< req.ShortDebugString());
 
     TRACE_LAZY(DbDriverState->Log, "InitRequest",
-        TRACE_KV_IF(init->partitioning_case() == Ydb::Topic::StreamWriteMessage_InitRequest::kPartitionId, "partition_id", init->partition_id()),
-        TRACE_IF(init->partitioning_case() == Ydb::Topic::StreamWriteMessage_InitRequest::kPartitionWithGeneration,
+        TRACE_KV_IF(init->partitioning_case() == NYdbProtos::Topic::StreamWriteMessage_InitRequest::kPartitionId, "partition_id", init->partition_id()),
+        TRACE_IF(init->partitioning_case() == NYdbProtos::Topic::StreamWriteMessage_InitRequest::kPartitionWithGeneration,
             TRACE_KV("pwg_partition_id", init->partition_with_generation().partition_id()),
             TRACE_KV("pwg_generation", init->partition_with_generation().generation())
         ));
@@ -1123,7 +1123,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                     msgWriteStatus = TWriteSessionEvent::TWriteAck::EES_WRITTEN;
                 } else {
                     msgWriteStatus =
-                        (ack.skipped().reason() == Ydb::Topic::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason_REASON_ALREADY_WRITTEN)
+                        (ack.skipped().reason() == NYdbProtos::Topic::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason_REASON_ALREADY_WRITTEN)
                         ? TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN
                         : TWriteSessionEvent::TWriteAck::EES_DISCARDED;
                 }
@@ -1478,7 +1478,7 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
     Processor->Write(std::move(clientMessage));
 }
 
-bool TWriteSessionImpl::TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const
+bool TWriteSessionImpl::TxIsChanged(const NYdbProtos::Topic::StreamWriteMessage_WriteRequest* writeRequest) const
 {
     Y_ABORT_UNLESS(writeRequest);
 

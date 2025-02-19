@@ -68,7 +68,7 @@ private:
     TInstant TokenExpireAt_;
     TInstant TokenRequestAt_;
     TPlainStatus Status_;
-    Ydb::Auth::LoginResponse Response_;
+    NYdbProtos::Auth::LoginResponse Response_;
 };
 
 TLoginCredentialsProvider::TLoginCredentialsProvider(std::weak_ptr<ICoreFacility> facility, TLoginCredentialsParams params)
@@ -119,7 +119,7 @@ void TLoginCredentialsProvider::RequestToken() {
     if (strongFacility) {
         TokenRequestAt_ = {};
 
-        auto responseCb = [facility = Facility_, this](Ydb::Auth::LoginResponse* resp, TPlainStatus status) {
+        auto responseCb = [facility = Facility_, this](NYdbProtos::Auth::LoginResponse* resp, TPlainStatus status) {
             auto strongFacility = facility.lock();
             if (strongFacility) {
                 std::lock_guard<std::mutex> lock(Mutex_);
@@ -133,14 +133,14 @@ void TLoginCredentialsProvider::RequestToken() {
             Notify_.notify_all();
         };
 
-        Ydb::Auth::LoginRequest request;
+        NYdbProtos::Auth::LoginRequest request;
         request.set_user(TStringType{Params_.User});
         request.set_password(TStringType{Params_.Password});
         TRpcRequestSettings rpcSettings;
         rpcSettings.ClientTimeout = TDuration::Seconds(60);
 
-        TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<Ydb::Auth::V1::AuthService, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>(
-            strongFacility, std::move(request), std::move(responseCb), &Ydb::Auth::V1::AuthService::Stub::AsyncLogin,
+        TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<NYdbProtos::Auth::V1::AuthService, NYdbProtos::Auth::LoginRequest, NYdbProtos::Auth::LoginResponse>(
+            strongFacility, std::move(request), std::move(responseCb), &NYdbProtos::Auth::V1::AuthService::Stub::AsyncLogin,
             rpcSettings);
     }
 }
@@ -166,7 +166,7 @@ void TLoginCredentialsProvider::PrepareToken() {
 bool TLoginCredentialsProvider::IsOk() const {
     return State_ == EState::Done
         && Status_.Ok()
-        && Response_.operation().status() == Ydb::StatusIds::SUCCESS;
+        && Response_.operation().status() == NYdbProtos::StatusIds::SUCCESS;
 }
 
 void TLoginCredentialsProvider::ParseToken() { // works under mutex
@@ -186,7 +186,7 @@ void TLoginCredentialsProvider::ParseToken() { // works under mutex
 }
 
 std::string TLoginCredentialsProvider::GetToken() const {
-    Ydb::Auth::LoginResult result;
+    NYdbProtos::Auth::LoginResult result;
     Response_.operation().result().UnpackTo(&result);
     return result.token();
 }
@@ -196,7 +196,7 @@ std::string TLoginCredentialsProvider::GetError() const {
         if (Response_.operation().issues_size() > 0) {
             return Response_.operation().issues(0).message();
         } else {
-            return Ydb::StatusIds_StatusCode_Name(Response_.operation().status());
+            return NYdbProtos::StatusIds_StatusCode_Name(Response_.operation().status());
         }
     } else {
         TStringBuilder str;

@@ -6,28 +6,28 @@
 
 namespace NYdb::inline V3 {
 
-bool TypesEqual(const Ydb::Type& t1, const Ydb::Type& t2) {
+bool TypesEqual(const NYdbProtos::Type& t1, const NYdbProtos::Type& t2) {
     if (t1.type_case() != t2.type_case()) {
         return false;
     }
 
     switch (t1.type_case()) {
-        case Ydb::Type::kTypeId:
+        case NYdbProtos::Type::kTypeId:
             return t1.type_id() == t2.type_id();
-        case Ydb::Type::kDecimalType:
+        case NYdbProtos::Type::kDecimalType:
             return t1.decimal_type().precision() == t2.decimal_type().precision()
                 && t1.decimal_type().scale() == t2.decimal_type().scale();
-        case Ydb::Type::kPgType:
+        case NYdbProtos::Type::kPgType:
             return t1.pg_type().type_name() == t2.pg_type().type_name()
                 && t1.pg_type().type_modifier() == t2.pg_type().type_modifier();
-        case Ydb::Type::kOptionalType:
+        case NYdbProtos::Type::kOptionalType:
             return TypesEqual(t1.optional_type().item(), t2.optional_type().item());
-        case Ydb::Type::kTaggedType:
+        case NYdbProtos::Type::kTaggedType:
             return t1.tagged_type().tag() == t2.tagged_type().tag() &&
                 TypesEqual(t1.tagged_type().type(), t2.tagged_type().type());
-        case Ydb::Type::kListType:
+        case NYdbProtos::Type::kListType:
             return TypesEqual(t1.list_type().item(), t2.list_type().item());
-        case Ydb::Type::kTupleType:
+        case NYdbProtos::Type::kTupleType:
             if (t1.tuple_type().elements_size() != t2.tuple_type().elements_size()) {
                 return false;
             }
@@ -37,7 +37,7 @@ bool TypesEqual(const Ydb::Type& t1, const Ydb::Type& t2) {
                 }
             }
             return true;
-        case Ydb::Type::kStructType:
+        case NYdbProtos::Type::kStructType:
             if (t1.struct_type().members_size() != t2.struct_type().members_size()) {
                 return false;
             }
@@ -53,17 +53,17 @@ bool TypesEqual(const Ydb::Type& t1, const Ydb::Type& t2) {
                 }
             }
             return true;
-        case Ydb::Type::kDictType:
+        case NYdbProtos::Type::kDictType:
             return TypesEqual(t1.dict_type().key(), t2.dict_type().key())
                 && TypesEqual(t1.dict_type().payload(), t2.dict_type().payload());
-        case Ydb::Type::kVariantType: {
+        case NYdbProtos::Type::kVariantType: {
             const auto& v1 = t1.variant_type();
             const auto& v2 = t2.variant_type();
             if (v1.type_case() != v2.type_case()) {
                 return false;
             }
             switch (v1.type_case()) {
-                case Ydb::VariantType::kTupleItems:
+                case NYdbProtos::VariantType::kTupleItems:
                     if (v1.tuple_items().elements_size() != v2.tuple_items().elements_size()) {
                         return false;
                     }
@@ -73,7 +73,7 @@ bool TypesEqual(const Ydb::Type& t1, const Ydb::Type& t2) {
                         }
                     }
                     return true;
-                case Ydb::VariantType::kStructItems:
+                case NYdbProtos::VariantType::kStructItems:
                     if (v1.struct_items().members_size() != v2.struct_items().members_size()) {
                         return false;
                     }
@@ -95,13 +95,13 @@ bool TypesEqual(const Ydb::Type& t1, const Ydb::Type& t2) {
             }
             return false;
         }
-        case Ydb::Type::kVoidType:
+        case NYdbProtos::Type::kVoidType:
             return true;
-        case Ydb::Type::kNullType:
+        case NYdbProtos::Type::kNullType:
             return true;
-        case Ydb::Type::kEmptyListType:
+        case NYdbProtos::Type::kEmptyListType:
             return true;
-        case Ydb::Type::kEmptyDictType:
+        case NYdbProtos::Type::kEmptyDictType:
             return true;
         default:
             ThrowFatalError(TStringBuilder() << "Unexpected type case " << static_cast<int>(t1.type_case()));

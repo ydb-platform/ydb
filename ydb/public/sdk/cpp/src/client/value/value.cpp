@@ -29,37 +29,37 @@ static void CheckKind(TTypeParser::ETypeKind actual, TTypeParser::ETypeKind expe
     }
 }
 
-static TTypeParser::ETypeKind GetKind(const Ydb::Type& type) {
+static TTypeParser::ETypeKind GetKind(const NYdbProtos::Type& type) {
     using ETypeKind = TTypeParser::ETypeKind;
 
     switch (type.type_case()) {
-        case Ydb::Type::kTypeId:
+        case NYdbProtos::Type::kTypeId:
             return ETypeKind::Primitive;
-        case Ydb::Type::kDecimalType:
+        case NYdbProtos::Type::kDecimalType:
             return ETypeKind::Decimal;
-        case Ydb::Type::kPgType:
+        case NYdbProtos::Type::kPgType:
             return ETypeKind::Pg;
-        case Ydb::Type::kOptionalType:
+        case NYdbProtos::Type::kOptionalType:
             return ETypeKind::Optional;
-        case Ydb::Type::kListType:
+        case NYdbProtos::Type::kListType:
             return ETypeKind::List;
-        case Ydb::Type::kTupleType:
+        case NYdbProtos::Type::kTupleType:
             return ETypeKind::Tuple;
-        case Ydb::Type::kStructType:
+        case NYdbProtos::Type::kStructType:
             return ETypeKind::Struct;
-        case Ydb::Type::kDictType:
+        case NYdbProtos::Type::kDictType:
             return ETypeKind::Dict;
-        case Ydb::Type::kVariantType:
+        case NYdbProtos::Type::kVariantType:
             return ETypeKind::Variant;
-        case Ydb::Type::kVoidType:
+        case NYdbProtos::Type::kVoidType:
             return ETypeKind::Void;
-        case Ydb::Type::kNullType:
+        case NYdbProtos::Type::kNullType:
             return ETypeKind::Null;
-        case Ydb::Type::kEmptyListType:
+        case NYdbProtos::Type::kEmptyListType:
             return ETypeKind::EmptyList;
-        case Ydb::Type::kEmptyDictType:
+        case NYdbProtos::Type::kEmptyDictType:
             return ETypeKind::EmptyDict;
-        case Ydb::Type::kTaggedType:
+        case NYdbProtos::Type::kTaggedType:
             return ETypeKind::Tagged;
         default:
             break;
@@ -77,21 +77,21 @@ bool TypesEqual(const TType& t1, const TType& t2) {
 
 class TType::TImpl {
 public:
-    TImpl(const Ydb::Type& typeProto)
+    TImpl(const NYdbProtos::Type& typeProto)
         : ProtoType_(typeProto) {}
 
-    TImpl(Ydb::Type&& typeProto)
+    TImpl(NYdbProtos::Type&& typeProto)
         : ProtoType_(std::move(typeProto)) {}
 
-    Ydb::Type ProtoType_;
+    NYdbProtos::Type ProtoType_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TType::TType(const Ydb::Type& typeProto)
+TType::TType(const NYdbProtos::Type& typeProto)
     : Impl_(new TImpl(typeProto)) {}
 
-TType::TType(Ydb::Type&& typeProto)
+TType::TType(NYdbProtos::Type&& typeProto)
     : Impl_(new TImpl(std::move(typeProto))) {}
 
 std::string TType::ToString() const {
@@ -102,11 +102,11 @@ void TType::Out(IOutputStream& o) const {
     o << FormatType(*this);
 }
 
-const Ydb::Type& TType::GetProto() const {
+const NYdbProtos::Type& TType::GetProto() const {
     return Impl_->ProtoType_;
 }
 
-Ydb::Type& TType::GetProto()
+NYdbProtos::Type& TType::GetProto()
 {
     return Impl_->ProtoType_;
 }
@@ -160,10 +160,10 @@ public:
 
     void OpenVariant(int index) {
         CheckKind(ETypeKind::Variant, "Open");
-        const Ydb::VariantType& variantType = GetProto().variant_type();
+        const NYdbProtos::VariantType& variantType = GetProto().variant_type();
         const google::protobuf::Message* nextPtr = nullptr;
         switch (variantType.type_case()) {
-            case Ydb::VariantType::kTupleItems: {
+            case NYdbProtos::VariantType::kTupleItems: {
                 auto& tupleType = variantType.tuple_items();
                 if (index >= tupleType.elements_size()) {
                     return FatalError("variant index is out of range");
@@ -171,7 +171,7 @@ public:
                 nextPtr = &tupleType.elements(index);
                 break;
             }
-            case Ydb::VariantType::kStructItems: {
+            case NYdbProtos::VariantType::kStructItems: {
                 auto& structType = variantType.struct_items();
                 if (index >= structType.members_size()) {
                     return FatalError("variant index is out of range");
@@ -284,14 +284,14 @@ public:
             }
 
             case ETypeKind::Variant: {
-                const Ydb::VariantType& variantType = GetProto().variant_type();
-                auto wrappedVariant = std::make_unique<Ydb::Type>();
+                const NYdbProtos::VariantType& variantType = GetProto().variant_type();
+                auto wrappedVariant = std::make_unique<NYdbProtos::Type>();
                 switch (variantType.type_case()) {
-                    case Ydb::VariantType::kTupleItems: {
+                    case NYdbProtos::VariantType::kTupleItems: {
                         *wrappedVariant->mutable_tuple_type() = variantType.tuple_items();
                         break;
                     }
-                    case Ydb::VariantType::kStructItems: {
+                    case NYdbProtos::VariantType::kStructItems: {
                         *wrappedVariant->mutable_struct_type() = variantType.struct_items();
                         break;
                     }
@@ -333,8 +333,8 @@ private:
         NYdb::CheckKind(GetKind(1), kind, method);
     }
 
-    const Ydb::Type& GetProto(ui32 offset = 0) const {
-        return *static_cast<const Ydb::Type*>(Path_[Path_.size() - (offset + 1)].Ptr);
+    const NYdbProtos::Type& GetProto(ui32 offset = 0) const {
+        return *static_cast<const NYdbProtos::Type*>(Path_[Path_.size() - (offset + 1)].Ptr);
     }
 
     void BackwardStep() {
@@ -354,7 +354,7 @@ private:
 private:
     TType Type_;
     TStackVec<TProtoPosition, 8> Path_;
-    TStackVec<std::unique_ptr<Ydb::Type>, 8> WrappedVariants_;
+    TStackVec<std::unique_ptr<NYdbProtos::Type>, 8> WrappedVariants_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -595,7 +595,7 @@ public:
         Path_.emplace_back(TProtoPosition{&ProtoType_});
     }
 
-    TImpl(Ydb::Type& type)
+    TImpl(NYdbProtos::Type& type)
     {
         Path_.emplace_back(TProtoPosition{&type});
     }
@@ -605,13 +605,13 @@ public:
             FatalError("Invalid Build() call, type is incomplete.");
         }
 
-        Ydb::Type type;
+        NYdbProtos::Type type;
         type.Swap(&ProtoType_);
         return TType(std::move(type));
     }
 
     void Primitive(const EPrimitiveType& primitiveType) {
-        GetProto().set_type_id(Ydb::Type::PrimitiveTypeId(primitiveType));
+        GetProto().set_type_id(NYdbProtos::Type::PrimitiveTypeId(primitiveType));
     }
 
     void Decimal(const TDecimalType& decimalType) {
@@ -751,8 +751,8 @@ public:
         taggedType->mutable_type()->CopyFrom(itemType.GetProto());
     }
 
-    Ydb::Type& GetProto(ui32 offset = 0) {
-        return *static_cast<Ydb::Type*>(Path_[Path_.size() - (offset + 1)].Ptr);
+    NYdbProtos::Type& GetProto(ui32 offset = 0) {
+        return *static_cast<NYdbProtos::Type*>(Path_[Path_.size() - (offset + 1)].Ptr);
     }
 
     void SetType(const TType& type) {
@@ -764,7 +764,7 @@ public:
     }
 
 private:
-    void AddPosition(Ydb::Type* type) {
+    void AddPosition(NYdbProtos::Type* type) {
         Path_.emplace_back(TProtoPosition{type});
     }
 
@@ -805,7 +805,7 @@ private:
     };
 
 private:
-    Ydb::Type ProtoType_;
+    NYdbProtos::Type ProtoType_;
     TStackVec<TProtoPosition, 8> Path_;
 };
 
@@ -953,7 +953,7 @@ TTypeBuilder& TTypeBuilder::Tagged(const std::string& tag, const TType& itemType
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDecimalValue::TDecimalValue(const Ydb::Value& valueProto, const TDecimalType& decimalType)
+TDecimalValue::TDecimalValue(const NYdbProtos::Value& valueProto, const TDecimalType& decimalType)
     : DecimalType_(decimalType)
     , Low_(valueProto.low_128())
     , Hi_(valueProto.high_128())
@@ -976,16 +976,16 @@ std::string TDecimalValue::ToString() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPgValue::TPgValue(const Ydb::Value& pgValueProto, const TPgType& pgType)
+TPgValue::TPgValue(const NYdbProtos::Value& pgValueProto, const TPgType& pgType)
     : PgType_(pgType)
 {
-    if (pgValueProto.value_case() == Ydb::Value::kTextValue) {
+    if (pgValueProto.value_case() == NYdbProtos::Value::kTextValue) {
         Kind_ = VK_TEXT;
         Content_ = pgValueProto.text_value();
         return;
     }
 
-    if (pgValueProto.value_case() == Ydb::Value::kBytesValue) {
+    if (pgValueProto.value_case() == NYdbProtos::Value::kBytesValue) {
         Kind_ = VK_BINARY;
         Content_ = pgValueProto.bytes_value();
         return;
@@ -1016,7 +1016,7 @@ TUuidValue::TUuidValue(uint64_t low_128, uint64_t high_128) {
     Buf_.Halfs[1] = high_128;
 }
 
-TUuidValue::TUuidValue(const Ydb::Value& valueProto) {
+TUuidValue::TUuidValue(const NYdbProtos::Value& valueProto) {
     Buf_.Halfs[0] = valueProto.low_128();
     Buf_.Halfs[1] = valueProto.high_128();
 }
@@ -1044,24 +1044,24 @@ std::string TUuidValue::ToString() const {
 
 class TValue::TImpl {
 public:
-    TImpl(const TType& type, const Ydb::Value& valueProto)
+    TImpl(const TType& type, const NYdbProtos::Value& valueProto)
         : Type_(type)
         , ProtoValue_(valueProto) {}
 
-    TImpl(const TType& type, Ydb::Value&& valueProto)
+    TImpl(const TType& type, NYdbProtos::Value&& valueProto)
         : Type_(type)
         , ProtoValue_(std::move(valueProto)) {}
 
     TType Type_;
-    Ydb::Value ProtoValue_;
+    NYdbProtos::Value ProtoValue_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TValue::TValue(const TType& type, const Ydb::Value& valueProto)
+TValue::TValue(const TType& type, const NYdbProtos::Value& valueProto)
     : Impl_(new TImpl(type, valueProto)) {}
 
-TValue::TValue(const TType& type, Ydb::Value&& valueProto)
+TValue::TValue(const TType& type, NYdbProtos::Value&& valueProto)
     : Impl_(new TImpl(type, std::move(valueProto))) {}
 
 const TType& TValue::GetType() const {
@@ -1072,11 +1072,11 @@ TType & TValue::GetType() {
     return Impl_->Type_;
 }
 
-const Ydb::Value& TValue::GetProto() const {
+const NYdbProtos::Value& TValue::GetProto() const {
     return Impl_->ProtoValue_;
 }
 
-Ydb::Value& TValue::GetProto() {
+NYdbProtos::Value& TValue::GetProto() {
     return Impl_->ProtoValue_;
 }
 
@@ -1110,7 +1110,7 @@ public:
     TImpl(const TType& type)
         : TypeParser_(type) {}
 
-    void Reset(const Ydb::Value& value) {
+    void Reset(const NYdbProtos::Value& value) {
         TypeParser_.Impl_->Reset();
         Path_.clear();
         AddPath(EParseKind::Value, &value);
@@ -1283,9 +1283,9 @@ public:
     void OpenOptional() {
         TypeParser_.OpenOptional();
 
-        if (GetProto().value_case() == Ydb::Value::kNestedValue) {
+        if (GetProto().value_case() == NYdbProtos::Value::kNestedValue) {
             AddPath(EParseKind::Value, &GetProto().nested_value());
-        } else if (GetProto().value_case() == Ydb::Value::kNullFlagValue) {
+        } else if (GetProto().value_case() == NYdbProtos::Value::kNullFlagValue) {
             AddPath(EParseKind::Null, &GetProto());
         } else {
             AddPath(EParseKind::Value, &GetProto());
@@ -1400,7 +1400,7 @@ public:
     void OpenVariant() {
         auto variantIndex = GetProto().variant_index();
         TypeParser_.OpenVariant(variantIndex);
-        if (GetProto().value_case() == Ydb::Value::kNestedValue) {
+        if (GetProto().value_case() == NYdbProtos::Value::kNestedValue) {
             AddPath(EParseKind::Value, &GetProto().nested_value());
         } else {
             FatalError(TStringBuilder() << "No nested value for variant type.");
@@ -1536,7 +1536,7 @@ private:
         NYdb::CheckKind(TypeParser_.GetKind(), kind, method);
     }
 
-    void CheckTransportKind(Ydb::Value::ValueCase expectedCase) const {
+    void CheckTransportKind(NYdbProtos::Value::ValueCase expectedCase) const {
         if (expectedCase != GetProto().value_case()) {
             FatalError(TStringBuilder() << "Transport value case mismatch, requested: " << (ui32)expectedCase
                 << ", actual: " << (ui32)GetProto().value_case());
@@ -1556,80 +1556,80 @@ private:
 
     void CheckDecimal() const {
         CheckKind(ETypeKind::Decimal, "Get");
-        CheckTransportKind(Ydb::Value::kLow128);
+        CheckTransportKind(NYdbProtos::Value::kLow128);
     }
 
     void CheckPg() const {
         CheckKind(ETypeKind::Pg, "Get");
     }
 
-    const Ydb::Value& GetProto() const {
-        return *static_cast<const Ydb::Value*>(GetPathBack().Ptr);
+    const NYdbProtos::Value& GetProto() const {
+        return *static_cast<const NYdbProtos::Value*>(GetPathBack().Ptr);
     }
 
-    const Ydb::ValuePair& GetProtoPair() const {
+    const NYdbProtos::ValuePair& GetProtoPair() const {
         if (GetPathBack().Kind != EParseKind::Pair) {
             FatalError(TStringBuilder() << "Bad parser state, expected dict pair");
         }
 
-        return *static_cast<const Ydb::ValuePair*>(GetPathBack().Ptr);
+        return *static_cast<const NYdbProtos::ValuePair*>(GetPathBack().Ptr);
     }
 
-    Ydb::Value::ValueCase GetPrimitiveValueCase(NYdb::EPrimitiveType primitiveTypeId) const {
+    NYdbProtos::Value::ValueCase GetPrimitiveValueCase(NYdb::EPrimitiveType primitiveTypeId) const {
         switch (primitiveTypeId) {
             case NYdb::EPrimitiveType::Bool:
-                return Ydb::Value::kBoolValue;
+                return NYdbProtos::Value::kBoolValue;
             case NYdb::EPrimitiveType::Int8:
-                return Ydb::Value::kInt32Value;
+                return NYdbProtos::Value::kInt32Value;
             case NYdb::EPrimitiveType::Uint8:
-                return Ydb::Value::kUint32Value;
+                return NYdbProtos::Value::kUint32Value;
             case NYdb::EPrimitiveType::Int16:
-                return Ydb::Value::kInt32Value;
+                return NYdbProtos::Value::kInt32Value;
             case NYdb::EPrimitiveType::Uint16:
-                return Ydb::Value::kUint32Value;
+                return NYdbProtos::Value::kUint32Value;
             case NYdb::EPrimitiveType::Int32:
-                return Ydb::Value::kInt32Value;
+                return NYdbProtos::Value::kInt32Value;
             case NYdb::EPrimitiveType::Uint32:
-                return Ydb::Value::kUint32Value;
+                return NYdbProtos::Value::kUint32Value;
             case NYdb::EPrimitiveType::Int64:
-                return Ydb::Value::kInt64Value;
+                return NYdbProtos::Value::kInt64Value;
             case NYdb::EPrimitiveType::Uint64:
-                return Ydb::Value::kUint64Value;
+                return NYdbProtos::Value::kUint64Value;
             case NYdb::EPrimitiveType::Float:
-                return Ydb::Value::kFloatValue;
+                return NYdbProtos::Value::kFloatValue;
             case NYdb::EPrimitiveType::Double:
-                return Ydb::Value::kDoubleValue;
+                return NYdbProtos::Value::kDoubleValue;
             case NYdb::EPrimitiveType::Date:
             case NYdb::EPrimitiveType::Datetime:
-                return Ydb::Value::kUint32Value;
+                return NYdbProtos::Value::kUint32Value;
             case NYdb::EPrimitiveType::Date32:
-                return Ydb::Value::kInt32Value;
+                return NYdbProtos::Value::kInt32Value;
             case NYdb::EPrimitiveType::Timestamp:
-                return Ydb::Value::kUint64Value;
+                return NYdbProtos::Value::kUint64Value;
             case NYdb::EPrimitiveType::Interval:
             case NYdb::EPrimitiveType::Interval64:
             case NYdb::EPrimitiveType::Timestamp64:
             case NYdb::EPrimitiveType::Datetime64:
-                return Ydb::Value::kInt64Value;
+                return NYdbProtos::Value::kInt64Value;
             case NYdb::EPrimitiveType::TzDate:
             case NYdb::EPrimitiveType::TzDatetime:
             case NYdb::EPrimitiveType::TzTimestamp:
-                return Ydb::Value::kTextValue;
+                return NYdbProtos::Value::kTextValue;
             case NYdb::EPrimitiveType::String:
-                return Ydb::Value::kBytesValue;
+                return NYdbProtos::Value::kBytesValue;
             case NYdb::EPrimitiveType::Utf8:
-                return Ydb::Value::kTextValue;
+                return NYdbProtos::Value::kTextValue;
             case NYdb::EPrimitiveType::Yson:
-                return Ydb::Value::kBytesValue;
+                return NYdbProtos::Value::kBytesValue;
             case NYdb::EPrimitiveType::Json:
             case NYdb::EPrimitiveType::JsonDocument:
             case NYdb::EPrimitiveType::DyNumber:
-                return Ydb::Value::kTextValue;
+                return NYdbProtos::Value::kTextValue;
             case NYdb::EPrimitiveType::Uuid:
-                return Ydb::Value::kLow128;
+                return NYdbProtos::Value::kLow128;
             default:
                 FatalError(TStringBuilder() << "Unexpected primitive type: " << primitiveTypeId);
-                return Ydb::Value::kBytesValue;
+                return NYdbProtos::Value::kBytesValue;
         }
     }
 
@@ -1654,7 +1654,7 @@ TValueParser::TValueParser(const TValue& value)
 TValueParser::TValueParser(const TType& type)
     : Impl_(new TImpl(type)) {}
 
-void TValueParser::Reset(const Ydb::Value& value) {
+void TValueParser::Reset(const NYdbProtos::Value& value) {
     Impl_->Reset(value);
 }
 
@@ -2021,11 +2021,11 @@ class TValueBuilderImpl {
     using TMembersMap = std::map<std::string, size_t>;
 
     struct TProtoPosition {
-        Ydb::Value& Value;
+        NYdbProtos::Value& Value;
         bool BuildType = false;
         ui32 OptLevel = 0;
 
-       TProtoPosition(Ydb::Value& value)
+       TProtoPosition(NYdbProtos::Value& value)
             : Value(value) {}
     };
 
@@ -2052,7 +2052,7 @@ public:
         GetType().CopyFrom(type.GetProto());
     }
 
-    TValueBuilderImpl(Ydb::Type& type, Ydb::Value& value)
+    TValueBuilderImpl(NYdbProtos::Type& type, NYdbProtos::Value& value)
         : TypeBuilder_(type)
     {
         PushPath(value);
@@ -2068,7 +2068,7 @@ public:
     TValue BuildValue() {
         CheckValue();
 
-        Ydb::Value value;
+        NYdbProtos::Value value;
         value.Swap(&ProtoValue_);
 
         return TValue(TypeBuilder_.Build(), std::move(value));
@@ -2611,11 +2611,11 @@ public:
     }
 
 private:
-    Ydb::Type& GetType(size_t offset = 0) {
+    NYdbProtos::Type& GetType(size_t offset = 0) {
         return TypeBuilder_.GetProto(offset);
     }
 
-    Ydb::Value& GetValue() {
+    NYdbProtos::Value& GetValue() {
         return PathTop().Value;
     }
 
@@ -2742,7 +2742,7 @@ private:
         return Path_.back();
     }
 
-    void PushPath(Ydb::Value& value) {
+    void PushPath(NYdbProtos::Value& value) {
         Path_.emplace_back(value);
     }
 
@@ -2762,7 +2762,7 @@ private:
         return StructsPath_.back();
     }
 
-    TMembersMap& GetMembersMap(const Ydb::StructType* structType) {
+    TMembersMap& GetMembersMap(const NYdbProtos::StructType* structType) {
         auto it = StructsMap_.find(structType);
         if (it == StructsMap_.end()) {
             TMembersMap membersMap;
@@ -2784,8 +2784,8 @@ private:
 
     //TTypeBuilder TypeBuilder_;
     TTypeBuilder::TImpl TypeBuilder_;
-    Ydb::Value ProtoValue_;
-    std::map<const Ydb::StructType*, TMembersMap> StructsMap_;
+    NYdbProtos::Value ProtoValue_;
+    std::map<const NYdbProtos::StructType*, TMembersMap> StructsMap_;
 
     TStackVec<TProtoPosition, 8> Path_;
     TStackVec<TStructPosition, 8> StructsPath_;
@@ -2808,7 +2808,7 @@ TValueBuilderBase<TDerived>::TValueBuilderBase(const TType& type)
     : Impl_(new TValueBuilderImpl(type)) {}
 
 template<typename TDerived>
-TValueBuilderBase<TDerived>::TValueBuilderBase(Ydb::Type& type, Ydb::Value& value)
+TValueBuilderBase<TDerived>::TValueBuilderBase(NYdbProtos::Type& type, NYdbProtos::Value& value)
     : Impl_(new TValueBuilderImpl(type, value)) {}
 
 template<typename TDerived>

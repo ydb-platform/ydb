@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb-cpp-sdk/client/types/fwd.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
 #include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
@@ -10,13 +11,13 @@
 #include <google/protobuf/timestamp.pb.h>
 #include <google/protobuf/util/json_util.h>
 
-namespace Ydb {
+YDB_PROTOS_NAMESPACE {
 namespace Operations {
 
 class Operation;
 
 } // namespace Operations
-} // namespace Ydb
+}
 
 namespace NYdb::inline V3 {
 
@@ -26,7 +27,7 @@ public:
 
 public:
     TOperation(TStatus&& status);
-    TOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+    TOperation(TStatus&& status, NYdbProtos::Operations::Operation&& operation);
     virtual ~TOperation() = default;
 
     const TOperationId& Id() const;
@@ -41,7 +42,7 @@ public:
     void Out(IOutputStream& o) const;
 
 protected:
-    const Ydb::Operations::Operation& GetProto() const;
+    const NYdbProtos::Operations::Operation& GetProto() const;
 
 private:
     class TImpl;

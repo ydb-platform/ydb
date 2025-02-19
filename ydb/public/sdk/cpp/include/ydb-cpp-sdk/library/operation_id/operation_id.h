@@ -1,10 +1,12 @@
 #pragma once
 
+#include <ydb-cpp-sdk/type_switcher.h>
+
 #include <memory>
 #include <string>
 #include <vector>
 
-namespace Ydb {
+YDB_PROTOS_NAMESPACE {
     class TOperationId;
 }
 
@@ -54,15 +56,15 @@ public:
     std::string GetSubKind() const;
     std::string ToString() const;
 
-    const Ydb::TOperationId& GetProto() const;
+    const NYdbProtos::TOperationId& GetProto() const;
 private:
     class TImpl;
     std::unique_ptr<TImpl> Impl;
 };
 
-std::string ProtoToString(const Ydb::TOperationId& proto);
+std::string ProtoToString(const NYdbProtos::TOperationId& proto);
 
-void AddOptionalValue(Ydb::TOperationId& operarionId, const std::string& key, const std::string& value);
+void AddOptionalValue(NYdbProtos::TOperationId& operarionId, const std::string& key, const std::string& value);
 
 TOperationId::EKind ParseKind(const std::string_view value);
 

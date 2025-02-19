@@ -12,15 +12,15 @@ namespace NYdb::inline V3::NQuery {
 
 class TExecStats::TImpl {
 public:
-    Ydb::TableStats::QueryStats Proto;
+    NYdbProtos::TableStats::QueryStats Proto;
 };
 
-TExecStats::TExecStats(const Ydb::TableStats::QueryStats& proto) {
+TExecStats::TExecStats(const NYdbProtos::TableStats::QueryStats& proto) {
     Impl_ = std::make_shared<TImpl>();
     Impl_->Proto = proto;
 }
 
-TExecStats::TExecStats(Ydb::TableStats::QueryStats&& proto) {
+TExecStats::TExecStats(NYdbProtos::TableStats::QueryStats&& proto) {
     Impl_ = std::make_shared<TImpl>();
     Impl_->Proto = std::move(proto);
 }
@@ -77,7 +77,7 @@ TDuration TExecStats::GetTotalCpuTime() const {
     return TDuration::MicroSeconds(Impl_->Proto.total_cpu_time_us());
 }
 
-const Ydb::TableStats::QueryStats& TExecStats::GetProto() const {
+const NYdbProtos::TableStats::QueryStats& TExecStats::GetProto() const {
     return Impl_->Proto;
 }
 

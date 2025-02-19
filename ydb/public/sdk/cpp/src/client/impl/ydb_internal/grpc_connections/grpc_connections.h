@@ -98,7 +98,7 @@ public:
             clientConfig.MaxOutboundMessageSize = MaxOutboundMessageSize_;
         }
 
-        if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()
+        if (std::is_same<TService,NYdbProtos::Discovery::V1::DiscoveryService>()
             || dbState->Database.empty()
             || endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint)
         {
@@ -291,7 +291,7 @@ public:
             (TResponse* response, TPlainStatus status) mutable
         {
             if (response) {
-                Ydb::Operations::Operation* operation = response->mutable_operation();
+                NYdbProtos::Operations::Operation* operation = response->mutable_operation();
                 if (!operation->ready() && poll) {
                     auto action = MakeIntrusive<TDeferredAction>(
                         operation->id(),
@@ -359,7 +359,7 @@ public:
         const TRpcRequestSettings& requestSettings,
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
-        auto operationCb = [userResponseCb = std::move(userResponseCb)](Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
+        auto operationCb = [userResponseCb = std::move(userResponseCb)](NYdbProtos::Operations::Operation* operation, TPlainStatus status) mutable {
             if (operation) {
                 status.SetCostInfo(std::move(*operation->mutable_cost_info()));
                 userResponseCb(operation->mutable_result(), std::move(status));

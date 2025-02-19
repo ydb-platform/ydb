@@ -640,6 +640,10 @@ void TNodeWarden::PersistConfig(const TString& configYaml, ui64 version, std::op
         return;
     }
 
+    if (YamlConfig && version <= YamlConfig->GetConfigVersion()) {
+        return; // some kind of a race
+    }
+
     struct TSaveContext {
         TString ConfigStorePath;
         TString ConfigYaml;

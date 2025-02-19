@@ -93,6 +93,7 @@ struct TEncryptionIV {
 };
 
 struct TEncryptionKey {
+    TEncryptionKey() = default; // Uninitialized
     explicit TEncryptionKey(const TString& bytes)
         : Key(reinterpret_cast<const unsigned char*>(bytes.data()), reinterpret_cast<const unsigned char*>(bytes.data() + bytes.size()))
     {
@@ -145,7 +146,7 @@ private:
 // Class that reads encrypted file
 // Has streaming interface
 class TEncryptedFileDeserializer {
-    TEncryptedFileDeserializer() = default;
+    TEncryptedFileDeserializer();
 
 public:
     TEncryptedFileDeserializer(TEncryptedFileDeserializer&&) = default;
@@ -172,6 +173,9 @@ public:
     // Get file IV.
     // Must be called after data added enough for the file header.
     TEncryptionIV GetIV() const;
+
+    // Get input bytes read
+    size_t GetProcessedInputBytes() const;
 
     // Helper that deserializes the whole file at one time
     static std::pair<TBuffer, TEncryptionIV> DecryptFile(TEncryptionKey key, TBuffer data);

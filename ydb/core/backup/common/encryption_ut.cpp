@@ -110,6 +110,8 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
 
                     TStringBuf resultText(deserializedFile.Data(), deserializedFile.Size());
                     UNIT_ASSERT_STRINGS_EQUAL(text, resultText);
+
+                    UNIT_ASSERT_VALUES_EQUAL(serializedFile.Size(), deserializer.GetProcessedInputBytes());
                 }
             }
         }
@@ -248,6 +250,35 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
             deserializer.AddData(fileData, false);
             UNIT_ASSERT_EXCEPTION_CONTAINS(deserializer.GetNextBlock(), yexception, "File is corrupted");
         }
+    }
+
+    Y_UNIT_TEST(RestoreFromState) {
+        TString blocks[] = {
+            "Come crawling faster",
+            "Obey your master",
+            "Your life burns faster",
+            "Obey your master",
+        };
+        TEncryptionIV iv = TEncryptionIV::Generate();
+        TEncryptedFileSerializer serializer("Chacha20-Poly1305", Key32, iv);
+        TEncryptedFileDeserializer deserializer(Key32);
+        TString state = deserializer.GetState();
+        const size_t blocksSize = sizeof(blocks) / sizeof(blocks[0]);
+        for (size_t i = 0; i < blocksSize; ++i) {
+            const TString& block = blocks[i];
+            const bool last = i == blocksSize - 1;
+            TBuffer buffer = serializer.AddBlock(block, last);
+            TEncryptedFileDeserializer restored = TEncryptedFileDeserializer::RestoreFromState(state);
+            restored.AddData(std::move(buffer), last);
+            TMaybe<TBuffer> decryptedBlock = restored.GetNextBlock();
+            UNIT_ASSERT(decryptedBlock);
+            UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(decryptedBlock->Data(), decryptedBlock->Size()), block);
+            state = restored.GetState();
+        }
+
+        TEncryptedFileDeserializer restored = TEncryptedFileDeserializer::RestoreFromState(state);
+        UNIT_ASSERT(!restored.GetNextBlock());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(restored.AddData(TBuffer("data", 4), true), yexception, "Stream finished");
     }
 }
 

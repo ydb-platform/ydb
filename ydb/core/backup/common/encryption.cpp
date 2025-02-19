@@ -230,6 +230,9 @@ public:
         }
 
         const EVP_CIPHER* cipher = GetCipherByName(NormalizedAlgName);
+        if (!cipher) {
+            throw yexception() << "Algorith \"" << NormalizedAlgName << "\" was not found";
+        }
 
         // Check key length
         const int keyLength = EVP_CIPHER_key_length(cipher);
@@ -392,6 +395,7 @@ TBuffer TEncryptedFileSerializer::EncryptFile(TString algorithm, TEncryptionKey 
 
 class TEncryptedFileDeserializer::TImpl {
 public:
+    TImpl() = default;
     TImpl(TEncryptionKey key, TEncryptionIV expectedIV)
         : Key(std::move(key))
         , IV(std::move(expectedIV))
@@ -443,7 +447,7 @@ public:
                 size_t toSkip = Min(skip, GetCurrentBufferAvailableBytes());
                 skip -= toSkip;
                 CurrentBufferPos += toSkip;
-                BytesRead += toSkip;
+                BytesProcessed += toSkip;
                 if (addToMACCalculation) {
                     CalcMACOnNonencryptedData(TStringBuf(GetCurrentBufferData(), toSkip));
                 }
@@ -465,7 +469,7 @@ public:
         if (addToMACCalculation) {
             CalcMACOnNonencryptedData(buf);
         }
-        BytesRead += buf.size();
+        BytesProcessed += buf.size();
         return size == 0 && skip == 0;
     }
 
@@ -475,7 +479,7 @@ public:
                 size_t toSkip = Min(skip, GetCurrentBufferAvailableBytes());
                 skip -= toSkip;
                 CurrentBufferPos += toSkip;
-                BytesRead += toSkip;
+                BytesProcessed += toSkip;
                 if (!GetCurrentBufferAvailableBytes()) {
                     PopCurrentBuffer();
                     continue;
@@ -491,7 +495,7 @@ public:
             CurrentBufferPos += static_cast<size_t>(outSize);
             size -= static_cast<size_t>(outSize);
             data += static_cast<size_t>(outSize);
-            BytesRead += toDecrypt;
+            BytesProcessed += toDecrypt;
             if (!GetCurrentBufferAvailableBytes()) {
                 PopCurrentBuffer();
             }
@@ -605,6 +609,9 @@ public:
 
     void ResetCtx() {
         const EVP_CIPHER* cipher = GetCipherByName(NormalizedAlgName);
+        if (!cipher) {
+            ThrowFileIsCorrupted();
+        }
 
         // Check key length
         const int keyLength = EVP_CIPHER_key_length(cipher);
@@ -739,11 +746,50 @@ public:
     }
 
     TString GetState() const {
-        return {};
+        TEncryptedFileDeserializerState state;
+        state.SetEncryptionAlgorithm(NormalizedAlgName);
+        state.SetKey(Key.GetBinaryString());
+        state.SetIV(IV.GetBinaryString());
+        state.SetCurrentChunkNumber(CurrentChunkNumber);
+        state.SetBytesProcessed(BytesProcessed);
+        state.SetPreviousMAC(TString(PreviousMAC, MAC_SIZE));
+        state.SetHeaderWasRead(HeaderWasRead);
+        state.SetDecryptedLastBlock(DecryptedLastBlock);
+        state.SetFinished(Finished);
+
+        TString result;
+        if (!state.SerializeToString(&result)) {
+            throw yexception() << "Failed to save state";
+        }
+        return result;
+    }
+
+    void RestoreFromState(const TString& serializedState) {
+        TEncryptedFileDeserializerState state;
+        if (!state.ParseFromString(serializedState)) {
+            throw yexception() << "Failed to restore state";
+        }
+        NormalizedAlgName = state.GetEncryptionAlgorithm();
+        Key = TEncryptionKey(state.GetKey());
+        IV = TEncryptionIV::FromBinaryString(state.GetIV());
+        CurrentChunkNumber = state.GetCurrentChunkNumber();
+        BytesProcessed = state.GetBytesProcessed();
+        memcpy(PreviousMAC, state.GetPreviousMAC().data(), Min(MAC_SIZE, state.GetPreviousMAC().size()));
+        HeaderWasRead = state.GetHeaderWasRead();
+        DecryptedLastBlock = state.GetDecryptedLastBlock();
+        Finished = state.GetFinished();
+
+        if (HeaderWasRead) {
+            ResetCtx();
+        }
     }
 
     TEncryptionIV GetIV() const {
         return IV;
+    }
+
+    size_t GetProcessedInputBytes() const {
+        return BytesProcessed;
     }
 
 private:
@@ -755,7 +801,7 @@ private:
 
     std::deque<TBuffer> InputData;
     size_t InputBytes = 0;
-    size_t BytesRead = 0;
+    size_t BytesProcessed = 0;
     size_t CurrentBufferPos = 0;
     bool Finished = false;
     bool DecryptedLastBlock = false;
@@ -770,6 +816,11 @@ TEncryptedFileDeserializer::TEncryptedFileDeserializer(TEncryptionKey key)
 
 TEncryptedFileDeserializer::TEncryptedFileDeserializer(TEncryptionKey key, TEncryptionIV expectedIV)
     : Impl(new TImpl(std::move(key), std::move(expectedIV)))
+{
+}
+
+TEncryptedFileDeserializer::TEncryptedFileDeserializer()
+    : Impl(new TImpl())
 {
 }
 
@@ -789,7 +840,7 @@ TString TEncryptedFileDeserializer::GetState() const {
 
 TEncryptedFileDeserializer TEncryptedFileDeserializer::RestoreFromState(const TString& state) {
     TEncryptedFileDeserializer deserializer;
-    Y_UNUSED(state);
+    deserializer.Impl->RestoreFromState(state);
     return deserializer;
 }
 
@@ -813,6 +864,10 @@ TBuffer TEncryptedFileDeserializer::DecryptFile(TEncryptionKey key, TEncryptionI
 
 TEncryptionIV TEncryptedFileDeserializer::GetIV() const {
     return Impl->GetIV();
+}
+
+size_t TEncryptedFileDeserializer::GetProcessedInputBytes() const {
+    return Impl->GetProcessedInputBytes();
 }
 
 } // NKikimr::NBackup

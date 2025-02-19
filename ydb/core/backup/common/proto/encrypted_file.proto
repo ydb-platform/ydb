@@ -8,3 +8,15 @@ message TExportEncryptedFileHeader {
     bytes IV = 2;                   // Initialization vector. The length must suit requirements of encryption algorithm
     string EncryptionAlgorithm = 3; // Encryption algorithm
 }
+
+message TEncryptedFileDeserializerState {
+    string EncryptionAlgorithm = 1;
+    bytes Key = 2;
+    bytes IV = 3;
+    uint32 CurrentChunkNumber = 4;
+    uint64 BytesProcessed = 5;
+    bytes PreviousMAC = 6;
+    bool HeaderWasRead = 7;
+    bool DecryptedLastBlock = 8;
+    bool Finished = 9;
+};

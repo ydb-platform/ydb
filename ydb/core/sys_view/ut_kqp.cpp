@@ -301,7 +301,6 @@ private:
 
         FillStorageSettings(scheme, tableDesc);
         FillColumnFamilies(scheme, tableDesc);
-        //FillAttributes(scheme, pathDesc);
         FillPartitioningSettings(scheme, tableDesc);
         FillKeyBloomFilter(scheme, tableDesc);
         FillReadReplicasSettings(scheme, tableDesc);

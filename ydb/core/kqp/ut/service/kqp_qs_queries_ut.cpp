@@ -1485,25 +1485,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
     }
 
-    Y_UNIT_TEST(ExplainShowCreateTable) {
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetQueryClient();
-
-        auto settings = TExecuteQuerySettings()
-            .ExecMode(EExecMode::Explain);
-
-        auto result = db.ExecuteQuery(R"(
-            SELECT * FROM TwoShard WHERE Key = 1;
-        )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT(result.GetResultSets().empty());
-
-        UNIT_ASSERT(result.GetStats().has_value());
-        UNIT_ASSERT(result.GetStats()->GetPlan().has_value());
-
-        UNIT_ASSERT_C(false, *result.GetStats()->GetPlan());
-    }
-
     Y_UNIT_TEST(ExecStats) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
@@ -2807,7 +2788,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(!result.GetResultSets().empty());
 
             CompareYson(R"([
-                ["`/Root/test_show_create`";"CREATE TABLE test_show_create"];
+                [["/Root/test_show_create"];["CREATE TABLE `test_show_create` (\n\t`Key` Uint32,\n\t`Value` Uint32,\n\tFAMILY default (COMPRESSION = \"off\"),\n\tPRIMARY KEY (`Key`)\n) WITH (\n\tAUTO_PARTITIONING_BY_SIZE = DISABLED,\n\tAUTO_PARTITIONING_BY_LOAD = DISABLED,\n\tAUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1\n);"]];
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }

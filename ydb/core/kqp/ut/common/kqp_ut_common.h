@@ -149,7 +149,19 @@ public:
 
     TKikimrRunner(const NFake::TStorage& storage);
 
-    ~TKikimrRunner();
+    ~TKikimrRunner() {
+        Server->GetRuntime()->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+
+        RunCall([&] { Driver->Stop(true); return false; });
+        if (ThreadPoolStarted_) {
+            ThreadPool.Stop();
+        }
+
+        UNIT_ASSERT_C(WaitHttpGatewayFinalization(CountersRoot), "Failed to finalize http gateway before destruction");
+
+        Server.Reset();
+        Client.Reset();
+    }
 
     NYdb::TDriver* GetDriverMut() { return Driver.Get(); }
     const TString& GetEndpoint() const { return Endpoint; }
@@ -192,8 +204,6 @@ private:
     void WaitForKqpProxyInit();
     void CreateSampleTables();
     void SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
-
-    void CheckShowCreateTable();
 
 private:
     THolder<Tests::TServerSettings> ServerSettings;

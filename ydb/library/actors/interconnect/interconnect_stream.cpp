@@ -108,6 +108,8 @@ namespace NInterconnect {
     TStreamSocket::TStreamSocket(SOCKET fd)
         : TSocket(fd)
     {
+        const int value = 1;
+        setsockopt(Descriptor, IPPROTO_TCP, TCP_NODELAY, (const char*) &value, sizeof(value));
     }
 
     ssize_t

@@ -66,7 +66,6 @@ namespace NYql::NDq {
         using ILookupRetryState = ILookupRetryPolicy::IRetryState;
 
         struct TEvLookupRetry : NActors::TEventLocal<TEvLookupRetry, EvRetry> {
-            typedef typename THandle::TPtr TPtr;
         };
 
     public:

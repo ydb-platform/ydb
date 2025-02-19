@@ -571,8 +571,11 @@ TRestoreResult TRestoreClient::FindClusterRootPath() {
         return Result<TRestoreResult>();
     }
 
+    LOG_D("Try to find cluster root path");
+
     auto status = NDump::ListDirectory(SchemeClient, "/");
     if (!status.IsSuccess()) {
+        LOG_E("Error finding cluster root path: " << status.GetIssues().ToOneLineString());
         return status;
     }
 
@@ -806,6 +809,8 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
     if (auto result = CreateDatabase(CmsClient, dbPath, TCreateDatabaseSettings(dbDesc)); !result.IsSuccess()) {
         if (result.GetStatus() == EStatus::ALREADY_EXISTS) {
             LOG_W("Database " << dbPath.Quote() << " already exists, continue restoring to this database");
+        } else if (result.GetStatus() == EStatus::UNAUTHORIZED) {
+            LOG_W("Not enough rights to create database " << dbPath.Quote() << ", try to restore to existing database");
         } else {
             return result;
         }

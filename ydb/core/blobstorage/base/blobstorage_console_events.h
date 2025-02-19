@@ -35,13 +35,11 @@ namespace NKikimr {
         TEvControllerConsoleCommitRequest(
             const TString& yamlConfig,
             bool allowUnknownFields = false,
-            bool allowIncorrectVersion = false,
-            bool allowIncorrectCluster = false) {
+            bool bypassMetadataChecks = false) {
 
             Record.SetYAML(yamlConfig);
             Record.SetAllowUnknownFields(allowUnknownFields);
-            Record.SetAllowIncorrectVersion(allowIncorrectVersion);
-            Record.SetAllowIncorrectCluster(allowIncorrectCluster);
+            Record.SetBypassMetadataChecks(bypassMetadataChecks);
         }
 
         TString ToString() const override {
@@ -90,8 +88,7 @@ namespace NKikimr {
             std::optional<bool> switchDedicatedStorageSection,
             bool dedicatedConfigMode,
             bool allowUnknownFields,
-            bool allowIncorrectVersion,
-            bool allowIncorrectCluster) {
+            bool bypassMetadataChecks) {
 
             if (clusterYaml) {
                 Record.SetClusterYaml(*clusterYaml);
@@ -104,8 +101,7 @@ namespace NKikimr {
             }
             Record.SetDedicatedConfigMode(dedicatedConfigMode);
             Record.SetAllowUnknownFields(allowUnknownFields);
-            Record.SetAllowIncorrectVersion(allowIncorrectVersion);
-            Record.SetAllowIncorrectCluster(allowIncorrectCluster);
+            Record.SetBypassMetadataChecks(bypassMetadataChecks);
         }
 
         TString ToString() const override {

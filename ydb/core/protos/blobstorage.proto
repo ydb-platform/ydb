@@ -1426,8 +1426,7 @@ message TEvControllerProposeConfigResponse {
 message TEvControllerConsoleCommitRequest {
     optional string YAML = 1;
     optional bool AllowUnknownFields = 2;
-    optional bool AllowIncorrectVersion = 3;
-    optional bool AllowIncorrectCluster = 4;
+    optional bool BypassMetadataChecks = 3;
 }
 
 message TEvControllerConsoleCommitResponse {
@@ -1450,8 +1449,7 @@ message TEvControllerReplaceConfigRequest {
     optional bool DedicatedConfigMode = 7;
     // console flags
     optional bool AllowUnknownFields = 8;
-    optional bool AllowIncorrectVersion = 9;
-    optional bool AllowIncorrectCluster = 10;
+    optional bool BypassMetadataChecks = 9;
 }
 
 message TEvControllerReplaceConfigResponse {
@@ -1472,8 +1470,7 @@ message TEvControllerReplaceConfigResponse {
 message TEvControllerValidateConfigRequest {
     optional string YAML = 1;
     optional bool AllowUnknownFields = 2;
-    optional bool AllowIncorrectVersion = 3;
-    optional bool AllowIncorrectCluster = 4;
+    optional bool BypassMetadataChecks = 3;
 }
 
 message TEvControllerValidateConfigResponse {

@@ -20,35 +20,25 @@ public:
             TActorId senderId,
             const TString& mainYamlConfig,
             bool allowUnknownFields,
-            bool allowIncorrectVersion,
-            bool allowIncorrectCluster,
+            bool bypassMetadataChecks,
             TActorId interconnectSession,
             ui64 cookie)
         : SenderId(senderId)
         , MainYamlConfig(mainYamlConfig)
         , AllowUnknownFields(allowUnknownFields)
-        , AllowIncorrectVersion(allowIncorrectVersion)
-        , AllowIncorrectCluster(allowIncorrectCluster)
+        , BypassMetadataChecks(bypassMetadataChecks)
         , InterconnectSession(interconnectSession)
         , Cookie(cookie)
     {}
 
     void Bootstrap(const TActorId& consoleId) {
-        if (AllowIncorrectVersion xor AllowIncorrectCluster) {
-            auto response = std::make_unique<TEvBlobStorage::TEvControllerConsoleCommitResponse>();
-            response->Record.SetStatus(NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted);
-            response->Record.SetErrorReason("Options AllowIncorrectVersion and AllowIncorrectCluster currently can be used only together");
-            SendInReply(std::move(response));
-            PassAway();
-        }
-
         auto executeRequest = [&](auto& request) {
             request->Record.MutableRequest()->set_config(MainYamlConfig);
             request->Record.MutableRequest()->set_allow_unknown_fields(AllowUnknownFields);
             Send(consoleId, request.release());
         };
 
-        if (AllowIncorrectVersion && AllowIncorrectCluster) {
+        if (BypassMetadataChecks) {
             auto request = std::make_unique<TEvConsole::TEvSetYamlConfigRequest>();
             executeRequest(request);
         } else {
@@ -92,8 +82,7 @@ private:
     TActorId SenderId;
     TString MainYamlConfig;
     bool AllowUnknownFields;
-    bool AllowIncorrectVersion;
-    bool AllowIncorrectCluster;
+    bool BypassMetadataChecks;
     TActorId InterconnectSession;
     ui64 Cookie;
 
@@ -159,8 +148,7 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::
     auto& record = ev->Get()->Record;
     const auto& mainYamlConfig = record.GetYAML();
     bool allowUnknownFields = record.GetAllowUnknownFields();
-    bool allowIncorrectVersion = record.GetAllowIncorrectVersion();
-    bool allowIncorrectCluster = record.GetAllowIncorrectCluster();
+    bool bypassMetadataChecks = record.GetBypassMetadataChecks();
     if (!CheckSession(*ev, response, NKikimrBlobStorage::TEvControllerConsoleCommitResponse::SessionMismatch)) {
         return;
     }
@@ -169,8 +157,7 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::
         ev->Sender,
         mainYamlConfig,
         allowUnknownFields,
-        allowIncorrectVersion,
-        allowIncorrectCluster,
+        bypassMetadataChecks,
         ev->InterconnectSession,
         ev->Cookie);
     CommitActor = Register(actor);
@@ -184,22 +171,12 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerValidateConfigRequest:
 
     auto& record = response->Record;
 
-    bool allowIncorrectVersion = ev->Get()->Record.GetAllowIncorrectVersion();
-    bool allowIncorrectCluster = ev->Get()->Record.GetAllowIncorrectCluster();
-
-    if (allowIncorrectVersion xor allowIncorrectCluster) {
-        record.SetStatus(NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigNotValid);
-        record.SetErrorReason("Options AllowIncorrectVersion and AllowIncorrectCluster currently can be used only together");
-        SendInReply(ev->Sender, ev->InterconnectSession, std::move(response), ev->Cookie);
-        return;
-    }
-
-    bool force = allowIncorrectVersion && allowIncorrectCluster;
+    bool bypassMetadataChecks = ev->Get()->Record.GetBypassMetadataChecks();
 
     auto mainYamlConfig = ev->Get()->Record.GetYAML();
 
     TUpdateConfigOpContext opCtx;
-    ReplaceMainConfigMetadata(mainYamlConfig, force, opCtx);
+    ReplaceMainConfigMetadata(mainYamlConfig, bypassMetadataChecks, opCtx);
     ValidateMainConfig(opCtx);
     bool hasForbiddenUnknownFields = !opCtx.UnknownFields.empty() && !ev->Get()->Record.GetAllowUnknownFields();
 

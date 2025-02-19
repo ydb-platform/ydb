@@ -95,8 +95,7 @@ namespace NKikimr::NBsController {
                             new TEvBlobStorage::TEvControllerConsoleCommitRequest(
                                 yaml,
                                 AllowUnknownFields,
-                                AllowIncorrectVersion,
-                                AllowIncorrectCluster));
+                                BypassMetadataChecks));
                     }
                 }
                 break;
@@ -158,8 +157,7 @@ namespace NKikimr::NBsController {
                     new TEvBlobStorage::TEvControllerConsoleCommitRequest(
                         yaml,
                         AllowUnknownFields,
-                        AllowIncorrectVersion,
-                        AllowIncorrectCluster));
+                        BypassMetadataChecks));
             }
         } else {
             Y_ABORT_UNLESS(!ClientId);
@@ -274,8 +272,7 @@ namespace NKikimr::NBsController {
             // don't need to reset them explicitly
             // every time we get new request we just replace them
             AllowUnknownFields = record.GetAllowUnknownFields();
-            AllowIncorrectVersion = record.GetAllowIncorrectVersion();
-            AllowIncorrectCluster = record.GetAllowIncorrectCluster();
+            BypassMetadataChecks = record.GetBypassMetadataChecks();
         } else {
             PendingYamlConfig.reset();
         }
@@ -308,8 +305,7 @@ namespace NKikimr::NBsController {
         auto validateConfigEv = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigRequest>();
         validateConfigEv->Record.SetYAML(record.GetClusterYaml());
         validateConfigEv->Record.SetAllowUnknownFields(record.GetAllowUnknownFields());
-        validateConfigEv->Record.SetAllowIncorrectVersion(record.GetAllowIncorrectVersion());
-        validateConfigEv->Record.SetAllowIncorrectCluster(record.GetAllowIncorrectCluster());
+        validateConfigEv->Record.SetBypassMetadataChecks(record.GetBypassMetadataChecks());
         NTabletPipe::SendData(Self.SelfId(), ConsolePipe, validateConfigEv.release());
     }
 

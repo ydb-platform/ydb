@@ -48,8 +48,7 @@ namespace NKikimr::NBsController {
 
         std::optional<TString> PendingYamlConfig;
         bool AllowUnknownFields = false;
-        bool AllowIncorrectVersion = false;
-        bool AllowIncorrectCluster = false;
+        bool BypassMetadataChecks = false;
 
         std::optional<std::optional<TString>> PendingStorageYamlConfig;
 

@@ -43,7 +43,7 @@ public:
 
     STFUNC(StateWork) {
        switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
             default:
                 LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
@@ -79,7 +79,7 @@ private:
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
         std::optional<TString> out;

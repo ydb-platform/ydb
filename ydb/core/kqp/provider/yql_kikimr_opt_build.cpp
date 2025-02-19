@@ -942,6 +942,151 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
         return res;
     }
 
+    TNodeOnNodeOwnedMap showCreateTableReadReplaces;
+    VisitExpr(node.Ptr(), [&showCreateTableReadReplaces](const TExprNode::TPtr& input) -> bool {
+        TExprBase currentNode(input);
+        if (auto maybeReadTable = currentNode.Maybe<TKiReadTable>()) {
+            auto readTable = maybeReadTable.Cast();
+            for (auto setting : readTable.Settings()) {
+                auto name = setting.Name().Value();
+                if (name == "showCreateTable") {
+                    showCreateTableReadReplaces[input.Get()] = nullptr;
+                }
+            }
+        }
+        return true;
+    });
+
+    if (!showCreateTableReadReplaces.empty()) {
+        for (auto& [input, _] : showCreateTableReadReplaces) {
+            TKiReadTable content(input);
+
+            TExprNode::TPtr path = ctx.NewCallable(
+                node.Pos(),
+                "String",
+                { ctx.NewAtom(node.Pos(), NKikimr::CanonizePath(NKikimr::JoinPath({TString(database), ".sys/show_create_table"}))) }
+            );
+            auto table = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), "table"), path});
+            auto newKey = ctx.NewCallable(node.Pos(), "Key", {table});
+
+            TKikimrKey key(ctx);
+            YQL_ENSURE(key.Extract(content.TableKey().Ref()));
+
+            auto showCreateValue = Build<TCoNameValueTuple>(ctx, node.Pos())
+                .Name()
+                    .Build("showCreateTable")
+                .Value<TCoAtom>()
+                    .Value(key.GetTablePath())
+                    .Build()
+                .Done();
+
+            auto showCreateTableRead = Build<TCoRead>(ctx, node.Pos())
+                .World<TCoWorld>().Build()
+                .DataSource<TCoDataSource>()
+                    .Category(ctx.NewAtom(node.Pos(), KikimrProviderName))
+                    .FreeArgs()
+                        .Add(ctx.NewAtom(node.Pos(), "db"))
+                    .Build()
+                .Build()
+                .FreeArgs()
+                    .Add(newKey)
+                    .Add(ctx.NewCallable(node.Pos(), "Void", {}))
+                    .Add(ctx.NewList(node.Pos(), {}))
+                    .Add(showCreateValue)
+                .Build()
+            .Done().Ptr();
+
+            showCreateTableReadReplaces[input] = showCreateTableRead;
+        }
+        auto res = ctx.ReplaceNodes(std::move(node.Ptr()), showCreateTableReadReplaces);
+
+        TExprBase resNode(res);
+
+        TNodeOnNodeOwnedMap showCreateTableRightReplaces;
+        VisitExpr(resNode.Ptr(), [&showCreateTableRightReplaces](const TExprNode::TPtr& input) -> bool {
+            TExprBase currentNode(input);
+            if (auto rightMaybe = currentNode.Maybe<TCoRight>()) {
+                auto right = rightMaybe.Cast();
+                if (auto maybeRead = right.Input().Maybe<TCoRead>()) {
+                    auto read = maybeRead.Cast();
+                    for (auto arg : read.FreeArgs()) {
+                        if (auto tuple = arg.Maybe<TCoNameValueTuple>()) {
+                            auto name = tuple.Cast().Name().Value();
+                            if (name == "showCreateTable") {
+                                showCreateTableRightReplaces[input.Get()] = nullptr;
+                            }
+                        }
+                    }
+                }
+            }
+            return true;
+        });
+
+        for (auto& [input, _] : showCreateTableRightReplaces) {
+            TCoRight right(input);
+            TCoRead read(right.Input().Ptr());
+
+            TString tablePath;
+            for (auto arg : read.FreeArgs()) {
+                if (auto tuple = arg.Maybe<TCoNameValueTuple>()) {
+                    auto name = tuple.Cast().Name().Value();
+                    if (name == "showCreateTable") {
+                        tablePath = tuple.Cast().Value().Cast().Cast<TCoAtom>().StringValue();
+                    }
+                }
+            }
+            YQL_ENSURE(!tablePath.empty(), "Unexpected empty table path for SHOW CREATE TABLE");
+
+            TCoAtom columnTableAtom(ctx.NewAtom(resNode.Pos(), "Table"));
+            auto columnTableArg = Build<TCoArgument>(ctx, resNode.Pos())
+                .Name("_column_table_arg")
+                .Done();
+            auto columnTable = Build<TCoMember>(ctx, resNode.Pos())
+                    .Struct(columnTableArg)
+                    .Name(columnTableAtom)
+                    .Done().Ptr();
+
+            auto tableCondition = Build<TCoCmpEqual>(ctx, resNode.Pos())
+                .Left(columnTable)
+                .Right<TCoString>()
+                    .Literal().Build(tablePath)
+                .Build()
+                .Done();
+
+            auto lambda = Build<TCoLambda>(ctx, resNode.Pos())
+                .Args({columnTableArg})
+                .Body<TCoCoalesce>()
+                    .Predicate(tableCondition)
+                    .Value<TCoBool>()
+                        .Literal().Build("false")
+                        .Build()
+                    .Build()
+                .Done().Ptr();
+
+            auto readData = Build<TCoRight>(ctx, resNode.Pos())
+                .Input(right.Input().Ptr())
+            .Done().Ptr();
+
+            auto filterData = Build<TCoFilter>(ctx, resNode.Pos())
+                .Input(readData)
+                .Lambda(lambda)
+            .Done().Ptr();
+
+            showCreateTableRightReplaces[input] = filterData;
+        }
+
+        ctx.Step
+            .Repeat(TExprStep::RewriteIO)
+            .Repeat(TExprStep::ExprEval)
+            .Repeat(TExprStep::DiscoveryIO)
+            .Repeat(TExprStep::Epochs)
+            .Repeat(TExprStep::Intents)
+            .Repeat(TExprStep::LoadTablesMetadata)
+            .Repeat(TExprStep::RewriteIO);
+
+        return ctx.ReplaceNodes(std::move(resNode.Ptr()), showCreateTableRightReplaces);;
+    }
+
     TKiExploreTxResults txExplore;
     txExplore.ConcurrentResults = concurrentResults;
     if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore, tablesData, types) || txExplore.HasErrors) {

@@ -1485,6 +1485,25 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
     }
 
+    Y_UNIT_TEST(ExplainShowCreateTable) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = TExecuteQuerySettings()
+            .ExecMode(EExecMode::Explain);
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT * FROM TwoShard WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetResultSets().empty());
+
+        UNIT_ASSERT(result.GetStats().has_value());
+        UNIT_ASSERT(result.GetStats()->GetPlan().has_value());
+
+        UNIT_ASSERT_C(false, *result.GetStats()->GetPlan());
+    }
+
     Y_UNIT_TEST(ExecStats) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
@@ -2759,6 +2778,38 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         checkUpsert(true, 2);
         checkCreate(false, EEx::Empty, 2); // already exists
         checkUpsert(true, 2);
+    }
+
+    Y_UNIT_TEST(ShowCreateTable) {
+        auto serverSettings = TKikimrSettings();
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE test_show_create (
+                    Key Uint32,
+                    Value Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE TABLE `/Root/test_show_create`;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT(!result.GetResultSets().empty());
+
+            CompareYson(R"([
+                ["`/Root/test_show_create`";"CREATE TABLE test_show_create"];
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 
     Y_UNIT_TEST(DdlCache) {

@@ -298,6 +298,8 @@ private:
             RegisterSystemView<Schema::AuthPermissions>(PermissionsName);
             RegisterSystemView<Schema::AuthPermissions>(EffectivePermissionsName);
         }
+
+        RegisterSystemView<Schema::ShowCreateTable>(ShowCreateTableName);
     }
 
 private:

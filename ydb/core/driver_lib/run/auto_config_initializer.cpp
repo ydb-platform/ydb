@@ -328,6 +328,16 @@ namespace NKikimr::NAutoConfigInitializer {
             } else {
                 executor->SetSpinThreshold(1);
             }
+
+            if (config->HasMinLocalQueueSize()) {
+                executor->SetMinLocalQueueSize(config->GetMinLocalQueueSize());
+            }
+            if (config->HasMaxLocalQueueSize()) {
+                executor->SetMaxLocalQueueSize(config->GetMaxLocalQueueSize());
+            }
+            if (config->HasFixedLocalQueueSize()) {
+                executor->SetFixedLocalQueueSize(config->GetFixedLocalQueueSize());
+            }
         }
     }
 

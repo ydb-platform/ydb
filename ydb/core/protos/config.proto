@@ -86,6 +86,9 @@ message TActorSystemConfig {
         optional int32 MaxAvgPingDeviation = 17;
 
         optional bool HasSharedThread = 18;
+        optional ui16 MaxLocalQueueSize = 20;
+        optional ui16 MinLocalQueueSize = 21;
+        optional ui16 FixedLocalQueueSize = 22;
     }
 
     message TScheduler {
@@ -125,6 +128,10 @@ message TActorSystemConfig {
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
+
+    optional ui16 MinLocalQueueSize = 20;
+    optional ui16 MaxLocalQueueSize = 21;
+    optional ui16 FixedLocalQueueSize = 22;
 }
 
 message TStaticNameserviceConfig {

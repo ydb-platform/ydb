@@ -174,6 +174,9 @@ namespace NActors {
         IHarmonizer *Harmonizer;
         ui64 SoftProcessingDurationTs = 0;
         bool HasOwnSharedThread = false;
+        ui16 MaxLocalQueueSize = 0;
+        ui16 MinLocalQueueSize = 0;
+        std::optional<ui16> FixedLocalQueueSize = 0;
 
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
@@ -243,7 +246,9 @@ namespace NActors {
         void ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter);
 
         void SetLocalQueueSize(ui16 size);
-
+        ui16 GetLocalQueueSize() const;
+        ui16 GetMaxLocalQueueSize() const;
+        ui16 GetMinLocalQueueSize() const;
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
         void PrepareStop() override;

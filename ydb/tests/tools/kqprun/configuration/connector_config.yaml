@@ -1,0 +1,53 @@
+connector_server:
+  endpoint:
+    host: "0.0.0.0"
+    port: ${TARGET_PORT}
+
+logger:
+  log_level: INFO
+  enable_sql_query_logging: false
+
+paging:
+  bytes_per_page: 4194304
+  prefetch_queue_capacity: 2
+
+conversion:
+  use_unsafe_converters: true
+
+data_source_default:  &data_source_default_var
+  open_connection_timeout: 5s
+  ping_connection_timeout: 5s
+  exponential_backoff:
+    initial_interval: 500ms
+    randomization_factor: 0.5
+    multiplier: 1.5
+    max_interval: 20s
+    max_elapsed_time: 1m
+
+datasources:
+  clickhouse:
+    <<: *data_source_default_var
+
+  greenplum:
+    <<: *data_source_default_var
+
+  ms_sql_server:
+    <<: *data_source_default_var
+
+  mysql:
+    <<: *data_source_default_var
+    result_chan_capacity: 1024
+
+  postgresql:
+    <<: *data_source_default_var
+
+  oracle:
+    <<: *data_source_default_var
+
+  mongodb:
+    <<: *data_source_default_var
+    count_docs_to_deduce_schema: 5
+
+  ydb:
+    <<: *data_source_default_var
+    use_underlay_network_for_dedicated_databases: false

@@ -1293,9 +1293,6 @@ namespace NActors {
                                         case EEventAction::PROCESS:
                                             UpdateFinalEventsStatsForEachContext(*ev);
                                             SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
-                                            if (checkStopConditions(/* perMessage */ true)) {
-                                                stopCondition = true;
-                                            }
                                             break;
                                         case EEventAction::DROP:
                                             // do nothing

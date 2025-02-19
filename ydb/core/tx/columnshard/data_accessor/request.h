@@ -223,7 +223,7 @@ public:
     }
 
     virtual ~TDataAccessorsRequest() {
-        Subscriber = nullptr;
+        Subscriber = nullptr; // break loop dependency
     }
 
     ui64 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {

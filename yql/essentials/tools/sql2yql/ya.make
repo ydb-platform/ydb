@@ -8,6 +8,7 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/stub
     yql/essentials/sql
+    yql/essentials/sql/v1
     yql/essentials/sql/pg
     yql/essentials/sql/v1/format
 )

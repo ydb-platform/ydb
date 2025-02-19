@@ -6657,6 +6657,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup4", true), {
             NLs::CheckPartCount("PQGroup4", 2, 1, 2, 2),
         });
+
+        // decimal type
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup5"
+            TotalGroupCount: 2
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+                PartitionKeySchema { Name: "key1" TypeId: 4865 TypeInfo { DecimalPrecision: 35 DecimalScale: 10 } }
+            }
+            PartitionBoundaries {
+                Tuple { Optional { Low128: 0 Hi128: 0 } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup5", true), {
+            NLs::CheckPartCount("PQGroup5", 2, 1, 2, 2),
+        });        
     }
 
     Y_UNIT_TEST(AlterPersQueueGroupWithKeySchema) {

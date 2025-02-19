@@ -12,6 +12,7 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(EErrorCode, i16,
     ((TopicAuthorizationFailed)     (29))
     ((GroupAuthorizationFailed)     (30))
     ((SaslAuthenticationFailed)     (31))
+    ((InvalidTimestamp)             (32))
     ((UnsupportedSaslMechanism)     (33))
 );
 

@@ -189,4 +189,9 @@ message TFeatureFlags {
     optional bool EnableViewExport = 164 [default = false];
     optional bool EnableColumnStore = 165 [default = false];
     optional bool EnableStrictAclCheck = 166 [default = false];
+    optional bool DatabaseYamlConfigAllowed = 167 [default = false];
+    // deny non-administrators the privilege of administering local users and groups
+    optional bool EnableStrictUserManagement = 168 [default = false];
+    optional bool EnableDatabaseAdmin = 169 [default = false];
+    optional bool EnableChangefeedsImport = 170 [default = false];
 }

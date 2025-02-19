@@ -160,7 +160,18 @@ TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYq
 TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
     AddCommonOptimization(issueCode);
     Transformers_.push_back(TTransformStage(
-        CreateRecaptureDataProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
+        CreateChoiceGraphTransformer(
+            [&typesCtx = std::as_const(*TypeAnnotationContext_)](const TExprNode::TPtr&, TExprContext&) {
+                return typesCtx.EngineType == EEngineType::Ytflow;
+            },
+            TTransformStage(
+                CreateRecaptureDataProposalsInspector(*TypeAnnotationContext_, TString{YtflowProviderName}),
+                "RecaptureDataProposalsYtflow",
+                issueCode),
+            TTransformStage(
+                CreateRecaptureDataProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
+                "RecaptureDataProposalsDq",
+                issueCode)),
         "RecaptureDataProposals",
         issueCode));
     Transformers_.push_back(TTransformStage(
@@ -189,6 +200,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
 
 TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<TString>& lineageOut, EYqlIssueCode issueCode) {
     AddCommonOptimization(issueCode);
+    AddCheckExecution(false, issueCode);
     Transformers_.push_back(TTransformStage(
         CreateFunctorTransformer(
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

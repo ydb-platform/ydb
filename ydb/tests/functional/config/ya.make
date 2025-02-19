@@ -2,6 +2,7 @@ PY3TEST()
 
 TEST_SRCS(
     test_config_with_metadata.py
+    test_generate_dynamic_config.py
 )
 
 SPLIT_FACTOR(10)

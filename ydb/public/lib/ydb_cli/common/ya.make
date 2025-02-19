@@ -3,6 +3,7 @@ LIBRARY(common)
 SRCS(
     aws.cpp
     command.cpp
+    command_utils.cpp
     common.cpp
     csv_parser.cpp
     examples.cpp
@@ -29,18 +30,9 @@ SRCS(
     sys.cpp
     tabbed_table.cpp
     waiting_bar.cpp
+    ydb_updater.cpp
     yt.cpp
 )
-
-IF (YDB_CERTIFIED)
-    CFLAGS(
-        -DDISABLE_UPDATE
-    )
-ELSE()
-    SRCS(
-        ydb_updater.cpp
-    )
-ENDIF ()
 
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3

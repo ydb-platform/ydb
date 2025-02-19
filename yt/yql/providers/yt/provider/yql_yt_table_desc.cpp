@@ -7,6 +7,8 @@
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <util/generic/scope.h>
@@ -180,7 +182,13 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
         }
     }
 
-    NYql::TAstParseResult sqlRes = NSQLTranslation::SqlToYql(sql, settings);
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
+    NYql::TAstParseResult sqlRes = NSQLTranslation::SqlToYql(translators, sql, settings);
     ctx.IssueManager.RaiseIssues(sqlRes.Issues);
     if (!sqlRes.IsOk()) {
         return {};
@@ -267,7 +275,7 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
                 return node;
             }
 
-            return ctx.ChangeChild(*node, 0, 
+            return ctx.ChangeChild(*node, 0,
                 ctx.NewAtom(node->Head().Pos(), settings.FileAliasPrefix + origFunc));
         }
 
@@ -290,7 +298,7 @@ bool TYtViewDescription::Fill(const TString& provider, const TString& cluster, c
     IUdfResolver::TPtr udfResolver)
 {
     Sql = sql;
-    CompiledSql = CompileViewSql(provider, cluster, sql, syntaxVersion, viewId, qContext, 
+    CompiledSql = CompileViewSql(provider, cluster, sql, syntaxVersion, viewId, qContext,
         ctx, moduleResolver, urlListerManager, randomProvider, enableViewIsolation, udfResolver);
     return bool(CompiledSql);
 }

@@ -99,7 +99,7 @@
 
 #include <ydb/services/auth/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
-#include <ydb/services/bsconfig/grpc_service.h>
+#include <ydb/services/config/grpc_service.h>
 #include <ydb/services/dynamic_config/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
 #include <ydb/services/discovery/grpc_service.h>
@@ -620,8 +620,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["tablet_service"] = &hasTabletService;
         TServiceCfg hasView = services.empty();
         names["view"] = &hasView;
-        TServiceCfg hasBSConfig = services.empty();
-        names["bsconfig"] = &hasBSConfig;
+        TServiceCfg hasConfig = services.empty();
+        names["config"] = &hasConfig;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -915,8 +915,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 grpcRequestProxies[0], hasView.IsRlAllowed()));
         }
 
-        if (hasBSConfig) {
-            server.AddService(new NGRpcService::TBSConfigGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+        if (hasConfig) {
+            server.AddService(new NGRpcService::TConfigGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (ModuleFactories) {
@@ -1057,6 +1057,11 @@ void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
     for (const auto& a : allocConfig.GetParam()) {
         NMalloc::MallocInfo().SetParam(a.first.c_str(), a.second.c_str());
     }
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    if (allocConfig.GetEnableDefaultAllocator()) {
+        NKikimr::UseDefaultAllocator();
+    }
+#endif
 }
 
 void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)

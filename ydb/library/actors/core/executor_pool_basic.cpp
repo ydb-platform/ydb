@@ -354,9 +354,10 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter) {
-        if (TlsThreadContext && TlsThreadContext->Pool() == this && TlsThreadContext->WorkerId() >= 0) {
+        if (TlsThreadContext && TlsThreadContext->Pool() == this) {
+            TWorkerId workerId = TlsThreadContext->WorkerId();
             if (++TlsThreadContext->LocalQueueContext.WriteTurn < TlsThreadContext->LocalQueueContext.LocalQueueSize) {
-                LocalQueues[TlsThreadContext->WorkerId()].push(mailbox->Hint);
+                LocalQueues[workerId].push(mailbox->Hint);
                 return;
             }
             if (ActorSystemProfile != EASProfile::Default) {
@@ -364,8 +365,8 @@ namespace NActors {
                 TSemaphore semaphore = TSemaphore::GetSemaphore(x);
                 if constexpr (NFeatures::TLocalQueuesFeatureFlags::UseIfAllOtherThreadsAreSleeping) {
                     if (semaphore.CurrentSleepThreadCount == semaphore.CurrentThreadCount - 1 && semaphore.OldSemaphore == 0) {
-                        if (LocalQueues[TlsThreadContext->WorkerId()].empty()) {
-                            LocalQueues[TlsThreadContext->WorkerId()].push(mailbox->Hint);
+                        if (LocalQueues[workerId].empty()) {
+                            LocalQueues[workerId].push(mailbox->Hint);
                             return;
                         }
                     }
@@ -373,9 +374,9 @@ namespace NActors {
 
                 if constexpr (NFeatures::TLocalQueuesFeatureFlags::UseOnMicroburst) {
                     if (semaphore.OldSemaphore >= semaphore.CurrentThreadCount) {
-                        if (LocalQueues[TlsThreadContext->WorkerId()].empty() && TlsThreadContext->LocalQueueContext.WriteTurn < 1) {
+                        if (LocalQueues[workerId].empty() && TlsThreadContext->LocalQueueContext.WriteTurn < 1) {
                             TlsThreadContext->LocalQueueContext.WriteTurn++;
-                            LocalQueues[TlsThreadContext->WorkerId()].push(mailbox->Hint);
+                            LocalQueues[workerId].push(mailbox->Hint);
                             return;
                         }
                     }
@@ -519,8 +520,8 @@ namespace NActors {
         if (deadline < current)
             deadline = current;
 
-        if (auto sharedPool = TlsThreadContext->SharedPool()) {
-            sharedPool->Schedule(deadline, ev, cookie, workerId);
+        if (TlsThreadContext && TlsThreadContext->IsShared()) {
+            TlsThreadContext->SharedPool()->Schedule(deadline, ev, cookie, workerId);
         } else {
             Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
             ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
@@ -529,8 +530,8 @@ namespace NActors {
 
     void TBasicExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
         const auto deadline = ActorSystem->Monotonic() + delta;
-        if (auto sharedPool = TlsThreadContext->SharedPool()) {
-            sharedPool->Schedule(deadline, ev, cookie, workerId);
+        if (TlsThreadContext && TlsThreadContext->IsShared()) {
+            TlsThreadContext->SharedPool()->Schedule(deadline, ev, cookie, workerId);
         } else {
             Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
             ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);

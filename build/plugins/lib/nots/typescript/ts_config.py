@@ -64,7 +64,7 @@ class TsConfig(object):
 
     def read(self):
         try:
-            with open(self.path) as f:
+            with open(self.path, encoding="utf-8") as f:
                 self.data = self.rj.load(f, parse_mode=(self.rj.PM_COMMENTS | self.rj.PM_TRAILING_COMMAS))
 
         except Exception as e:
@@ -118,7 +118,6 @@ class TsConfig(object):
 
         if ext_value.startswith("."):
             base_config_path = ext_value
-
         else:
             dep_name = utils.extract_package_name_from_path(ext_value)
             # the rest part is the ext config path
@@ -134,15 +133,15 @@ class TsConfig(object):
             base_config_path = os.path.join(dep_path, file_path)
 
         rel_path = os.path.dirname(base_config_path)
-        tsconfig_curdir_path = os.path.join(os.path.dirname(self.path), base_config_path)
-        if os.path.isdir(tsconfig_curdir_path):
+        base_config_path = os.path.normpath(os.path.join(os.path.dirname(self.path), base_config_path))
+        if os.path.isdir(base_config_path):
             base_config_path = os.path.join(base_config_path, DEFAULT_TS_CONFIG_FILE)
 
         # processing the base file recursively
-        base_config = TsConfig.load(os.path.join(os.path.dirname(self.path), base_config_path))
+        base_config = TsConfig.load(base_config_path)
         paths = [base_config_path] + base_config.inline_extend(dep_paths)
-
         self.merge(rel_path, base_config)
+
         return paths
 
     def inline_extend(self, dep_paths):

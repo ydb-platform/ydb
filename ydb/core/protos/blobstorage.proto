@@ -1101,11 +1101,22 @@ message TEvControllerRegisterNode {
     }
 
     repeated TShredStatus ShredStatus = 9;
+    optional uint64 ConfigVersion = 10;
+    optional uint64 ConfigHash = 11;
 }
 
 message TEvControllerUpdateNodeDrives {
     optional uint32 NodeId = 1;
     repeated TDriveData DrivesData = 2;
+}
+
+message TYamlConfig {
+    optional string YAML = 1;
+    optional string DedicatedStorageYAML = 2;
+    optional string DedicatedClusterYAML = 3;
+    optional uint64 ConfigVersion = 4;
+    optional uint64 StorageConfigVersion = 5;
+    optional uint64 ClusterConfigVersion = 6;
 }
 
 message TEvControllerNodeServiceSetUpdate {
@@ -1119,6 +1130,10 @@ message TEvControllerNodeServiceSetUpdate {
         repeated uint32 PDiskIds = 2; // a set of PDisks to start shred at
     }
 
+    message TSaveConfigRequest {
+        optional TYamlConfig YamlConfig = 1;
+    }
+
     optional NKikimrProto.EReplyStatus Status = 1;
     optional uint32 NodeID = 2;
     optional TNodeWardenServiceSet ServiceSet = 3;
@@ -1127,6 +1142,8 @@ message TEvControllerNodeServiceSetUpdate {
     optional bool Comprehensive = 6; // if this flag is set to true, then there will be no any other entities than elisted in the ServiceSet
     optional uint64 AvailDomain = 7; // availability domain of the controller
     optional TShredRequest ShredRequest = 8;
+    optional TSaveConfigRequest SaveConfigRequest = 9;
+    optional TYamlConfig YamlConfig = 10;
 }
 
 message TEvControllerConfigRequest {
@@ -1408,6 +1425,8 @@ message TEvControllerProposeConfigResponse {
 
 message TEvControllerConsoleCommitRequest {
     optional string YAML = 1;
+    optional bool AllowUnknownFields = 2;
+    optional bool BypassMetadataChecks = 3;
 }
 
 message TEvControllerConsoleCommitResponse {
@@ -1428,6 +1447,9 @@ message TEvControllerReplaceConfigRequest {
     optional bool SkipConsoleValidation = 5;
     optional bool SwitchDedicatedStorageSection = 6;
     optional bool DedicatedConfigMode = 7;
+    // console flags
+    optional bool AllowUnknownFields = 8;
+    optional bool BypassMetadataChecks = 9;
 }
 
 message TEvControllerReplaceConfigResponse {
@@ -1447,6 +1469,8 @@ message TEvControllerReplaceConfigResponse {
 
 message TEvControllerValidateConfigRequest {
     optional string YAML = 1;
+    optional bool AllowUnknownFields = 2;
+    optional bool BypassMetadataChecks = 3;
 }
 
 message TEvControllerValidateConfigResponse {

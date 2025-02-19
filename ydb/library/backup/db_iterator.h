@@ -40,6 +40,18 @@ private:
     TString TraverseRoot;
     TDeque<TSchemeEntryWithPath> NextNodes;
 
+    static const TVector<NScheme::ESchemeEntryType>& SupportedEntryTypes() {
+        static const TVector<NScheme::ESchemeEntryType> values = {
+            NScheme::ESchemeEntryType::Table,
+            NScheme::ESchemeEntryType::View,
+            NScheme::ESchemeEntryType::Topic,
+            NScheme::ESchemeEntryType::CoordinationNode,
+            NScheme::ESchemeEntryType::Replication,
+        };
+
+        return values;
+    }
+
 public:
     TDbIterator(TDriver driver, const TString& fullPath)
       : Client(driver)
@@ -48,7 +60,7 @@ public:
         Y_ENSURE(listResult.IsSuccess(), "Can't list directory, maybe it doesn't exist, dbPath# "
                 << fullPath.Quote());
 
-        if (IsIn({NScheme::ESchemeEntryType::Table, NScheme::ESchemeEntryType::View}, listResult.GetEntry().Type)) {
+        if (IsIn(SupportedEntryTypes(), listResult.GetEntry().Type)) {
             TPathSplitUnix parentPath(fullPath);
             parentPath.pop_back();
             TraverseRoot = parentPath.Reconstruct();
@@ -143,6 +155,18 @@ public:
 
     bool IsDir() const {
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Directory;
+    }
+
+    bool IsReplication() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Replication;
+    }
+
+    bool IsExternalDataSource() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::ExternalDataSource;
+    }
+
+    bool IsExternalTable() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::ExternalTable;
     }
 
     bool IsListed() const {

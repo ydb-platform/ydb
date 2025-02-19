@@ -29,7 +29,7 @@ namespace NKikimr::NStorage {
 
         NKikimrBlobStorage::TStorageConfig ProposedStorageConfig;
 
-        TString NewYaml;
+        std::optional<TString> NewYaml;
 
     public:
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev)
@@ -635,12 +635,12 @@ namespace NKikimr::NStorage {
         void FetchStorageConfig(bool manual) {
             if (!Self->StorageConfig) {
                 FinishWithError(TResult::ERROR, "no agreed StorageConfig");
-            } else if (!Self->StorageConfigFetchYaml) {
+            } else if (!Self->MainConfigFetchYaml) {
                 FinishWithError(TResult::ERROR, "no stored YAML for storage config");
             } else {
                 auto ev = PrepareResult(TResult::OK, std::nullopt);
                 auto *record = &ev->Record;
-                record->MutableFetchStorageConfig()->SetYAML(Self->StorageConfigFetchYaml);
+                record->MutableFetchStorageConfig()->SetYAML(Self->MainConfigFetchYaml);
 
                 if (manual) {
                     // add BlobStorageConfig, NameserviceConfig, DomainsConfig
@@ -657,25 +657,76 @@ namespace NKikimr::NStorage {
                 return FinishWithError(TResult::ERROR, "previous config has not been committed to Console yet");
             }
 
-            NewYaml = request.GetYAML();
-            ui32 newYamlVersion = 0;
+            NewYaml = request.HasYAML() ? std::make_optional(request.GetYAML()) : std::nullopt;
+
+            auto newStorageYaml = request.HasStorageYAML() ? std::make_optional(request.GetStorageYAML()) : std::nullopt;
+
+            auto switchDedicatedStorageSection = request.HasSwitchDedicatedStorageSection()
+                ? std::make_optional(request.GetSwitchDedicatedStorageSection())
+                : std::nullopt;
+
+            const TString *storageYamlPtr = newStorageYaml ? &newStorageYaml.value() :
+                Self->StorageConfigYaml ? &Self->StorageConfigYaml.value() : nullptr;
+
+            const bool targetDedicatedStorageSection = switchDedicatedStorageSection.value_or(Self->StorageConfigYaml.has_value());
+
+            if (request.GetDedicatedStorageSectionConfigMode() != targetDedicatedStorageSection) {
+                return FinishWithError(TResult::ERROR, "DedicatedStorageSectionConfigMode does not match target state");
+            } else if (newStorageYaml && !targetDedicatedStorageSection) {
+                // we are going to end up in single-config mode, but explicit storage yaml is provided
+                return FinishWithError(TResult::ERROR, "unexpected dedicated storage config section in request");
+            } else if (switchDedicatedStorageSection && *switchDedicatedStorageSection == Self->StorageConfigYaml.has_value()) {
+                // this enable/disable command does not change the state
+                return FinishWithError(TResult::ERROR, "dedicated storage config section is already in requested state");
+            } else if (targetDedicatedStorageSection && !storageYamlPtr) {
+                // we are going to turn on dual-config mode, but no storage config provided
+                return FinishWithError(TResult::ERROR, "no dedicated storage config section provided");
+            }
+
+            const TString *mainYamlPtr = NewYaml ? &NewYaml.value() : &Self->MainConfigYaml;
+
+            std::optional<ui64> newYamlVersion;
+            std::optional<ui64> newStorageYamlVersion;
 
             NKikimrConfig::TAppConfig appConfig;
+            const char *state = "";
+
             try {
-                auto json = NYaml::Yaml2Json(YAML::Load(NewYaml), true);
+                if (storageYamlPtr) { // parse the storage yaml first
+                    state = "loading storage YAML";
+                    auto json = NYaml::Yaml2Json(YAML::Load(*storageYamlPtr), true);
+                    state = "parsing storage YAML";
+                    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(), appConfig, true);
+                    state = "extracting storage YAML metadata";
+                    if (json.Has("metadata")) {
+                        if (auto& metadata = json["metadata"]; metadata.Has("version")) {
+                            newStorageYamlVersion = metadata["version"].GetUIntegerRobust();
+                        }
+                    }
+                }
+
+                state = "loading main YAML";
+                auto json = NYaml::Yaml2Json(YAML::Load(*mainYamlPtr), true);
+                state = "parsing main YAML";
                 NYaml::Parse(json, NYaml::GetJsonToProtoConfig(), appConfig, true);
+                state = "extracting main YAML metadata";
                 if (json.Has("metadata")) {
                     if (auto& metadata = json["metadata"]; metadata.Has("version")) {
                         newYamlVersion = metadata["version"].GetUIntegerRobust();
                     }
                 }
             } catch (const std::exception& ex) {
-                return FinishWithError(TResult::ERROR, TStringBuilder() << "exception while parsing YAML: " << ex.what());
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "exception while " << state
+                    << ": " << ex.what());
             }
 
-            if (Self->StorageConfigYamlVersion && newYamlVersion != *Self->StorageConfigYamlVersion + 1) {
+            if (newYamlVersion && *newYamlVersion != *Self->MainConfigYamlVersion + 1) {
                 return FinishWithError(TResult::ERROR, TStringBuilder() << "version must be increasing by one"
-                    << " new version# " << newYamlVersion << " expected version# " << *Self->StorageConfigYamlVersion + 1);
+                    << " new version# " << *newYamlVersion << " expected version# " << *Self->MainConfigYamlVersion + 1);
+            } else if (newStorageYamlVersion && *newStorageYamlVersion != Self->StorageConfig->GetExpectedStorageYamlVersion()) {
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "version must be increasing by one"
+                    << " new version# " << *newStorageYamlVersion
+                    << " expected version# " << Self->StorageConfig->GetExpectedStorageYamlVersion());
             }
 
             TString errorReason;
@@ -686,8 +737,30 @@ namespace NKikimr::NStorage {
                     << errorReason);
             }
 
-            if (const auto& error = UpdateConfigComposite(config, NewYaml, std::nullopt)) {
-                return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to update config yaml: " << *error);
+            if (NewYaml) {
+                if (const auto& error = UpdateConfigComposite(config, *NewYaml, std::nullopt)) {
+                    return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to update config yaml: " << *error);
+                }
+            } else {
+                config.SetConfigComposite(Self->StorageConfig->GetConfigComposite());
+            }
+
+            if (newStorageYaml) {
+                // make new compressed storage yaml section
+                TString s;
+                if (TStringOutput output(s); true) {
+                    TZstdCompress zstd(&output);
+                    ::Save(&zstd, *newStorageYaml);
+                    ::Save(&zstd, *newStorageYamlVersion);
+                }
+                config.SetCompressedStorageYaml(s);
+                config.SetExpectedStorageYamlVersion(*newStorageYamlVersion + 1);
+            } else if (switchDedicatedStorageSection && !*switchDedicatedStorageSection) {
+                // delete compressed storage yaml section as this request turns off dedicated storage yaml
+            } else if (Self->StorageConfig->HasCompressedStorageYaml()) {
+                // retain current storage yaml
+                config.SetCompressedStorageYaml(Self->StorageConfig->GetCompressedStorageYaml());
+                config.SetExpectedStorageYamlVersion(Self->StorageConfig->GetExpectedStorageYamlVersion());
             }
 
             // advance the config generation
@@ -712,7 +785,7 @@ namespace NKikimr::NStorage {
                 !Self->SelfManagementEnabled &&
                 config.GetSelfManagementConfig().GetEnabled();
 
-            if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, NewYaml)) {
+            if (NewYaml && !Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml)) {
                 FinishWithError(TResult::ERROR, "console pipe is not available");
             } else {
                 ProposedStorageConfig = std::move(config);
@@ -740,7 +813,7 @@ namespace NKikimr::NStorage {
                         << record.GetErrorReason());
 
                 case NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigIsValid:
-                    if (const auto& error = UpdateConfigComposite(ProposedStorageConfig, NewYaml, record.GetYAML())) {
+                    if (const auto& error = UpdateConfigComposite(ProposedStorageConfig, *NewYaml, record.GetYAML())) {
                         return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to update config yaml: " << *error);
                     }
                     return StartProposition(&ProposedStorageConfig);

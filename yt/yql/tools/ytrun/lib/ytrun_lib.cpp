@@ -8,6 +8,8 @@
 #include <yt/yql/providers/yt/lib/log/yt_logger.h>
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/gateway/fmr/yql_yt_fmr.h>
+#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
+#include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
@@ -170,7 +172,26 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     services.FileStorage = GetFileStorage();
     services.Config = std::make_shared<TYtGatewayConfig>(GetRunOptions().GatewaysConfig->GetYt());
     auto ytGateway =  CreateYtNativeGateway(services);
-    return GetRunOptions().GatewayTypes.contains(FastMapReduceGatewayName) ? CreateYtFmrGateway(ytGateway): ytGateway;
+    if (!GetRunOptions().GatewayTypes.contains(FastMapReduceGatewayName)) {
+        return ytGateway;
+    }
+
+    auto coordinator = NFmr::MakeFmrCoordinator();
+    auto func = [&] (NFmr::TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
+        while (!cancelFlag->load()) {
+            Sleep(TDuration::Seconds(3));
+            return NFmr::ETaskStatus::Completed;
+        }
+        return NFmr::ETaskStatus::Aborted;
+    }; // TODO - use function which actually calls Downloader/Uploader based on task params
+
+    NFmr::TFmrJobFactorySettings settings{.Function=func};
+    auto jobFactory = MakeFmrJobFactory(settings);
+    NFmr::TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDefaultRandomProvider(),
+        .TimeToSleepBetweenRequests=TDuration::Seconds(1)};
+    FmrWorker_ = MakeFmrWorker(coordinator, jobFactory, workerSettings);
+    FmrWorker_->Start();
+    return CreateYtFmrGateway(ytGateway, coordinator);
 }
 
 IOptimizerFactory::TPtr TYtRunTool::CreateCboFactory() {

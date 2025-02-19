@@ -3,6 +3,7 @@
 #include <ydb-cpp-sdk/client/driver/driver.h>
 
 namespace Ydb::Cms {
+    class CreateDatabaseRequest;
     class ListDatabasesResult;
     class GetDatabaseStatusResult;
 
@@ -34,9 +35,7 @@ private:
 
 using TAsyncListDatabasesResult = NThreading::TFuture<TListDatabasesResult>;
 
-struct TGetDatabaseStatusSettings : public TOperationRequestSettings<TGetDatabaseStatusSettings> {
-    FLUENT_SETTING(std::string, Path);
-};
+struct TGetDatabaseStatusSettings : public TOperationRequestSettings<TGetDatabaseStatusSettings> {};
 
 enum class EState {
     StateUnspecified = 0,
@@ -134,14 +133,14 @@ struct TTargetTrackingPolicy {
     TTargetTrackingPolicy() = default;
     TTargetTrackingPolicy(const Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy& proto);
 
-    std::variant<TAverageCpuUtilizationPercent> Target;
+    std::variant<std::monostate, TAverageCpuUtilizationPercent> Target;
 };
 
 struct TScaleRecommenderPolicy {
     TScaleRecommenderPolicy() = default;
     TScaleRecommenderPolicy(const Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy& proto);
 
-    std::variant<TTargetTrackingPolicy> Policy;
+    std::variant<std::monostate, TTargetTrackingPolicy> Policy;
 };
 
 struct TScaleRecommenderPolicies {
@@ -151,13 +150,15 @@ struct TScaleRecommenderPolicies {
     std::vector<TScaleRecommenderPolicy> Policies;
 };
 
+using TResourcesKind = std::variant<std::monostate, TResources, TSharedResources, TServerlessResources>;
+
 class TGetDatabaseStatusResult : public TStatus {
 public:
     TGetDatabaseStatusResult(TStatus&& status, const Ydb::Cms::GetDatabaseStatusResult& proto);
 
     const std::string& GetPath() const;
     EState GetState() const;
-    const std::variant<TResources, TSharedResources, TServerlessResources>& GetResourcesKind() const;
+    const TResourcesKind& GetResourcesKind() const;
     const TResources& GetAllocatedResources() const;
     const std::vector<TAllocatedComputationalUnit>& GetRegisteredResources() const;
     std::uint64_t GetGeneration() const;
@@ -165,10 +166,13 @@ public:
     const TDatabaseQuotas& GetDatabaseQuotas() const;
     const TScaleRecommenderPolicies& GetScaleRecommenderPolicies() const;
 
+    // Fills CreateDatabaseRequest proto from this database status
+    void SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const;
+
 private:
     std::string Path_;
     EState State_;
-    std::variant<TResources, TSharedResources, TServerlessResources> ResourcesKind_;
+    TResourcesKind ResourcesKind_;
     TResources AllocatedResources_;
     std::vector<TAllocatedComputationalUnit> RegisteredResources_;
     std::uint64_t Generation_;
@@ -179,13 +183,28 @@ private:
 
 using TAsyncGetDatabaseStatusResult = NThreading::TFuture<TGetDatabaseStatusResult>;
 
+struct TCreateDatabaseSettings : public TOperationRequestSettings<TCreateDatabaseSettings> {
+    TCreateDatabaseSettings() = default;
+    explicit TCreateDatabaseSettings(const Ydb::Cms::CreateDatabaseRequest& request);
+
+    // Fills CreateDatabaseRequest proto from this settings
+    void SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const;
+
+    FLUENT_SETTING(TResourcesKind, ResourcesKind);
+    FLUENT_SETTING(TSchemaOperationQuotas, SchemaOperationQuotas);
+    FLUENT_SETTING(TDatabaseQuotas, DatabaseQuotas);
+    FLUENT_SETTING(TScaleRecommenderPolicies, ScaleRecommenderPolicies);
+};
+
 class TCmsClient {
 public:
     explicit TCmsClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
     TAsyncListDatabasesResult ListDatabases(const TListDatabasesSettings& settings = TListDatabasesSettings());
-    TAsyncGetDatabaseStatusResult GetDatabaseStatus(const TGetDatabaseStatusSettings& settings = TGetDatabaseStatusSettings());
-    
+    TAsyncGetDatabaseStatusResult GetDatabaseStatus(const std::string& path,
+        const TGetDatabaseStatusSettings& settings = TGetDatabaseStatusSettings());
+    TAsyncStatus CreateDatabase(const std::string& path,
+        const TCreateDatabaseSettings& settings = TCreateDatabaseSettings());
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;

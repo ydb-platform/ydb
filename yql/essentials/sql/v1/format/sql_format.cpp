@@ -747,6 +747,54 @@ private:
         }
     }
 
+    void VisitValueConstructor(const TRule_value_constructor& msg) {
+        switch (msg.Alt_case()) {
+            case TRule_value_constructor::kAltValueConstructor1: {
+                auto& ctor = msg.GetAlt_value_constructor1();
+                Scopes.push_back(EScope::TypeName);
+                Visit(ctor.GetToken1());
+                Scopes.pop_back();
+                AfterInvokeExpr = true;
+                Visit(ctor.GetToken2());
+                Visit(ctor.GetRule_expr3());
+                Visit(ctor.GetToken4());
+                Visit(ctor.GetRule_expr5());
+                Visit(ctor.GetToken6());
+                Visit(ctor.GetRule_expr7());
+                Visit(ctor.GetToken8());
+                break;
+            }
+            case TRule_value_constructor::kAltValueConstructor2: {
+                auto& ctor = msg.GetAlt_value_constructor2();
+                Scopes.push_back(EScope::TypeName);
+                Visit(ctor.GetToken1());
+                Scopes.pop_back();
+                AfterInvokeExpr = true;
+                Visit(ctor.GetToken2());
+                Visit(ctor.GetRule_expr3());
+                Visit(ctor.GetToken4());
+                Visit(ctor.GetRule_expr5());
+                Visit(ctor.GetToken6());
+                break;
+            }
+            case TRule_value_constructor::kAltValueConstructor3: {
+                auto& ctor = msg.GetAlt_value_constructor3();
+                Scopes.push_back(EScope::TypeName);
+                Visit(ctor.GetToken1());
+                Scopes.pop_back();
+                AfterInvokeExpr = true;
+                Visit(ctor.GetToken2());
+                Visit(ctor.GetRule_expr3());
+                Visit(ctor.GetToken4());
+                Visit(ctor.GetRule_expr5());
+                Visit(ctor.GetToken6());
+                break;
+            }
+            case TRule_value_constructor::ALT_NOT_SET:
+                Y_ABORT("You should change implementation according to grammar changes");
+        }
+    }
+
     void VisitDefineActionOrSubqueryBody(const TRule_define_action_or_subquery_body& msg) {
         SkipSemicolons(msg.GetBlock1());
         if (msg.HasBlock2()) {
@@ -942,6 +990,11 @@ private:
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_alter_sequence_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitShowCreateTable(const TRule_show_create_table_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_show_create_table_stmt::GetDescriptor(), msg);
     }
 
     void VisitIntoTable(const TRule_into_table_stmt& msg) {
@@ -2908,6 +2961,7 @@ TStaticData::TStaticData()
         })
     , PrettyVisitDispatch({
         {TToken::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitToken)},
+        {TRule_value_constructor::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitValueConstructor)},
         {TRule_into_values_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoValuesSource)},
         {TRule_select_kind::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKind)},
         {TRule_process_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitProcessCore)},
@@ -3021,6 +3075,7 @@ TStaticData::TStaticData()
         {TRule_restore_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRestore)},
         {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
         {TRule_alter_database_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterDatabase)},
+        {TRule_show_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShowCreateTable)},
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},
@@ -3071,7 +3126,7 @@ public:
         }
 
         if (mode == EFormatMode::Obfuscate) {
-            auto message = NSQLTranslationV1::SqlAST(query, "Query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
             if (!message) {
                 return false;
             }
@@ -3082,7 +3137,7 @@ public:
 
         auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
         TVector<TString> statements;
-        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues)) {
+        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File)) {
             return false;
         }
 
@@ -3101,12 +3156,12 @@ public:
                 }
             };
 
-            if (!lexer->Tokenize(currentQuery, "Query", onNextRawToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+            if (!lexer->Tokenize(currentQuery, parsedSettings.File, onNextRawToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
                 return false;
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
             if (!message) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
@@ -3127,7 +3182,7 @@ public:
                 stmtFormattedTokens.push_back(token);
             };
 
-            if (!lexer->Tokenize(currentFormattedQuery, "Query", onNextFormattedToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+            if (!lexer->Tokenize(currentFormattedQuery, parsedSettings.File, onNextFormattedToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
                 return false;
             }
 
@@ -3178,7 +3233,7 @@ TString MutateQuery(const TString& query, const NSQLTranslation::TTranslationSet
         }
     };
 
-    if (!lexer->Tokenize(query, "Query", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+    if (!lexer->Tokenize(query, parsedSettings.File, onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
         throw yexception() << issues.ToString();
     }
 

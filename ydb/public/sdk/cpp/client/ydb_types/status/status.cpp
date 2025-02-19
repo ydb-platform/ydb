@@ -56,6 +56,10 @@ void TStatus::CheckStatusOk(const TStringType& str) const {
     Impl_->CheckStatusOk(str);
 }
 
+bool TStatus::IsUnimplementedError() const {
+    return Impl_->Status.Status == EStatus::CLIENT_CALL_UNIMPLEMENTED;
+}
+
 void TStatus::RaiseError(const TStringType& str) const {
     Impl_->RaiseError(str);
 }

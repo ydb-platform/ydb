@@ -2,6 +2,7 @@ import itertools
 import os
 import os.path
 import sys
+import json
 import subprocess
 import optparse
 import textwrap
@@ -13,7 +14,6 @@ import process_command_files as pcf
 import thinlto_cache
 
 from process_whole_archive_option import ProcessWholeArchiveOption
-from fix_py2_protobuf import fix_py2
 
 
 def get_leaks_suppressions(cmd):
@@ -24,9 +24,6 @@ def get_leaks_suppressions(cmd):
         else:
             newcmd.append(arg)
     return supp, newcmd
-
-
-MUSL_LIBS = '-lc', '-lcrypt', '-ldl', '-lm', '-lpthread', '-lrt', '-lutil'
 
 
 CUDA_LIBRARIES = {
@@ -257,14 +254,6 @@ def fix_sanitize_flag(cmd, opts):
     return flags
 
 
-def fix_cmd_for_musl(cmd):
-    flags = []
-    for flag in cmd:
-        if flag not in MUSL_LIBS:
-            flags.append(flag)
-    return flags
-
-
 def fix_cmd_for_dynamic_cuda(cmd):
     flags = []
     for flag in cmd:
@@ -321,10 +310,9 @@ def fix_blas_resolving(cmd):
     return cmd
 
 
-def parse_args():
+def parse_args(args):
     parser = optparse.OptionParser()
     parser.disable_interspersed_args()
-    parser.add_option('--musl', action='store_true')
     parser.add_option('--custom-step')
     parser.add_option('--python')
     parser.add_option('--source-root')
@@ -341,19 +329,30 @@ def parse_args():
     parser.add_option('--whole-archive-libs', action='append')
     parser.add_option('--exclude-libs', action='append')
     thinlto_cache.add_options(parser)
-    return parser.parse_args()
+    return parser.parse_args(args)
 
 
 if __name__ == '__main__':
-    opts, args = parse_args()
+    args = sys.argv[1:]
+    plugins = []
+
+    if '--start-plugins' in args:
+        ib = args.index('--start-plugins')
+        ie = args.index('--end-plugins')
+        plugins = args[ib + 1:ie]
+        args = args[:ib] + args[ie + 1:]
+
+    for p in plugins:
+        res = subprocess.check_output([sys.executable, p] + args).decode().strip()
+
+        if res:
+            args = json.loads(res)
+
+    opts, args = parse_args(args)
     args = pcf.skip_markers(args)
 
     cmd = fix_blas_resolving(args)
-    cmd = fix_py2(cmd)
     cmd = remove_excessive_flags(cmd)
-    if opts.musl:
-        cmd = fix_cmd_for_musl(cmd)
-
     cmd = fix_sanitize_flag(cmd, opts)
 
     if opts.dynamic_cuda:

@@ -345,6 +345,7 @@ message TSystemStateInfo {
     optional double CoresUsed = 39;
     optional uint32 CoresTotal = 40;
     optional float NetworkUtilization = 41;
+    optional uint64 NetworkWriteThroughput = 42;
 }
 
 message TEvSystemStateRequest {

@@ -439,7 +439,7 @@ class Response(_SansIOResponse):
            Can now be used in a with statement.
         """
         if hasattr(self.response, "close"):
-            self.response.close()  # type: ignore
+            self.response.close()
         for func in self._on_close:
             func()
 
@@ -644,6 +644,14 @@ class Response(_SansIOResponse):
         Calls :meth:`get_json` with default arguments.
         """
         return self.get_json()
+
+    @t.overload
+    def get_json(self, force: bool = ..., silent: "te.Literal[False]" = ...) -> t.Any:
+        ...
+
+    @t.overload
+    def get_json(self, force: bool = ..., silent: bool = ...) -> t.Optional[t.Any]:
+        ...
 
     def get_json(self, force: bool = False, silent: bool = False) -> t.Optional[t.Any]:
         """Parse :attr:`data` as JSON. Useful during testing.

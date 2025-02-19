@@ -85,15 +85,6 @@ std::set<ui32> TPKRangesFilter::GetColumnIds(const TIndexInfo& indexInfo) const 
     return result;
 }
 
-bool TPKRangesFilter::IsPortionInUsage(const TPortionInfo& info) const {
-    for (auto&& i : SortedRanges) {
-        if (i.IsPortionInUsage(info)) {
-            return true;
-        }
-    }
-    return SortedRanges.empty();
-}
-
 bool TPKRangesFilter::CheckPoint(const NArrow::TReplaceKey& point) const {
     for (auto&& i : SortedRanges) {
         if (i.CheckPoint(point)) {
@@ -103,18 +94,21 @@ bool TPKRangesFilter::CheckPoint(const NArrow::TReplaceKey& point) const {
     return SortedRanges.empty();
 }
 
-TPKRangeFilter::EUsageClass TPKRangesFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+    if (SortedRanges.empty()) {
+        return TPKRangeFilter::EUsageClass::FullUsage;
+    }
     for (auto&& i : SortedRanges) {
-        switch (i.IsPortionInPartialUsage(start, end)) {
+        switch (i.GetUsageClass(start, end)) {
             case TPKRangeFilter::EUsageClass::FullUsage:
                 return TPKRangeFilter::EUsageClass::FullUsage;
             case TPKRangeFilter::EUsageClass::PartialUsage:
                 return TPKRangeFilter::EUsageClass::PartialUsage;
-            case TPKRangeFilter::EUsageClass::DontUsage:
+            case TPKRangeFilter::EUsageClass::NoUsage:
                 break;
         }
     }
-    return TPKRangeFilter::EUsageClass::DontUsage;
+    return TPKRangeFilter::EUsageClass::NoUsage;
 }
 
 TPKRangesFilter::TPKRangesFilter(const bool reverse)

@@ -1827,7 +1827,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
         AddCmdDeleteRangeForAllKeys(*PersistRequest);
 
-        ctx.Send(Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
+        ctx.Send(BlobCache, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
         PersistRequest = nullptr;
         CurrentPersistRequestSpan = std::move(PersistRequestSpan);
         PersistRequestSpan = NWilson::TSpan();
@@ -1993,7 +1993,9 @@ void TPartition::RunPersist() {
         //haveChanges = true;
     }
 
-    TryAddDeleteHeadKeysToPersistRequest();
+    if (TryAddDeleteHeadKeysToPersistRequest()) {
+        haveChanges = true;
+    }
 
     if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
         WriteCycleStartTime = now;
@@ -2055,8 +2057,10 @@ void TPartition::RunPersist() {
     PersistRequest = nullptr;
 }
 
-void TPartition::TryAddDeleteHeadKeysToPersistRequest()
+bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
 {
+    bool haveChanges = !DeletedKeys.empty();
+
     while (!DeletedKeys.empty()) {
         auto& k = DeletedKeys.back();
 
@@ -2070,6 +2074,8 @@ void TPartition::TryAddDeleteHeadKeysToPersistRequest()
 
         DeletedKeys.pop_back();
     }
+
+    return haveChanges;
 }
 
 void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)

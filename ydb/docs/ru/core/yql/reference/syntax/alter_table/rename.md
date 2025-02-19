@@ -10,6 +10,16 @@
 ALTER TABLE old_table_name RENAME TO new_table_name;
 ```
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% cut "См. правила наименования таблиц и колонок" %}
+
+{% include [table naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md) %}
+
+{% endcut %}
+
+{% endif %}
+
 Если таблица с новым именем существует, будет возвращена ошибка. Возможность транзакционной подмены таблицы под нагрузкой поддерживается специализированными методами в CLI и SDK.
 
 {% note warning %}

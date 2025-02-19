@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
@@ -20,6 +21,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider_impl.h>
@@ -1848,6 +1850,18 @@ private:
         TypesCtx->AddDataSink(NYql::PgProviderName, NYql::CreatePgDataSink(state));
     }
 
+    void InitSolomonProvider() {
+        auto solomonState = MakeIntrusive<TSolomonState>();
+
+        solomonState->Types = TypesCtx.Get();
+        solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
+        solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
+        solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
+
+        TypesCtx->AddDataSource(NYql::SolomonProviderName, NYql::CreateSolomonDataSource(solomonState));
+        TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));
+    }
+
     void Init(EKikimrQueryType queryType) {
         TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem);
@@ -1883,6 +1897,9 @@ private:
             InitGenericProvider();
             if (FederatedQuerySetup->YtGateway) {
                 InitYtProvider();
+            }
+            if (FederatedQuerySetup->SolomonGateway) {
+                InitSolomonProvider();
             }
         }
 

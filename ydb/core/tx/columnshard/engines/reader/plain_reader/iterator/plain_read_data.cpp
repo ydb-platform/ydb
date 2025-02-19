@@ -40,8 +40,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
             if (GetReadMetadata()->IsWriteConflictable(i.GetInsertWriteId())) {
                 continue;
             }
-        } else if (GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(i.GetFirst(), i.GetLast()) ==
-                   TPKRangeFilter::EUsageClass::DontUsage) {
+        } else if (!GetReadMetadata()->GetPKRangesFilter().IsUsed(i.GetFirst(), i.GetLast())) {
             continue;
         }
         sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, i, SpecialReadContext));

@@ -1149,10 +1149,10 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
                         auto& counterData = meta.GetCounterData();
                         UNIT_ASSERT_VALUES_EQUAL(counterData.GetMessagesWrittenTotal(), cookie - 1);
                         UNIT_ASSERT_VALUES_EQUAL(counterData.GetMessagesWrittenGrpc(),isFirstClass ? cookie - 1 : 0);
-                        UNIT_ASSERT(counterData.GetBytesWrittenUncompressed() > currUncSize);
+                        UNIT_ASSERT(counterData.GetBytesWrittenUncompressed() >= currUncSize);
                         currUncSize = counterData.GetBytesWrittenUncompressed();
                         UNIT_ASSERT_VALUES_EQUAL(counterData.GetBytesWrittenGrpc(), isFirstClass ? counterData.GetBytesWrittenTotal() : 0);
-                        UNIT_ASSERT(counterData.GetBytesWrittenTotal() > currTotalSize);
+                        UNIT_ASSERT(counterData.GetBytesWrittenTotal() >= currTotalSize);
                         currTotalSize = counterData.GetBytesWrittenTotal();
 
                         if (cookie == 11) {

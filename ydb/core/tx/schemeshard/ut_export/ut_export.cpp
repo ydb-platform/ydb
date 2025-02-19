@@ -1,12 +1,13 @@
+#include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
-#include <ydb/core/metering/metering.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <util/string/builder.h>
@@ -2386,6 +2387,78 @@ partitioning_settings {
         )", port));
         env.TestWaitNotification(runtime, txId);
 
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
+        const auto* dataChecksum = s3Mock.GetData().FindPtr("/data_00.csv.sha256");
+        UNIT_ASSERT(dataChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*dataChecksum, "19dcd641390a61063ee45f3e6e06b8f0d3acfc33f934b9bf1ba204668a98f21d data_00.csv");
+
+        const auto* metadataChecksum = s3Mock.GetData().FindPtr("/metadata.json.sha256");
+        UNIT_ASSERT(metadataChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "b72575244ae0cce8dffd45f3537d1e412bfe39de4268f4f85f529cb529870903 metadata.json");
+
+        const auto* schemeChecksum = s3Mock.GetData().FindPtr("/scheme.pb.sha256");
+        UNIT_ASSERT(schemeChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*schemeChecksum, "cb1fb80965ae92e6369acda2b3b5921fd5518c97d6437f467ce00492907f9eb6 scheme.pb");
+
+        const auto* permissionsChecksum = s3Mock.GetData().FindPtr("/permissions.pb.sha256");
+        UNIT_ASSERT(permissionsChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*permissionsChecksum, "b41fd8921ff3a7314d9c702dc0e71aace6af8443e0102add0432895c5e50a326 permissions.pb");
+    }
+
+    Y_UNIT_TEST(EnableChecksumsPersistance) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+    
+        // Create test table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+    
+        // Add some test data
+        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+    
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+    
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+        
+        // Block sending backup task to datashards
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> block(runtime, [](auto& ev) {
+            NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+            UNIT_ASSERT(schemeTx.ParseFromString(ev.Get()->Get()->GetTxBody()));
+            return schemeTx.HasBackup();
+        });
+    
+        // Start export and expect it to be blocked
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+    
+        runtime.WaitFor("backup task is sent to datashards", [&]{ return block.size() >= 1; });
+    
+        // Stop blocking new events
+        block.Stop();
+        
+        // Reboot SchemeShard to resend backup task
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+    
+        // Wait for export to complete
+        env.TestWaitNotification(runtime, txId);
+    
+        // Verify checksums are created
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
 
         const auto* dataChecksum = s3Mock.GetData().FindPtr("/data_00.csv.sha256");

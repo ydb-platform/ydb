@@ -549,7 +549,15 @@ namespace Tests {
         if (!Settings->AppConfig->HasSharedCacheConfig()) {
             Settings->AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(32_MB);
         }
-        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, &Settings->AppConfig->GetSharedCacheConfig(), Settings->EnableForceFollowers);
+
+        SetupTabletServices(
+            *Runtime,
+            &app,
+            mockDisk,
+            Settings->CustomDiskParams,
+            &Settings->AppConfig->GetSharedCacheConfig(),
+            Settings->EnableForceFollowers,
+            Settings->ProxyDSMocks);
 
         // WARNING: must be careful about modifying app data after actor system starts
 
@@ -707,7 +715,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxies, true, 1));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbTabletService(system, counters, grpcRequestProxies, true, 1));
-        if (Settings->EnableYq) {
+        if (Settings->EnableYq || Settings->EnableYqGrpc) {
             GRpcServer->AddService(new NGRpcService::TGRpcFederatedQueryService(system, counters, grpcRequestProxies[0]));
             GRpcServer->AddService(new NGRpcService::TGRpcFqPrivateTaskService(system, counters, grpcRequestProxies[0]));
         }
@@ -1243,6 +1251,8 @@ namespace Tests {
                     queryServiceConfig.GetGeneric(),
                     queryServiceConfig.GetYt(),
                     Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
+                    queryServiceConfig.GetSolomon(),
+                    Settings->SolomonGateway ? Settings->SolomonGateway : NYql::CreateSolomonGateway(queryServiceConfig.GetSolomon()),
                     Settings->ComputationFactory
                 );
             }
@@ -1364,11 +1374,13 @@ namespace Tests {
                     Runtime->GetAppData(nodeIdx).Counters);
                 const TActorId controllerActorId = Runtime->Register(controllerActor, nodeIdx, Runtime->GetAppData(nodeIdx).BatchPoolId);
                 Runtime->RegisterService(NMemory::MakeMemoryControllerId(0), controllerActorId, nodeIdx);
-
-                auto statActor = NStat::CreateStatService();
-                const TActorId statActorId = Runtime->Register(statActor.Release(), nodeIdx, Runtime->GetAppData(nodeIdx).UserPoolId);
-                Runtime->RegisterService(NStat::MakeStatServiceID(Runtime->GetNodeId(nodeIdx)), statActorId, nodeIdx);
             }
+        }
+
+        {
+            auto statActor = NStat::CreateStatService();
+            const TActorId statActorId = Runtime->Register(statActor.Release(), nodeIdx, Runtime->GetAppData(nodeIdx).UserPoolId);
+            Runtime->RegisterService(NStat::MakeStatServiceID(Runtime->GetNodeId(nodeIdx)), statActorId, nodeIdx);
         }
 
         {
@@ -2330,6 +2342,20 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
+    NMsgBusProxy::EResponseStatus TClient::CreateTopic(const TString& parent,
+                                                        const NKikimrSchemeOp::TPersQueueGroupDescription& topic) {
+        auto request = std::make_unique<NMsgBusProxy::TBusSchemeOperation>();
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
+        op->SetWorkingDir(parent);
+        op->MutableCreatePersQueueGroup()->CopyFrom(topic);
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.release(), reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse& response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
     NMsgBusProxy::EResponseStatus TClient::CreateSolomon(const TString& parent, const TString& name, ui32 parts, ui32 channelProfile) {
         auto* request = new NMsgBusProxy::TBusSchemeOperation();
         auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -2667,6 +2693,9 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> request(new NMsgBusProxy::TBusBlobStorageConfigRequest());
         request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
         request->Record.SetDomain(Domain);
+        if (SecurityToken) {
+            request->Record.SetSecurityToken(SecurityToken);
+        }
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
@@ -3218,7 +3247,7 @@ namespace Tests {
         return Server->DynamicNodes();
     }
 
-    void TTenants::CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes, TDuration timeout) {
+    void TTenants::CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes, TDuration timeout, bool acceptAlreadyExist) {
         const TString path = request.path();
         const bool serverless = request.has_serverless_resources();
 
@@ -3228,7 +3257,7 @@ namespace Tests {
             std::move(request), "", "", runtime.GetActorSystem(0), true
         ).ExtractValueSync();
 
-        if (result.operation().status() != Ydb::StatusIds::SUCCESS) {
+        if (result.operation().status() != Ydb::StatusIds::SUCCESS && (!acceptAlreadyExist || result.operation().status() != Ydb::StatusIds::ALREADY_EXISTS)) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(result.operation().issues(), issues);
             ythrow yexception() << "Failed to create tenant " << path << ", " << result.operation().status() << ", reason:\n" << issues.ToString();

@@ -948,6 +948,14 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
         nodeWardenConfig->SelfManagementConfig.emplace(Config.GetSelfManagementConfig());
     }
 
+    if (Config.HasConfigStorePath()) {
+        nodeWardenConfig->ConfigStorePath = Config.GetConfigStorePath();
+    }
+
+    if (Config.HasStoredConfigYaml()) {
+        nodeWardenConfig->YamlConfig.emplace(Config.GetStoredConfigYaml());
+    }
+
     ObtainTenantKey(&nodeWardenConfig->TenantKey, Config.GetKeyConfig());
     ObtainStaticKey(&nodeWardenConfig->StaticKey);
     ObtainPDiskKey(&nodeWardenConfig->PDiskKey, Config.GetPDiskKeyConfig());

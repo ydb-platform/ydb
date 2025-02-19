@@ -1166,6 +1166,9 @@ TFuture<void> TClient::SuspendOperation(
 
     NScheduler::ToProto(req, operationIdOrAlias);
     req->set_abort_running_jobs(options.AbortRunningJobs);
+    if (options.Reason) {
+        req->set_reason(*options.Reason);
+    }
 
     return req->Invoke().As<void>();
 }
@@ -2725,6 +2728,7 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
 
     req->set_pipeline_path(pipelinePath);
     req->set_view_path(viewPath);
+    req->set_cache(options.Cache);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetFlowViewPtr& rsp) {
         return TGetFlowViewResult{

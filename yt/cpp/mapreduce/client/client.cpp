@@ -256,21 +256,49 @@ void TClientBase::Concatenate(
     const TRichYPath& destinationPath,
     const TConcatenateOptions& options)
 {
-    RequestWithRetry<void>(
-        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, &sourcePaths, &destinationPath, &options] (TMutationId /*mutationId*/) {
-            auto transaction = StartTransaction(TStartTransactionOptions());
+    Y_ABORT_IF(options.MaxBatchSize_ <= 0);
 
-            if (!options.Append_ && !sourcePaths.empty() && !transaction->Exists(destinationPath.Path_)) {
-                auto typeNode = transaction->Get(CanonizeYPath(sourcePaths.front()).Path_ + "/@type");
-                auto type = FromString<ENodeType>(typeNode.AsString());
-                transaction->Create(destinationPath.Path_, type, TCreateOptions().IgnoreExisting(true));
-            }
+    ITransactionPtr outerTransaction;
+    IClientBase* outerClient;
+    if (std::ssize(sourcePaths) > options.MaxBatchSize_) {
+        outerTransaction = StartTransaction(TStartTransactionOptions());
+        outerClient = outerTransaction.Get();
+    } else {
+        outerClient = this;
+    }
 
-            RawClient_->Concatenate(transaction->GetId(), sourcePaths, destinationPath, options);
+    TVector<TRichYPath> batch;
+    for (ssize_t i = 0; i < std::ssize(sourcePaths); i += options.MaxBatchSize_) {
+        auto begin = sourcePaths.begin() + i;
+        auto end = sourcePaths.begin() + std::min(i + options.MaxBatchSize_, std::ssize(sourcePaths));
+        batch.assign(begin, end);
 
-            transaction->Commit();
-        });
+        bool firstBatch = (i == 0);
+        RequestWithRetry<void>(
+            ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+            [this, &batch, &destinationPath, &options, outerClient, firstBatch] (TMutationId /*mutationId*/) {
+                auto transaction = outerClient->StartTransaction(TStartTransactionOptions());
+
+                if (firstBatch && !options.Append_ && !batch.empty() && !transaction->Exists(destinationPath.Path_)) {
+                    auto typeNode = transaction->Get(transaction->CanonizeYPath(batch.front()).Path_ + "/@type");
+                    auto type = FromString<ENodeType>(typeNode.AsString());
+                    transaction->Create(destinationPath.Path_, type, TCreateOptions().IgnoreExisting(true));
+                }
+
+                TConcatenateOptions currentOptions = options;
+                if (!firstBatch) {
+                    currentOptions.Append_ = true;
+                }
+
+                RawClient_->Concatenate(transaction->GetId(), batch, destinationPath, currentOptions);
+
+                transaction->Commit();
+            });
+    }
+
+    if (outerTransaction) {
+        outerTransaction->Commit();
+    }
 }
 
 TRichYPath TClientBase::CanonizeYPath(const TRichYPath& path)
@@ -1150,7 +1178,7 @@ void TClient::InsertRows(
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &rows, &options] (TMutationId /*mutationId*/) {
-            RawClient_->InsertRows(path, rows, options);
+            NRawClient::InsertRows(Context_, path, rows, options);
         });
 }
 
@@ -1163,7 +1191,7 @@ void TClient::DeleteRows(
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
-            RawClient_->DeleteRows(path, keys, options);
+            NRawClient::DeleteRows(Context_, path, keys, options);
         });
 }
 
@@ -1190,7 +1218,7 @@ TNode::TListType TClient::LookupRows(
     return RequestWithRetry<TNode::TListType>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
-            return RawClient_->LookupRows(path, keys, options);
+            return NRawClient::LookupRows(Context_, path, keys, options);
         });
 }
 
@@ -1433,7 +1461,7 @@ TYtPoller& TClient::GetYtPoller()
         // We don't use current client and create new client because YtPoller_ might use
         // this client during current client shutdown.
         // That might lead to incrementing of current client refcount and double delete of current client object.
-        YtPoller_ = std::make_unique<TYtPoller>(Context_, ClientRetryPolicy_);
+        YtPoller_ = std::make_unique<TYtPoller>(RawClient_->Clone(), Context_.Config, ClientRetryPolicy_);
     }
     return *YtPoller_;
 }
@@ -1468,7 +1496,7 @@ void TClient::CheckShutdown() const
     }
 }
 
-TClientPtr CreateClientImpl(
+TClientContext CreateClientContext(
     const TString& serverName,
     const TCreateClientOptions& options)
 {
@@ -1517,6 +1545,10 @@ TClientPtr CreateClientImpl(
         context.ServerName = Format("tvm.%v", context.ServerName);
     }
 
+    if (options.ProxyRole_) {
+        context.Config->Hosts = "hosts?role=" + *options.ProxyRole_;
+    }
+
     if (context.UseTLS || options.UseCoreHttpClient_) {
         context.HttpClient = NHttpClient::CreateCoreHttpClient(context.UseTLS, context.Config);
     } else {
@@ -1537,6 +1569,15 @@ TClientPtr CreateClientImpl(
     if (context.Token) {
         TConfig::ValidateToken(context.Token);
     }
+
+    return context;
+}
+
+TClientPtr CreateClientImpl(
+    const TString& serverName,
+    const TCreateClientOptions& options)
+{
+    auto context = CreateClientContext(serverName, options);
 
     auto globalTxId = GetGuid(context.Config->GlobalTxId);
 

@@ -98,6 +98,26 @@ class TDqComputeActorBase : public NActors::TActorBootstrapped<TDerived>
                           , public TSinkCallbacks
                           , public TOutputTransformCallbacks
 {
+private:
+    struct TEvPrivate {
+        enum EEv : ui32 {
+            EvAsyncOutputError = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvEnd
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+        struct TEvAsyncOutputError : public NActors::TEventLocal<TEvAsyncOutputError, EvAsyncOutputError> {
+            TEvAsyncOutputError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)
+                : StatusCode(statusCode)
+                , Issues(issues)
+            {}
+
+            NYql::NDqProto::StatusIds::StatusCode StatusCode;
+            NYql::TIssues Issues;
+        };
+    };
+
 protected:
     enum EEvWakeupTag : ui64 {
         TimeoutTag = 1,
@@ -296,6 +316,7 @@ protected:
             hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleExecuteBase);
             hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, OnNewAsyncInputDataArrived);
             hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
+            hFunc(TEvPrivate::TEvAsyncOutputError, HandleAsyncOutputError);
             default: {
                 CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
                 InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
@@ -367,12 +388,12 @@ protected:
     }
 
     void ProcessOutputsImpl(ERunStatus status) {
-        ProcessOutputsState.LastRunStatus = status;
-
         CA_LOG_T("ProcessOutputsState.Inflight: " << ProcessOutputsState.Inflight);
         if (ProcessOutputsState.Inflight == 0) {
             ProcessOutputsState = TProcessOutputsState();
         }
+
+        ProcessOutputsState.LastRunStatus = status;
 
         for (auto& entry : OutputChannelsMap) {
             const ui64 channelId = entry.first;
@@ -1524,7 +1545,7 @@ protected:
         }
 
         CA_LOG_E("Sink[" << outputIndex << "] fatal error: " << issues.ToOneLineString());
-        InternalError(fatalCode, issues);
+        this->Send(this->SelfId(), new TEvPrivate::TEvAsyncOutputError(fatalCode, issues));
     }
 
     void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override final {
@@ -1534,7 +1555,11 @@ protected:
         }
 
         CA_LOG_E("OutputTransform[" << outputIndex << "] fatal error: " << issues.ToOneLineString());
-        InternalError(fatalCode, issues);
+        this->Send(this->SelfId(), new TEvPrivate::TEvAsyncOutputError(fatalCode, issues));
+    }
+
+    void HandleAsyncOutputError(const TEvPrivate::TEvAsyncOutputError::TPtr& ev) {
+        InternalError(ev->Get()->StatusCode, ev->Get()->Issues);
     }
 
     bool AllAsyncOutputsFinished() const {

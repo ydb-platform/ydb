@@ -247,6 +247,7 @@ public:
         NKikimrViewer::EFlag DiskSpace = NKikimrViewer::EFlag::Grey;
         bool Donor = false;
         std::vector<TVSlotId> Donors;
+        bool Present = false;
 
         TString GetVDiskId() const {
             return TStringBuilder() << VDiskId.GroupID.GetRawId() << '-'
@@ -375,6 +376,9 @@ public:
                     if (*vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                         ++replicatingDisks;
                     }
+                }
+                if (!vdisk.Present) { // no data about disk
+                    ++MissingDisks;
                 }
                 allocated += vdisk.AllocatedSize;
                 limit += vdisk.AllocatedSize + vdisk.AvailableSize;
@@ -1271,6 +1275,7 @@ public:
         if (vDisk.Status && NKikimrBlobStorage::EVDiskStatus_Parse(vDisk.Status, &vDiskStatus)) {
             vDisk.VDiskStatus = vDiskStatus;
         }
+        vDisk.Present = true;
     }
 
     bool AreBSControllerRequestsDone() const {
@@ -1574,7 +1579,7 @@ public:
         }
     }
 
-    void RequestNodesList() {
+    void RequestNodesListForStorageGroups() {
         if (!NodesInfo.has_value()) {
             NodesInfo = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         }
@@ -1623,34 +1628,30 @@ public:
     }
 
     void ProcessWhiteboardGroups() {
-        std::unordered_map<ui32, const NKikimrWhiteboard::TBSGroupStateInfo*> latestGroupInfo;
-        for (const auto& [nodeId, bsGroupStateResponse] : BSGroupStateResponse) {
-            if (bsGroupStateResponse.IsOk()) {
-                for (const NKikimrWhiteboard::TBSGroupStateInfo& info : bsGroupStateResponse->Record.GetBSGroupStateInfo()) {
-                    TString storagePoolName = info.GetStoragePoolName();
-                    if (storagePoolName.empty()) {
-                        continue;
-                    }
-                    if (info.VDiskNodeIdsSize() == 0) {
-                        continue;
-                    }
-                    auto itLatest = latestGroupInfo.find(info.GetGroupID());
-                    if (itLatest == latestGroupInfo.end()) {
-                        latestGroupInfo.emplace(info.GetGroupID(), &info);
-                    } else {
-                        if (info.GetGroupGeneration() > itLatest->second->GetGroupGeneration()) {
-                            itLatest->second = &info;
+        if (GroupData.empty()) {
+            std::unordered_map<ui32, const NKikimrWhiteboard::TBSGroupStateInfo*> latestGroupInfo;
+            for (const auto& [nodeId, bsGroupStateResponse] : BSGroupStateResponse) {
+                if (bsGroupStateResponse.IsOk()) {
+                    for (const NKikimrWhiteboard::TBSGroupStateInfo& info : bsGroupStateResponse->Record.GetBSGroupStateInfo()) {
+                        TString storagePoolName = info.GetStoragePoolName();
+                        if (storagePoolName.empty()) {
+                            continue;
+                        }
+                        if (info.VDiskNodeIdsSize() == 0) {
+                            continue;
+                        }
+                        auto itLatest = latestGroupInfo.find(info.GetGroupID());
+                        if (itLatest == latestGroupInfo.end()) {
+                            latestGroupInfo.emplace(info.GetGroupID(), &info);
+                        } else {
+                            if (info.GetGroupGeneration() > itLatest->second->GetGroupGeneration()) {
+                                itLatest->second = &info;
+                            }
                         }
                     }
                 }
             }
-        }
-        GroupData.reserve(latestGroupInfo.size()); // to keep cache stable after emplace
-        RebuildGroupsByGroupId();
-        size_t capacity = GroupData.capacity();
-        for (const auto& [groupId, info] : latestGroupInfo) {
-            auto itGroup = GroupsByGroupId.find(groupId);
-            if (itGroup == GroupsByGroupId.end()) {
+            for (const auto& [groupId, info] : latestGroupInfo) {
                 TGroup& group = GroupData.emplace_back();
                 group.GroupId = groupId;
                 group.GroupGeneration = info->GetGroupGeneration();
@@ -1665,26 +1666,15 @@ public:
                     TVDisk& vDisk = group.VDisks.emplace_back();
                     vDisk.VDiskId = VDiskIDFromVDiskID(vDiskId);
                 }
-                if (capacity != GroupData.capacity()) {
-                    // we expect to never do this
-                    RebuildGroupsByGroupId();
-                    capacity = GroupData.capacity();
-                }
-            } else {
-                TGroup& group = *itGroup->second;
-                if (group.VDiskNodeIds.empty()) {
-                    for (auto nodeId : info->GetVDiskNodeIds()) {
-                        group.VDiskNodeIds.push_back(nodeId);
-                    }
-                }
             }
+            GroupView.clear();
+            for (TGroup& group : GroupData) {
+                GroupView.emplace_back(&group);
+            }
+            FieldsAvailable |= FieldsWbGroups;
+            FoundGroups = TotalGroups = GroupView.size();
+            ApplyEverything();
         }
-        for (TGroup& group : GroupData) {
-            GroupView.emplace_back(&group);
-        }
-        FieldsAvailable |= FieldsWbGroups;
-        FoundGroups = TotalGroups = GroupView.size();
-        ApplyEverything();
         if (FieldsNeeded(FieldsWbDisks)) {
             std::unordered_set<TNodeId> nodeIds;
             for (const TGroup* group : GroupView) {
@@ -1732,6 +1722,7 @@ public:
         for (auto& donor : info.GetDonors()) {
             vDisk.Donors.emplace_back(donor);
         }
+        vDisk.Present = true;
     }
 
     void ProcessWhiteboardDisks() {
@@ -1901,7 +1892,7 @@ public:
 
     void RequestWhiteboard() {
         FallbackToWhiteboard = true;
-        RequestNodesList();
+        RequestNodesListForStorageGroups();
     }
 
     void OnBscError(const TString& error) {

@@ -5,6 +5,7 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TEST_SRCS(
     conftest.py
     test_create_users.py
+    test_create_users_strict_acl_checks.py
     test_db_counters.py
     test_dynamic_tenants.py
     test_tenants.py
@@ -32,7 +33,7 @@ FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:10 cpu:1)
 ELSE()
     SIZE(MEDIUM)

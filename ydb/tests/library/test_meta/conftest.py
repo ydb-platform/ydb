@@ -15,7 +15,7 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
 
-    if call.when == "teardown":
+    if call.when == "call":
         test_meta_dir = os.getenv("TEST_META_INFO")
 
         if test_meta_dir:

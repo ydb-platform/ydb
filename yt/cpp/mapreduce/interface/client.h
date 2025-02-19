@@ -579,6 +579,11 @@ public:
     virtual void Shutdown() = 0;
 };
 
+/// Create a rpc client for particular cluster.
+IClientPtr CreateRpcClient(
+    const TString& serverName,
+    const TCreateClientOptions& options = {});
+
 /// Create a client for particular MapReduce cluster.
 IClientPtr CreateClient(
     const TString& serverName,

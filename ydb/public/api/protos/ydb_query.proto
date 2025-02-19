@@ -13,6 +13,7 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_query_stats.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_common.proto";
 
 message CreateSessionRequest {
 }
@@ -200,6 +201,10 @@ message ExecuteQueryResponsePart {
     Ydb.TableStats.QueryStats exec_stats = 5;
 
     TransactionMeta tx_meta = 6;
+
+    // Optional timestamp that corresponds to the returned data
+    // That timestamp can be compared with CDC timestamp to make sure is data already present in async stream
+    VirtualTimestamp snapshot = 7;
 }
 
 message ExecuteScriptRequest {

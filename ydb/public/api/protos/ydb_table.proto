@@ -1293,6 +1293,10 @@ message ExecuteScanQueryPartialResult {
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
     string query_full_diagnostics = 7 [deprecated = true];
+
+    // Optional timestamp that corresponds to the returned data
+    // That timestamp can be compared with CDC timestamp to make sure is data already present in async stream
+    VirtualTimestamp snapshot = 8;
 }
 
 // Returns information about an external data source with a given path.

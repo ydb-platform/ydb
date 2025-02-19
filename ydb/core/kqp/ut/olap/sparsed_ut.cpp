@@ -351,6 +351,40 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
     }
 
+    Y_UNIT_TEST(DisabledSetSparsedViaColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(
+            TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableSparsedColumns(false));
+
+        TString tableName = "/Root/TableWithDefaultColumnFamily";
+        TTestHelper::TCompression offCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(offCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(offCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto alterQuery =
+            TStringBuilder() << R"(ALTER OBJECT `)" << tableName
+                             << R"(` (TYPE TABLE) SET (ACTION=ALTER_FAMILY, NAME=default, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`))";
+        auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(SetSparsedViaColumnFamily) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

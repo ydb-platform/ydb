@@ -73,6 +73,12 @@ protected:
                     return false;
                 }
             }
+            for (const auto& [_, family] : targetSchema.GetColumnFamilies().GetColumnFamilies()) {
+                if (family.GetAccessorConstructor().HasObject() &&
+                    family.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName) {
+                    return false;
+                }
+            }
         }
         return true;
     }

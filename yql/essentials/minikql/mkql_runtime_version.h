@@ -30,7 +30,7 @@ namespace NMiniKQL {
 // History:
 // v4  is the version supported by kikimr-19-6
 // v14 is the version supported by kikimr-20-2
-constexpr ui32 RuntimeVersion = MKQL_RUNTIME_VERSION;
+constexpr ui32 RuntimeVersion = 50U;
 
 }
 }

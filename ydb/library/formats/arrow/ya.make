@@ -3,7 +3,6 @@ RECURSE_FOR_TESTS(
 )
 
 RECURSE(
-    accessor
     common
     switch
     csv

@@ -2,12 +2,14 @@
 import random
 import ydb
 
+from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.sql.lib.test_base import TpchTestBaseH1
 from ydb.tests.sql.lib.helpers import split_data_into_fixed_size_chunks
 
 
 class TestTpchBulkUpsertsOperations(TpchTestBaseH1):
 
+    @link_test_case("#14643")
     def test_bulk_upsert_lineitem_with_overlapping_keys(self):
         """
         Test bulk upsert into the lineitem table with overlapping keys.
@@ -72,6 +74,7 @@ class TestTpchBulkUpsertsOperations(TpchTestBaseH1):
 
             assert inserted_quantity == result_quantity, f"Mismatch in l_quantity for {key}"
 
+    @link_test_case("#14642")
     def test_repeated_bulk_upsert_lineitem(self):
         """
         Test that repeatedly upserting records in the lineitem table with the same keys results,

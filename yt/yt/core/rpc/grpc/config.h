@@ -18,6 +18,7 @@ class TDispatcherConfig
 public:
     int DispatcherThreadCount;
     int GrpcThreadCount;
+    int GrpcEventEngineThreadCount;
 
     REGISTER_YSON_STRUCT(TDispatcherConfig);
 

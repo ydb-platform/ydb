@@ -124,4 +124,13 @@ private:
     bool StripMetadata = false;
 };
 
+class TCommandGenerateDynamicConfig : public TYdbReadOnlyCommand {
+public:
+    TCommandGenerateDynamicConfig(bool allowEmptyDatabase);
+    void Config(TConfig&) override;
+    int Run(TConfig&) override;
+private:
+    bool AllowEmptyDatabase = false;
+};
+
 } // namespace NYdb::NConsoleClient::NDynamicConfig

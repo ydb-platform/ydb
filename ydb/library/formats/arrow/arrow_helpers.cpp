@@ -46,29 +46,25 @@ std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared
         return nullptr;
     }
     auto table = TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
-    return table ? ToBatch(table, true) : nullptr;
+    return table ? ToBatch(table) : nullptr;
 }
 
-std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& tableExt, const bool combine) {
+std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& tableExt) {
     if (!tableExt) {
         return nullptr;
     }
-    std::shared_ptr<arrow::Table> table;
-    if (combine) {
-        auto res = tableExt->CombineChunks();
-        Y_ABORT_UNLESS(res.ok());
-        table = *res;
-    } else {
-        table = tableExt;
+    if (tableExt->num_rows() == 0) {
+        return MakeEmptyBatch(tableExt->schema(), 0);
     }
+    std::shared_ptr<arrow::Table> res = TStatusValidator::GetValid(tableExt->CombineChunks());
     std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(table->num_columns());
-    for (auto& col : table->columns()) {
-        AFL_VERIFY(col->num_chunks() == 1)("size", col->num_chunks())("size_bytes", GetTableDataSize(tableExt))
-            ("schema", tableExt->schema()->ToString())("size_new", GetTableDataSize(table));
+    columns.reserve(tableExt->num_columns());
+    for (auto& col : res->columns()) {
+        AFL_VERIFY(col->num_chunks() == 1)("size", col->num_chunks())("size_bytes", GetTableDataSize(res))("schema", res->schema()->ToString())(
+            "size_new", GetTableDataSize(res));
         columns.push_back(col->chunk(0));
     }
-    return arrow::RecordBatch::Make(table->schema(), table->num_rows(), columns);
+    return arrow::RecordBatch::Make(res->schema(), res->num_rows(), columns);
 }
 
 // Check if the permutation doesn't reorder anything
@@ -205,16 +201,26 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared
     return builders;
 }
 
-std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Field>& field) {
+std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Field>& field, const ui32 reserveItems, const ui32 reserveSize) {
     AFL_VERIFY(field);
-    return MakeBuilder(field->type());
+    return MakeBuilder(field->type(), reserveItems, reserveSize);
 }
 
-std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::DataType>& type) {
+std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::DataType>& type, const ui32 reserveItems, const ui32 reserveSize) {
     AFL_VERIFY(type);
     std::unique_ptr<arrow::ArrayBuilder> builder;
     TStatusValidator::Validate(arrow::MakeBuilder(arrow::default_memory_pool(), type, &builder));
+    if (reserveSize) {
+        ReserveData(*builder, reserveSize);
+    }
+    TStatusValidator::Validate(builder->Reserve(reserveItems));
     return std::move(builder);
+}
+
+std::shared_ptr<arrow::Array> FinishBuilder(std::unique_ptr<arrow::ArrayBuilder>&& builder) {
+    std::shared_ptr<arrow::Array> array;
+    TStatusValidator::Validate(builder->Finish(&array));
+    return array;
 }
 
 std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders) {

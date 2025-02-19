@@ -13,3 +13,5 @@ YQL_LAST_ABI_VERSION()
 GENERATE_ENUM_SERIALIZATION(yql_yt_request_options.h)
 
 END()
+
+RECURSE(proto_helpers)

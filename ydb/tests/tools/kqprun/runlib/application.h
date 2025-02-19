@@ -2,7 +2,7 @@
 
 #include "settings.h"
 
-#include <library/cpp/getopt/small/modchooser.h>
+#include <library/cpp/getopt/modchooser.h>
 
 #include <util/stream/file.h>
 

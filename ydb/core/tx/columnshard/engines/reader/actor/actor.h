@@ -25,6 +25,7 @@ private:
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::optional<TMonotonic> StartInstant;
+    std::optional<TMonotonic> FinishInstant;
 
 public:
     static constexpr auto ActorActivityType() {

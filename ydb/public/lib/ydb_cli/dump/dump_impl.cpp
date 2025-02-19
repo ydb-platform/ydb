@@ -4,8 +4,7 @@
 #include <ydb/library/backup/util.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 TDumpClient::TDumpClient(const TDriver& driver, const std::shared_ptr<TLog>& log)
     : Driver(driver)
@@ -60,5 +59,4 @@ TDumpResult TDumpClient::DumpDatabase(const TString& database, const TString& fs
     }
 }
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

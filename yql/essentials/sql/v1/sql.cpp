@@ -182,6 +182,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore59: // alter transfer
         case TRule_sql_stmt_core::kAltSqlStmtCore60: // drop transfer
         case TRule_sql_stmt_core::kAltSqlStmtCore61: // alter database
+        case TRule_sql_stmt_core::kAltSqlStmtCore62: // show create table
             return false;
     }
 }
@@ -272,6 +273,54 @@ bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, 
     }
 
     return true;
+}
+
+class TTranslator : public NSQLTranslation::ITranslator {
+public:
+    TTranslator(const TLexers& lexers, const TParsers& parsers)
+        : Lexers_(lexers)
+        , Parsers_(parsers)
+    {
+        Y_UNUSED(Parsers_);
+    }
+
+    NSQLTranslation::ILexer::TPtr MakeLexer(const NSQLTranslation::TTranslationSettings& settings) final {
+        return NSQLTranslationV1::MakeLexer(Lexers_, settings.AnsiLexer, settings.Antlr4Parser);
+    }
+
+    NYql::TAstParseResult TextToAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
+        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo) final {
+        Y_UNUSED(stmtParseInfo);
+        return SqlToYql(query, settings, warningRules);
+    }
+
+    google::protobuf::Message* TextToMessage(const TString& query, const TString& queryName,
+        NYql::TIssues& issues, size_t maxErrors, const NSQLTranslation::TTranslationSettings& settings) final {
+        return SqlAST(query, queryName, issues, maxErrors, settings.AnsiLexer, settings.Antlr4Parser,
+            settings.TestAntlr4, settings.Arena);
+    }
+
+    NYql::TAstParseResult TextAndMessageToAst(const TString& query, const google::protobuf::Message& protoAst,
+        const NSQLTranslation::TSQLHints& hints, const NSQLTranslation::TTranslationSettings& settings) final {
+        return SqlASTToYql(query, protoAst, hints, settings);
+    }
+
+    TVector<NYql::TAstParseResult> TextToManyAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
+        NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo) final {
+        return SqlToAstStatements(query, settings, warningRules, stmtParseInfo);
+    }
+
+private:
+    const TLexers Lexers_;
+    const TParsers Parsers_;
+};
+
+NSQLTranslation::TTranslatorPtr MakeTranslator() {
+    return MakeIntrusive<TTranslator>(MakeAllLexers(), MakeAllParsers());
+}
+
+NSQLTranslation::TTranslatorPtr MakeTranslator(const TLexers& lexers, const TParsers& parsers) {
+    return MakeIntrusive<TTranslator>(lexers, parsers);
 }
 
 } // namespace NSQLTranslationV1

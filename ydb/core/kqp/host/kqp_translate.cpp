@@ -2,6 +2,9 @@
 
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v0/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
 
@@ -179,6 +182,7 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     NSQLTranslation::TTranslationSettings settings;
     settings.PgParser = UsePgParser && *UsePgParser;
     settings.Antlr4Parser = false;
+    settings.EmitReadsForExists = true;
     if (settings.PgParser) {
         settings.AutoParametrizeEnabled = IsEnablePgConstsToParams ;
         settings.AutoParametrizeValuesStmt = IsEnablePgConstsToParams;
@@ -287,7 +291,14 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         TKqpAutoParamBuilderFactory autoParamBuilderFactory;
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
         NYql::TStmtParseInfo stmtParseInfo;
-        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &stmtParseInfo, effectiveSettings);
+
+        NSQLTranslation::TTranslators translators(
+            NSQLTranslationV0::MakeTranslator(),
+            NSQLTranslationV1::MakeTranslator(),
+            NSQLTranslationPG::MakeTranslator()
+        );
+
+        auto ast = NSQLTranslation::SqlToYql(translators, queryText, settings, nullptr, &stmtParseInfo, effectiveSettings);
         deprecatedSQL = (ast.ActualSyntaxType == NYql::ESyntaxType::YQLv0);
         sqlVersion = ast.ActualSyntaxType == NYql::ESyntaxType::YQLv1 ? 1 : 0;
         keepInCache = stmtParseInfo.KeepInCache;
@@ -321,13 +332,19 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder) {
     TVector<TQueryAst> result;
     settingsBuilder.SetSqlVersion(sqlVersion);
+    NSQLTranslation::TTranslators translators(
+        NSQLTranslationV0::MakeTranslator(),
+        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
         TKqpAutoParamBuilderFactory autoParamBuilderFactory;
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
         ui16 actualSyntaxVersion = 0;
         TVector<NYql::TStmtParseInfo> stmtParseInfo;
-        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
+        auto astStatements = NSQLTranslation::SqlToAstStatements(translators, queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
         deprecatedSQL = (actualSyntaxVersion == 0);
         sqlVersion = actualSyntaxVersion;
         YQL_ENSURE(astStatements.size() == stmtParseInfo.size());

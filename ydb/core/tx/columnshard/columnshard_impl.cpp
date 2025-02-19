@@ -86,7 +86,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
     , TablesManager(StoragesManager, std::make_shared<NOlap::NDataAccessorControl::TLocalManager>(nullptr),
-          std::make_shared<NOlap::TSchemaObjectsCache>(), info->TabletID)
+          std::make_shared<NOlap::TSchemaObjectsCache>(), Counters.GetPortionIndexCounters(), info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
@@ -1617,11 +1617,7 @@ void TColumnShard::OnTieringModified(const std::optional<ui64> pathId) {
     StoragesManager->OnTieringModified(Tiers);
     if (TablesManager.HasPrimaryIndex()) {
         if (pathId) {
-            std::optional<NOlap::TTiering> tableTtl;
-            if (auto* findTtl = TablesManager.GetTtl().FindPtr(*pathId)) {
-                tableTtl = *findTtl;
-            }
-            TablesManager.MutablePrimaryIndex().OnTieringModified(tableTtl, *pathId);
+            TablesManager.MutablePrimaryIndex().OnTieringModified(TablesManager.GetTableTtl(*pathId), *pathId);
         } else {
             TablesManager.MutablePrimaryIndex().OnTieringModified(TablesManager.GetTtl());
         }

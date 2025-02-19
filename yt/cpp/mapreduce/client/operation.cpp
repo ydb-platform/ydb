@@ -879,6 +879,12 @@ void BuildCommonOperationPart(
     if (baseSpec.MaxFailedJobCount_.Defined()) {
         (*specNode)["max_failed_job_count"] = *baseSpec.MaxFailedJobCount_;
     }
+    if (baseSpec.Description_.Defined()) {
+        (*specNode)["description"] = *baseSpec.Description_;
+    }
+    if (baseSpec.Annotations_.Defined()) {
+        (*specNode)["annotations"] = *baseSpec.Annotations_;
+    }
 }
 
 template <typename TSpec>

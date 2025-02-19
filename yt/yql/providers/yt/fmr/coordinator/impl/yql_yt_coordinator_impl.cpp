@@ -3,7 +3,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include "yql_yt_coordinator_impl.h"
 
-namespace NYql {
+namespace NYql::NFmr {
 
 namespace {
 
@@ -243,4 +243,4 @@ IFmrCoordinator::TPtr MakeFmrCoordinator(const TFmrCoordinatorSettings& settings
     return MakeIntrusive<TFmrCoordinator>(settings);
 }
 
-} // namespace NYql
+} // namespace NYql::NFmr

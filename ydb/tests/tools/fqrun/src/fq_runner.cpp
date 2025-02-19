@@ -8,17 +8,24 @@ using namespace NKikimrRun;
 namespace NFqRun {
 
 class TFqRunner::TImpl {
+    using EVerbose = TFqSetupSettings::EVerbose;
+
     static constexpr TDuration REFRESH_PERIOD = TDuration::Seconds(1);
 
 public:
     explicit TImpl(const TRunnerOptions& options)
         : Options(options)
+        , VerboseLevel(options.FqSettings.VerboseLevel)
         , FqSetup(options.FqSettings)
         , CerrColors(NColorizer::AutoColors(Cerr))
         , CoutColors(NColorizer::AutoColors(Cout))
     {}
 
     bool ExecuteStreamQuery(const TRequestOptions& query) {
+        if (VerboseLevel >= EVerbose::QueriesText) {
+            Cout << CoutColors.Cyan() << "Starting stream request:\n" << CoutColors.Default() << query.Query << Endl;
+        }
+
         const TRequestResult status = FqSetup.StreamRequest(query, StreamQueryId);
 
         if (!status.IsSuccess()) {
@@ -52,12 +59,59 @@ public:
         if (Options.ResultOutput) {
             Cout << CoutColors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Writing query results..." << CoutColors.Default() << Endl;
             for (size_t i = 0; i < ResultSets.size(); ++i) {
-                if (ResultSets.size() > 1) {
+                if (ResultSets.size() > 1 && VerboseLevel >= EVerbose::Info) {
                     *Options.ResultOutput << CoutColors.Cyan() << "Result set " << i + 1 << ":" << CoutColors.Default() << Endl;
                 }
                 PrintResultSet(Options.ResultOutputFormat, *Options.ResultOutput, ResultSets[i]);
             }
         }
+    }
+
+    bool CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections) {
+        for (const auto& connection : connections) {
+            if (VerboseLevel >= EVerbose::QueriesText) {
+                Cout << CoutColors.Cyan() << "Creating connection:\n" << CoutColors.Default() << Endl << connection.DebugString() << Endl;
+            }
+
+            TString connectionId;
+            const TRequestResult status = FqSetup.CreateConnection(connection, connectionId);
+
+            if (!status.IsSuccess()) {
+                Cerr << CerrColors.Red() << "Failed to create connection '" << connection.name() << "', reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
+                return false;
+            }
+
+            if (!ConnectionNameToId.emplace(connection.name(), connectionId).second) {
+                Cerr << CerrColors.Red() << "Got duplicated connection name '" << connection.name() << "'" << CerrColors.Default() << Endl;
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings) const {
+        for (auto binding : bindings) {
+            if (VerboseLevel >= EVerbose::QueriesText) {
+                Cout << CoutColors.Cyan() << "Creating binding:\n" << CoutColors.Default() << Endl << binding.DebugString() << Endl;
+            }
+
+            const auto it = ConnectionNameToId.find(binding.connection_id());
+            if (it == ConnectionNameToId.end()) {
+                Cerr << CerrColors.Red() << "Failed to create binding '" << binding.name() << "', connection with name '" << binding.connection_id() << "' not found" << CerrColors.Default() << Endl;
+                return false;
+            }
+
+            binding.set_connection_id(it->second);
+            const TRequestResult status = FqSetup.CreateBinding(binding);
+
+            if (!status.IsSuccess()) {
+                Cerr << CerrColors.Red() << "Failed to create binding '" << binding.name() << "', reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
+                return false;
+            }
+        }
+
+        return true;
     }
 
 private:
@@ -70,7 +124,13 @@ private:
         StartTime = TInstant::Now();
 
         while (true) {
-            const TRequestResult status = FqSetup.DescribeQuery(StreamQueryId, ExecutionMeta);
+            TExecutionMeta meta;
+            const TRequestResult status = FqSetup.DescribeQuery(StreamQueryId, meta);
+
+            if (meta.TransientIssues.Size() != ExecutionMeta.TransientIssues.Size() && VerboseLevel >= EVerbose::Info) {
+                Cerr << CerrColors.Red() << "Query transient issues updated:" << CerrColors.Default() << Endl << meta.TransientIssues.ToString() << Endl;
+            }
+            ExecutionMeta = meta;
 
             if (IsFinalStatus(ExecutionMeta.Status)) {
                 break;
@@ -84,13 +144,12 @@ private:
             Sleep(REFRESH_PERIOD);
         }
 
-        Cout << CoutColors.Cyan() << "Query finished. Duration: " << TInstant::Now() - StartTime << CoutColors.Default() << Endl;
+        if (VerboseLevel >= EVerbose::Info) {
+            Cout << CoutColors.Cyan() << "Query finished. Duration: " << TInstant::Now() - StartTime << CoutColors.Default() << Endl;
+        }
 
         if (ExecutionMeta.Status != FederatedQuery::QueryMeta::COMPLETED) {
             Cerr << CerrColors.Red() << "Failed to execute query, invalid final status " << FederatedQuery::QueryMeta::ComputeStatus_Name(ExecutionMeta.Status) << ", issues:" << CerrColors.Default() << Endl << ExecutionMeta.Issues.ToString() << Endl;
-            if (ExecutionMeta.TransientIssues) {
-                Cerr << CerrColors.Red() << "Transient issues:" << CerrColors.Default() << Endl << ExecutionMeta.TransientIssues.ToString() << Endl;
-            }
             return false;
         }
 
@@ -98,15 +157,12 @@ private:
             Cerr << CerrColors.Red() << "Query finished with issues:" << CerrColors.Default() << Endl << ExecutionMeta.Issues.ToString() << Endl;
         }
 
-        if (ExecutionMeta.TransientIssues) {
-            Cerr << CerrColors.Red() << "Query finished with transient issues:" << CerrColors.Default() << Endl << ExecutionMeta.TransientIssues.ToString() << Endl;
-        }
-
         return true;
     }
 
 private:
     const TRunnerOptions Options;
+    const EVerbose VerboseLevel;
     const TFqSetup FqSetup;
     const NColorizer::TColors CerrColors;
     const NColorizer::TColors CoutColors;
@@ -115,6 +171,7 @@ private:
     TInstant StartTime;
     TExecutionMeta ExecutionMeta;
     std::vector<Ydb::ResultSet> ResultSets;
+    std::unordered_map<TString, TString> ConnectionNameToId;
 };
 
 TFqRunner::TFqRunner(const TRunnerOptions& options)
@@ -131,6 +188,14 @@ bool TFqRunner::FetchQueryResults() const {
 
 void TFqRunner::PrintQueryResults() const {
     Impl->PrintQueryResults();
+}
+
+bool TFqRunner::CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections) const {
+    return Impl->CreateConnections(connections);
+}
+
+bool TFqRunner::CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings) const {
+    return Impl->CreateBindings(bindings);
 }
 
 }  // namespace NFqRun

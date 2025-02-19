@@ -44,6 +44,7 @@ struct TExecutionOptions {
     bool UseTemplates = false;
 
     ui32 LoopCount = 1;
+    TDuration QueryDelay;
     TDuration LoopDelay;
     bool ContinueAfterFail = false;
 
@@ -100,11 +101,12 @@ struct TExecutionOptions {
         };
     }
 
-    TRequestOptions GetScriptQueryOptions(size_t index, size_t queryId, TInstant startTime) const {
+    TRequestOptions GetScriptQueryOptions(size_t index, size_t loopId, size_t queryId, TInstant startTime) const {
         Y_ABORT_UNLESS(index < ScriptQueries.size());
 
         TString sql = ScriptQueries[index];
         if (UseTemplates) {
+            SubstGlobal(sql, "${LOOP_ID}", ToString(loopId));
             SubstGlobal(sql, "${QUERY_ID}", ToString(queryId));
         }
 
@@ -270,12 +272,12 @@ private:
 };
 
 
-void RunArgumentQuery(size_t index, size_t queryId, TInstant startTime, const TExecutionOptions& executionOptions, TKqpRunner& runner) {
+void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, TInstant startTime, const TExecutionOptions& executionOptions, TKqpRunner& runner) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     switch (executionOptions.GetExecutionCase(index)) {
         case TExecutionOptions::EExecutionCase::GenericScript: {
-            if (!runner.ExecuteScript(executionOptions.GetScriptQueryOptions(index, queryId, startTime))) {
+            if (!runner.ExecuteScript(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
@@ -292,21 +294,21 @@ void RunArgumentQuery(size_t index, size_t queryId, TInstant startTime, const TE
         }
 
         case TExecutionOptions::EExecutionCase::GenericQuery: {
-            if (!runner.ExecuteQuery(executionOptions.GetScriptQueryOptions(index, queryId, startTime))) {
+            if (!runner.ExecuteQuery(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
             break;
         }
 
         case TExecutionOptions::EExecutionCase::YqlScript: {
-            if (!runner.ExecuteYqlScript(executionOptions.GetScriptQueryOptions(index, queryId, startTime))) {
+            if (!runner.ExecuteYqlScript(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
             }
             break;
         }
 
         case TExecutionOptions::EExecutionCase::AsyncQuery: {
-            runner.ExecuteQueryAsync(executionOptions.GetScriptQueryOptions(index, queryId, startTime));
+            runner.ExecuteQueryAsync(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime));
             break;
         }
     }
@@ -327,24 +329,25 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
     const size_t numberLoops = executionOptions.LoopCount;
     for (size_t queryId = 0; queryId < numberQueries * numberLoops || numberLoops == 0; ++queryId) {
         size_t id = queryId % numberQueries;
-        if (id == 0 && queryId > 0) {
-            Sleep(executionOptions.LoopDelay);
+        if (queryId > 0) {
+            Sleep(id == 0 ? executionOptions.LoopDelay : executionOptions.QueryDelay);
         }
 
         const TInstant startTime = TInstant::Now();
+        const size_t loopId = queryId / numberQueries;
         if (executionOptions.GetExecutionCase(id) != TExecutionOptions::EExecutionCase::AsyncQuery) {
             Cout << colors.Yellow() << startTime.ToIsoStringLocal() << " Executing script";
             if (numberQueries > 1) {
                 Cout << " " << id;
             }
             if (numberLoops != 1) {
-                Cout << ", loop " << queryId / numberQueries;
+                Cout << ", loop " << loopId;
             }
             Cout << "..." << colors.Default() << Endl;
         }
 
         try {
-            RunArgumentQuery(id, queryId, startTime, executionOptions, runner);
+            RunArgumentQuery(id, loopId, queryId, startTime, executionOptions, runner);
         } catch (const yexception& exception) {
             if (executionOptions.ContinueAfterFail) {
                 Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
@@ -424,6 +427,8 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistr
 
 
 class TMain : public TMainBase {
+    using EVerbose = TYdbSetupSettings::EVerbose;
+
     inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
     inline static IOutputStream* ProfileAllocationsOutput = nullptr;
     inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
@@ -472,6 +477,10 @@ protected:
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.ScriptQueries.emplace_back(LoadFile(option->CurVal()));
             });
+
+        options.AddLongOption("sql", "Script query SQL text to execute (typically DML query)")
+            .RequiredArgument("str")
+            .AppendTo(&ExecutionOptions.ScriptQueries);
 
         options.AddLongOption("templates", "Enable templates for -s and -p queries, such as ${YQL_TOKEN} and ${QUERY_ID}")
             .NoArgument()
@@ -660,11 +669,11 @@ protected:
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
 
-        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(TYdbSetupSettings::EVerbose::Max) - 1 << ")")
+        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(EVerbose::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EVerbose::Info))
+            .DefaultValue(static_cast<ui8>(EVerbose::Info))
             .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.VerboseLevel, [](ui8 value) {
-                return static_cast<TYdbSetupSettings::EVerbose>(std::min(value, static_cast<ui8>(TYdbSetupSettings::EVerbose::Max)));
+                return static_cast<EVerbose>(std::min(value, static_cast<ui8>(EVerbose::Max)));
             });
 
         TChoices<TAsyncQueriesSettings::EVerbose> verbose({
@@ -713,6 +722,11 @@ protected:
             .DefaultValue(0)
             .StoreMappedResultT<ui64>(&ExecutionOptions.LoopDelay, &TDuration::MilliSeconds<ui64>);
 
+        options.AddLongOption("query-delay", "Delay in milliseconds between queries starts")
+            .RequiredArgument("uint")
+            .DefaultValue(0)
+            .StoreMappedResultT<ui64>(&ExecutionOptions.QueryDelay, &TDuration::MilliSeconds<ui64>);
+
         options.AddLongOption("continue-after-fail", "Don't not stop requests execution after fails")
             .NoArgument()
             .SetFlag(&ExecutionOptions.ContinueAfterFail);
@@ -751,7 +765,7 @@ protected:
 
         options.AddLongOption('H', "health-check", TStringBuilder() << "Level of health check before start (max level " << static_cast<ui32>(TYdbSetupSettings::EHealthCheck::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EHealthCheck::NodesCount))
+            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EHealthCheck::FetchDatabase))
             .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.HealthCheckLevel, [](ui8 value) {
                 return static_cast<TYdbSetupSettings::EHealthCheck>(std::min(value, static_cast<ui8>(TYdbSetupSettings::EHealthCheck::Max)));
             });

@@ -133,6 +133,10 @@ public:
         UseBlockOutput_ = true;
     }
 
+    void SetIsTableContent() {
+        IsTableContent_ = true;
+    }
+
     void SetTableOffsets(const TVector<ui64>& offsets);
 
     void Clear();
@@ -148,6 +152,7 @@ public:
     bool UseSkiff_ = false;
     bool UseBlockInput_ = false;
     bool UseBlockOutput_ = false;
+    bool IsTableContent_ = false;
     TString OptLLVM_;
     TSystemFields SystemFields_;
 
@@ -256,5 +261,31 @@ public:
 };
 
 using IMkqlWriterImplPtr = TIntrusivePtr<IMkqlWriterImpl>;
+
+NKikimr::NUdf::TUnboxedValue ReadYsonValueInTableFormat(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, char cmd, NCommon::TInputBuf& buf);
+TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonValueInTableFormat(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const TStringBuf& yson, NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, IOutputStream* err);
+TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonNode(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const NYT::TNode& node, NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, IOutputStream* err);
+extern "C" void ReadYsonContainerValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf,
+    bool wrapOptional);
+extern "C" void ReadContainerNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf,
+    bool wrapOptional);
+void WriteYsonValueInTableFormat(NCommon::TOutputBuf& buf, NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, bool topLevel);
+extern "C" void WriteYsonContainerValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
+
+void SkipSkiffField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
+NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NCommon::TInputBuf& buf);
+NKikimr::NUdf::TUnboxedValue ReadSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
+void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
+void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
+extern "C" void WriteContainerNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
 
 } // NYql

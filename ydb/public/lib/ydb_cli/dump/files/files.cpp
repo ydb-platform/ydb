@@ -19,6 +19,8 @@ enum EFilesType {
     CREATE_GROUP,
     ALTER_GROUP,
     CREATE_ASYNC_REPLICATION,
+    CREATE_EXTERNAL_DATA_SOURCE,
+    CREATE_EXTERNAL_TABLE,
 };
 
 static constexpr TFileInfo FILES_INFO[] = {
@@ -38,6 +40,8 @@ static constexpr TFileInfo FILES_INFO[] = {
     {"create_group.sql", "groups"},
     {"alter_group.sql", "group members"},
     {"create_async_replication.sql", "async replication"},
+    {"create_external_data_source.sql", "external data source"},
+    {"create_external_table.sql", "external table"},
 };
 
 const TFileInfo& TableScheme() {
@@ -102,6 +106,14 @@ const TFileInfo& AlterGroup() {
 
 const TFileInfo& CreateAsyncReplication() {
     return FILES_INFO[CREATE_ASYNC_REPLICATION];
+}
+
+const TFileInfo& CreateExternalDataSource() {
+    return FILES_INFO[CREATE_EXTERNAL_DATA_SOURCE];
+}
+
+const TFileInfo& CreateExternalTable() {
+    return FILES_INFO[CREATE_EXTERNAL_TABLE];
 }
 
 } // NYdb::NDump::NFiles

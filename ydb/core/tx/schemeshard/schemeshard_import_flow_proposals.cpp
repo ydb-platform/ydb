@@ -231,5 +231,65 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
     return MakeHolder<TEvIndexBuilder::TEvCancelRequest>(ui64(indexBuildId), domainPath.PathString(), ui64(indexBuildId));
 }
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo::TItem& item
+) {
+    Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
+
+    const auto& importChangefeedTopic = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx];
+    const auto& changefeed = importChangefeedTopic.GetChangefeed();
+    const auto& topic = importChangefeedTopic.GetTopic();
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto& record = propose->Record;
+    auto& modifyScheme = *record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
+    auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
+
+    const TPath dstPath = TPath::Init(item.DstPathId, ss);
+    modifyScheme.SetWorkingDir(dstPath.Parent().PathString());
+    cdcStream.SetTableName(dstPath.LeafName());
+
+    TString error;
+    Ydb::StatusIds::StatusCode status;
+
+    auto& cdcStreamDescription = *cdcStream.MutableStreamDescription();
+    if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
+        return nullptr;
+    }
+    
+    if (topic.has_retention_period()) {
+        cdcStream.SetRetentionPeriodSeconds(topic.retention_period().seconds());
+    }
+    
+    if (topic.has_partitioning_settings()) {
+        i64 minActivePartitions =
+            topic.partitioning_settings().min_active_partitions();
+        if (minActivePartitions < 0) {
+            return nullptr;
+        } else if (minActivePartitions == 0) {
+            minActivePartitions = 1;
+        }
+        cdcStream.SetTopicPartitions(minActivePartitions);
+
+        if (topic.partitioning_settings().has_auto_partitioning_settings()) {
+            auto& partitioningSettings = topic.partitioning_settings().auto_partitioning_settings();
+            cdcStream.SetTopicAutoPartitioning(partitioningSettings.strategy() != ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED);
+
+            i64 maxActivePartitions =
+                topic.partitioning_settings().max_active_partitions();
+            if (maxActivePartitions < 0) {
+                return nullptr;
+            } else if (maxActivePartitions == 0) {
+                maxActivePartitions = 50;
+            }
+            cdcStream.SetMaxPartitionCount(maxActivePartitions);
+        }
+    }
+    return propose;
+}
+
 } // NSchemeShard
 } // NKikimr

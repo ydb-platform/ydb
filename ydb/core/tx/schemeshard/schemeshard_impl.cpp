@@ -1319,6 +1319,7 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TS
                         actualVersion = pathVersion.GetSequenceVersion();
                         break;
                     case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+                    case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
                         actualVersion = pathVersion.GetReplicationVersion();
                         break;
                     case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
@@ -3360,7 +3361,8 @@ void TSchemeShard::PersistBackupSettings(
                 NIceDb::TUpdate<Schema::BackupSettings::ScanSettings>(settings.GetScanSettings().SerializeAsString()), \
                 NIceDb::TUpdate<Schema::BackupSettings::NeedToBill>(settings.GetNeedToBill()), \
                 NIceDb::TUpdate<Schema::BackupSettings::TableDescription>(settings.GetTable().SerializeAsString()), \
-                NIceDb::TUpdate<Schema::BackupSettings::NumberOfRetries>(settings.GetNumberOfRetries())); \
+                NIceDb::TUpdate<Schema::BackupSettings::NumberOfRetries>(settings.GetNumberOfRetries()), \
+                NIceDb::TUpdate<Schema::BackupSettings::EnableChecksums>(settings.GetEnableChecksums())); \
         } else { \
             db.Table<Schema::MigratedBackupSettings>().Key(pathId.OwnerId, pathId.LocalPathId).Update( \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::TableName>(settings.GetTableName()), \
@@ -3368,7 +3370,8 @@ void TSchemeShard::PersistBackupSettings(
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::ScanSettings>(settings.GetScanSettings().SerializeAsString()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::NeedToBill>(settings.GetNeedToBill()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::TableDescription>(settings.GetTable().SerializeAsString()), \
-                NIceDb::TUpdate<Schema::MigratedBackupSettings::NumberOfRetries>(settings.GetNumberOfRetries())); \
+                NIceDb::TUpdate<Schema::MigratedBackupSettings::NumberOfRetries>(settings.GetNumberOfRetries()), \
+                NIceDb::TUpdate<Schema::MigratedBackupSettings::EnableChecksums>(settings.GetEnableChecksums())); \
         } \
     }
 

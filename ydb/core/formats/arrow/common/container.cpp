@@ -67,6 +67,9 @@ void TGeneralContainer::DeleteFieldsByIndex(const std::vector<ui32>& idxs) {
 
 void TGeneralContainer::Initialize() {
     std::optional<ui64> recordsCount;
+    if (Schema->num_fields() == 0) {
+        recordsCount = 0;
+    }
     AFL_VERIFY(Schema->num_fields() == (i32)Columns.size())("schema", Schema->num_fields())("columns", Columns.size());
     for (i32 i = 0; i < Schema->num_fields(); ++i) {
         AFL_VERIFY(Columns[i]);
@@ -134,7 +137,7 @@ TGeneralContainer::TGeneralContainer(const ui32 recordsCount)
     , Schema(std::make_shared<NModifier::TSchema>()) {
 }
 
-std::shared_ptr<NKikimr::NArrow::NAccessor::IChunkedArray> TGeneralContainer::GetAccessorByNameVerified(const std::string& fieldId) const {
+std::shared_ptr<NAccessor::IChunkedArray> TGeneralContainer::GetAccessorByNameVerified(const std::string& fieldId) const {
     auto result = GetAccessorByNameOptional(fieldId);
     AFL_VERIFY(result)("event", "cannot_find_accessor_in_general_container")("field_id", fieldId)("schema", Schema->ToString());
     return result;
@@ -222,12 +225,18 @@ TConclusionStatus TGeneralContainer::SyncSchemaTo(
     return TConclusionStatus::Success();
 }
 
-TString TGeneralContainer::DebugString() const {
-    TStringBuilder result;
+NJson::TJsonValue TGeneralContainer::DebugJson(const bool withData) const {
+    NJson::TJsonValue result;
     if (RecordsCount) {
-        result << "records_count=" << *RecordsCount << ";";
+        result.InsertValue("records_count", *RecordsCount);
     }
-    result << "schema=" << Schema->ToString() << ";";
+    result.InsertValue("schema", Schema->ToString());
+    if (withData) {
+        auto& arrData = result.InsertValue("data", NJson::JSON_ARRAY);
+        for (auto&& i : Columns) {
+            arrData.AppendValue(i->DebugJson());
+        }
+    }
     return result;
 }
 

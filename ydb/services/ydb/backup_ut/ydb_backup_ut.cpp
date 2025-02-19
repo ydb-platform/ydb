@@ -2,16 +2,20 @@
 
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/draft/ydb_view.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb-cpp-sdk/client/export/export.h>
 #include <ydb-cpp-sdk/client/import/import.h>
 #include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb-cpp-sdk/client/query/client.h>
 #include <ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb-cpp-sdk/client/table/table.h>
@@ -33,6 +37,34 @@ using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 using namespace NYdb::NView;
 
+namespace Ydb::Table {
+
+bool operator==(const DescribeExternalDataSourceResult& lhs, const DescribeExternalDataSourceResult& rhs) {
+    google::protobuf::util::MessageDifferencer differencer;
+    differencer.IgnoreField(DescribeExternalDataSourceResult::GetDescriptor()->FindFieldByName("self"));
+    return differencer.Compare(lhs, rhs);
+}
+
+bool operator==(const DescribeExternalTableResult& lhs, const DescribeExternalTableResult& rhs) {
+    google::protobuf::util::MessageDifferencer differencer;
+    differencer.IgnoreField(DescribeExternalTableResult::GetDescriptor()->FindFieldByName("self"));
+    return differencer.Compare(lhs, rhs);
+}
+
+}
+
+namespace Ydb::RateLimiter {
+
+bool operator==(const HierarchicalDrrSettings& lhs, const HierarchicalDrrSettings& rhs) {
+    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
+}
+
+bool operator==(const MeteringConfig& lhs, const MeteringConfig& rhs) {
+    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
+}
+
+}
+
 namespace NYdb::NTable {
 
 bool operator==(const TValue& lhs, const TValue& rhs) {
@@ -52,13 +84,6 @@ bool operator==(const TKeyRange& lhs, const TKeyRange& rhs) {
 namespace NYdb::NRateLimiter {
 
 bool operator==(
-    const Ydb::RateLimiter::HierarchicalDrrSettings& lhs,
-    const Ydb::RateLimiter::HierarchicalDrrSettings& rhs
-) {
-    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
-}
-
-bool operator==(
     const TDescribeResourceResult::THierarchicalDrrProps& lhs,
     const TDescribeResourceResult::THierarchicalDrrProps& rhs
 ) {
@@ -69,10 +94,19 @@ bool operator==(
     return left == right;
 }
 
+bool operator==(const TMeteringConfig& lhs, const TMeteringConfig& rhs) {
+    Ydb::RateLimiter::MeteringConfig left;
+    lhs.SerializeTo(left);
+    Ydb::RateLimiter::MeteringConfig right;
+    rhs.SerializeTo(right);
+    return left == right;
+}
+
 bool operator==(const TDescribeResourceResult& lhs, const TDescribeResourceResult& rhs) {
     UNIT_ASSERT_C(lhs.IsSuccess(), lhs.GetIssues().ToString());
     UNIT_ASSERT_C(rhs.IsSuccess(), rhs.GetIssues().ToString());
-    return lhs.GetHierarchicalDrrProps() == rhs.GetHierarchicalDrrProps();
+    return lhs.GetHierarchicalDrrProps() == rhs.GetHierarchicalDrrProps()
+        && lhs.GetMeteringConfig() == rhs.GetMeteringConfig();
 }
 
 }
@@ -725,6 +759,35 @@ void TestViewReferenceTableIsPreserved(
     TestViewReferenceTableIsPreserved(view, table, view, session, std::move(backup), std::move(restore));
 }
 
+void TestViewDependentOnAnotherViewIsRestored(
+    const char* baseView, const char* dependentView, NQuery::TSession& session,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE VIEW `%s` WITH security_invoker = TRUE AS SELECT 1 AS Key;
+            )", baseView
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE VIEW `%s` WITH security_invoker = TRUE AS SELECT * FROM `%s`;
+            )", dependentView, baseView
+        ), true
+    );
+    const auto originalContent = GetTableContent(session, dependentView);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+                DROP VIEW `%s`;
+                DROP VIEW `%s`;
+            )", baseView, dependentView
+        ), true
+    );
+
+    restore();
+    CompareResults(GetTableContent(session, dependentView), originalContent);
+}
+
 void TestTopicSettingsArePreserved(
     const char* topic, NQuery::TSession& session, NTopic::TTopicClient& topicClient,
     TBackupFunction&& backup, TRestoreFunction&& restore
@@ -847,56 +910,215 @@ TDescribeResourceResult DescribeRateLimiter(
     return result;
 }
 
-void DropRateLimiter(
-    TRateLimiterClient& client,
-    const std::string& coordinationNodePath,
-    const std::string& rateLimiterPath
-) {
-    const auto result = client.DropResource(coordinationNodePath, rateLimiterPath).ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-}
-
 void TestCoordinationNodeResourcesArePreserved(
-    const std::string& coordinationNodePath,
+    const std::string& path,
     NCoordination::TClient& nodeClient,
     TRateLimiterClient& rateLimiterClient,
     TBackupFunction&& backup,
     TRestoreFunction&& restore
 ) {
-    constexpr std::array rateLimiters = { "root", "root/firstChild", "root/secondChild" };
-    CreateCoordinationNode(nodeClient, coordinationNodePath, {});
-    // required settings
-    const auto settings = TCreateResourceSettings().MaxUnitsPerSecond(5);
-    for (const auto& rateLimiter : rateLimiters) {
-        CreateRateLimiter(rateLimiterClient, coordinationNodePath, rateLimiter, settings);
+    const std::vector<std::pair<std::string, TCreateResourceSettings>> rateLimiters = {
+        {
+            "root",
+            TCreateResourceSettings()
+                .MaxUnitsPerSecond(5)
+                .MaxBurstSizeCoefficient(2)
+                .PrefetchCoefficient(0.5)
+                .PrefetchWatermark(0.8)
+                .ImmediatelyFillUpTo(-10)
+        },
+        {
+            "root/firstChild",
+            TCreateResourceSettings()
+                .MaxUnitsPerSecond(10)
+                .LeafBehavior(
+                    TReplicatedBucketSettings()
+                        .ReportInterval(std::chrono::milliseconds(10000))
+                )
+        },
+        {
+            "root/secondChild",
+            TCreateResourceSettings()
+                .MaxUnitsPerSecond(20)
+                .MeteringConfig(
+                    TMeteringConfig()
+                        .Enabled(true)
+                        .ReportPeriod(std::chrono::milliseconds(10000))
+                        .MeterPeriod(std::chrono::milliseconds(5000))
+                        .CollectPeriod(std::chrono::seconds(20))
+                        .ProvisionedUnitsPerSecond(100)
+                        .ProvisionedCoefficient(50)
+                        .OvershootCoefficient(1.2)
+                        .Provisioned(
+                            TMetric()
+                                .Enabled(true)
+                                .BillingPeriod(std::chrono::seconds(30))
+                                .Labels({{"k", "v"}})
+                        )
+                )
+        },
+    };
+
+    CreateCoordinationNode(nodeClient, path, {});
+    for (const auto& [resource, settings] : rateLimiters) {
+        CreateRateLimiter(rateLimiterClient, path, resource, settings);
     }
 
-    std::vector<TDescribeResourceResult> originalDescriptions;
-    for (const auto& rateLimiter : rateLimiters) {
-        originalDescriptions.emplace_back(DescribeRateLimiter(rateLimiterClient, coordinationNodePath, rateLimiter));
+    std::vector<TDescribeResourceResult> original;
+    for (const auto& [resource, _] : rateLimiters) {
+        original.emplace_back(DescribeRateLimiter(rateLimiterClient, path, resource));
     }
 
     backup();
 
-    for (int i = 2; i >= 0; --i) {
-        DropRateLimiter(rateLimiterClient, coordinationNodePath, rateLimiters[i]);
-    }
-    DropCoordinationNode(nodeClient, coordinationNodePath);
+    DropCoordinationNode(nodeClient, path);
 
     restore();
-    for (int i = 0; i < 3; ++i) {
-        UNIT_ASSERT_EQUAL_C(
-            DescribeRateLimiter(rateLimiterClient, coordinationNodePath, rateLimiters[i]),
-            originalDescriptions[i],
-            "i: " << i
-        );
+    for (size_t i = 0; i < rateLimiters.size(); ++i) {
+        UNIT_ASSERT_EQUAL(DescribeRateLimiter(rateLimiterClient, path, rateLimiters[i].first), original[i]);
     }
+}
+
+void TestReplicationSettingsArePreserved(
+        const TString& endpoint,
+        NQuery::TSession& session,
+        NReplication::TReplicationClient& client,
+        TBackupFunction&& backup,
+        TRestoreFunction&& restore)
+{
+    ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+    ExecuteQuery(session, "CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k));", true);
+    ExecuteQuery(session, Sprintf(R"(
+        CREATE ASYNC REPLICATION `/Root/replication` FOR
+            `/Root/table` AS `/Root/replica`
+        WITH (
+            CONNECTION_STRING = 'grpc://%s/?database=/Root',
+            TOKEN_SECRET_NAME = 'secret'
+        );)", endpoint.c_str()), true
+    );
+
+    auto waitReplicationInit = [&client]() {
+        int retry = 0;
+        do {
+            auto result = client.DescribeReplication("/Root/replication").ExtractValueSync();
+            const auto& desc = result.GetReplicationDescription();
+            if (desc.GetItems().empty()) {
+                Sleep(TDuration::Seconds(1));
+            } else {
+                break;
+            }
+        } while (++retry < 10);
+        UNIT_ASSERT(retry < 10);
+    };
+
+    auto checkDescription = [&client, &endpoint]() {
+        auto result = client.DescribeReplication("/Root/replication").ExtractValueSync();
+        const auto& desc = result.GetReplicationDescription();
+
+        const auto& params = desc.GetConnectionParams();
+        UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
+        UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "secret");
+
+        const auto& items = desc.GetItems();
+        UNIT_ASSERT_VALUES_EQUAL(items.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(items.at(0).SrcPath, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(items.at(0).DstPath, "/Root/replica");
+    };
+
+    waitReplicationInit();
+    checkDescription();
+    backup();
+    ExecuteQuery(session, "DROP ASYNC REPLICATION `/Root/replication` CASCADE;", true);
+    restore();
+    waitReplicationInit();
+    checkDescription();
+}
+
+Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TSession& session, const TString& path) {
+    auto result = session.DescribeExternalDataSource(path).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return TProtoAccessor::GetProto(result.GetExternalDataSourceDescription());;
+}
+
+void TestExternalDataSourceSettingsArePreserved(
+    const char* path, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteQuery(querySession, Sprintf(R"(
+                CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "192.168.1.1:8123",
+                    AUTH_METHOD = "NONE"
+                );
+            )", path
+        ), true
+    );
+    const auto originalDescription = DescribeExternalDataSource(tableSession, path);
+
+    backup();
+
+    ExecuteQuery(querySession, Sprintf(R"(
+                DROP EXTERNAL DATA SOURCE `%s`;
+            )", path
+        ), true
+    );
+
+    restore();
+    UNIT_ASSERT_VALUES_EQUAL(
+        DescribeExternalDataSource(tableSession, path),
+        originalDescription
+    );
+}
+
+Ydb::Table::DescribeExternalTableResult DescribeExternalTable(TSession& session, const TString& path) {
+    auto result = session.DescribeExternalTable(path).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return TProtoAccessor::GetProto(result.GetExternalTableDescription());;
+}
+
+void TestExternalTableSettingsArePreserved(
+    const char* path, const char* externalDataSource, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteQuery(querySession, Sprintf(R"(
+                CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "192.168.1.1:8123",
+                    AUTH_METHOD = "NONE"
+                );
+
+                CREATE EXTERNAL TABLE `%s` (
+                    key Utf8 NOT NULL,
+                    value Utf8 NOT NULL
+                ) WITH (
+                    DATA_SOURCE = "%s",
+                    LOCATION = "folder",
+                    FORMAT = "csv_with_names",
+                    COMPRESSION = "gzip"
+                );
+            )", externalDataSource, path, externalDataSource
+        ), true
+    );
+    const auto originalDescription = DescribeExternalTable(tableSession, path);
+
+    backup();
+
+    ExecuteQuery(querySession, Sprintf(R"(
+                DROP EXTERNAL TABLE `%s`;
+                DROP EXTERNAL DATA SOURCE `%s`;
+            )", path, externalDataSource
+        ), true
+    );
+
+    restore();
+    UNIT_ASSERT_VALUES_EQUAL(
+        DescribeExternalTable(tableSession, path),
+        originalDescription
+    );
 }
 
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
-
     auto CreateBackupLambda(const TDriver& driver, const TFsPath& fsPath, const TString& dbPath = "/Root") {
         return [&]() {
             NDump::TClient backupClient(driver);
@@ -1132,6 +1354,27 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(RestoreViewDependentOnAnotherView) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* baseView = "/Root/baseView";
+        constexpr const char* dependentView = "/Root/dependentView";
+
+        TestViewDependentOnAnotherViewIsRestored(
+            baseView,
+            dependentView,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
     Y_UNIT_TEST(RestoreKesusResources) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
@@ -1282,45 +1525,105 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    void TestReplicationBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        NReplication::TReplicationClient replicationClient(driver);
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        TestReplicationSettingsArePreserved(
+            endpoint, session, replicationClient,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    void TestExternalDataSourceBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* path = "/Root/externalDataSource";
+
+        TestExternalDataSourceSettingsArePreserved(
+            path,
+            tableSession,
+            querySession,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    void TestExternalTableBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* path = "/Root/externalTable";
+        constexpr const char* externalDataSource = "/Root/externalDataSource";
+
+        TestExternalTableSettingsArePreserved(
+            path,
+            externalDataSource,
+            tableSession,
+            querySession,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
 
         switch (Value) {
             case EPathTypeTable:
-                TestTableBackupRestore();
-                break;
+                return TestTableBackupRestore();
             case EPathTypeTableIndex:
-                TestTableWithIndexBackupRestore();
-                break;
+                return TestTableWithIndexBackupRestore();
             case EPathTypeSequence:
-                TestTableWithSerialBackupRestore();
-                break;
+                return TestTableWithSerialBackupRestore();
             case EPathTypeDir:
-                TestDirectoryBackupRestore();
-                break;
+                return TestDirectoryBackupRestore();
             case EPathTypePersQueueGroup:
-                TestTopicBackupRestoreWithoutData();
-                break;
+                return TestTopicBackupRestoreWithoutData();
             case EPathTypeSubDomain:
             case EPathTypeExtSubDomain:
                 break; // https://github.com/ydb-platform/ydb/issues/10432
             case EPathTypeView:
-                TestViewBackupRestore();
-                break;
+                return TestViewBackupRestore();
             case EPathTypeCdcStream:
                 break; // https://github.com/ydb-platform/ydb/issues/7054
             case EPathTypeReplication:
+                return TestReplicationBackupRestore();
             case EPathTypeTransfer:
                 break; // https://github.com/ydb-platform/ydb/issues/10436
             case EPathTypeExternalTable:
-                break; // https://github.com/ydb-platform/ydb/issues/10438
+                return TestExternalTableBackupRestore();
             case EPathTypeExternalDataSource:
-                break; // https://github.com/ydb-platform/ydb/issues/10439
+                return TestExternalDataSourceBackupRestore();
             case EPathTypeResourcePool:
                 break; // https://github.com/ydb-platform/ydb/issues/10440
             case EPathTypeKesus:
-                TestKesusBackupRestore();
-                break;
+                return TestKesusBackupRestore();
             case EPathTypeColumnStore:
             case EPathTypeColumnTable:
                 break; // https://github.com/ydb-platform/ydb/issues/10459
@@ -1345,8 +1648,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalVectorKmeansTree:
-                TestTableWithIndexBackupRestore(Value);
-                break;
+                return TestTableWithIndexBackupRestore(Value);
             case EIndexTypeGlobalUnique:
                 break; // https://github.com/ydb-platform/ydb/issues/10468
             case EIndexTypeInvalid:
@@ -1402,6 +1704,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
             auto& runtime = *Server.GetRuntime();
             runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_DEBUG);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
             runtime.GetAppData().FeatureFlags.SetEnableViews(true);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
@@ -1712,6 +2016,21 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view", "a/b/c/table" })
         );
     }
+
+    Y_UNIT_TEST(RestoreViewDependentOnAnotherView) {
+        TS3TestEnv testEnv;
+        constexpr const char* baseView = "/Root/baseView";
+        constexpr const char* dependentView = "/Root/dependentView";
+
+        TestViewDependentOnAnotherViewIsRestored(
+            baseView,
+            dependentView,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "baseView", "dependentView" })
+        );
+    }
+
 
     // TO DO: test view restoration to a different database
 

@@ -49,6 +49,8 @@ constexpr TStringBuf PgTablesName = "pg_tables";
 constexpr TStringBuf InformationSchemaTablesName = "tables";
 constexpr TStringBuf PgClassName = "pg_class";
 
+constexpr TStringBuf ResourcePoolClassifiersName = "resource_pool_classifiers";
+
 namespace NAuth {
     constexpr TStringBuf UsersName = "auth_users";
     constexpr TStringBuf GroupsName = "auth_groups";
@@ -700,6 +702,18 @@ struct Schema : NIceDb::Schema {
         const TVector<PgColumn>& GetColumns(TStringBuf tableName) const;
     private:
         std::unordered_map<TString, TVector<PgColumn>> columnsStorage;
+    };
+
+    struct ResourcePoolClassifiers : Table<20> {
+        struct Name    : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Rank    : Column<2, NScheme::NTypeIds::Int64> {};
+        struct Config  : Column<3, NScheme::NTypeIds::JsonDocument> {};
+
+        using TKey = TableKey<Name>;
+        using TColumns = TableColumns<
+            Name,
+            Rank,
+            Config>;
     };
 };
 

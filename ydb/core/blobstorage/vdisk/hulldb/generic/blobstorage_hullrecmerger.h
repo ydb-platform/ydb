@@ -176,20 +176,13 @@ namespace NKikimr {
             }
         }
 
-        void Finish(bool targetingHugeBlob) {
+        void Finish(bool targetingHugeBlob, bool keepData) {
             Y_DEBUG_ABORT_UNLESS(!Finished);
             Y_DEBUG_ABORT_UNLESS(!Empty());
 
             if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
-                // finish data merger and remove excessive local parts if needed
-                DataMerger.Finish(targetingHugeBlob, Key.LogoBlobID());
-                Y_ABORT_UNLESS(MemRec.GetLocalParts(GType) == DataMerger.GetParts());
-                if (const NMatrix::TVectorType remain = DataMerger.GetRemainingParts(); remain != DataMerger.GetParts()) {
-                    MemRec.ReplaceLocalParts(GType, remain);
-                    DataMerger.FilterLocalParts(remain);
-                    Y_ABORT_UNLESS(MemRec.GetLocalParts(GType) == remain);
-                }
-
+                DataMerger.Finish(targetingHugeBlob, Key.LogoBlobID(), keepData);
+                MemRec.ReplaceLocalParts(GType, DataMerger.GetParts());
                 MemRec.SetDiskBlob(TDiskPart(0, 0, DataMerger.GetInplacedBlobSize(Key.LogoBlobID())));
                 MemRec.SetType(DataMerger.GetType());
             }
@@ -209,6 +202,10 @@ namespace NKikimr {
         void SetExternalDataStage() {
             Y_DEBUG_ABORT_UNLESS(!ExternalDataStage);
             ExternalDataStage = true;
+        }
+
+        const TMemRec& GetMemRecForBarriers() const {
+            return MemRec;
         }
 
     protected:

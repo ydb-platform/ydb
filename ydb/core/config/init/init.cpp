@@ -591,10 +591,17 @@ void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, NKi
     IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
     const TString mainYamlConfigString = protoConfigFileProvider.GetProtoFromFile(mainYamlConfigFile, errorCollector);
+    appConfig.SetStartupConfigYaml(mainYamlConfigString);
 
     if (appConfig.GetSelfManagementConfig().GetEnabled()) {
         // fill in InitialConfigYaml only when self-management through distconf is enabled
         appConfig.MutableSelfManagementConfig()->SetInitialConfigYaml(mainYamlConfigString);
+    }
+
+    if (appConfig.GetConfigLoadedFromStore()) {
+        auto* yamlConfig = appConfig.MutableStoredConfigYaml();
+        yamlConfig->SetYAML(mainYamlConfigString);
+        yamlConfig->SetConfigVersion(NYamlConfig::GetVersion(mainYamlConfigString));
     }
 
     /*

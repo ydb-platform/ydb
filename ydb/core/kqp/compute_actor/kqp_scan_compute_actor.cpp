@@ -86,12 +86,36 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
         auto* taskStats = dst->MutableTasks(0);
         auto* tableStats = taskStats->AddTables();
 
+        auto& sourceStats = *taskStats->AddSources();
+
+        // sourceStats.SetInputIndex(0); // do not have real input index
+        sourceStats.SetIngressName("CS");
+
+        auto& ingressStats = *sourceStats.MutableIngress();
+
         tableStats->SetTablePath(ScanData->TablePath);
 
-        if (auto* x = ScanData->BasicStats.get()) {
-            tableStats->SetReadRows(x->Rows);
-            tableStats->SetReadBytes(x->Bytes);
-            tableStats->SetAffectedPartitions(x->AffectedShards);
+        if (auto* stats = ScanData->BasicStats.get()) {
+            ingressStats.SetRows(stats->Rows);
+            ingressStats.SetBytes(stats->Bytes);
+            ingressStats.SetFirstMessageMs(stats->FirstMessageMs);
+            ingressStats.SetLastMessageMs(stats->LastMessageMs);
+
+            for (auto& [shardId, stat] : stats->ExternalStats) {
+                auto& externalStat = *sourceStats.AddExternalPartitions();
+                externalStat.SetPartitionId(ToString(shardId));
+                externalStat.SetExternalRows(stat.ExternalRows);
+                externalStat.SetExternalBytes(stat.ExternalBytes);
+                externalStat.SetFirstMessageMs(stat.FirstMessageMs);
+                externalStat.SetLastMessageMs(stat.LastMessageMs);
+            }
+
+            taskStats->SetIngressRows(taskStats->GetIngressRows() + stats->Rows);
+            taskStats->SetIngressBytes(taskStats->GetIngressBytes() + stats->Bytes);
+
+            tableStats->SetReadRows(stats->Rows);
+            tableStats->SetReadBytes(stats->Bytes);
+            tableStats->SetAffectedPartitions(stats->AffectedShards);
             // TODO: CpuTime
         }
 

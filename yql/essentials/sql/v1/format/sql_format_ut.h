@@ -144,6 +144,14 @@ Y_UNIT_TEST(AlterSequence) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(ShowCreateTable) {
+    TCases cases = {
+        {"use plato;show create table user;","USE plato;\n\nSHOW CREATE TABLE user;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
 
 Y_UNIT_TEST(Use) {
     TCases cases = {
@@ -1832,6 +1840,20 @@ Y_UNIT_TEST(AnsiLexer) {
     TCases cases = {
         {"select 'a', \"a\" from (select 1 as \"a\")",
             "SELECT\n\t'a',\n\t\"a\"\nFROM (\n\tSELECT\n\t\t1 AS \"a\"\n);\n"},
+    };
+
+    TSetup setup(/* ansiLexer = */ true);
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(ValueConstructor) {
+    TCases cases = {
+        {"select Enum('a', Enum<'a','b'>)",
+            "SELECT\n\tEnum('a', Enum<'a', 'b'>)\n;\n"},
+        {"select Variant(true, '0', Variant<bool>)",
+            "SELECT\n\tVariant(TRUE, '0', Variant<bool>)\n;\n"},
+        {"select Callable(Callable<(Int32)->Int32>,($x)->($x))(0)",
+            "SELECT\n\tCallable(Callable<(Int32) -> Int32>, ($x) -> ($x))(0)\n;\n"},
     };
 
     TSetup setup(/* ansiLexer = */ true);

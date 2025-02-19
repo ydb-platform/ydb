@@ -296,6 +296,12 @@ A **[user](../security/authorization.md#user)** is an individual utilizing {{ yd
 
 A **[group](../security/authorization.md#group)** or **access group** is a named collection of [users](#access-user) with identical [access rights](#access-right) to certain [access objects](#access-object).
 
+### Role {#access-role}
+
+A **role** is a named collection of [access rights](#access-right) that can be granted to [users](#access-user) or [groups](#access-group).
+
+Roles in {{ ydb-short-name }} are implemented as [groups](#access-group) that are created during the initial cluster deployment and granted a set of [access rights](#access-right) on the root of the cluster scheme.
+
 ### SID {#access-sid}
 
 **SID** (**Security Identifier**) is a string in the format `<login>[@<subsystem>]`, identifying an [access subject](../concepts/glossary.md#access-subject) in [access control lists](#access-control-list).
@@ -464,6 +470,10 @@ A **Hive** is a system tablet responsible for launching and managing other table
 #### Cluster management system {#cms}
 
 The **cluster management system** or **CMS** is a system tablet responsible for managing the information about the current [{{ ydb-short-name }} cluster](#cluster) state. This information is used to perform cluster rolling restarts without affecting user workloads, maintenance, cluster re-configuration, etc.
+
+#### Node Broker {#node-broker}
+
+The **Node Broker** is a system tablet that registers [dynamic nodes](#dynamic-node) in the cluster.
 
 ### Slot {#slot}
 

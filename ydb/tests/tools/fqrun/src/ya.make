@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    common.cpp
     fq_runner.cpp
     fq_setup.cpp
 )
@@ -17,6 +18,7 @@ PEERDIR(
     ydb/library/folder_service/mock
     ydb/library/grpc/server/actors
     ydb/library/security
+    ydb/library/yql/providers/pq/provider
     ydb/tests/tools/kqprun/runlib
 )
 

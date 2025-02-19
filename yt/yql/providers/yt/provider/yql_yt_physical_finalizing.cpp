@@ -2721,14 +2721,24 @@ private:
         auto newOutput = origOutput;
         for (const auto& item: groupSpecs) {
             const auto table = op.Output().Item(item.first);
-            auto currentGroup = GetSetting(table.Settings().Ref(), EYtSettingType::ColumnGroups);
-            if (!currentGroup || currentGroup->Tail().Content() != item.second) {
-                auto newSettings = AddOrUpdateSettingValue(table.Settings().Ref(),
-                    EYtSettingType::ColumnGroups,
-                    ctx.NewAtom(table.Settings().Pos(), item.second, TNodeFlags::MultilineContent),
-                    ctx);
-                auto newTable = ctx.ChangeChild(table.Ref(), TYtOutTable::idx_Settings, std::move(newSettings));
-                newOutput = ctx.ChangeChild(*newOutput, item.first, std::move(newTable));
+            if (item.second.empty()) {
+                if (NYql::HasSetting(table.Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                    newOutput = ctx.ChangeChild(*newOutput, item.first,
+                        ctx.ChangeChild(table.Ref(), TYtOutTable::idx_Settings,
+                            NYql::RemoveSetting(table.Settings().Ref(), EYtSettingType::ColumnGroups, ctx)
+                        )
+                    );
+                }
+            } else {
+                auto currentGroup = NYql::GetSetting(table.Settings().Ref(), EYtSettingType::ColumnGroups);
+                if (!currentGroup || currentGroup->Tail().Content() != item.second) {
+                    auto newSettings = NYql::AddOrUpdateSettingValue(table.Settings().Ref(),
+                        EYtSettingType::ColumnGroups,
+                        ctx.NewAtom(table.Settings().Pos(), item.second, TNodeFlags::MultilineContent),
+                        ctx);
+                    auto newTable = ctx.ChangeChild(table.Ref(), TYtOutTable::idx_Settings, std::move(newSettings));
+                    newOutput = ctx.ChangeChild(*newOutput, item.first, std::move(newTable));
+                }
             }
         }
         if (newOutput != origOutput) {
@@ -2925,14 +2935,12 @@ private:
             auto writer = x.first;
             TColumnUsage& usage = x.second;
             if (usage.GenerateGroups) {
-
                 std::map<size_t, TString> groupSpecs;
                 for (size_t i = 0; i < usage.OutTypes.size(); ++i) {
+                    groupSpecs[i] = TString{};
                     if (!usage.PublishUsage[i].empty()) {
                         if (usage.PublishUsage[i].size() == 1) {
-                            if (auto spec = *usage.PublishUsage[i].cbegin(); !spec.empty()) {
-                                groupSpecs[i] = spec;
-                            }
+                            groupSpecs[i] = *usage.PublishUsage[i].cbegin();
                         }
                         continue;
                     }

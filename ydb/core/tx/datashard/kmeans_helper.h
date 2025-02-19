@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/datashard/buffer_data.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
 #include <ydb/core/tx/datashard/range_ops.h>
@@ -48,7 +49,7 @@ Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const ui8* lhs, const ui8* rh
     return {static_cast<TRes>(ll), static_cast<TRes>(lr), static_cast<TRes>(rr)};
 }
 
-TTableRange CreateRangeFrom(const TUserTable& table, ui32 parent, TCell& from, TCell& to);
+TTableRange CreateRangeFrom(const TUserTable& table, NTableIndex::TClusterId parent, TCell& from, TCell& to);
 
 NTable::TLead CreateLeadFrom(const TTableRange& range);
 
@@ -200,14 +201,14 @@ ui32 FeedEmbedding(const TCalculation<TMetric>& calculation, std::span<const TSt
     return calculation.FindClosest(clusters, embedding);
 }
 
-void AddRowMain2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
+void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
 
-void AddRowMain2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
                         ui32 dataPos);
 
-void AddRowBuild2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
+void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
 
-void AddRowBuild2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
                          ui32 dataPos);
 
 TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,

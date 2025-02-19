@@ -53,9 +53,6 @@ namespace NKikimr {
         typedef ::NKikimr::TOrderedLevelSegmentsLoader<TKey, TMemRec> TOrderedLevelSegmentsLoader;
         typedef ::NKikimr::THandoffMap<TKey, TMemRec> THandoffMap;
         typedef TIntrusivePtr<THandoffMap> THandoffMapPtr;
-        typedef ::NKikimr::TGcMap<TKey, TMemRec> TGcMap;
-        typedef typename TGcMap::TIterator TGcMapIterator;
-        typedef TIntrusivePtr<TGcMap> TGcMapPtr;
         typedef ::NKikimr::TFreshSegment<TKey, TMemRec> TFreshSegment;
         typedef ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec> TFreshSegmentSnapshot;
         typedef ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec> TLevelIndexSnapshot;
@@ -76,7 +73,6 @@ namespace NKikimr {
         TActiveActors ActiveActors;
 
         THandoffMapPtr Hmp;
-        TGcMapPtr Gcmp;
         TIterator It;
 
         THullCompactionWorker Worker;
@@ -123,13 +119,9 @@ namespace NKikimr {
             // build handoff map (use LevelSnap by ref)
             Hmp->BuildMap(LevelSnap, It);
 
-            // build gc map (use LevelSnap by ref)
-            Gcmp->BuildMap(ctx, brs, LevelSnap, It);
-            TGcMapIterator gcmpIt = TGcMapIterator(Gcmp.Get());
-
             // enter work state, prepare, and kick worker class
             TThis::Become(&TThis::WorkFunc);
-            Worker.Prepare(Hmp, gcmpIt, &LevelSnap);
+            Worker.Prepare(Hmp, brs, &LevelSnap);
             MainCycle(ctx);
         }
 
@@ -293,11 +285,10 @@ namespace NKikimr {
             LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                        VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                              "%s: Compaction job (%" PRIu64 ") finished: fresh# %s chunks# %" PRIu32 " stat# %s "
-                             "gcmpStat# %s IsAborting# %s",
+                             "IsAborting# %s",
                              PDiskSignatureForHullDbKey<TKey>().ToString().data(),
                              CompactionID, (FreshSegment ? "true" : "false"), ui32(msg->CommitChunks.size()),
-                             Worker.Statistics.ToString().data(), Gcmp->GetStat().ToString().data(),
-                             IsAborting ? "true" : "false"));
+                             Worker.Statistics.ToString().data(), IsAborting ? "true" : "false"));
 
             ctx.Send(LIActor, msg.release());
             TThis::Die(ctx);
@@ -325,7 +316,6 @@ namespace NKikimr {
                         std::shared_ptr<TFreshSegmentSnapshot> freshSegmentSnap,
                         TBarriersSnapshot &&barriersSnap,
                         TLevelIndexSnapshot &&levelSnap,
-                        ui64 mergeElementsApproximation,
                         const TIterator &it,
                         ui64 firstLsn,
                         ui64 lastLsn,
@@ -341,10 +331,9 @@ namespace NKikimr {
             , BarriersSnap(std::move(barriersSnap))
             , LevelSnap(std::move(levelSnap))
             , Hmp(CreateHandoffMap<TKey, TMemRec>(HullCtx, rtCtx->RunHandoff, rtCtx->SkeletonId))
-            , Gcmp(CreateGcMap<TKey, TMemRec>(HullCtx, mergeElementsApproximation, allowGarbageCollection))
             , It(it)
             , Worker(HullCtx, PDiskCtx, std::move(hugeBlobCtx), minHugeBlobInBytes, rtCtx->LevelIndex, it,
-                static_cast<bool>(FreshSegment), firstLsn, lastLsn, restoreDeadline, partitionKey)
+                static_cast<bool>(FreshSegment), firstLsn, lastLsn, restoreDeadline, partitionKey, allowGarbageCollection)
             , CompactionID(TAppData::RandomProvider->GenRand64())
             , SkeletonId(rtCtx->SkeletonId)
             , HugeKeeperId(rtCtx->HugeKeeperId)

@@ -17,13 +17,15 @@ namespace NFqRun {
 
 namespace {
 
-Ydb::StatusIds::StatusCode GetStatus(const NYql::TIssues& issues) {
-    return issues ? Ydb::StatusIds::BAD_REQUEST : Ydb::StatusIds::SUCCESS;
+TRequestResult GetStatus(const NYql::TIssues& issues) {
+    return TRequestResult(issues ? Ydb::StatusIds::BAD_REQUEST : Ydb::StatusIds::SUCCESS, issues);
 }
 
 }  // anonymous namespace
 
 class TFqSetup::TImpl {
+    using EVerbose = TFqSetupSettings::EVerbose;
+
 private:
     TAutoPtr<TLogBackend> CreateLogBackend() const {
         if (Settings.LogOutputFile) {
@@ -46,7 +48,7 @@ private:
         NKikimr::Tests::TServerSettings serverSettings(PortManager.GetPort());
 
         serverSettings.SetDomainName(Settings.DomainName);
-        serverSettings.SetVerbose(false);
+        serverSettings.SetVerbose(Settings.VerboseLevel >= EVerbose::InitLogs);
 
         NKikimrConfig::TAppConfig config;
         *config.MutableLogConfig() = Settings.LogConfig;
@@ -83,7 +85,7 @@ private:
         Client->InitRootScheme();
     }
 
-    NFq::NConfig::TConfig GetFqProxyConfig(ui32 grpcPort, ui32 httpPort) const {
+    NFq::NConfig::TConfig GetFqProxyConfig(ui32 grpcPort) const {
         auto fqConfig = Settings.FqConfig;
 
         fqConfig.MutableControlPlaneStorage()->AddSuperUsers(BUILTIN_ACL_ROOT);
@@ -109,14 +111,19 @@ private:
         nodesMenagerConfig->SetPort(grpcPort);
         nodesMenagerConfig->SetHost("localhost");
 
-        fqConfig.MutableCommon()->SetYdbMvpCloudEndpoint(TStringBuilder() << "http://localhost:" << httpPort << "/yql-mock/abc");
+        auto* healthConfig = fqConfig.MutableHealth();
+        healthConfig->SetPort(grpcPort);
+        healthConfig->SetDatabase(database);
+
+        if (Settings.EmulateS3) {
+            fqConfig.MutableCommon()->SetObjectStorageEndpoint("file://");
+        }
 
         return fqConfig;
     }
 
     void InitializeFqProxy(ui32 grpcPort) {
-        const ui32 httpPort = PortManager.GetPort();
-        const auto& fqConfig = GetFqProxyConfig(grpcPort, httpPort);
+        const auto& fqConfig = GetFqProxyConfig(grpcPort);
         const auto counters = GetRuntime()->GetAppData().Counters->GetSubgroup("counters", "yq");
         YqSharedResources = NFq::CreateYqSharedResources(fqConfig, NKikimr::CreateYdbCredentialsProviderFactory, counters);
 
@@ -131,10 +138,9 @@ private:
 
         NFq::Init(
             fqConfig, GetRuntime()->GetNodeId(), actorRegistrator, &GetRuntime()->GetAppData(),
-            Settings.DomainName, nullptr, YqSharedResources, folderServiceFactory, 0, {}
+            Settings.DomainName, nullptr, YqSharedResources, folderServiceFactory, 0, {}, Settings.PqGateway
         );
-
-        NFq::InitTest(GetRuntime(), httpPort, grpcPort, YqSharedResources);
+        YqSharedResources->Init(GetRuntime()->GetActorSystem(0));
     }
 
 public:
@@ -145,11 +151,11 @@ public:
         InitializeServer(grpcPort);
         InitializeFqProxy(grpcPort);
 
-        if (Settings.MonitoringEnabled) {
+        if (Settings.MonitoringEnabled && Settings.VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Monitoring port: " << CoutColors.Default() << GetRuntime()->GetMonPort() << Endl;
         }
 
-        if (Settings.GrpcEnabled) {
+        if (Settings.GrpcEnabled && Settings.VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Domain gRPC port: " << CoutColors.Default() << grpcPort << Endl;
         }
     }
@@ -167,7 +173,7 @@ public:
         auto& content = *request.mutable_content();
         content.set_type(FederatedQuery::QueryContent::STREAMING);
         content.set_text(query.Query);
-        content.mutable_acl()->set_visibility(::FederatedQuery::Acl::SCOPE);
+        SetupAcl(content.mutable_acl());
 
         return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvCreateQueryRequest, NFq::TEvControlPlaneProxy::TEvCreateQueryResponse>(request);
     }
@@ -188,6 +194,20 @@ public:
         return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvGetResultDataRequest, NFq::TEvControlPlaneProxy::TEvGetResultDataResponse>(request);
     }
 
+    NFq::TEvControlPlaneProxy::TEvCreateConnectionResponse::TPtr CreateConnection(const FederatedQuery::ConnectionContent& connection) const {
+        FederatedQuery::CreateConnectionRequest request;
+        *request.mutable_content() = connection;
+
+        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvCreateConnectionRequest, NFq::TEvControlPlaneProxy::TEvCreateConnectionResponse>(request);
+    }
+
+    NFq::TEvControlPlaneProxy::TEvCreateBindingResponse::TPtr CreateBinding(const FederatedQuery::BindingContent& binding) const {
+        FederatedQuery::CreateBindingRequest request;
+        *request.mutable_content() = binding;
+
+        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvCreateBindingRequest, NFq::TEvControlPlaneProxy::TEvCreateBindingResponse>(request);
+    }
+
 private:
     NActors::TTestActorRuntime* GetRuntime() const {
         return Server->GetRuntime();
@@ -195,7 +215,7 @@ private:
 
     template <typename TRequest, typename TResponse, typename TProto>
     typename TResponse::TPtr RunControlPlaneProxyRequest(const TProto& request) const {
-        auto event = std::make_unique<TRequest>("yandexcloud://kqprun", request, BUILTIN_ACL_ROOT, BUILTIN_ACL_ROOT, TVector<TString>{});
+        auto event = std::make_unique<TRequest>("yandexcloud://fqrun", request, BUILTIN_ACL_ROOT, Settings.YqlToken ? Settings.YqlToken : "fqrun", TVector<TString>{});
         return RunControlPlaneProxyRequest<TRequest, TResponse>(std::move(event));
     }
 
@@ -228,8 +248,7 @@ TRequestResult TFqSetup::StreamRequest(const TRequestOptions& query, TString& qu
 
     queryId = response->Get()->Result.query_id();
 
-    const auto& issues = response->Get()->Issues;
-    return TRequestResult(GetStatus(issues), issues);
+    return GetStatus(response->Get()->Issues);
 }
 
 TRequestResult TFqSetup::DescribeQuery(const TString& queryId, TExecutionMeta& meta) const {
@@ -245,8 +264,7 @@ TRequestResult TFqSetup::DescribeQuery(const TString& queryId, TExecutionMeta& m
         meta.ResultSetSizes.emplace_back(resultMeta.rows_count());
     }
 
-    const auto& issues = response->Get()->Issues;
-    return TRequestResult(GetStatus(issues), issues);
+    return GetStatus(response->Get()->Issues);
 }
 
 TRequestResult TFqSetup::FetchQueryResults(const TString& queryId, i32 resultSetId, Ydb::ResultSet& resultSet) const {
@@ -254,8 +272,20 @@ TRequestResult TFqSetup::FetchQueryResults(const TString& queryId, i32 resultSet
 
     resultSet = response->Get()->Result.result_set();
 
-    const auto& issues = response->Get()->Issues;
-    return TRequestResult(GetStatus(issues), issues);
+    return GetStatus(response->Get()->Issues);
+}
+
+TRequestResult TFqSetup::CreateConnection(const FederatedQuery::ConnectionContent& connection, TString& connectionId) const {
+    const auto response = Impl->CreateConnection(connection);
+
+    connectionId = response->Get()->Result.connection_id();
+
+    return GetStatus(response->Get()->Issues);
+}
+
+TRequestResult TFqSetup::CreateBinding(const FederatedQuery::BindingContent& binding) const {
+    const auto response = Impl->CreateBinding(binding);
+    return GetStatus(response->Get()->Issues);
 }
 
 }  // namespace NFqRun

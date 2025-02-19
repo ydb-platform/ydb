@@ -15,6 +15,7 @@ RECURSE(
     kqp
     large_serializable
     limits
+    minidumps
     postgresql
     query_cache
     rename
@@ -30,6 +31,7 @@ RECURSE(
     suite_tests
     tpc
     tenants
+    transfer
     ttl
     wardens
     ydb_cli

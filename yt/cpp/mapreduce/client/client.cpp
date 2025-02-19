@@ -273,7 +273,7 @@ void TClientBase::Concatenate(
         auto end = sourcePaths.begin() + std::min(i + options.MaxBatchSize_, std::ssize(sourcePaths));
         batch.assign(begin, end);
 
-        bool firstBatch = i == 0;
+        bool firstBatch = (i == 0);
         RequestWithRetry<void>(
             ClientRetryPolicy_->CreatePolicyForGenericRequest(),
             [this, &batch, &destinationPath, &options, outerClient, firstBatch] (TMutationId /*mutationId*/) {
@@ -1178,7 +1178,7 @@ void TClient::InsertRows(
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &rows, &options] (TMutationId /*mutationId*/) {
-            RawClient_->InsertRows(path, rows, options);
+            NRawClient::InsertRows(Context_, path, rows, options);
         });
 }
 
@@ -1191,7 +1191,7 @@ void TClient::DeleteRows(
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
-            RawClient_->DeleteRows(path, keys, options);
+            NRawClient::DeleteRows(Context_, path, keys, options);
         });
 }
 
@@ -1218,7 +1218,7 @@ TNode::TListType TClient::LookupRows(
     return RequestWithRetry<TNode::TListType>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
-            return RawClient_->LookupRows(path, keys, options);
+            return NRawClient::LookupRows(Context_, path, keys, options);
         });
 }
 
@@ -1496,7 +1496,7 @@ void TClient::CheckShutdown() const
     }
 }
 
-TClientPtr CreateClientImpl(
+TClientContext CreateClientContext(
     const TString& serverName,
     const TCreateClientOptions& options)
 {
@@ -1545,6 +1545,10 @@ TClientPtr CreateClientImpl(
         context.ServerName = Format("tvm.%v", context.ServerName);
     }
 
+    if (options.ProxyRole_) {
+        context.Config->Hosts = "hosts?role=" + *options.ProxyRole_;
+    }
+
     if (context.UseTLS || options.UseCoreHttpClient_) {
         context.HttpClient = NHttpClient::CreateCoreHttpClient(context.UseTLS, context.Config);
     } else {
@@ -1565,6 +1569,15 @@ TClientPtr CreateClientImpl(
     if (context.Token) {
         TConfig::ValidateToken(context.Token);
     }
+
+    return context;
+}
+
+TClientPtr CreateClientImpl(
+    const TString& serverName,
+    const TCreateClientOptions& options)
+{
+    auto context = CreateClientContext(serverName, options);
 
     auto globalTxId = GetGuid(context.Config->GlobalTxId);
 

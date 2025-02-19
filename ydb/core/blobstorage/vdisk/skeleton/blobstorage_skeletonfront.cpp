@@ -269,6 +269,7 @@ namespace NKikimr {
                 ProcessNext(ctx, front, true);
             }
 
+        private:
             template <class TFront>
             void ProcessNext(const TActorContext &ctx, TFront &front, bool forceError) {
                 // we can send next element to Skeleton if any

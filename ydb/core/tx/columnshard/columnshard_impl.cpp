@@ -1617,11 +1617,7 @@ void TColumnShard::OnTieringModified(const std::optional<ui64> pathId) {
     StoragesManager->OnTieringModified(Tiers);
     if (TablesManager.HasPrimaryIndex()) {
         if (pathId) {
-            std::optional<NOlap::TTiering> tableTtl;
-            if (auto* findTtl = TablesManager.GetTtl().FindPtr(*pathId)) {
-                tableTtl = *findTtl;
-            }
-            TablesManager.MutablePrimaryIndex().OnTieringModified(tableTtl, *pathId);
+            TablesManager.MutablePrimaryIndex().OnTieringModified(TablesManager.GetTableTtl(*pathId), *pathId);
         } else {
             TablesManager.MutablePrimaryIndex().OnTieringModified(TablesManager.GetTtl());
         }

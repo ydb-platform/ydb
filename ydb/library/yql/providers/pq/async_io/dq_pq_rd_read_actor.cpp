@@ -944,7 +944,7 @@ TDqPqRdReadActor::TSession* TDqPqRdReadActor::FindAndUpdateSession(const TEventP
     auto& session = sessionIt->second;
 
     if (ev->Cookie != session.Generation) {
-        SRC_LOG_W("Wrong message generation (" << typeid(TEventPtr).name()  << "), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << session.Generation << ", send TEvStopSession");
+        SRC_LOG_W("Wrong message generation (" << typeid(TEventPtr).name()  << "), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << session.Generation << ", send TEvNoSession");
         SendNoSession(ev->Sender, ev->Cookie);
         return nullptr;
     }
@@ -995,13 +995,13 @@ void TDqPqRdReadActor::UpdateSessions() {
             continue;
         }
 
-        SRC_LOG_I("Create session to " << rowDispatcherActorId);
         auto queueId = ++NextEventQueueId;
         Sessions.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(rowDispatcherActorId),
             std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, queueId, ++NextGeneration));
         auto& session = Sessions.at(rowDispatcherActorId);
+        SRC_LOG_I("Create session to " << rowDispatcherActorId << ", generation " << session.Generation);
         for (auto partitionId : partitions) {
             session.Partitions[partitionId];
         }

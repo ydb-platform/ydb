@@ -15,4 +15,6 @@ SRCS(
     accessor.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(accessor.h)
+
 END()

@@ -202,7 +202,7 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
                 Sleep(TDuration::Seconds(3));
                 return NFmr::ETaskStatus::Completed;
             }
-            return NFmr::ETaskStatus::Aborted;
+            return NFmr::ETaskStatus::Failed;
         }; // TODO - use function which actually calls Downloader/Uploader based on task params
 
         NFmr::TFmrJobFactorySettings settings{.Function=func};

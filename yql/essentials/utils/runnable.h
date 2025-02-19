@@ -1,3 +1,5 @@
+#pragma once
+
 #include <util/generic/ptr.h>
 
 namespace NYql {

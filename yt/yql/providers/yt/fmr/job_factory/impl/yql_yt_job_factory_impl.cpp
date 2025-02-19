@@ -40,12 +40,11 @@ public:
         return future;
     }
 
-private:
-    void Start() {
+    void Start() override {
         ThreadPool_ = CreateThreadPool(NumThreads_);
     }
 
-    void Stop() {
+    void Stop() override {
         ThreadPool_->Stop();
     }
 

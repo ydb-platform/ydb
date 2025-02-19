@@ -1,5 +1,5 @@
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/core/persqueue/list_all_topics_actor.h>
 
 

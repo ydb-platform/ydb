@@ -1022,7 +1022,7 @@ namespace Tests {
         if (Settings->AppConfig->GetKafkaProxyConfig().GetEnableKafkaProxy()) {
 
             IActor* discoveryCache = CreateDiscoveryCache(NGRpcService::KafkaEndpointId);
-            TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx, userPoolId);
+            TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx);
 	    Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
 
             NKafka::TListenerSettings settings;

@@ -118,7 +118,7 @@ public:
     std::shared_ptr<TReadStats> ReadStats;
 
     TReadMetadata(const std::shared_ptr<TVersionedIndex> info, const TReadDescription& read)
-        : TBase(info, read.PKRangesFilter->IsReverse() ? TReadMetadataBase::ESorting::ASC : TReadMetadataBase::ESorting::DESC, read.GetProgram(),
+        : TBase(info, read.PKRangesFilter->IsReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC, read.GetProgram(),
               info->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(), read.GetScanCursor())
         , PathId(read.PathId)
         , ReadStats(std::make_shared<TReadStats>()) {

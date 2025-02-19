@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/services/bsconfig)
+UNITTEST_FOR(ydb/services/config)
 
 SIZE(MEDIUM)
 
@@ -10,7 +10,7 @@ PEERDIR(
     library/cpp/logger
     ydb/core/protos
     ydb/core/testlib/default
-    ydb/services/bsconfig
+    ydb/services/config
 )
 
 YQL_LAST_ABI_VERSION()

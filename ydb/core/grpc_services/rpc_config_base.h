@@ -3,7 +3,7 @@
 
 #include "rpc_deferrable.h"
 
-#include <ydb/public/api/protos/ydb_bsconfig.pb.h>
+#include <ydb/public/api/protos/ydb_config.pb.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
@@ -103,10 +103,10 @@ private:
 };
 
 
-bool CopyToConfigRequest(const Ydb::BSConfig::ReplaceStorageConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
-bool CopyToConfigRequest(const Ydb::BSConfig::FetchStorageConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
-void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &/*from*/, Ydb::BSConfig::ReplaceStorageConfigResult* /*to*/);
-void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb::BSConfig::FetchStorageConfigResult *to);
+bool CopyToConfigRequest(const Ydb::Config::ReplaceConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
+bool CopyToConfigRequest(const Ydb::Config::FetchConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
+void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &/*from*/, Ydb::Config::ReplaceConfigResult* /*to*/);
+void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb::Config::FetchConfigResult *to);
 
 template <typename TDerived>
 class TBaseBSConfigRequest {
@@ -281,14 +281,36 @@ protected:
 
     void Handle(TEvBlobStorage::TEvControllerFetchConfigResponse::TPtr ev) {
         auto *self = Self();
-        if constexpr (std::is_same_v<TResultRecord, Ydb::BSConfig::FetchStorageConfigResult>) {
+        if constexpr (std::is_same_v<TResultRecord, Ydb::Config::FetchConfigResult>) {
             TResultRecord result;
             const auto& record = ev->Get()->Record;
             if (record.HasClusterYaml()) {
-                result.set_yaml_config(ev->Get()->Record.GetClusterYaml());
+                auto conf = ev->Get()->Record.GetClusterYaml();
+                auto metadata = NYamlConfig::GetMainMetadata(conf);
+                if (metadata.Version && metadata.Cluster) {
+                    auto& config = *result.add_config();
+                    auto& identity = *config.mutable_identity();
+                    identity.set_version(*metadata.Version);
+                    identity.set_cluster(*metadata.Cluster);
+                    identity.mutable_main();
+                    config.set_config(conf);
+                } else {
+                    // impossible
+                }
             }
             if (record.HasStorageYaml()) {
-                result.set_storage_yaml_config(ev->Get()->Record.GetStorageYaml());
+                auto conf = ev->Get()->Record.GetStorageYaml();
+                auto metadata = NYamlConfig::GetStorageMetadata(conf);
+                if (metadata.Version && metadata.Cluster) {
+                    auto& config = *result.add_config();
+                    auto& identity = *config.mutable_identity();
+                    identity.set_version(*metadata.Version);
+                    identity.set_cluster(*metadata.Cluster);
+                    identity.mutable_storage();
+                    config.set_config(conf);
+                } else {
+                    // impossible
+                }
             }
             self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
         } else {
@@ -299,7 +321,7 @@ protected:
 
     void Handle(TEvBlobStorage::TEvControllerReplaceConfigResponse::TPtr ev) {
         auto *self = Self();
-        if constexpr (std::is_same_v<TResultRecord, Ydb::BSConfig::ReplaceStorageConfigResult>) {
+        if constexpr (std::is_same_v<TResultRecord, Ydb::Config::ReplaceConfigResult>) {
             const auto& record = ev->Get()->Record;
             if (record.GetStatus() == NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success) {
                 TResultRecord result;

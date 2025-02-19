@@ -1425,6 +1425,8 @@ message TEvControllerProposeConfigResponse {
 
 message TEvControllerConsoleCommitRequest {
     optional string YAML = 1;
+    optional bool AllowUnknownFields = 2;
+    optional bool BypassMetadataChecks = 3;
 }
 
 message TEvControllerConsoleCommitResponse {
@@ -1445,6 +1447,9 @@ message TEvControllerReplaceConfigRequest {
     optional bool SkipConsoleValidation = 5;
     optional bool SwitchDedicatedStorageSection = 6;
     optional bool DedicatedConfigMode = 7;
+    // console flags
+    optional bool AllowUnknownFields = 8;
+    optional bool BypassMetadataChecks = 9;
 }
 
 message TEvControllerReplaceConfigResponse {
@@ -1464,6 +1469,8 @@ message TEvControllerReplaceConfigResponse {
 
 message TEvControllerValidateConfigRequest {
     optional string YAML = 1;
+    optional bool AllowUnknownFields = 2;
+    optional bool BypassMetadataChecks = 3;
 }
 
 message TEvControllerValidateConfigResponse {

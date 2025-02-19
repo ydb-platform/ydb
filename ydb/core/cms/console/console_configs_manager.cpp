@@ -113,6 +113,8 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
         }
     } catch (const yexception &e) {
         opCtx.Error = e.what();
+    } catch (const std::exception& e) {
+        opCtx.Error = e.what();
     }
 }
 

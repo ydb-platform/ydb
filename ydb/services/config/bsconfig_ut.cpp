@@ -73,7 +73,7 @@ public:
         }
         ServerSettings->Formats = new NKikimr::TFormatFactory;
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
-        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TBSConfigGRpcService>("bsconfig");
+        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TConfigGRpcService>("bsconfig");
 
         Server_.Reset(new NKikimr::Tests::TServer(*ServerSettings));
         Tenants_.Reset(new NKikimr::Tests::TTenants(Server_));
@@ -158,73 +158,108 @@ TString NormalizeYaml(const TString& yaml) {
     return normalized.Str();
 }
 
-Y_UNIT_TEST_SUITE(BSConfigGRPCService) {
+Y_UNIT_TEST_SUITE(ConfigGRPCService) {
 
     template <typename TCtx>
     void AdjustCtxForDB(TCtx &ctx) {    
         ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
     }
 
-    void ReplaceStorageConfig(auto &channel, std::optional<TString> yamlConfig, std::optional<TString> storageYamlConfig,
-            std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode) {
-        std::unique_ptr<Ydb::BSConfig::V1::BSConfigService::Stub> stub;
-        stub = Ydb::BSConfig::V1::BSConfigService::NewStub(channel);
+    void ReplaceConfig(
+            auto &channel,
+            std::optional<TString> mainConfig,
+            std::optional<TString> storageConfig,
+            std::optional<bool> switchDedicatedStorageSection,
+            bool dedicatedConfigMode) {
 
-        Ydb::BSConfig::ReplaceStorageConfigRequest request;
-        if (yamlConfig) {
-            request.set_yaml_config(*yamlConfig);
-        }
-        if (storageYamlConfig) {
-            request.set_storage_yaml_config(*storageYamlConfig);
-        }
-        if (switchDedicatedStorageSection) {
-            request.set_switch_dedicated_storage_section(*switchDedicatedStorageSection);
-        }
-        request.set_dedicated_config_mode(dedicatedConfigMode);
+        std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub;
+        stub = Ydb::Config::V1::ConfigService::NewStub(channel);
 
-        Ydb::BSConfig::ReplaceStorageConfigResponse response;
-        Ydb::BSConfig::ReplaceStorageConfigResult result;
+        Ydb::Config::ReplaceConfigRequest request;
 
-        grpc::ClientContext replaceStorageConfigCtx;
-        AdjustCtxForDB(replaceStorageConfigCtx);
-        stub->ReplaceStorageConfig(&replaceStorageConfigCtx, request, &response);
+        if (!dedicatedConfigMode && !switchDedicatedStorageSection) {
+            if (mainConfig) {
+                request.set_replace(*mainConfig);
+            }
+        } else if (dedicatedConfigMode && !switchDedicatedStorageSection) {
+            auto& replace = *request.mutable_replace_with_dedicated_storage_section();
+            if (mainConfig) {
+                replace.set_main_config(*mainConfig);
+            }
+            if (storageConfig) {
+                replace.set_storage_config(*storageConfig);
+            }
+        } else if (switchDedicatedStorageSection && *switchDedicatedStorageSection) {
+            auto& replace = *request.mutable_replace_enable_dedicated_storage_section();
+            if (mainConfig) {
+                replace.set_main_config(*mainConfig);
+            }
+            if (storageConfig) {
+                replace.set_storage_config(*storageConfig);
+            }
+        } else if (switchDedicatedStorageSection && !*switchDedicatedStorageSection) {
+            if (mainConfig) {
+                request.set_replace_disable_dedicated_storage_section(*mainConfig);
+            }
+        } else {
+            Y_ABORT("invariant violation");
+        }
+
+        Ydb::Config::ReplaceConfigResponse response;
+        Ydb::Config::ReplaceConfigResult result;
+
+        grpc::ClientContext replaceConfigCtx;
+        AdjustCtxForDB(replaceConfigCtx);
+        stub->ReplaceConfig(&replaceConfigCtx, request, &response);
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
         Cerr << "response: " << response.operation().result().DebugString() << Endl;
         response.operation().result().UnpackTo(&result);
     }
 
-    void FetchStorageConfig(auto& channel, bool dedicatedStorageSection, bool dedicatedClusterSection,
-            std::optional<TString>& yamlConfig, std::optional<TString>& storageYamlConfig) {
-        std::unique_ptr<Ydb::BSConfig::V1::BSConfigService::Stub> stub;
-        stub = Ydb::BSConfig::V1::BSConfigService::NewStub(channel);
+    void FetchConfig(
+            auto& channel,
+            bool dedicatedStorageSection,
+            bool dedicatedClusterSection,
+            std::optional<TString>& mainConfig,
+            std::optional<TString>& storageConfig) {
+        std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub;
+        stub = Ydb::Config::V1::ConfigService::NewStub(channel);
 
-        Ydb::BSConfig::FetchStorageConfigRequest request;
-        request.set_dedicated_storage_section(dedicatedStorageSection);
-        request.set_dedicated_cluster_section(dedicatedClusterSection);
+        Ydb::Config::FetchConfigRequest request;
 
-        Ydb::BSConfig::FetchStorageConfigResponse response;
-        Ydb::BSConfig::FetchStorageConfigResult result;
+        auto& all = *request.mutable_all();
 
-        grpc::ClientContext fetchStorageConfigCtx;
-        AdjustCtxForDB(fetchStorageConfigCtx);
-        stub->FetchStorageConfig(&fetchStorageConfigCtx, request, &response);
+        if (dedicatedStorageSection || dedicatedClusterSection) {
+            all.mutable_detach_storage_config_section();
+        }
+
+        Ydb::Config::FetchConfigResponse response;
+        Ydb::Config::FetchConfigResult result;
+
+        grpc::ClientContext fetchConfigCtx;
+        AdjustCtxForDB(fetchConfigCtx);
+        stub->FetchConfig(&fetchConfigCtx, request, &response);
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
         response.operation().result().UnpackTo(&result);
 
-        if (result.has_yaml_config()) {
-            yamlConfig.emplace(result.yaml_config());
-        } else {
-            yamlConfig.reset();
+        std::optional<TString> rcvMainConfig;
+        std::optional<TString> rcvStorageConfig;
+
+        for (auto& entry : result.config()) {
+            if (entry.identity().type_case() == Ydb::Config::ConfigIdentity::TypeCase::kMain) {
+                rcvMainConfig = entry.config();
+            }
+
+            if (entry.identity().type_case() == Ydb::Config::ConfigIdentity::TypeCase::kStorage) {
+                rcvStorageConfig = entry.config();
+            }
         }
 
-        if (result.has_storage_yaml_config()) {
-            storageYamlConfig.emplace(result.storage_yaml_config());
-        } else {
-            storageYamlConfig.reset();
-        }
+        mainConfig = rcvMainConfig;
+        storageConfig = rcvStorageConfig;
     }   
 
-    Y_UNIT_TEST(ReplaceStorageConfig) {
+    Y_UNIT_TEST(ReplaceConfig) {
         TKikimrWithGrpcAndRootSchema server;
         TString yamlConfig = R"(
 metadata:
@@ -263,18 +298,18 @@ config:
     host_config_id: 2
 )";
         TString yamlConfigExpected = SubstGlobalCopy(yamlConfig, "version: 0", "version: 1");
-        ReplaceStorageConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false);
+        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false);
         std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
-        FetchStorageConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
+        FetchConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
         UNIT_ASSERT(yamlConfigFetched);
         UNIT_ASSERT(!storageYamlConfigFetched);
         UNIT_ASSERT_VALUES_EQUAL(yamlConfigExpected, *yamlConfigFetched);
     }
 
-    Y_UNIT_TEST(FetchStorageConfig) {
+    Y_UNIT_TEST(FetchConfig) {
         TKikimrWithGrpcAndRootSchema server;
         std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
-        FetchStorageConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
+        FetchConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
         UNIT_ASSERT(!yamlConfigFetched);
         UNIT_ASSERT(!storageYamlConfigFetched);
     }

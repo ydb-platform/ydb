@@ -1856,6 +1856,6 @@ Y_UNIT_TEST(ValueConstructor) {
             "SELECT\n\tCallable(Callable<(Int32) -> Int32>, ($x) -> ($x))(0)\n;\n"},
     };
 
-    TSetup setup(/* ansiLexer = */ true);
+    TSetup setup;
     setup.Run(cases);
 }

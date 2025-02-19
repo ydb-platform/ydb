@@ -20,15 +20,24 @@ namespace NSQLTranslation {
 
 namespace NSQLTranslationV1 {
 
+    //FIXME remove
     NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules = nullptr);
+    NYql::TAstParseResult SqlToYql(const TLexers& lexers, const TParsers& parsers, const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules = nullptr);
 
+    //FIXME remove
     NYql::TAstParseResult SqlASTToYql(const TString& query, const google::protobuf::Message& protoAst, const NSQLTranslation::TSQLHints& hints, const NSQLTranslation::TTranslationSettings& settings);
+    NYql::TAstParseResult SqlASTToYql(const TLexers& lexers, const TParsers& parsers, const TString& query, const google::protobuf::Message& protoAst, const NSQLTranslation::TSQLHints& hints, const NSQLTranslation::TTranslationSettings& settings);
 
+    //FIXME remove
     TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo = nullptr);
+    TVector<NYql::TAstParseResult> SqlToAstStatements(const TLexers& lexers, const TParsers& parsers, const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo = nullptr);
 
     bool NeedUseForAllStatements(const NSQLv1Generated::TRule_sql_stmt_core::AltCase& subquery);
 
+    //FIXME remove
     bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, NYql::TIssues& issues,
+        const NSQLTranslation::TTranslationSettings& settings);
+    bool SplitQueryToStatements(const TLexers& lexers, const TParsers& parsers, const TString& query, TVector<TString>& statements, NYql::TIssues& issues,
         const NSQLTranslation::TTranslationSettings& settings);
 
     NSQLTranslation::TTranslatorPtr MakeTranslator();

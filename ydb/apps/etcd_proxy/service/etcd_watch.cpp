@@ -471,7 +471,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateFunc);
         Stuff->Watchtower = SelfId();
-        ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
+        ctx.Schedule(TDuration::Seconds(101), new TEvents::TEvWakeup);
     }
 private:
     struct TSubscriptions {
@@ -576,7 +576,7 @@ private:
     void Wakeup(const TActorContext&) {
         std::ostringstream sql;
         NYdb::TParamsBuilder params;
-        Revision = Stuff->Revision.fetch_add(1LL);
+        Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
         params.AddParam("$Revision").Int64(Revision).Build();
 
         sql << "$Expired = select `id` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) < CurrentUtcDatetime();" << std::endl;
@@ -624,9 +624,9 @@ private:
             }
         }
 
+
         if (!deleted) {
-            auto expected = Revision + 1U;
-            Stuff->Revision.compare_exchange_strong(expected, Revision);
+            Stuff->Revision.compare_exchange_weak(Revision, Revision - 1LL);
         }
 
         ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);

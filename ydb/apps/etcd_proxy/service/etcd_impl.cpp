@@ -39,6 +39,20 @@ struct TOperation {
     size_t ResultIndex = 0ULL;
 };
 
+void MakeSlice(const std::string_view& key, const std::string_view& rangeEnd, std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter, const i64 revision = 0LL) {
+    sql << "select * from ";
+    if (revision) {
+        sql << "(select max_by(TableRow(), `modified`) from `verhaal` where ";
+        MakeSimplePredicate(key, rangeEnd, sql, params, paramsCounter);
+        if (revision)
+            sql << " and " << AddParam("Rev", params, revision, paramsCounter) << " >= `modified`";
+        sql << " group by `key`) flatten columns where 0L < `version`";
+    } else {
+        sql << "`huidig` where ";
+        MakeSimplePredicate(key, rangeEnd, sql, params, paramsCounter);
+    }
+}
+
 static constexpr auto NoEnd = "\0"sv;
 
 struct TRange : public TOperation {
@@ -113,18 +127,12 @@ struct TRange : public TOperation {
         sql << resultName << " = select `key`,`created`,`modified`,`version`,`lease`,";
         if (KeysOnly)
             sql << "'' as ";
-        sql << "`value` from ";
-        const bool fromHistory = KeyRevision || MinCreateRevision || MaxCreateRevision || MinModificateRevision || MaxModificateRevision;
-        sql << '`' << (fromHistory ? "verhaal" : "huidig") << '`' << std::endl;
-        sql << "where ";
+        sql << "`value` from (" << std::endl << '\t';
+        MakeSlice(Key, RangeEnd, sql, params, paramsCounter, KeyRevision);
+        sql << std::endl << ')';
 
         if (!txnFilter.empty())
-            sql << txnFilter << " and ";
-
-        MakeSimplePredicate(Key, RangeEnd, sql, params, paramsCounter);
-        if (KeyRevision) {
-            sql << std::endl << '\t' << "and `modified` = " << AddParam("Revision", params, KeyRevision, paramsCounter);
-        }
+            sql << " where " << txnFilter;
 
         if (MinCreateRevision) {
             sql << std::endl << '\t' << "and `created` >= " << AddParam("MinCreateRevision", params, MinCreateRevision, paramsCounter);
@@ -166,11 +174,18 @@ struct TRange : public TOperation {
         etcdserverpb::RangeResponse response;
         FillHeader(revision, *response.mutable_header());
 
+        ui64 count = 0ULL;
         if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
-            response.set_count(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
+            count = NYdb::TValueParser(parser.GetValue(0)).GetUint64();
+            response.set_count(count);
         }
+
         if (!CountOnly) {
-            for (auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]); parser.TryNextRow();) {
+            const auto& output = results[ResultIndex + 1U];
+            if (output.RowsCount() < count)
+                response.set_more(true);
+
+            for (auto parser = NYdb::TResultSetParser(output); parser.TryNextRow();) {
                 const auto kvs = response.add_kvs();
                 kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
                 kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
@@ -219,6 +234,12 @@ struct TPut : public TOperation {
 
         if (Key.empty())
             return "key is not provided";
+
+        if (IgnoreValue && !Value.empty())
+            return "value is provided";
+
+        if (IgnoreLease && Lease)
+            return "lease is provided";
 
         return {};
     }
@@ -344,8 +365,10 @@ struct TDeleteRange : public TOperation {
         MakeSimplePredicate(Key, RangeEnd, where, params, paramsCounter);
 
         const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
+        sql << oldResultSetName << " = select * from (";
+        MakeSlice(Key, RangeEnd, sql, params, paramsCounter);
+        sql << ')' << ' ' << where.str() << ';' << std::endl;
 
-        sql << oldResultSetName << " = select `key`, `value`, `created`, `modified`, `version`, `lease` from `huidig` " << where.str() << ';' << std::endl;
         sql << "insert into `verhaal`" << std::endl;
         sql << "select `key`, `created`, $Revision as `modified`, 0L as `version`, `value`, `lease` from " << oldResultSetName << ';' << std::endl;
 
@@ -355,17 +378,19 @@ struct TDeleteRange : public TOperation {
                 ++(*resultsCounter);
             sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from " << oldResultSetName << ';' << std::endl;
         }
-
         sql << "delete from `huidig` " << where.str() << ';' << std::endl;
     }
 
     etcdserverpb::DeleteRangeResponse MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
         etcdserverpb::DeleteRangeResponse response;
-        FillHeader(revision, *response.mutable_header());
 
+        ui64 deleted  = 0ULL;
         if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
-            response.set_deleted(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
+            deleted = NYdb::TValueParser(parser.GetValue(0)).GetUint64();
+            response.set_deleted(deleted);
         }
+
+        FillHeader(deleted ? revision : revision - 1LL, *response.mutable_header());
 
         if (GetPrevious) {
             for (auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]); parser.TryNextRow();) {
@@ -569,58 +594,11 @@ struct TTxn : public TOperation {
             return {};
         };
 
-        if (Compares.empty())
-            return "compare is not provided";
         return fill(Success, rec.success()) + fill(Failure, rec.failure());
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
         ResultIndex = (*resultsCounter)++;
-
-        std::unordered_map<std::pair<std::string, std::string>, std::vector<TCompare>> map(Compares.size());
-        for (const auto& compare : Compares)
-            map[std::make_pair(compare.Key, compare.RangeEnd)].emplace_back(compare);
-        const bool manyRanges = map.size() > 1U;
-
-        const auto& cmpResultSetName = GetNameWithIndex("Cmp", resultsCounter);
-        sql << cmpResultSetName << " = ";
-
-        if (manyRanges)
-            sql << "select nvl(bool_and(`cmp`), false) as `cmp` from (" << std::endl;
-
-        for (auto i = map.cbegin(); map.cend() != i; ++i) {
-            if (map.cbegin() != i)
-                sql << std::endl << "union all" << std::endl;
-
-            sql << "select nvl(bool_and(";
-            const auto& compares = i->second;
-            bool def = true;
-            for (auto j = compares.cbegin(); compares.cend() != j; ++j) {
-                if (compares.cbegin() != j)
-                    sql << " and ";
-                def = j->MakeQueryWithParams(sql, params, paramsCounter) && def;
-            }
-            sql << "), " << (def ? "true" : "false") << ") as `cmp` from `huidig` where ";
-            MakeSimplePredicate(i->first.first, i->first.second, sql, params, paramsCounter);
-        }
-
-        if (manyRanges)
-            sql << std::endl << ')';
-        sql << ';' << std::endl;
-
-        sql << "select * from " << cmpResultSetName << ';' << std::endl;
-
-
-        const auto& scalarBoolOneName = GetNameWithIndex("One", resultsCounter);
-        const auto& scalarBoolTwoName = GetNameWithIndex("Two", resultsCounter);
-
-        if (txnFilter.empty()) {
-            sql << scalarBoolOneName << " = select " << cmpResultSetName << ';' << std::endl;
-            sql << scalarBoolTwoName << " = select not " << cmpResultSetName << ';' << std::endl;
-        } else {
-            sql << scalarBoolOneName << " = select " << txnFilter << " and " << cmpResultSetName << ';' << std::endl;
-            sql << scalarBoolTwoName << " = select " << txnFilter << " and not " << cmpResultSetName << ';' << std::endl;
-        }
 
         const auto make = [&sql, &params](std::vector<TRequestOp>& operations, size_t* paramsCounter, size_t* resultsCounter, const std::string_view& txnFilter) {
             for (auto& operation : operations) {
@@ -635,8 +613,59 @@ struct TTxn : public TOperation {
             }
         };
 
-        make(Success, paramsCounter, resultsCounter, scalarBoolOneName);
-        make(Failure, paramsCounter, resultsCounter, scalarBoolTwoName);
+        if (Compares.empty()) {
+            sql << "select true;" << std::endl;
+            make(Success, paramsCounter, resultsCounter, "");
+        } else {
+            std::unordered_map<std::pair<std::string, std::string>, std::vector<TCompare>> map(Compares.size());
+            for (const auto& compare : Compares)
+                map[std::make_pair(compare.Key, compare.RangeEnd)].emplace_back(compare);
+            const bool manyRanges = map.size() > 1U;
+
+            const auto& cmpResultSetName = GetNameWithIndex("Cmp", resultsCounter);
+            sql << cmpResultSetName << " = ";
+
+            if (manyRanges)
+                sql << "select nvl(bool_and(`cmp`), false) as `cmp` from (" << std::endl;
+
+            for (auto i = map.cbegin(); map.cend() != i; ++i) {
+                if (map.cbegin() != i)
+                    sql << std::endl << "union all" << std::endl;
+
+                sql << "select nvl(bool_and(";
+                const auto& compares = i->second;
+                bool def = true;
+                for (auto j = compares.cbegin(); compares.cend() != j; ++j) {
+                    if (compares.cbegin() != j)
+                        sql << " and ";
+                    def = j->MakeQueryWithParams(sql, params, paramsCounter) && def;
+                }
+                sql << "), " << (def ? "true" : "false") << ") as `cmp` from (";
+                MakeSlice(i->first.first, i->first.second, sql, params, paramsCounter);
+                sql << ')';
+            }
+
+            if (manyRanges)
+                sql << std::endl << ')';
+
+            sql << ';' << std::endl;
+            sql << "select * from " << cmpResultSetName << ';' << std::endl;
+
+
+            const auto& scalarBoolOneName = GetNameWithIndex("One", resultsCounter);
+            const auto& scalarBoolTwoName = GetNameWithIndex("Two", resultsCounter);
+
+            if (txnFilter.empty()) {
+                sql << scalarBoolOneName << " = select " << cmpResultSetName << ';' << std::endl;
+                sql << scalarBoolTwoName << " = select not " << cmpResultSetName << ';' << std::endl;
+            } else {
+                sql << scalarBoolOneName << " = select " << txnFilter << " and " << cmpResultSetName << ';' << std::endl;
+                sql << scalarBoolTwoName << " = select " << txnFilter << " and not " << cmpResultSetName << ';' << std::endl;
+            }
+
+            make(Success, paramsCounter, resultsCounter, scalarBoolOneName);
+            make(Failure, paramsCounter, resultsCounter, scalarBoolTwoName);
+        }
     }
 
     etcdserverpb::TxnResponse MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
@@ -734,8 +763,7 @@ private:
 protected:
     void TryToRollbackRevision() {
         if constexpr (!ReadOnly) {
-            auto expected = Revision + 1U;
-            Stuff->Revision.compare_exchange_weak(expected, Revision);
+            Stuff->Revision.compare_exchange_weak(Revision, Revision - 1LL);
         }
     }
 
@@ -796,7 +824,8 @@ private:
     std::string ParseGrpcRequest() final {
         if (const auto& error = Put.Parse(*GetProtoRequest()); !error.empty())
             return error;
-        Revision = Stuff->Revision.fetch_add(1L);
+
+        Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
         return {};
     }
 
@@ -828,7 +857,7 @@ private:
     std::string ParseGrpcRequest() final {
         if (const auto& error = DeleteRange.Parse(*GetProtoRequest()); !error.empty())
             return error;
-        Revision = Stuff->Revision.fetch_add(1L);
+        Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
         return {};
     }
 
@@ -863,7 +892,7 @@ private:
     std::string ParseGrpcRequest() final {
         if (const auto& error = Txn.Parse(*GetProtoRequest()); !error.empty())
             return error;
-        Revision = Stuff->Revision.fetch_add(1L);
+        Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
         return {};
     }
 
@@ -937,7 +966,7 @@ private:
         if (rec.id())
             return "requested id isn't supported";
 
-        Lease = Stuff->Lease.fetch_add(1L);
+        Lease = Stuff->Lease.fetch_add(1LL) + 1LL;
         return {};
     }
 
@@ -971,7 +1000,7 @@ private:
         if (!Lease)
             return "lease id isn't set";
 
-        Revision = Stuff->Revision.fetch_add(1LL);
+        Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
         return {};
     }
 

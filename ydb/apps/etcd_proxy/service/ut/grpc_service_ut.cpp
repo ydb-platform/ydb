@@ -159,7 +159,7 @@ i64 Put(std::string_view key, std::optional<std::string_view> value, const std::
         putRequest.set_lease(l);
 
     etcdserverpb::PutResponse putResponse;
-    stub->Put(&writeCtx, putRequest, &putResponse);
+    UNIT_ASSERT(stub->Put(&writeCtx, putRequest, &putResponse).ok());
     UNIT_ASSERT(!putResponse.has_prev_kv());
     return putResponse.header().revision();
 }
@@ -173,7 +173,7 @@ i64 Delete(const std::string_view &key, const std::unique_ptr<etcdserverpb::KV::
         deleteRangeRequest.set_range_end(rangeEnd);
 
     etcdserverpb::DeleteRangeResponse deleteRangeResponse;
-    stub->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
+    UNIT_ASSERT(stub->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse).ok());
     UNIT_ASSERT(deleteRangeResponse.prev_kvs().empty());
     return deleteRangeResponse.deleted();
 }
@@ -185,7 +185,7 @@ i64 Grant(const i64 ttl, const std::unique_ptr<etcdserverpb::Lease::Stub> &stub)
     leaseGrantRequest.set_ttl(ttl);
 
     etcdserverpb::LeaseGrantResponse leaseGrantResponse;
-    stub->LeaseGrant(&leaseGrantCtx, leaseGrantRequest, &leaseGrantResponse);
+    UNIT_ASSERT(stub->LeaseGrant(&leaseGrantCtx, leaseGrantRequest, &leaseGrantResponse).ok());
 
     const auto id = leaseGrantResponse.id();
     UNIT_ASSERT(id != 0LL);
@@ -199,7 +199,7 @@ void Revoke(const i64 id, const std::unique_ptr<etcdserverpb::Lease::Stub> &stub
     leaseRevokeRequest.set_id(id);
 
     etcdserverpb::LeaseRevokeResponse leaseRevokeResponse;
-    stub->LeaseRevoke(&leaseRevokeCtx, leaseRevokeRequest, &leaseRevokeResponse);
+    UNIT_ASSERT(stub->LeaseRevoke(&leaseRevokeCtx, leaseRevokeRequest, &leaseRevokeResponse).ok());
 }
 
 std::unordered_multiset<i64> Leases(const std::unique_ptr<etcdserverpb::Lease::Stub> &stub)
@@ -207,7 +207,7 @@ std::unordered_multiset<i64> Leases(const std::unique_ptr<etcdserverpb::Lease::S
     grpc::ClientContext leasesCtx;
     etcdserverpb::LeaseLeasesRequest leasesRequest;
     etcdserverpb::LeaseLeasesResponse leasesResponse;
-    stub->LeaseLeases(&leasesCtx, leasesRequest, &leasesResponse);
+    UNIT_ASSERT(stub->LeaseLeases(&leasesCtx, leasesRequest, &leasesResponse).ok());
     std::unordered_multiset<i64> result(leasesResponse.leases().size());
     for (const auto& l : leasesResponse.leases())
         result.emplace(l.id());
@@ -290,6 +290,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 etcdserverpb::RangeResponse rangeResponse;
                 etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
 
+                UNIT_ASSERT(rangeResponse.more());
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 7LL);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 4U);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key1");
@@ -326,6 +327,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 etcdserverpb::RangeResponse rangeResponse;
                 etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
 
+                UNIT_ASSERT(rangeResponse.more());
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 5LL);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 3U);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key5");
@@ -348,6 +350,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 etcdserverpb::RangeResponse rangeResponse;
                 etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
 
+                UNIT_ASSERT(rangeResponse.more());
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 8LL);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 3U);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key7");

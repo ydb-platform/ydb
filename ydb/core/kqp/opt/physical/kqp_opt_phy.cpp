@@ -449,8 +449,10 @@ protected:
         // TODO: Allow push to left stage for data queries.
         // It is now possible as we don't use datashard transactions for reads in data queries.
         bool pushLeftStage = (KqpCtx.IsScanQuery() || KqpCtx.Config->EnableKqpDataQueryStreamLookup) && AllowFuseJoinInputs(node);
+        bool rightCollectStage = !IsConnectionFromLegacyReadStage(node.Cast<TDqJoin>().RightInput());
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
-            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false)
+            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false),
+            rightCollectStage
         );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
         return output;

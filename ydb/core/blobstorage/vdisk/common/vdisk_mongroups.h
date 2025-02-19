@@ -739,5 +739,18 @@ public:                                                                         
             COUNTER_DEF(DroppingStuckInternalQueue);
         };
 
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TTimerGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TTimerGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TTimerGroup)
+            {
+                COUNTER_INIT(SkeletonFrontUptimeSeconds, false);
+            }
+
+            COUNTER_DEF(SkeletonFrontUptimeSeconds);
+        };
+
     } // NMonGroup
 } // NKikimr

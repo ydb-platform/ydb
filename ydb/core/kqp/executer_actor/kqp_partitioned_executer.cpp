@@ -17,6 +17,12 @@ namespace NKqp {
 
 namespace {
 
+template <typename T>
+bool FillParamValue(TQueryData::TPtr queryData, const TString& name, T value) {
+    auto type = queryData->GetParameterType(name);
+    return queryData->AddUVParam(name, type, NUdf::TUnboxedValuePod(value));
+}
+
 class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecuter> {
     enum class EExecuterResponse {
         NONE,
@@ -149,41 +155,46 @@ public:
     }
 
     void CreateExecuters() {
-        Executers.reserve(Partitioning->size());
-        BufferActors.reserve(Partitioning->size());
+        Executers.resize(Partitioning->size());
+        BufferActors.resize(Partitioning->size());
         ExecutersResponses.resize(Partitioning->size(), EExecuterResponse::NONE);
 
         for (size_t i = 0; i < Partitioning->size(); ++i) {
-            IKqpGateway::TExecPhysicalRequest newRequest(Request.TxAlloc);
-            FillRequestWithParams(newRequest, i);
-
-            auto txManager = CreateKqpTransactionManager();
-
-            TKqpBufferWriterSettings settings {
-                .SessionActorId = SelfId(),
-                .TxManager = txManager,
-                .TraceId = Request.TraceId.GetTraceId(),
-                .Counters = Counters,
-                .TxProxyMon = RequestCounters->TxProxyMon,
-            };
-            auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
-            auto bufferActorId = RegisterWithSameMailbox(bufferActor);
-            BufferActors.push_back(bufferActorId);
-
-            auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, RequestCounters,
-                TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
-                FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId);
-
-            auto exId = RegisterWithSameMailbox(executerActor);
-            Executers.push_back(exId);
-
-            LOG_D("Created new KQP executer from Partitioned: " << exId);
-
-            auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
-            Send(MakeTxProxyID(), ev.release());
+            CreateExecuterWithBuffer(i, /*isRetry*/ false);
         }
 
         Become(&TKqpPartitionedExecuter::ExecuteState);
+    }
+
+    void CreateExecuterWithBuffer(size_t partitionIdx, bool isRetry) {
+        IKqpGateway::TExecPhysicalRequest newRequest(Request.TxAlloc);
+        FillRequestWithParams(newRequest, partitionIdx);
+
+        auto txManager = CreateKqpTransactionManager();
+
+        TKqpBufferWriterSettings settings {
+            .SessionActorId = SelfId(),
+            .TxManager = txManager,
+            .TraceId = Request.TraceId.GetTraceId(),
+            .Counters = Counters,
+            .TxProxyMon = RequestCounters->TxProxyMon,
+        };
+        auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
+        auto bufferActorId = RegisterWithSameMailbox(bufferActor);
+        BufferActors[partitionIdx] = bufferActorId;
+
+        auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, RequestCounters,
+            TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
+            FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId);
+
+        auto exId = RegisterWithSameMailbox(executerActor);
+        Executers[partitionIdx] = exId;
+
+        LOG_D("Created new KQP executer from Partitioned: " << exId << ", isRetry = "
+            << isRetry << ", partitionIdx = " << partitionIdx);
+
+        auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
+        Send(MakeTxProxyID(), ev.release());
     }
 
     void Abort() {
@@ -238,7 +249,7 @@ public:
             default:
                 RuntimeError(
                     Ydb::StatusIds::INTERNAL_ERROR,
-                    NYql::TIssues({NYql::TIssue("RuntimeError: ExecuteState.")}));
+                    NYql::TIssues({NYql::TIssue("RuntimeError: TEvTxResponse handle execute.")}));
         }
     }
 
@@ -280,7 +291,7 @@ public:
             default:
                 RuntimeError(
                     Ydb::StatusIds::INTERNAL_ERROR,
-                    NYql::TIssues({NYql::TIssue("RuntimeError: ExecuteState.")}));
+                    NYql::TIssues({NYql::TIssue("RuntimeError: TEvError handle execute.")}));
         }
     }
 
@@ -297,34 +308,7 @@ public:
         }
 
         ExecutersResponses[partitionIdx] = EExecuterResponse::NONE;
-
-        IKqpGateway::TExecPhysicalRequest newRequest(Request.TxAlloc);
-        FillRequestWithParams(newRequest, partitionIdx);
-
-        auto txManager = CreateKqpTransactionManager();
-
-        TKqpBufferWriterSettings settings {
-            .SessionActorId = SelfId(),
-            .TxManager = txManager,
-            .TraceId = Request.TraceId.GetTraceId(),
-            .Counters = Counters,
-            .TxProxyMon = RequestCounters->TxProxyMon,
-        };
-        auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
-        auto bufferActorId = RegisterWithSameMailbox(bufferActor);
-        BufferActors[partitionIdx] = bufferActorId;
-
-        auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, RequestCounters,
-            TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
-            FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId);
-
-        auto exId = RegisterWithSameMailbox(executerActor);
-        Executers[partitionIdx] = exId;
-
-        LOG_D("Retry with new KQP executer from Partitioned: " << exId);
-
-        auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
-        Send(MakeTxProxyID(), ev.release());
+        CreateExecuterWithBuffer(partitionIdx, /*isRetry*/ true);
     }
 
     STFUNC(AbortState) {
@@ -332,7 +316,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleAbort);
             default:
-                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+                LOG_D("Got unknown message from ActorId = " << ev->Sender << ", typeRewrite = " << ev->GetTypeRewrite());
             }
         } catch (...) {
             RuntimeError(
@@ -397,50 +381,40 @@ private:
 
         auto& queryData = newRequest.Transactions.front().Params;
 
-        auto firstParamType = queryData->GetParameterType(NBatchParams::IsFirstQuery);
-        queryData->AddUVParam(NBatchParams::IsFirstQuery, firstParamType, NUdf::TUnboxedValuePod(partitionIdx == 0));
+        YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsFirstQuery, partitionIdx == 0));
 
         auto partition = Partitioning->at(partitionIdx).Range;
         if (!partition) {
-            auto lastParamType = queryData->GetParameterType(NBatchParams::IsLastQuery);
-            queryData->AddUVParam(NBatchParams::IsLastQuery, lastParamType, NUdf::TUnboxedValuePod(true));
-            return;
+            YQL_ENSURE(false);
         }
 
         auto cells = partition->EndKeyPrefix.GetCells();
-        auto lastParamType = queryData->GetParameterType(NBatchParams::IsLastQuery);
-        queryData->AddUVParam(NBatchParams::IsLastQuery, lastParamType, NUdf::TUnboxedValuePod(cells.empty()));
 
-        auto inclusiveParamType = queryData->GetParameterType(NBatchParams::IsInclusive);
-        queryData->AddUVParam(NBatchParams::IsInclusive, inclusiveParamType, NUdf::TUnboxedValuePod(partition->IsInclusive));
+        YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsLastQuery, cells.empty()));
+        YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsInclusiveRight, partition->IsInclusive));
 
         for (size_t i = 0; i < cells.size(); ++i) {
-            auto cellValue = NMiniKQL::GetCellValue(cells[i], KeyColumnTypes[i]);
-
             auto endParam = NBatchParams::End + ToString(i + 1);
-            auto endParamType = queryData->GetParameterType(endParam);
-            queryData->AddUVParam(endParam, endParamType, NUdf::TUnboxedValuePod(cellValue));
+            auto cellValue = NMiniKQL::GetCellValue(cells[i], KeyColumnTypes[i]);
+            YQL_ENSURE(FillParamValue(queryData, endParam, cellValue));
         }
 
-        if (partitionIdx == 0) {
-            return;
-        }
+        if (partitionIdx > 0) {
+            auto prevPartition = Partitioning->at(partitionIdx - 1).Range;
+            if (!prevPartition) {
+                YQL_ENSURE(false);
+            }
 
-        auto prevPartition = Partitioning->at(partitionIdx - 1).Range;
-        if (!prevPartition) {
-            YQL_ENSURE(false);
-            return;
-        }
+            YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsInclusiveLeft, prevPartition->IsInclusive));
 
-        auto prevCells = prevPartition->EndKeyPrefix.GetCells();
-        YQL_ENSURE(!prevCells.empty());
+            auto prevCells = prevPartition->EndKeyPrefix.GetCells();
+            YQL_ENSURE(!prevCells.empty());
 
-        for (size_t i = 0; i < prevCells.size(); ++i) {
-            auto prevCellValue = NMiniKQL::GetCellValue(prevCells[i], KeyColumnTypes[i]);
-
-            auto beginParam = NBatchParams::Begin + ToString(i + 1);
-            auto beginParamType = queryData->GetParameterType(beginParam);
-            queryData->AddUVParam(beginParam, beginParamType, NUdf::TUnboxedValuePod(prevCellValue));
+            for (size_t i = 0; i < prevCells.size(); ++i) {
+                auto beginParam = NBatchParams::Begin + ToString(i + 1);
+                auto prevCellValue = NMiniKQL::GetCellValue(prevCells[i], KeyColumnTypes[i]);
+                YQL_ENSURE(FillParamValue(queryData, beginParam, prevCellValue));
+            }
         }
     }
 
@@ -478,8 +452,10 @@ private:
         auto newParams = newRequest.Transactions.front().Params;
         auto oldParams = Request.Transactions.front().Params;
         for (auto& [name, _] : oldParams->GetParams()) {
-            TTypedUnboxedValue& typedValue = oldParams->GetParameterUnboxedValue(name);
-            newParams->AddUVParam(name, typedValue.first, typedValue.second);
+            if (!name.StartsWith(NBatchParams::Header)) {
+                TTypedUnboxedValue& typedValue = oldParams->GetParameterUnboxedValue(name);
+                newParams->AddUVParam(name, typedValue.first, typedValue.second);
+            }
         }
     }
 

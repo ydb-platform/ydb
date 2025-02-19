@@ -9,62 +9,519 @@ namespace NKikimr {
 namespace NKqp {
 
 using namespace NYdb;
-using namespace NYdb::NTable;
+using namespace NYdb::NQuery;
 
-static NKikimrConfig::TAppConfig GetAppConfig() {
+namespace {
+
+NKikimrConfig::TAppConfig GetAppConfig() {
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);
     app.MutableTableServiceConfig()->SetEnableOltpSink(true);
     return app;
 }
 
-static NYdb::NQuery::TExecuteQuerySettings GetQuerySettings() {
+NYdb::NQuery::TExecuteQuerySettings GetQuerySettings() {
     NYdb::NQuery::TExecuteQuerySettings execSettings;
     execSettings.StatsMode(NYdb::NQuery::EStatsMode::Basic);
     return execSettings;
 }
 
-static void CreateTestTable(auto session, const TString& name = "TestTable") {
+void CreateSimpleTable(TSession& session, const TString& name = "TestTable") {
     UNIT_ASSERT(session.ExecuteQuery(TStringBuilder() << R"(
         CREATE TABLE `)" << name << R"(` (
             Group Uint32,
             Name String,
             Age Uint64,
             Amount Uint64,
-            Comment String,
             PRIMARY KEY (Group)
-        ) WITH (
-            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
-            PARTITION_AT_KEYS = (3u)
         );)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
 
     auto result = session.ExecuteQuery(TStringBuilder() << R"(
-        UPSERT INTO `/Root/)" << name << R"(` (Group, Name, Age, Amount, Comment) VALUES
-                (1u, "Anna", 23ul, 3500ul, "None"),
-                (2u, "Paul", 36ul, 300ul, "None"),
-                (3u, "Tony", 81ul, 7200ul, "None"),
-                (4u, "Bear", 11ul, 0ul, "Roar"),
-                (5u, "Ydb", 3ul, 100ul, "?");
+        UPSERT INTO `/Root/)" << name << R"(` (Group, Name, Age, Amount) VALUES
+                (1u, "Anna", 23ul, 3500ul),
+                (2u, "Paul", 36ul, 300ul),
+                (3u, "Tony", 81ul, 7200ul),
+                (4u, "John", 11ul, 10ul),
+                (5u, "Lena", 3ul, 0ul);
     )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+void CreateTwoPartitionsTable(TSession& session, const TString& name = "TestTable") {
+    UNIT_ASSERT(session.ExecuteQuery(TStringBuilder() << R"(
+        CREATE TABLE `)" << name << R"(` (
+            Group Uint32,
+            Name String,
+            Age Uint64,
+            Amount Uint64,
+            PRIMARY KEY (Group)
+        ) WITH (
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+            PARTITION_AT_KEYS = (4u)
+        );)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
+
+    auto result = session.ExecuteQuery(TStringBuilder() << R"(
+        UPSERT INTO `/Root/)" << name << R"(` (Group, Name, Age, Amount) VALUES
+                (1u, "Anna", 23ul, 3500ul),
+                (2u, "Paul", 36ul, 300ul),
+                (3u, "Tony", 81ul, 7200ul),
+                (4u, "John", 11ul, 10ul),
+                (5u, "Lena", 3ul, 0ul),
+                (6u, "Mary", 48ul, 730ul);
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+void CreateTuplePrimaryTable(TSession& session, const TString& name = "TestTable") {
+    UNIT_ASSERT(session.ExecuteQuery(TStringBuilder() << R"(
+        CREATE TABLE `)" << name << R"(` (
+            Group Uint32,
+            Name String,
+            Age Uint64,
+            Amount Uint64,
+            PRIMARY KEY (Group, Name)
+        );)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
+
+    auto result = session.ExecuteQuery(TStringBuilder() << R"(
+        UPSERT INTO `/Root/)" << name << R"(` (Group, Name, Age, Amount) VALUES
+                (1u, "Anna", 23ul, 3500ul),
+                (2u, "Paul", 36ul, 300ul),
+                (3u, "Tony", 81ul, 7200ul),
+                (4u, "John", 11ul, 10ul),
+                (5u, "Lena", 3ul, 0ul);
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(KqpBatch) {
-    Y_UNIT_TEST(UpdateBatch) {
+    Y_UNIT_TEST(UpdateSimple) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session);
+        CreateSimpleTable(session);
 
-        auto query = Q_(R"(
-            BATCH UPDATE TestTable SET Amount = 1000 WHERE Age <= 30;
-        )");
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Amount = 1000 WHERE Age <= 30;
+            )");
 
-        auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable ORDER BY Group;
+            )");
 
-        auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR); // not implemented yet
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([
+                [[23u];[1000u];[1u];["Anna"]];
+                [[36u];[300u];[2u];["Paul"]];
+                [[81u];[7200u];[3u];["Tony"]];
+                [[11u];[1000u];[4u];["John"]];
+                [[3u];[1000u];[5u];["Lena"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(UpdateMultiFilter) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateSimpleTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Amount = 1000 WHERE Age < 15 OR Group < 3 AND Name != "Anna";
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable ORDER BY Group;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([
+                [[23u];[3500u];[1u];["Anna"]];
+                [[36u];[1000u];[2u];["Paul"]];
+                [[81u];[7200u];[3u];["Tony"]];
+                [[11u];[1000u];[4u];["John"]];
+                [[3u];[1000u];[5u];["Lena"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(UpdateMultiSet) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateSimpleTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Amount = 0, Name = "None" WHERE Age <= 25;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable ORDER BY Group;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([
+                [[23u];[0u];[1u];["None"]];
+                [[36u];[300u];[2u];["Paul"]];
+                [[81u];[7200u];[3u];["Tony"]];
+                [[11u];[0u];[4u];["None"]];
+                [[3u];[0u];[5u];["None"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(UpdateMultiBoth) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateSimpleTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Amount = 0, Name = "None" WHERE Age > 15 AND Amount < 3500;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable ORDER BY Group;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([
+                [[23u];[3500u];[1u];["Anna"]];
+                [[36u];[0u];[2u];["None"]];
+                [[81u];[7200u];[3u];["Tony"]];
+                [[11u];[10u];[4u];["John"]];
+                [[3u];[0u];[5u];["Lena"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(UpdateTwoPartitionsSimple) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTwoPartitionsTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Amount = 100 WHERE Age <= 30;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable ORDER BY Group;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([
+                [[23u];[100u];[1u];["Anna"]];
+                [[36u];[300u];[2u];["Paul"]];
+                [[81u];[7200u];[3u];["Tony"]];
+                [[11u];[100u];[4u];["John"]];
+                [[3u];[100u];[5u];["Lena"]];
+                [[48u];[730u];[6u];["Mary"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(UpdateTwoPartitionsMulti) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTwoPartitionsTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Amount = 0, Name = "None" WHERE Age > 15 AND Amount < 3500;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable ORDER BY Group;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([
+                [[23u];[3500u];[1u];["Anna"]];
+                [[36u];[0u];[2u];["None"]];
+                [[81u];[7200u];[3u];["Tony"]];
+                [[11u];[10u];[4u];["John"]];
+                [[3u];[0u];[5u];["Lena"]];
+                [[48u];[0u];[6u];["None"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // todo partitioning==2 and abort by locks
+    Y_UNIT_TEST(UpdateTwoPartitionsByPrimaryRange) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTwoPartitionsTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Amount = 25 WHERE Group <= 3;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable ORDER BY Group;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([
+                [[23u];[25u];[1u];["Anna"]];
+                [[36u];[25u];[2u];["Paul"]];
+                [[81u];[25u];[3u];["Tony"]];
+                [[11u];[10u];[4u];["John"]];
+                [[3u];[0u];[5u];["Lena"]];
+                [[48u];[730u];[6u];["Mary"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // todo partitioning==2, shards==1 and abort by locks
+    Y_UNIT_TEST(UpdateTwoPartitionsByPrimaryPoint) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTwoPartitionsTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Amount = 0 WHERE Group = 1u;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable ORDER BY Group;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([
+                [[23u];[0u];[1u];["Anna"]];
+                [[36u];[300u];[2u];["Paul"]];
+                [[81u];[7200u];[3u];["Tony"]];
+                [[11u];[10u];[4u];["John"]];
+                [[3u];[0u];[5u];["Lena"]];
+                [[48u];[730u];[6u];["Mary"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(UpdateTuplePrimarySimple) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTuplePrimaryTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Amount = 1000 WHERE Age <= 30;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable ORDER BY Group;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([
+                [[23u];[1000u];[1u];["Anna"]];
+                [[36u];[300u];[2u];["Paul"]];
+                [[81u];[7200u];[3u];["Tony"]];
+                [[11u];[1000u];[4u];["John"]];
+                [[3u];[1000u];[5u];["Lena"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(UpdateTuplePrimaryMulti) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTuplePrimaryTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Amount = 0, Age = 0 WHERE Age > 15 AND Amount < 3500;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable ORDER BY Group;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([
+                [[23u];[3500u];[1u];["Anna"]];
+                [[0u];[0u];[2u];["Paul"]];
+                [[81u];[7200u];[3u];["Tony"]];
+                [[11u];[10u];[4u];["John"]];
+                [[3u];[0u];[5u];["Lena"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // todo partitioning==2 and abort by locks
+    Y_UNIT_TEST(UpdateTuplePrimaryByPrimaryRange) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTuplePrimaryTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Amount = 25 WHERE Group <= 3 AND Name <= "Tony";
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable ORDER BY Group;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([
+                [[23u];[25u];[1u];["Anna"]];
+                [[36u];[25u];[2u];["Paul"]];
+                [[81u];[25u];[3u];["Tony"]];
+                [[11u];[10u];[4u];["John"]];
+                [[3u];[0u];[5u];["Lena"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // todo partitioning==2, shards==1 and abort by locks
+    Y_UNIT_TEST(UpdateTuplePrimaryByPrimaryPoint) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTuplePrimaryTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Amount = 0 WHERE Group = 1u AND Name = "Anna";
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable ORDER BY Group;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([
+                [[23u];[0u];[1u];["Anna"]];
+                [[36u];[300u];[2u];["Paul"]];
+                [[81u];[7200u];[3u];["Tony"]];
+                [[11u];[10u];[4u];["John"]];
+                [[3u];[0u];[5u];["Lena"]];
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 
     Y_UNIT_TEST(UpdateNotIdempotent_1) {
@@ -72,7 +529,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session);
+        CreateSimpleTable(session);
 
         auto query = Q_(R"(
             BATCH UPDATE TestTable SET Age = Age * 10 WHERE Group = 1;
@@ -89,7 +546,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session);
+        CreateSimpleTable(session);
 
         auto query = Q_(R"(
             BATCH UPDATE TestTable SET Age = Group * Age WHERE Group = 1;
@@ -106,7 +563,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session);
+        CreateSimpleTable(session);
 
         auto query = Q_(R"(
             BATCH UPDATE TestTable SET Age = Amount, Amount = Age WHERE Group = 1;
@@ -123,7 +580,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session);
+        CreateSimpleTable(session);
 
         auto query = Q_(R"(
             BATCH UPDATE TestTable SET Amount = 1000 WHERE Age IN (SELECT Age FROM TestTable WHERE Group = 1);
@@ -140,8 +597,8 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session, "TestFirst");
-        CreateTestTable(session, "TestSecond");
+        CreateSimpleTable(session, "TestFirst");
+        CreateSimpleTable(session, "TestSecond");
 
         auto query = Q_(R"(
             BATCH UPDATE TestFirst SET Amount = 1000 WHERE Age IN (SELECT Age FROM TestSecond WHERE Group = 1);
@@ -158,8 +615,8 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session, "TestFirst");
-        CreateTestTable(session, "TestSecond");
+        CreateSimpleTable(session, "TestFirst");
+        CreateSimpleTable(session, "TestSecond");
 
         auto query = Q_(R"(
             BATCH UPDATE TestFirst SET Amount = 1000 WHERE Age = 10;
@@ -177,7 +634,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session);
+        CreateSimpleTable(session);
 
         auto query = Q_(R"(
             BATCH UPDATE TestTable SET Amount = 1000 WHERE Age = 10;
@@ -195,7 +652,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session, "TestTable");
+        CreateSimpleTable(session, "TestTable");
 
         auto query = Q_(R"(
             BATCH UPDATE TestTable SET Amount = 1000 WHERE Age = 10;
@@ -215,7 +672,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session);
+        CreateSimpleTable(session);
 
         auto query = Q_(R"(
             BATCH DELETE FROM TestTable WHERE Age >= 10ul;
@@ -224,7 +681,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
 
         auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR); // not implemented yet
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
 
     Y_UNIT_TEST(DeleteMultiTable_1) {
@@ -232,7 +689,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session);
+        CreateSimpleTable(session);
 
         auto query = Q_(R"(
             BATCH DELETE FROM TestTable WHERE Age IN (SELECT Age FROM TestTable WHERE Group = 2);
@@ -249,8 +706,8 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session, "TestFirst");
-        CreateTestTable(session, "TestSecond");
+        CreateSimpleTable(session, "TestFirst");
+        CreateSimpleTable(session, "TestSecond");
 
         auto query = Q_(R"(
             BATCH DELETE FROM TestFirst WHERE Age IN (SELECT Age FROM TestSecond WHERE Group = 2);
@@ -267,8 +724,8 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session, "TestFirst");
-        CreateTestTable(session, "TestSecond");
+        CreateSimpleTable(session, "TestFirst");
+        CreateSimpleTable(session, "TestSecond");
 
         auto query = Q_(R"(
             BATCH DELETE FROM TestFirst WHERE Age = 10;
@@ -286,7 +743,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session);
+        CreateSimpleTable(session);
 
         auto query = Q_(R"(
             BATCH DELETE FROM TestTable WHERE Group = 2;
@@ -304,7 +761,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session);
+        CreateSimpleTable(session);
 
         auto query = Q_(R"(
             BATCH DELETE FROM TestTable WHERE Group = 2;

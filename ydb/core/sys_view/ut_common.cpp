@@ -67,7 +67,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);
 
-    this->Server->SetupDefaultProfiles();
+    if (showCreateTable) {
+        this->Server->SetupDefaultProfiles();
+    }
 
     auto* runtime = Server->GetRuntime();
     for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
@@ -78,9 +80,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
     Tenants = MakeHolder<Tests::TTenants>(Server);
 
-    if (showCreateTable) {
-        Client->InitRootScheme("Root");
-    }
+    Client->InitRootScheme("Root");
 
     if (settings.PqTabletsN) {
         NKikimr::NPQ::FillPQConfig(Settings->PQConfig, "/Root/PQ", true);
@@ -90,6 +90,8 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     Endpoint = "localhost:" + ToString(grpcPort);
     if (showCreateTable) {
         DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
+    } else {
+        DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
     }
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 

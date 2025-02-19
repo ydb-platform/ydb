@@ -43,7 +43,6 @@ private:
 
 public:
     using TBase::TBase;
-
 };
 
 class IDataSource;
@@ -189,19 +188,6 @@ public:
         , Indexes(indexes) {
         AFL_VERIFY(Indexes);
         AFL_VERIFY(Indexes->GetIndexesCount());
-    }
-};
-
-class TFilterProgramStep: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-    std::shared_ptr<NSsa::TProgramStep> Step;
-
-public:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    TFilterProgramStep(const std::shared_ptr<NSsa::TProgramStep>& step)
-        : TBase("EARLY_FILTER_STEP")
-        , Step(step) {
     }
 };
 

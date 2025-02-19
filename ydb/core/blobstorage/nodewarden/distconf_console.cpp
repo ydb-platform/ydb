@@ -39,19 +39,19 @@ namespace NKikimr::NStorage {
             return; // no config yet
         }
 
-        Y_ABORT_UNLESS(StorageConfigYamlVersion);
+        Y_ABORT_UNLESS(MainConfigYamlVersion);
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC67, "SendConfigProposeRequest: sending propose request to the Console",
-            (StorageConfigFetchYamlHash, StorageConfigFetchYamlHash),
-            (StorageConfigYamlVersion, StorageConfigYamlVersion),
+            (MainConfigFetchYamlHash, MainConfigFetchYamlHash),
+            (MainConfigYamlVersion, MainConfigYamlVersion),
             (ProposedConfigHashVersion, ProposedConfigHashVersion),
             (ProposeRequestCookie, ProposeRequestCookie + 1));
 
         Y_DEBUG_ABORT_UNLESS(!ProposedConfigHashVersion || ProposedConfigHashVersion == std::make_tuple(
-            StorageConfigFetchYamlHash, *StorageConfigYamlVersion));
-        ProposedConfigHashVersion.emplace(StorageConfigFetchYamlHash, *StorageConfigYamlVersion);
+            MainConfigFetchYamlHash, *MainConfigYamlVersion));
+        ProposedConfigHashVersion.emplace(MainConfigFetchYamlHash, *MainConfigYamlVersion);
         NTabletPipe::SendData(SelfId(), ConsolePipeId, new TEvBlobStorage::TEvControllerProposeConfigRequest(
-            StorageConfigFetchYamlHash, *StorageConfigYamlVersion), ++ProposeRequestCookie);
+            MainConfigFetchYamlHash, *MainConfigYamlVersion), ++ProposeRequestCookie);
         ProposeRequestInFlight = true;
     }
 
@@ -92,18 +92,19 @@ namespace NKikimr::NStorage {
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNeeded: {
                 if (!StorageConfig || !StorageConfig->HasConfigComposite() || ProposedConfigHashVersion !=
-                        std::make_tuple(StorageConfigFetchYamlHash, *StorageConfigYamlVersion)) {
+                        std::make_tuple(MainConfigFetchYamlHash, *MainConfigYamlVersion)) {
                     const char *err = "proposed config, but something has gone awfully wrong";
                     STLOG(PRI_CRIT, BS_NODE, NWDC69, err, (StorageConfig, StorageConfig),
                         (ProposedConfigHashVersion, ProposedConfigHashVersion),
-                        (StorageConfigFetchYamlHash, StorageConfigFetchYamlHash),
-                        (StorageConfigYamlVersion, StorageConfigYamlVersion));
+                        (MainConfigFetchYamlHash, MainConfigFetchYamlHash),
+                        (MainConfigYamlVersion, MainConfigYamlVersion));
                     Y_DEBUG_ABORT("%s", err);
                     return;
                 }
 
                 NTabletPipe::SendData(SelfId(), ConsolePipeId, new TEvBlobStorage::TEvControllerConsoleCommitRequest(
-                    StorageConfigYaml), ++CommitRequestCookie);
+                    MainConfigYaml), // FIXME: probably should propagate force here
+                        ++CommitRequestCookie);
                 break;
             }
 

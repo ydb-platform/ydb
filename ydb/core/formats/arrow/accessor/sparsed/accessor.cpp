@@ -216,12 +216,31 @@ void TSparsedArray::TBuilder::AddChunk(const ui32 recordsCount, const std::share
     AFL_VERIFY(data->num_rows() <= recordsCount)("rows", data->num_rows())("count", recordsCount);
     AFL_VERIFY(data->num_columns() == 2)("count", data->num_columns());
     AFL_VERIFY(data->column(0)->type_id() == arrow::uint32()->id())("type", data->column(0)->type()->ToString());
+    AFL_VERIFY(data->column(1)->type_id() == Type->id())("type", Type->ToString())("ext_type", data->column(0)->type()->ToString());
     AFL_VERIFY_DEBUG(data->schema()->field(0)->name() == "index")("name", data->schema()->field(0)->name());
     if (data->num_rows()) {
         auto* arr = static_cast<const arrow::UInt32Array*>(data->column(0).get());
         AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount)("val", arr->Value(arr->length() - 1))("count", recordsCount);
     }
     Chunks.emplace_back(RecordsCount, recordsCount, data, DefaultValue);
+    RecordsCount += recordsCount;
+}
+
+void TSparsedArray::TBuilder::AddChunk(
+    const ui32 recordsCount, const std::shared_ptr<arrow::Array>& indexes, const std::shared_ptr<arrow::Array>& values) {
+    AFL_VERIFY(indexes);
+    AFL_VERIFY(values);
+    AFL_VERIFY(recordsCount);
+    AFL_VERIFY(indexes->length() == values->length())("indexes", indexes->length())("values", values->length());
+    AFL_VERIFY(indexes->length() <= recordsCount)("indexes", indexes->length())("count", recordsCount);
+    AFL_VERIFY(indexes->type_id() == arrow::uint32()->id())("type", indexes->type()->ToString());
+    AFL_VERIFY(values->type_id() == Type->id())("type", Type->ToString())("ext_type", values->type()->ToString());
+    if (indexes->length()) {
+        auto* arr = static_cast<const arrow::UInt32Array*>(indexes.get());
+        AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount)("val", arr->Value(arr->length() - 1))("count", recordsCount);
+    }
+    Chunks.emplace_back(
+        RecordsCount, recordsCount, arrow::RecordBatch::Make(BuildSchema(Type), indexes->length(), { indexes, values }), DefaultValue);
     RecordsCount += recordsCount;
 }
 

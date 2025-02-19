@@ -18,6 +18,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
+    std::shared_ptr<IChunkedArray> GetPathAccessor(const std::string_view path, const ui32 recordsCount) const;
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("stats", Stats.DebugJson());

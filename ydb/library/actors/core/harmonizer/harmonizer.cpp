@@ -398,8 +398,8 @@ void THarmonizer::Enable(bool enable) {
     IsDisabled = enable;
 }
 
-IHarmonizer* MakeHarmonizer(ui64 ts) {
-    return new THarmonizer(ts);
+std::unique_ptr<IHarmonizer> MakeHarmonizer(ui64 ts) {
+    return std::make_unique<THarmonizer>(ts);
 }
 
 TPoolHarmonizerStats THarmonizer::GetPoolStats(i16 poolId) const {

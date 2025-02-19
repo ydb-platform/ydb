@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
-        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+        auto r = env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {
@@ -30,6 +30,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
                 {.Name = "value", .Type = "Utf8"},
             },
         }));
+        UNIT_ASSERT_EQUAL(r, NMsgBusProxy::MSTATUS_OK);
 
         auto writer = env.GetRuntime().Register(CreateLocalTableWriter(env.GetPathId("/Root/Table")));
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());

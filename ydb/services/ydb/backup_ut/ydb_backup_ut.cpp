@@ -759,6 +759,35 @@ void TestViewReferenceTableIsPreserved(
     TestViewReferenceTableIsPreserved(view, table, view, session, std::move(backup), std::move(restore));
 }
 
+void TestViewDependentOnAnotherViewIsRestored(
+    const char* baseView, const char* dependentView, NQuery::TSession& session,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE VIEW `%s` WITH security_invoker = TRUE AS SELECT 1 AS Key;
+            )", baseView
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE VIEW `%s` WITH security_invoker = TRUE AS SELECT * FROM `%s`;
+            )", dependentView, baseView
+        ), true
+    );
+    const auto originalContent = GetTableContent(session, dependentView);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+                DROP VIEW `%s`;
+                DROP VIEW `%s`;
+            )", baseView, dependentView
+        ), true
+    );
+
+    restore();
+    CompareResults(GetTableContent(session, dependentView), originalContent);
+}
+
 void TestTopicSettingsArePreserved(
     const char* topic, NQuery::TSession& session, NTopic::TTopicClient& topicClient,
     TBackupFunction&& backup, TRestoreFunction&& restore
@@ -1325,6 +1354,27 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(RestoreViewDependentOnAnotherView) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* baseView = "/Root/baseView";
+        constexpr const char* dependentView = "/Root/dependentView";
+
+        TestViewDependentOnAnotherViewIsRestored(
+            baseView,
+            dependentView,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
     Y_UNIT_TEST(RestoreKesusResources) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
@@ -1654,6 +1704,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
             auto& runtime = *Server.GetRuntime();
             runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_DEBUG);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
             runtime.GetAppData().FeatureFlags.SetEnableViews(true);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
@@ -1964,6 +2016,21 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view", "a/b/c/table" })
         );
     }
+
+    Y_UNIT_TEST(RestoreViewDependentOnAnotherView) {
+        TS3TestEnv testEnv;
+        constexpr const char* baseView = "/Root/baseView";
+        constexpr const char* dependentView = "/Root/dependentView";
+
+        TestViewDependentOnAnotherViewIsRestored(
+            baseView,
+            dependentView,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "baseView", "dependentView" })
+        );
+    }
+
 
     // TO DO: test view restoration to a different database
 

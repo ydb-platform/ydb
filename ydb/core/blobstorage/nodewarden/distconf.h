@@ -178,10 +178,11 @@ namespace NKikimr::NStorage {
 
         // currently active storage config
         std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
-        TString StorageConfigYaml; // the part we have to push (unless this is storage-only) to console
-        TString StorageConfigFetchYaml; // the part we would get is we fetch from console
-        ui64 StorageConfigFetchYamlHash = 0;
-        std::optional<ui32> StorageConfigYamlVersion;
+        TString MainConfigYaml; // the part we have to push (unless this is storage-only) to console
+        std::optional<ui64> MainConfigYamlVersion;
+        TString MainConfigFetchYaml; // the part we would get is we fetch from console
+        ui64 MainConfigFetchYamlHash = 0;
+        std::optional<TString> StorageConfigYaml; // set if dedicated storage yaml is enabled; otherwise nullopt
 
         // base config from config file
         NKikimrBlobStorage::TStorageConfig BaseConfig;

@@ -1169,6 +1169,11 @@
                 "ColumnId": 10,
                 "ColumnName": "NeedToBill",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "EnableChecksums",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1184,7 +1189,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4549,6 +4555,11 @@
                 "ColumnId": 11,
                 "ColumnName": "NeedToBill",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "EnableChecksums",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -4565,7 +4576,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6201,6 +6213,16 @@
                 "ColumnId": 14,
                 "ColumnName": "PreparedCreationQuery",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "Changefeeds",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "NextChangefeedIdx",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -6220,7 +6242,9 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8012,10 +8036,11 @@
         }
     },
     {
-        "TableId": 112,
-        "TableName": "KMeansTreeState",
+        "TableId": 113,
+        "TableName": "KMeansTreeSample",
         "TableKey": [
-            1
+            1,
+            2
         ],
         "ColumnsAdded": [
             {
@@ -8025,18 +8050,18 @@
             },
             {
                 "ColumnId": 2,
-                "ColumnName": "Level",
+                "ColumnName": "Row",
                 "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 3,
-                "ColumnName": "Parent",
-                "ColumnType": "Uint32"
+                "ColumnName": "Probability",
+                "ColumnType": "Uint64"
             },
             {
                 "ColumnId": 4,
-                "ColumnName": "State",
-                "ColumnType": "Uint32"
+                "ColumnName": "Data",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -8068,11 +8093,10 @@
         }
     },
     {
-        "TableId": 113,
-        "TableName": "KMeansTreeSample",
+        "TableId": 114,
+        "TableName": "KMeansTreeProgress",
         "TableKey": [
-            1,
-            2
+            1
         ],
         "ColumnsAdded": [
             {
@@ -8082,18 +8106,18 @@
             },
             {
                 "ColumnId": 2,
-                "ColumnName": "Row",
+                "ColumnName": "Level",
                 "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 3,
-                "ColumnName": "Probability",
-                "ColumnType": "Uint64"
+                "ColumnName": "State",
+                "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 4,
-                "ColumnName": "Data",
-                "ColumnType": "String"
+                "ColumnName": "Parent",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],

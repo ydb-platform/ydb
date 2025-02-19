@@ -90,6 +90,8 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
 // in
 bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
     const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+    const Ydb::Table::ChangefeedDescription& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
 void FillTableStats(Ydb::Table::DescribeTableResult& out,

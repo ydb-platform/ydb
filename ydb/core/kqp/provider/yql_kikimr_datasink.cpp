@@ -1031,7 +1031,12 @@ public:
                         TString(dataSink.Cluster()),
                         key.GetTablePath(), node->Pos(), ctx);
 
-                    returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled, true /*ignoreWriteOnlyColumns*/);
+                    if (table) {
+                        returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled, true /*ignoreWriteOnlyColumns*/);
+                        return true;
+                    } else {
+                        return false;
+                    }
                 };
 
                 TVector<TExprBase> columnsToReturn;
@@ -1040,7 +1045,9 @@ public:
                         auto pgResultNode = item.Cast<TCoPgResultItem>();
                         const auto value = pgResultNode.ExpandedColumns().Cast<TCoAtom>().Value();
                         if (value.empty()) {
-                            fillStar();
+                            if (!fillStar()) {
+                                return nullptr;
+                            }
                             break;
                         } else {
                             auto atom = Build<TCoAtom>(ctx, node->Pos())
@@ -1051,7 +1058,9 @@ public:
                     } else if (auto returningItem = item.Maybe<TCoReturningListItem>()) {
                         columnsToReturn.push_back(returningItem.Cast().ColumnRef());
                     } else if (auto returningStar = item.Maybe<TCoReturningStar>()) {
-                        fillStar();
+                        if (!fillStar()) {
+                            return nullptr;
+                        }
                         break;
                     }
                 }

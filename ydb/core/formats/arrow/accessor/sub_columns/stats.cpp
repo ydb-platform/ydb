@@ -98,6 +98,7 @@ TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex)
             return std::make_shared<NAccessor::NSparsed::TConstructor>();
         case IChunkedArray::EType::Undefined:
         case IChunkedArray::EType::SerializedChunkedArray:
+        case IChunkedArray::EType::CompositeChunkedArray:
         case IChunkedArray::EType::SubColumnsArray:
         case IChunkedArray::EType::ChunkedArray:
             AFL_VERIFY(false);

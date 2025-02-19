@@ -6,6 +6,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/arrow_kernels
     ydb/library/formats/arrow/simple_builder
+    ydb/core/formats/arrow/program
     ydb/core/base
 
     # for NYql::NUdf alloc stuff used in binary_json

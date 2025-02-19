@@ -215,74 +215,80 @@ struct TError {
     TString Error;
 };
 
-/**
- * Parses config metadata
- */
-std::variant<TMainMetadata, TDatabaseMetadata, TError> GetGenericMetadata(const TString& config);
+class IConfigSwissKnife {
+public:
+    virtual ~IConfigSwissKnife() = default;
+    /**
+    * Parses config metadata
+    */
+    virtual std::variant<TMainMetadata, TDatabaseMetadata, TError> GetGenericMetadata(const TString& config) const = 0;
 
-/**
- * Parses config metadata
- */
-TMainMetadata GetMainMetadata(const TString& config);
+    /**
+    * Parses config metadata
+    */
+    virtual TMainMetadata GetMainMetadata(const TString& config) const = 0;
 
-/**
- * Parses database config metadata
- */
-TDatabaseMetadata GetDatabaseMetadata(const TString& config);
+    /**
+    * Parses database config metadata
+    */
+    virtual TDatabaseMetadata GetDatabaseMetadata(const TString& config) const = 0;
 
-/**
- * Parses storage config metadata
- */
-TStorageMetadata GetStorageMetadata(const TString& config);
+    /**
+    * Parses storage config metadata
+    */
+    virtual TStorageMetadata GetStorageMetadata(const TString& config) const = 0;
 
-/**
- * Parses volatile config metadata
- */
-TVolatileMetadata GetVolatileMetadata(const TString& config);
+    /**
+    * Parses volatile config metadata
+    */
+    virtual TVolatileMetadata GetVolatileMetadata(const TString& config) const = 0;
 
-/**
- * Replaces metadata in config
- */
-TString ReplaceMetadata(const TString& config, const TMainMetadata& metadata);
+    /**
+    * Replaces metadata in config
+    */
+    virtual TString ReplaceMetadata(const TString& config, const TMainMetadata& metadata) const = 0;
 
-/**
- * Replaces metadata in database config
- */
-TString ReplaceMetadata(const TString& config, const TDatabaseMetadata& metadata);
+    /**
+    * Replaces metadata in database config
+    */
+    virtual TString ReplaceMetadata(const TString& config, const TDatabaseMetadata& metadata) const = 0;
 
-/**
- * Replaces volatile metadata in config
- */
-TString ReplaceMetadata(const TString& config, const TVolatileMetadata& metadata);
+    /**
+    * Replaces volatile metadata in config
+    */
+    virtual TString ReplaceMetadata(const TString& config, const TVolatileMetadata& metadata) const = 0;
 
-/**
- * Checks whether string is volatile config or not
- */
-bool IsVolatileConfig(const TString& config);
+    /**
+    * Checks whether string is volatile config or not
+    */
+    virtual bool IsVolatileConfig(const TString& config) const = 0;
 
-/**
- * Checks whether string is main config or not
- */
-bool IsMainConfig(const TString& config);
+    /**
+    * Checks whether string is main config or not
+    */
+    virtual bool IsMainConfig(const TString& config) const = 0;
 
-/**
- * Checks whether string is storage config or not
- */
-bool IsStorageConfig(const TString& config);
+    /**
+    * Checks whether string is storage config or not
+    */
+    virtual bool IsStorageConfig(const TString& config) const = 0;
 
-/**
- * Checks whether string is main config or not
- */
-bool IsDatabaseConfig(const TString& config);
+    /**
+    * Checks whether string is main config or not
+    */
+    virtual bool IsDatabaseConfig(const TString& config) const = 0;
 
-/**
- * Checks whether string is static config or not
- */
-bool IsStaticConfig(const TString& config);
+    /**
+    * Checks whether string is static config or not
+    */
+    virtual bool IsStaticConfig(const TString& config) const = 0;
 
-/**
- * Strips metadata from config
- */
-TString StripMetadata(const TString& config);
+    /**
+    * Strips metadata from config
+    */
+    virtual TString StripMetadata(const TString& config) const = 0;
+};
+
+std::shared_ptr<IConfigSwissKnife> CreateDefaultConfigSwissKnife();
 
 } // namespace NKikimr::NYamlConfig

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/apps/ydb/factories/cli_factories.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_root_common.h>
 
 namespace NYdb {
@@ -21,7 +22,7 @@ public:
     int Run(TConfig& config) override;
 };
 
-int NewYdbClient(int argc, char** argv);
+int NewYdbClient(int argc, char** argv, TModuleFactories&& factories);
 
 }
 }

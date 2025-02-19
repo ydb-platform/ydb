@@ -29,7 +29,7 @@
 
 namespace NKikimr {
 
-// A way to parameterize YDB binary, we do it via a set of factories
+// A way to parameterize ydbd binary, we do it via a set of factories
 struct TModuleFactories {
     // A backend factory for Query Replay
     std::shared_ptr<NKqp::IQueryReplayBackendFactory> QueryReplayBackendFactory;

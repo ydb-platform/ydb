@@ -505,7 +505,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     auto& systemConfig = Config.GetActorSystemConfig();
     bool hasASCfg = Config.HasActorSystemConfig();
     if (!hasASCfg || (systemConfig.HasUseAutoConfig() && systemConfig.GetUseAutoConfig())) {
-        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig());
+        bool isDynamicNode = appData->DynamicNameserviceConfig->MinDynamicNodeId <= NodeId;
+        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), isDynamicNode);
     }
 
     Y_ABORT_UNLESS(Config.HasActorSystemConfig());

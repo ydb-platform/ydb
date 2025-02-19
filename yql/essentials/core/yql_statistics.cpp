@@ -189,6 +189,16 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
                 Base64StrictDecode(countMinBase64, countMinRaw);
                 cStat.CountMinSketch.reset(NKikimr::TCountMinSketch::FromString(countMinRaw.data(), countMinRaw.size()));
             }
+            if (auto eqWidthHistogram = colMap.find("histogram"); eqWidthHistogram != colMap.end()) {
+              TString histogramBase64 = eqWidthHistogram->second.GetStringSafe();
+
+              TString histogramBinary{};
+              Base64StrictDecode(histogramBase64, histogramBinary);
+              auto histogram = std::make_shared<NKikimr::NOptimizerHistograms::TEqWidthHistogram>(
+                  histogramBinary.data(), histogramBinary.size());
+              cStat.EqWidthHistogramEstimator =
+                  std::make_shared<NKikimr::NOptimizerHistograms::TEqWidthHistogramEstimator>(histogram);
+            }
 
             res->ColumnStatistics->Data[columnName] = cStat;
         }

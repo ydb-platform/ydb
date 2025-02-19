@@ -13,6 +13,12 @@ namespace {
     THashSet<TString> PgInequalityPreds = {
         "<", "<=", ">", ">="};
 
+    THashMap<TString, EInequalityPredicateType> StringToInequalityPredicateMap{
+        {"<", EInequalityPredicateType::Less},
+        {"<=", EInequalityPredicateType::LessOrEqual},
+        {">", EInequalityPredicateType::Greater},
+        {">=", EInequalityPredicateType::GreaterOrEqual}};
+
     /**
      * Check if a callable is an attribute of some table
      * Currently just return a boolean and cover only basic cases
@@ -56,69 +62,143 @@ namespace {
         }
     }
 
-    std::optional<ui32> EstimateCountMin(NYql::NNodes::TExprBase maybeLiteral, TString columnType, const std::shared_ptr<NKikimr::TCountMinSketch>& countMinSketch) {
-        if (auto maybeJust = maybeLiteral.Maybe<NYql::NNodes::TCoJust>() ) {
-            maybeLiteral = maybeJust.Cast().Input();
+    // Estimates number of rows based on histogram and predicate type.
+    template <typename T>
+    std::optional<ui64> EstimateInequalityPredicateByType(
+        const std::shared_ptr<NKikimr::NOptimizerHistograms::TEqWidthHistogramEstimator>& estimator, T val,
+        EInequalityPredicateType predicate) {
+      switch (predicate) {
+        case EInequalityPredicateType::Less:
+          return estimator->EstimateLess<T>(val);
+        case EInequalityPredicateType::LessOrEqual:
+          return estimator->EstimateLessOrEqual<T>(val);
+        case EInequalityPredicateType::Greater:
+          return estimator->EstimateGreater<T>(val);
+        case EInequalityPredicateType::GreaterOrEqual:
+          return estimator->EstimateGreaterOrEqual<T>(val);
+      }
+      return std::nullopt;
+    }
+
+    // Returns an opposite predicate.
+    EInequalityPredicateType GetOppositePredicateType(EInequalityPredicateType predicate) {
+      switch (predicate) {
+        case EInequalityPredicateType::Less:
+          return EInequalityPredicateType::Greater;
+        case EInequalityPredicateType::Greater:
+          return EInequalityPredicateType::Less;
+        case EInequalityPredicateType::LessOrEqual:
+          return EInequalityPredicateType::GreaterOrEqual;
+        case EInequalityPredicateType::GreaterOrEqual:
+          return EInequalityPredicateType::LessOrEqual;
+      }
+    }
+
+    // Returns a number of rows based on predicate.
+    std::optional<ui64> EstimateInequalityPredicateByHistogram(
+        NYql::NNodes::TExprBase maybeLiteral, const TString& columnType,
+        const std::shared_ptr<NKikimr::NOptimizerHistograms::TEqWidthHistogramEstimator>& estimator,
+        EInequalityPredicateType predicate) {
+      if (auto maybeJust = maybeLiteral.Maybe<NYql::NNodes::TCoJust>()) {
+        maybeLiteral = maybeJust.Cast().Input();
+      }
+
+      if (maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>()) {
+        auto literal = maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>().Cast();
+        auto value = literal.Literal().Value();
+        if (columnType == "Uint32") {
+          ui32 val = FromString<ui32>(value);
+          return EstimateInequalityPredicateByType<ui32>(estimator, val, predicate);
+        } else if (columnType == "Int32") {
+          i32 val = FromString<i32>(value);
+          return EstimateInequalityPredicateByType<ui32>(estimator, val, predicate);
+        } else if (columnType == "Uint64") {
+          ui64 val = FromString<ui64>(value);
+          return EstimateInequalityPredicateByType<ui64>(estimator, val, predicate);
+        } else if (columnType == "Int64") {
+          i64 val = FromString<i64>(value);
+          return EstimateInequalityPredicateByType<i64>(estimator, val, predicate);
+        } else if (columnType == "Double") {
+          double val = FromString<double>(value);
+          return EstimateInequalityPredicateByType<double>(estimator, val, predicate);
+        } else if (columnType == "Date") {
+          ui16 val = FromString<ui16>(value);
+          return EstimateInequalityPredicateByType<ui16>(estimator, val, predicate);
+        } else if (columnType == "String") {
+          NKikimr::NOptimizerHistograms::TStringPrefix prefix(value.data(), value.size());
+          return EstimateInequalityPredicateByType<NKikimr::NOptimizerHistograms::TStringPrefix>(estimator, prefix,
+                                                                                                 predicate);
         }
-
-        if (maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>()) {
-            auto literal = maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>().Cast();
-            auto value = literal.Literal().Value();
-
-            if (columnType == "Bool") {
-                ui8 v = FromString<bool>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Uint8") {
-                ui8 v = FromString<ui8>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Int8") {
-                i8 v = FromString<i8>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Uint32") {
-                ui32 v = FromString<ui32>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Int32") {
-                i32 v = FromString<i32>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Uint64") {
-                ui64 v = FromString<ui64>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Int64") {
-                i64 v = FromString<i64>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Float") {
-                float v = FromString<float>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Double") {
-                double v = FromString<double>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Date") {
-                ui16 v = FromString<ui32>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Datetime") {
-                ui32 v = FromString<ui32>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Utf8" || columnType == "String" || columnType == "Yson" || columnType == "Json") {
-                return countMinSketch->Probe(value.data(), value.size());
-            } else if (columnType == "Interval" || columnType == "Timestamp64" || columnType == "Interval64") {
-                i64 v = FromString<i64>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Timestamp") {
-                ui64 v = FromString<ui64>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else if (columnType == "Uuid") {
-                const ui64* uuidData = reinterpret_cast<const ui64*>(value.data());
-                std::pair<ui64, ui64> v{};
-                v.first = uuidData[0]; // low128
-                v.second = uuidData[1]; // high128
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-            } else {
-                return std::nullopt;
-            }
-
-        }
-
+        // TODO: Add support for other types.
         return std::nullopt;
+      }
+
+      return std::nullopt;
+    }
+
+    std::optional<ui32> EstimateCountMin(NYql::NNodes::TExprBase maybeLiteral, TString columnType,
+                                         const std::shared_ptr<NKikimr::TCountMinSketch>& countMinSketch) {
+      if (auto maybeJust = maybeLiteral.Maybe<NYql::NNodes::TCoJust>()) {
+        maybeLiteral = maybeJust.Cast().Input();
+      }
+
+      if (maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>()) {
+        auto literal = maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>().Cast();
+        auto value = literal.Literal().Value();
+
+        if (columnType == "Bool") {
+          ui8 v = FromString<bool>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Uint8") {
+          ui8 v = FromString<ui8>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Int8") {
+          i8 v = FromString<i8>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Uint32") {
+          ui32 v = FromString<ui32>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Int32") {
+          i32 v = FromString<i32>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Uint64") {
+          ui64 v = FromString<ui64>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Int64") {
+          i64 v = FromString<i64>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Float") {
+          float v = FromString<float>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Double") {
+          double v = FromString<double>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Date") {
+          ui16 v = FromString<ui32>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Datetime") {
+          ui32 v = FromString<ui32>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Utf8" || columnType == "String" || columnType == "Yson" || columnType == "Json") {
+          return countMinSketch->Probe(value.data(), value.size());
+        } else if (columnType == "Interval" || columnType == "Timestamp64" || columnType == "Interval64") {
+          i64 v = FromString<i64>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Timestamp") {
+          ui64 v = FromString<ui64>(value);
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else if (columnType == "Uuid") {
+          const ui64* uuidData = reinterpret_cast<const ui64*>(value.data());
+          std::pair<ui64, ui64> v{};
+          v.first = uuidData[0];   // low128
+          v.second = uuidData[1];  // high128
+          return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+        } else {
+          return std::nullopt;
+        }
+      }
+
+      return std::nullopt;
     }
 }
 
@@ -138,49 +218,90 @@ TExprNode::TPtr FindNode(const TExprBase& input) {
     return nullptr;
 }
 
-double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(const TExprBase& left, const TExprBase& right) {
-    if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
-        return ComputeEqualitySelectivity(right, left);
-    }
+double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(const TExprBase& left,
+                                                                              const TExprBase& right,
+                                                                              EInequalityPredicateType predicate) {
+  if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
+    return ComputeInequalitySelectivity(right, left, GetOppositePredicateType(predicate));
+  }
 
-    if (auto maybeMember = IsAttribute(left)) {
-        // In case both arguments refer to an attribute, return 0.2
-        if (auto maybeAnotherMember = IsAttribute(right)) {
-            if (CollectMemberEqualities) {
-                MemberEqualities.Add(*maybeMember.Get(), *maybeAnotherMember.Get());
-            }
-            return 0.3;
+  if (auto maybeMember = IsAttribute(left)) {
+    // It seems like this is not possible in current version.
+    if (IsAttribute(right)) {
+      return 0.3;
+    } else if (IsConstantExprWithParams(right.Ptr())) {
+      const TString attributeName = maybeMember.Get()->Name().StringValue();
+      if (!IsConstantExpr(right.Ptr())) {
+        return DefaultSelectivity(Stats, attributeName);
+      }
+
+      if (!Stats || !Stats->ColumnStatistics) {
+        return DefaultSelectivity(Stats, attributeName);
+      }
+
+      if (auto histogramEstimator = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
+        const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
+        std::optional<ui64> estimation =
+            EstimateInequalityPredicateByHistogram(right, columnType, histogramEstimator, predicate);
+        if (!estimation.has_value()) {
+          return DefaultSelectivity(Stats, attributeName);
         }
-        // In case the right side is a constant that can be extracted, compute the selectivity using statistics
-        // Currently, with the basic statistics we just return 1/nRows
-
-        else if (IsConstantExprWithParams(right.Ptr())) {
-            TString attributeName = maybeMember.Get()->Name().StringValue();
-            if (!IsConstantExpr(right.Ptr())) {
-                return DefaultSelectivity(Stats, attributeName);
-            }
-
-            if (Stats == nullptr || Stats->ColumnStatistics == nullptr) {
-                if (CollectColumnsStatUsedMembers) {
-                    ColumnStatsUsedMembers.AddEquality(*maybeMember.Get());
-                }
-                return DefaultSelectivity(Stats, attributeName);
-            }
-
-            if (auto countMinSketch = Stats->ColumnStatistics->Data[attributeName].CountMinSketch; countMinSketch != nullptr) {
-                auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
-                std::optional<ui32> countMinEstimation = EstimateCountMin(right, columnType,  countMinSketch);
-                if (!countMinEstimation.has_value()) {
-                    return DefaultSelectivity(Stats, attributeName);
-                }
-                return countMinEstimation.value() / Stats->Nrows;
-            }
-
-            return DefaultSelectivity(Stats, attributeName);
-        }
+        // Should we compare the number of rows in histogram against `Nrows` and adjust `value` based on that.
+        Y_ASSERT(Stats->Nrows);
+        return estimation.value() / Stats->Nrows;
+      }
+      return 0.5;
     }
+  }
 
-    return 1.0;
+  return 1.0;
+}
+
+double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(const TExprBase& left,
+                                                                            const TExprBase& right) {
+  if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
+    return ComputeEqualitySelectivity(right, left);
+  }
+
+  if (auto maybeMember = IsAttribute(left)) {
+    // In case both arguments refer to an attribute, return 0.2
+    if (auto maybeAnotherMember = IsAttribute(right)) {
+      if (CollectMemberEqualities) {
+        MemberEqualities.Add(*maybeMember.Get(), *maybeAnotherMember.Get());
+      }
+      return 0.3;
+    }
+    // In case the right side is a constant that can be extracted, compute the selectivity using statistics
+    // Currently, with the basic statistics we just return 1/nRows
+
+    else if (IsConstantExprWithParams(right.Ptr())) {
+      TString attributeName = maybeMember.Get()->Name().StringValue();
+      if (!IsConstantExpr(right.Ptr())) {
+        return DefaultSelectivity(Stats, attributeName);
+      }
+
+      if (Stats == nullptr || Stats->ColumnStatistics == nullptr) {
+        if (CollectColumnsStatUsedMembers) {
+          ColumnStatsUsedMembers.AddEquality(*maybeMember.Get());
+        }
+        return DefaultSelectivity(Stats, attributeName);
+      }
+
+      if (auto countMinSketch = Stats->ColumnStatistics->Data[attributeName].CountMinSketch;
+          countMinSketch != nullptr) {
+        auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
+        std::optional<ui32> countMinEstimation = EstimateCountMin(right, columnType, countMinSketch);
+        if (!countMinEstimation.has_value()) {
+          return DefaultSelectivity(Stats, attributeName);
+        }
+        return countMinEstimation.value() / Stats->Nrows;
+      }
+
+      return DefaultSelectivity(Stats, attributeName);
+    }
+  }
+
+  return 1.0;
 }
 
 double NYql::NDq::TPredicateSelectivityComputer::ComputeComparisonSelectivity(const TExprBase& left, const TExprBase& right) {
@@ -271,6 +392,34 @@ double TPredicateSelectivityComputer::Compute(
         resSelectivity = ComputeEqualitySelectivity(left, right);
     }
 
+    else if (auto less = input.Maybe<TCoCmpLess>()) {
+        auto left = less.Cast().Left();
+        auto right = less.Cast().Right();
+
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Less);
+    }
+
+    else if (auto less = input.Maybe<TCoCmpGreater>()) {
+        auto left = less.Cast().Left();
+        auto right = less.Cast().Right();
+
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Greater);
+    }
+
+    else if (auto less = input.Maybe<TCoCmpLessOrEqual>()) {
+        auto left = less.Cast().Left();
+        auto right = less.Cast().Right();
+
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::LessOrEqual);
+    }
+
+    else if (auto less = input.Maybe<TCoCmpGreaterOrEqual>()) {
+        auto left = less.Cast().Left();
+        auto right = less.Cast().Right();
+
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::GreaterOrEqual);
+    }
+
     else if (input.Ptr()->IsCallable("PgResolvedOp") && input.Ptr()->ChildPtr(0)->Content()=="=") {
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
@@ -306,29 +455,29 @@ double TPredicateSelectivityComputer::Compute(
     else if (input.Ptr()->IsCallable("PgResolvedOp") && PgInequalityPreds.contains(input.Ptr()->ChildPtr(0)->Content())){
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
-
-        resSelectivity = ComputeComparisonSelectivity(left, right);
+        resSelectivity =
+            ComputeInequalitySelectivity(left, right, StringToInequalityPredicateMap[input.Ptr()->ChildPtr(0)->Content()]);
     }
 
     // Process SqlIn
-    else if(input.Ptr()->IsCallable("SqlIn")) {
-        auto list = input.Ptr()->ChildPtr(0);
+    else if (input.Ptr()->IsCallable("SqlIn")) {
+      auto list = input.Ptr()->ChildPtr(0);
 
-        double tmpSelectivity = 0.0;
-        auto lhs = TExprBase(input.Ptr()->ChildPtr(1));
-        for (const auto& child: list->Children()) {
-            TExprBase rhs = TExprBase(child);
-            tmpSelectivity += ComputeEqualitySelectivity(lhs, rhs);
-        }
-        resSelectivity = tmpSelectivity;
+      double tmpSelectivity = 0.0;
+      auto lhs = TExprBase(input.Ptr()->ChildPtr(1));
+      for (const auto& child : list->Children()) {
+        TExprBase rhs = TExprBase(child);
+        tmpSelectivity += ComputeEqualitySelectivity(lhs, rhs);
+      }
+      resSelectivity = tmpSelectivity;
     }
 
     else if (input.Maybe<TCoAtom>()) {
-        auto atom = input.Cast<TCoAtom>();
-        // regexp
-        if (atom.StringValue().StartsWith("Re2")) {
-            resSelectivity = 0.5;
-        }
+      auto atom = input.Cast<TCoAtom>();
+      // regexp
+      if (atom.StringValue().StartsWith("Re2")) {
+        resSelectivity = 0.5;
+      }
     }
 
     else if (auto maybeIfExpr = input.Maybe<TCoIf>()) {
@@ -349,6 +498,7 @@ double TPredicateSelectivityComputer::Compute(
                 resSelectivity = tmpSelectivity;
             }
         }
+      }
     }
 
     if (!resSelectivity.has_value()) {

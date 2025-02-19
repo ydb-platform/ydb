@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
@@ -219,6 +221,134 @@ TKikimrRunner::TKikimrRunner(const TString& authToken, const TString& domainRoot
 TKikimrRunner::TKikimrRunner(const NFake::TStorage& storage)
     : TKikimrRunner(TKikimrSettings()
         .SetStorage(storage)) {}
+
+TMaybe<Ydb::Table::CreateTableRequest> GetCreateTableRequest(const NKikimrSchemeOp::TTableDescription& tableDesc) {
+    Ydb::Table::CreateTableRequest scheme;
+
+    NKikimrMiniKQL::TType mkqlKeyType;
+
+    try {
+        FillColumnDescription(scheme, mkqlKeyType, tableDesc);
+    } catch (const yexception&) {
+        return Nothing();
+    }
+
+    scheme.mutable_primary_key()->CopyFrom(tableDesc.GetKeyColumnNames());
+
+    try {
+        FillTableBoundary(scheme, tableDesc, mkqlKeyType);
+        FillIndexDescription(scheme, tableDesc);
+    } catch (const yexception&) {
+        return Nothing();
+    }
+
+    FillStorageSettings(scheme, tableDesc);
+    FillColumnFamilies(scheme, tableDesc);
+    //FillAttributes(scheme, pathDesc);
+    FillPartitioningSettings(scheme, tableDesc);
+    FillKeyBloomFilter(scheme, tableDesc);
+    FillReadReplicasSettings(scheme, tableDesc);
+
+    TString error;
+    Ydb::StatusIds::StatusCode status;
+    if (!FillSequenceDescription(scheme, tableDesc, status, error)) {
+        return Nothing();
+    }
+
+    return scheme;
+}
+
+void TKikimrRunner::CheckShowCreateTable() {
+    TTestActorRuntime* runtime = Server->GetRuntime();
+
+    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(ServerSettings->DomainName);
+    NKikimrSchemeOp::TDescribePath& requestRecord = request->Record;
+    requestRecord.MutableOptions()->SetReturnPartitioningInfo(false);
+    requestRecord.MutableOptions()->SetReturnPartitionConfig(false);
+    requestRecord.MutableOptions()->SetReturnChildren(true);
+    ForwardToTablet(*runtime, SCHEME_SHARD1_ID, runtime->AllocateEdgeActor(), request.Release());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+
+    const auto& record = reply->GetRecord();
+    const auto status = record.GetStatus();
+    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrScheme::StatusSuccess);
+
+    const auto& pathDescription = record.GetPathDescription();
+    UNIT_ASSERT(pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir
+        || pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeSubDomain);
+
+    for (size_t i = 0; i < record.GetPathDescription().ChildrenSize(); ++i) {
+        const auto& childrenDescription = record.GetPathDescription().GetChildren(i);
+        if (childrenDescription.GetPathType() != NKikimrSchemeOp::EPathTypeTable) {
+            continue;
+        }
+
+        auto tableName = childrenDescription.GetName();
+        auto tablePath = CanonizePath(JoinPath({ServerSettings->DomainName, tableName}));
+
+        auto describeResultOrig = DescribeTable(Server.Get(), runtime->AllocateEdgeActor(), tablePath);
+
+        auto session = GetQueryClient().GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(TStringBuilder() << R"(
+            SHOW CREATE TABLE `)" << tablePath << R"(`;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT(result.GetResultSets().size() == 1);
+        auto resultSet = result.GetResultSet(0);
+        auto columnsMeta = resultSet.GetColumnsMeta();
+        UNIT_ASSERT(columnsMeta.size() == 2);
+
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+
+        NYdb::TValueParser parser1(parser.GetValue(0));
+        parser1.OpenOptional();
+        UNIT_ASSERT_VALUES_EQUAL(parser1.GetUtf8(), std::string(tablePath));
+        NYdb::TValueParser parser2(parser.GetValue(1));
+        parser2.OpenOptional();
+        auto showCreateQuery = parser2.GetUtf8();
+
+        result = session.ExecuteQuery(TStringBuilder() << R"(
+            DROP TABLE `)" << tablePath << R"(`;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(showCreateQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describeResultNew = DescribeTable(Server.Get(), runtime->AllocateEdgeActor(), tablePath);
+
+        Ydb::Table::CreateTableRequest requestFirst = *GetCreateTableRequest(describeResultOrig.GetPathDescription().GetTable());
+        Ydb::Table::CreateTableRequest requestSecond = *GetCreateTableRequest(describeResultNew.GetPathDescription().GetTable());
+
+        TString first;
+        ::google::protobuf::TextFormat::PrintToString(requestFirst, &first);
+        TString second;
+        ::google::protobuf::TextFormat::PrintToString(requestSecond, &second);
+
+        UNIT_ASSERT_VALUES_EQUAL(first, second);
+    }
+}
+
+TKikimrRunner::~TKikimrRunner() {
+    //CheckShowCreateTable();
+
+    Server->GetRuntime()->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+
+    RunCall([&] { Driver->Stop(true); return false; });
+    if (ThreadPoolStarted_) {
+        ThreadPool.Stop();
+    }
+
+    UNIT_ASSERT_C(WaitHttpGatewayFinalization(CountersRoot), "Failed to finalize http gateway before destruction");
+
+    Server.Reset();
+    Client.Reset();
+}
 
 void TKikimrRunner::CreateSampleTables() {
     Client->CreateTable("/Root", R"(
@@ -1243,7 +1373,7 @@ std::vector<NJson::TJsonValue> FindPlanNodes(const NJson::TJsonValue& plan, cons
 
 std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
     std::vector<NJson::TJsonValue> stages;
-    FindPlanStagesImpl(plan.GetMapSafe().at("Plan"), stages);    
+    FindPlanStagesImpl(plan.GetMapSafe().at("Plan"), stages);
     return stages;
 }
 
@@ -1485,7 +1615,7 @@ NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& par
     if (auto ops = opt.GetMapSafe().find("Operators"); ops != opt.GetMapSafe().end()) {
         auto opName = ops->second.GetArraySafe()[0].GetMapSafe().at("Name").GetStringSafe();
         if (
-            opName.find("Join") != TString::npos || 
+            opName.find("Join") != TString::npos ||
             opName.find("Union") != TString::npos ||
             (opName.find("Filter") != TString::npos && params.IncludeFilters) ||
             (opName.find("HashShuffle") != TString::npos && params.IncludeShuffles) 
@@ -1541,7 +1671,7 @@ bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference){
     NJson::TJsonValue optRoot;
     NJson::ReadJsonTree(optimized, &optRoot, true);
     optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"), {});
-    
+
     NJson::TJsonValue refRoot;
     NJson::ReadJsonTree(reference, &refRoot, true);
 
@@ -1567,7 +1697,7 @@ NJson::TJsonValue GetDetailedJoinOrderImpl(const NJson::TJsonValue& opt, const T
         res["table"] = op.GetMapSafe().at("Table").GetStringSafe();
         return res;
     }
-    
+
     auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
     for (size_t i = 0; i < subplans.size(); ++i) {
         res["args"].AppendValue(GetDetailedJoinOrderImpl(subplans[i], params));

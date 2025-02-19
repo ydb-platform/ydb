@@ -311,10 +311,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     auto& pqGroup = *modifyScheme.MutableAlterPersQueueGroup();
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);
-    Cerr << "pqGroup working dir: " << dstPath.Parent().PathString() << Endl;
-    Cerr << "pqGroup name: " << dstPath.LeafName() << Endl;
-    modifyScheme.SetWorkingDir(dstPath.Parent().PathString());
-    pqGroup.SetName(dstPath.LeafName());
+    modifyScheme.SetWorkingDir(dstPath.PathString());
+    pqGroup.SetName(importChangefeedTopic.GetChangefeed().name());
 
     for (const auto& consumer : topic.consumers()) {
         auto pqConsumer = *pqGroup.MutablePQTabletConfig()->AddConsumers();

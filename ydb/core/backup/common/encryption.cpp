@@ -4,6 +4,7 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/yexception.h>
+#include <util/generic/size_literals.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/string/ascii.h>
@@ -21,9 +22,15 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 
+#include <deque>
+
 namespace NKikimr::NBackup {
 
 namespace {
+
+static constexpr size_t MAC_SIZE = 16;
+static constexpr size_t MAX_HEADER_SIZE = 16_KB; // Header does not contain much data
+static constexpr size_t MAX_BLOCK_SIZE = 30_MB; // Max block size must always be at least size of table row (~8 MB) serialized into text csv format.
 
 THashMap<TString, TString> AlgNames = {
     {"aes128gcm",        "AES-128-GCM"},
@@ -103,13 +110,13 @@ uint16_t ToNetworkByteOrder(uint16_t n) {
     return htons(n);
 }
 
-// uint32_t ToHostByteOrder(uint32_t n) {
-//     return ntohl(n);
-// }
+uint32_t ToHostByteOrder(uint32_t n) {
+    return ntohl(n);
+}
 
-// uint16_t ToHostByteOrder(uint16_t n) {
-//     return ntohs(n);
-// }
+uint16_t ToHostByteOrder(uint16_t n) {
+    return ntohs(n);
+}
 
 } // anonymous
 
@@ -167,6 +174,20 @@ TString TEncryptionIV::GetBinaryString() const {
     }
 }
 
+TEncryptionIV TEncryptionIV::FromBinaryString(const TString& s) {
+    TEncryptionIV iv;
+    iv.IV.assign(reinterpret_cast<const unsigned char*>(s.data()), reinterpret_cast<const unsigned char*>(s.data() + s.size()));
+    return iv;
+}
+
+TString TEncryptionKey::GetBinaryString() const {
+    if (*this) {
+        return TString(reinterpret_cast<const char*>(Key.data()), Key.size());
+    } else {
+        return TString();
+    }
+}
+
 class TEncryptedFileSerializer::TImpl {
 public:
     TImpl(TString algorithm, TEncryptionKey key, TEncryptionIV iv)
@@ -179,10 +200,6 @@ public:
     }
 
     TBuffer AddBlock(TStringBuf data, bool last) {
-        if (!data) {
-            throw yexception() << "Empty data block";
-        }
-
         TBuffer buffer;
         ReserveBufferSize(buffer, data, last);
         if (CurrentChunkNumber == 0) {
@@ -190,8 +207,10 @@ public:
             ResetCtxForNextChunk();
         }
 
-        WriteBlock(buffer, data);
-        ResetCtxForNextChunk();
+        if (data) {
+            WriteBlock(buffer, data);
+            ResetCtxForNextChunk();
+        }
 
         if (last) {
             WriteBlock(buffer, TStringBuf());
@@ -230,7 +249,7 @@ public:
         }
 
         TEncryptionIV iv = TEncryptionIV::CombineForChunk(IV, CurrentChunkNumber);
-        if (int err = EVP_EncryptInit_ex(Ctx.get(), GetCipherByName(NormalizedAlgName), nullptr, Key.Ptr(), iv.Ptr()); err <= 0) {
+        if (int err = EVP_EncryptInit_ex(Ctx.get(), cipher, nullptr, Key.Ptr(), iv.Ptr()); err <= 0) {
             throw yexception() << "Failed to init encryption algoritm: " << GetOpenSslErrorText(err);
         }
 
@@ -351,7 +370,6 @@ private:
     TCipherCtxPtr Ctx;
     uint32_t CurrentChunkNumber = 0; // 0 for header
 
-    static constexpr size_t MAC_SIZE = 16;
     char PreviousMAC[MAC_SIZE] = {};
 };
 
@@ -369,6 +387,432 @@ TBuffer TEncryptedFileSerializer::AddBlock(TStringBuf data, bool last) {
 TBuffer TEncryptedFileSerializer::EncryptFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data) {
     TEncryptedFileSerializer serializer(std::move(algorithm), std::move(key), std::move(iv));
     return serializer.AddBlock(data, true);
+}
+
+
+class TEncryptedFileDeserializer::TImpl {
+public:
+    TImpl(TEncryptionKey key, TEncryptionIV expectedIV)
+        : Key(std::move(key))
+        , IV(std::move(expectedIV))
+    {
+    }
+
+    void AddData(TBuffer data, bool last) {
+        if (Finished) {
+            throw yexception() << "Stream finished";
+        }
+        Finished = last;
+
+        if (data) {
+            InputBytes += data.Size();
+            InputData.emplace_back(std::move(data));
+        }
+    }
+
+    size_t GetAvailableBytes() const {
+        return InputBytes - CurrentBufferPos;
+    }
+
+    const TBuffer& GetCurrentBuffer() const {
+        return InputData.front();
+    }
+
+    TBuffer& GetCurrentBuffer() {
+        return InputData.front();
+    }
+
+    const char* GetCurrentBufferData() const {
+        return GetCurrentBuffer().Data() + CurrentBufferPos;
+    }
+
+    size_t GetCurrentBufferAvailableBytes() const {
+        return GetCurrentBuffer().Size() - CurrentBufferPos;
+    }
+
+    void PopCurrentBuffer() {
+        InputBytes -= GetCurrentBuffer().Size();
+        InputData.pop_front();
+        CurrentBufferPos = 0;
+    }
+
+    bool ReadUnencrypted(char* data, size_t size, size_t skip = 0, bool addToMACCalculation = true) {
+        TStringBuf buf(data, size);
+        while (!InputData.empty() && (size || skip)) {
+            if (skip) {
+                size_t toSkip = Min(skip, GetCurrentBufferAvailableBytes());
+                skip -= toSkip;
+                CurrentBufferPos += toSkip;
+                BytesRead += toSkip;
+                if (addToMACCalculation) {
+                    CalcMACOnNonencryptedData(TStringBuf(GetCurrentBufferData(), toSkip));
+                }
+                if (!GetCurrentBufferAvailableBytes()) {
+                    PopCurrentBuffer();
+                    continue;
+                }
+            }
+
+            size_t toCopy = Min(size, GetCurrentBufferAvailableBytes());
+            memcpy(data, GetCurrentBufferData(), toCopy);
+            CurrentBufferPos += toCopy;
+            size -= toCopy;
+            data += toCopy;
+            if (!GetCurrentBufferAvailableBytes()) {
+                PopCurrentBuffer();
+            }
+        }
+        if (addToMACCalculation) {
+            CalcMACOnNonencryptedData(buf);
+        }
+        BytesRead += buf.size();
+        return size == 0 && skip == 0;
+    }
+
+    bool ReadEncrypted(char* data, size_t size, size_t skip = 0) {
+        while (!InputData.empty() && (size || skip)) {
+            if (skip) {
+                size_t toSkip = Min(skip, GetCurrentBufferAvailableBytes());
+                skip -= toSkip;
+                CurrentBufferPos += toSkip;
+                BytesRead += toSkip;
+                if (!GetCurrentBufferAvailableBytes()) {
+                    PopCurrentBuffer();
+                    continue;
+                }
+            }
+
+            size_t toDecrypt = Min(size, GetCurrentBufferAvailableBytes());
+            int outSize = static_cast<int>(toDecrypt);
+            if (int err = EVP_DecryptUpdate(Ctx.get(), reinterpret_cast<unsigned char*>(data), &outSize, reinterpret_cast<const unsigned char*>(GetCurrentBufferData()), toDecrypt); err <= 0) {
+                ThrowFileIsCorrupted();
+            }
+            Y_VERIFY(static_cast<size_t>(outSize) == toDecrypt);
+            CurrentBufferPos += static_cast<size_t>(outSize);
+            size -= static_cast<size_t>(outSize);
+            data += static_cast<size_t>(outSize);
+            BytesRead += toDecrypt;
+            if (!GetCurrentBufferAvailableBytes()) {
+                PopCurrentBuffer();
+            }
+        }
+        return size == 0 && skip == 0;
+    }
+
+    bool ReadEncrypted(TBuffer& dst, size_t size, size_t skip = 0) {
+        dst.Reserve(dst.Size() + size);
+        if (ReadEncrypted(dst.Data() + dst.Size(), size, skip)) {
+            dst.Advance(size);
+            return true;
+        }
+        return false;
+    }
+
+    // Reads, but does not move position.
+    // Used to read sizes and then check if data is available.
+    bool Peek(char* data, size_t size) {
+        if (InputData.empty()) {
+            return false;
+        }
+        size_t outPos = 0;
+        size_t inPos = CurrentBufferPos;
+        for (size_t i = 0; i < InputData.size(); ++i) {
+            const char* curBufferData = InputData[i].Data();
+            size_t curBufferSize = InputData[i].Size();
+            while (outPos < size && inPos < curBufferSize) {
+                data[outPos++] = curBufferData[inPos++];
+            }
+            if (outPos == size) {
+                return true;
+            }
+            inPos = 0;
+        }
+        return false;
+    }
+
+    bool Peek(uint16_t& n) {
+        if (Peek(reinterpret_cast<char*>(&n), sizeof(n))) {
+            n = ToHostByteOrder(n);
+            return true;
+        }
+        return false;
+    }
+
+    bool Peek(uint32_t& n) {
+        if (Peek(reinterpret_cast<char*>(&n), sizeof(n))) {
+            n = ToHostByteOrder(n);
+            return true;
+        }
+        return false;
+    }
+
+    bool TryReadHeader() {
+        uint16_t headerSize;
+        if (!Peek(headerSize)) {
+            return false;
+        }
+        if (headerSize > MAX_HEADER_SIZE) {
+            ThrowFileIsCorrupted();
+        }
+        if (GetAvailableBytes() < sizeof(headerSize) + headerSize + MAC_SIZE) {
+            if (Finished) {
+                ThrowFileIsCorrupted();
+            }
+            return false;
+        }
+        std::string serializedHeader;
+        serializedHeader.resize(headerSize);
+        if (!ReadUnencrypted(serializedHeader.data(), headerSize, sizeof(headerSize) /* skip */, false)) {
+            throw yexception() << "Failed to read header"; // Failed, but we have checked that we can read
+        }
+
+        TExportEncryptedFileHeader header;
+        if (!header.ParseFromString(serializedHeader)) {
+            ThrowFileIsCorrupted();
+        }
+        if (header.GetVersion() != 1) {
+            ThrowFileIsCorrupted();
+        }
+
+        TEncryptionIV iv = TEncryptionIV::FromBinaryString(header.GetIV());
+        if (IV && iv != IV) {
+            ThrowFileIsCorrupted();
+        }
+        if (iv.Size() != TEncryptionIV::SIZE) {
+            ThrowFileIsCorrupted();
+        }
+        IV = std::move(iv);
+        NormalizedAlgName = NormalizeAlgName(header.GetEncryptionAlgorithm());
+        if (!NormalizedAlgName) {
+            ThrowFileIsCorrupted();
+        }
+
+        ResetCtx();
+
+        // Check header MAC
+        {
+            CalcMACOnNonencryptedData(headerSize);
+            CalcMACOnNonencryptedData(serializedHeader);
+            TBuffer buf;
+            FinalizeAndCheckMAC(buf);
+        }
+
+        HeaderWasRead = true;
+
+        ResetCtxForNextChunk();
+        return true;
+    }
+
+    void ResetCtx() {
+        const EVP_CIPHER* cipher = GetCipherByName(NormalizedAlgName);
+
+        // Check key length
+        const int keyLength = EVP_CIPHER_key_length(cipher);
+        if (static_cast<int>(Key.Size()) != keyLength) {
+            throw yexception() << "Invalid key length " << Key.Size() << ". Expected: " << keyLength;
+        }
+
+        // Check IV length
+        const int ivLength = EVP_CIPHER_iv_length(cipher);
+        if (static_cast<int>(IV.Size()) != ivLength) {
+            ThrowFileIsCorrupted();
+        }
+
+        Ctx.reset(EVP_CIPHER_CTX_new());
+        if (!Ctx) {
+            throw yexception() << "Failed to allocate cypher context";
+        }
+
+        TEncryptionIV iv = TEncryptionIV::CombineForChunk(IV, CurrentChunkNumber);
+        if (int err = EVP_DecryptInit_ex(Ctx.get(), cipher, nullptr, Key.Ptr(), iv.Ptr()); err <= 0) {
+            throw yexception() << "Failed to init decryption algoritm: " << GetOpenSslErrorText(err);
+        }
+
+        // Start calculating MAC from the previous MAC
+        if (CurrentChunkNumber > 0) {
+            CalcMACOnNonencryptedData(TStringBuf(PreviousMAC, MAC_SIZE));
+        }
+    }
+
+    void ResetCtxForNextChunk() {
+        ++CurrentChunkNumber;
+        ResetCtx();
+    }
+
+    void CalcMACOnNonencryptedData(TStringBuf data) {
+        int outSize = 0;
+        if (int err = EVP_DecryptUpdate(Ctx.get(), nullptr, &outSize, reinterpret_cast<const unsigned char*>(data.data()), data.size()); err <= 0) {
+            ThrowFileIsCorrupted();
+        }
+    }
+
+    void CalcMACOnNonencryptedData(uint16_t size) {
+        size = ToNetworkByteOrder(size);
+        TStringBuf data(reinterpret_cast<const char*>(&size), sizeof(size));
+        CalcMACOnNonencryptedData(data);
+    }
+
+    void CalcMACOnNonencryptedData(uint32_t size) {
+        size = ToNetworkByteOrder(size);
+        TStringBuf data(reinterpret_cast<const char*>(&size), sizeof(size));
+        CalcMACOnNonencryptedData(data);
+    }
+
+    void ReadMAC() {
+        if (!ReadUnencrypted(PreviousMAC, MAC_SIZE, 0, false)) {
+            ThrowFileIsCorrupted();
+        }
+        if (int err = EVP_CIPHER_CTX_ctrl(Ctx.get(), EVP_CTRL_AEAD_SET_TAG, static_cast<int>(MAC_SIZE), (void*)PreviousMAC); err <= 0) {
+            ThrowFileIsCorrupted();
+        }
+    }
+
+    void FinalizeAndCheckMAC(TBuffer& dst) {
+        ReadMAC();
+        int outLen = dst.Avail();
+        if (int err = EVP_DecryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Data() + dst.Size()), &outLen); err <= 0) {
+            ThrowFileIsCorrupted();
+        }
+        dst.Advance(outLen);
+    }
+
+    bool TryReadBlock(TBuffer& dst) {
+        if (DecryptedLastBlock) {
+            return false;
+        }
+
+        uint32_t size;
+        if (!Peek(size)) {
+            return false;
+        }
+        if (size > MAX_BLOCK_SIZE) {
+            ThrowFileIsCorrupted();
+        }
+        if (GetAvailableBytes() < size + sizeof(size) + MAC_SIZE) {
+            if (Finished) {
+                ThrowFileIsCorrupted();
+            }
+            return false;
+        }
+        CalcMACOnNonencryptedData(size);
+        if (!ReadEncrypted(dst, size, sizeof(size))) {
+            ThrowFileIsCorrupted();
+        }
+        FinalizeAndCheckMAC(dst);
+        if (!size) {
+            DecryptedLastBlock = true;
+            Ctx.reset();
+        } else {
+            ResetCtxForNextChunk();
+        }
+        return true;
+    }
+
+    TMaybe<TBuffer> GetNextBlock() {
+        if (!HeaderWasRead && !TryReadHeader()) {
+            return Nothing();
+        }
+        if (DecryptedLastBlock) {
+            if (GetAvailableBytes()) {
+                ThrowFileIsCorrupted();
+            }
+            return Nothing();
+        }
+        TBuffer dst;
+        dst.Reserve(GetAvailableBytes());
+        while (TryReadBlock(dst));
+        if (DecryptedLastBlock && GetAvailableBytes()) {
+            ThrowFileIsCorrupted();
+        }
+        if (Finished && !DecryptedLastBlock) {
+            ThrowFileIsCorrupted();
+        }
+        if (dst || Finished && CurrentChunkNumber == 1) { // If the only empty chunk, then return empty data
+            return std::move(dst);
+        } else {
+            return Nothing();
+        }
+    }
+
+    static void ThrowFileIsCorrupted() {
+        throw yexception() << "File is corrupted";
+    }
+
+    TString GetState() const {
+        return {};
+    }
+
+    TEncryptionIV GetIV() const {
+        return IV;
+    }
+
+private:
+    TEncryptionKey Key;
+    TEncryptionIV IV;
+    TString NormalizedAlgName;
+    TCipherCtxPtr Ctx;
+    uint32_t CurrentChunkNumber = 0; // 0 for header
+
+    std::deque<TBuffer> InputData;
+    size_t InputBytes = 0;
+    size_t BytesRead = 0;
+    size_t CurrentBufferPos = 0;
+    bool Finished = false;
+    bool DecryptedLastBlock = false;
+    bool HeaderWasRead = false;
+    char PreviousMAC[MAC_SIZE] = {};
+};
+
+TEncryptedFileDeserializer::TEncryptedFileDeserializer(TEncryptionKey key)
+    : Impl(new TImpl(std::move(key), TEncryptionIV()))
+{
+}
+
+TEncryptedFileDeserializer::TEncryptedFileDeserializer(TEncryptionKey key, TEncryptionIV expectedIV)
+    : Impl(new TImpl(std::move(key), std::move(expectedIV)))
+{
+}
+
+TEncryptedFileDeserializer::~TEncryptedFileDeserializer() = default;
+
+void TEncryptedFileDeserializer::AddData(TBuffer data, bool last) {
+    Impl->AddData(std::move(data), last);
+}
+
+TMaybe<TBuffer> TEncryptedFileDeserializer::GetNextBlock() {
+    return Impl->GetNextBlock();
+}
+
+TString TEncryptedFileDeserializer::GetState() const {
+    return Impl->GetState();
+}
+
+TEncryptedFileDeserializer TEncryptedFileDeserializer::RestoreFromState(const TString& state) {
+    TEncryptedFileDeserializer deserializer;
+    Y_UNUSED(state);
+    return deserializer;
+}
+
+std::pair<TBuffer, TEncryptionIV> TEncryptedFileDeserializer::DecryptFile(TEncryptionKey key, TBuffer data) {
+    TEncryptedFileDeserializer deserializer(std::move(key));
+    deserializer.AddData(std::move(data), true);
+
+    TMaybe<TBuffer> result = deserializer.GetNextBlock();
+    Y_VERIFY(result);
+    return {std::move(*result), deserializer.GetIV()};
+}
+
+TBuffer TEncryptedFileDeserializer::DecryptFile(TEncryptionKey key, TEncryptionIV expectedIV, TBuffer data) {
+    TEncryptedFileDeserializer deserializer(std::move(key), std::move(expectedIV));
+    deserializer.AddData(std::move(data), true);
+
+    TMaybe<TBuffer> result = deserializer.GetNextBlock();
+    Y_VERIFY(result);
+    return std::move(*result);
+}
+
+TEncryptionIV TEncryptedFileDeserializer::GetIV() const {
+    return Impl->GetIV();
 }
 
 } // NKikimr::NBackup

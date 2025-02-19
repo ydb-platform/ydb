@@ -15,12 +15,18 @@ namespace NKikimr::NBackup {
 // Must suit to one byte.
 enum class EBackupFileType : unsigned char {
     Metadata = 0,
+    Permissions,
+    Schema,
+    Data,
 };
 
 struct TEncryptionIV {
     TEncryptionIV() = default; // Uninitialized IV
     TEncryptionIV(const TEncryptionIV&) = default;
     TEncryptionIV(TEncryptionIV&&) = default;
+
+    TEncryptionIV& operator=(const TEncryptionIV&) = default;
+    TEncryptionIV& operator=(TEncryptionIV&&) = default;
 
     // Generate new random IV
     static TEncryptionIV Generate();
@@ -35,12 +41,22 @@ struct TEncryptionIV {
     // fileIV: IV for backup item file got by Combine() function
     static TEncryptionIV CombineForChunk(const TEncryptionIV& fileIV, uint32_t chunkNumber);
 
+    static TEncryptionIV FromBinaryString(const TString& s);
+
     operator bool() const {
         return !IV.empty();
     }
 
     bool operator!() const {
         return IV.empty();
+    }
+
+    bool operator==(const TEncryptionIV& iv) const {
+        return IV == iv.IV;
+    }
+
+    bool operator!=(const TEncryptionIV& iv) const {
+        return IV != iv.IV;
     }
 
     size_t Size() const {
@@ -99,6 +115,8 @@ struct TEncryptionKey {
         return &Key[0];
     }
 
+    TString GetBinaryString() const;
+
     std::vector<unsigned char> Key;
 };
 
@@ -106,6 +124,7 @@ struct TEncryptionKey {
 // Has streaming interface
 class TEncryptedFileSerializer {
 public:
+    TEncryptedFileSerializer(TEncryptedFileSerializer&&) = default;
     TEncryptedFileSerializer(TString algorithm, TEncryptionKey key, TEncryptionIV iv);
     ~TEncryptedFileSerializer();
 
@@ -115,7 +134,7 @@ public:
     // because whole block must be read before usage.
     TBuffer AddBlock(TStringBuf data, bool last);
 
-    // Helper that serializes of the whole file at one time
+    // Helper that serializes the whole file at one time
     static TBuffer EncryptFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data);
 
 private:
@@ -126,14 +145,41 @@ private:
 // Class that reads encrypted file
 // Has streaming interface
 class TEncryptedFileDeserializer {
-public:
-    TEncryptedFileDeserializer(TEncryptionKey key, TEncryptionIV iv);
+    TEncryptedFileDeserializer() = default;
 
-    TMaybe<TBuffer> AddBlock(TStringBuf data, bool last);
+public:
+    TEncryptedFileDeserializer(TEncryptedFileDeserializer&&) = default;
+    TEncryptedFileDeserializer(TEncryptionKey key); // Decrypt file with key. Take IV from file header.
+    TEncryptedFileDeserializer(TEncryptionKey key, TEncryptionIV expectedIV); // Decrypt file with key. Check that IV in header is equal to expectedIV
+    ~TEncryptedFileDeserializer();
+
+    // Adds buffer with input data.
+    void AddData(TBuffer data, bool last);
+
+    // Decrypts next block from previously added data.
+    // Throws in case of error.
+    // Returns Nothing if not enough data added.
+    // Returns buffer with data in normal case.
+    TMaybe<TBuffer> GetNextBlock();
+
+    // Store state
+    TString GetState() const;
+
+    // Restore from state
+    // State includes secret key
+    static TEncryptedFileDeserializer RestoreFromState(const TString& state);
+
+    // Get file IV.
+    // Must be called after data added enough for the file header.
+    TEncryptionIV GetIV() const;
+
+    // Helper that deserializes the whole file at one time
+    static std::pair<TBuffer, TEncryptionIV> DecryptFile(TEncryptionKey key, TBuffer data);
+    static TBuffer DecryptFile(TEncryptionKey key, TEncryptionIV expectedIV, TBuffer data);
 
 private:
-    TEncryptionIV IV;
-    TEncryptionKey Key;
+    class TImpl;
+    std::unique_ptr<TImpl> Impl;
 };
 
 } // NKikimr::NBackup

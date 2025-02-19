@@ -180,7 +180,7 @@ TInt128 FromString(const std::string_view& str, ui8 precision, ui8 scale) {
 
         bool plus = c > '5';
         if (!plus && c == '5') {
-            for (plus = v & 1; !plus && l > -; --l) {
+            for (plus = v & 1; !plus && l > 0; --l) {
                 const char c = *s++;
                 if (!std::isdigit(c))
                     return Err();

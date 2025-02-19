@@ -133,7 +133,7 @@ private:
 } // namespace
 
 IFmrWorker::TPtr MakeFmrWorker(IFmrCoordinator::TPtr coordinator, IFmrJobFactory::TPtr jobFactory, const TFmrWorkerSettings& settings) {
-    return MakeIntrusive<TFmrWorker>(coordinator, jobFactory, settings);
+    return MakeHolder<TFmrWorker>(coordinator, jobFactory, settings);
 }
 
 } // namespace NYql::NFmr

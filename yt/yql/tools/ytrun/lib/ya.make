@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     yt/yql/providers/yt/provider
+    yt/yql/providers/yt/fmr/coordinator/client
     yt/yql/providers/yt/fmr/coordinator/impl
     yt/yql/providers/yt/fmr/job_factory/impl
     yt/yql/providers/yt/fmr/worker/impl

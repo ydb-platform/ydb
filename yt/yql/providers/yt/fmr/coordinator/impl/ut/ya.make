@@ -5,7 +5,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/yt/assert
     yt/yql/providers/yt/fmr/coordinator/impl
     yt/yql/providers/yt/fmr/job_factory/impl
     yt/yql/providers/yt/fmr/worker/impl

@@ -38,11 +38,12 @@ public:
         auto getOperationStatusesFunc = [&] {
             while (!StopFmrGateway_) {
                 with_lock(SessionStates_->Mutex) {
-                    auto checkOperationStatuses = [&] <typename T> (std::unordered_map<TString, TPromise<T>>& operationStatuses) {
-                        std::vector<TString> completedOperationIds;
+                    auto checkOperationStatuses = [&] <typename T> (std::unordered_map<TString, TPromise<T>>& operationStatuses, const TString& sessionId) {
                         for (auto& [operationId, promise]: operationStatuses) {
+                            YQL_CLOG(DEBUG, FastMapReduce) << "Sending get operation request to coordinator with operationId: " << operationId;
+
                             auto getOperationFuture = Coordinator_->GetOperation({operationId});
-                            getOperationFuture.Subscribe([&, operationId] (const auto& getFuture) {
+                            getOperationFuture.Subscribe([&, operationId, sessionId] (const auto& getFuture) {
                                 auto getOperationResult = getFuture.GetValueSync();
                                 auto getOperationStatus = getOperationResult.Status;
                                 auto operationErrorMessages = getOperationResult.ErrorMessages;
@@ -52,22 +53,30 @@ public:
                                         // operation finished, set value in future returned in Publish / Download
                                         bool hasCompletedSuccessfully = getOperationStatus == EOperationStatus::Completed;
                                         SendOperationCompletionSignal(promise, hasCompletedSuccessfully, operationErrorMessages);
-                                        completedOperationIds.emplace_back(operationId);
+                                        YQL_CLOG(DEBUG, FastMapReduce) << "Sending delete operation request to coordinator with operationId: " << operationId;
+                                        auto deleteOperationFuture = Coordinator_->DeleteOperation({operationId});
+                                        deleteOperationFuture.Subscribe([&, sessionId, operationId] (const auto& deleteFuture) {
+                                            auto deleteOperationResult = deleteFuture.GetValueSync();
+                                            auto deleteOperationStatus = deleteOperationResult.Status;
+                                            YQL_ENSURE(deleteOperationStatus == EOperationStatus::Aborted || deleteOperationStatus == EOperationStatus::NotFound);
+                                            with_lock(SessionStates_->Mutex) {
+                                                YQL_ENSURE( SessionStates_->Sessions.contains(sessionId));
+                                                auto& sessionInfo = SessionStates_->Sessions[sessionId];
+                                                auto& operationStates = sessionInfo.OperationStates;
+                                                operationStates.DownloadOperationStatuses.erase(operationId);
+                                                operationStates.UploadOperationStatuses.erase(operationId);
+                                            }
+                                        });
                                     }
                                 }
                             });
                         }
-
-                        for (auto& operationId: completedOperationIds) {
-                            Coordinator_->DeleteOperation({operationId}).GetValueSync();
-                            operationStatuses.erase(operationId);
-                        }
                     };
 
-                    for (auto& [sessionId, sessionInfo]: SessionStates_->Sessions) {
+                    for (auto [sessionId, sessionInfo]: SessionStates_->Sessions) {
                         auto& operationStates = sessionInfo.OperationStates;
-                        checkOperationStatuses(operationStates.DownloadOperationStatuses);
-                        checkOperationStatuses(operationStates.UploadOperationStatuses);
+                        checkOperationStatuses(operationStates.DownloadOperationStatuses, sessionId);
+                        checkOperationStatuses(operationStates.UploadOperationStatuses, sessionId);
                     }
                 }
                 Sleep(TimeToSleepBetweenGetOperationRequests_);
@@ -82,6 +91,7 @@ public:
     }
 
     TFuture<TPublishResult> Publish(const TExprNode::TPtr& node, TExprContext& ctx, TPublishOptions&& options) final {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
         if (!Coordinator_) {
             return Slave_->Publish(node, ctx, std::move(options));
         }
@@ -98,7 +108,6 @@ public:
         TFuture<void> downloadedSuccessfully;
 
         TString sessionId = options.SessionId();
-        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__, sessionId);
 
         with_lock(SessionStates_->Mutex) {
             auto& tablePresenceStatuses = SessionStates_->Sessions[sessionId].TablePresenceStatuses;
@@ -130,9 +139,11 @@ public:
         auto promise = NewPromise<TPublishResult>();
         auto future = promise.GetFuture();
 
-        auto startOperationResponseFuture = Coordinator_->StartOperation(uploadRequest);
-        startOperationResponseFuture.Subscribe([this, promise = std::move(promise), &sessionId] (const auto& startFuture) {
-            TString operationId = startFuture.GetValueSync().OperationId;
+        YQL_CLOG(DEBUG, FastMapReduce) << "Starting upload to yt table: " << cluster + "." + outputPath;
+        auto uploadOperationResponseFuture = Coordinator_->StartOperation(uploadRequest);
+        uploadOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId] (const auto& uploadFuture) {
+            TStartOperationResponse startOperationResponse = uploadFuture.GetValueSync();
+            TString operationId = startOperationResponse.OperationId;
             with_lock(SessionStates_->Mutex) {
                 YQL_ENSURE(SessionStates_->Sessions.contains(sessionId));
                 auto& operationStates = SessionStates_->Sessions[sessionId].OperationStates;
@@ -156,14 +167,15 @@ public:
             .TaskType = ETaskType::Download, .TaskParams = downloadTaskParams, .SessionId = sessionId, .IdempotencyKey=idempotencyKey, .NumRetries=1
         };
 
-        YQL_CLOG(INFO, FastMapReduce) << "Downloading table with cluster " << ytTableRef.Cluster << " and path " << ytTableRef.Path << " from yt to fmr";
+        YQL_CLOG(DEBUG, FastMapReduce) << "Starting download to from yt table: " << fmrTableId;
 
         auto promise = NewPromise<TDownloadTableToFmrResult>();
         auto future = promise.GetFuture();
 
-        auto startOperationResponseFuture = Coordinator_->StartOperation(downloadRequest);
-        startOperationResponseFuture.Subscribe([this, promise = std::move(promise), &sessionId] (const auto& startFuture) {
-            TString operationId = startFuture.GetValueSync().OperationId;
+        auto downloadOperationResponseFuture = Coordinator_->StartOperation(downloadRequest);
+        downloadOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId] (const auto& downloadFuture) {
+            TStartOperationResponse downloadOperationResponse = downloadFuture.GetValueSync();
+            TString operationId = downloadOperationResponse.OperationId;
             with_lock(SessionStates_->Mutex) {
                 auto& operationStates = SessionStates_->Sessions[sessionId].OperationStates;
                 auto& downloadOperationStatuses = operationStates.DownloadOperationStatuses;
@@ -219,13 +231,9 @@ public:
                     cancelOperationsFutures.emplace_back(Coordinator_->DeleteOperation({operationId}));
                 }
                 NThreading::WaitAll(cancelOperationsFutures).GetValueSync();
-                std::vector<TFuture<T>> resultFutures;
-
                 for (auto& [operationId, promise]: operationStatuses) {
                     SendOperationCompletionSignal(promise, false);
-                    resultFutures.emplace_back(promise.GetFuture());
                 }
-                NThreading::WaitAll(resultFutures).GetValueSync();
             };
 
             cancelOperationsFunc(operationStates.DownloadOperationStatuses);
@@ -265,7 +273,7 @@ private:
     template <std::derived_from<NCommon::TOperationResult> T>
     void SendOperationCompletionSignal(TPromise<T> promise, bool completedSuccessfully = false, const std::vector<TFmrError>& errorMessages = {}) {
         YQL_ENSURE(!promise.HasValue());
-        T commonOperationResult;
+        T commonOperationResult{};
         if (completedSuccessfully) {
             commonOperationResult.SetSuccess();
         } else if (!errorMessages.empty()) {
@@ -279,7 +287,7 @@ private:
 } // namespace
 
 IYtGateway::TPtr CreateYtFmrGateway(IYtGateway::TPtr slave, IFmrCoordinator::TPtr coordinator, const TFmrYtGatewaySettings& settings) {
-    return MakeIntrusive<TFmrYtGateway>(std::move(slave), std::move(coordinator), settings);
+    return MakeIntrusive<TFmrYtGateway>(std::move(slave), coordinator, settings);
 }
 
 } // namespace NYql::NFmr

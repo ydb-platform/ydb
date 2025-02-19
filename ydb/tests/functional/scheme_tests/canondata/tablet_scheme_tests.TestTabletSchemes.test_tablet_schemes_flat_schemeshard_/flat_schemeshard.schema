@@ -6213,6 +6213,16 @@
                 "ColumnId": 14,
                 "ColumnName": "PreparedCreationQuery",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "Changefeeds",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "NextChangefeedIdx",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -6232,7 +6242,9 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

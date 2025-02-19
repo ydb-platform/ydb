@@ -1565,11 +1565,13 @@ struct Schema : NIceDb::Schema {
         // NKikimrSchemeOp::TModifyScheme serialized as string
         struct PreparedCreationQuery : Column<14, NScheme::NTypeIds::String> {};
         struct Permissions : Column<11, NScheme::NTypeIds::String> {};
-        struct Metadata : Column<12, NScheme::NTypeIds::String> {};
+        struct Metadata : Column<12, NScheme::NTypeIds::String> {}; 
+        struct Changefeeds : Column<15, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TImportTableChangefeeds; };
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
         struct NextIndexIdx : Column<9, NScheme::NTypeIds::Uint32> {};
+        struct NextChangefeedIdx : Column<16, NScheme::NTypeIds::Uint32> {};
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ImportId, Index>;
@@ -1584,9 +1586,11 @@ struct Schema : NIceDb::Schema {
             PreparedCreationQuery,
             Permissions,
             Metadata,
+            Changefeeds,
             State,
             WaitTxId,
             NextIndexIdx,
+            NextChangefeedIdx,
             Issue
         >;
     };

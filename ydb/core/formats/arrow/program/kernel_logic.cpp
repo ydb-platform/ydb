@@ -1,8 +1,7 @@
 #include "kernel_logic.h"
 
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
-
-#include <ydb/library/formats/arrow/accessor/composite/accessor.h>
 
 namespace NKikimr::NArrow::NSSA {
 

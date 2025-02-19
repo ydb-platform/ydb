@@ -320,15 +320,7 @@ protected:
     }
 
 public:
-    std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const {
-        if (filter.IsTotalAllowFilter()) {
-            return selfPtr;
-        }
-        if (filter.IsTotalDenyFilter()) {
-            return TTrivialArray::BuildEmpty();
-        }
-        return DoApplyFilter(filter);
-    }
+    std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const;
 
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;

@@ -1,9 +1,8 @@
 #pragma once
 #include "direct_builder.h"
 
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
 
@@ -28,4 +27,4 @@ private:
 public:
 };
 
-}   // namespace NKikimr::NArrow::NAccessor
+}   // namespace NKikimr::NArrow::NAccessor::NSubColumns

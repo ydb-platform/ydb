@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/library/formats/arrow/accessor/common/const.h>
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 
@@ -116,8 +116,7 @@ private:
             AFL_VERIFY(Chunk->GetRecordsCount());
             AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() <= position && 
                     position < CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition())
-            ("pos", position)("finish", Chunk->GetFinishPosition())(
-                "shift", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
+            ("pos", position)("finish", Chunk->GetFinishPosition())("shift", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
             ChunkStartGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition();
             NextGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFirstIndexNotDefault();
             NextLocalPosition = 0;
@@ -274,8 +273,7 @@ private:
     std::deque<TCursor> Cursors;
     std::list<TCursorPosition> CursorPositions;
 
-    virtual void DoStart(
-        const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext) override;
+    virtual void DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext) override;
 
     virtual std::vector<TColumnPortionResult> DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) override;
 

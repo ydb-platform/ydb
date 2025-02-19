@@ -1,6 +1,7 @@
 #pragma once
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -59,6 +60,7 @@ public:
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> Chunks;
         const std::shared_ptr<arrow::DataType> Type;
         bool Finished = false;
+
     public:
         TBuilder(const std::shared_ptr<arrow::DataType>& type)
             : Type(type) {

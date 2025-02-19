@@ -119,6 +119,16 @@ std::shared_ptr<IChunkedArray> IChunkedArray::DoApplyFilter(const TColumnFilter&
     }
 }
 
+std::shared_ptr<IChunkedArray> IChunkedArray::ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const {
+    if (filter.IsTotalAllowFilter()) {
+        return selfPtr;
+    }
+    if (filter.IsTotalDenyFilter()) {
+        return TTrivialArray::BuildEmpty(GetDataType());
+    }
+    return DoApplyFilter(filter);
+}
+
 TString IChunkedArray::TReader::DebugString(const ui32 position) const {
     auto address = GetReadChunk(position);
     return NArrow::DebugString(address.GetArray(), address.GetPosition());

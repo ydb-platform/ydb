@@ -1,5 +1,6 @@
 #pragma once
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 

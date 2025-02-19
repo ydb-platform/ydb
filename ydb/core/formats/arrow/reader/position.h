@@ -1,16 +1,16 @@
 #pragma once
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
-#include <ydb/core/formats/arrow/common/container.h>
 
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <library/cpp/json/writer/json_value.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <library/cpp/json/writer/json_value.h>
 #include <util/system/types.h>
 
 namespace NKikimr::NArrow::NMerger {
@@ -22,15 +22,14 @@ class TCursor {
 private:
     YDB_READONLY(ui64, Position, 0);
     std::vector<NAccessor::IChunkedArray::TFullDataAddress> PositionAddress;
+
 public:
     TCursor() = default;
     TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns);
 
     TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TFullDataAddress>& addresses)
         : Position(position)
-        , PositionAddress(addresses)
-    {
-
+        , PositionAddress(addresses) {
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -57,7 +56,6 @@ public:
 
     std::partial_ordering Compare(const TSortableScanData& item, const ui64 itemPosition) const;
     std::partial_ordering Compare(const TCursor& item) const;
-
 };
 
 class TSortableScanData {
@@ -74,16 +72,17 @@ private:
     bool Contains(const ui64 position) const {
         return StartPosition <= position && position < FinishPosition;
     }
+
 public:
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch);
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns);
     TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns);
-    TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns, const std::vector<std::shared_ptr<arrow::Field>>& fields)
+    TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns,
+        const std::vector<std::shared_ptr<arrow::Field>>& fields)
         : RecordsCount(recordsCount)
         , Columns(columns)
-        , Fields(fields)
-    {
+        , Fields(fields) {
         BuildPosition(position);
     }
 
@@ -154,13 +153,13 @@ public:
 
     [[nodiscard]] bool InitPosition(const ui64 position);
 
-     std::shared_ptr<arrow::Table> Slice(const ui64 offset, const ui64 count) const {
-         std::vector<std::shared_ptr<arrow::ChunkedArray>> slicedArrays;
-         for (auto&& i : Columns) {
-             slicedArrays.emplace_back(i->Slice(offset, count));
-         }
-         return arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), slicedArrays, count);
-     }
+    std::shared_ptr<arrow::Table> Slice(const ui64 offset, const ui64 count) const {
+        std::vector<std::shared_ptr<arrow::ChunkedArray>> slicedArrays;
+        for (auto&& i : Columns) {
+            slicedArrays.emplace_back(i->Slice(offset, count));
+        }
+        return arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), slicedArrays, count);
+    }
 
     bool IsSameSchema(const std::shared_ptr<arrow::Schema>& schema) const {
         if (Fields.size() != (size_t)schema->num_fields()) {
@@ -254,9 +253,9 @@ public:
     TSortableBatchPosition(TRWSortableBatchPosition& source) = delete;
     TSortableBatchPosition(TRWSortableBatchPosition&& source) = delete;
 
-    TSortableBatchPosition operator= (const TRWSortableBatchPosition& source) = delete;
-    TSortableBatchPosition operator= (TRWSortableBatchPosition& source) = delete;
-    TSortableBatchPosition operator= (TRWSortableBatchPosition&& source) = delete;
+    TSortableBatchPosition operator=(const TRWSortableBatchPosition& source) = delete;
+    TSortableBatchPosition operator=(TRWSortableBatchPosition& source) = delete;
+    TSortableBatchPosition operator=(TRWSortableBatchPosition&& source) = delete;
 
     TRWSortableBatchPosition BuildRWPosition(const bool needData, const bool deepCopy) const;
 
@@ -281,6 +280,7 @@ public:
         explicit TFoundPosition(const ui32 pos)
             : Position(pos) {
         }
+
     public:
         TString DebugString() const {
             TStringBuilder result;
@@ -322,7 +322,8 @@ public:
 
     static std::optional<TFoundPosition> FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound,
         const bool needGreater, const std::optional<ui32> includedStartPosition);
-    static std::optional<TSortableBatchPosition::TFoundPosition> FindPosition(TRWSortableBatchPosition& position, const ui64 posStart, const ui64 posFinish, const TSortableBatchPosition& forFound, const bool greater);
+    static std::optional<TSortableBatchPosition::TFoundPosition> FindPosition(TRWSortableBatchPosition& position, const ui64 posStart,
+        const ui64 posFinish, const TSortableBatchPosition& forFound, const bool greater);
 
     const TSortableScanData& GetData() const {
         AFL_VERIFY(!!Data);
@@ -419,13 +420,13 @@ public:
     bool operator!=(const TSortableBatchPosition& item) const {
         return Compare(item) != std::partial_ordering::equivalent;
     }
-
 };
 
 class TIntervalPosition {
 private:
     TSortableBatchPosition Position;
     bool LeftIntervalInclude;
+
 public:
     const TSortableBatchPosition& GetPosition() const {
         return Position;
@@ -436,20 +437,18 @@ public:
     TIntervalPosition(TSortableBatchPosition&& position, const bool leftIntervalInclude)
         : Position(std::move(position))
         , LeftIntervalInclude(leftIntervalInclude) {
-
     }
 
     TIntervalPosition(const TSortableBatchPosition& position, const bool leftIntervalInclude)
         : Position(position)
         , LeftIntervalInclude(leftIntervalInclude) {
-
     }
 
     bool operator<(const TIntervalPosition& item) const {
         std::partial_ordering cmp = Position.Compare(item.Position);
         if (cmp == std::partial_ordering::equivalent) {
             return (LeftIntervalInclude ? 1 : 0) < (item.LeftIntervalInclude ? 1 : 0);
-        } 
+        }
         return cmp == std::partial_ordering::less;
     }
 
@@ -464,6 +463,7 @@ public:
 class TIntervalPositions {
 private:
     std::vector<TIntervalPosition> Positions;
+
 public:
     using const_iterator = std::vector<TIntervalPosition>::const_iterator;
 
@@ -554,6 +554,7 @@ public:
 class TRWSortableBatchPosition: public TSortableBatchPosition, public TMoveOnly {
 private:
     using TBase = TSortableBatchPosition;
+
 public:
     using TBase::TBase;
 
@@ -576,10 +577,10 @@ public:
     class TAsymmetricPositionGuard: TNonCopyable {
     private:
         TRWSortableBatchPosition& Owner;
+
     public:
         TAsymmetricPositionGuard(TRWSortableBatchPosition& owner)
-            : Owner(owner)
-        {
+            : Owner(owner) {
         }
 
         [[nodiscard]] bool InitSortingPosition(const i64 position) {
@@ -608,8 +609,8 @@ public:
 
     //  (-inf, it1), [it1, it2), [it2, it3), ..., [itLast, +inf)
     template <class TBordersIterator>
-    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBorders(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<std::string>& columnNames, TBordersIterator& it) {
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBorders(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, TBordersIterator& it) {
         std::vector<std::shared_ptr<arrow::RecordBatch>> result;
         if (!batch || batch->num_rows() == 0) {
             while (it.IsValid()) {
@@ -662,6 +663,7 @@ public:
     private:
         typename TContainer::const_iterator Current;
         typename TContainer::const_iterator End;
+
     public:
         TAssociatedContainerIterator(const TContainer& container)
             : Current(container.begin())
@@ -686,7 +688,8 @@ public:
     };
 
     template <class TContainer>
-    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInAssociativeContainer(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container) {
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInAssociativeContainer(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container) {
         TAssociatedContainerIterator<TContainer> it(container);
         return SplitByBorders(batch, columnNames, it);
     }
@@ -696,6 +699,7 @@ public:
     private:
         typename TContainer::const_iterator Current;
         typename TContainer::const_iterator End;
+
     public:
         TSequentialContainerIterator(const TContainer& container)
             : Current(container.begin())
@@ -720,7 +724,8 @@ public:
     };
 
     template <class TContainer>
-    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInSequentialContainer(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container) {
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInSequentialContainer(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container) {
         TSequentialContainerIterator<TContainer> it(container);
         return SplitByBorders(batch, columnNames, it);
     }
@@ -755,7 +760,6 @@ public:
             bool operator()(const TSortableBatchPosition& value, const TIntervalPosition& pos) const {
                 return value < pos.GetPosition();
             }
-
         };
 
         void SkipToUpper(const TSortableBatchPosition& toPos) {
@@ -770,4 +774,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NArrow::NMerger

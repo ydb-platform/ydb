@@ -54,7 +54,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
             std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(
                 externalInfo.GetDefaultSerializer(), columnStats.GetAccessorConstructor(i), schema->field(i), nullptr, 0);
             std::vector<TDeserializeChunkedArray::TChunk> chunks = { TDeserializeChunkedArray::TChunk(
-                externalInfo.GetRecordsCount(), originalData.substr(currentIndex, proto.GetKeyColumns(i).GetSize())) };
+                externalInfo.GetRecordsCount(), TStringBuf(originalData.data() + currentIndex, proto.GetKeyColumns(i).GetSize())) };
             columns.emplace_back(std::make_shared<TDeserializeChunkedArray>(externalInfo.GetRecordsCount(), columnLoader, std::move(chunks), true));
             currentIndex += proto.GetKeyColumns(i).GetSize();
         }
@@ -71,7 +71,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
             std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(
                 externalInfo.GetDefaultSerializer(), std::make_shared<NPlain::TConstructor>(), schema->field(i), nullptr, 0);
             std::vector<TDeserializeChunkedArray::TChunk> chunks = { TDeserializeChunkedArray::TChunk(
-                proto.GetOtherRecordsCount(), originalData.substr(currentIndex, proto.GetOtherColumns(i).GetSize())) };
+                proto.GetOtherRecordsCount(), TStringBuf(originalData.data() + currentIndex, proto.GetOtherColumns(i).GetSize())) };
             columns.emplace_back(std::make_shared<TDeserializeChunkedArray>(proto.GetOtherRecordsCount(), columnLoader, std::move(chunks), true));
             currentIndex += proto.GetOtherColumns(i).GetSize();
         }
@@ -79,8 +79,10 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
         otherData = TOthersData(otherStats, otherKeysContainer);
     }
     TColumnsData columnData(columnStats, columnKeysContainer);
-    return std::make_shared<TSubColumnsArray>(
+    auto result = std::make_shared<TSubColumnsArray>(
         std::move(columnData), std::move(otherData), externalInfo.GetColumnType(), externalInfo.GetRecordsCount(), Settings);
+    result->StoreSourceString(originalData);
+    return result;
 }
 
 NKikimrArrowAccessorProto::TConstructor TConstructor::DoSerializeToProto() const {

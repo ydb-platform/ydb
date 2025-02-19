@@ -1,8 +1,7 @@
 #pragma once
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
-
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/library/formats/arrow/accessor/composite/accessor.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -16,6 +15,7 @@ public:
         YDB_READONLY(ui32, RecordsCount, 0);
         std::shared_ptr<IChunkedArray> PredefinedArray;
         const TString Data;
+        const TStringBuf DataBuffer;
 
     public:
         TChunk(const std::shared_ptr<IChunkedArray>& predefinedArray)
@@ -29,11 +29,21 @@ public:
             , Data(data) {
         }
 
+        TChunk(const ui32 recordsCount, const TStringBuf dataBuffer)
+            : RecordsCount(recordsCount)
+            , DataBuffer(dataBuffer) {
+        }
+
         std::shared_ptr<IChunkedArray> GetArrayVerified(const std::shared_ptr<TColumnLoader>& loader) const {
             if (PredefinedArray) {
                 return PredefinedArray;
             }
-            return loader->ApplyVerified(Data, RecordsCount);
+            if (!!Data) {
+                return loader->ApplyVerified(Data, RecordsCount);
+            } else {
+                AFL_VERIFY(!!DataBuffer);
+                return loader->ApplyVerified(TString(DataBuffer.data(), DataBuffer.size()), RecordsCount);
+            }
         }
     };
 

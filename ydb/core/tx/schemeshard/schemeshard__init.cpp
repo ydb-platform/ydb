@@ -1,5 +1,6 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for PQGroupReserve
+#include "schemeshard__data_erasure_manager.h"
 
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -1869,9 +1870,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         // Read Running data erasure for tenants
         {
-            // if (!Self->DataErasureManager->Restore(db)) {
-            //     return false;
-            // }
+            if (!Self->DataErasureManager->Restore(db)) {
+                return false;
+            }
         }
 
         // Read External Tables

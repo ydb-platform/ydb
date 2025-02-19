@@ -968,6 +968,12 @@ TCheckFunc RetentionPeriod(const TDuration& value) {
     };
 }
 
+TCheckFunc ConsumerExist(const TString& name) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetConsumers(0).GetName(), name);
+    };
+}
+
 void NoChildren(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     ChildrenCount(0)(record);
 }

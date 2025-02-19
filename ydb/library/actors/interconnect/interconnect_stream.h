@@ -58,8 +58,6 @@ namespace NInterconnect {
         virtual ssize_t WriteV(const struct iovec* iov, int iovcnt) const;
         virtual ssize_t ReadV(const struct iovec* iov, int iovcnt) const;
 
-        ssize_t SendZc(const void* msg, size_t len) const;
-
         int Connect(const TAddress& addr) const;
         int Connect(const NAddr::IRemoteAddr* addr) const;
         int Listen(int backlog) const;

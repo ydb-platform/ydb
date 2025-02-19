@@ -159,7 +159,7 @@ namespace NInterconnect {
         }
 
         template<typename T>
-        void ProduceIoVec(T& container, size_t maxItems, size_t maxBytes) const {
+        void ProduceIoVec(T& container, size_t maxItems, size_t maxBytes) {
             size_t offset = SendOffset;
             for (auto it = SendQueue.begin() + SendQueuePos; it != SendQueue.end() && std::size(container) < maxItems && maxBytes; ++it) {
                 const TContiguousSpan span = it->Span.SubSpan(offset, maxBytes);

@@ -5067,7 +5067,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             {changefeedPath, GenerateTestData({EPathTypeCdcStream, changefeedDesc, std::move(attr)})},
             [changefeedPath = TString(changefeedPath)](TTestBasicRuntime& runtime) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath, false, false, true), {
-                    NLs::PathExist
+                    NLs::PathExist,
+                    NLs::ConsumerExist("my_consumer")
                 });
             }
         };

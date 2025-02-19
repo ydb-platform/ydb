@@ -30,7 +30,7 @@ public:
     static TDisableSourcesTag DisableSourcesTag;
 
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, const TTestEnvSettings& settings = {});
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, const TTestEnvSettings& settings = {}, bool showCreateTable = false);
 
     ~TTestEnv();
 

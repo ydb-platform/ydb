@@ -14,9 +14,24 @@ namespace NSQLTranslation {
 
 namespace NSQLTranslationV1 {
 
-    google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, 
+    struct TParsers {
+        NSQLTranslation::TParserFactoryPtr Antlr3;
+        NSQLTranslation::TParserFactoryPtr Antlr3Ansi;
+        NSQLTranslation::TParserFactoryPtr Antlr4;
+        NSQLTranslation::TParserFactoryPtr Antlr4Ansi;
+    };
+
+    //FIXME remove
+    TParsers MakeAllParsers();
+
+    //FIXME remove
+    google::protobuf::Message* SqlAST(const TString& query, const TString& queryName,
         NYql::TIssues& err, size_t maxErrors, bool ansiLexer, bool antlr4Parser, bool testAntlr4, google::protobuf::Arena* arena);
     google::protobuf::Message* SqlAST(const TString& query, const TString& queryName,
         NProtoAST::IErrorCollector& err, bool ansiLexer, bool antlr4Parser, bool testAntlr4, google::protobuf::Arena* arena);
 
+    google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query, const TString& queryName,
+        NYql::TIssues& err, size_t maxErrors, bool ansiLexer, bool antlr4Parser, google::protobuf::Arena* arena);
+    google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query, const TString& queryName,
+        NProtoAST::IErrorCollector& err, bool ansiLexer, bool antlr4Parser, google::protobuf::Arena* arena);
 }  // namespace NSQLTranslationV1

@@ -10,10 +10,9 @@ namespace NYT::NSignature {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class ISignatureValidator
+struct ISignatureValidator
     : public TRefCounted
 {
-public:
     virtual TFuture<bool> Validate(const TSignaturePtr& signature) = 0;
 };
 

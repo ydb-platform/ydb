@@ -1845,3 +1845,17 @@ Y_UNIT_TEST(AnsiLexer) {
     TSetup setup(/* ansiLexer = */ true);
     setup.Run(cases);
 }
+
+Y_UNIT_TEST(ValueConstructor) {
+    TCases cases = {
+        {"select Enum('a', Enum<'a','b'>)",
+            "SELECT\n\tEnum('a', Enum<'a', 'b'>)\n;\n"},
+        {"select Variant(true, '0', Variant<bool>)",
+            "SELECT\n\tVariant(TRUE, '0', Variant<bool>)\n;\n"},
+        {"select Callable(Callable<(Int32)->Int32>,($x)->($x))(0)",
+            "SELECT\n\tCallable(Callable<(Int32) -> Int32>, ($x) -> ($x))(0)\n;\n"},
+    };
+
+    TSetup setup(/* ansiLexer = */ true);
+    setup.Run(cases);
+}

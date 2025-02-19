@@ -277,8 +277,15 @@ bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, 
 
 class TTranslator : public NSQLTranslation::ITranslator {
 public:
+    TTranslator(const TLexers& lexers, const TParsers& parsers)
+        : Lexers_(lexers)
+        , Parsers_(parsers)
+    {
+        Y_UNUSED(Parsers_);
+    }
+
     NSQLTranslation::ILexer::TPtr MakeLexer(const NSQLTranslation::TTranslationSettings& settings) final {
-        return NSQLTranslationV1::MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
+        return NSQLTranslationV1::MakeLexer(Lexers_, settings.AnsiLexer, settings.Antlr4Parser);
     }
 
     NYql::TAstParseResult TextToAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
@@ -302,10 +309,18 @@ public:
         NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo) final {
         return SqlToAstStatements(query, settings, warningRules, stmtParseInfo);
     }
+
+private:
+    const TLexers Lexers_;
+    const TParsers Parsers_;
 };
 
 NSQLTranslation::TTranslatorPtr MakeTranslator() {
-    return MakeIntrusive<TTranslator>();
+    return MakeIntrusive<TTranslator>(MakeAllLexers(), MakeAllParsers());
+}
+
+NSQLTranslation::TTranslatorPtr MakeTranslator(const TLexers& lexers, const TParsers& parsers) {
+    return MakeIntrusive<TTranslator>(lexers, parsers);
 }
 
 } // namespace NSQLTranslationV1

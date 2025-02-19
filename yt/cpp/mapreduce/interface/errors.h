@@ -157,8 +157,6 @@ class TErrorResponse
     : public yexception
 {
 public:
-    TErrorResponse(int httpCode, const TString& requestId);
-
     TErrorResponse(TYtError error, const TString& requestId);
 
     /// Get error object returned by server.
@@ -166,9 +164,6 @@ public:
 
     /// Get if (correlation-id) of request that was responded with error.
     TString GetRequestId() const;
-
-    /// Get HTTP code of response.
-    int GetHttpCode() const;
 
     /// Is error parsed from response trailers.
     bool IsFromTrailers() const;
@@ -218,7 +213,6 @@ private:
     void Setup();
 
 private:
-    int HttpCode_;
     TString RequestId_;
     TYtError Error_;
     bool IsFromTrailers_ = false;

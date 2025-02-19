@@ -1,5 +1,7 @@
 #include "yql_qstorage.h"
 
+#include <util/system/mutex.h>
+
 namespace NYql {
 class TQWriterDecorator : public IQWriter {
     public:
@@ -8,14 +10,31 @@ class TQWriterDecorator : public IQWriter {
         if (Closed_) {
             return NThreading::MakeFuture();
         }
-        return Underlying_->Put(key, value);
+        try {
+            return Underlying_->Put(key, value);
+        } catch (...) {
+            auto message = CurrentExceptionMessage();
+            with_lock(Mutex_) {
+                Exception_ = std::move(message);
+            }
+            Close();
+            return NThreading::MakeFuture();
+        }
     }
 
     NThreading::TFuture<void> Commit() override final {
-        if (Closed_) {
+        with_lock(Mutex_) {
+            if (Exception_) {
+                throw yexception() << "QWriter exception while Put(): " << *Exception_ << ")";
+            }
+        }
+        bool expected = false;
+        if (!Closed_.compare_exchange_strong(expected, true)) {
             throw yexception() << "QWriter closed";
         }
-        return Underlying_->Commit();
+        auto result = Underlying_->Commit();
+        Underlying_ = {};
+        return result;
     }
 
     // Close all used files, doesn't commit anything
@@ -26,8 +45,10 @@ class TQWriterDecorator : public IQWriter {
         }
     }
 private:
+    TMaybe<TString> Exception_;
     IQWriterPtr Underlying_;
     std::atomic<bool> Closed_ = false;
+    TMutex Mutex_;
 };
 
 IQWriterPtr MakeCloseAwareWriterDecorator(IQWriterPtr&& rhs) {

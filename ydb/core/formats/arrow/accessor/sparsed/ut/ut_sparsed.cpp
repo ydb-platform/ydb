@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             filter.Add(false, 1);
             filter.Add(true, 1);
             filter.Add(false, 5);
-            auto arrFiltered = arr->ApplyFilter(filter)->GetChunkedArray();
+            auto arrFiltered = filter.Apply(arr)->GetChunkedArray();
             auto arrSlice = PrepareToCompare(arrFiltered->ToString());
             AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null,null]])")("string", PrepareToCompare(arrFiltered->ToString()));
         }
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             filter.Add(true, 1);
             filter.Add(false, 1);
             filter.Add(true, 5);
-            auto arrFiltered = arr->ApplyFilter(filter)->GetChunkedArray();
+            auto arrFiltered = filter.Apply(arr)->GetChunkedArray();
             auto arrSlice = PrepareToCompare(arrFiltered->ToString());
             AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null],["abc5","abcd6"],[null],["abcde8"],[null]])")(
                 "string", PrepareToCompare(arrFiltered->ToString()));
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             TColumnFilter filter = TColumnFilter::BuildAllowFilter();
             filter.Add(true, 6);
             filter.Add(false, 4);
-            auto arrFiltered = arr->ApplyFilter(filter)->GetChunkedArray();
+            auto arrFiltered = Filter.Apply(arr)->GetChunkedArray();
             auto arrSlice = PrepareToCompare(arrFiltered->ToString());
             AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null,null,null,null],["abc5"]])")(
                 "string", PrepareToCompare(arrFiltered->ToString()));
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             filter.Add(false, 5);
             filter.Add(true, 1);
             filter.Add(false, 4);
-            auto arrFiltered = arr->ApplyFilter(filter)->GetChunkedArray();
+            auto arrFiltered = filter.Apply(arr)->GetChunkedArray();
             auto arrSlice = PrepareToCompare(arrFiltered->ToString());
             AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([["abc5"]])")(
                 "string", PrepareToCompare(arrFiltered->ToString()));

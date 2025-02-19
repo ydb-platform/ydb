@@ -52,8 +52,10 @@ null_types = {
     "String": "'{}'",
 }
 
+
 def cleanup_type_name(type_name):
     return type_name.replace('(', '').replace(')', '').replace(',', '')
+
 
 class WorkloadInsertDeleteAllTypes(WorkloadBase):
     def __init__(self, client, prefix, stop):

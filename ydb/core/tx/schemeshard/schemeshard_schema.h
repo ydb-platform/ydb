@@ -583,6 +583,7 @@ struct Schema : NIceDb::Schema {
         struct NumberOfRetries : Column<8, NScheme::NTypeIds::Uint32> {};
         struct ScanSettings : Column<9, NScheme::NTypeIds::String> {};
         struct NeedToBill : Column<10, NScheme::NTypeIds::Bool> {};
+        struct EnableChecksums : Column<11, NScheme::NTypeIds::Bool> {};
         // deprecated
         struct CreateDestinationFlag : Column<4, NScheme::NTypeIds::Bool> {};
         struct EraseOldDataFlag : Column<5, NScheme::NTypeIds::Bool> {};
@@ -598,7 +599,8 @@ struct Schema : NIceDb::Schema {
             TableDescription,
             NumberOfRetries,
             ScanSettings,
-            NeedToBill
+            NeedToBill,
+            EnableChecksums
         >;
     };
 
@@ -613,6 +615,7 @@ struct Schema : NIceDb::Schema {
         struct NumberOfRetries : Column<9, NScheme::NTypeIds::Uint32> {};
         struct ScanSettings : Column<10, NScheme::NTypeIds::String> {};
         struct NeedToBill : Column<11, NScheme::NTypeIds::Bool> {};
+        struct EnableChecksums : Column<12, NScheme::NTypeIds::Bool> {};
         // deprecated
         struct CreateDestinationFlag : Column<5, NScheme::NTypeIds::Bool> {};
         struct EraseOldDataFlag : Column<6, NScheme::NTypeIds::Bool> {};
@@ -629,7 +632,8 @@ struct Schema : NIceDb::Schema {
             TableDescription,
             NumberOfRetries,
             ScanSettings,
-            NeedToBill
+            NeedToBill,
+            EnableChecksums
         >;
     };
 
@@ -1561,11 +1565,13 @@ struct Schema : NIceDb::Schema {
         // NKikimrSchemeOp::TModifyScheme serialized as string
         struct PreparedCreationQuery : Column<14, NScheme::NTypeIds::String> {};
         struct Permissions : Column<11, NScheme::NTypeIds::String> {};
-        struct Metadata : Column<12, NScheme::NTypeIds::String> {};
+        struct Metadata : Column<12, NScheme::NTypeIds::String> {}; 
+        struct Changefeeds : Column<15, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TImportTableChangefeeds; };
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
         struct NextIndexIdx : Column<9, NScheme::NTypeIds::Uint32> {};
+        struct NextChangefeedIdx : Column<16, NScheme::NTypeIds::Uint32> {};
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ImportId, Index>;
@@ -1580,9 +1586,11 @@ struct Schema : NIceDb::Schema {
             PreparedCreationQuery,
             Permissions,
             Metadata,
+            Changefeeds,
             State,
             WaitTxId,
             NextIndexIdx,
+            NextChangefeedIdx,
             Issue
         >;
     };

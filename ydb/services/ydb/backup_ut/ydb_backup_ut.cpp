@@ -5,6 +5,7 @@
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/draft/ydb_view.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -14,6 +15,7 @@
 #include <ydb-cpp-sdk/client/export/export.h>
 #include <ydb-cpp-sdk/client/import/import.h>
 #include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb-cpp-sdk/client/query/client.h>
 #include <ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb-cpp-sdk/client/table/table.h>
@@ -35,6 +37,34 @@ using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 using namespace NYdb::NView;
 
+namespace Ydb::Table {
+
+bool operator==(const DescribeExternalDataSourceResult& lhs, const DescribeExternalDataSourceResult& rhs) {
+    google::protobuf::util::MessageDifferencer differencer;
+    differencer.IgnoreField(DescribeExternalDataSourceResult::GetDescriptor()->FindFieldByName("self"));
+    return differencer.Compare(lhs, rhs);
+}
+
+bool operator==(const DescribeExternalTableResult& lhs, const DescribeExternalTableResult& rhs) {
+    google::protobuf::util::MessageDifferencer differencer;
+    differencer.IgnoreField(DescribeExternalTableResult::GetDescriptor()->FindFieldByName("self"));
+    return differencer.Compare(lhs, rhs);
+}
+
+}
+
+namespace Ydb::RateLimiter {
+
+bool operator==(const HierarchicalDrrSettings& lhs, const HierarchicalDrrSettings& rhs) {
+    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
+}
+
+bool operator==(const MeteringConfig& lhs, const MeteringConfig& rhs) {
+    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
+}
+
+}
+
 namespace NYdb::NTable {
 
 bool operator==(const TValue& lhs, const TValue& rhs) {
@@ -54,13 +84,6 @@ bool operator==(const TKeyRange& lhs, const TKeyRange& rhs) {
 namespace NYdb::NRateLimiter {
 
 bool operator==(
-    const Ydb::RateLimiter::HierarchicalDrrSettings& lhs,
-    const Ydb::RateLimiter::HierarchicalDrrSettings& rhs
-) {
-    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
-}
-
-bool operator==(
     const TDescribeResourceResult::THierarchicalDrrProps& lhs,
     const TDescribeResourceResult::THierarchicalDrrProps& rhs
 ) {
@@ -69,13 +92,6 @@ bool operator==(
     Ydb::RateLimiter::HierarchicalDrrSettings right;
     rhs.SerializeTo(right);
     return left == right;
-}
-
-bool operator==(
-    const Ydb::RateLimiter::MeteringConfig& lhs,
-    const Ydb::RateLimiter::MeteringConfig& rhs
-) {
-    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
 }
 
 bool operator==(const TMeteringConfig& lhs, const TMeteringConfig& rhs) {
@@ -743,6 +759,35 @@ void TestViewReferenceTableIsPreserved(
     TestViewReferenceTableIsPreserved(view, table, view, session, std::move(backup), std::move(restore));
 }
 
+void TestViewDependentOnAnotherViewIsRestored(
+    const char* baseView, const char* dependentView, NQuery::TSession& session,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE VIEW `%s` WITH security_invoker = TRUE AS SELECT 1 AS Key;
+            )", baseView
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE VIEW `%s` WITH security_invoker = TRUE AS SELECT * FROM `%s`;
+            )", dependentView, baseView
+        ), true
+    );
+    const auto originalContent = GetTableContent(session, dependentView);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+                DROP VIEW `%s`;
+                DROP VIEW `%s`;
+            )", baseView, dependentView
+        ), true
+    );
+
+    restore();
+    CompareResults(GetTableContent(session, dependentView), originalContent);
+}
+
 void TestTopicSettingsArePreserved(
     const char* topic, NQuery::TSession& session, NTopic::TTopicClient& topicClient,
     TBackupFunction&& backup, TRestoreFunction&& restore
@@ -990,6 +1035,87 @@ void TestReplicationSettingsArePreserved(
     checkDescription();
 }
 
+Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TSession& session, const TString& path) {
+    auto result = session.DescribeExternalDataSource(path).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return TProtoAccessor::GetProto(result.GetExternalDataSourceDescription());;
+}
+
+void TestExternalDataSourceSettingsArePreserved(
+    const char* path, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteQuery(querySession, Sprintf(R"(
+                CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "192.168.1.1:8123",
+                    AUTH_METHOD = "NONE"
+                );
+            )", path
+        ), true
+    );
+    const auto originalDescription = DescribeExternalDataSource(tableSession, path);
+
+    backup();
+
+    ExecuteQuery(querySession, Sprintf(R"(
+                DROP EXTERNAL DATA SOURCE `%s`;
+            )", path
+        ), true
+    );
+
+    restore();
+    UNIT_ASSERT_VALUES_EQUAL(
+        DescribeExternalDataSource(tableSession, path),
+        originalDescription
+    );
+}
+
+Ydb::Table::DescribeExternalTableResult DescribeExternalTable(TSession& session, const TString& path) {
+    auto result = session.DescribeExternalTable(path).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return TProtoAccessor::GetProto(result.GetExternalTableDescription());;
+}
+
+void TestExternalTableSettingsArePreserved(
+    const char* path, const char* externalDataSource, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteQuery(querySession, Sprintf(R"(
+                CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "192.168.1.1:8123",
+                    AUTH_METHOD = "NONE"
+                );
+
+                CREATE EXTERNAL TABLE `%s` (
+                    key Utf8 NOT NULL,
+                    value Utf8 NOT NULL
+                ) WITH (
+                    DATA_SOURCE = "%s",
+                    LOCATION = "folder",
+                    FORMAT = "csv_with_names",
+                    COMPRESSION = "gzip"
+                );
+            )", externalDataSource, path, externalDataSource
+        ), true
+    );
+    const auto originalDescription = DescribeExternalTable(tableSession, path);
+
+    backup();
+
+    ExecuteQuery(querySession, Sprintf(R"(
+                DROP EXTERNAL TABLE `%s`;
+                DROP EXTERNAL DATA SOURCE `%s`;
+            )", path, externalDataSource
+        ), true
+    );
+
+    restore();
+    UNIT_ASSERT_VALUES_EQUAL(
+        DescribeExternalTable(tableSession, path),
+        originalDescription
+    );
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -1228,6 +1354,27 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(RestoreViewDependentOnAnotherView) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* baseView = "/Root/baseView";
+        constexpr const char* dependentView = "/Root/dependentView";
+
+        TestViewDependentOnAnotherViewIsRestored(
+            baseView,
+            dependentView,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
     Y_UNIT_TEST(RestoreKesusResources) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
@@ -1398,6 +1545,52 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    void TestExternalDataSourceBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* path = "/Root/externalDataSource";
+
+        TestExternalDataSourceSettingsArePreserved(
+            path,
+            tableSession,
+            querySession,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    void TestExternalTableBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* path = "/Root/externalTable";
+        constexpr const char* externalDataSource = "/Root/externalDataSource";
+
+        TestExternalTableSettingsArePreserved(
+            path,
+            externalDataSource,
+            tableSession,
+            querySession,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
 
@@ -1424,9 +1617,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeTransfer:
                 break; // https://github.com/ydb-platform/ydb/issues/10436
             case EPathTypeExternalTable:
-                break; // https://github.com/ydb-platform/ydb/issues/10438
+                return TestExternalTableBackupRestore();
             case EPathTypeExternalDataSource:
-                break; // https://github.com/ydb-platform/ydb/issues/10439
+                return TestExternalDataSourceBackupRestore();
             case EPathTypeResourcePool:
                 break; // https://github.com/ydb-platform/ydb/issues/10440
             case EPathTypeKesus:
@@ -1511,6 +1704,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
             auto& runtime = *Server.GetRuntime();
             runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_DEBUG);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
             runtime.GetAppData().FeatureFlags.SetEnableViews(true);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
@@ -1821,6 +2016,21 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view", "a/b/c/table" })
         );
     }
+
+    Y_UNIT_TEST(RestoreViewDependentOnAnotherView) {
+        TS3TestEnv testEnv;
+        constexpr const char* baseView = "/Root/baseView";
+        constexpr const char* dependentView = "/Root/dependentView";
+
+        TestViewDependentOnAnotherViewIsRestored(
+            baseView,
+            dependentView,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "baseView", "dependentView" })
+        );
+    }
+
 
     // TO DO: test view restoration to a different database
 

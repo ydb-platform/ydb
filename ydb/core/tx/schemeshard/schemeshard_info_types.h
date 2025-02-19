@@ -105,7 +105,7 @@ struct TSplitSettings {
     TForceShardSplitSettings GetForceShardSplitSettings() const {
         return TForceShardSplitSettings{
             .ForceShardSplitDataSize = ui64(ForceShardSplitDataSize),
-            .DisableForceShardSplit = true,
+            .DisableForceShardSplit = ui64(DisableForceShardSplit) != 0,
         };
     }
 };
@@ -2828,6 +2828,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         CreateSchemeObject,
         Transferring,
         BuildIndexes,
+        CreateChangefeed,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,
@@ -2851,6 +2852,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
+        NKikimrSchemeOp::TImportTableChangefeeds Changefeeds;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
@@ -2858,6 +2860,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
         int NextIndexIdx = 0;
+        int NextChangefeedIdx = 0;
         TString Issue;
         int ViewCreationRetries = 0;
 

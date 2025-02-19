@@ -22,6 +22,8 @@ namespace NYdb::NDump {
 extern const char DOC_API_TABLE_VERSION_ATTR[23];
 extern const char DOC_API_REQUEST_TYPE[22];
 
+class TRestoreClient;
+
 namespace NPrivate {
 
 class TBatch;
@@ -123,6 +125,58 @@ public:
     virtual void Wait() = 0;
 };
 
+struct TDelayedRestoreCall {
+    using TSimplePath = TString;
+
+    struct TTwoComponentPath {
+        TString RestoreRoot;
+        TString RelativeToRestoreRoot;
+    };
+
+    NScheme::ESchemeEntryType Type;
+    TFsPath FsPath;
+    std::variant<TSimplePath, TTwoComponentPath> DbPath;
+    TRestoreSettings Settings;
+    bool IsAlreadyExisting;
+
+    TDelayedRestoreCall(
+        NScheme::ESchemeEntryType type,
+        TFsPath fsPath,
+        TString dbPath,
+        TRestoreSettings settings,
+        bool isAlreadyExisting
+    );
+
+    TDelayedRestoreCall(
+        NScheme::ESchemeEntryType type,
+        TFsPath fsPath,
+        TString dbRestoreRoot,
+        TString dbPathRelativeToRestoreRoot,
+        TRestoreSettings settings,
+        bool isAlreadyExisting
+    );
+
+    int GetOrder() const;
+};
+
+class TDelayedRestoreManager {
+    TVector<TDelayedRestoreCall> Calls;
+    TRestoreClient* Client = nullptr;
+
+    TRestoreResult Restore(const TDelayedRestoreCall& call);
+    static bool ShouldRetry(const TRestoreResult& result, NScheme::ESchemeEntryType type);
+    TRestoreResult RestoreWithRetries(TVector<TDelayedRestoreCall>&& calls);
+
+public:
+    void SetClient(TRestoreClient& client);
+    TRestoreResult RestoreDelayed();
+
+    template <typename... Args>
+    void Add(NScheme::ESchemeEntryType type, Args&&... args) {
+        Calls.emplace_back(type, std::forward<Args>(args)...);
+    }
+};
+
 } // NPrivate
 
 class TRestoreClient {
@@ -135,6 +189,8 @@ class TRestoreClient {
     TRestoreResult RestoreCoordinationNode(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
     TRestoreResult RestoreDependentResources(const TFsPath& fsPath, const TString& dbPath);
     TRestoreResult RestoreRateLimiter(const TFsPath& fsPath, const TString& coordinationNodePath, const TString& resourcePath);
+    TRestoreResult RestoreExternalDataSource(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
+    TRestoreResult RestoreExternalTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
 
     TRestoreResult CheckSchema(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc, ui32 partitionCount);
@@ -146,7 +202,6 @@ class TRestoreClient {
     TRestoreResult FindClusterRootPath();
     TRestoreResult ReplaceClusterRoot(TString& outPath);
     TRestoreResult WaitForAvailableNodes(const TString& database, TDuration waitDuration);
-    TRestoreResult RetryViewRestoration();
 
     TRestoreResult RestoreClusterRoot(const TFsPath& fsPath);
     TRestoreResult RestoreDatabases(const TFsPath& fsPath, const TRestoreClusterSettings& settings);
@@ -184,19 +239,10 @@ private:
     std::shared_ptr<TLog> Log;
     // Used to creating child drivers with different database settings.
     TDriverConfig DriverConfig;
-
-    struct TRestoreViewCall {
-        TFsPath FsPath;
-        TString DbRestoreRoot;
-        TString DbPathRelativeToRestoreRoot;
-        TRestoreSettings Settings;
-        bool IsAlreadyExisting;
-    };
-    // Views usually depend on other objects.
-    // If the dependency is not created yet, then the view restoration will fail.
-    // We retry failed view creation attempts until either all views are created, or the errors are persistent.
-    TVector<TRestoreViewCall> ViewRestorationCalls;
     TString ClusterRootPath;
+    NPrivate::TDelayedRestoreManager DelayedRestoreManager;
+
+    friend class NPrivate::TDelayedRestoreManager;
 }; // TRestoreClient
 
 } // NYdb::NDump

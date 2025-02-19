@@ -20,10 +20,9 @@ TSignaturePtr ISignatureGenerator::Sign(TYsonString data)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDummySignatureGenerator
+struct TDummySignatureGenerator
     : public ISignatureGenerator
 {
-public:
     void Sign(const TSignaturePtr& signature) override
     {
         signature->Header_ = NYson::TYsonString("DummySignature"_sb);
@@ -37,10 +36,9 @@ ISignatureGeneratorPtr CreateDummySignatureGenerator()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAlwaysThrowingSignatureGenerator
+struct TAlwaysThrowingSignatureGenerator
     : public ISignatureGenerator
 {
-public:
     void Sign(const TSignaturePtr& /*signature*/) override
     {
         THROW_ERROR_EXCEPTION("Signature generation is unsupported");

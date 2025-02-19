@@ -21,7 +21,7 @@ FROM
         ORDER BY
             CAST(time AS Timestamp)
         MEASURES
-            SUM(A.value + 1u + LENGTH(A.name)) AS aggr_expr,
+            SUM(A.value + 1u + LENGTH(A.name)) + SUM(B.value + 1u + LENGTH(B.name)) AS aggr_expr,
             FIRST(A.value) AS first_a,
             LAST(A.value) AS last_a,
             COUNT(A.value) AS count_a,

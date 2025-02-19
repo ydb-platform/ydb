@@ -646,6 +646,17 @@ message TToggleConfigValidatorResponse {
     optional TStatus Status = 1;
 }
 
+message TFetchStartupConfigRequest {
+    optional Ydb.DynamicConfig.FetchStartupConfigRequest Request = 1;
+    optional bytes UserToken = 2;
+    optional string PeerName = 3;
+    optional string IngressDatabase = 4;
+}
+
+message TFetchStartupConfigResponse {
+    optional Ydb.DynamicConfig.FetchStartupConfigResult Response = 1;
+}
+
 enum EValidationLevel {
     // Validation is disabled.
     VALIDATE_NONE = 0;

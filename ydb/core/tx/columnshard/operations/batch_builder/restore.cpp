@@ -16,7 +16,7 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
     auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData.GetContainer(), Context.GetActualSchema()->GetPKColumnNames());
     request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData, false);
     for (auto&& i : Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false)) {
-        request->AddColumn(i, Context.GetActualSchema()->GetIndexInfo().GetColumnName(i));
+        request->AddColumn(i);
     }
     return request;
 }

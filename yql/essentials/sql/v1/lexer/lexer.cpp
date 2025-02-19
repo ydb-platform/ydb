@@ -1,14 +1,12 @@
 #include "lexer.h"
 
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/parser/proto_ast/collect_issues/collect_issues.h>
-#include <yql/essentials/parser/proto_ast/antlr3/proto_ast_antlr3.h>
-#include <yql/essentials/parser/proto_ast/antlr4/proto_ast_antlr4.h>
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/parser/lexer_common/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
 
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
@@ -18,16 +16,16 @@
 #include <util/system/mutex.h>
 #endif
 
-namespace NALPDefault {
-extern ANTLR_UINT8 *SQLv1ParserTokenNames[];
-}
-
-namespace NALPAnsi {
-extern ANTLR_UINT8 *SQLv1ParserTokenNames[];
-}
-
-
 namespace NSQLTranslationV1 {
+
+TLexers MakeAllLexers() {
+    return TLexers {
+        .Antlr3 = MakeAntlr3LexerFactory(),
+        .Antlr3Ansi = MakeAntlr3AnsiLexerFactory(),
+        .Antlr4 = MakeAntlr4LexerFactory(),
+        .Antlr4Ansi = MakeAntlr4AnsiLexerFactory()
+    };
+}
 
 namespace {
 
@@ -36,47 +34,71 @@ TMutex SanitizerSQLTranslationMutex;
 #endif
 
 using NSQLTranslation::ILexer;
+using NSQLTranslation::MakeDummyLexerFactory;
 
 class TV1Lexer : public ILexer {
 public:
-    explicit TV1Lexer(bool ansi, bool antlr4)
-        : Ansi(ansi), Antlr4(antlr4)
+    explicit TV1Lexer(const TLexers& lexers, bool ansi, bool antlr4)
+        : Factory(GetFactory(lexers, ansi, antlr4))
     {
     }
 
     bool Tokenize(const TString& query, const TString& queryName, const TTokenCallback& onNextToken, NYql::TIssues& issues, size_t maxErrors) override {
-        NYql::TIssues newIssues;
 #if defined(_tsan_enabled_)
         TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
-        NSQLTranslation::TErrorCollectorOverIssues collector(newIssues, maxErrors, queryName);
-        if (Ansi && !Antlr4) {
-            NProtoAST::TLexerTokensCollector3<NALPAnsi::SQLv1Lexer> tokensCollector(query, (const char**)NALPAnsi::SQLv1ParserTokenNames, queryName);
-            tokensCollector.CollectTokens(collector, onNextToken);
-        } else if (!Ansi && !Antlr4) {
-            NProtoAST::TLexerTokensCollector3<NALPDefault::SQLv1Lexer> tokensCollector(query, (const char**)NALPDefault::SQLv1ParserTokenNames, queryName);
-            tokensCollector.CollectTokens(collector, onNextToken);
-        } else if (Ansi && Antlr4) {
-            NProtoAST::TLexerTokensCollector4<NALPAnsiAntlr4::SQLv1Antlr4Lexer> tokensCollector(query, queryName);
-            tokensCollector.CollectTokens(collector, onNextToken);
-        } else {
-            NProtoAST::TLexerTokensCollector4<NALPDefaultAntlr4::SQLv1Antlr4Lexer> tokensCollector(query, queryName);
-            tokensCollector.CollectTokens(collector, onNextToken);
-        }
-
-        issues.AddIssues(newIssues);
-        return !AnyOf(newIssues.begin(), newIssues.end(), [](auto issue) { return issue.GetSeverity() == NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR; });
+        return Factory->MakeLexer()->Tokenize(query, queryName, onNextToken, issues, maxErrors);
     }
 
 private:
-    const bool Ansi;
-    const bool Antlr4;
+    static NSQLTranslation::TLexerFactoryPtr GetFactory(const TLexers& lexers, bool ansi, bool antlr4) {
+        if (!ansi && !antlr4) {
+            if (lexers.Antlr3) {
+                return lexers.Antlr3;
+            }
+
+            if (lexers.Antlr4) {
+                return lexers.Antlr4;
+            }
+
+            return MakeDummyLexerFactory("antlr3");
+        } else if (ansi && !antlr4) {
+            if (lexers.Antlr3Ansi) {
+                return lexers.Antlr3Ansi;
+            }
+
+            if (lexers.Antlr4Ansi) {
+                return lexers.Antlr4Ansi;
+            }
+
+            return MakeDummyLexerFactory("antlr3_ansi");
+        } else if (!ansi && antlr4) {
+            if (lexers.Antlr4) {
+                return lexers.Antlr4;
+            }
+
+            return MakeDummyLexerFactory("antlr4");
+        } else {
+            if (lexers.Antlr4Ansi) {
+                return lexers.Antlr4Ansi;
+            }
+
+            return MakeDummyLexerFactory("antlr4_ansi");
+        }
+    }
+
+private:
+    NSQLTranslation::TLexerFactoryPtr Factory;
 };
 
 } // namespace
 
 NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi, bool antlr4) {
-    return NSQLTranslation::ILexer::TPtr(new TV1Lexer(ansi, antlr4));
+    return NSQLTranslation::ILexer::TPtr(new TV1Lexer(MakeAllLexers(), ansi, antlr4));
+}
+
+NSQLTranslation::ILexer::TPtr MakeLexer(const TLexers& lexers, bool ansi, bool antlr4) {
+    return NSQLTranslation::ILexer::TPtr(new TV1Lexer(lexers, ansi, antlr4));
 }
 
 bool IsProbablyKeyword(const NSQLTranslation::TParsedToken& token) {

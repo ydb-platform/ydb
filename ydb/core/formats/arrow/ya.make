@@ -24,33 +24,16 @@ PEERDIR(
     yql/essentials/core/arrow_kernels/request
 )
 
-IF (OS_WINDOWS)
-    ADDINCL(
-        ydb/library/yql/udfs/common/clickhouse/client/base
-        ydb/library/arrow_clickhouse
-    )
-ELSE()
-    PEERDIR(
-        ydb/library/arrow_clickhouse
-    )
-    ADDINCL(
-        ydb/library/arrow_clickhouse
-    )
-ENDIF()
-
 YQL_LAST_ABI_VERSION()
 
 SRCS(
     arrow_batch_builder.cpp
-    arrow_filter.cpp
     arrow_helpers.cpp
+    arrow_filter.cpp
     converter.cpp
     converter.h
-    custom_registry.cpp
     permutations.cpp
-    program.cpp
     size_calcer.cpp
-    ssa_program_optimizer.cpp
     special_keys.cpp
     process_columns.cpp
 )

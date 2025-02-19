@@ -865,7 +865,7 @@ TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData)
 {
-    if (!EnsureMaxArgsCount(*node, 4, ctx) && !EnsureMinArgsCount(*node, 3, ctx)) {
+    if (!EnsureMaxArgsCount(*node, 5, ctx) && !EnsureMinArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
     }
 

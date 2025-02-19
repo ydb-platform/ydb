@@ -22,6 +22,21 @@ TString WrapYaml(const TString& yaml) {
     return out.Str();
 }
 
+TString WrapStaticConfig(const TString& yaml) {
+    auto newDoc = NFyaml::TDocument::Parse("---\nmetadata: {}\nconfig: {}\n");
+    auto inputDoc = NFyaml::TDocument::Parse(yaml);
+
+    auto configNode = inputDoc.Root().Copy(newDoc);
+    newDoc.Root().Map().pair_at("config").SetValue(configNode.Ref());
+
+    auto metadataNode = newDoc.Root().Map().pair_at("metadata").Value().Map();
+    metadataNode.Append(newDoc.Buildf("kind"), newDoc.Buildf("MainConfig"));
+    metadataNode.Append(newDoc.Buildf("cluster"), newDoc.Buildf("\"\""));
+    metadataNode.Append(newDoc.Buildf("version"), newDoc.Buildf("0"));
+
+    return TString(newDoc.EmitToCharArray().get());
+}
+
 TCommandConfig::TCommandConfig(
         TCommandFlagsOverrides commandFlagsOverrides,
         bool allowEmptyDatabase)
@@ -31,6 +46,7 @@ TCommandConfig::TCommandConfig(
     AddCommand(std::make_unique<TCommandConfigFetch>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigReplace>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());
+    AddCommand(std::make_unique<TCommandGenerateDynamicConfig>(allowEmptyDatabase));
 }
 
 TCommandConfig::TCommandConfig(bool allowEmptyDatabase)
@@ -683,6 +699,33 @@ int TCommandConfigVolatileFetch::Run(TConfig& config) {
                 out << cfg;
             }
         }
+    }
+
+    return EXIT_SUCCESS;
+}
+
+TCommandGenerateDynamicConfig::TCommandGenerateDynamicConfig(bool allowEmptyDatabase)
+    : TYdbReadOnlyCommand("generate", {}, "Generate dynamic config from startup static config")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandGenerateDynamicConfig::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+}
+
+int TCommandGenerateDynamicConfig::Run(TConfig& config) {
+    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+
+    auto result = client.FetchStartupConfig().GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    if (NYamlConfig::IsStaticConfig(TString{result.GetConfig()})) {
+        Cout << WrapStaticConfig(TString{result.GetConfig()});
+    } else {
+        Cout << "Startup config is already dynamic" << Endl;
     }
 
     return EXIT_SUCCESS;

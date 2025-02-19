@@ -572,16 +572,14 @@ public:
     virtual void Shutdown() = 0;
 };
 
-
 /// Create a client for particular MapReduce cluster.
 IClientPtr CreateClient(
     const TString& serverName,
-    const TCreateClientOptions& options = TCreateClientOptions());
-
+    const TCreateClientOptions& options = {});
 
 /// Create a client for mapreduce cluster specified in `YT_PROXY` environment variable.
 IClientPtr CreateClientFromEnv(
-    const TCreateClientOptions& options = TCreateClientOptions());
+    const TCreateClientOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

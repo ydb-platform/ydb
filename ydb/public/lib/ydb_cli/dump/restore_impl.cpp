@@ -69,6 +69,14 @@ TString ReadAsyncReplicationQuery(const TFsPath& fsDirPath, const TLog* log) {
     return ReadFromFile(fsDirPath, log, NFiles::CreateAsyncReplication());
 }
 
+TString ReadExternalDataSourceQuery(const TFsPath& fsDirPath, const TLog* log) {
+    return ReadFromFile(fsDirPath, log, NFiles::CreateExternalDataSource());
+}
+
+TString ReadExternalTableQuery(const TFsPath& fsDirPath, const TLog* log) {
+    return ReadFromFile(fsDirPath, log, NFiles::CreateExternalTable());
+}
+
 template <typename TProtoType>
 TProtoType ReadProtoFromFile(const TFsPath& fsDirPath, const TLog* log, const NFiles::TFileInfo& fileInfo) {
     TProtoType proto;
@@ -293,6 +301,112 @@ TString TBatch::GetLocation() const {
     return result;
 }
 
+TDelayedRestoreCall::TDelayedRestoreCall(
+    ESchemeEntryType type,
+    TFsPath fsPath,
+    TString dbPath,
+    TRestoreSettings settings,
+    bool isAlreadyExisting
+)
+    : Type(type)
+    , FsPath(fsPath)
+    , DbPath(dbPath)
+    , Settings(settings)
+    , IsAlreadyExisting(isAlreadyExisting)
+{}
+
+TDelayedRestoreCall::TDelayedRestoreCall(
+    ESchemeEntryType type,
+    TFsPath fsPath,
+    TString dbRestoreRoot,
+    TString dbPathRelativeToRestoreRoot,
+    TRestoreSettings settings,
+    bool isAlreadyExisting
+)
+    : Type(type)
+    , FsPath(fsPath)
+    , DbPath(TTwoComponentPath(dbRestoreRoot, dbPathRelativeToRestoreRoot))
+    , Settings(settings)
+    , IsAlreadyExisting(isAlreadyExisting)
+{}
+
+int TDelayedRestoreCall::GetOrder() const {
+    switch (Type) {
+        case ESchemeEntryType::View:
+            return std::numeric_limits<int>::max();
+        default:
+            return 0;
+    }
+}
+
+auto operator<=>(const TDelayedRestoreCall& lhs, const TDelayedRestoreCall& rhs) {
+    return lhs.GetOrder() <=> rhs.GetOrder();
+}
+
+TRestoreResult TDelayedRestoreManager::Restore(const TDelayedRestoreCall& call) {
+    switch (call.Type) {
+        case ESchemeEntryType::View: {
+            const auto& [dbRestoreRoot, dbPathRelativeToRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
+            return Client->RestoreView(call.FsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, call.Settings, call.IsAlreadyExisting);
+        }
+        case ESchemeEntryType::ExternalTable: {
+            const auto& dbPath = std::get<TDelayedRestoreCall::TSimplePath>(call.DbPath);
+            return Client->RestoreExternalTable(call.FsPath, dbPath, call.Settings, call.IsAlreadyExisting);
+        }
+        default:
+            ythrow TBadArgumentException() << "Attempting to restore an unexpected object from: " << call.FsPath;
+    }
+}
+
+bool TDelayedRestoreManager::ShouldRetry(const TRestoreResult& result, ESchemeEntryType type) {
+    switch (type) {
+        case ESchemeEntryType::View:
+            return result.GetStatus() == EStatus::SCHEME_ERROR;
+        default:
+            return false;
+    }
+}
+
+TRestoreResult TDelayedRestoreManager::RestoreWithRetries(TVector<TDelayedRestoreCall>&& callsToRetry) {
+    bool stopRetries = false;
+    TVector<TDelayedRestoreCall> nextRound;
+    while (!callsToRetry.empty()) {
+        nextRound.clear();
+        for (const auto& call : callsToRetry) {
+            auto result = Restore(call);
+            if (!result.IsSuccess()) {
+                if (stopRetries || !ShouldRetry(result, call.Type)) {
+                    return result;
+                }
+                nextRound.emplace_back(call);
+            }
+        }
+        // errors are persistent
+        stopRetries = nextRound.size() == callsToRetry.size();
+        std::swap(nextRound, callsToRetry);
+    }
+    return Result<TRestoreResult>();
+}
+
+void TDelayedRestoreManager::SetClient(TRestoreClient& client) {
+    Client = &client;
+}
+
+TRestoreResult TDelayedRestoreManager::RestoreDelayed() {
+    std::sort(Calls.begin(), Calls.end());
+    TVector<TDelayedRestoreCall> callsToRetry;
+    for (const auto& call : Calls) {
+        auto result = Restore(call);
+        if (!result.IsSuccess()) {
+            if (!ShouldRetry(result, call.Type)) {
+                return result;
+            }
+            callsToRetry.emplace_back(call);
+        }
+    }
+    return RestoreWithRetries(std::move(callsToRetry));
+}
+
 } // NPrivate
 
 TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log)
@@ -308,36 +422,7 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
     , Log(log)
     , DriverConfig(driver.GetConfig())
 {
-}
-
-TRestoreResult TRestoreClient::RetryViewRestoration() {
-    auto result = Result<TRestoreResult>();
-
-    if (!ViewRestorationCalls.empty()) {
-        TVector<TRestoreViewCall> calls;
-        TMaybe<TRestoreResult> lastFail;
-        size_t size;
-        do {
-            calls.clear();
-            lastFail.Clear();
-            size = ViewRestorationCalls.size();
-            std::swap(calls, ViewRestorationCalls);
-
-            for (const auto& [fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, isAlreadyExisting] : calls) {
-                auto result = RestoreView(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, isAlreadyExisting);
-                if (!result.IsSuccess()) {
-                    lastFail = std::move(result);
-                }
-            }
-        } while (!ViewRestorationCalls.empty() && ViewRestorationCalls.size() < size);
-
-        // retries could not fix the errors
-        if (!ViewRestorationCalls.empty() || lastFail) {
-            result = *lastFail;
-        }
-    }
-
-    return result;
+    DelayedRestoreManager.SetClient(*this);
 }
 
 TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
@@ -376,8 +461,8 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
     // restore
     auto restoreResult = RestoreFolder(fsPath, dbPath, "", settings, oldEntries);
-    if (auto retryViewResult = RetryViewRestoration(); !retryViewResult.IsSuccess()) {
-        restoreResult = retryViewResult;
+    if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
+        restoreResult = result;
     }
 
     if (restoreResult.IsSuccess()) {
@@ -399,6 +484,8 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         return restoreResult;
     }
 
+    TVector<const TSchemeEntry*> entriesToDropInSecondPass;
+
     for (const auto& entry : newDirectoryList.Entries) {
         if (oldEntries.contains(entry.Name)) {
             continue;
@@ -419,7 +506,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
                 break;
             case ESchemeEntryType::View:
                 result = QueryClient.RetryQuerySync([&path = fullPath](NQuery::TSession session) {
-                    return session.ExecuteQuery(std::format("DROP VIEW IF EXISTS `{}`;", path),
+                    return session.ExecuteQuery(std::format("DROP VIEW `{}`;", path),
                         NQuery::TTxControl::NoTx()).ExtractValueSync();
                 });
                 break;
@@ -433,6 +520,15 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
                     return client.DropNode(path).ExtractValueSync();
                 });
                 break;
+            case ESchemeEntryType::ExternalDataSource:
+                entriesToDropInSecondPass.emplace_back(&entry);
+                continue;
+            case ESchemeEntryType::ExternalTable:
+                result = QueryClient.RetryQuerySync([&path = fullPath](NQuery::TSession session) {
+                    return session.ExecuteQuery(std::format("DROP EXTERNAL TABLE `{}`;", path),
+                        NQuery::TTxControl::NoTx()).ExtractValueSync();
+                });
+                break;
             default:
                 break;
         }
@@ -442,7 +538,27 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
             return restoreResult;
         } else if (!result->IsSuccess()) {
             LOG_E("Error removing " << entry.Type << ": " << TString{fullPath}.Quote()
-                << ": " << result->GetIssues().ToOneLineString());
+                << ", issues: " << result->GetIssues().ToOneLineString());
+            return restoreResult;
+        }
+    }
+
+    for (const auto* entry : entriesToDropInSecondPass) {
+        TMaybe<TStatus> result;
+        switch (entry->Type) {
+            case ESchemeEntryType::ExternalDataSource:
+                result = QueryClient.RetryQuerySync([&path = entry->Name](NQuery::TSession session) {
+                    return session.ExecuteQuery(std::format("DROP EXTERNAL DATA SOURCE `{}`;", path),
+                        NQuery::TTxControl::NoTx()).ExtractValueSync();
+                });
+                break;
+            default:
+                break;
+        }
+        Y_ENSURE(result, "Unexpected entry to drop in the second pass");
+        if (!result->IsSuccess()) {
+            LOG_E("Error removing " << entry->Type << ": " << TString{entry->Name}.Quote()
+                << ", issues: " << result->GetIssues().ToOneLineString());
             return restoreResult;
         }
     }
@@ -476,7 +592,7 @@ TRestoreResult TRestoreClient::RestoreClusterRoot(const TFsPath& fsPath) {
     }
 
     LOG_I("Restore cluster root " << ClusterRootPath.Quote() << " from " << fsPath.GetPath().Quote());
-    
+
     if (!fsPath.Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "Specified folder does not exist: " << fsPath.GetPath());
@@ -508,7 +624,7 @@ TRestoreResult TRestoreClient::RestoreClusterRoot(const TFsPath& fsPath) {
     if (auto result = RestoreGroupMembers(rootTableClient, fsPath, ClusterRootPath); !result.IsSuccess()) {
         return result;
     }
-    
+
     if (auto result = RestorePermissionsImpl(rootSchemeClient, fsPath, ClusterRootPath); !result.IsSuccess()) {
         return result;
     }
@@ -521,7 +637,7 @@ TRestoreResult TRestoreClient::WaitForAvailableNodes(const TString& database, TD
     dbDriverConfig.SetDatabase(database);
 
     THPTimer timer;
-    
+
     NDiscovery::TDiscoveryClient client(dbDriverConfig);
     TDuration retrySleep = TDuration::MilliSeconds(1000);
     while (true) {
@@ -561,13 +677,13 @@ TRestoreResult TRestoreClient::RestoreUsers(TTableClient& client, const TFsPath&
         auto statementResult = client.RetryOperationSync([&](TSession session) {
             return session.ExecuteSchemeQuery(statement).ExtractValueSync();
         });
-        
+
         if (statement.StartsWith("CREATE")
             && statementResult.GetStatus() == EStatus::PRECONDITION_FAILED
             && statementResult.GetIssues().ToOneLineString().find("exists") != TString::npos)
         {
             LOG_D("User from create statement " << statement.Quote() << " already exists, trying to alter it");
-            auto alterStatement = "ALTER" + statement.substr(6); 
+            auto alterStatement = "ALTER" + statement.substr(6);
             auto alterStatementResult = client.RetryOperationSync([&](TSession session) {
                 return session.ExecuteSchemeQuery(alterStatement).ExtractValueSync();
             });
@@ -658,7 +774,7 @@ TRestoreResult TRestoreClient::ReplaceClusterRoot(TString& outPath) {
     if (clusterRootEnd != std::string::npos) {
         outPath = ClusterRootPath + outPath.substr(clusterRootEnd);
     } else {
-        return Result<TRestoreResult>(EStatus::INTERNAL_ERROR, 
+        return Result<TRestoreResult>(EStatus::INTERNAL_ERROR,
             TStringBuilder() << "Can't find cluster root path in "
             << outPath.Quote() << " to replace it on "
             << ClusterRootPath.Quote());
@@ -686,7 +802,7 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
     }
 
     LOG_I("Restore database from " << fsPath.Quote() << " to " << dbPath.Quote());
-    
+
     if (auto result = CreateDatabase(CmsClient, dbPath, TCreateDatabaseSettings(dbDesc)); !result.IsSuccess()) {
         if (result.GetStatus() == EStatus::ALREADY_EXISTS) {
             LOG_W("Database " << dbPath.Quote() << " already exists, continue restoring to this database");
@@ -723,8 +839,8 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
 
     if (settings.WithContent_) {
         auto restoreResult = RestoreFolder(fsPath, dbPath, "", {}, {});
-        if (auto retryViewResult = RetryViewRestoration(); !retryViewResult.IsSuccess()) {
-            restoreResult = retryViewResult;
+        if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
+            restoreResult = result;
         }
         return restoreResult;
     } else {
@@ -761,6 +877,7 @@ TRestoreResult TRestoreClient::RestoreDatabases(const TFsPath& fsPath, const TRe
     if (IsFileExists(fsPath.Child(NFiles::Database().FileName))) {
         TRestoreDatabaseSettings dbSettings = {
             .WaitNodesDuration_ = settings.WaitNodesDuration_,
+            .Database_ = std::nullopt,
             .WithContent_ = false
         };
 
@@ -849,8 +966,7 @@ TRestoreResult TRestoreClient::RestoreFolder(
     }
 
     if (IsFileExists(fsPath.Child(NFiles::CreateView().FileName))) {
-        // delay view restoration
-        ViewRestorationCalls.emplace_back(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, oldEntries.contains(objectDbPath));
+        DelayedRestoreManager.Add(ESchemeEntryType::View, fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, oldEntries.contains(objectDbPath));
         return Result<TRestoreResult>();
     }
 
@@ -864,6 +980,15 @@ TRestoreResult TRestoreClient::RestoreFolder(
 
     if (IsFileExists(fsPath.Child(NFiles::CreateAsyncReplication().FileName))) {
         return RestoreReplication(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, oldEntries.contains(objectDbPath));
+    }
+
+    if (IsFileExists(fsPath.Child(NFiles::CreateExternalDataSource().FileName))) {
+        return RestoreExternalDataSource(fsPath, objectDbPath, settings, oldEntries.contains(objectDbPath));
+    }
+
+    if (IsFileExists(fsPath.Child(NFiles::CreateExternalTable().FileName))) {
+        DelayedRestoreManager.Add(ESchemeEntryType::ExternalTable, fsPath, objectDbPath, settings, oldEntries.contains(objectDbPath));
+        return Result<TRestoreResult>();
     }
 
     if (IsFileExists(fsPath.Child(NFiles::Empty().FileName))) {
@@ -881,14 +1006,17 @@ TRestoreResult TRestoreClient::RestoreFolder(
         } else if (IsFileExists(child.Child(NFiles::Empty().FileName))) {
             result = RestoreEmptyDir(child, childDbPath, settings, oldEntries.contains(childDbPath));
         } else if (IsFileExists(child.Child(NFiles::CreateView().FileName))) {
-            // delay view restoration
-            ViewRestorationCalls.emplace_back(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings, oldEntries.contains(childDbPath));
+            DelayedRestoreManager.Add(ESchemeEntryType::View, child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings, oldEntries.contains(childDbPath));
         } else if (IsFileExists(child.Child(NFiles::CreateTopic().FileName))) {
             result = RestoreTopic(child, childDbPath, settings, oldEntries.contains(childDbPath));
         } else if (IsFileExists(child.Child(NFiles::CreateCoordinationNode().FileName))) {
             result = RestoreCoordinationNode(child, childDbPath, settings, oldEntries.contains(childDbPath));
         } else if (IsFileExists(child.Child(NFiles::CreateAsyncReplication().FileName))) {
             result = RestoreReplication(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings, oldEntries.contains(childDbPath));
+        } else if (IsFileExists(child.Child(NFiles::CreateExternalDataSource().FileName))) {
+            result = RestoreExternalDataSource(child, childDbPath, settings, oldEntries.contains(childDbPath));
+        } else if (IsFileExists(child.Child(NFiles::CreateExternalTable().FileName))) {
+            DelayedRestoreManager.Add(ESchemeEntryType::ExternalTable, child, childDbPath, settings, oldEntries.contains(childDbPath));
         } else if (child.IsDirectory()) {
             result = RestoreFolder(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings, oldEntries);
         }
@@ -900,7 +1028,7 @@ TRestoreResult TRestoreClient::RestoreFolder(
 
     const bool dbPathExists = oldEntries.contains(dbPath);
     if (!result.Defined() && !dbPathExists) {
-        // This situation occurs when all the children of the folder are views.
+        // This situation arises when all the children of the file system path are scheme objects with a delayed restoration.
         return RestoreEmptyDir(fsPath, dbPath, settings, dbPathExists);
     }
 
@@ -946,9 +1074,6 @@ TRestoreResult TRestoreClient::RestoreView(
 
     if (result.GetStatus() == EStatus::SCHEME_ERROR) {
         LOG_I("Failed to create " << dbPath.Quote() << ". Will retry.");
-        // Scheme error happens when the view depends on a table (or a view) that is not yet restored.
-        // Instead of tracking view dependencies, we simply retry the creation of the view later.
-        ViewRestorationCalls.emplace_back(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, isAlreadyExisting);
     } else {
         LOG_E("Failed to create " << dbPath.Quote());
     }
@@ -1110,6 +1235,82 @@ TRestoreResult TRestoreClient::RestoreCoordinationNode(
             return Result<TRestoreResult>(dbPath, std::move(result));
         }
 
+        LOG_D("Created " << dbPath.Quote());
+        return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
+    }
+
+    LOG_E("Failed to create " << dbPath.Quote());
+    return Result<TRestoreResult>(dbPath, std::move(result));
+}
+
+TRestoreResult TRestoreClient::RestoreExternalDataSource(
+    const TFsPath& fsPath,
+    const TString& dbPath,
+    const TRestoreSettings& settings,
+    bool isAlreadyExisting)
+{
+    LOG_D("Process " << fsPath.GetPath().Quote());
+
+    if (auto error = ErrorOnIncomplete(fsPath)) {
+        return *error;
+    }
+
+    LOG_I("Restore external data source " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
+
+    if (settings.DryRun_) {
+        return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::ExternalDataSource);
+    }
+
+    TString query = ReadExternalDataSourceQuery(fsPath, Log.get());
+
+    NYql::TIssues issues;
+    if (!RewriteCreateQuery(query, "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}`", dbPath, issues)) {
+        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
+    }
+
+    auto result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
+        return session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    });
+
+    if (result.IsSuccess()) {
+        LOG_D("Created " << dbPath.Quote());
+        return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
+    }
+
+    LOG_E("Failed to create " << dbPath.Quote());
+    return Result<TRestoreResult>(dbPath, std::move(result));
+}
+
+TRestoreResult TRestoreClient::RestoreExternalTable(
+    const TFsPath& fsPath,
+    const TString& dbPath,
+    const TRestoreSettings& settings,
+    bool isAlreadyExisting)
+{
+    LOG_D("Process " << fsPath.GetPath().Quote());
+
+    if (auto error = ErrorOnIncomplete(fsPath)) {
+        return *error;
+    }
+
+    LOG_I("Restore external table " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
+
+    if (settings.DryRun_) {
+        return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::ExternalTable);
+    }
+
+    TString query = ReadExternalTableQuery(fsPath, Log.get());
+
+    NYql::TIssues issues;
+    if (!RewriteCreateQuery(query, "CREATE EXTERNAL TABLE IF NOT EXISTS `{}`", dbPath, issues)) {
+        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
+    }
+
+    auto result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
+        return session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    });
+
+    if (result.IsSuccess()) {
         LOG_D("Created " << dbPath.Quote());
         return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
     }
@@ -1544,7 +1745,7 @@ TRestoreResult TRestoreClient::RestorePermissionsImpl(
     if (result.GetStatus() == EStatus::UNAUTHORIZED) {
         LOG_W("Not enough rights to restore permissions on " << dbPath.Quote() << ", skipping");
         return Result<TRestoreResult>();
-    } 
+    }
 
     return result;
 }

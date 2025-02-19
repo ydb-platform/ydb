@@ -294,6 +294,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
     NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
     NCommon::TConfSetting<bool, false> JobBlockInput;
+    NCommon::TConfSetting<bool, false> JobBlockTableContent;
     NCommon::TConfSetting<TSet<TString>, false> JobBlockInputSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, false> JobBlockInputSupportedDataTypes;
     NCommon::TConfSetting<EBlockOutputMode, false> JobBlockOutput;

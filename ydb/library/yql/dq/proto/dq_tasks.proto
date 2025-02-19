@@ -210,5 +210,5 @@ message TDqTask {
     map<string, string> RequestContext = 18;
     optional bool EnableSpilling = 19;
     optional uint32 ArrayBufferMinFillPercentage = 20;
-    optional bool EnableMetering = 21;
+    optional bool DisableMetering = 22;
 }

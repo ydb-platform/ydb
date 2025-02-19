@@ -161,6 +161,14 @@ public:
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Replication;
     }
 
+    bool IsExternalDataSource() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::ExternalDataSource;
+    }
+
+    bool IsExternalTable() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::ExternalTable;
+    }
+
     bool IsListed() const {
         return NextNodes.front().IsListed;
     }

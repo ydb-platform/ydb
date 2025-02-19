@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp/ut/common
     yql/essentials/sql
+    yql/essentials/sql/v1
     yql/essentials/utils/log
 
     ydb/core/testlib/basics/default

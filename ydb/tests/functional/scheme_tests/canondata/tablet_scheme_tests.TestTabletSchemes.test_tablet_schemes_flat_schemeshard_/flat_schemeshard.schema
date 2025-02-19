@@ -1169,6 +1169,11 @@
                 "ColumnId": 10,
                 "ColumnName": "NeedToBill",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "EnableChecksums",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1184,7 +1189,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4549,6 +4555,11 @@
                 "ColumnId": 11,
                 "ColumnName": "NeedToBill",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "EnableChecksums",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -4565,7 +4576,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6201,6 +6213,16 @@
                 "ColumnId": 14,
                 "ColumnName": "PreparedCreationQuery",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "Changefeeds",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "NextChangefeedIdx",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -6220,7 +6242,9 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

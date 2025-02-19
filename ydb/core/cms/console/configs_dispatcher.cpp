@@ -181,6 +181,7 @@ public:
     void Handle(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr &ev);
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     void Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev);
+    void Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &ev);
 
     void ReplyMonJson(TActorId mailbox);
 
@@ -199,6 +200,7 @@ public:
             hFuncTraced(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle);
             // Resolve
             hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
+            hFunc(TEvConsole::TEvFetchStartupConfigRequest, Handle);
         default:
             EnqueueEvent(ev);
             break;
@@ -223,7 +225,7 @@ public:
             IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             // Resolve
             hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
-
+            hFunc(TEvConsole::TEvFetchStartupConfigRequest, Handle);
             // Ignore these console requests until we get rid of persistent subscriptions-related code
             IgnoreFunc(TEvConsole::TEvAddConfigSubscriptionResponse);
             IgnoreFunc(TEvConsole::TEvGetNodeConfigResponse);
@@ -242,6 +244,7 @@ private:
     const std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     const NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig CurrentConfig;
+    const TString StartupConfigYaml;
     NKikimrConfig::TAppConfig CandidateStartupConfig;
     bool StartupConfigProcessError = false;
     bool StartupConfigProcessDiff = false;
@@ -275,6 +278,7 @@ TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInf
         , ItemsServeRules(initInfo.ItemsServeRules)
         , BaseConfig(initInfo.InitialConfig)
         , CurrentConfig(initInfo.InitialConfig)
+        , StartupConfigYaml(initInfo.StartupConfigYaml)
         , CandidateStartupConfig(initInfo.InitialConfig)
         , DebugInfo(initInfo.DebugInfo)
         , RecordedInitialConfiguratorDeps(std::move(initInfo.RecordedInitialConfiguratorDeps))
@@ -1228,6 +1232,15 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev) {
         labelSer->set_label(label);
         labelSer->set_value(value);
     }
+
+    Send(ev->Sender, Response.Release());
+}
+
+void TConfigsDispatcher::Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &ev) {
+    auto Response = MakeHolder<TEvConsole::TEvFetchStartupConfigResponse>();
+
+    auto* resp = Response->Record.MutableResponse();
+    resp->set_config(StartupConfigYaml);
 
     Send(ev->Sender, Response.Release());
 }

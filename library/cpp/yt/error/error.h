@@ -56,6 +56,9 @@ void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Forward declaration.
+class TErrorException;
+
 template <class TValue>
 concept CErrorNestable = requires (TError& error, TValue&& operand)
 {
@@ -71,6 +74,8 @@ public:
 
     TErrorOr(const TError& other);
     TErrorOr(TError&& other) noexcept;
+
+    TErrorOr(const TErrorException& errorEx) noexcept;
 
     TErrorOr(const std::exception& ex);
 
@@ -364,6 +369,8 @@ public:
 
     TErrorOr(const TError& other);
     TErrorOr(TError&& other) noexcept;
+
+    TErrorOr(const TErrorException& errorEx) noexcept;
 
     TErrorOr(const std::exception& ex);
 

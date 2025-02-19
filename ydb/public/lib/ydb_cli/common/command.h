@@ -91,6 +91,7 @@ public:
         };
 
         static ELogPriority VerbosityLevelToELogPriority(EVerbosityLevel lvl);
+        static ELogPriority VerbosityLevelToELogPriorityChatty(EVerbosityLevel lvl);
 
         int ArgC;
         char** ArgV;

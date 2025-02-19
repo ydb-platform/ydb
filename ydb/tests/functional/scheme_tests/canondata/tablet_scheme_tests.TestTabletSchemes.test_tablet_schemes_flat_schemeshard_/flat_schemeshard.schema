@@ -8036,10 +8036,11 @@
         }
     },
     {
-        "TableId": 112,
-        "TableName": "KMeansTreeState",
+        "TableId": 113,
+        "TableName": "KMeansTreeSample",
         "TableKey": [
-            1
+            1,
+            2
         ],
         "ColumnsAdded": [
             {
@@ -8049,18 +8050,18 @@
             },
             {
                 "ColumnId": 2,
-                "ColumnName": "Level",
+                "ColumnName": "Row",
                 "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 3,
-                "ColumnName": "Parent",
-                "ColumnType": "Uint32"
+                "ColumnName": "Probability",
+                "ColumnType": "Uint64"
             },
             {
                 "ColumnId": 4,
-                "ColumnName": "State",
-                "ColumnType": "Uint32"
+                "ColumnName": "Data",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -8092,11 +8093,10 @@
         }
     },
     {
-        "TableId": 113,
-        "TableName": "KMeansTreeSample",
+        "TableId": 114,
+        "TableName": "KMeansTreeProgress",
         "TableKey": [
-            1,
-            2
+            1
         ],
         "ColumnsAdded": [
             {
@@ -8106,18 +8106,18 @@
             },
             {
                 "ColumnId": 2,
-                "ColumnName": "Row",
+                "ColumnName": "Level",
                 "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 3,
-                "ColumnName": "Probability",
-                "ColumnType": "Uint64"
+                "ColumnName": "State",
+                "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 4,
-                "ColumnName": "Data",
-                "ColumnType": "String"
+                "ColumnName": "Parent",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],

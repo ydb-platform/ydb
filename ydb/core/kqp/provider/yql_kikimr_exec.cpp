@@ -2642,7 +2642,7 @@ public:
         if (auto maybeAnalyze = TMaybeNode<TKiAnalyzeTable>(input)) {
             if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
                 ctx.AddError(TIssue("ANALYZE command is not supported because `EnableColumnStatistics` feature flag is off"));
-                return SyncError();            
+                return SyncError();
             }
 
             auto cluster = TString(maybeAnalyze.Cast().DataSink().Cluster());

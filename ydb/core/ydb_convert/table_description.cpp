@@ -1138,7 +1138,7 @@ void FillAttributesImpl(TOutProto& out, const TInProto& in) {
 }
 void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
     const NKikimrSchemeOp::TCdcStreamDescription& in) {
-    
+
     out.set_name(in.GetName());
     out.set_virtual_timestamps(in.GetVirtualTimestamps());
     out.set_aws_region(in.GetAwsRegion());

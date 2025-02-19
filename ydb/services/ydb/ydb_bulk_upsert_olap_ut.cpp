@@ -454,7 +454,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             csvSettings.set_delimiter("|");
 
             TString formatSettings;
-            Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+            UNIT_ASSERT(csvSettings.SerializeToString(&formatSettings));
 
             NYdb::NTable::TBulkUpsertSettings upsertSettings;
             upsertSettings.FormatSettings(formatSettings);
@@ -510,7 +510,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             csvSettings.set_delimiter(",");
 
             TString formatSettings;
-            Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+            UNIT_ASSERT(csvSettings.SerializeToString(&formatSettings));
 
             NYdb::NTable::TBulkUpsertSettings upsertSettings;
             upsertSettings.FormatSettings(formatSettings);
@@ -559,7 +559,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             csvSettings.set_delimiter(",");
 
             TString formatSettings;
-            Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+            UNIT_ASSERT(csvSettings.SerializeToString(&formatSettings));
 
             NYdb::NTable::TBulkUpsertSettings upsertSettings;
             upsertSettings.FormatSettings(formatSettings);
@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
-        TTestOlap::CreateTable(*server.ServerSettings); // 2 shards
+        TTestOlap::CreateTable(*server.ServerSettings);
 
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -669,7 +669,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
                 csvSettings.set_header(true);
 
                 TString formatSettings;
-                Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+                UNIT_ASSERT(csvSettings.SerializeToString(&formatSettings));
                 upsertSettings.FormatSettings(formatSettings);
             }
 
@@ -937,7 +937,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
                 csvSettings.set_header(true);
 
                 TString formatSettings;
-                Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+                UNIT_ASSERT(csvSettings.SerializeToString(&formatSettings));
                 upsertSettings.FormatSettings(formatSettings);
             }
 
@@ -946,6 +946,81 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
 
             Cerr << "Reordered columns (with header): " << res.GetStatus() << Endl;
             UNIT_ASSERT(res.GetStatus() == EStatus::SUCCESS);
+        }
+    }
+
+    Y_UNIT_TEST(UpsertMixed) {
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+
+        TTestOlap::CreateTable(*server.ServerSettings);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+        TString tablePath = TTestOlap::TablePath;
+
+        {
+            TString csv =
+            "timestamp|resource_type|resource_id|uid|level|message|json_payload|ingested_at|saved_at|request_id\n"
+            "1970-01-01T00:00:00Z|OBJECT|123|guid|5|data|{}|1970-01-01T00:00:00Z|1970-01-01T00:00:00Z|125";
+
+            Ydb::Formats::CsvSettings csvSettings;
+            csvSettings.set_header(true);
+            csvSettings.set_delimiter("|");
+
+            TString formatSettings;
+            UNIT_ASSERT(csvSettings.SerializeToString(&formatSettings));
+
+            NYdb::NTable::TBulkUpsertSettings upsertSettings;
+            upsertSettings.FormatSettings(formatSettings);
+
+            auto res = client.BulkUpsert(tablePath,
+                NYdb::NTable::EDataFormat::CSV, csv, {}, upsertSettings).GetValueSync();
+
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+    
+        {
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            rowsBuilder.AddListItem()
+                .BeginStruct()
+                .AddMember("timestamp").OptionalTimestamp(TInstant::Now())
+                .AddMember("resource_type").OptionalUtf8("FILE")
+                .AddMember("resource_id").OptionalUtf8("124")
+                .AddMember("uid").OptionalUtf8("guid7")
+                .AddMember("level").OptionalInt32(6)
+                .AddMember("message").OptionalUtf8("data2")
+                .AddMember("json_payload").OptionalJsonDocument("{}")
+                .AddMember("ingested_at").OptionalTimestamp(TInstant::Now())
+                .AddMember("saved_at").OptionalTimestamp(TInstant::Now())
+                .AddMember("request_id").OptionalUtf8("126")
+                .EndStruct();
+            rowsBuilder.EndList();
+    
+            auto result = client.BulkUpsert(tablePath, rowsBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto srcBatch = TTestOlap::SampleBatch();
+            auto schema = srcBatch->schema();
+            TString strSchema = NArrow::SerializeSchema(*schema);
+            TString strBatch = NArrow::SerializeBatchNoCompression(srcBatch);
+    
+            auto res = client.BulkUpsert(tablePath,
+                NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema).GetValueSync();
+
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+
+        { // Read all
+            auto rows = ScanQuerySelect(client, tablePath);
+            UNIT_ASSERT_EQUAL(rows.size(), 102);
         }
     }
 }

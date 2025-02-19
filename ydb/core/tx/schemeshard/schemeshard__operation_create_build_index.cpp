@@ -60,10 +60,14 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         // TODO(mbkkt) less than necessary for vector index
         checks
-            .IsValidLeafName()
-            .PathsLimit(2) // index and impl-table
-            .DirChildrenLimit()
-            .ShardsLimit(1); // impl-table
+            .IsValidLeafName();
+
+        if (!tx.internal()) {
+            checks
+                .PathsLimit(2) // index and impl-table
+                .DirChildrenLimit()
+                .ShardsLimit(1); // impl-table
+        }
 
         if (!checks) {
             return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
@@ -118,6 +122,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
         *outTx.MutableCreateTable() = std::move(implTableDesc);
+        outTx.SetInternal(tx.GetInternal());
 
         return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx);
     };

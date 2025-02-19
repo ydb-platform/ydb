@@ -107,7 +107,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
     }
 
-    {
+    if (!tx.internal()) {
         auto checks = baseTablePath.Check();
         checks
             .PathShardsLimit(baseShards)
@@ -224,6 +224,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         auto scheme = TransactionTemplate(tx.GetWorkingDir(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         scheme.SetFailOnExist(tx.GetFailOnExist());
         scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+        scheme.SetInternal(tx.GetInternal());
 
         scheme.MutableCreateTable()->CopyFrom(baseTableDescription);
         if (tx.HasAlterUserAttributes()) {
@@ -270,6 +271,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
             scheme.SetFailOnExist(tx.GetFailOnExist());
             scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+            scheme.SetInternal(tx.GetInternal());
 
             *scheme.MutableCreateTable() = std::move(implTableDesc);
 

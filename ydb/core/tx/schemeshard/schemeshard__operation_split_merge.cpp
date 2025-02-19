@@ -751,7 +751,8 @@ public:
                 .NotUnderOperation();
 
             if (checks) {
-                if (dstCount >= srcCount) { //allow over commit for merge
+                // allow over commit for merge
+                if (dstCount >= srcCount && !Transaction.internal()) {
                     checks
                         .ShardsLimit(dstCount)
                         .PathShardsLimit(dstCount);

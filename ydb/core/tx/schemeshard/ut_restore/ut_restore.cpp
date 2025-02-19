@@ -296,7 +296,7 @@ namespace {
             case EPathTypeView:
                 result.emplace(prefix + "/create_view.sql", item.CreationQuery);
                 break;
-            case EPathTypeCdcStream: 
+            case EPathTypeCdcStream:
                 result.emplace(prefix +  "/changefeed_description.pb", item.Changefeed.Changefeed);
                 result.emplace(prefix +  "/topic_description.pb", item.Changefeed.Topic);
                 break;
@@ -5031,6 +5031,109 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     Y_UNIT_TEST(ChangefeedsWithTablePermissions) {
         TestImportChangefeeds(3, AddedSchemeWithPermissions);
     }
+
+    Y_UNIT_TEST(IgnoreBasicSchemeLimits) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Alice"
+        )");
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Alice"
+            ExternalSchemeShard: true
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            StoragePools {
+                Name: "Alice:hdd"
+                Kind: "hdd"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Alice"), {
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)
+        });
+        UNIT_ASSERT_UNEQUAL(tenantSchemeShard, 0);
+
+        TSchemeLimits basicLimits;
+        basicLimits.MaxShards = 4;
+        SetSchemeshardSchemaLimits(runtime, basicLimits, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Alice"), {
+            NLs::DomainLimitsIs(basicLimits.MaxPaths, basicLimits.MaxShards),
+            NLs::PathsInsideDomain(0),
+            NLs::ShardsInsideDomain(3)
+        });
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Alice", R"(
+            Name: "table1"
+            Columns { Name: "Key" Type: "Uint64" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["Key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Alice", R"(
+                Name: "table2"
+                Columns { Name: "Key" Type: "Uint64" }
+                Columns { Name: "Value" Type: "Utf8" }
+                KeyColumnNames: ["Key"]
+            )",
+            { NKikimrScheme::StatusResourceExhausted }
+        );
+
+        const auto data = GenerateTestData(R"(
+                columns {
+                    name: "key"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                primary_key: "key"
+                partition_at_keys {
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "b" } }
+                    }
+                }
+                indexes {
+                    name: "ByValue"
+                    index_columns: "value"
+                    global_index {}
+                }
+            )",
+            {{"a", 1}, {"b", 1}}
+        );
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const auto importId = ++txId;
+        TestImport(runtime, tenantSchemeShard, importId, "/MyRoot/Alice", Sprintf(R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: ""
+                        destination_path: "/MyRoot/Alice/ImportDir/Table"
+                    }
+                }
+            )",
+            port
+        ));
+        env.TestWaitNotification(runtime, importId, tenantSchemeShard);
+        TestGetImport(runtime, tenantSchemeShard, importId, "/MyRoot/Alice");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
@@ -5380,7 +5483,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         const auto changefeedName = "update_changefeed";
 
         schemes.emplace("", R"(
-            columns { 
+            columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
             }
@@ -5447,11 +5550,11 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
         )";
-        
+
         NAttr::TAttributes attr;
         attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
 
-        schemes.emplace("/update_feed", 
+        schemes.emplace("/update_feed",
             TTypedScheme {
                 EPathTypeCdcStream,
                 changefeedDesc,
@@ -5468,7 +5571,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
     Y_UNIT_TEST(CancelShouldSucceedOnSingleChangefeed) {
         CancelShouldSucceed(GetSchemeWithChangefeed());
     }
-  
+
     Y_UNIT_TEST(CancelShouldSucceedOnDependentView) {
         CancelShouldSucceed(
             {

@@ -115,10 +115,14 @@ public:
                 }
 
                 checks
-                    .IsValidLeafName()
-                    .PathsLimit(2) // index and impl-table
-                    .DirChildrenLimit()
-                    .ShardsLimit(1); // impl-table
+                    .IsValidLeafName();
+
+                if (!request.GetOperationParams().labels().contains("internal")) {
+                    checks
+                        .PathsLimit(2) // index and impl-table
+                        .DirChildrenLimit()
+                        .ShardsLimit(1); // impl-table
+                }
 
                 if (!checks) {
                     return Reply(checks.GetStatus(), checks.GetError());

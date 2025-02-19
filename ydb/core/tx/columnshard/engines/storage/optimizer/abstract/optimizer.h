@@ -194,7 +194,7 @@ private:
 
 public:
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto result = TFactory::MakeHolder("l-buckets");
+        auto result = TFactory::MakeHolder("lc-buckets");
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }

@@ -4,10 +4,10 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TEST_SRCS(
     test_followers.py
     test_compatibility.py
+    test_column_family.py
 )
 
-SIZE(LARGE)
-TAG(ya:fat)
+SIZE(MEDIUM)
 
 DEPENDS(
     ydb/apps/ydbd

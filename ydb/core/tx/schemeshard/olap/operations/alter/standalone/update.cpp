@@ -33,6 +33,31 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     TSimpleErrorCollector collector;
     TOlapSchema targetSchema = originalSchema;
     if (AlterSchema) {
+        // Add default family if not exists
+        if (!targetSchema.GetColumnFamilies().GetByName("default") &&
+            (AlterSchema->GetColumnFamilies().GetAddColumnFamilies().size() || AlterSchema->GetColumnFamilies().GetAlterColumnFamily().size())) {
+            NKikimrSchemeOp::TAlterColumnTableSchema addDefaultFamily;
+            auto defaultFamily = addDefaultFamily.AddAddColumnFamily();  // GetDefaultFamily()
+            defaultFamily->SetId(0);
+            defaultFamily->SetName("default");
+            for (const auto& [_, column] : targetSchema.GetColumns().GetColumns()) {
+                if (!column.GetColumnFamilyId().has_value()) {
+                    auto setDefaultFamily = addDefaultFamily.AddAlterColumns();
+                    setDefaultFamily->SetName(column.GetName());
+                    setDefaultFamily->SetColumnFamilyName("default");
+                }
+            }
+            TOlapSchemaUpdate schemaUpdate;
+            if (!schemaUpdate.Parse(addDefaultFamily, collector)) {
+                return TConclusionStatus::Fail(
+                    "update parse error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
+            }
+            if (!targetSchema.Update(schemaUpdate, collector)) {
+                return TConclusionStatus::Fail(
+                    "schema update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
+            }
+        }
+
         if (!targetSchema.Update(*AlterSchema, collector)) {
             return TConclusionStatus::Fail("schema update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }

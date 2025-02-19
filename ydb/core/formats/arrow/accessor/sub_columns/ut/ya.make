@@ -5,6 +5,7 @@ SIZE(SMALL)
 PEERDIR(
     ydb/core/formats/arrow/accessor/sub_columns
     yql/essentials/public/udf/service/stub
+    ydb/core/formats/arrow
 )
 
 SRCS(

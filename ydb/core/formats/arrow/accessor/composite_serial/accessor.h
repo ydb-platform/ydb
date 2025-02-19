@@ -77,12 +77,12 @@ protected:
     }
 
 public:
-    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, std::vector<TChunk>&& chunks, const bool forLazyInitialization = false)
+    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, std::vector<TChunk>&& chunks,
+        const bool forLazyInitialization = false)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
         , Chunks(std::move(chunks))
-        , ForLazyInitialization(forLazyInitialization)
-    {
+        , ForLazyInitialization(forLazyInitialization) {
         AFL_VERIFY(Loader);
     }
 };

@@ -39,6 +39,7 @@ private:
     }
 
 public:
+
     class TSlicesIterator {
     private:
         const TColumnFilter& Owner;

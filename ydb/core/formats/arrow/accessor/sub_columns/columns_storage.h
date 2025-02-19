@@ -33,6 +33,8 @@ public:
         return result;
     }
 
+    TColumnsData ApplyFilter(const TColumnFilter& filter) const;
+
     TColumnsData Slice(const ui32 offset, const ui32 count) const;
 
     static TColumnsData BuildEmpty(const ui32 recordsCount) {

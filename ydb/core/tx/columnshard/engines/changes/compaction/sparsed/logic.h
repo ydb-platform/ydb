@@ -114,11 +114,11 @@ private:
             AFL_VERIFY(!Chunk || CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition() <= position);
             Chunk = &CurrentSparsedArray->GetSparsedChunk(CurrentOwnedArray->GetAddress().GetLocalIndex(position));
             AFL_VERIFY(Chunk->GetRecordsCount());
-            AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetStartPosition() <= position && 
+            AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() <= position && 
                     position < CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition())
-            ("pos", position)("start", Chunk->GetStartPosition())("finish", Chunk->GetFinishPosition())(
+            ("pos", position)("finish", Chunk->GetFinishPosition())(
                 "shift", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
-            ChunkStartGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetStartPosition();
+            ChunkStartGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition();
             NextGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFirstIndexNotDefault();
             NextLocalPosition = 0;
             FinishGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition();

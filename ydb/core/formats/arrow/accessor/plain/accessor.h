@@ -34,6 +34,8 @@ public:
         return Array;
     }
 
+    static std::shared_ptr<TTrivialArray> BuildEmpty(const std::shared_ptr<arrow::DataType>& type);
+
     TTrivialArray(const std::shared_ptr<arrow::Array>& data)
         : TBase(data->length(), EType::Array, data->type())
         , Array(data) {

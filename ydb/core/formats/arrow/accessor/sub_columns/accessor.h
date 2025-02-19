@@ -5,6 +5,7 @@
 #include "others_storage.h"
 #include "settings.h"
 
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/common/container.h>
 
@@ -50,6 +51,11 @@ protected:
     virtual std::optional<ui64> DoGetRawSize() const override {
         return ColumnsData.GetRawSize() + OthersData.GetRawSize();
     }
+    virtual std::shared_ptr<IChunkedArray> DoApplyFilter(const TColumnFilter& filter) const override {
+        return std::make_shared<TSubColumnsArray>(ColumnsData.ApplyFilter(filter), OthersData.ApplyFilter(filter, Settings), GetDataType(),
+            filter.GetFilteredCountVerified(), Settings);
+    }
+
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
         return std::make_shared<TSubColumnsArray>(
             ColumnsData.Slice(offset, count), OthersData.Slice(offset, count, Settings), GetDataType(), count, Settings);

@@ -397,7 +397,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         familyDescription->SetName(family.Name);
         ui32 id = 0;
         if (familyDescription->GetName() != "default") {
-            id = ++columnFamilyId;
+            id = columnFamilyId++;
         }
         familyDescription->SetId(id);
         if (family.Compression.Defined()) {

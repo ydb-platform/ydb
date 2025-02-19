@@ -13,7 +13,7 @@ PEERDIR(
     yql/essentials/core/services/mounts
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/transform
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/providers/common/comp_nodes
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/dq/local_gateway

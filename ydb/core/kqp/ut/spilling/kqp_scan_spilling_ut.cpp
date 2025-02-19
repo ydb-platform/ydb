@@ -5,6 +5,8 @@
 
 #include <util/system/fs.h>
 
+#include <contrib/libs/fmt/include/fmt/format.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -253,6 +255,52 @@ Y_UNIT_TEST(SelfJoin) {
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
     UNIT_ASSERT(counters.SpillingWriteBlobs->Val() > 0);
     UNIT_ASSERT(counters.SpillingReadBlobs->Val() > 0);
+}
+
+Y_UNIT_TEST_TWIN(MISHA, UseLlvm) {
+
+    Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
+
+    NYql::NDq::GetDqExecutionSettingsForTests().FlowControl.MaxOutputChunkSize = 20;
+    NYql::NDq::GetDqExecutionSettingsForTests().FlowControl.InFlightBytesOvercommit = 1;
+
+    Y_DEFER {
+        NYql::NDq::GetDqExecutionSettingsForTests().Reset();
+    };
+
+    TKikimrRunner kikimr(AppCfgLowComputeLimits(0.01));
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
+
+    auto db = kikimr.GetTableClient();
+
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    for (ui32 i = 0; i < 10; ++i) {
+        auto result = session.ExecuteDataQuery(Sprintf(R"(
+            --!syntax_v1
+            REPLACE INTO `/Root/KeyValue` (Key, Value) VALUES (%d, "%s")
+        )", i, TString(20, 'a' + i).c_str()), TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+    TString query = fmt::format(R"(
+        --!syntax_v1
+        PRAGMA Kikimr.EnableLlvm = "{}";
+
+        SELECT Value, COUNT(Key) AS c
+        FROM `/Root/KeyValue`
+        GROUP BY Value
+        ORDER BY c DESC
+    )", UseLlvm ? "true" : "false");
+
+    auto it = db.StreamExecuteScanQuery(query).GetValueSync();
+
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+    TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+    // UNIT_ASSERT(counters.SpillingWriteBlobs->Val() > 0);
+    // UNIT_ASSERT(counters.SpillingReadBlobs->Val() > 0);
+
 }
 
 } // suite

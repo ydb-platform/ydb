@@ -243,6 +243,54 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(MISHA, UseLlvm) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("Aggregation");
+
+        auto* spilling = settings.AppConfig.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig();
+        spilling->SetEnable(true);
+        spilling->SetRoot("./spilling/");
+        TKikimrRunner kikimr(settings);
+
+        auto* rm = settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager();
+        rm->SetMkqlLightProgramMemoryLimit(100);
+        rm->SetMkqlHeavyProgramMemoryLimit(300);
+        rm->SetSpillingPercent(0.01);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
+        }
+
+        {
+            TString query = fmt::format(R"(
+                --!syntax_v1
+                PRAGMA ydb.UseLlvm = "{}";
+
+                SELECT message as msg, COUNT(level) AS c
+                FROM `/Root/olapStore/olapTable`
+                WHERE message <> ''
+                GROUP BY message
+                ORDER BY c DESC
+                LIMIT 10
+            )", UseLlvm ? "true" : "false");
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+        }
+    }
+
     Y_UNIT_TEST(BlockAggregationIsChosenByDefaultForSimpleQueries) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

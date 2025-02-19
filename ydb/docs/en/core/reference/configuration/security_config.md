@@ -73,8 +73,7 @@ Default value: `all-users@well-known`.
 
 If `all_users_group` is not empty, all local users upon creation will be added to the group with this name. This group must exist, when new users are added.
 
-The `all_users_group` parameter is used during initialization of the built-in security.
-<!-- TODO: [](../../security/builtin-security.md) -->
+The `all_users_group` parameter is used during initialization of the [built-in security](../../security/builtin-security.md).
 
 Default value: empty.
     ||
@@ -84,7 +83,7 @@ Default value: empty.
 
 The `default_users`, `default_groups`, `default_access` parameters affect the initial {{ ydb-short-name }} cluster configuration that occurs when {{ ydb-short-name }} starts for the first time. During subsequent runs initial configuration is not repeated, and these parameters are ignored.
 
-<!-- TODO: See [{#T}](../../security/builtin-security.md) and the related [`domains_config`](index.md#domains-config) parameters. -->
+See [{#T}](../../security/builtin-security.md) and the related [`domains_config`](index.md#domains-config) parameters.
 
 #|
 || Parameter | Description ||

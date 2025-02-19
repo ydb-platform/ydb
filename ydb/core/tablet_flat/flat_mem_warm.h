@@ -460,8 +460,7 @@ namespace NMem {
             return TxIdStats;
         }
 
-        bool CommitTx(ui64 txId, TRowVersion rowVersion) {
-            bool newRef = false;
+        void CommitTx(ui64 txId, TRowVersion rowVersion) {
             auto it = Committed.find(txId);
             bool toInsert = (it == Committed.end());
 
@@ -481,16 +480,12 @@ namespace NMem {
                             UndoBuffer.push_back(TUndoOpInsertRemoved{ txId });
                         }
                         Removed.erase(itRemoved);
-                    } else {
-                        newRef = true;
                     }
                 }
             }
-            return newRef;
         }
 
-        bool RemoveTx(ui64 txId) {
-            bool newRef = false;
+        void RemoveTx(ui64 txId) {
             auto it = Committed.find(txId);
             if (it == Committed.end()) {
                 auto itRemoved = Removed.find(txId);
@@ -499,10 +494,8 @@ namespace NMem {
                         UndoBuffer.push_back(TUndoOpEraseRemoved{ txId });
                     }
                     Removed.insert(txId);
-                    newRef = true;
                 }
             }
-            return newRef;
         }
 
         const absl::flat_hash_map<ui64, TRowVersion>& GetCommittedTransactions() const {

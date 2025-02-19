@@ -226,8 +226,7 @@ public:
     void UpdateApproximateFreeSharesByChannel(const THashMap<ui32, float>& approximateFreeSpaceShareByChannel);
     TString SnapshotToLog(ui32 table, TTxStamp);
 
-    TAutoPtr<TSubset> CompactionSubset(ui32 table, TEpoch before, TArrayRef<const TLogoBlobID> bundle) const;
-    TAutoPtr<TSubset> PartSwitchSubset(ui32 table, TEpoch before, TArrayRef<const TLogoBlobID> bundle, TArrayRef<const TLogoBlobID> txStatus) const;
+    TAutoPtr<TSubset> Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const;
     TAutoPtr<TSubset> Subset(ui32 table, TEpoch before, TRawVals from, TRawVals to) const;
     TAutoPtr<TSubset> ScanSnapshot(ui32 table, TRowVersion snapshot = TRowVersion::Max());
 
@@ -236,15 +235,11 @@ public:
     TBundleSlicesMap LookupSlices(ui32 table, TArrayRef<const TLogoBlobID> bundles) const;
     void ReplaceSlices(ui32 table, TBundleSlicesMap slices);
 
-    void Replace(
-        ui32 table,
-        const TSubset&,
-        TArrayRef<const TPartView>,
-        TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>);
+    void Replace(ui32 table, TArrayRef<const TPartView>, const TSubset&);
+    void ReplaceTxStatus(ui32 table, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>, const TSubset&);
     void Merge(ui32 table, TPartView);
     void Merge(ui32 table, TIntrusiveConstPtr<TColdPart>);
     void Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart>);
-    void MergeDone(ui32 table);
 
     void DebugDumpTable(ui32 table, IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const;
     void DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const;

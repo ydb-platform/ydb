@@ -246,11 +246,8 @@ namespace NTest {
             if (last /* make full subset */) {
                 subset = Base->Subset(table, TEpoch::Max(), { }, { });
             } else /* only flush memtables */ {
-                subset = Base->CompactionSubset(table, TEpoch::Max(), { });
+                subset = Base->Subset(table, { }, TEpoch::Max());
             }
-
-            // Note: we don't compact TxStatus in these tests
-            Y_ABORT_UNLESS(subset->TxStatus.empty());
 
             TLogoBlobID logo(1, Gen, ++Step, 1, 0, 0);
 
@@ -282,7 +279,7 @@ namespace NTest {
             for (auto &part : eggs.Parts)
                 partViews.push_back({ part, nullptr, part->Slices });
 
-            Base->Replace(table, *subset, std::move(partViews), { });
+            Base->Replace(table, std::move(partViews), *subset);
 
             return *this;
         }

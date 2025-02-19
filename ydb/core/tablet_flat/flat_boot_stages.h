@@ -194,9 +194,6 @@ namespace NBoot {
 
             const auto was = Back->DatabaseImpl->Rewind(Back->Serial);
 
-            // Notify database that all merges have completed
-            Back->DatabaseImpl->MergeDone();
-
             result.Database = new NTable::TDatabase(Back->DatabaseImpl.Release());
 
             if (auto logl = Env->Logger()->Log(ELnLev::Info)) {

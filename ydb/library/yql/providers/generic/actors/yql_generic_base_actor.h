@@ -90,9 +90,6 @@ namespace NYql::NDq {
             NConnector::NApi::TError Error;
         };
 
-        struct TEvRetry: NActors::TEventLocal<TEvRetry, EvRetry> {
-        };
-
     protected: // TODO move common logic here
     };
 

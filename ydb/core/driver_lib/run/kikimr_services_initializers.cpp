@@ -503,7 +503,7 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
 void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                    const NKikimr::TAppData* appData) {
     bool hasASCfg = Config.HasActorSystemConfig();
-    if (!hasASCfg || (systemConfig.HasUseAutoConfig() && systemConfig.GetUseAutoConfig())) {
+    if (!hasASCfg || Config.GetActorSystemConfig().GetUseAutoConfig()) {
         bool isDynamicNode = appData->DynamicNameserviceConfig->MinDynamicNodeId <= NodeId;
         NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), isDynamicNode);
     }

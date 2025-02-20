@@ -163,7 +163,7 @@ public:
     struct TNodeTabletState {
         struct TTabletStateSettings {
             TInstant AliveBarrier;
-            ui32 MaxRestartsPerPeriod = 30; // per hour
+            ui32 MaxRestartsPerPeriod = AppData()->HealthCheckConfig.GetTabletsRestartsPerPeriodOrangeThreshold(); // per hour
             ui32 MaxTabletIdsStored = 10;
             bool ReportGoodTabletsIds = false;
         };
@@ -1729,9 +1729,9 @@ public:
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
         TSelfCheckContext rrContext(&context, "NODE_UPTIME");
-        if (databaseState.NodeRestartsPerPeriod[nodeId] >= 30) {
+        if (databaseState.NodeRestartsPerPeriod[nodeId] >= AppData()->HealthCheckConfig.GetNodeRestartsPerPeriodYellowThreshold()) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Node is restarting too often", ETags::Uptime);
-        } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= 10) {
+        } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= AppData()->HealthCheckConfig.GetNodeRestartsPerPeriodOrangeThreshold()) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "The number of node restarts has increased", ETags::Uptime);
         } else {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
@@ -2921,8 +2921,8 @@ public:
         }
     }
 
-    const TDuration MAX_CLOCKSKEW_ORANGE_ISSUE_TIME = TDuration::MicroSeconds(25000);
-    const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(5000);
+    const TDuration MAX_CLOCKSKEW_ORANGE_ISSUE_TIME = TDuration::MicroSeconds(AppData()->HealthCheckConfig.GetNodesTimeDifferenceUsOrangeThreshold());
+    const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(AppData()->HealthCheckConfig.GetNodesTimeDifferenceUsYellowThreshold());
 
     void FillResult(TOverallStateContext context) {
         if (IsSpecificDatabaseFilter()) {

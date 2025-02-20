@@ -59,7 +59,7 @@ struct W_ITEM_TBL g_w_item,
     g_OldValues;
 
 void validate_string(char *szString, unsigned long maxSize) {
-    // Prevent passing unterminated string. Fixing coverity issue STRING_SIZE
+    // Prevent passing unterminated string. Fixing coverity issue STRING_NULL
     if (strlen(szString) > maxSize) {
       INTERNAL("Trying po pass unterminated string");
       exit(EXIT_FAILURE);

@@ -338,6 +338,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     for (const auto& consumer : topic.consumers()) {
         auto rule = ::Ydb::PersQueue::V1::TopicSettings_ReadRule();
         rule.set_consumer_name(consumer.name());
+        rule.set_important(consumer.important());
         AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig);
     }
     

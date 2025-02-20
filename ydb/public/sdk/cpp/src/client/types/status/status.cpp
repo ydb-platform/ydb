@@ -54,10 +54,6 @@ bool TStatus::IsTransportError() const {
         && static_cast<size_t>(Impl_->Status.Status) <= TRANSPORT_STATUSES_LAST;
 }
 
-bool TStatus::IsUnimplementedError() const {
-    return Impl_->Status.Status == EStatus::CLIENT_CALL_UNIMPLEMENTED;
-}
-
 void TStatus::CheckStatusOk(const std::string& str) const {
     Impl_->CheckStatusOk(str);
 }

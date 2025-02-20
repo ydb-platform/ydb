@@ -44,7 +44,6 @@
 
 namespace fs = std::filesystem;
 
-extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 
 using namespace NYdb::NConsoleClient;
@@ -54,16 +53,12 @@ namespace NKikimr::NConfig {
 
 constexpr TStringBuf NODE_KIND_YDB = "ydb";
 constexpr TStringBuf NODE_KIND_YQ = "yq";
-constexpr TStringBuf CONFIG_NAME = "config.yaml";
+constexpr const char *CONFIG_NAME = "config.yaml";
+constexpr const char *STORAGE_CONFIG_NAME = "storage.yaml";
 
 constexpr static ui32 DefaultLogLevel = NActors::NLog::PRI_WARN; // log settings
 constexpr static ui32 DefaultLogSamplingLevel = NActors::NLog::PRI_DEBUG; // log settings
 constexpr static ui32 DefaultLogSamplingRate = 0; // log settings
-
-inline bool IsFileExists(const fs::path& path) {
-    std::error_code ec;
-    return fs::exists(path, ec) && !ec;
-}
 
 template<typename T>
 bool ParsePBFromString(const TString &content, T *pb, bool allowUnknown = false) {
@@ -181,7 +176,9 @@ auto MutableConfigPartMerge(
 
 void AddProtoConfigOptions(IProtoConfigFileProvider& out);
 void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out);
-void LoadMainYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
+void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, const TString& storageYamlConfigFile,
+    bool loadedFromStore, NKikimrConfig::TAppConfig& appConfig,
+    const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src);
 void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src);
 
@@ -1068,17 +1065,27 @@ public:
         LoadBootstrapConfig(ProtoConfigFileProvider, ErrorCollector, freeArgs, BaseConfig);
 
         TString yamlConfigFile = CommonAppOptions.YamlConfigFile;
-        if (!CommonAppOptions.ConfigStorePath.empty()) {
+        TString storageYamlConfigFile;
+        bool loadedFromStore = false;
+
+        if (CommonAppOptions.ConfigStorePath) {
             AppConfig.SetConfigStorePath(CommonAppOptions.ConfigStorePath);
 
-            const TString autoConfigPath = TStringBuilder() << CommonAppOptions.ConfigStorePath << "/" << CONFIG_NAME;
-            fs::path path(autoConfigPath.c_str());
-            if (IsFileExists(path)) {
-                AppConfig.SetConfigLoadedFromStore(true);
-                yamlConfigFile = autoConfigPath;
+            auto dir = fs::path(CommonAppOptions.ConfigStorePath.c_str());
+
+            if (auto path = dir / STORAGE_CONFIG_NAME; fs::is_regular_file(path)) {
+                storageYamlConfigFile = path.c_str();
+            }
+
+            if (auto path = dir / CONFIG_NAME; fs::is_regular_file(path)) {
+                yamlConfigFile = path.c_str();
+                loadedFromStore = true;
+            } else {
+                storageYamlConfigFile.clear();
             }
         }
-        LoadMainYamlConfig(refs, yamlConfigFile, AppConfig);
+
+        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig);
         OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
 
         // start memorylog as soon as possible
@@ -1100,14 +1107,9 @@ public:
             InitDynamicNode();
         }
 
-        LoadMainYamlConfig(refs, yamlConfigFile, AppConfig);
+        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig);
 
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{});
-
-        if (!AppConfig.HasActorSystemConfig()) {
-            AppConfig.MutableActorSystemConfig()->CopyFrom(*DummyActorSystemConfig());
-            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::ActorSystemConfigItem, TConfigItemInfo::EUpdateKind::SetExplicitly);
-        }
 
         Option("domains-file", TCfg::TDomainsConfigFieldTag{});
         Option("bs-file", TCfg::TBlobStorageConfigFieldTag{});

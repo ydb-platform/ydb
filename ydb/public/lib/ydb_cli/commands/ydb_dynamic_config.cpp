@@ -215,7 +215,7 @@ int TCommandConfigReplace::Run(TConfig& config) {
 
     auto status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
 
-    if (status.IsUnimplementedError()) {
+    if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
         Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
 
         auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);

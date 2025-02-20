@@ -354,25 +354,44 @@ public:
             }
         }
 
-        // Check config version
-        if (Self->YamlConfig && !Self->StorageYamlConfig) {
-            const auto& configVersion = GetVersion(*Self->YamlConfig);
-            const auto& nodeId = record.GetNodeID();
-            if (record.GetConfigVersion() != configVersion) {
-                if (record.GetConfigVersion() > configVersion) {
-                    STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN09, "Version on node greater than BSC", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
-                }
-                STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN10, "Send update config", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
-                auto *yamlConfig = Response->Record.MutableYamlConfig();
-                yamlConfig->SetYAML(CompressSingleConfig(*Self->YamlConfig));
-                yamlConfig->SetConfigVersion(record.GetConfigVersion());
+        if (Self->YamlConfig) {
+            const ui64 configVersion = GetVersion(*Self->YamlConfig);
+            auto *yamlConfig = Response->Record.MutableYamlConfig();
+            yamlConfig->SetMainConfigVersion(configVersion);
+
+            if (record.GetMainConfigVersion() < configVersion) {
+                yamlConfig->SetCompressedMainConfig(CompressSingleConfig(*Self->YamlConfig));
+            } else if (configVersion < record.GetMainConfigVersion()) {
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN09, "main config version on node is greater than one known to BSC",
+                    (NodeId, record.GetNodeID()),
+                    (NodeVersion, record.GetMainConfigVersion()),
+                    (StoredVersion, configVersion));
+            } else if (record.GetMainConfigHash() != Self->YamlConfigHash) {
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN11, "node main config hash mismatch",
+                    (NodeId, record.GetNodeID()));
             }
-            else if (record.GetConfigHash() != GetSingleConfigHash(*Self->YamlConfig)) {
-                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN11, "Config hash on node mismatch", (NodeId, nodeId));
+        } else if (record.HasMainConfigVersion()) {
+            // TODO(alexvru): report?
+        }
+
+        if (Self->StorageYamlConfig) {
+            const ui64 configVersion = Self->StorageYamlConfigVersion;
+            auto *yamlConfig = Response->Record.MutableYamlConfig();
+            yamlConfig->SetStorageConfigVersion(Self->StorageYamlConfigVersion);
+            Y_DEBUG_ABORT_UNLESS(yamlConfig->HasMainConfigVersion()); // no storage config without main one
+
+            if (!record.HasStorageConfigVersion() || record.GetStorageConfigVersion() < configVersion) {
+                yamlConfig->SetCompressedStorageConfig(CompressStorageYamlConfig(*Self->StorageYamlConfig));
+            } else if (configVersion < record.GetStorageConfigVersion()) {
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN09, "storage config version on node is greater than one known to BSC",
+                    (NodeId, record.GetNodeID()),
+                    (NodeVersion, record.GetMainConfigVersion()),
+                    (StoredVersion, configVersion));
+            } else if (record.GetStorageConfigHash() != Self->StorageYamlConfigHash) {
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN11, "node storage config hash mismatch",
+                    (NodeId, record.GetNodeID()));
             }
-        } else {
-            // TODO(mregrock): Implement for double config mode
-        } 
+        }
 
         return true;
     }

@@ -83,6 +83,9 @@ message TransactionControl {
     }
 
     bool commit_tx = 10;
+
+    // If set the timestamp will be returned along with ExecuteQueryResponsePart
+    bool return_virtual_timestamp = 11;
 }
 
 message BeginTransactionRequest {
@@ -94,6 +97,8 @@ message BeginTransactionRequest {
 message TransactionMeta {
     // Transaction identifier
     string id = 1 [(Ydb.length).le = 1024];
+    // Optional timestamp that represents snapshot acquired to start transaction
+    VirtualTimestamp snapshot_timestamp = 2;
 }
 
 message BeginTransactionResponse {
@@ -113,6 +118,9 @@ message CommitTransactionRequest {
 message CommitTransactionResponse {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
+
+    // Optional timestamp that corresponds to the commit transaction
+    VirtualTimestamp commit_timestamp = 3;
 }
 
 message RollbackTransactionRequest {
@@ -202,9 +210,8 @@ message ExecuteQueryResponsePart {
 
     TransactionMeta tx_meta = 6;
 
-    // Optional timestamp that corresponds to the returned data
-    // That timestamp can be compared with CDC timestamp to make sure is data already present in async stream
-    VirtualTimestamp snapshot = 7;
+    // Optional timestamp that corresponds to the commit transaction
+    VirtualTimestamp commit_timestamp = 7;
 }
 
 message ExecuteScriptRequest {

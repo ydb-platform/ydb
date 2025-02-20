@@ -280,7 +280,7 @@ public:
     }
 
     bool NeedCommit() const override {
-        const bool dontNeedCommit = IsReadOnly() && (IsSingleShard() || HasSnapshot());
+        const bool dontNeedCommit = IsEmpty() || IsReadOnly() && (IsSingleShard() || HasSnapshot());
         return !dontNeedCommit;
     }
 

@@ -2,6 +2,7 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_block_builder.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -62,6 +63,10 @@ public:
     virtual void UpdateState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
 
     virtual std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) = 0;
+
+    virtual void SerializeState(void* state, NUdf::TOutputBuffer& buffer) = 0;
+
+    virtual void DeserializeState(void* state, NUdf::TInputBuffer& buffer) = 0;
 
     explicit IBlockAggregatorFinalizeKeys(ui32 stateSize)
         : IBlockAggregatorBase(stateSize)

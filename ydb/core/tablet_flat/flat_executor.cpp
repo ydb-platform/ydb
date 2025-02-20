@@ -1479,7 +1479,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
     }
 
     if (partSwitch.FollowerUpdateStep) {
-        auto subset = Database->Subset(partSwitch.TableId, partSwitch.Leaving, partSwitch.Head);
+        auto subset = Database->PartSwitchSubset(partSwitch.TableId, partSwitch.Head, partSwitch.Leaving, partSwitch.LeavingTxStatus);
 
         if (partSwitch.Head != subset->Head) {
             Y_ABORT("Follower table epoch head has diverged from leader");
@@ -1488,16 +1488,17 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         }
 
         Y_ABORT_UNLESS(newColdParts.empty(), "Unexpected cold part at a follower");
-        Database->Replace(partSwitch.TableId, std::move(newParts), *subset);
-        Database->ReplaceTxStatus(partSwitch.TableId, std::move(newTxStatus), *subset);
+        Database->Replace(partSwitch.TableId, *subset, std::move(newParts), std::move(newTxStatus));
 
         for (auto &gone : subset->Flatten)
             DropCachesOfBundle(*gone);
 
         Send(Owner->Tablet(), new TEvTablet::TEvFGcAck(Owner->TabletID(), Generation(), partSwitch.FollowerUpdateStep));
     } else {
+        bool merged = false;
         for (auto &partView : newParts) {
             Database->Merge(partSwitch.TableId, partView);
+            merged = true;
 
             if (CompactionLogic) {
                 CompactionLogic->BorrowedPart(partSwitch.TableId, std::move(partView));
@@ -1505,6 +1506,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         }
         for (auto &part : newColdParts) {
             Database->Merge(partSwitch.TableId, part);
+            merged = true;
 
             if (CompactionLogic) {
                 CompactionLogic->BorrowedPart(partSwitch.TableId, std::move(part));
@@ -1512,6 +1514,10 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         }
         for (auto &txStatus : newTxStatus) {
             Database->Merge(partSwitch.TableId, txStatus);
+            merged = true;
+        }
+        if (merged) {
+            Database->MergeDone(partSwitch.TableId);
         }
     }
 
@@ -1533,7 +1539,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         // N.B. there should be a single source table per part switch
         for (auto& [sourceTable, state] : perTable) {
             // Rebase source parts to their respective new epochs
-            auto srcSubset = Database->Subset(sourceTable, state.Bundles, NTable::TEpoch::Zero());
+            auto srcSubset = Database->PartSwitchSubset(sourceTable, NTable::TEpoch::Zero(), state.Bundles, { });
             TVector<NTable::TPartView> rebased(Reserve(srcSubset->Flatten.size()));
             for (const auto& partView : srcSubset->Flatten) {
                 Y_ABORT_UNLESS(!partView->TxIdStats, "Cannot move parts with uncommitted deltas");
@@ -1542,7 +1548,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             }
 
             // Remove source parts from the source table
-            Database->Replace(sourceTable, { }, *srcSubset);
+            Database->Replace(sourceTable, *srcSubset, { }, { });
 
             if (CompactionLogic) {
                 CompactionLogic->RemovedParts(sourceTable, state.Bundles);
@@ -1557,6 +1563,8 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
                 }
             }
         }
+
+        Database->MergeDone(partSwitch.TableId);
     }
 }
 
@@ -2310,7 +2318,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
                     }
 
                     // Remove source parts from the source table
-                    Database->Replace(src, { }, *srcSubset);
+                    Database->Replace(src, *srcSubset, { }, { });
 
                     const auto logicResult = CompactionLogic->RemovedParts(src, labels);
 
@@ -2342,6 +2350,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
                         Database->Merge(dst, partView);
                         CompactionLogic->BorrowedPart(dst, partView);
                     }
+                    Database->MergeDone(dst);
 
                     // Serialize rebased parts as moved from the source table
                     NKikimrExecutorFlat::TTablePartSwitch proto;
@@ -3050,7 +3059,7 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
     TAutoPtr<NTable::TSubset> subset;
 
     if (params) {
-        subset = Database->Subset(table, { }, params->Edge.Head);
+        subset = Database->CompactionSubset(table, params->Edge.Head, { });
 
         if (params->Parts) {
             subset->Flatten.insert(subset->Flatten.end(), params->Parts.begin(), params->Parts.end());
@@ -3397,8 +3406,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             newParts.emplace_back(result.Part);
         }
 
-        Database->Replace(tableId, newParts, *ops->Subset);
-        Database->ReplaceTxStatus(tableId, newTxStatus, *ops->Subset);
+        Database->Replace(tableId, *ops->Subset, newParts, newTxStatus);
 
         TVector<TLogoBlobID> bundles(Reserve(ops->Subset->Flatten.size() + ops->Subset->ColdParts.size()));
         for (auto &part: ops->Subset->Flatten) {
@@ -4525,23 +4533,28 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         if (!memTableSnapshot->GetCommittedTransactions().empty() || !memTableSnapshot->GetRemovedTransactions().empty()) {
             // We must compact tx status when mem table has changes
             compactTxStatus = true;
+            break;
         }
     }
     for (const auto& txStatus : snapshot->Subset->TxStatus) {
         if (txStatus->Label.TabletID() != Owner->TabletID()) {
             // We want to compact borrowed tx status
             compactTxStatus = true;
+            break;
         }
+    }
+    if (snapshot->Subset->TxStatus && snapshot->Subset->GarbageTransactions) {
+        // We want to remove garbage transactions
+        compactTxStatus = true;
     }
 
     if (compactTxStatus) {
-        comp->CommittedTransactions = snapshot->Subset->CommittedTransactions;
-        comp->RemovedTransactions = snapshot->Subset->RemovedTransactions;
         comp->Frozen.reserve(snapshot->Subset->Frozen.size());
         for (auto& memTableSnapshot : snapshot->Subset->Frozen) {
             comp->Frozen.push_back(memTableSnapshot.MemTable);
         }
         comp->TxStatus = snapshot->Subset->TxStatus;
+        comp->GarbageTransactions = snapshot->Subset->GarbageTransactions;
     } else {
         // We are not compacting tx status, avoid deleting current blobs
         snapshot->Subset->TxStatus.clear();

@@ -186,6 +186,14 @@ struct TMainMetadata {
 };
 
 /**
+ * Represents config metadata
+ */
+struct TStorageMetadata {
+    std::optional<ui64> Version;
+    std::optional<TString> Cluster;
+};
+
+/**
  * Represents volatile config metadata
  */
 struct TVolatileMetadata {
@@ -221,6 +229,11 @@ TMainMetadata GetMainMetadata(const TString& config);
  * Parses database config metadata
  */
 TDatabaseMetadata GetDatabaseMetadata(const TString& config);
+
+/**
+ * Parses storage config metadata
+ */
+TStorageMetadata GetStorageMetadata(const TString& config);
 
 /**
  * Parses volatile config metadata

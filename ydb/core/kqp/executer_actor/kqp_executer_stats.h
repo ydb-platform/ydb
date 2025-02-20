@@ -229,6 +229,7 @@ private:
     std::map<ui32, TStageExecutionStats> StageStats;
     std::map<ui32, TIngressExternalPartitionStat> ExternalPartitionStats; // FIXME: several ingresses
     ui64 BaseTimeMs = 0;
+    std::map<ui32, TDuration> LongestTaskDurations;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
     void AdjustExternalAggr(NYql::NDqProto::TDqExternalAggrStats& stats);
@@ -307,7 +308,8 @@ private:
         const NYql::NDqProto::TDqComputeActorStats& stats);
     void AddComputeActorProfileStatsByTask(
         const NYql::NDqProto::TDqTaskStats& task,
-        const NYql::NDqProto::TDqComputeActorStats& stats);
+        const NYql::NDqProto::TDqComputeActorStats& stats,
+        bool keepOnlyLastTask);
     void AddDatashardFullStatsByTask(
         const NYql::NDqProto::TDqTaskStats& task,
         ui64 datashardCpuTimeUs);

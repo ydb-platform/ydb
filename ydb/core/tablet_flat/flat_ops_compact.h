@@ -255,40 +255,61 @@ namespace NTabletFlatExecutor {
 
         void WriteTxStatus() noexcept
         {
-            if (!Conf->CommittedTransactions && !Conf->RemovedTransactions) {
-                // Nothing to write
-                return;
+            if (!Conf->Frozen && !Conf->TxStatus) {
+                // Nothing to compact
             }
 
-            THashSet<ui64> txFilter;
+            absl::flat_hash_map<ui64, std::optional<TRowVersion>> status;
+            auto mergeStatus = [&](ui64 txId, const std::optional<TRowVersion>& version) {
+                if (Conf->GarbageTransactions.Contains(txId)) {
+                    // We don't write garbage transactions
+                    return;
+                }
+                auto it = status.find(txId);
+                if (it == status.end()) {
+                    status[txId] = version;
+                } else if (version) {
+                    if (!it->second) {
+                        // commit wins over remove
+                        it->second = version;
+                    } else if (*version < *it->second) {
+                        // lowest commit version wins
+                        it->second = version;
+                    }
+                }
+            };
+
             for (const auto& memTable : Conf->Frozen) {
                 for (const auto& pr : memTable->GetCommittedTransactions()) {
-                    txFilter.insert(pr.first);
+                    mergeStatus(pr.first, pr.second);
                 }
                 for (const ui64 txId : memTable->GetRemovedTransactions()) {
-                    txFilter.insert(txId);
+                    mergeStatus(txId, std::nullopt);
                 }
             }
             for (const auto& txStatus : Conf->TxStatus) {
                 for (const auto& item : txStatus->TxStatusPage->GetCommittedItems()) {
-                    txFilter.insert(item.GetTxId());
+                    mergeStatus(item.GetTxId(), item.GetRowVersion());
                 }
                 for (const auto& item : txStatus->TxStatusPage->GetRemovedItems()) {
-                    txFilter.insert(item.GetTxId());
+                    mergeStatus(item.GetTxId(), std::nullopt);
                 }
             }
 
+            if (status.empty()) {
+                // Nothing to write
+                return;
+            }
+
             NTable::NPage::TTxStatusBuilder builder;
-            for (const auto& pr : Conf->CommittedTransactions) {
-                if (txFilter.contains(pr.first)) {
-                    builder.AddCommitted(pr.first, pr.second);
+            for (const auto& pr : status) {
+                if (pr.second) {
+                    builder.AddCommitted(pr.first, *pr.second);
+                } else {
+                    builder.AddRemoved(pr.first);
                 }
             }
-            for (const ui64 txId : Conf->RemovedTransactions) {
-                if (txFilter.contains(txId)) {
-                    builder.AddRemoved(txId);
-                }
-            }
+
             auto data = builder.Finish();
             if (!data) {
                 // Don't write an empty page

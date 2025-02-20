@@ -64,8 +64,9 @@ bool RecreateContext(
     const TString queryName = "context recreation query";
 
     const auto* ast = NSQLTranslationV1::SqlAST(
+        ctx.Parsers,
         recreationQuery, queryName, ctx.Issues,
-        settings.MaxErrors, settings.AnsiLexer,  settings.Antlr4Parser, settings.TestAntlr4, settings.Arena
+        settings.MaxErrors, settings.AnsiLexer,  settings.Antlr4Parser, settings.Arena
     );
     if (!ast) {
         return false;
@@ -83,7 +84,7 @@ TNodePtr BuildViewSelect(
     const TString& contextRecreationQuery
 ) {
     TIssues issues;
-    TContext context(parentContext.Settings, {}, issues, parentContext.Query);
+    TContext context(parentContext.Lexers, parentContext.Parsers, parentContext.Settings, {}, issues, parentContext.Query);
     if (!RecreateContext(context, context.Settings, contextRecreationQuery)) {
         parentContext.Issues.AddIssues(issues);
         return nullptr;

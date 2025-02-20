@@ -2,6 +2,15 @@
 
 Tool can be used to execute streaming queries by using FQ proxy infrastructure.
 
+For profiling memory allocations build fqrun with ya make flags `-D PROFILE_MEMORY_ALLOCATIONS -D CXXFLAGS=-DPROFILE_MEMORY_ALLOCATIONS`.
+
+## Scripts
+
+* `flame_graph.sh` - script for collecting flame graphs in svg format, usage:
+    ```(bash)
+    ./flame_graph.sh [graph collection time in seconds]
+    ```
+
 ## Examples
 
 ### Queries
@@ -25,7 +34,7 @@ Tool can be used to execute streaming queries by using FQ proxy infrastructure.
     ./fqrun -M 32000
     ```
 
-    Monitoring endpoint: https://localhost:32000
+    Monitoring endpoint: http://localhost:32000
 
 * gRPC endpoint:
     ```(bash)

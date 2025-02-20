@@ -772,8 +772,12 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
 }
 
 void TQueryExecutionStats::AddComputeActorProfileStatsByTask(
-        const NYql::NDqProto::TDqTaskStats& task, const NYql::NDqProto::TDqComputeActorStats& stats) {
+        const NYql::NDqProto::TDqTaskStats& task, const NYql::NDqProto::TDqComputeActorStats& stats,
+        bool keepOnlyLastTask) {
     auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
+    if (keepOnlyLastTask) {
+        stageStats->MutableComputeActors()->Clear();
+    }
     stageStats->AddComputeActors()->CopyFrom(stats);
 }
 
@@ -787,7 +791,7 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
 
     UpdateAggr(ExtraStats.MutableComputeCpuTimeUs(), stats.GetCpuTimeUs());
 
-    auto longTasks = TVector<NYql::NDqProto::TDqTaskStats*>(Reserve(stats.GetTasks().size()));
+    NYql::NDqProto::TDqTaskStats * longTask = nullptr;
 
     for (auto& task : *stats.MutableTasks()) {
         ResultBytes += task.GetResultBytes();
@@ -833,10 +837,11 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
         //      enough to result in an enormous duration - triggering the "long tasks" mode.
 
         auto taskDuration = TDuration::MilliSeconds(task.GetFinishTimeMs() - task.GetStartTimeMs());
-        bool longTask = taskDuration > collectLongTaskStatsTimeout;
-        if (longTask) {
+        auto& longestTaskDuration = LongestTaskDurations[task.GetStageId()];
+        if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
             CollectStatsByLongTasks = true;
-            longTasks.push_back(&task);
+            longTask = &task;
+            longestTaskDuration = taskDuration;
         }
     }
 
@@ -848,11 +853,11 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
 
     if (CollectProfileStats(StatsMode)) {
         for (const auto& task : stats.GetTasks()) {
-            AddComputeActorProfileStatsByTask(task, stats);
+            AddComputeActorProfileStatsByTask(task, stats, false);
         }
     } else {
-        for (const auto* task : longTasks) {
-            AddComputeActorProfileStatsByTask(*task, stats);
+        if (longTask) {
+            AddComputeActorProfileStatsByTask(*longTask, stats, true);
         }
     }
 }
@@ -949,7 +954,7 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
     Result->SetCpuTimeUs(Result->GetCpuTimeUs() + datashardCpuTimeUs);
     TotalTasks += stats.GetTasks().size();
 
-    auto longTasks = TVector<NYql::NDqProto::TDqTaskStats*>(Reserve(stats.GetTasks().size()));
+    NYql::NDqProto::TDqTaskStats* longTask = nullptr;
 
     for (auto& task : *stats.MutableTasks()) {
         for (auto& table : task.GetTables()) {
@@ -976,11 +981,13 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
         }
 
         // checking whether the task is long
+
         auto taskDuration = TDuration::MilliSeconds(task.GetFinishTimeMs() - task.GetStartTimeMs());
-        bool longTask = taskDuration > collectLongTaskStatsTimeout;
-        if (longTask) {
+        auto& longestTaskDuration = LongestTaskDurations[task.GetStageId()];
+        if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
             CollectStatsByLongTasks = true;
-            longTasks.push_back(&task);
+            longTask = &task;
+            longestTaskDuration = taskDuration;
         }
     }
 
@@ -990,18 +997,18 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
         }
         DatashardStats.emplace_back(std::move(txStats));
     } else {
-        if (!longTasks.empty()) {
+        if (longTask) {
             DatashardStats.emplace_back(std::move(txStats));
         }
     }
 
     if (CollectProfileStats(StatsMode)) {
         for (const auto& task : stats.GetTasks()) {
-            AddComputeActorProfileStatsByTask(task, stats);
+            AddComputeActorProfileStatsByTask(task, stats, false);
         }
     } else {
-        for (const auto* task : longTasks) {
-            AddComputeActorProfileStatsByTask(*task, stats);
+        if (longTask) {
+            AddComputeActorProfileStatsByTask(*longTask, stats, true);
         }
     }
 }

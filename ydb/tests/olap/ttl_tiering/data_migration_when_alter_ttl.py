@@ -3,6 +3,8 @@ import logging
 from .base import TllTieringTestBase, ColumnTableHelper
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 
+from ydb.tests.library.test_meta import link_test_case
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,9 +26,8 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
             f"SELECT count(*) as Rows from `{table_path}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromMinutes({past_minutes})"
         )[0].rows[0]["Rows"]
 
+    @link_test_case("#13466")
     def test(self):
-        '''Implements https://github.com/ydb-platform/ydb/issues/13466'''
-
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/table"
         secret_prefix = self.test_name

@@ -4,6 +4,7 @@
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <util/generic/map.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -17,7 +18,10 @@ using namespace NSQLTranslation;
 namespace {
 
 TParsedTokenList Tokenize(const TString& query) {
-    auto lexer = NSQLTranslationV1::MakeLexer(true, true);
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, false, true);
     TParsedTokenList tokens;
     NYql::TIssues issues;
     UNIT_ASSERT_C(Tokenize(*lexer, query, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS),

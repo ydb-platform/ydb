@@ -899,7 +899,15 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("Received TEvNoSession from " << ev->Sender << ", cookie " << ev->Cookie);
+    LOG_ROW_DISPATCHER_DEBUG("Received TEvNoSession from " << ev->Sender << ", generation " << ev->Cookie);
+    auto consumerIt = Consumers.find(ev->Sender);
+    if (consumerIt == Consumers.end()) {
+        return;
+    }
+    const auto& consumer = consumerIt->second;
+    if (consumer->Generation != ev->Cookie) {
+        return;
+    }
     DeleteConsumer(ev->Sender);
 }
 

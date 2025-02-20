@@ -2517,7 +2517,7 @@ void TServiceBase::OnServiceLivenessCheck()
     {
         auto writerGuard = WriterGuard(DiscoverRequestsByPayloadLock_);
 
-        std::vector<TString> payloadsToReply;
+        std::vector<std::string> payloadsToReply;
         for (const auto& [payload, requests] : DiscoverRequestsByPayload_) {
             auto empty = true;
             auto isUp = false;

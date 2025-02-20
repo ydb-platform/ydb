@@ -1,6 +1,7 @@
 #include "ydb_dynamic_config.h"
 
 #include <ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
+#include <ydb-cpp-sdk/client/config/config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <openssl/sha.h>
@@ -196,15 +197,44 @@ void TCommandConfigReplace::Parse(TConfig& config) {
 
 int TCommandConfigReplace::Run(TConfig& config) {
     std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
-    auto exec = [&]() {
-        if (Force) {
-            return client.SetConfig(DynamicConfig, DryRun, AllowUnknownFields).GetValueSync();
-        }
+    auto client = NYdb::NConfig::TConfigClient(*driver);
 
-        return client.ReplaceConfig(DynamicConfig, DryRun, AllowUnknownFields).GetValueSync();
-    };
-    auto status = exec();
+    NYdb::NConfig::TReplaceConfigSettings settings;
+
+    if (Force) {
+        settings.BypassChecks();
+    }
+
+    if (DryRun) {
+        settings.DryRun();
+    }
+
+    if (AllowUnknownFields) {
+        settings.AllowUnknownFields();
+    }
+
+    auto status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
+
+    if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+        Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
+
+        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+
+        status = [&]() {
+            if (Force) {
+                return client.SetConfig(
+                    DynamicConfig,
+                    DryRun,
+                    AllowUnknownFields).GetValueSync();
+            }
+
+            return client.ReplaceConfig(
+                DynamicConfig,
+                DryRun,
+                AllowUnknownFields).GetValueSync();
+        }();
+    }
+
     NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
 
     if (!status.GetIssues()) {

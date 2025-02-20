@@ -33,6 +33,7 @@ public:
     enum class ETargetKind: ui8 {
         Table,
         IndexTable,
+        Transfer,
     };
 
     enum class EDstState: ui8 {
@@ -54,11 +55,22 @@ public:
 
     class ITarget {
     public:
+        struct IConfig {
+            using TPtr = std::shared_ptr<IConfig>;
+
+            virtual ~IConfig() = default;
+
+            virtual ETargetKind GetKind() const = 0;
+            virtual const TString& GetSrcPath() const = 0;
+            virtual const TString& GetDstPath() const = 0;
+        };
+
         virtual ~ITarget() = default;
 
         virtual ui64 GetId() const = 0;
         virtual ETargetKind GetKind() const = 0;
 
+        virtual const IConfig::TPtr& GetConfig() const = 0;
         virtual const TString& GetSrcPath() const = 0;
         virtual const TString& GetDstPath() const = 0;
 
@@ -105,8 +117,8 @@ public:
     explicit TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::TReplicationConfig&& config);
     explicit TReplication(ui64 id, const TPathId& pathId, const TString& config);
 
-    ui64 AddTarget(ETargetKind kind, const TString& srcPath, const TString& dstPath);
-    ITarget* AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const TString& dstPath);
+    ui64 AddTarget(ETargetKind kind, const ITarget::IConfig::TPtr& config);
+    ITarget* AddTarget(ui64 id, ETargetKind kind, const ITarget::IConfig::TPtr& config);
     const ITarget* FindTarget(ui64 id) const;
     ITarget* FindTarget(ui64 id);
     void RemoveTarget(ui64 id);

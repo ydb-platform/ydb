@@ -21,7 +21,7 @@ struct TOperationInfo {
 };
 
 struct TIdempotencyKeyInfo {
-    TString operationId;
+    TString OperationId;
     TInstant OperationCreationTime;
 };
 
@@ -47,13 +47,13 @@ public:
         TGuard<TMutex> guard(Mutex_);
         TMaybe<TString> IdempotencyKey = request.IdempotencyKey;
         if (IdempotencyKey && IdempotencyKeys_.contains(*IdempotencyKey)) {
-            auto operationId = IdempotencyKeys_[*IdempotencyKey].operationId;
+            auto operationId = IdempotencyKeys_[*IdempotencyKey].OperationId;
             auto& operationInfo = Operations_[operationId];
             return NThreading::MakeFuture(TStartOperationResponse(operationInfo.OperationStatus, operationId));
         }
         auto operationId = GenerateId();
         if (IdempotencyKey) {
-            IdempotencyKeys_[*IdempotencyKey] = TIdempotencyKeyInfo{.operationId = operationId, .OperationCreationTime=TInstant::Now()};
+            IdempotencyKeys_[*IdempotencyKey] = TIdempotencyKeyInfo{.OperationId = operationId, .OperationCreationTime=TInstant::Now()};
         }
 
         TString taskId = GenerateId();
@@ -107,17 +107,16 @@ public:
         TGuard<TMutex> guard(Mutex_);
 
         ui32 workerId = request.WorkerId;
-        YQL_ENSURE(workerId >= 1 && workerId <= WorkersNum_);
-        if (! workerToVolatileId_.contains(workerId)) {
-            workerToVolatileId_[workerId] = request.VolatileId;
-        } else if (request.VolatileId != workerToVolatileId_[workerId]) {
-            workerToVolatileId_[workerId] = request.VolatileId;
+        YQL_ENSURE(workerId >= 0 && workerId < WorkersNum_);
+        if (! WorkerToVolatileId_.contains(workerId)) {
+            WorkerToVolatileId_[workerId] = request.VolatileId;
+        } else if (request.VolatileId != WorkerToVolatileId_[workerId]) {
+            WorkerToVolatileId_[workerId] = request.VolatileId;
             for (auto& [taskId, taskInfo]: Tasks_) {
                 auto taskStatus = Tasks_[taskId].TaskStatus;
                 auto operationId = Tasks_[taskId].OperationId;
                 if (taskStatus == ETaskStatus::InProgress) {
                     TaskToDeleteIds_.insert(taskId); // Task is currently running, send signal to worker to cancel
-                    TString sessionId = Operations_[operationId].SessionId;
                     TFmrError error{
                         .Component = EFmrComponent::Coordinator, .ErrorMessage = "Max retries limit exceeded", .OperationId = operationId};
                     SetUnfinishedTaskStatus(taskId, ETaskStatus::Failed, error);
@@ -145,7 +144,7 @@ public:
         }
 
         for (auto& taskId: TaskToDeleteIds_) {
-            SetUnfinishedTaskStatus(taskId, ETaskStatus::Aborted);
+            SetUnfinishedTaskStatus(taskId, ETaskStatus::Failed);
         }
         return NThreading::MakeFuture(THeartbeatResponse{.TasksToRun = tasksToRun, .TaskToDeleteIds = TaskToDeleteIds_});
     }
@@ -159,7 +158,7 @@ private:
                     auto currentTime = TInstant::Now();
                     for (auto it = IdempotencyKeys_.begin(); it != IdempotencyKeys_.end();) {
                         auto operationCreationTime = it->second.OperationCreationTime;
-                        auto operationId = it->second.operationId;
+                        auto operationId = it->second.OperationId;
                         if (currentTime - operationCreationTime > IdempotencyKeyStoreTime_) {
                             it = IdempotencyKeys_.erase(it);
                             if (Operations_.contains(operationId)) {
@@ -229,7 +228,7 @@ private:
 
     TMutex Mutex_;
     const ui32 WorkersNum_;
-    std::unordered_map<ui32, TString> workerToVolatileId_; // worker id -> volatile id
+    std::unordered_map<ui32, TString> WorkerToVolatileId_; // worker id -> volatile id
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     std::thread ClearIdempotencyKeysThread_;
     std::atomic<bool> StopCoordinator_;

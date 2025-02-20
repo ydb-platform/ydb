@@ -366,6 +366,7 @@ public:
 
     void HandleFinalize(TEvents::TEvUndelivered::TPtr&) {
         auto issue = YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN, "Buffer actor isn't available. Operation state unknown.");
+        // TODO: better
         ReplyErrorAndDie(Ydb::StatusIds::UNDETERMINED, issue);
     }
 

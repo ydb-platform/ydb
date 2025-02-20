@@ -1,6 +1,7 @@
 #include "kqp_ut_common.h"
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
@@ -135,6 +136,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->SetEnableOlapCompression(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
+    ServerSettings->Controls = settings.Controls;
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);
@@ -1353,6 +1355,72 @@ void WaitForZeroSessions(const NKqp::TKqpCounters& counters) {
     }
 
     UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+}
+
+void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
+    int iterators = 0;
+    static const TString counterName = "DataShard/ReadIteratorsCount";
+
+    for (int i = 0; i < 10; i++, Sleep(TDuration::Seconds(1))) {
+        TTestActorRuntime* runtime = server.GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        auto shards = GetTableShards(&server, sender, path);
+        UNIT_ASSERT_C(shards.size() > 0, "Table: " << path << " has no shards");
+        iterators = 0;
+        for (auto x : shards) {
+            runtime->SendToPipe(
+                x,
+                sender,
+                new TEvTablet::TEvGetCounters,
+                0,
+                GetPipeConfigWithRetries());
+
+            auto ev = runtime->GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
+            UNIT_ASSERT(ev);
+
+            const NKikimrTabletBase::TEvGetCountersResponse& resp = ev->Get()->Record;
+            for (const auto& counter : resp.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+                if (counterName != counter.GetName()) {
+                    continue;
+                }
+
+                iterators += counter.GetValue();
+            }
+        }
+        if (iterators == 0) {
+            break;
+        }
+    }
+
+    UNIT_ASSERT_C(iterators == 0, "Unable to wait for proper read iterator count, it looks like cancelation doesn`t work (" << iterators << ")");
+}
+
+TTableId ResolveTableId(Tests::TServer* server, TActorId sender, const TString& path) {
+    auto response = Navigate(*server->GetRuntime(), sender, path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+    return response->ResultSet.at(0).TableId;
+}
+
+NKikimrTxDataShard::TEvCompactTableResult CompactTable(
+    Tests::TServer* server, ui64 shardId, const TTableId& tableId, bool compactBorrowed)
+{
+    TTestActorRuntime* runtime = server->GetRuntime();
+    auto sender = runtime->AllocateEdgeActor();
+    auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+    request->Record.SetCompactBorrowed(compactBorrowed);
+    runtime->SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+    auto ev = runtime->GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+    return ev->Get()->Record;
+}
+
+void WaitForCompaction(Tests::TServer* server, const TString& path, bool compactBorrowed) {
+    TTestActorRuntime* runtime = server->GetRuntime();
+    auto sender = runtime->AllocateEdgeActor();
+    auto shards = GetTableShards(server, sender, path);
+    auto tableId = ResolveTableId(server, sender, path);
+    for (auto shard : shards) {
+        CompactTable(server, shard, tableId, compactBorrowed);
+    }
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {

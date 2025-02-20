@@ -311,12 +311,34 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     auto& pqGroup = *modifyScheme.MutableAlterPersQueueGroup();
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);
-    modifyScheme.SetWorkingDir(dstPath.PathString());
-    pqGroup.SetName(importChangefeedTopic.GetChangefeed().name());
+    modifyScheme.SetWorkingDir(dstPath.PathString() + "/" + importChangefeedTopic.GetChangefeed().name());
+    modifyScheme.SetInternal(true);
+
+    pqGroup.SetName("streamImpl");
+
+    auto describeSchemeResult = DescribePath(ss, TlsActivationContext->AsActorContext(),
+        dstPath.PathString() + "/" + importChangefeedTopic.GetChangefeed().name() + "/streamImpl");
+
+    const auto& response = describeSchemeResult->GetRecord().GetPathDescription();
+    pqGroup.CopyFrom(response.GetPersQueueGroup());
+
+    pqGroup.ClearTotalGroupCount();
+    pqGroup.MutablePQTabletConfig()->ClearPartitionKeySchema();
+
+    {
+        auto applyIf = modifyScheme.AddApplyIf();
+        applyIf->SetPathId(response.GetSelf().GetPathId());
+        applyIf->SetPathVersion(response.GetSelf().GetPathVersion());
+    }
+
+    auto* tabletConfig = pqGroup.MutablePQTabletConfig();
+    const auto& pqConfig = AppData()->PQConfig;
+    auto serviceTypes = NGRpcProxy::V1::GetSupportedClientServiceTypes(pqConfig);
 
     for (const auto& consumer : topic.consumers()) {
-        auto pqConsumer = *pqGroup.MutablePQTabletConfig()->AddConsumers();
-        *pqConsumer.MutableName() = consumer.name();
+        auto rule = ::Ydb::PersQueue::V1::TopicSettings_ReadRule();
+        rule.set_consumer_name(consumer.name());
+        AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig);
     }
     
     return propose;

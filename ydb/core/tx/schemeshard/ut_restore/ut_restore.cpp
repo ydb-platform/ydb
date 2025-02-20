@@ -5068,6 +5068,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             [changefeedPath = TString(changefeedPath)](TTestBasicRuntime& runtime) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath, false, false, true), {
                     NLs::PathExist,
+                });
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath + "/streamImpl", false, false, true), {
                     NLs::ConsumerExist("my_consumer")
                 });
             }

@@ -26,7 +26,6 @@ public:
     const NYql::TIssues& GetIssues() const;
     bool IsSuccess() const;
     bool IsTransportError() const;
-    bool IsUnimplementedError() const;
     const TStringType& GetEndpoint() const;
     const std::multimap<TStringType, TStringType>& GetResponseMetadata() const;
     float GetConsumedRu() const;

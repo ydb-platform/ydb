@@ -501,12 +501,12 @@ public:
 
                 checks
                     .IsValidLeafName()
+                    .PathsLimit()
+                    .DirChildrenLimit()
                     .IsValidACL(acl);
 
                 if (!Transaction.internal()) {
                     checks
-                        .PathsLimit()
-                        .DirChildrenLimit()
                         .ShardsLimit(shardsToCreate)
                         .PathShardsLimit(shardsToCreate);
                 }

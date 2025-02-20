@@ -60,12 +60,12 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         // TODO(mbkkt) less than necessary for vector index
         checks
-            .IsValidLeafName();
+            .IsValidLeafName()
+            .PathsLimit(2) // index and impl-table
+            .DirChildrenLimit();
 
         if (!tx.internal()) {
             checks
-                .PathsLimit(2) // index and impl-table
-                .DirChildrenLimit()
                 .ShardsLimit(1); // impl-table
         }
 

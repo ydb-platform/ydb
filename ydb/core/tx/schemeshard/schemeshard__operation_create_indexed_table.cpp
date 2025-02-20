@@ -107,12 +107,16 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
     }
 
-    if (!tx.internal()) {
+    {
         auto checks = baseTablePath.Check();
         checks
             .PathShardsLimit(baseShards)
-            .PathsLimit(pathToCreate)
-            .ShardsLimit(shardsToCreate);
+            .PathsLimit(pathToCreate);
+
+        if (!tx.GetInternal()) {
+            checks
+                .ShardsLimit(shardsToCreate);
+        }
 
         if (!checks) {
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, checks.GetError())};

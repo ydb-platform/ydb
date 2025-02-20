@@ -571,7 +571,7 @@ private:
                         SelfId(),
                         Params.QueryId,
                         Params.YqSharedResources->UserSpaceYdbDriver,
-                        Params.DefaultPqGateway,
+                        Params.PqGateway,
                         Params.Resources.topic_consumers(),
                         PrepareReadRuleCredentials()
                     )
@@ -1436,7 +1436,7 @@ private:
                 SelfId(),
                 Params.QueryId,
                 Params.YqSharedResources->UserSpaceYdbDriver,
-                Params.DefaultPqGateway,
+                Params.PqGateway,
                 Params.Resources.topic_consumers(),
                 PrepareReadRuleCredentials()
             )
@@ -1947,6 +1947,9 @@ private:
             gatewaysConfig,
             clusters);
 
+        auto pqGateway = Params.PqGateway;
+        pqGateway->UpdateClusterConfigs(std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()));
+
         TVector<TDataProviderInitializer> dataProvidersInit;
         const std::shared_ptr<IDatabaseAsyncResolver> dbResolver = std::make_shared<TDatabaseAsyncResolverImpl>(
             NActors::TActivationContext::ActorSystem(),
@@ -1972,16 +1975,6 @@ private:
         }
 
         {
-            NYql::TPqGatewayServices pqServices(
-                Params.YqSharedResources->UserSpaceYdbDriver,
-                Params.PqCmConnections,
-                Params.CredentialsFactory,
-                std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()),
-                Params.FunctionRegistry,
-                nullptr,
-                Params.DefaultPqGateway->GetTopicClientSettings()
-            );
-            const auto pqGateway = NYql::CreatePqNativeGateway(pqServices);
             dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
         }
 

@@ -58,6 +58,8 @@ public:
         const TString& endpoint,
         const TString& database,
         bool secure) override;
+
+    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) override;
     
     ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override;

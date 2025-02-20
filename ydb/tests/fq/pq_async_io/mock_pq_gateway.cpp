@@ -148,6 +148,8 @@ public:
         const TString& /*database*/,
         bool /*secure*/) override {}
 
+    void UpdateClusterConfigs(const TPqGatewayConfigPtr& /*config*/) override {};
+
     NYql::ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& /*driver*/, const NYdb::NTopic::TTopicClientSettings& /*settings*/) override {
         return MakeIntrusive<TMockTopicClient>(this);
     }

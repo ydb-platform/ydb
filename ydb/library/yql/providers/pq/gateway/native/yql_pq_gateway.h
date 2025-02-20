@@ -16,9 +16,6 @@ class IFunctionRegistry;
 
 namespace NYql {
 
-class TPqGatewayConfig;
-using TPqGatewayConfigPtr = std::shared_ptr<TPqGatewayConfig>;
-
 struct TPqGatewayServices {
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     TPqGatewayConfigPtr Config;

@@ -13,6 +13,9 @@
 
 namespace NYql {
 
+class TPqGatewayConfig;
+using TPqGatewayConfigPtr = std::shared_ptr<TPqGatewayConfig>;
+
 struct IPqGateway : public TThrRefBase {
     using TPtr = TIntrusivePtr<IPqGateway>;
 
@@ -36,6 +39,8 @@ struct IPqGateway : public TThrRefBase {
         const TString& endpoint,
         const TString& database,
         bool secure) = 0;
+
+    virtual void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) = 0;
 
     virtual NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const = 0;
 };

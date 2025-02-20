@@ -979,7 +979,7 @@ public:
             TxManager->SetError(ev->Get()->TabletId);
             if (Mode == EMode::IMMEDIATE_COMMIT) {
                 RuntimeError(
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::NDqProto::StatusIds::UNDETERMINED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
                     TStringBuilder()
                         << "Error writing to table `" << TableId.PathId.ToString() << "`"
@@ -2117,13 +2117,12 @@ public:
             }
 
             ReplyErrorAndDie(
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::NDqProto::StatusIds::UNDETERMINED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
                     TStringBuilder() << "Failed to deviler message to coordinator.",
                     {});
             return;
         }
-
 
         ReplyErrorAndDie(
             NYql::NDqProto::StatusIds::UNAVAILABLE,

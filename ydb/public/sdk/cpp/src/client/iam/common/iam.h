@@ -19,12 +19,19 @@ class TGrpcIamCredentialsProvider : public ICredentialsProvider {
 protected:
     using TRequestFiller = std::function<void(TRequest&)>;
 
+    using TSimpleRpc =
+        typename NYdbGrpc::TSimpleRequestProcessor<
+            typename TService::Stub,
+            TRequest,
+            TResponse>::TAsyncRequest;
+
 private:
     class TImpl : public std::enable_shared_from_this<TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl> {
     public:
-        TImpl(const TIamEndpoint& iamEndpoint, const TRequestFiller& requestFiller)
+        TImpl(const TIamEndpoint& iamEndpoint, const TRequestFiller& requestFiller, TSimpleRpc rpc)
             : Client(std::make_unique<NYdbGrpc::TGRpcClientLow>())
             , Connection_(nullptr)
+            , Rpc_(rpc)
             , Ticket_("")
             , NextTicketUpdate_(TInstant::Zero())
             , IamEndpoint_(iamEndpoint)
@@ -67,7 +74,7 @@ private:
             Connection_->template DoRequest<TRequest, TResponse>(
                 std::move(req),
                 std::move(cb),
-                &TService::Stub::AsyncCreate,
+                Rpc_,
                 { {}, {}, IamEndpoint_.RequestTimeout }
             );
 
@@ -142,9 +149,9 @@ private:
         }
 
     private:
-
         std::unique_ptr<NYdbGrpc::TGRpcClientLow> Client;
         std::unique_ptr<NYdbGrpc::TServiceConnection<TService>> Connection_;
+        TSimpleRpc Rpc_;
         std::string Ticket_;
         TInstant NextTicketUpdate_;
         const TIamEndpoint IamEndpoint_;
@@ -157,8 +164,8 @@ private:
     };
 
 public:
-    TGrpcIamCredentialsProvider(const TIamEndpoint& endpoint, const TRequestFiller& requestFiller)
-        : Impl_(std::make_shared<TImpl>(endpoint, requestFiller))
+    TGrpcIamCredentialsProvider(const TIamEndpoint& endpoint, const TRequestFiller& requestFiller, TSimpleRpc rpc)
+        : Impl_(std::make_shared<TImpl>(endpoint, requestFiller, rpc))
     {
         Impl_->UpdateTicket(true);
     }
@@ -186,7 +193,7 @@ public:
         : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
             [jwtParams = params.JwtParams](TRequest& req) {
                 req.set_jwt(MakeSignedJwt(jwtParams));
-            }) {}
+            }, &TService::Stub::AsyncCreate) {}
 };
 
 template<typename TRequest, typename TResponse, typename TService>

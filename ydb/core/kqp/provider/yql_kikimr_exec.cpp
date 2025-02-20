@@ -1492,10 +1492,6 @@ public:
                     auto resultNode = ctx.NewWorld(input->Pos());
                     return resultNode;
                 }, GetDropTableDebugString(tableTypeItem));
-
-            input->SetState(TExprNode::EState::ExecutionComplete);
-            input->SetResult(ctx.NewWorld(input->Pos()));
-            return SyncOk();
         }
 
         if (auto maybeAlter = TMaybeNode<TKiAlterTable>(input)) {

@@ -229,7 +229,7 @@ private:
     std::map<ui32, TStageExecutionStats> StageStats;
     std::map<ui32, TIngressExternalPartitionStat> ExternalPartitionStats; // FIXME: several ingresses
     ui64 BaseTimeMs = 0;
-    TDuration LongestTaskDuration;
+    std::map<ui32, TDuration> LongestTaskDurations;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
     void AdjustExternalAggr(NYql::NDqProto::TDqExternalAggrStats& stats);

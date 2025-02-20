@@ -331,6 +331,12 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool prepare, bool last) {
     Rows = 0;
     BytesRead = 0;
 
+    // Compression finishes compression frame during Flush
+    // so that last table row borders equal to compression frame borders.
+    // This full finished block must then be encrypted so that encryption frame
+    // has the same borders.
+    // It allows to import data in batches and save its state during import.
+
     if (Compression) {
         TMaybe<TBuffer> compressedBuffer = Compression->Flush(prepare);
         if (!compressedBuffer) {

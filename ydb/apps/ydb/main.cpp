@@ -1,4 +1,5 @@
 #include <ydb/apps/ydb/commands/ydb_root.h>
+#include <ydb/apps/ydb/factories/cli_factories.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 
 TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
@@ -11,7 +12,9 @@ TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
 
 int main(int argc, char **argv) {
     try {
-        return NYdb::NConsoleClient::NewYdbClient(argc, argv);
+        NYdb::NConsoleClient::TModuleFactories factories;
+        factories.ConfigSwissKnife = NKikimr::NYamlConfig::CreateDefaultConfigSwissKnife();
+        return NYdb::NConsoleClient::NewYdbClient(argc, argv, std::move(factories));
     }
     catch (const NYdb::NConsoleClient::TMisuseWithHelpException& e) {
         // command help is already printed. Just exit(1)

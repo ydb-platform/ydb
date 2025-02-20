@@ -102,7 +102,7 @@ int TYdbClientCommandRoot::Run(TConfig& config) {
     return TClientCommandRoot::Run(config);
 }
 
-int NewYdbClient(int argc, char** argv) {
+int NewYdbClient(int argc, char** argv, TModuleFactories&& factories) {
     NYdb::NConsoleClient::TClientSettings settings;
     settings.EnableSsl = true;
     settings.UseAccessToken = true;
@@ -114,6 +114,8 @@ int NewYdbClient(int argc, char** argv) {
     settings.MentionUserAccount = false;
     settings.StorageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/release";
     settings.YdbDir = "ydb";
+
+    NYdb::NConsoleClient::AppData()->Factories = factories;
 
     auto commandsRoot = MakeHolder<TYdbClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
     commandsRoot->Opts.SetTitle("YDB client");

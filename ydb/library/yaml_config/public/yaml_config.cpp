@@ -870,6 +870,111 @@ std::variant<TMainMetadata, TDatabaseMetadata, TError> GetGenericMetadata(const 
     }
 }
 
+class TDefaultConfigSwissKnife : public IConfigSwissKnife {
+public:
+    /**
+    * Parses config metadata
+    */
+    std::variant<TMainMetadata, TDatabaseMetadata, TError> GetGenericMetadata(const TString& config) const override {
+        return NYamlConfig::GetGenericMetadata(config);
+    }
+
+    /**
+    * Parses config metadata
+    */
+    TMainMetadata GetMainMetadata(const TString& config) const override {
+        return NYamlConfig::GetMainMetadata(config);
+    }
+
+    /**
+    * Parses database config metadata
+    */
+    TDatabaseMetadata GetDatabaseMetadata(const TString& config) const override {
+        return NYamlConfig::GetDatabaseMetadata(config);
+    }
+
+    /**
+    * Parses storage config metadata
+    */
+    TStorageMetadata GetStorageMetadata(const TString& config) const override {
+        return NYamlConfig::GetStorageMetadata(config);
+    }
+
+    /**
+    * Parses volatile config metadata
+    */
+    TVolatileMetadata GetVolatileMetadata(const TString& config) const override {
+        return NYamlConfig::GetVolatileMetadata(config);
+    }
+
+    /**
+    * Replaces metadata in config
+    */
+    TString ReplaceMetadata(const TString& config, const TMainMetadata& metadata) const override {
+        return NYamlConfig::ReplaceMetadata(config, metadata);
+    }
+
+    /**
+    * Replaces metadata in database config
+    */
+    TString ReplaceMetadata(const TString& config, const TDatabaseMetadata& metadata) const override {
+        return NYamlConfig::ReplaceMetadata(config, metadata);
+    }
+
+    /**
+    * Replaces volatile metadata in config
+    */
+    TString ReplaceMetadata(const TString& config, const TVolatileMetadata& metadata) const override {
+        return NYamlConfig::ReplaceMetadata(config, metadata);
+    }
+
+    /**
+    * Checks whether string is volatile config or not
+    */
+    bool IsVolatileConfig(const TString& config) const override {
+        return NYamlConfig::IsVolatileConfig(config);
+    }
+
+    /**
+    * Checks whether string is main config or not
+    */
+    bool IsMainConfig(const TString& config) const override {
+        return NYamlConfig::IsMainConfig(config);
+    }
+
+    /**
+    * Checks whether string is storage config or not
+    */
+    bool IsStorageConfig(const TString& config) const override {
+        return NYamlConfig::IsStorageConfig(config);
+    }
+
+    /**
+    * Checks whether string is main config or not
+    */
+    bool IsDatabaseConfig(const TString& config) const override {
+        return NYamlConfig::IsDatabaseConfig(config);
+    }
+
+    /**
+    * Checks whether string is static config or not
+    */
+    bool IsStaticConfig(const TString& config) const override {
+        return NYamlConfig::IsStaticConfig(config);
+    }
+
+    /**
+    * Strips metadata from config
+    */
+    TString StripMetadata(const TString& config) const override {
+        return NYamlConfig::StripMetadata(config);
+    }
+};
+
+std::shared_ptr<IConfigSwissKnife> CreateDefaultConfigSwissKnife() {
+    return std::make_shared<TDefaultConfigSwissKnife>();
+}
+
 } // namespace NKikimr::NYamlConfig
 
 template <>

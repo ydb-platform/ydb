@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     ydb/apps/ydb/commands
+    ydb/apps/ydb/factories
 )
 
 RESOURCE(

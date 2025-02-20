@@ -3,6 +3,7 @@
 #include <ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
 #include <ydb-cpp-sdk/client/config/config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
+#include <ydb/apps/ydb/factories/cli_factories.h>
 
 #include <openssl/sha.h>
 
@@ -12,6 +13,10 @@
 using namespace NKikimr;
 
 namespace NYdb::NConsoleClient::NDynamicConfig {
+
+NKikimr::NYamlConfig::IConfigSwissKnife& Csk() {
+    return *NYdb::NConsoleClient::AppData()->Factories.ConfigSwissKnife;
+}
 
 TString WrapYaml(const TString& yaml) {
     auto doc = NFyaml::TDocument::Parse(yaml);
@@ -112,11 +117,11 @@ int TCommandConfigFetch::Run(TConfig& config) {
     ui64 version = 0;
 
     if (cfg) {
-        auto metadata = NYamlConfig::GetMainMetadata(cfg);
+        auto metadata = Csk().GetMainMetadata(cfg);
         version = metadata.Version.value();
 
         if (StripMetadata) {
-            cfg = NYamlConfig::StripMetadata(cfg);
+            cfg = Csk().StripMetadata(cfg);
         }
     } else {
         Cerr << "YAML config is absent on this cluster." << Endl;
@@ -136,7 +141,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
     if (All) {
         for (auto [id, cfg] : result.GetVolatileConfigs()) {
             if (StripMetadata) {
-                cfg = NYamlConfig::StripMetadata(TString{cfg});
+                cfg = Csk().StripMetadata(TString{cfg});
             }
 
             if (!OutDir) {
@@ -188,7 +193,7 @@ void TCommandConfigReplace::Parse(TConfig& config) {
     DynamicConfig = configStr;
 
     if (!IgnoreCheck) {
-        NYamlConfig::GetMainMetadata(configStr);
+        Csk().GetMainMetadata(configStr);
         auto tree = NFyaml::TDocument::Parse(configStr);
         const auto resolved = NYamlConfig::ResolveAll(tree);
         Y_UNUSED(resolved); // we can't check it better without ydbd
@@ -345,7 +350,7 @@ int TCommandConfigResolve::Run(TConfig& config) {
         for (auto& entry : entries) {
             if (entry.IsFile() && entry.GetName().StartsWith("volatile_") && entry.GetName().EndsWith(".yaml")) {
                 auto volatileConfigStr = TFileInput(entry).ReadAll();
-                auto metadata = NYamlConfig::GetVolatileMetadata(volatileConfigStr);
+                auto metadata = Csk().GetVolatileMetadata(volatileConfigStr);
                 volatileConfigStrs[metadata.Id.value()] = volatileConfigStr;
             }
         }
@@ -558,7 +563,7 @@ int TCommandConfigVolatileAdd::Run(TConfig& config) {
             ythrow yexception() << "Config on server is empty";
         }
 
-        NYamlConfig::GetVolatileMetadata(configStr);
+        Csk().GetVolatileMetadata(configStr);
 
         auto tree = NFyaml::TDocument::Parse(TString{result.GetConfig()});
 
@@ -630,8 +635,8 @@ int TCommandConfigVolatileDrop::Run(TConfig& config) {
         for (auto& entry : entries) {
             if (entry.IsFile() && entry.GetName().StartsWith("volatile_") && entry.GetName().EndsWith(".yaml")) {
                 auto volatileConfigStr = TFileInput(entry).ReadAll();
-                if (NYamlConfig::IsVolatileConfig(volatileConfigStr)) {
-                    auto metadata = NYamlConfig::GetVolatileMetadata(volatileConfigStr);
+                if (Csk().IsVolatileConfig(volatileConfigStr)) {
+                    auto metadata = Csk().GetVolatileMetadata(volatileConfigStr);
                     Ids.insert(metadata.Id.value());
                     Cluster = metadata.Cluster.value();
                     Version = metadata.Version.value();
@@ -643,8 +648,8 @@ int TCommandConfigVolatileDrop::Run(TConfig& config) {
 
     if (!Filename.empty()) {
         auto volatileConfigStr = TFileInput(Filename).ReadAll();
-        if (NYamlConfig::IsVolatileConfig(volatileConfigStr)) {
-            auto metadata = NYamlConfig::GetVolatileMetadata(volatileConfigStr);
+        if (Csk().IsVolatileConfig(volatileConfigStr)) {
+            auto metadata = Csk().GetVolatileMetadata(volatileConfigStr);
             Ids.insert(metadata.Id.value());
             Cluster = metadata.Cluster.value();
             Version = metadata.Version.value();
@@ -714,10 +719,10 @@ int TCommandConfigVolatileFetch::Run(TConfig& config) {
 
     for (auto [id, cfg] : result.GetVolatileConfigs()) {
         if (All || Ids.contains(id)) {
-            version = NYamlConfig::GetVolatileMetadata(TString{cfg}).Version.value();
+            version = Csk().GetVolatileMetadata(TString{cfg}).Version.value();
 
             if (StripMetadata) {
-                cfg = NYamlConfig::StripMetadata(TString{cfg});
+                cfg = Csk().StripMetadata(TString{cfg});
             }
 
             if (!OutDir) {
@@ -752,7 +757,7 @@ int TCommandGenerateDynamicConfig::Run(TConfig& config) {
 
     auto result = client.FetchStartupConfig().GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-    if (NYamlConfig::IsStaticConfig(TString{result.GetConfig()})) {
+    if (Csk().IsStaticConfig(TString{result.GetConfig()})) {
         Cout << WrapStaticConfig(TString{result.GetConfig()});
     } else {
         Cout << "Startup config is already dynamic" << Endl;

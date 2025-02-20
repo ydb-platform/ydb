@@ -14,7 +14,7 @@ public:
     {
     }
 
-    TAsyncStatus ReplaceConfig(const TString& mainConfig, const TReplaceConfigSettings& settings = {}) {
+    TAsyncStatus ReplaceConfig(const std::string& mainConfig, const TReplaceConfigSettings& settings = {}) {
         auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
         request.set_replace(mainConfig);
 
@@ -25,7 +25,7 @@ public:
             &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig);
     }
 
-    TAsyncStatus ReplaceConfig(const TString& mainConfig, const TString& storageConfig, const TReplaceConfigSettings& settings = {}) {
+    TAsyncStatus ReplaceConfig(const std::string& mainConfig, const std::string& storageConfig, const TReplaceConfigSettings& settings = {}) {
         auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
         auto& replace = *request.mutable_replace_with_dedicated_storage_section();
         replace.set_main_config(mainConfig);
@@ -38,7 +38,7 @@ public:
             &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig);
     }
 
-    TAsyncStatus ReplaceConfigDisableDedicatedStorageSection(const TString& mainConfig, const TReplaceConfigSettings& settings = {}) {
+    TAsyncStatus ReplaceConfigDisableDedicatedStorageSection(const std::string& mainConfig, const TReplaceConfigSettings& settings = {}) {
         auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
         request.set_replace_disable_dedicated_storage_section(mainConfig);
 
@@ -49,7 +49,7 @@ public:
             &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig);
     }
 
-    TAsyncStatus ReplaceConfigEnableDedicatedStorageSection(const TString& mainConfig, const TString& storageConfig, const TReplaceConfigSettings& settings = {}) {
+    TAsyncStatus ReplaceConfigEnableDedicatedStorageSection(const std::string& mainConfig, const std::string& storageConfig, const TReplaceConfigSettings& settings = {}) {
         auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
         auto& replace = *request.mutable_replace_enable_dedicated_storage_section();
         replace.set_main_config(mainConfig);
@@ -117,7 +117,7 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncStatus BootstrapCluster(const TString& selfAssemblyUUID, const TBootstrapClusterSettings& settings = {}) {
+    TAsyncStatus BootstrapCluster(const std::string& selfAssemblyUUID, const TBootstrapClusterSettings& settings = {}) {
         Y_UNUSED(settings);
         auto request = MakeRequest<Ydb::Config::BootstrapClusterRequest>();
         request.set_self_assembly_uuid(selfAssemblyUUID);
@@ -141,30 +141,30 @@ TConfigClient::TConfigClient(const TDriver& driver, const TCommonClientSettings&
 TConfigClient::~TConfigClient() = default;
 
 TAsyncStatus TConfigClient::ReplaceConfig(
-    const TString& mainConfig,
+    const std::string& mainConfig,
     const TReplaceConfigSettings& settings)
 {
     return Impl_->ReplaceConfig(mainConfig, settings);
 }
 
 TAsyncStatus TConfigClient::ReplaceConfig(
-    const TString& mainConfig,
-    const TString& storageConfig,
+    const std::string& mainConfig,
+    const std::string& storageConfig,
     const TReplaceConfigSettings& settings)
 {
     return Impl_->ReplaceConfig(mainConfig, storageConfig, settings);
 }
 
 TAsyncStatus TConfigClient::ReplaceConfigDisableDedicatedStorageSection(
-    const TString& mainConfig,
+    const std::string& mainConfig,
     const TReplaceConfigSettings& settings)
 {
     return Impl_->ReplaceConfigDisableDedicatedStorageSection(mainConfig, settings);
 }
 
 TAsyncStatus TConfigClient::ReplaceConfigEnableDedicatedStorageSection(
-    const TString& mainConfig,
-    const TString& storageConfig,
+    const std::string& mainConfig,
+    const std::string& storageConfig,
     const TReplaceConfigSettings& settings)
 {
     return Impl_->ReplaceConfigEnableDedicatedStorageSection(mainConfig, storageConfig, settings);
@@ -175,7 +175,7 @@ TAsyncFetchConfigResult TConfigClient::FetchAllConfigs(const TFetchAllConfigsSet
 }
 
 TAsyncStatus TConfigClient::BootstrapCluster(
-    const TString& selfAssemblyUUID,
+    const std::string& selfAssemblyUUID,
     const TBootstrapClusterSettings& settings)
 {
     return Impl_->BootstrapCluster(selfAssemblyUUID, settings);

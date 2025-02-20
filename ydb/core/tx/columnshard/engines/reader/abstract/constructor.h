@@ -8,6 +8,10 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/program/program.h>
 
+namespace NKikimr::NColumnShard {
+class TTablesManager;
+}
+
 namespace NKikimr::NOlap::NReader {
 
 class TScannerConstructorContext {
@@ -31,6 +35,7 @@ protected:
     const bool IsReverse;
     TConclusionStatus ParseProgram(const TVersionedIndex* vIndex, const NKikimrSchemeOp::EOlapProgramType programType,
         const TString& serializedProgram, TReadDescription& read, const NArrow::NSSA::IColumnResolver& columnResolver) const;
+    std::optional<TReadMetadataBase::TTtlBound> GetTtlBound(const ui64 pathId, const NColumnShard::TTablesManager& tablesManager) const;
 
 private:
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(

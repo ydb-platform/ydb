@@ -1,6 +1,7 @@
 #pragma once
 #include "fetching.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
@@ -140,6 +141,17 @@ public:
         : TBase("FETCHING_COLUMNS")
         , Columns(columns) {
         AFL_VERIFY(Columns.GetColumnsCount());
+    }
+};
+
+class TTtlFilter: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TTtlFilter()
+        : TBase("TTL") {
     }
 };
 

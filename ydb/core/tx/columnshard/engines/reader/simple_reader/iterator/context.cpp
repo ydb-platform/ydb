@@ -38,6 +38,16 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
                 return false;
         }
     }();
+    const bool useTtl = [&]() {
+        const auto& ttlBound = GetReadMetadata()->GetTtlBound();
+        if (!ttlBound) {
+            return false;
+        }
+        if (ttlBound->GetColumnId() != GetReadMetadata()->GetIndexInfo().GetPKFirstColumnId()) {
+            return false;
+        }
+        return true;
+    }();
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
     const bool hasDeletions = source->GetHasDeletions();
     bool needShardingFilter = false;
@@ -49,12 +59,12 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
     }
     {
         auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
-                                           [hasDeletions ? 1 : 0];
+                                           [hasDeletions ? 1 : 0][useTtl ? 1 : 0];
         if (result.NeedInitialization()) {
             TGuard<TMutex> g(Mutex);
             if (auto gInit = result.StartInitialization()) {
                 gInit->InitializationFinished(
-                    BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions));
+                    BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, useTtl));
             }
             AFL_VERIFY(!result.NeedInitialization());
         }
@@ -63,7 +73,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
 }
 
 std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
-    const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const {
+    const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion, const bool needFilterTtl) const {
     std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>(*this);
     const bool partialUsageByPredicate = partialUsageByPredicateExt && GetPredicateColumns()->GetColumnsCount();
 
@@ -89,6 +99,10 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         }
         if (partialUsageByPredicate) {
             columnsFetch = columnsFetch + *GetPredicateColumns();
+        }
+        if (needFilterTtl) {
+            AFL_VERIFY(GetReadMetadata()->GetTtlBound());
+            columnsFetch = columnsFetch + *columnsFetch.BuildSamePtr({ GetReadMetadata()->GetTtlBound()->GetColumnId() });
         }
 
         if (columnsFetch.GetColumnsCount()) {
@@ -122,6 +136,14 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
                 result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->GetLimitRobust(), GetReadMetadata()->IsDescSorted()));
             }
         }
+        if (needFilterTtl) {
+            AFL_VERIFY(GetReadMetadata()->GetTtlBound());
+            acc.AddAssembleStep(
+                *result, std::vector<ui32>(GetReadMetadata()->GetTtlBound()->GetColumnId()), "TTL", EStageFeaturesIndexes::Filter, false);
+            result->AddStep(std::make_shared<NCommon::TTtlFilter>());
+        }
+        acc.AddFetchingStep(*result, *GetFFColumns(), EStageFeaturesIndexes::Fetching);
+        acc.AddAssembleStep(*result, *GetFFColumns(), "LAST", EStageFeaturesIndexes::Fetching, false);
     }
     result->AddStep<NCommon::TBuildStageResultStep>();
     result->AddStep<TPrepareResultStep>();
@@ -138,8 +160,8 @@ TString TSpecialReadContext::ProfileDebugString() const {
         return (val & (1 << pos)) ? 1 : 0;
     };
 
-    for (ui32 i = 0; i < (1 << 5); ++i) {
-        auto& script = CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)];
+    for (ui32 i = 0; i < (1 << 6); ++i) {
+        auto& script = CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)][GetBit(i, 5)];
         if (script.HasScript()) {
             sb << script.DebugString() << ";";
         }

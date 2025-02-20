@@ -19,6 +19,23 @@ std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::
     }
 }
 
+std::shared_ptr<arrow::Scalar> TTierInfo::GetLargestExpiredScalar(const TInstant now, const arrow::Type::type resultType) const {
+    const TInstant expirationInstant = now - EvictDuration;
+    const ui64 unitsInSeconds = TtlUnitsInSecond ? TtlUnitsInSecond : 1;
+    switch (resultType) {
+        case arrow::Type::TIMESTAMP:
+            return std::make_shared<arrow::TimestampScalar>(expirationInstant.MicroSeconds(), std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO));
+        case arrow::Type::UINT16: // YQL Date
+            return std::make_shared<arrow::UInt16Scalar>(expirationInstant.Days());
+        case arrow::Type::UINT32: // YQL Datetime or Uint32
+            return std::make_shared<arrow::UInt32Scalar>(expirationInstant.MicroSeconds() * (1.0 * unitsInSeconds / 1000000));
+        case arrow::Type::UINT64:
+            return std::make_shared<arrow::UInt64Scalar>(expirationInstant.MicroSeconds() * (1.0 * unitsInSeconds / 1000000));
+        default:
+            return nullptr;
+    }
+}
+
 TTiering::TTieringContext TTiering::GetTierToMove(const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction) const {
     AFL_VERIFY(OrderedTiers.size());
     std::optional<TString> nextTierName;

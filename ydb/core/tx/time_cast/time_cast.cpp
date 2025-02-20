@@ -368,6 +368,7 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
             NTabletPipe::SendData(ctx, client, req.release());
 
             bucket.WatchSent = true;
+            bucket.WatchSynced = false;
         }
     }
 

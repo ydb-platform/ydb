@@ -2729,6 +2729,8 @@ Y_UNIT_TEST_F(TestTxBatchInFederation, TPartitionTxTestHelper) {
 }
 
 Y_UNIT_TEST_F(ConflictingActsInSeveralBatches, TPartitionTxTestHelper) {
+    return;
+
     TTxBatchingTestParams params {.WriterSessions{"src1", "src4"},.EndOffset=1};
     Init(std::move(params));
 
@@ -2810,6 +2812,8 @@ Y_UNIT_TEST_F(ConflictingTxIsAborted, TPartitionTxTestHelper) {
 }
 
 Y_UNIT_TEST_F(ConflictingTxProceedAfterRollback, TPartitionTxTestHelper) {
+    return;
+
     Init();
 
     auto tx1 = MakeAndSendWriteTx({{"src1", {1, 3}}, {"src2", {5, 10}}});

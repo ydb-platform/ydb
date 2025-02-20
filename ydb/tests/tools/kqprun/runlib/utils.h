@@ -34,17 +34,28 @@ struct TRequestResult {
 template <typename TResult>
 class TChoices {
 public:
-    explicit TChoices(std::map<TString, TResult> choicesMap, const TString& optionName = "")
+    explicit TChoices(std::map<TString, TResult> choicesMap, const TString& optionName = "", bool checkRegister = true)
         : ChoicesMap(std::move(choicesMap))
         , OptionName(optionName)
+        , CheckRegister(checkRegister)
     {}
 
-    TResult operator()(const TString& choice) const {
-        const auto it = ChoicesMap.find(choice);
-        // if (it == ChoicesMap.end()) {
+    TResult operator()(TString choice) const {
+        if (!CheckRegister) {
+            std::for_each(choice.begin(), choice.vend(), [](char& c) { c = std::tolower(c); });
+        }
 
-        //     throw yexception() << "Value '" << choice << "' is not allowed " << (OptionName ? TStringBuilder() << "for option " << OptionName : TStringBuilder()) << ", available variants:\n" << Join(", ")
-        // }
+        const auto it = ChoicesMap.find(choice);
+        if (it == ChoicesMap.end()) {
+            auto error = yexception() << "Value '" << choice << "' is not allowed " << (OptionName ? TStringBuilder() << "for option " << OptionName : TStringBuilder()) << ", available variants:\n";
+            for (auto it = ChoicesMap.begin(); it != ChoicesMap.end();) {
+                error << choice;
+                if (++it != ChoicesMap.end()) {
+                    error << ", ";
+                }
+            }
+            ythrow error;
+        }
         return it->second;
     }
 
@@ -64,6 +75,7 @@ public:
 private:
     const std::map<TString, TResult> ChoicesMap;
     const TString OptionName;
+    const bool CheckRegister;
 };
 
 class TStatsPrinter {
@@ -94,6 +106,8 @@ NKikimrServices::EServiceKikimr GetLogService(const TString& serviceName);
 void ModifyLogPriorities(std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> logPriorities, NKikimrConfig::TLogConfig& logConfig);
 
 void InitLogSettings(const NKikimrConfig::TLogConfig& logConfig, NActors::TTestActorRuntimeBase& runtime);
+
+TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName);
 
 void SetupSignalActions();
 

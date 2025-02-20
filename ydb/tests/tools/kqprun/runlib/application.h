@@ -2,6 +2,7 @@
 
 #include "settings.h"
 
+#include <library/cpp/colorizer/colors.h>
 #include <library/cpp/getopt/modchooser.h>
 
 #include <util/stream/file.h>
@@ -23,6 +24,8 @@ public:
 protected:
     void RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettings& settings);
 
+    virtual void RegisterLogOptions(NLastGetopt::TOpts& options);
+
     void FillLogConfig(NKikimrConfig::TLogConfig& config) const;
 
     static IOutputStream* GetDefaultOutput(const TString& file);
@@ -30,6 +33,7 @@ protected:
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistry() const;
 
 protected:
+    inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
     inline static IOutputStream* ProfileAllocationsOutput = nullptr;
 
 private:

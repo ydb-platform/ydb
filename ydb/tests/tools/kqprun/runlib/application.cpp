@@ -7,6 +7,7 @@
 #include <util/stream/file.h>
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/blob_depot/mon_main.h>
 
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/udf/udf_static_registry.h>
@@ -53,40 +54,7 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
             }
         });
 
-    TChoices<NActors::NLog::EPriority> logPriority({
-        {"emerg", NActors::NLog::EPriority::PRI_EMERG},
-        {"alert", NActors::NLog::EPriority::PRI_ALERT},
-        {"crit", NActors::NLog::EPriority::PRI_CRIT},
-        {"error", NActors::NLog::EPriority::PRI_ERROR},
-        {"warn", NActors::NLog::EPriority::PRI_WARN},
-        {"notice", NActors::NLog::EPriority::PRI_NOTICE},
-        {"info", NActors::NLog::EPriority::PRI_INFO},
-        {"debug", NActors::NLog::EPriority::PRI_DEBUG},
-        {"trace", NActors::NLog::EPriority::PRI_TRACE},
-    });
-    options.AddLongOption("log-default", "Default log priority")
-        .RequiredArgument("priority")
-        .StoreMappedResultT<TString>(&DefaultLogPriority, logPriority);
-
-    options.AddLongOption("log", "Component log priority in format <component>=<priority> (e. g. KQP_YQL=trace)")
-        .RequiredArgument("component priority")
-        .Handler1([this, logPriority](const NLastGetopt::TOptsParser* option) {
-            TStringBuf component;
-            TStringBuf priority;
-            TStringBuf(option->CurVal()).Split('=', component, priority);
-            if (component.empty() || priority.empty()) {
-                ythrow yexception() << "Incorrect log setting, expected form component=priority, e. g. KQP_YQL=trace";
-            }
-
-            if (!logPriority.Contains(TString(priority))) {
-                ythrow yexception() << "Incorrect log priority: " << priority;
-            }
-
-            const auto service = GetLogService(TString(component));
-            if (!LogPriorities.emplace(service, logPriority(TString(priority))).second) {
-                ythrow yexception() << "Got duplicated log service name: " << component;
-            }
-        });
+    RegisterLogOptions(options);
 
     options.AddLongOption("profile-output", "File with profile memory allocations output (use '-' to write in stdout)")
         .RequiredArgument("file")
@@ -126,6 +94,28 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
         .Handler1([backtrace](const NLastGetopt::TOptsParser* option) {
             TString choice(option->CurValOrDef());
             backtrace(choice)();
+        });
+}
+
+void TMainBase::RegisterLogOptions(NLastGetopt::TOpts& options) {
+    options.AddLongOption("log-default", "Default log priority")
+        .RequiredArgument("priority")
+        .StoreMappedResultT<TString>(&DefaultLogPriority, GetLogPrioritiesMap("log-default"));
+
+    options.AddLongOption("log", "Component log priority in format <component>=<priority> (e. g. KQP_YQL=trace)")
+        .RequiredArgument("component priority")
+        .Handler1([this, logPriority = GetLogPrioritiesMap("log")](const NLastGetopt::TOptsParser* option) {
+            TStringBuf component;
+            TStringBuf priority;
+            TStringBuf(option->CurVal()).Split('=', component, priority);
+            if (component.empty() || priority.empty()) {
+                ythrow yexception() << "Incorrect log setting, expected form component=priority, e. g. KQP_YQL=trace";
+            }
+
+            const auto service = GetLogService(TString(component));
+            if (!LogPriorities.emplace(service, logPriority(TString(priority))).second) {
+                ythrow yexception() << "Got duplicated log service name: " << component;
+            }
         });
 }
 

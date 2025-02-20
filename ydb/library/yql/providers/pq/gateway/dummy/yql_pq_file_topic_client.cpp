@@ -16,7 +16,7 @@ class TFileTopicReadSession : public NYdb::NTopic::IReadSession {
 constexpr static auto FILE_POLL_PERIOD = TDuration::MilliSeconds(5);
 
 public:
-    TFileTopicReadSession(TFile file, NYdb::NTopic::TPartitionSession::TPtr session, const TString& producerId = "")
+    TFileTopicReadSession(TFile file, NYdb::NTopic::TPartitionSession::TPtr session, const TString& producerId = "", bool cancelOnFileFinish = false)
         : File_(std::move(file))
         , Session_(std::move(session))
         , ProducerId_(producerId)
@@ -24,6 +24,7 @@ public:
                 PollFileForChanges();
             })
         , Counters_()
+        , CancelOnFileFinish_(cancelOnFileFinish)
     {
         Pool_.Start(1);
     }
@@ -133,7 +134,7 @@ private:
             }
             if (!msgs.empty()) {
                 EventsQ_.Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, Session_), size);
-            } else {
+            } else if (CancelOnFileFinish_) {
                 EventsQ_.Push(NYdb::NTopic::TSessionClosedEvent(NYdb::EStatus::CANCELLED, {NYdb::NIssue::TIssue("PQ file topic was finished")}), size);
             }
 
@@ -147,6 +148,7 @@ private:
     TString ProducerId_;
     std::thread FilePoller_;
     NYdb::NTopic::TReaderCounters::TPtr Counters_;
+    bool CancelOnFileFinish_ = false;
 
     TThreadPool Pool_;
     size_t MsgOffset_ = 0;
@@ -338,6 +340,10 @@ struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
     }
 };
 
+TFileTopicClient::TFileTopicClient(THashMap<TDummyPqGateway::TClusterNPath, TDummyTopic> topics)
+    : Topics_(topics)
+{}
+
 std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) {
     Y_ENSURE(!settings.Topics_.empty());
     const auto& topic = settings.Topics_.front();
@@ -360,7 +366,8 @@ std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(
     ui64 sessionId = 0;
     return std::make_shared<TFileTopicReadSession>(
         TFile(*filePath, EOpenMode::TEnum::RdOnly),
-        MakeIntrusive<TDummyPartitionSession>(sessionId, TString{topicPath}, partitionId)
+        MakeIntrusive<TDummyPartitionSession>(sessionId, TString{topicPath}, partitionId),
+        "", topicsIt->second.CancelOnFileFinish
     );
 }
 

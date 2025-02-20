@@ -403,7 +403,6 @@ class TMain : public TMainBase {
     using EVerbose = TYdbSetupSettings::EVerbose;
 
     inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
-    inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
 
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
@@ -808,7 +807,7 @@ protected:
         }
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.YdbSettings.VerboseLevel >= 1) {
+        if (RunnerOptions.YdbSettings.VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Starting profile memory allocations" << CoutColors.Default() << Endl;
         }
         NAllocProfiler::StartAllocationSampling(true);
@@ -821,7 +820,7 @@ protected:
         RunScript(ExecutionOptions, RunnerOptions);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.YdbSettings.VerboseLevel >= 1) {
+        if (RunnerOptions.YdbSettings.VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Finishing profile memory allocations" << CoutColors.Default() << Endl;
         }
         FinishProfileMemoryAllocations();

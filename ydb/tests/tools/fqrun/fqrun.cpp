@@ -3,6 +3,7 @@
 
 #include <util/datetime/base.h>
 
+#include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/tests/tools/fqrun/src/fq_runner.h>
 #include <ydb/tests/tools/kqprun/runlib/application.h>
@@ -195,6 +196,20 @@ protected:
                 }
             });
 
+        options.AddLongOption("cnacel-on-file-finish", "Cancel emulate YDS topics when topic file finished")
+            .RequiredArgument("topic")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                TStringBuf topicName;
+                TStringBuf filePath;
+                TStringBuf(option->CurVal()).Split('@', topicName, filePath);
+                if (topicName.empty() || filePath.empty()) {
+                    ythrow yexception() << "Incorrect PQ file mapping, expected form topic@file";
+                }
+                if (!PqFilesMapping.emplace(topicName, filePath).second) {
+                    ythrow yexception() << "Got duplicated topic name: " << topicName;
+                }
+            });
+
         // Outputs
 
         options.AddLongOption("result-file", "File with query results (use '-' to write in stdout)")
@@ -251,7 +266,7 @@ protected:
         }
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.FqSettings.VerboseLevel >= 1) {
+        if (RunnerOptions.FqSettings.VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Starting profile memory allocations" << CoutColors.Default() << Endl;
         }
         NAllocProfiler::StartAllocationSampling(true);
@@ -264,7 +279,7 @@ protected:
         RunScript(ExecutionOptions, RunnerOptions);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.FqSettings.VerboseLevel >= 1) {
+        if (RunnerOptions.FqSettings.VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Finishing profile memory allocations" << CoutColors.Default() << Endl;
         }
         FinishProfileMemoryAllocations();
@@ -284,8 +299,6 @@ private:
     }
 
 private:
-    inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
-
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
     std::unordered_map<TString, NYql::TDummyTopic> PqFilesMapping;

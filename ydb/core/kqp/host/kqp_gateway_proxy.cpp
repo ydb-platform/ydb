@@ -2219,6 +2219,12 @@ public:
         return Gateway->ExecuteLiteral(program, resultType, txAlloc);
     }
 
+    TExecuteLiteralResult ExecuteLiteralInstant(const TString& program,
+        const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override
+    {
+        return Gateway->ExecuteLiteralInstant(program, resultType, txAlloc);
+    }
+
 private:
     bool IsPrepare() const {
         if (!SessionCtx) {

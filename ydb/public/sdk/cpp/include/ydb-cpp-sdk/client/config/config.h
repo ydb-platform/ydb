@@ -30,19 +30,19 @@ struct TFetchAllConfigsSettings : public NYdb::TOperationRequestSettings<TFetchA
 struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {};
 
 struct TMainConfigIdentity {
-    ui64 Version;
-    TString Cluster;
+    std::uint64_t Version;
+    std::string Cluster;
 };
 
 struct TStorageConfigIdentity {
-    ui64 Version;
-    TString Cluster;
+    std::uint64_t Version;
+    std::string Cluster;
 };
 
 struct TDatabaseConfigIdentity {
-    ui64 Version;
-    TString Cluster;
-    TString Database;
+    std::uint64_t Version;
+    std::string Cluster;
+    std::string Database;
 };
 
 using TIdentityTypes = std::variant<
@@ -54,7 +54,7 @@ using TIdentityTypes = std::variant<
 
 struct TConfig {
     TIdentityTypes Identity;
-    TString Config;
+    std::string Config;
 };
 
 struct TFetchConfigResult : public TStatus {
@@ -83,24 +83,24 @@ public:
 
     // Replace config
     TAsyncStatus ReplaceConfig(
-        const TString& mainConfig,
+        const std::string& mainConfig,
         const TReplaceConfigSettings& settings = {});
 
     // Replace config
     TAsyncStatus ReplaceConfig(
-        const TString& mainConfig,
-        const TString& storageConfig,
+        const std::string& mainConfig,
+        const std::string& storageConfig,
         const TReplaceConfigSettings& settings = {});
 
     // Replace config
     TAsyncStatus ReplaceConfigDisableDedicatedStorageSection(
-        const TString& mainConfig,
+        const std::string& mainConfig,
         const TReplaceConfigSettings& settings = {});
 
     // Replace config
     TAsyncStatus ReplaceConfigEnableDedicatedStorageSection(
-        const TString& mainConfig,
-        const TString& storageConfig,
+        const std::string& mainConfig,
+        const std::string& storageConfig,
         const TReplaceConfigSettings& settings = {});
 
     // Fetch current cluster storage config
@@ -108,7 +108,7 @@ public:
 
     // Bootstrap cluster with automatic configuration
     TAsyncStatus BootstrapCluster(
-        const TString& selfAssemblyUUID,
+        const std::string& selfAssemblyUUID,
         const TBootstrapClusterSettings& settings = {});
 
 private:

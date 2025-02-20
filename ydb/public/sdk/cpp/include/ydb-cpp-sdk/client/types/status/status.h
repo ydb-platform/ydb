@@ -25,7 +25,6 @@ public:
     const NYdb::NIssue::TIssues& GetIssues() const;
     bool IsSuccess() const;
     bool IsTransportError() const;
-    bool IsUnimplementedError() const;
     const std::string& GetEndpoint() const;
     const std::multimap<std::string, std::string>& GetResponseMetadata() const;
     float GetConsumedRu() const;

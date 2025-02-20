@@ -922,6 +922,14 @@ def on_set_ts_test_for_vars(unit: NotsUnitType, for_mod: str) -> None:
 
 @_with_report_configure_error
 def on_ts_files(unit: NotsUnitType, *files: str) -> None:
+    for f in files:
+        if f.startswith(".."):
+            ymake.report_configure_error(
+                "Macro TS_FILES() does not allow to get files from parent directory.\n"
+                f"Got path '{f}'.\n"
+                "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-files."
+            )
+
     new_cmds = ['$COPY_CMD ${{context=TEXT;input:"{0}"}} ${{noauto;output:"{0}"}}'.format(f) for f in files]
     all_cmds = unit.get("_TS_FILES_COPY_CMD")
     if all_cmds:

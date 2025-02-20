@@ -11,6 +11,7 @@ const TString INSERT_NEW_GROUP = R"sql(
     DECLARE $Master AS Utf8;
     DECLARE $LastHeartbeat AS Datetime;
     DECLARE $ProtocolType AS Utf8;
+    DECLARE $RebalanceTimeoutMs AS Uint32;
 
     INSERT INTO `%s`
     (
@@ -20,7 +21,8 @@ const TString INSERT_NEW_GROUP = R"sql(
         database,
         last_heartbeat_time,
         master,
-        protocol_type
+        protocol_type,
+        rebalance_timeout_ms
     )
     VALUES
     (
@@ -30,7 +32,8 @@ const TString INSERT_NEW_GROUP = R"sql(
         $Database,
         $LastHeartbeat,
         $Master,
-        $ProtocolType
+        $ProtocolType,
+        $RebalanceTimeoutMs
     );
 )sql";
 
@@ -42,15 +45,17 @@ const TString UPDATE_GROUP = R"sql(
     DECLARE $Database AS Utf8;
     DECLARE $Master AS Utf8;
     DECLARE $LastHeartbeat AS Datetime;
+    DECLARE $RebalanceTimeoutMs AS Uint32;
 
     UPDATE `%s`
     SET
         state = $State,
         generation = $Generation,
         last_heartbeat_time = $LastHeartbeat,
-        master = $Master
-    WHERE consumer_group = $ConsumerGroup
-      AND database = $Database;
+        master = $Master,
+        rebalance_timeout_ms = $RebalanceTimeoutMs
+    WHERE database = $Database
+      AND consumer_group = $ConsumerGroup;
 )sql";
 
 const TString UPDATE_GROUP_STATE_AND_PROTOCOL = R"sql(
@@ -66,8 +71,8 @@ const TString UPDATE_GROUP_STATE_AND_PROTOCOL = R"sql(
         state = $State,
         last_heartbeat_time = $LastHeartbeat,
         protocol = $Protocol
-    WHERE consumer_group = $ConsumerGroup
-    AND database = $Database;
+    WHERE database = $Database
+    AND consumer_group = $ConsumerGroup;
 )sql";
 
 const TString INSERT_MEMBER = R"sql(
@@ -77,24 +82,27 @@ const TString INSERT_MEMBER = R"sql(
     DECLARE $MemberId            AS Utf8;
     DECLARE $WorkerStateProto    AS String;
     DECLARE $Database            AS Utf8;
-    DECLARE $LastHeartbeat AS Datetime;
+    DECLARE $HeartbeatDeadline AS Datetime;
+    DECLARE $SessionTimeoutMs AS Uint32;
 
     INSERT INTO `%s`
     (
         consumer_group,
         generation,
         member_id,
-        last_heartbeat_time,
+        heartbeat_deadline,
         worker_state_proto,
-        database
+        database,
+        session_timeout_ms
     )
     VALUES (
         $ConsumerGroup,
         $Generation,
         $MemberId,
-        $LastHeartbeat,
+        $HeartbeatDeadline,
         $WorkerStateProto,
-        $Database
+        $Database,
+        $SessionTimeoutMs
     );
 )sql";
 
@@ -120,30 +128,27 @@ const TString UPSERT_ASSIGNMENTS_AND_SET_WORKING_STATE = R"sql(
     SET
         state = $State,
         last_heartbeat_time = $LastHeartbeat
-    WHERE consumer_group = $ConsumerGroup
-      AND database = $Database;
+    WHERE database = $Database
+      AND consumer_group = $ConsumerGroup;
 )sql";
 
-const TString UPDATE_GROUPS_AND_SELECT_WORKER_STATES = R"sql(
+const TString SELECT_WORKER_STATES = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
-    DECLARE $State AS Uint64;
     DECLARE $Generation AS Uint64;
     DECLARE $Database AS Utf8;
-    DECLARE $LastHeartbeat AS Datetime;
-
-    UPDATE `%s`
-    SET
-        state = $State,
-        last_heartbeat_time = $LastHeartbeat
-    WHERE consumer_group = $ConsumerGroup
-      AND database = $Database;
+    DECLARE $PaginationMemberId AS Utf8;
+    DECLARE $Limit AS Uint64;
 
     SELECT worker_state_proto, member_id
     FROM `%s`
-    WHERE consumer_group = $ConsumerGroup
+    VIEW PRIMARY KEY
+    WHERE database = $Database
+      AND consumer_group = $ConsumerGroup
       AND generation = $Generation
-      AND database = $Database;
+      AND member_id > $PaginationMemberId
+    ORDER BY member_id
+    LIMIT $Limit;
 )sql";
 
 const TString CHECK_GROUP_STATE = R"sql(
@@ -151,10 +156,11 @@ const TString CHECK_GROUP_STATE = R"sql(
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Database AS Utf8;
 
-    SELECT state, generation, master, last_heartbeat_time, consumer_group, database, protocol, protocol_type
+    SELECT state, generation, master, last_heartbeat_time, consumer_group, database, protocol, protocol_type, rebalance_timeout_ms
     FROM `%s`
-    WHERE consumer_group = $ConsumerGroup
-    AND database = $Database;
+    VIEW PRIMARY KEY
+    WHERE database = $Database
+      AND consumer_group = $ConsumerGroup;
 )sql";
 
 const TString FETCH_ASSIGNMENTS = R"sql(
@@ -166,10 +172,11 @@ const TString FETCH_ASSIGNMENTS = R"sql(
 
     SELECT assignment
     FROM `%s`
-    WHERE consumer_group = $ConsumerGroup
+    VIEW PRIMARY KEY
+    WHERE database = $Database
+      AND consumer_group = $ConsumerGroup
       AND generation = $Generation
-      AND member_id = $MemberId
-      AND database = $Database;
+      AND member_id = $MemberId;
 )sql";
 
 const TString CHECK_DEAD_MEMBERS = R"sql(
@@ -178,13 +185,24 @@ const TString CHECK_DEAD_MEMBERS = R"sql(
     DECLARE $Generation AS Uint64;
     DECLARE $Database AS Utf8;
     DECLARE $Deadline AS Datetime;
+    DECLARE $MemberId AS Utf8;
 
     SELECT COUNT(1) as cnt
     FROM `%s`
-    WHERE consumer_group = $ConsumerGroup
+    VIEW idx_group_generation_db_hb
+    WHERE database = $Database
+      AND consumer_group = $ConsumerGroup
       AND generation = $Generation
-      AND database = $Database
-      AND last_heartbeat_time < $Deadline;
+      AND heartbeat_deadline < $Deadline;
+
+    SELECT session_timeout_ms
+    FROM `%s`
+    VIEW PRIMARY KEY
+    WHERE database = $Database
+      AND consumer_group = $ConsumerGroup
+      AND generation = $Generation
+      AND member_id = $MemberId;
+
 )sql";
 
 const TString UPDATE_LASTHEARTBEATS = R"sql(
@@ -194,6 +212,7 @@ const TString UPDATE_LASTHEARTBEATS = R"sql(
     DECLARE $MemberId AS Utf8;
     DECLARE $Database AS Utf8;
     DECLARE $LastHeartbeat AS Datetime;
+    DECLARE $HeartbeatDeadline AS Datetime;
     DECLARE $UpdateGroupHeartbeat AS Bool;
 
     UPDATE `%s`
@@ -203,7 +222,7 @@ const TString UPDATE_LASTHEARTBEATS = R"sql(
         AND $UpdateGroupHeartbeat = True;
 
     UPDATE `%s`
-    SET last_heartbeat_time = $LastHeartbeat
+    SET heartbeat_deadline = $HeartbeatDeadline
     WHERE consumer_group = $ConsumerGroup
       AND generation = $Generation
       AND member_id = $MemberId
@@ -219,12 +238,16 @@ const TString UPDATE_LASTHEARTBEAT_TO_LEAVE_GROUP = R"sql(
     DECLARE $LastHeartbeat AS Datetime;
 
     UPDATE `%s`
-    SET last_heartbeat_time = $LastHeartbeat
+    SET heartbeat_deadline = $LastHeartbeat
     WHERE consumer_group = $ConsumerGroup
     AND member_id = $MemberId
     AND database = $Database;
 )sql";
 
-} // namespace NKafka
+const TString CHECK_GROUPS_COUNT = R"sql(
+    --!syntax_v1
+    SELECT COUNT(1) as groups_count
+    FROM `%s`
+)sql";
 
-// savnik check max members count
+} // namespace NKafka

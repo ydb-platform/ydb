@@ -169,9 +169,9 @@ protected:
                 TStringBuf(others).Split(':', path, partitionCountStr);
                 size_t partitionCount = !partitionCountStr.empty() ? FromString<size_t>(partitionCountStr) : 1;
                 if (topicName.empty() || path.empty()) {
-                    ythrow yexception() << "Incorrect table mapping, expected form topic@path[:partitions_count]" << Endl;
+                    ythrow yexception() << "Incorrect PQ file mapping, expected form topic@path[:partitions_count]" << Endl;
                 }
-                if (!PqFilesMapping.emplace(topicName, NYql::TDummyTopic("pq", TString(topicName), TString(path), partitionCount)  ).second) {
+                if (!PqFilesMapping.emplace(topicName, NYql::TDummyTopic("pq", TString(topicName), TString(path), partitionCount)).second) {
                     ythrow yexception() << "Got duplicated topic name: " << topicName;
                 }
             });

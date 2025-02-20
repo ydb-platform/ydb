@@ -30,27 +30,36 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     using TUnderlying = std::function<void(const TVector<TTypedScheme>&, const TString&, TTestWithReboots&)>;
 
-    void Decorate(const TVector<TTypedScheme>& schemeObjects, const TString& request, TUnderlying func) {
+    void Decorate(const TVector<TTypedScheme>& schemeObjects, const TString& request,
+        TUnderlying func, const TTestEnvOptions& opts)
+    {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
         TTestWithReboots t;
+        t.GetTestEnvOptions() = opts;
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
         func(schemeObjects, Sprintf(request.c_str(), port), t);
     }
 
-    void RunS3(const TVector<TTypedScheme>& schemeObjects, const TString& request) {
-        Decorate(schemeObjects, request, &Run);
+    void RunS3(const TVector<TTypedScheme>& schemeObjects, const TString& request,
+        const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions())
+    {
+        Decorate(schemeObjects, request, &Run, opts);
     }
 
-    void CancelS3(const TVector<TTypedScheme>& schemeObjects, const TString& request) {
-        Decorate(schemeObjects, request, &Cancel);
+    void CancelS3(const TVector<TTypedScheme>& schemeObjects, const TString& request,
+        const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions())
+    {
+        Decorate(schemeObjects, request, &Cancel, opts);
     }
 
-    void ForgetS3(const TVector<TTypedScheme>& schemeObjects, const TString& request) {
-        Decorate(schemeObjects, request, &Forget);
+    void ForgetS3(const TVector<TTypedScheme>& schemeObjects, const TString& request,
+        const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions())
+    {
+        Decorate(schemeObjects, request, &Forget, opts);
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
@@ -180,6 +189,40 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
               }
             }
         )");
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnViewsAndTablesWithPermissions) {
+        RunS3({
+            {
+                EPathTypeView,
+                R"(
+                    Name: "View"
+                    QueryText: "some query"
+                )"
+            }, {
+                EPathTypeTable,
+                R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Utf8" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )"
+            }
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/View"
+                destination_prefix: "view"
+              }
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "table"
+              }
+            }
+        )",
+        TTestEnvOptions().EnablePermissionsExport(true));
     }
 
     Y_UNIT_TEST(CancelShouldSucceedOnSingleShardTable) {

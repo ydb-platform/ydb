@@ -85,7 +85,7 @@ message TransactionControl {
     bool commit_tx = 10;
 
     // If set the timestamp will be returned along with ExecuteQueryResponsePart
-    bool return_virtual_timestamp = 11;
+    bool with_tx_timestamp = 11;
 }
 
 message BeginTransactionRequest {

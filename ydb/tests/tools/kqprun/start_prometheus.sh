@@ -2,6 +2,11 @@
 
 set -eux
 
+function cleanup {
+    rm ./prometheus_config.yaml
+}
+trap cleanup EXIT
+
 if [ $# -le 0 ]; then
     echo "Please provide monitoring port to listen (value of -M argument)"
     exit -1
@@ -25,7 +30,9 @@ if netstat -tuln | grep ":$2"; then
     exit -1
 fi
 
-cp ${3:-'./configuration/prometheus_config.yaml'} ./prometheus_config.yaml
+SCRIPT_DIR=$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)
+
+cp ${3:-"$SCRIPT_DIR/configuration/prometheus_config.yaml"} ./prometheus_config.yaml
 sed -i "s/\${TARGET_PORT}/$1/g" ./prometheus_config.yaml
 
 docker run --rm --name=prometeus-$1 --network host -v ./prometheus_config.yaml:/etc/prometheus/prometheus.yml prom/prometheus --config.file=/etc/prometheus/prometheus.yml --web.listen-address=:$2

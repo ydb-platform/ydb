@@ -81,3 +81,15 @@
 | Compactions | Сведения о производимых операциях LSM compaction |
 | ReadSets | Сведения о пересылаемых ReadSets при исполнении пользовательской транзакции |
 | Other | Прочие метрики |
+
+## Distributed Storage performance metrics {#ds-performance}
+
+Подробнее о метриках производительности Distributed Storage читайте в [этой статье](distributed-storage-performance.md).
+
+| Имя | Описание | Единицы измерения |
+|---|---|---|
+| DiskTimeAvailable and total Cost relation | Отношение совокупной стоимости потока запросов и доступного времени диска. Если линия TotalCost выше линии DiskTimeAvailable, то поток нагрузки превышает предельно допустимый | условные единицы |
+| Cost by source | Суммарная стоимость потока запросов по источнику нагрузки | условные единицы |
+| Total burst duration | Совокупное время, в течение которого VDisk'и находились в состоянии [underflow](distributed-storage-performance.md#burst-detection). Если значение метрики больше 0, то в системе наблюдаются всплески нагрузки | мс |
+
+Стоимость запросов и доступное время диска на графиках для удобства представлены в наносекундах.

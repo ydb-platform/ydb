@@ -4,6 +4,23 @@ Tool can be used to execute queries by using kikimr provider.
 
 For profiling memory allocations build kqprun with ya make flag `-D PROFILE_MEMORY_ALLOCATIONS`.
 
+## Scripts
+
+* `flame_graph.sh` - script for collecting flame graphs in svg format, usage:
+    ```(bash)
+    ./flame_graph.sh [graph collection time in seconds]
+    ```
+
+* `start_prometheus.sh` - script for starting prometheus web UI, can be used for counters visualisation (kqprun should be runned with flag `-M <monitoring port>`), usage:
+    ```(bash)
+    ./start_prometheus.sh <monitoring port> <web UI port> [config path]
+    ```
+
+* `start_connector.sh` - script for starting local FQ connector, usage:
+    ```(bash)
+    ./start_connector.sh <connector port> [config path]
+    ```
+
 ## Examples
 
 ### Queries

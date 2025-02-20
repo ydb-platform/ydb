@@ -5,3 +5,4 @@ sync_dir
 *.conf
 *.parquet
 *.json
+*.yaml

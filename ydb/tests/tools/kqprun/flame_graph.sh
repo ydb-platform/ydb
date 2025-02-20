@@ -2,11 +2,24 @@
 
 set -eux
 
+function cleanup {
+    sudo rm ./profdata
+    rm ./profdata.txt
+}
+trap cleanup EXIT
+
+if [ $# -gt 1 ]; then
+    echo "Too many arguments"
+    exit -1
+fi
+
 kqprun_pid=$(pgrep -u $USER kqprun)
 
 sudo perf record -F 50 --call-graph dwarf -g --proc-map-timeout=10000 --pid $kqprun_pid -v -o profdata -- sleep ${1:-'30'}
 sudo perf script -i profdata > profdata.txt
 
-flame_graph_tool="../../../../contrib/tools/flame-graph/"
+SCRIPT_DIR=$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)
+
+flame_graph_tool="$SCRIPT_DIR/../../../../contrib/tools/flame-graph/"
 
 ${flame_graph_tool}/stackcollapse-perf.pl profdata.txt | ${flame_graph_tool}/flamegraph.pl > profdata.svg

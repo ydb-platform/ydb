@@ -149,7 +149,7 @@ getTdefsByNumber(int nTable)
 
 void checkTdefsSize(int nTable) {
    // Prevent array overflow. Fixing coverity issue OVERRUN
-   if (nTable >= (int)(sizeof(s_tdefs) / sizeof(s_tdefs[0]))) {
+   if (nTable < 0 || nTable >= (int)(sizeof(s_tdefs) / sizeof(s_tdefs[0]))) {
       INTERNAL("Array s_tdefs overflow");
       exit(EXIT_FAILURE);
    }

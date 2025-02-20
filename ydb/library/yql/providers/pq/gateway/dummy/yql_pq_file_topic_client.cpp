@@ -5,6 +5,7 @@
 
 #include <library/cpp/threading/future/async.h>
 
+#include <util/folder/path.h>
 #include <util/system/file.h>
 #include "yql_pq_blocking_queue.h"
 
@@ -325,17 +326,24 @@ struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
 
 std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) {
     Y_ENSURE(!settings.Topics_.empty());
-    TString topicPath = settings.Topics_.front().Path_;
-
+    const auto& topic = settings.Topics_.front();
+    auto topicPath = topic.Path_;
+    Y_ENSURE(topic.PartitionIds_.size() >= 1);
+    ui64 partitionId = topic.PartitionIds_.front();
     auto topicsIt = Topics_.find(make_pair("pq", topicPath));
     Y_ENSURE(topicsIt != Topics_.end());
-    auto filePath = topicsIt->second.FilePath;
+    auto filePath = topicsIt->second.Path;
     Y_ENSURE(filePath);
-    
+
+    TFsPath fsPath(*filePath);
+    if (fsPath.IsDirectory()) {
+        filePath = TStringBuilder() << *filePath << "/" << ToString(partitionId);
+    } else if (!fsPath.Exists()) {
+        filePath = TStringBuilder() << *filePath << "_" << partitionId;
+    }
+
     // TODO
     ui64 sessionId = 0;
-    ui64 partitionId = 0;
-
     return std::make_shared<TFileTopicReadSession>(
         TFile(*filePath, EOpenMode::TEnum::RdOnly),
         MakeIntrusive<TDummyPartitionSession>(sessionId, topicPath, partitionId)
@@ -399,7 +407,7 @@ std::shared_ptr<NYdb::NTopic::IWriteSession> TFileTopicClient::CreateWriteSessio
     TString topicPath = settings.Path_;
     auto topicsIt = Topics_.find(make_pair("pq", topicPath));
     Y_ENSURE(topicsIt != Topics_.end());
-    auto filePath = topicsIt->second.FilePath;
+    auto filePath = topicsIt->second.Path;
     Y_ENSURE(filePath);
 
     return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::RdWr));

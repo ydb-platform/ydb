@@ -27,8 +27,8 @@ class TReshuffleKMeansScanBase: public TActor<TReshuffleKMeansScanBase>, public 
 protected:
     using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
 
-    ui32 Parent = 0;
-    ui32 Child = 0;
+    NTableIndex::TClusterId Parent = 0;
+    NTableIndex::TClusterId Child = 0;
 
     ui32 K = 0;
 

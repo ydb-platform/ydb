@@ -114,6 +114,7 @@ private:
                     break;
                 case NArrow::NAccessor::IChunkedArray::EType::Undefined:
                 case NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray:
+                case NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray:
                 case NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray:
                 case NArrow::NAccessor::IChunkedArray::EType::ChunkedArray:
                     AFL_VERIFY(false);

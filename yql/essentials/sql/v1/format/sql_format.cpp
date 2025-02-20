@@ -3,9 +3,6 @@
 #include <yql/essentials/parser/lexer_common/lexer.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
 
-#include <yql/essentials/sql/v1/lexer/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
-
 #include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 
 #include <library/cpp/protobuf/util/simple_reflection.h>
@@ -744,6 +741,54 @@ private:
         }
         if (printOne) {
             Out(';');
+        }
+    }
+
+    void VisitValueConstructor(const TRule_value_constructor& msg) {
+        switch (msg.Alt_case()) {
+            case TRule_value_constructor::kAltValueConstructor1: {
+                auto& ctor = msg.GetAlt_value_constructor1();
+                Scopes.push_back(EScope::TypeName);
+                Visit(ctor.GetToken1());
+                Scopes.pop_back();
+                AfterInvokeExpr = true;
+                Visit(ctor.GetToken2());
+                Visit(ctor.GetRule_expr3());
+                Visit(ctor.GetToken4());
+                Visit(ctor.GetRule_expr5());
+                Visit(ctor.GetToken6());
+                Visit(ctor.GetRule_expr7());
+                Visit(ctor.GetToken8());
+                break;
+            }
+            case TRule_value_constructor::kAltValueConstructor2: {
+                auto& ctor = msg.GetAlt_value_constructor2();
+                Scopes.push_back(EScope::TypeName);
+                Visit(ctor.GetToken1());
+                Scopes.pop_back();
+                AfterInvokeExpr = true;
+                Visit(ctor.GetToken2());
+                Visit(ctor.GetRule_expr3());
+                Visit(ctor.GetToken4());
+                Visit(ctor.GetRule_expr5());
+                Visit(ctor.GetToken6());
+                break;
+            }
+            case TRule_value_constructor::kAltValueConstructor3: {
+                auto& ctor = msg.GetAlt_value_constructor3();
+                Scopes.push_back(EScope::TypeName);
+                Visit(ctor.GetToken1());
+                Scopes.pop_back();
+                AfterInvokeExpr = true;
+                Visit(ctor.GetToken2());
+                Visit(ctor.GetRule_expr3());
+                Visit(ctor.GetToken4());
+                Visit(ctor.GetRule_expr5());
+                Visit(ctor.GetToken6());
+                break;
+            }
+            case TRule_value_constructor::ALT_NOT_SET:
+                Y_ABORT("You should change implementation according to grammar changes");
         }
     }
 
@@ -2913,6 +2958,7 @@ TStaticData::TStaticData()
         })
     , PrettyVisitDispatch({
         {TToken::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitToken)},
+        {TRule_value_constructor::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitValueConstructor)},
         {TRule_into_values_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoValuesSource)},
         {TRule_select_kind::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKind)},
         {TRule_process_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitProcessCore)},
@@ -3061,8 +3107,12 @@ TStaticData::TStaticData()
 
 class TSqlFormatter : public NSQLFormat::ISqlFormatter {
 public:
-    TSqlFormatter(const NSQLTranslation::TTranslationSettings& settings)
-        : Settings(settings)
+    TSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
+        const NSQLTranslationV1::TParsers& parsers,
+        const NSQLTranslation::TTranslationSettings& settings)
+        : Lexers(lexers)
+        , Parsers(parsers)
+        , Settings(settings)
     {}
 
     bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues, EFormatMode mode) override {
@@ -3077,7 +3127,7 @@ public:
         }
 
         if (mode == EFormatMode::Obfuscate) {
-            auto message = NSQLTranslationV1::SqlAST(query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(Parsers, query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
             if (!message) {
                 return false;
             }
@@ -3086,7 +3136,7 @@ public:
             return Format(visitor.Process(*message), formattedQuery, issues, EFormatMode::Pretty);
         }
 
-        auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
+        auto lexer = NSQLTranslationV1::MakeLexer(Lexers, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
         TVector<TString> statements;
         if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File)) {
             return false;
@@ -3112,7 +3162,7 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(Parsers, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
             if (!message) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
@@ -3160,23 +3210,32 @@ public:
     }
 
 private:
+    const NSQLTranslationV1::TLexers Lexers;
+    const NSQLTranslationV1::TParsers Parsers;
     const NSQLTranslation::TTranslationSettings Settings;
 };
 
 }
 
-ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslation::TTranslationSettings& settings) {
-    return ISqlFormatter::TPtr(new TSqlFormatter(settings));
+ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
+    const NSQLTranslationV1::TParsers& parsers,
+    const NSQLTranslation::TTranslationSettings& settings) {
+    return ISqlFormatter::TPtr(new TSqlFormatter(lexers, parsers, settings));
 }
 
-TString MutateQuery(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslation::TTranslationSettings& settings) {
+    return MakeSqlFormatter(NSQLTranslationV1::MakeAllLexers(), NSQLTranslationV1::MakeAllParsers(), settings);
+}
+
+TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
+    const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     auto parsedSettings = settings;
     NYql::TIssues issues;
     if (!NSQLTranslation::ParseTranslationSettings(query, parsedSettings, issues)) {
         throw yexception() << issues.ToString();
     }
 
-    auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
     TVector<NSQLTranslation::TParsedToken> allTokens;
     auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
         if (token.Name != "EOF") {
@@ -3199,13 +3258,15 @@ TString MutateQuery(const TString& query, const NSQLTranslation::TTranslationSet
     return newQueryBuilder;
 }
 
-bool SqlFormatSimple(const TString& query, TString& formattedQuery, TString& error) {
+bool SqlFormatSimple(const NSQLTranslationV1::TLexers& lexers,
+    const NSQLTranslationV1::TParsers& parsers,
+    const TString& query, TString& formattedQuery, TString& error) {
     try {
         google::protobuf::Arena arena;
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
 
-        auto formatter = MakeSqlFormatter(settings);
+        auto formatter = MakeSqlFormatter(lexers, parsers, settings);
         NYql::TIssues issues;
         const bool result = formatter->Format(query, formattedQuery, issues);
         if (!result) {

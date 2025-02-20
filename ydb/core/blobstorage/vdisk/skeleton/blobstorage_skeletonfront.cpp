@@ -439,20 +439,6 @@ namespace NKikimr {
                 return InFlightCount > 0 && TActivationContext::Monotonic() - LastUpdate > StuckQueueThreshold;
             }
 
-            void ResetQueue() {
-                InFlightCount = 0;
-                InFlightCost = 0;
-                InFlightBytes = 0;
-
-                *SkeletonFrontInFlightCount = 0;
-                *SkeletonFrontInFlightCost = 0;
-                *SkeletonFrontInFlightBytes = 0;
-                *SkeletonFrontCostProcessed = 0;
-
-                Msgs.clear();
-                UpdateState();
-            }
-
             TString GenerateHtmlState() const {
                 // NOTE: warning policy:
                 // 1. For InFlightCount and InFlightCost we output them in yellow, if
@@ -701,12 +687,14 @@ namespace NKikimr {
         NMonGroup::TSyncerGroup SyncerMonGroup;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
         NMonGroup::TCostGroup CostGroup;
-        NMonGroup::TMalfunctionGroup MalfunctionGroup;
+        NMonGroup::TTimerGroup TimerGroup;
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         bool HasUnreadableBlobs = false;
         TInstant LastSanitizeTime = TInstant::Zero();
         TInstant LastSanitizeWithErrorTime = TInstant::Zero();
         ui64 NextUniqueMessageId = 1;
+
+        TMonotonic StartTimestamp = TMonotonic::Zero();
 
         static constexpr TDuration StuckQueueCheckPeriod = TDuration::Seconds(60);
 
@@ -812,6 +800,8 @@ namespace NKikimr {
             ActiveActors.Insert(SkeletonId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
             SetupMonitoring(ctx);
+            StartTimestamp = TActivationContext::Monotonic();
+            TimerGroup.SkeletonFrontUptimeSeconds() = 0;
             Become(&TThis::StateLocalRecoveryInProgress);
         }
 
@@ -2077,18 +2067,20 @@ namespace NKikimr {
         }
 
         void HandleWakeup(const TActorContext& ctx) {
+            TMonotonic now = TActivationContext::Monotonic();
+            TimerGroup.SkeletonFrontUptimeSeconds() = (now - StartTimestamp).Seconds();
             for (TIntQueueClass* queue : { IntQueueAsyncGets.get(), IntQueueFastGets.get(),
                     IntQueueDiscover.get(), IntQueueLowGets.get(), IntQueueLogPuts.get(),
                     IntQueueHugePutsForeground.get(), IntQueueHugePutsBackground.get() }) {
                 if (queue->IsStuck()) {
-                    queue->DropWithError(ctx, *this);
-                    queue->ResetQueue();
-                    DisconnectClients(ctx);
                     LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                            << "Stuck internal queue detected, dropping queues, "
+                            << "Stuck internal queue detected, restarting VDisk, "
                             << " Queue.Name# " << queue->Name
                             << " Marker# BSVSF08");
-                    ++MalfunctionGroup.DroppingStuckInternalQueue();
+                    TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+                    ctx.Send(wardenId, new TEvBlobStorage::TEvAskRestartVDisk(
+                            Config->BaseInfo.PDiskId, SelfVDiskId));
+                    return;
                 }
             }
             Schedule(StuckQueueCheckPeriod, new TEvents::TEvWakeup);
@@ -2266,7 +2258,7 @@ namespace NKikimr {
             , SyncerMonGroup(VDiskCounters, "subsystem", "syncer")
             , VDiskMonGroup(VDiskCounters, "subsystem", "state")
             , CostGroup(VDiskCounters, "subsystem", "cost")
-            , MalfunctionGroup(VDiskCounters, "subsystem", "malfunction")
+            , TimerGroup(VDiskCounters, "subsystem", "timer")
         {
             ReplMonGroup.ReplUnreplicatedVDisks() = 1;
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::Initial);

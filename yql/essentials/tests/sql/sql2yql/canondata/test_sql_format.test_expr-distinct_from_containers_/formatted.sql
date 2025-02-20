@@ -10,6 +10,6 @@ SELECT
     <|a: 1 / 0, b: Nothing(String?), c: 1|> IS NOT DISTINCT FROM <|c: 1u, d: 1u / 0u, e: Nothing(Utf8?)|>, --true
     [1, 2, NULL] IS NOT DISTINCT FROM [1, 2, just(1 / 0)], --false
     {1: NULL} IS DISTINCT FROM {1u: 2 / 0}, --false
-    VARIANT (1 / 0, '1', $vt1) IS DISTINCT FROM VARIANT (NULL, '1', $vt2), --false
-    VARIANT (1 / 0, 'b', $svt1) IS NOT DISTINCT FROM VARIANT (NULL, 'b', $svt2), --true
+    Variant(1 / 0, '1', $vt1) IS DISTINCT FROM Variant(NULL, '1', $vt2), --false
+    Variant(1 / 0, 'b', $svt1) IS NOT DISTINCT FROM Variant(NULL, 'b', $svt2), --true
 ;

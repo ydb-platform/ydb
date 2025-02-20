@@ -70,7 +70,7 @@ auto defaultTaskFunction = [] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic
         Sleep(TDuration::Seconds(4));
         return ETaskStatus::Completed;
     }
-    return ETaskStatus::Aborted;
+    return ETaskStatus::Failed;
 };
 
 Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
 
         TFmrJobFactorySettings settings{.NumThreads = 3, .Function = defaultTaskFunction};
         auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
+        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
         auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
         worker->Start();
         Sleep(TDuration::Seconds(1));
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         }
         TFmrJobFactorySettings settings{.NumThreads = 10, .Function = defaultTaskFunction};
         auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
+        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
         auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
         worker->Start();
         Sleep(TDuration::Seconds(6));
@@ -184,12 +184,12 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
                 Sleep(TDuration::Seconds(1));
                 return ETaskStatus::Completed;
             }
-            return ETaskStatus::Aborted;
+            return ETaskStatus::Failed;
         };
 
         TFmrJobFactorySettings settings{.NumThreads = 10, .Function = func};
         auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
+        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
         auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
         worker->Start();
         Sleep(TDuration::Seconds(5));
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
 
         TFmrJobFactorySettings settings{.NumThreads = 3, .Function = defaultTaskFunction};
         auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
+        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
         auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
         worker->Start();
 
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
 
         TFmrJobFactorySettings settings{.NumThreads = 3, .Function = defaultTaskFunction};
         auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
+        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
         auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
         worker->Start();
 
@@ -259,11 +259,11 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
                     return ETaskStatus::Completed;
                 }
             }
-            return ETaskStatus::Aborted;
+            return ETaskStatus::Failed;
         };
         TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
         auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
+        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
         TFmrWorkerProxy workerProxy(coordinator, factory, workerSettings);
 
         workerProxy.Start();
@@ -290,12 +290,12 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
                 Sleep(TDuration::Seconds(2));
                 throw std::runtime_error{"Function crashed"};
             }
-            return ETaskStatus::Aborted;
+            return ETaskStatus::Failed;
         };
 
         TFmrJobFactorySettings settings{.NumThreads = 3, .Function = func};
         auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
+        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
         auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
         worker->Start();
         Sleep(TDuration::Seconds(4));

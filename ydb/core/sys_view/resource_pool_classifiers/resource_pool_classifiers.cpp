@@ -39,17 +39,7 @@ public:
         , UserToken(std::move(userToken))
         , Database(database)
         , Reverse(reverse)
-    {
-        const auto& cellsFrom = TableRange.From.GetCells();
-        if (cellsFrom.size() == 1 && !cellsFrom[0].IsNull()) {
-            From = TString{cellsFrom[0].Data(), cellsFrom[0].Size()};
-        }
-
-        const auto& cellsTo = TableRange.To.GetCells();
-        if (cellsTo.size() == 1 && !cellsTo[0].IsNull()) {
-            To = TString{cellsTo[0].Data(), cellsTo[0].Size()};
-        }
-    }
+    {}
 
     STFUNC(StateScan) {
         try {
@@ -138,7 +128,7 @@ private:
         batch->Finished = true;
         // It's a mandatory condition to keep sorted PK here
         for (const auto& [name, config] : std::map(resourcePoolsIt->second.begin(), resourcePoolsIt->second.end())) {
-            if (!IsInRange(name)) {
+            if (!StringKeyIsInTableRange({name})) {
                 continue;
             }
             TVector<TCell> cells;
@@ -160,19 +150,7 @@ private:
         SendBatch(std::move(batch));
     }
 
-    bool IsInRange(const TString& name) const {
-        if ((From && name < From) || (!TableRange.FromInclusive && From && name == From)) {
-            return false;
-        }
-        if ((To && To < name) || (!TableRange.ToInclusive && To && name == To)) {
-            return false;
-        }
-        return true;
-    }
-
 private:
-    TMaybe<TString> From;
-    TMaybe<TString> To;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString Database;
     const bool Reverse;

@@ -8,6 +8,8 @@ import datetime
 import threading
 import subprocess
 
+from ydb.tests.library.test_meta import link_test_case
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,8 +75,8 @@ class TestUnstableConnection(TllTieringTestBase):
         time.sleep(seconds)
         stop_event.set()
 
+    @link_test_case("#13544")
     def test(self):
-        ''' Implements https://github.com/ydb-platform/ydb/issues/13544'''
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/table"
         secret_prefix = self.test_name

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <library/cpp/random_provider/random_provider.h>
 #include <util/system/mutex.h>
 #include <util/system/guard.h>

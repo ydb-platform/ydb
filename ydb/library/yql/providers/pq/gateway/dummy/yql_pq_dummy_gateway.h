@@ -9,10 +9,11 @@
 namespace NYql {
 
 struct TDummyTopic {
-    TDummyTopic(const TString& cluster, const TString& path, const TMaybe<TString>& filePath = {})
+    TDummyTopic(const TString& cluster, const TString& topicName, const TMaybe<TString>& path = {}, size_t partitionCount = 1)
         : Cluster(cluster)
+        , TopicName(topicName)
         , Path(path)
-        , FilePath(filePath)
+        , PartitionsCount(partitionCount)
     {
     }
 
@@ -22,9 +23,10 @@ struct TDummyTopic {
     }
 
     TString Cluster;
-    TString Path;
-    TMaybe<TString> FilePath;
-    size_t PartitionsCount = 1;
+    TString TopicName;
+    TMaybe<TString> Path;
+    size_t PartitionsCount;
+    bool CancelOnFileFinish = false;
 };
 
 // Dummy Pq gateway for tests.

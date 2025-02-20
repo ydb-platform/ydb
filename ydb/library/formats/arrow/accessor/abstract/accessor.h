@@ -41,6 +41,7 @@ public:
         Array,
         ChunkedArray,
         SerializedChunkedArray,
+        CompositeChunkedArray,
         SparsedArray,
         SubColumnsArray
     };
@@ -429,6 +430,7 @@ public:
             case EType::Undefined:
                 AFL_VERIFY(false);
             case EType::SerializedChunkedArray:
+            case EType::CompositeChunkedArray:
                 return false;
         };
     }

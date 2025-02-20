@@ -1,6 +1,8 @@
 #include "others_storage.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
@@ -140,6 +142,25 @@ TOthersData TOthersData::BuildEmpty() {
         return TOthersData(TDictStats::BuildEmpty(), records);
     }();
     return result;
+}
+
+std::shared_ptr<IChunkedArray> TOthersData::GetPathAccessor(const std::string_view path, const ui32 recordsCount) const {
+    auto idx = Stats.GetKeyIndexOptional(path);
+    if (!idx) {
+        return std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::utf8(), recordsCount));
+    }
+    TColumnFilter filter = TColumnFilter::BuildAllowFilter();
+    for (TIterator it(Records); it.IsValid(); it.Next()) {
+        filter.Add(it.GetKeyIndex() == *idx);
+    }
+    auto recordsFiltered = Records;
+    AFL_VERIFY(filter.Apply(recordsFiltered));
+    auto table = recordsFiltered->BuildTableVerified(std::set<std::string>({ "record_idx", "value" }));
+
+    TSparsedArray::TBuilder builder(nullptr, arrow::utf8());
+    auto batch = ToBatch(table);
+    builder.AddChunk(recordsCount, batch->GetColumnByName("record_idx"), batch->GetColumnByName("value"));
+    return builder.Finish();
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

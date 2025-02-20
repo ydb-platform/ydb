@@ -526,6 +526,21 @@ private:
         return true;
     }
 
+    void CreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items.at(itemIdx);
+        item.SubState = ESubState::Proposed;
+
+        LOG_I("TImport::TTxProgress: CreateChangefeed propose"
+            << ": info# " << importInfo->ToString()
+            << ", item# " << item.ToString(itemIdx)
+            << ", txId# " << txId);
+
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
+
+        Send(Self->SelfId(), CreateChangefeedPropose(Self, txId, item));
+    }
+
     void AllocateTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
@@ -586,6 +601,25 @@ private:
         }
 
         return TTxId(ui64((*infoPtr)->Id));
+    }
+
+    TTxId GetActiveCreateChangefeedTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        const auto& item = importInfo->Items.at(itemIdx);
+
+        Y_ABORT_UNLESS(item.State == EState::CreateChangefeed);
+        Y_ABORT_UNLESS(item.DstPathId);
+
+        if (!Self->PathsById.contains(item.DstPathId)) {
+            return InvalidTxId;
+        }
+
+        auto path = Self->PathsById.at(item.DstPathId);
+        if (path->PathState != NKikimrSchemeOp::EPathStateAlter) {
+            return InvalidTxId;
+        }
+
+        return path->LastTxId;
     }
 
     static TString MakeIndexBuildUid(TImportInfo::TPtr importInfo, ui32 itemIdx) {
@@ -756,6 +790,7 @@ private:
                 case EState::CreateSchemeObject:
                 case EState::Transferring:
                 case EState::BuildIndexes:
+                case EState::CreateChangefeed:
                     if (item.WaitTxId == InvalidTxId) {
                         if (!IsCreatedByQuery(item) || item.PreparedCreationQuery) {
                             AllocateTxId(importInfo, itemIdx);
@@ -781,6 +816,10 @@ private:
                 TTxId txId = InvalidTxId;
 
                 switch (item.State) {
+                case EState::CreateChangefeed:
+                    txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
+                    break;
+
                 case EState::Transferring:
                     if (!CancelTransferring(importInfo, itemIdx)) {
                         txId = GetActiveRestoreTxId(importInfo, itemIdx);
@@ -1004,6 +1043,11 @@ private:
                 BuildIndex(importInfo, i, txId);
                 itemIdx = i;
                 break;
+            
+            case EState::CreateChangefeed:
+                CreateChangefeed(importInfo, i, txId);
+                itemIdx = i;
+                break;
 
             default:
                 break;
@@ -1064,6 +1108,8 @@ private:
                     txId = TTxId(record.GetPathCreateTxId());
                 } else if (item.State == EState::Transferring) {
                     txId = GetActiveRestoreTxId(importInfo, itemIdx);
+                } else if (item.State == EState::CreateChangefeed) {
+                    txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
                 }
             }
 
@@ -1216,6 +1262,10 @@ private:
                 if (item.NextIndexIdx < item.Scheme.indexes_size()) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(importInfo, itemIdx);
+                } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
+                           AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
+                    item.State = EState::CreateChangefeed;
+                    AllocateTxId(importInfo, itemIdx);
                 } else {
                     item.State = EState::Done;
                 }
@@ -1229,9 +1279,21 @@ private:
             } else {
                 if (++item.NextIndexIdx < item.Scheme.indexes_size()) {
                     AllocateTxId(importInfo, itemIdx);
+                } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
+                           AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
+                    item.State = EState::CreateChangefeed;
+                    AllocateTxId(importInfo, itemIdx);
                 } else {
                     item.State = EState::Done;
                 }
+            }
+            break;
+        
+        case EState::CreateChangefeed:
+            if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
+                AllocateTxId(importInfo, itemIdx);
+            } else {
+                item.State = EState::Done;
             }
             break;
 

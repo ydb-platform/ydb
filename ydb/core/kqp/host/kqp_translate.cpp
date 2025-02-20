@@ -332,13 +332,19 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder) {
     TVector<TQueryAst> result;
     settingsBuilder.SetSqlVersion(sqlVersion);
+    NSQLTranslation::TTranslators translators(
+        NSQLTranslationV0::MakeTranslator(),
+        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
         TKqpAutoParamBuilderFactory autoParamBuilderFactory;
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
         ui16 actualSyntaxVersion = 0;
         TVector<NYql::TStmtParseInfo> stmtParseInfo;
-        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
+        auto astStatements = NSQLTranslation::SqlToAstStatements(translators, queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
         deprecatedSQL = (actualSyntaxVersion == 0);
         sqlVersion = actualSyntaxVersion;
         YQL_ENSURE(astStatements.size() == stmtParseInfo.size());

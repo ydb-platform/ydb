@@ -337,6 +337,12 @@
 
 Группа идентифицируется [SID](#access-sid).
 
+### Роль {#access-role}
+
+Роль — это именованное множество [прав доступа](#access-right), используемое для назначения [пользователям](#access-user) или [группам](#access-group) пользователей.
+
+Роли в {{ ydb-short-name }} реализованы с помощью [групп](#access-group), которые создаются при первоначальном развёртывании кластера, и которым назначается определённый [список прав](#access-right) на корне схемы кластера. Подробнее о ролях читайте в статье [{#T}](../security/builtin-security.md).
+
 ### SID {#access-sid}
 
 **SID** или **security identifier** — строка вида `<name>` или `<name>@<auth-domain>`, идентифицирующая [субъект доступа](../concepts/glossary.md#access-subject). Используется при [аутентификации](../security/authentication.md), [авторизации](../security/authorization.md), в [списках прав](#access-control-list) и в [списках уровней доступа](#access-level-list).

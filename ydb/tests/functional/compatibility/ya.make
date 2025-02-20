@@ -7,7 +7,7 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
-TAG(ya:fat)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(
     ydb/apps/ydbd

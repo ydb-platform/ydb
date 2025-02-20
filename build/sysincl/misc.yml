@@ -459,14 +459,6 @@
       - vendor/github.com/NVIDIA/go-nvml/gen/nvml/nvml.h
       - vendor/github.com/NVIDIA/go-nvml/pkg/nvml/nvml.h
 
-- source_filter: "^smart_devices/third_party/beken_freertos_sdk"
-  includes:
-    - error.h: smart_devices/third_party/beken_freertos_sdk/beken378/common/error.h
-    - errno.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/errno.h
-    - netdb.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/netdb.h
-    - signal.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/wpa_supplicant_2_9/bk_patch/signal.h
-    - check_config.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/mbedtls/mbedtls-2.27.0/include/mbedtls/check_config.h
-
 - source_filter: "^contrib/libs/svt-av1"
   includes:
     - filter.h: contrib/libs/svt-av1/Source/Lib/Codec/filter.h

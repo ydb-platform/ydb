@@ -4,6 +4,7 @@ PEERDIR(
     ydb/library/conclusion
     ydb/library/actors/core
     ydb/library/services
+    ydb/core/formats/arrow/accessor/sub_columns
 )
 
 IF (OS_WINDOWS)
@@ -32,6 +33,7 @@ SRCS(
     assign_internal.cpp
     chain.cpp
     custom_registry.cpp
+    GLOBAL kernel_logic.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(abstract.h)

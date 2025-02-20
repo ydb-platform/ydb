@@ -692,6 +692,19 @@ TDatabaseMetadata GetDatabaseMetadata(const TString& config) {
     return {};
 }
 
+TStorageMetadata GetStorageMetadata(const TString& config) {
+    if (auto doc = GetMetadataDoc(config); doc) {
+        auto versionNode = doc->Node["version"];
+        auto clusterNode = doc->Node["cluster"];
+        return TStorageMetadata{
+            .Version = versionNode ? std::optional{FromString<ui64>(versionNode.Scalar())} : std::nullopt,
+            .Cluster = clusterNode ? std::optional{clusterNode.Scalar()} : std::nullopt,
+        };
+    }
+
+    return {};
+}
+
 TVolatileMetadata GetVolatileMetadata(const TString& config) {
     if (auto doc = GetMetadataDoc(config); doc) {
         auto versionNode = doc->Node.at("version");
@@ -799,6 +812,11 @@ bool IsStorageConfig(const TString& config) {
 
 bool IsDatabaseConfig(const TString& config) {
     return IsConfigKindEquals(config, "DatabaseConfig");
+}
+
+bool IsStaticConfig(const TString& config) {
+    auto doc = NFyaml::TDocument::Parse(config);
+    return !doc.Root().Map().Has("metadata");
 }
 
 TString StripMetadata(const TString& config) {

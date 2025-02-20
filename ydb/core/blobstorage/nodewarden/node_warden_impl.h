@@ -177,9 +177,17 @@ namespace NKikimr::NStorage {
             };
 
             struct TEvRetrySaveConfig : TEventLocal<TEvRetrySaveConfig, EvRetrySaveConfig> {
-                NKikimrBlobStorage::TYamlConfig YamlConfig;
-                TEvRetrySaveConfig(const NKikimrBlobStorage::TYamlConfig& yamlConfig)
-                    : YamlConfig(yamlConfig)
+                std::optional<TString> MainYaml;
+                ui64 MainYamlVersion;
+                std::optional<TString> StorageYaml;
+                std::optional<ui64> StorageYamlVersion;
+
+                TEvRetrySaveConfig(std::optional<TString> mainYaml, ui64 mainYamlVersion, std::optional<TString> storageYaml,
+                        std::optional<ui64> storageYamlVersion)
+                    : MainYaml(std::move(mainYaml))
+                    , MainYamlVersion(mainYamlVersion)
+                    , StorageYaml(std::move(storageYaml))
+                    , StorageYamlVersion(storageYamlVersion)
                 {}
             };
         };
@@ -567,7 +575,8 @@ namespace NKikimr::NStorage {
         void Handle(NPDisk::TEvShredPDisk::TPtr ev);
         void ProcessShredStatus(ui64 cookie, ui64 generation, std::optional<TString> error);
 
-        void PersistConfig(const TString& yaml, ui64 version, std::optional<TString> storageYaml = std::nullopt);
+        void PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVersion, std::optional<TString> storageYaml,
+            std::optional<ui64> storageYamlVersion);
         void LoadConfigVersion();
 
         void Handle(TEvRegisterPDiskLoadActor::TPtr ev);
@@ -674,6 +683,8 @@ namespace NKikimr::NStorage {
 
     bool DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig, NKikimrBlobStorage::TStorageConfig *config,
         TString *errorReason);
+
+    void EscapeHtmlString(IOutputStream& out, const TString& s);
 
 }
 

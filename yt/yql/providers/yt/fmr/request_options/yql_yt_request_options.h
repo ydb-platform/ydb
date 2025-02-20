@@ -21,8 +21,7 @@ enum class ETaskStatus {
     Accepted,
     InProgress,
     Failed,
-    Completed,
-    Aborted
+    Completed
 };
 
 enum class ETaskType {

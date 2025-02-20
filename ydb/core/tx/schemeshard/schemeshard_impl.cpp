@@ -2252,8 +2252,9 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
             db.Table<Schema::StoragePools>().Key(pathId.LocalPathId, pool.GetName(), pool.GetKind()).Delete();
         }
 
-        db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(static_cast<ui32>(TDataErasureManager::EStatus::COMPLETED));
-        DataErasureManager->Remove(pathId);
+        if (DataErasureManager->Remove(pathId)) {
+            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(static_cast<ui32>(TDataErasureManager::EStatus::COMPLETED));
+        }
 
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
         SubDomains.erase(it);

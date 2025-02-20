@@ -110,7 +110,7 @@ void TRootDataErasureManager::ClearWaitingDataErasureRequests() {
 
 void TRootDataErasureManager::Run(NIceDb::TNiceDb& db) {
     Status = EStatus::IN_PROGRESS;
-    StartTime =AppData(SchemeShard->ActorContext())->TimeProvider->Now();
+    StartTime = AppData(SchemeShard->ActorContext())->TimeProvider->Now();
     for (auto& [pathId, subdomain] : SchemeShard->SubDomains) {
         auto path = TPath::Init(pathId, SchemeShard);
         if (path->IsRoot()) {
@@ -468,19 +468,24 @@ bool TRootDataErasureManager::Restore(NIceDb::TNiceDb& db) {
     return true;
 }
 
-void TRootDataErasureManager::Remove(const TPathId& pathId) {
-    WaitingDataErasureTenants[pathId] = EStatus::COMPLETED;
-    bool isDataErasureCompleted = true;
-    for (const auto& [pathId, status] : WaitingDataErasureTenants) {
-        if (status == EStatus::IN_PROGRESS) {
-            isDataErasureCompleted = false;
-            break;
+bool TRootDataErasureManager::Remove(const TPathId& pathId) {
+    auto it = WaitingDataErasureTenants.find(pathId);
+    if (it != WaitingDataErasureTenants.end()) {
+        WaitingDataErasureTenants[pathId] = EStatus::COMPLETED;
+        bool isDataErasureCompleted = true;
+        for (const auto& [pathId, status] : WaitingDataErasureTenants) {
+            if (status == EStatus::IN_PROGRESS) {
+                isDataErasureCompleted = false;
+                break;
+            }
         }
-    }
 
-    if (isDataErasureCompleted) {
-        SendRequestToBSC();
+        if (isDataErasureCompleted) {
+            SendRequestToBSC();
+        }
+        return true;
     }
+    return false;
 }
 
 void TRootDataErasureManager::UpdateMetrics() {

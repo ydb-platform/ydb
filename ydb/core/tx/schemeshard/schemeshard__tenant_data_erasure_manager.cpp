@@ -379,10 +379,11 @@ bool TTenantDataErasureManager::Restore(NIceDb::TNiceDb& db) {
     return true;
 }
 
-void TTenantDataErasureManager::Remove(const TPathId&) {
+bool TTenantDataErasureManager::Remove(const TPathId&) {
     auto ctx = SchemeShard->ActorContext();
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] [Remove] Cannot execute in tenant schemeshard: " << SchemeShard->TabletID());
+    return false;
 }
 
 void TTenantDataErasureManager::UpdateMetrics() {

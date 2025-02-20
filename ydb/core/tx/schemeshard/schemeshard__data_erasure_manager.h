@@ -55,7 +55,7 @@ public:
     virtual void SendRequestToBSC() = 0;
     virtual void Complete() = 0;
     virtual bool Restore(NIceDb::TNiceDb& db) = 0;
-    virtual void Remove(const TPathId& pathId) = 0;
+    virtual bool Remove(const TPathId& pathId) = 0;
 
     void Clear();
 
@@ -125,7 +125,7 @@ public:
     void SendRequestToBSC() override;
     void Complete() override;
     bool Restore(NIceDb::TNiceDb& db) override;
-    void Remove(const TPathId& pathId) override;
+    bool Remove(const TPathId& pathId) override;
 
 private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);
@@ -184,7 +184,7 @@ public:
     void SendRequestToBSC() override;
     void Complete() override;
     bool Restore(NIceDb::TNiceDb& db) override;
-    void Remove(const TPathId& pathId) override;
+    bool Remove(const TPathId& pathId) override;
 
 private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);

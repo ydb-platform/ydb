@@ -170,10 +170,8 @@ namespace NKikimr::NStorage {
                         }
                         DIV_CLASS("panel-body") {
                             if (config) {
-                                TString s;
-                                NProtoBuf::TextFormat::PrintToString(*config, &s);
                                 out << "<pre>";
-                                EscapeHtmlString(out, s);
+                                OutputPrettyMessage(out, *config);
                                 out << "</pre>";
                             } else {
                                 out << "not defined";

@@ -9,10 +9,12 @@
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/apps/etcd_proxy/service/etcd_base_init.h>
 #include <ydb/apps/etcd_proxy/service/etcd_watch.h>
 #include <ydb/apps/etcd_proxy/service/etcd_grpc.h>
 #include <ydb/core/grpc_services/base/base.h>
+
 
 #include "proxy.h"
 
@@ -34,17 +36,21 @@ int TProxy::Discovery() {
     NYdb::TDriverConfig config;
     config.SetEndpoint(Endpoint);
     config.SetDatabase(Database);
+    if (!Token.empty())
+        config.SetAuthToken(Token);
+    if (!CA.empty())
+        config.UseSecureConnection(TFileInput(CA).ReadAll());
+
     const auto driver = NYdb::TDriver(config);
     auto client = NYdb::NDiscovery::TDiscoveryClient(driver);
     const auto res = client.ListEndpoints().GetValueSync();
     if (res.IsSuccess()) {
-        TStringBuilder str;
+        std::ostringstream str;
         str << res.GetEndpointsInfo().front().Address << ':' << res.GetEndpointsInfo().front().Port;
-        Endpoint = str;
+        Endpoint = str.str();
 
-        NYdb::TDriverConfig config;
         config.SetEndpoint(Endpoint);
-        config.SetDatabase(Database);
+
         const auto driver = NYdb::TDriver(config);
         Stuff->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
         return 0;
@@ -103,12 +109,17 @@ int TProxy::Run() {
         if (const auto res = InitDatabase()) {
             return res;
         }
-    } else {
+    }
+    if (!ImportPrefix_.empty()) {
+        if (const auto res = ImportDatabase()) {
+            return res;
+        }
+    }
+    if (!Initialize_ && ImportPrefix_.empty()) {
         if (const auto res = StartServer()) {
             return res;
         }
-        do
-            Sleep(TDuration::MilliSeconds(97));
+        do Sleep(TDuration::MilliSeconds(97));
         while (!Quit);
     }
     return Shutdown();
@@ -122,6 +133,91 @@ int TProxy::InitDatabase() {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }
+}
+
+int TProxy::ImportDatabase() {
+    auto credentials = grpc::InsecureChannelCredentials();
+    if (!Root.empty() || !Cert.empty() || !Key.empty()) {
+        const grpc::SslCredentialsOptions opts {
+            .pem_root_certs = TFileInput(Root).ReadAll(),
+            .pem_private_key = TFileInput(Key).ReadAll(),
+            .pem_cert_chain = TFileInput(Cert).ReadAll()
+        };
+        credentials = grpc::SslCredentials(opts);
+    }
+
+    const auto channel = grpc::CreateChannel(TString(ImportFrom_), credentials);
+    const std::unique_ptr<etcdserverpb::KV::Stub> kv = etcdserverpb::KV::NewStub(channel);
+
+    grpc::ClientContext readRangeCtx;
+    etcdserverpb::RangeRequest rangeRequest;
+    rangeRequest.set_key(ImportPrefix_);
+    rangeRequest.set_range_end(NEtcd::IncrementKey(ImportPrefix_));
+
+    etcdserverpb::RangeResponse rangeResponse;
+    if (const auto& status = kv->Range(&readRangeCtx, rangeRequest, &rangeResponse); !status.ok()) {
+        std::cout << status.error_message() << std::endl;
+        return 1;
+    }
+
+    std::cout << rangeResponse.count() << " keys received." << std::endl;
+
+    if (!rangeResponse.count())
+        return 0;
+
+    const auto& type = NYdb::TTypeBuilder()
+        .BeginList()
+            .BeginStruct()
+                .AddMember("key").Primitive(NYdb::EPrimitiveType::String)
+                .AddMember("created").Primitive(NYdb::EPrimitiveType::Int64)
+                .AddMember("modified").Primitive(NYdb::EPrimitiveType::Int64)
+                .AddMember("version").Primitive(NYdb::EPrimitiveType::Int64)
+                .AddMember("value").Primitive(NYdb::EPrimitiveType::String)
+                .AddMember("lease").Primitive(NYdb::EPrimitiveType::Int64)
+            .EndStruct()
+        .EndList()
+    .Build();
+
+    NYdb::TValueBuilder valueBuilder(type);
+    valueBuilder.BeginList();
+    for (const auto& kv : rangeResponse.kvs()) {
+        valueBuilder.AddListItem()
+            .BeginStruct()
+                .AddMember("key").String(kv.key())
+                .AddMember("created").Int64(kv.create_revision())
+                .AddMember("modified").Int64(kv.mod_revision())
+                .AddMember("version").Int64(kv.version())
+                .AddMember("value").String(kv.value())
+                .AddMember("lease").Int64(kv.lease())
+            .EndStruct();
+    }
+
+    auto value = valueBuilder.EndList().Build();
+
+    NYdb::TDriverConfig config;
+    config.SetEndpoint(Endpoint);
+    config.SetDatabase(Database);
+    if (!Token.empty())
+        config.SetAuthToken(Token);
+    if (!CA.empty())
+        config.UseSecureConnection(TFileInput(CA).ReadAll());
+
+    const auto driver = NYdb::TDriver(config);
+    auto client = NYdb::NTable::TTableClient(driver);
+
+    if (const auto res = client.BulkUpsert(Database + "/huidig", std::move(value)).ExtractValueSync(); !res.IsSuccess()) {
+        std::cout << res.GetIssues().ToString() << std::endl;
+        return 1;
+    }
+
+    const auto& param = NYdb::TParamsBuilder().AddParam("$Prefix").String(ImportPrefix_).Build().Build();
+    if (const auto res = Stuff->Client->ExecuteQuery("insert into `verhaal` select * from `huidig` where startswith(`key`,$Prefix);", NYdb::NQuery::TTxControl::NoTx(), param).ExtractValueSync(); !res.IsSuccess()) {
+        std::cout << res.GetIssues().ToString() << std::endl;
+        return 1;
+    }
+
+    std::cout << rangeResponse.count() << " keys imported successfully." << std::endl;
+    return 0;
 }
 
 int TProxy::Shutdown() {
@@ -140,10 +236,16 @@ TProxy::TProxy(int argc, char** argv)
 
     opts.AddLongOption("database", "YDB etcd databse").Required().RequiredArgument("DATABASE").StoreResult(&Database);
     opts.AddLongOption("endpoint", "YDB endpoint to connect").Required().RequiredArgument("ENDPOINT").StoreResult(&Endpoint);
+    opts.AddLongOption("token", "YDB token for connection").Optional().RequiredArgument("TOKEN").StoreResult(&Token);
+    opts.AddLongOption("ydbca", "YDB CA for connection").Optional().RequiredArgument("CA").StoreResult(&CA);
+
     opts.AddLongOption("port", "Listening port").Optional().DefaultValue("2379").RequiredArgument("PORT").StoreResult(&ListeningPort);
-    opts.AddLongOption("init", "Initialize etcd databse").NoArgument().SetFlag(&Initialize_);
+    opts.AddLongOption("init", "Initialize etcd database").NoArgument().SetFlag(&Initialize_);
     opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&useStdErr);
     opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&mlock);
+
+    opts.AddLongOption("import-from", "Import existing data from etcd base").RequiredArgument("ENDPOINT").DefaultValue("localhost:2379").StoreResult(&ImportFrom_);
+    opts.AddLongOption("import-prefix", "Prefix of data to import").RequiredArgument("PREFIX").StoreResult(&ImportPrefix_);
 
     opts.AddLongOption("ca", "SSL CA certificate file").Optional().RequiredArgument("CA").StoreResult(&Root);
     opts.AddLongOption("cert", "SSL certificate file").Optional().RequiredArgument("CERT").StoreResult(&Cert);

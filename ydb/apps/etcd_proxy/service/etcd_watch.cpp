@@ -430,7 +430,7 @@ private:
                 kv->set_create_revision(change.NewData.Created);
             }
 
-            std::cout << (change.NewData.Version ? "Put" : "Drop") << '(' << change.Key;
+            std::cout << (change.NewData.Version ? "Update" : "Delete") << '(' << change.Key;
             if (change.OldData.Version) {
                 std::cout << ", old " << change.OldData.Version << ',' << change.OldData.Created << ',' << change.OldData.Modified << ',' << change.OldData.Value.size() << ',' << change.OldData.Lease;
             }
@@ -471,7 +471,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateFunc);
         Stuff->Watchtower = SelfId();
-        ctx.Schedule(TDuration::Seconds(101), new TEvents::TEvWakeup);
+        ctx.Schedule(TDuration::Seconds(11), new TEvents::TEvWakeup);
     }
 private:
     struct TSubscriptions {

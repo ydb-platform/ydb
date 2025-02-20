@@ -41,7 +41,6 @@ public:
         ServerSettings->Verbose = true;
 
         Server_.Reset(new Tests::TServer(*ServerSettings));
-        Tenants_.Reset(new Tests::TTenants(Server_));
 
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
@@ -97,7 +96,6 @@ public:
 
     Tests::TServerSettings::TPtr ServerSettings;
     Tests::TServer::TPtr Server_;
-    THolder<Tests::TTenants> Tenants_;
 private:
     TPortManager PortManager;
     ui16 GRpcPort_;
@@ -235,7 +233,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 rangeRequest.set_range_end("key5");
 
                 etcdserverpb::RangeResponse rangeResponse;
-                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
 
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 4LL);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 4U);
@@ -263,7 +261,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 rangeRequest.set_keys_only(true);
 
                 etcdserverpb::RangeResponse rangeResponse;
-                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
 
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 2LL);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 2U);
@@ -292,7 +290,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 rangeRequest.set_limit(4LL);
 
                 etcdserverpb::RangeResponse rangeResponse;
-                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
 
                 UNIT_ASSERT(rangeResponse.more());
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 7LL);
@@ -329,7 +327,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 rangeRequest.set_sort_target(etcdserverpb::RangeRequest_SortTarget_VALUE);
                 rangeRequest.set_sort_order(etcdserverpb::RangeRequest_SortOrder_ASCEND);
                 etcdserverpb::RangeResponse rangeResponse;
-                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
 
                 UNIT_ASSERT(rangeResponse.more());
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 5LL);
@@ -352,7 +350,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 rangeRequest.set_sort_order(etcdserverpb::RangeRequest_SortOrder_DESCEND);
                 rangeRequest.set_keys_only(true);
                 etcdserverpb::RangeResponse rangeResponse;
-                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
 
                 UNIT_ASSERT(rangeResponse.more());
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 8LL);
@@ -388,7 +386,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 putRequest.set_prev_kv(true);
 
                 etcdserverpb::PutResponse putResponse;
-                etcd->Put(&writeCtx, putRequest, &putResponse);
+                UNIT_ASSERT(etcd->Put(&writeCtx, putRequest, &putResponse).ok());
                 UNIT_ASSERT(putResponse.has_prev_kv());
                 UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().key(), "key");
                 UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().value(), "value0");
@@ -402,7 +400,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 putRequest.set_prev_kv(true);
 
                 etcdserverpb::PutResponse putResponse;
-                etcd->Put(&writeCtx, putRequest, &putResponse);
+                UNIT_ASSERT(etcd->Put(&writeCtx, putRequest, &putResponse).ok());
                 UNIT_ASSERT(putResponse.has_prev_kv());
                 UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().key(), "key");
                 UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().value(), "value1");
@@ -419,7 +417,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 putRequest.set_prev_kv(true);
 
                 etcdserverpb::PutResponse putResponse;
-                etcd->Put(&writeCtx, putRequest, &putResponse);
+                UNIT_ASSERT(etcd->Put(&writeCtx, putRequest, &putResponse).ok());
                 UNIT_ASSERT(!putResponse.has_prev_kv());
             }
             {
@@ -430,7 +428,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 putRequest.set_prev_kv(true);
 
                 etcdserverpb::PutResponse putResponse;
-                etcd->Put(&writeCtx, putRequest, &putResponse);
+                UNIT_ASSERT(etcd->Put(&writeCtx, putRequest, &putResponse).ok());
                 UNIT_ASSERT(putResponse.has_prev_kv());
                 UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().key(), "key");
                 UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().value(), "value3");
@@ -456,7 +454,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 deleteRangeRequest.set_key("key2");
                 deleteRangeRequest.set_prev_kv(true);
                 etcdserverpb::DeleteRangeResponse deleteRangeResponse;
-                etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
+                UNIT_ASSERT(etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse).ok());
                 UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.deleted(), 1LL);
                 UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs().size(), 1U);
                 UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs(0).key(), "key2");
@@ -471,7 +469,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 deleteRangeRequest.set_range_end("key7");
                 deleteRangeRequest.set_prev_kv(true);
                 etcdserverpb::DeleteRangeResponse deleteRangeResponse;
-                etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
+                UNIT_ASSERT(etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse).ok());
                 UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.deleted(), 3LL);
                 UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs().size(), 3U);
 
@@ -491,7 +489,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 deleteRangeRequest.set_range_end("kez");
                 deleteRangeRequest.set_prev_kv(true);
                 etcdserverpb::DeleteRangeResponse deleteRangeResponse;
-                etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
+                UNIT_ASSERT(etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse).ok());
                 UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.deleted(), 4LL);
                 UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs().size(), 4U);
 
@@ -517,7 +515,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 rangeRequest.set_key("my_key");
 
                 etcdserverpb::RangeResponse rangeResponse;
-                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
 
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 1U);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "my_key");
@@ -533,7 +531,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 rangeRequest.set_key("my_key");
 
                 etcdserverpb::RangeResponse rangeResponse;
-                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
 
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 1LL);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 1U);
@@ -562,7 +560,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 put->set_value("new_value");
 
                 etcdserverpb::TxnResponse txnResponse;
-                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
 
                 UNIT_ASSERT(txnResponse.succeeded());
             }
@@ -582,7 +580,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 put->set_value("-----");
 
                 etcdserverpb::TxnResponse txnResponse;
-                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
 
                 UNIT_ASSERT(!txnResponse.succeeded());
             }
@@ -613,7 +611,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 range->set_key(key);
 
                 etcdserverpb::TxnResponse txnResponse;
-                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
 
                 UNIT_ASSERT(!txnResponse.succeeded());
                 const auto& resp = txnResponse.responses(0).response_range();
@@ -643,7 +641,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 range->set_key(key);
 
                 etcdserverpb::TxnResponse txnResponse;
-                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
 
                 UNIT_ASSERT(txnResponse.succeeded());
             }
@@ -673,7 +671,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 range->set_key(key);
 
                 etcdserverpb::TxnResponse txnResponse;
-                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
 
                 UNIT_ASSERT(!txnResponse.succeeded());
                 const auto& resp = txnResponse.responses(0).response_range();
@@ -702,7 +700,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 range->set_key(key);
 
                 etcdserverpb::TxnResponse txnResponse;
-                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
 
                 UNIT_ASSERT(txnResponse.succeeded());
                 UNIT_ASSERT_VALUES_EQUAL(txnResponse.responses(0).response_delete_range().deleted(), 1LL);
@@ -782,7 +780,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 }
 
                 etcdserverpb::TxnResponse txnResponse;
-                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
 
                 UNIT_ASSERT(!txnResponse.succeeded());
 
@@ -842,7 +840,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 }
 
                 etcdserverpb::TxnResponse txnResponse;
-                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
 
                 UNIT_ASSERT(txnResponse.succeeded());
             }
@@ -871,7 +869,7 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
                 rangeRequest.set_range_end("kez");
 
                 etcdserverpb::RangeResponse rangeResponse;
-                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
 
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 8U);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key0");
@@ -902,7 +900,7 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
                 rangeRequest.set_keys_only(true);
 
                 etcdserverpb::RangeResponse rangeResponse;
-                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
 
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 4U);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key0");
@@ -921,7 +919,7 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
                 timeToLiveRequest.set_id(42LL);
 
                 etcdserverpb::LeaseTimeToLiveResponse timeToLiveResponse;
-                lease->LeaseTimeToLive(&timeToLiveCtx, timeToLiveRequest, &timeToLiveResponse);
+                UNIT_ASSERT(lease->LeaseTimeToLive(&timeToLiveCtx, timeToLiveRequest, &timeToLiveResponse).ok());
 
                 UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.id(), 42LL);
                 UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.ttl(), -1LL);
@@ -946,7 +944,7 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
                 timeToLiveRequest.set_id(one);
 
                 etcdserverpb::LeaseTimeToLiveResponse timeToLiveResponse;
-                lease->LeaseTimeToLive(&timeToLiveCtx, timeToLiveRequest, &timeToLiveResponse);
+                UNIT_ASSERT(lease->LeaseTimeToLive(&timeToLiveCtx, timeToLiveRequest, &timeToLiveResponse).ok());
 
                 UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.id(), one);
                 UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.ttl(), 97LL);
@@ -960,7 +958,7 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
                 timeToLiveRequest.set_keys(true);
 
                 etcdserverpb::LeaseTimeToLiveResponse timeToLiveResponse;
-                lease->LeaseTimeToLive(&timeToLiveCtx, timeToLiveRequest, &timeToLiveResponse);
+                UNIT_ASSERT(lease->LeaseTimeToLive(&timeToLiveCtx, timeToLiveRequest, &timeToLiveResponse).ok());
 
                 UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.id(), two);
                 UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.ttl(), 17LL);
@@ -981,7 +979,7 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
                 timeToLiveRequest.set_keys(true);
 
                 etcdserverpb::LeaseTimeToLiveResponse timeToLiveResponse;
-                lease->LeaseTimeToLive(&timeToLiveCtx, timeToLiveRequest, &timeToLiveResponse);
+                UNIT_ASSERT(lease->LeaseTimeToLive(&timeToLiveCtx, timeToLiveRequest, &timeToLiveResponse).ok());
 
                 UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.id(), one);
                 UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.ttl(), -1LL);

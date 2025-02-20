@@ -365,9 +365,13 @@ public:
     }
 
     void HandleFinalize(TEvents::TEvUndelivered::TPtr&) {
-        auto issue = YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN, "Buffer actor isn't available. Operation state unknown.");
-        // TODO: better
-        ReplyErrorAndDie(Ydb::StatusIds::UNDETERMINED, issue);
+        if (Request.LocksOp == ELocksOp::Commit && !ReadOnlyTx) {
+            auto issue = YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN, "Buffer actor isn't available. Operation state unknown.");
+            ReplyErrorAndDie(Ydb::StatusIds::UNDETERMINED, issue);
+        } else {
+            auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, "Buffer actor isn't available.");
+            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
+        }
     }
 
     void MakeResponseAndPassAway() {

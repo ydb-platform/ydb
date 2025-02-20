@@ -2342,6 +2342,20 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
+    NMsgBusProxy::EResponseStatus TClient::CreateTopic(const TString& parent,
+                                                        const NKikimrSchemeOp::TPersQueueGroupDescription& topic) {
+        auto request = std::make_unique<NMsgBusProxy::TBusSchemeOperation>();
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
+        op->SetWorkingDir(parent);
+        op->MutableCreatePersQueueGroup()->CopyFrom(topic);
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.release(), reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse& response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
     NMsgBusProxy::EResponseStatus TClient::CreateSolomon(const TString& parent, const TString& name, ui32 parts, ui32 channelProfile) {
         auto* request = new NMsgBusProxy::TBusSchemeOperation();
         auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();

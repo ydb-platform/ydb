@@ -249,7 +249,7 @@ bool operator < (const TEnqueuedTime& lhs, const TEnqueuedTime& rhs)
 struct TExecutionPool final
     : public THeapItemBase<TExecutionPool>
 {
-    const TString PoolName;
+    const std::string PoolName;
 
     // Profiling sensors.
     const NProfiling::TSummary BucketCounter;
@@ -274,7 +274,7 @@ struct TExecutionPool final
     // Execution pool is retained for some after last usage to flush profiling counters.
     TCpuInstant LastUsageTime = 0;
 
-    TExecutionPool(TString poolName, const TProfiler& profiler)
+    TExecutionPool(std::string poolName, const TProfiler& profiler)
         : PoolName(std::move(poolName))
         , BucketCounter(profiler.Summary("/buckets"))
         , SizeCounter(profiler.Summary("/size"))
@@ -298,8 +298,8 @@ using TExecutionPoolPtr = ::NYT::TIntrusivePtr<TExecutionPool>;
 // Data for scheduling on the second level.
 struct TBucketBase
 {
-    const TString BucketName;
-    const TString PoolName;
+    const std::string BucketName;
+    const std::string PoolName;
 
     TRingQueue<TAction> ActionQueue;
     TExecutionPoolPtr Pool = nullptr;
@@ -308,7 +308,7 @@ struct TBucketBase
 
     TEnqueuedTime EnqueuedTime;
 
-    TBucketBase(TString bucketName, TString poolName)
+    TBucketBase(std::string bucketName, std::string poolName)
         : BucketName(std::move(bucketName))
         , PoolName(std::move(poolName))
     { }
@@ -327,7 +327,7 @@ class TBucket
     , public TBucketBase
 {
 public:
-    TBucket(TString bucketName, TString poolName, TBucketMappingPtr parent)
+    TBucket(std::string bucketName, std::string poolName, TBucketMappingPtr parent)
         : TBucketBase(std::move(bucketName), std::move(poolName))
         , Parent_(std::move(parent))
     { }
@@ -413,12 +413,12 @@ public:
         }
     }
 
-    virtual TProfiler GetPoolProfiler(const TString& poolName) = 0;
+    virtual TProfiler GetPoolProfiler(const std::string& poolName) = 0;
 
     virtual void Invoke(TClosure callback, TBucket* bucket) = 0;
 
     // GetInvoker is protected by mapping lock (can be sharded).
-    IInvokerPtr GetInvoker(const TString& poolName, const TString& bucketName)
+    IInvokerPtr GetInvoker(const std::string& poolName, const std::string& bucketName)
     {
         // TODO(lukyan): Use reader guard and update it to writer if needed.
         auto guard = Guard(MappingLock_);
@@ -461,7 +461,7 @@ public:
         }
     }
 
-    TExecutionPoolPtr GetOrRegisterPool(TString poolName)
+    TExecutionPoolPtr GetOrRegisterPool(std::string poolName)
     {
         YT_ASSERT_SPINLOCK_AFFINITY(MappingLock_);
 
@@ -562,8 +562,8 @@ private:
     const TDuration PoolRetentionTime_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, MappingLock_);
-    THashMap<std::pair<TString, TString>, TBucket*> BucketMapping_;
-    THashMap<TString, TExecutionPool*> PoolMapping_;
+    THashMap<std::pair<std::string, std::string>, TBucket*> BucketMapping_;
+    THashMap<std::string, TExecutionPool*> PoolMapping_;
 
     TPoolQueue RetainPoolQueue_;
 };
@@ -599,7 +599,7 @@ public:
 
     TTwoLevelFairShareQueue(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        const TString& threadNamePrefix,
+        const std::string& threadNamePrefix,
         const TNewTwoLevelFairShareThreadPoolOptions& options)
         : TNotifyManager(std::move(callbackEventCount), GetThreadTags(threadNamePrefix), options.PollingPeriod)
         , TBucketMapping(options.PoolRetentionTime)
@@ -818,7 +818,7 @@ private:
 
     static_assert(sizeof(TThreadState) >= CacheLineSize);
 
-    const TString ThreadNamePrefix_;
+    const std::string ThreadNamePrefix_;
     const TProfiler Profiler_;
     const NProfiling::TTimeCounter CumulativeSchedulingTimeCounter_;
     const IPoolWeightProviderPtr PoolWeightProvider_;
@@ -845,7 +845,7 @@ private:
 
     TCallbackList<TWaitTimeObserver::TSignature> WaitTimeObservers_;
 
-    TProfiler GetPoolProfiler(const TString& poolName) override
+    TProfiler GetPoolProfiler(const std::string& poolName) override
     {
         return Profiler_.WithTags(GetBucketTags(ThreadNamePrefix_, poolName));
     }
@@ -1266,8 +1266,8 @@ public:
     TFairShareThread(
         TTwoLevelFairShareQueuePtr queue,
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        const TString& threadGroupName,
-        const TString& threadName,
+        const std::string& threadGroupName,
+        const std::string& threadName,
         int index)
         : TSchedulerThread(
             std::move(callbackEventCount),
@@ -1322,7 +1322,7 @@ class TTwoLevelFairShareThreadPool
 public:
     TTwoLevelFairShareThreadPool(
         int threadCount,
-        const TString& threadNamePrefix,
+        const std::string& threadNamePrefix,
         const TNewTwoLevelFairShareThreadPoolOptions& options)
         : TThreadPoolBase(threadNamePrefix)
         , Queue_(New<TTwoLevelFairShareQueue>(
@@ -1349,7 +1349,7 @@ public:
     }
 
     IInvokerPtr GetInvoker(
-        const TString& poolName,
+        const std::string& poolName,
         const TFairShareThreadPoolTag& bucketName) override
     {
         EnsureStarted();
@@ -1410,7 +1410,7 @@ private:
 
 ITwoLevelFairShareThreadPoolPtr CreateTwoLevelFairShareThreadPool(
     int threadCount,
-    const TString& threadNamePrefix,
+    const std::string& threadNamePrefix,
     const TNewTwoLevelFairShareThreadPoolOptions& options)
 {
     return New<TTwoLevelFairShareThreadPool>(

@@ -4467,9 +4467,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         item.Metadata = NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
                     }
 
+                    if (rowset.HaveValue<Schema::ImportItems::Changefeeds>()) {
+                        item.Changefeeds = rowset.GetValue<Schema::ImportItems::Changefeeds>();
+                    }
+
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ImportItems::WaitTxId>(InvalidTxId);
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
+                    item.NextChangefeedIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextChangefeedIdx>(0);
                     item.Issue = rowset.GetValueOrDefault<Schema::ImportItems::Issue>(TString());
 
                     if (item.WaitTxId != InvalidTxId) {
@@ -4518,20 +4523,20 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             // read kmeans tree state
             {
-                auto rowset = db.Table<Schema::KMeansTreeState>().Range().Select();
+                auto rowset = db.Table<Schema::KMeansTreeProgress>().Range().Select();
                 if (!rowset.IsReady()) {
                     return false;
                 }
 
                 while (!rowset.EndOfSet()) {
-                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeState::Id>();
+                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeProgress::Id>();
                     const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
                     Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
                     auto& buildInfo = *buildInfoPtr->Get();
                     buildInfo.KMeans.Set(
-                        rowset.GetValue<Schema::KMeansTreeState::Level>(),
-                        rowset.GetValue<Schema::KMeansTreeState::Parent>(),
-                        rowset.GetValue<Schema::KMeansTreeState::State>()
+                        rowset.GetValue<Schema::KMeansTreeProgress::Level>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::Parent>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::State>()
                     );
                     buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
 

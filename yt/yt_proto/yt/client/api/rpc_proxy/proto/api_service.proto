@@ -3449,6 +3449,7 @@ message TRspGetQueryTrackerInfo
     required bytes supported_features = 2; // YSON
     repeated string access_control_objects = 3;
     optional string query_tracker_stage = 4;
+    repeated string clusters = 5;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

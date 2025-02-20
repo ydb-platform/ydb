@@ -2,6 +2,8 @@ import time
 import logging
 from .base import TllTieringTestBase, ColumnTableHelper
 
+from ydb.tests.library.test_meta import link_test_case
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,8 +38,8 @@ class TestDeleteS3Ttl(TllTieringTestBase):
     def get_row_count_by_date(self, table_path: str, past_days: int) -> int:
         return self.ydb_client.query(f"SELECT count(*) as Rows from `{table_path}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromDays({past_days})")[0].rows[0]["Rows"]
 
+    @link_test_case("#13542")
     def test_data_unchanged_after_ttl_change(self):
-        ''' Implements https://github.com/ydb-platform/ydb/issues/13542 '''
         self.row_count = 100000
         single_upsert_row_count = 10000
         test_name = 'test_data_unchanged_after_ttl_change'
@@ -214,8 +216,8 @@ class TestDeleteS3Ttl(TllTieringTestBase):
 
         change_ttl_and_check(self.days_to_cool, days_to_medium, self.days_to_freeze)
 
+    @link_test_case("#13467")
     def test_ttl_delete(self):
-        ''' Implements https://github.com/ydb-platform/ydb/issues/13467 '''
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/table"
         secret_prefix = self.test_name

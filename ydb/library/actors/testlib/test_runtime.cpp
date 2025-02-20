@@ -1731,7 +1731,7 @@ namespace NActors {
 
         IHarmonizer* harmonizer = nullptr;
         if (node) {
-            node->Harmonizer.reset(MakeHarmonizer(GetCycleCountFast()));
+            node->Harmonizer = MakeHarmonizer(GetCycleCountFast());
             harmonizer = node->Harmonizer.get();
         }
 

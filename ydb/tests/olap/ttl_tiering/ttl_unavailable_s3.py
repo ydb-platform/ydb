@@ -6,6 +6,8 @@ import logging
 
 from .base import TllTieringTestBase, ColumnTableHelper
 
+from ydb.tests.library.test_meta import link_test_case
+
 logger = logging.getLogger(__name__)
 
 ROWS_CHUNK_SIZE = 1000000
@@ -13,8 +15,8 @@ ROWS_CHUNKS_COUNT = 10
 
 
 class TestUnavailableS3(TllTieringTestBase):
+    @link_test_case("#13545")
     def test(self):
-        """As per https://github.com/ydb-platform/ydb/issues/13545"""
         bucket_s3_name = "cold"
         bucket_db_path = f"{self.ydb_client.database}/buckets/{bucket_s3_name}"
 

@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(FmrFactoryTests) {
                 *operationResults = "operation_result";
                 return ETaskStatus::Completed;
             }
-            return ETaskStatus::Aborted;
+            return ETaskStatus::Failed;
         };
         TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
         auto factory = MakeFmrJobFactory(settings);
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(FmrFactoryTests) {
                     return ETaskStatus::Completed;
                 }
             }
-            return ETaskStatus::Aborted;
+            return ETaskStatus::Failed;
         };
         TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
 
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(FmrFactoryTests) {
         cancelFlag->store(true);
         auto taskResult = futureTaskStatus.GetValueSync();
         ETaskStatus taskStatus = taskResult->TaskStatus;
-        UNIT_ASSERT_VALUES_EQUAL(taskStatus, ETaskStatus::Aborted);
+        UNIT_ASSERT_VALUES_EQUAL(taskStatus, ETaskStatus::Failed);
         UNIT_ASSERT_NO_DIFF(*operationResults, "computing_result");
     }
 }

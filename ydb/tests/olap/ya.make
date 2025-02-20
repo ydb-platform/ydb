@@ -19,7 +19,8 @@ PY3TEST()
     )
 
     PEERDIR(
-        ydb/tests/library
+    ydb/tests/library
+    ydb/tests/library/test_meta
     )
 END()
 

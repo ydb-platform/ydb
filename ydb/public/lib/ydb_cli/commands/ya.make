@@ -59,7 +59,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/import
     ydb/public/lib/ydb_cli/topic
-    ydb/public/sdk/cpp/src/client/bsconfig
+    ydb/public/sdk/cpp/src/client/config
     ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/debug
     ydb/public/sdk/cpp/src/client/draft

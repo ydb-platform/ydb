@@ -70,7 +70,6 @@ TCommandDatabaseRestore::TCommandDatabaseRestore()
 void TCommandDatabaseRestore::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.SetFreeArgsNum(0);
-    config.AllowEmptyDatabase = true; // it is possible to retrieve database path from dump
 
     config.Opts->AddLongOption('i', "input", "Path in a local filesystem to a directory with dump.")
         .RequiredArgument("PATH")
@@ -91,12 +90,8 @@ int TCommandDatabaseRestore::Run(TConfig& config) {
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     auto settings = NDump::TRestoreDatabaseSettings()
-        .WaitNodesDuration(WaitNodesDuration);
-
-    if (!config.Database.empty()) {
-        settings.Database(config.Database);
-        config.Database.clear(); // always connect directly to cluster
-    }
+        .WaitNodesDuration(WaitNodesDuration)
+        .Database(config.Database);
 
     NDump::TClient client(CreateDriver(config), std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.RestoreDatabase(FilePath, settings));

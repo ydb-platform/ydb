@@ -28,6 +28,7 @@ struct TReadOptions
     bool RenameConvertedCounters = true;
     double RateDenominator = 1.0;
     bool EnableHistogramCompat = false;
+    bool ReportTimestampsForRateMetrics = true;
 
     bool EnableSolomonAggregationWorkaround = false;
 

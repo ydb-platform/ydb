@@ -544,6 +544,7 @@ namespace NKikimr::NYaml {
 
         ui64 nextHostConfigID = 1;
 
+        // TODO: validate all host_configs exists (or better just drop this legacy and use yaml anchors)
         // Find the next available host_config_id
         if (ephemeralConfig.HostConfigsSize()) {
             for(const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
@@ -699,8 +700,10 @@ namespace NKikimr::NYaml {
             auto& vdiskLoc = ctx.CombinedDiskInfo[TCombinedDiskInfoKey{}];
 
             vdiskLoc.SetNodeID("1");
-            vdiskLoc.SetPath(drivePath.value());
-            vdiskLoc.SetPDiskCategory(diskType.value());
+            if (drivePath && diskType) {
+                vdiskLoc.SetPath(drivePath.value());
+                vdiskLoc.SetPDiskCategory(diskType.value());
+            }
         }
 
         if (!config.HasChannelProfileConfig()) {
@@ -710,7 +713,9 @@ namespace NKikimr::NYaml {
                 auto& channel = *channelProfile.AddChannel();
                 channel.SetErasureSpecies(erasureName);
                 channel.SetPDiskCategory(1);
-                channel.SetStoragePoolKind(diskTypeLower.value());
+                if (diskTypeLower) {
+                    channel.SetStoragePoolKind(diskTypeLower.value());
+                }
             };
         }
     }
@@ -1478,9 +1483,9 @@ namespace NKikimr::NYaml {
         return result;
     }
 
-    Ydb::BSConfig::ReplaceStorageConfigRequest BuildReplaceDistributedStorageCommand(const TString& data) {
-        Ydb::BSConfig::ReplaceStorageConfigRequest replaceRequest;
-        replaceRequest.set_yaml_config(data);
+    Ydb::Config::ReplaceConfigRequest BuildReplaceDistributedStorageCommand(const TString& data) {
+        Ydb::Config::ReplaceConfigRequest replaceRequest;
+        replaceRequest.set_replace(data);
         return replaceRequest;
     }
 

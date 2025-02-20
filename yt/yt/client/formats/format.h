@@ -30,6 +30,8 @@ public:
 
     const NYTree::IAttributeDictionary& Attributes() const;
 
+    bool operator==(const TFormat& other) const;
+
 private:
     NYTree::IAttributeDictionaryPtr Attributes_;
 

@@ -280,11 +280,6 @@ TString TYtError::FullDescription() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TErrorResponse::TErrorResponse(int httpCode, const TString& requestId)
-    : HttpCode_(httpCode)
-    , RequestId_(requestId)
-{ }
-
 TErrorResponse::TErrorResponse(TYtError error, const TString& requestId)
     : RequestId_(requestId)
     , Error_(std::move(error))
@@ -318,11 +313,6 @@ void TErrorResponse::ParseFromJsonError(const TString& jsonError)
 void TErrorResponse::SetIsFromTrailers(bool isFromTrailers)
 {
     IsFromTrailers_ = isFromTrailers;
-}
-
-int TErrorResponse::GetHttpCode() const
-{
-    return HttpCode_;
 }
 
 bool TErrorResponse::IsFromTrailers() const

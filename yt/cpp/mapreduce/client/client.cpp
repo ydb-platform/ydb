@@ -936,11 +936,6 @@ TBatchRequestPtr TClientBase::CreateBatchRequest()
     return MakeIntrusive<TBatchRequest>(TransactionId_, GetParentClientImpl());
 }
 
-IClientPtr TClientBase::GetParentClient()
-{
-    return GetParentClientImpl();
-}
-
 IRawClientPtr TClientBase::GetRawClient() const
 {
     return RawClient_;
@@ -1054,6 +1049,11 @@ void TTransaction::Detach()
 ITransactionPingerPtr TTransaction::GetTransactionPinger()
 {
     return TransactionPinger_;
+}
+
+IClientPtr TTransaction::GetParentClient(bool ignoreGlobalTx)
+{
+    return GetParentClientImpl()->GetParentClient(ignoreGlobalTx);
 }
 
 TClientPtr TTransaction::GetParentClientImpl()
@@ -1178,7 +1178,7 @@ void TClient::InsertRows(
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &rows, &options] (TMutationId /*mutationId*/) {
-            RawClient_->InsertRows(path, rows, options);
+            NRawClient::InsertRows(Context_, path, rows, options);
         });
 }
 
@@ -1191,7 +1191,7 @@ void TClient::DeleteRows(
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
-            RawClient_->DeleteRows(path, keys, options);
+            NRawClient::DeleteRows(Context_, path, keys, options);
         });
 }
 
@@ -1218,7 +1218,7 @@ TNode::TListType TClient::LookupRows(
     return RequestWithRetry<TNode::TListType>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
-            return RawClient_->LookupRows(path, keys, options);
+            return NRawClient::LookupRows(Context_, path, keys, options);
         });
 }
 
@@ -1487,6 +1487,20 @@ ITransactionPingerPtr TClient::GetTransactionPinger()
 TClientPtr TClient::GetParentClientImpl()
 {
     return this;
+}
+
+IClientPtr TClient::GetParentClient(bool ignoreGlobalTx)
+{
+    if (!TransactionId_.IsEmpty() && ignoreGlobalTx) {
+        return MakeIntrusive<TClient>(
+            RawClient_,
+            Context_,
+            TTransactionId(),
+            ClientRetryPolicy_
+        );
+    } else {
+        return this;
+    }
 }
 
 void TClient::CheckShutdown() const

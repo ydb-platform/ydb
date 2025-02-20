@@ -60,7 +60,7 @@ class TRefCountedGauge
     , public NProfiling::TGauge
 {
 public:
-    TRefCountedGauge(const NProfiling::TRegistry& profiler, const TString& name)
+    TRefCountedGauge(const NProfiling::TRegistry& profiler, const std::string& name)
         : NProfiling::TGauge(profiler.Gauge(name))
     { }
 
@@ -123,7 +123,7 @@ struct TFiberContext
 
     TFiberContext(
         TFiberSchedulerThread* fiberThread,
-        const TString& threadGroupName)
+        const std::string& threadGroupName)
         : FiberThread(fiberThread)
         , WaitingFibersCounter(New<NDetail::TRefCountedGauge>(
             NProfiling::TRegistry("/fiber").WithTag("thread", threadGroupName).WithHot(),
@@ -1038,8 +1038,8 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TFiberSchedulerThread::TFiberSchedulerThread(
-    TString threadGroupName,
-    TString threadName,
+    std::string threadGroupName,
+    std::string threadName,
     NThreading::TThreadOptions options)
     : TThread(std::move(threadName), std::move(options))
     , ThreadGroupName_(std::move(threadGroupName))

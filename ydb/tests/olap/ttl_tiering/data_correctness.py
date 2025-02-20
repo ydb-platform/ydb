@@ -6,6 +6,8 @@ import concurrent
 import random
 import datetime
 
+from ydb.tests.library.test_meta import link_test_case
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,8 +74,8 @@ class TestDataCorrectness(TllTieringTestBase):
         stats = table.get_portion_stat_by_tier()
         assert len(stats) > 1 or '__DEFAULT' not in stats
 
+    @link_test_case("#13465")
     def test(self):
-        """Implements https://github.com/ydb-platform/ydb/issues/13465"""
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/table"
         secret_prefix = self.test_name

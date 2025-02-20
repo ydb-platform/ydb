@@ -1,5 +1,7 @@
 #include "check_runner.h"
 #include <yql/essentials/sql/v1/lexer/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 
 namespace NYql {
@@ -47,7 +49,10 @@ private:
             return res;
         }
 
-        auto lexer = NSQLTranslationV1::MakeLexer(settings.AnsiLexer, true);
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+        auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true);
         auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
             Y_UNUSED(token);
         };

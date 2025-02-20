@@ -113,6 +113,8 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
         }
     } catch (const yexception &e) {
         opCtx.Error = e.what();
+    } catch (const std::exception& e) {
+        opCtx.Error = e.what();
     }
 }
 
@@ -148,14 +150,30 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
             currentConfig = it->second.Config;
         }
         if (opCtx.UpdatedConfig != currentConfig) {
-            auto tree = NFyaml::TDocument::Parse(MainYamlConfig);
             auto databaseTree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
-            NYamlConfig::AppendDatabaseConfig(tree, databaseTree);
-            auto resolved = NYamlConfig::ResolveAll(tree);
+            auto databaseConfig = NYamlConfig::ParseConfig(databaseTree);
 
             TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
 
+            auto databaseCfg = NYamlConfig::YamlToProto(
+                databaseConfig.Config,
+                true,
+                false,
+                unknownFieldsCollector);
+
             std::vector<TString> errors;
+            NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateDatabaseConfig(databaseCfg, errors);
+            if (result == NKikimr::NConfig::EValidationResult::Error) {
+                ythrow yexception() << errors.front();
+            }
+
+            // TODO: validate databaseConfig.AllowedLabels & databaseConfig.Selectors too
+
+            auto tree = NFyaml::TDocument::Parse(MainYamlConfig);
+            NYamlConfig::AppendDatabaseConfig(tree, databaseTree);
+            auto resolved = NYamlConfig::ResolveAll(tree);
+
+            errors.clear();
             for (auto& [_, config] : resolved.Configs) {
                 auto cfg = NYamlConfig::YamlToProto(
                     config.second,

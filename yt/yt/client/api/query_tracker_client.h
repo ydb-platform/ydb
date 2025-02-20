@@ -157,6 +157,7 @@ struct TGetQueryTrackerInfoResult
     TString ClusterName;
     NYson::TYsonString SupportedFeatures;
     std::vector<TString> AccessControlObjects;
+    std::vector<TString> Clusters;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

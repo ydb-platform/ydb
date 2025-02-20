@@ -5062,6 +5062,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         TSchemeLimits basicLimits;
         basicLimits.MaxShards = 4;
+        basicLimits.MaxShardsInPath = 2;
         SetSchemeshardSchemaLimits(runtime, basicLimits, tenantSchemeShard);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Alice"), {
@@ -5133,6 +5134,12 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ));
         env.TestWaitNotification(runtime, importId, tenantSchemeShard);
         TestGetImport(runtime, tenantSchemeShard, importId, "/MyRoot/Alice");
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Alice"), {
+            NLs::DomainLimitsIs(basicLimits.MaxPaths, basicLimits.MaxShards),
+            NLs::PathsInsideDomain(5),
+            NLs::ShardsInsideDomain(7)
+        });
     }
 }
 

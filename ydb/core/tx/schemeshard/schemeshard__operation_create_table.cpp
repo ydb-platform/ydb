@@ -505,7 +505,7 @@ public:
                     .DirChildrenLimit()
                     .IsValidACL(acl);
 
-                if (!Transaction.internal()) {
+                if (!Transaction.GetInternal()) {
                     checks
                         .ShardsLimit(shardsToCreate)
                         .PathShardsLimit(shardsToCreate);

@@ -217,9 +217,7 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
 
     const TPath domainPath = TPath::Init(importInfo->DomainPathId, ss);
     auto propose = MakeHolder<TEvIndexBuilder::TEvCreateRequest>(ui64(txId), domainPath.PathString(), std::move(settings));
-    auto& labels = *propose->Record.MutableOperationParams()->mutable_labels();
-    labels["uid"] = uid;
-    labels["internal"] = "";
+    (*propose->Record.MutableOperationParams()->mutable_labels())["uid"] = uid;
 
     return propose;
 }
@@ -261,11 +259,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
         return nullptr;
     }
-
+    
     if (topic.has_retention_period()) {
         cdcStream.SetRetentionPeriodSeconds(topic.retention_period().seconds());
     }
-
+    
     if (topic.has_partitioning_settings()) {
         i64 minActivePartitions =
             topic.partitioning_settings().min_active_partitions();

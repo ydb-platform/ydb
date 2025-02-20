@@ -110,11 +110,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     {
         auto checks = baseTablePath.Check();
         checks
-            .PathShardsLimit(baseShards)
             .PathsLimit(pathToCreate);
 
         if (!tx.GetInternal()) {
             checks
+                .PathShardsLimit(baseShards)
                 .ShardsLimit(shardsToCreate);
         }
 
@@ -317,6 +317,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
         scheme.SetFailOnExist(tx.GetFailOnExist());
         scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+        scheme.SetInternal(tx.GetInternal());
 
         *scheme.MutableSequence() = sequenceDescription;
 

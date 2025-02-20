@@ -111,6 +111,12 @@ bool FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const TK
     return false;
 }
 
+bool IsBatchQuery(const TKqpPhyTxHolder::TConstPtr& tx) {
+    NKikimrKqp::TKqpTableSinkSettings settings;
+    auto isFilledSettings = FillTableSinkSettings(settings, tx);
+    return isFilledSettings && settings.GetIsBatch();
+}
+
 class TRequestFail : public yexception {
 public:
     Ydb::StatusIds::StatusCode Status;
@@ -1416,10 +1422,9 @@ public:
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
         if (!request.Transactions.empty()) {
-            NKikimrKqp::TKqpTableSinkSettings sinkSettings;
-            auto isFilledSettings = FillTableSinkSettings(sinkSettings, request.Transactions.front().Body);
+            auto isBatch = IsBatchQuery(request.Transactions.front().Body);
 
-            if (Settings.TableService.GetEnableOltpSink() && isFilledSettings && sinkSettings.GetIsBatch()) {
+            if (Settings.TableService.GetEnableOltpSink() && isBatch) {
                 if (!Settings.TableService.GetEnableBatchUpdates()) {
                     ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Batch updates and deletes are disabled at current time.");
@@ -1428,6 +1433,8 @@ public:
                 SendToPartitionedExecuter(txCtx, std::move(request));
                 return;
             }
+
+            YQL_ENSURE(!isBatch || Settings.TableService.GetEnableBatchUpdates());
         }
 
         if (Settings.TableService.GetEnableOltpSink() && !txCtx->TxManager) {

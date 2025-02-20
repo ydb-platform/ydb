@@ -147,6 +147,7 @@ public:
     std::shared_ptr<TSingleMetric> SpillingChannelTime;
     std::shared_ptr<TSingleMetric> SpillingChannelBytes;
     TString IngressName;
+    bool BuiltInIngress = false;
     std::shared_ptr<TSingleMetric> IngressBytes;
     std::shared_ptr<TSingleMetric> IngressRows;
     std::vector<TOperatorInfo> Operators;

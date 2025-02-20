@@ -133,4 +133,14 @@ private:
     bool AllowEmptyDatabase = false;
 };
 
+class TCommandConfigInit : public TYdbCommand {
+public:
+    TCommandConfigInit();
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+private:
+    TString ConfigYamlPath;
+    TString ConfigDirPath;
+    TString SeedNodeEndpoint;
+};
 } // namespace NYdb::NConsoleClient::NDynamicConfig

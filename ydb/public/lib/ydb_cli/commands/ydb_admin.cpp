@@ -20,7 +20,9 @@ class TCommandNode : public TClientCommandTree {
 public:
     TCommandNode()
         : TClientCommandTree("node", {}, "Node-wide administration")
-    {}
+    {
+        AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>());
+    }
 };
 
 class TCommandDatabase : public TClientCommandTree {

@@ -26,6 +26,7 @@ struct TDummyTopic {
     TString TopicName;
     TMaybe<TString> Path;
     size_t PartitionsCount;
+    bool CancelOnFileFinish = false;
 };
 
 // Dummy Pq gateway for tests.

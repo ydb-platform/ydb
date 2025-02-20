@@ -1201,9 +1201,15 @@ private:
             if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
                 settingsProto.SetInconsistentTx(true);
             }
+          
             if (const auto streamWrite = settings.StreamWrite().Cast(); streamWrite.StringValue() == "true") {
                 settingsProto.SetEnableStreamWrite(true);
             }
+          
+            if (const auto isBatch = settings.IsBatch().Cast(); isBatch.StringValue() == "true") {
+                settingsProto.SetIsBatch(true);
+            }
+            
             settingsProto.SetIsOlap(settings.TableType().Cast().StringValue() == "olap");
             settingsProto.SetPriority(FromString<i64>(settings.Priority().Cast().StringValue()));
 

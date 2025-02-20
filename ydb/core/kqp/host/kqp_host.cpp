@@ -64,6 +64,38 @@ void AddQueryStats(NKqpProto::TKqpStatsQuery& total, NKqpProto::TKqpStatsQuery&&
     total.SetWorkerCpuTimeUs(total.GetWorkerCpuTimeUs() + stats.GetWorkerCpuTimeUs());
 }
 
+bool CheckIsBatch(const TExprNode::TPtr& root, TExprContext& exprCtx) {
+    ui64 writeCount = 0;
+    ui64 readCount = 0;
+    bool isBatch = false;
+
+    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+        if (node->ChildrenSize() == 2
+            && node->Child(0)->Content() == "is_batch"
+            && node->Child(1)->Content() == "true") {
+            isBatch = true;
+            return true;
+        }
+
+        if (NYql::NNodes::TCoWrite::Match(node.Get())) {
+            writeCount++;
+        } else if (NYql::NNodes::TCoRead::Match(node.Get())) {
+            readCount++;
+        }
+
+        return true;
+    });
+
+    if (isBatch && (writeCount > 1 || readCount != 0)) {
+        exprCtx.AddError(NYql::TIssue(
+            exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
+            "BATCH can't be used with multiple writes or reads."));
+        return false;
+    }
+
+    return true;
+}
+
 class TKqpResultWriter : public IResultWriter {
 public:
     TKqpResultWriter() {}
@@ -1337,6 +1369,10 @@ private:
         YQL_ENSURE(queryAst->Root);
         TExprNode::TPtr queryExpr;
         if (!CompileExpr(*queryAst->Root, queryExpr, ctx, ModuleResolver.get(), nullptr)) {
+            return result;
+        }
+
+        if (!CheckIsBatch(queryExpr, ctx)) {
             return result;
         }
 

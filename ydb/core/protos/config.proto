@@ -86,6 +86,8 @@ message TActorSystemConfig {
         optional int32 MaxAvgPingDeviation = 17;
 
         optional bool HasSharedThread = 18;
+        optional uint32 MaxLocalQueueSize = 20;
+        optional uint32 MinLocalQueueSize = 21;
     }
 
     message TScheduler {
@@ -125,6 +127,9 @@ message TActorSystemConfig {
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
+
+    optional uint32 MinLocalQueueSize = 20;
+    optional uint32 MaxLocalQueueSize = 21;
 }
 
 message TStaticNameserviceConfig {
@@ -326,9 +331,6 @@ message TSelfManagementConfig {
 
     // generation of the config; when set, one can automatically apply in-filesystem config
     optional uint64 Generation = 2;
-
-    // internally-used field with initial config.yaml loaded on the start (for the bootstrap process); not filled by the user
-    optional bytes InitialConfigYaml = 3;
 
     // subset of DefineStoragePool command
     optional string ErasureSpecies = 11;
@@ -2239,8 +2241,8 @@ message TAppConfig {
 
     optional string ConfigStorePath = 104;
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
-    optional bool ConfigLoadedFromStore = 106;
     optional string StartupConfigYaml = 107;
+    optional string StartupStorageYaml = 108;
 }
 
 message TYdbVersion {

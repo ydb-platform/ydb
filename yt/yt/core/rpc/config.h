@@ -81,7 +81,7 @@ class TServerConfig
     : public TServiceCommonConfig
 {
 public:
-    THashMap<TString, NYTree::INodePtr> Services;
+    THashMap<std::string, NYTree::INodePtr> Services;
 
     REGISTER_YSON_STRUCT(TServerConfig);
 
@@ -115,7 +115,7 @@ class TServerDynamicConfig
     : public TServiceCommonDynamicConfig
 {
 public:
-    THashMap<TString, NYTree::INodePtr> Services;
+    THashMap<std::string, NYTree::INodePtr> Services;
 
     REGISTER_YSON_STRUCT(TServerDynamicConfig);
 
@@ -304,10 +304,10 @@ class TServiceDiscoveryEndpointsConfig
     : public NYTree::TYsonStruct
 {
 public:
-    std::optional<TString> Cluster;
+    std::optional<std::string> Cluster;
     //! NB: If empty (default) this vector is filled with the cluster above.
-    std::vector<TString> Clusters;
-    TString EndpointSetId;
+    std::vector<std::string> Clusters;
+    std::string EndpointSetId;
     TDuration UpdatePeriod;
 
     //! Use IPv4 address of endpoint.

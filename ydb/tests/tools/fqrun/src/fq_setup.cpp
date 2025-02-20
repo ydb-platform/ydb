@@ -44,6 +44,14 @@ private:
         serverSettings.SetLoggerInitializer(loggerInitializer);
     }
 
+    void SetFunctionRegistry(NKikimr::Tests::TServerSettings& serverSettings) const {
+        if (Settings.FunctionRegistry) {
+            serverSettings.SetFrFactory([this](const NKikimr::NScheme::TTypeRegistry&) {
+                return Settings.FunctionRegistry.Get();
+            });
+        }
+    }
+
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
         NKikimr::Tests::TServerSettings serverSettings(PortManager.GetPort());
 
@@ -52,9 +60,13 @@ private:
 
         NKikimrConfig::TAppConfig config;
         *config.MutableLogConfig() = Settings.LogConfig;
+        if (Settings.ActorSystemConfig) {
+            *config.MutableActorSystemConfig() = *Settings.ActorSystemConfig;
+        }
         serverSettings.SetAppConfig(config);
 
         SetLoggerSettings(serverSettings);
+        SetFunctionRegistry(serverSettings);
 
         if (Settings.MonitoringEnabled) {
             serverSettings.InitKikimrRunConfig();

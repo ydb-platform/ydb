@@ -376,7 +376,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvents::TEvUndelivered::TPtr& ev) {
                 auto state = InFlightShards.GetShardStateVerified(info->GetTabletId());
                 AFL_WARN(NKikimrServices::KQP_COMPUTE)("event", "TEvents::TEvUndelivered")("from_tablet", info->GetTabletId())
                     ("state", state->State)("details", info->ToString())("node", SelfId().NodeId());
-                AFL_ENSURE(state->State == EShardState::Running)("state", state->State);
+                AFL_ENSURE(state->State == EShardState::Running || state->State == EShardState::Starting)("state", state->State);
                 RetryDeliveryProblem(state);
             }
             return;

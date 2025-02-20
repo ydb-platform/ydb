@@ -542,7 +542,7 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TActorContext& ctx, const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
+void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
 {
     if (SessionsCreated) {
         return;
@@ -559,7 +559,7 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TActorContext
     SessionsCreated.Inc();
     SessionsActive.Inc();
 
-    SetupBytesWrittenByUserAgentCounter(NPersQueue::GetFullTopicPath(ctx, dbPath, FullConverter->GetPrimaryPath()));
+    SetupBytesWrittenByUserAgentCounter(NPersQueue::GetFullTopicPath(dbPath, FullConverter->GetPrimaryPath()));
 }
 
 template<bool UseMigrationProtocol>
@@ -616,7 +616,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
 
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         const auto& tabletConfig = Config.GetPQTabletConfig();
-        SetupCounters(ctx, tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
+        SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
                         tabletConfig.GetYdbDatabasePath(), entry.DomainInfo->IsServerless(),
                       tabletConfig.GetYcFolderId());
     } else {

@@ -706,6 +706,8 @@ class ScenarioTestHelper:
                 self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)))
             elif e.is_column_store():
                 self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)))
+            elif e.is_external_data_source():
+                self.execute_scheme_query(dh.DropExternalDataSource(os.path.join(folder, e.name)))
             elif e.is_directory():
                 self._run_with_expected_status(
                     lambda: YdbCluster.get_ydb_driver().scheme_client.remove_directory(os.path.join(root_path, e.name)),

@@ -1548,10 +1548,10 @@ message TEvLocalKMeansRequest {
     optional uint32 NeedsRounds = 14;
 
     // id of parent cluster
-    optional uint32 ParentFrom = 15;
-    optional uint32 ParentTo = 21;
+    optional uint64 ParentFrom = 15;
+    optional uint64 ParentTo = 21;
     // [Child ... Child + K * (ParentFrom - ParentTo + 1)) ids reserved for this kmeans clusters
-    optional uint32 Child = 16;
+    optional uint64 Child = 16;
 
     optional string LevelName = 17;
     optional string PostingName = 18;
@@ -1599,9 +1599,9 @@ message TEvReshuffleKMeansRequest {
     optional TEvLocalKMeansRequest.EState Upload = 9;
 
     // id of parent cluster
-    optional uint32 Parent = 10;
+    optional uint64 Parent = 10;
     // [Child ... Child + ClustersSize) ids of this kmeans clusters
-    optional uint32 Child = 11;
+    optional uint64 Child = 11;
     // centroids of clusters
     repeated string Clusters = 12;
 

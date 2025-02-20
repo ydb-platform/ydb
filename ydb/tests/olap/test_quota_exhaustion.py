@@ -3,6 +3,7 @@ import sys
 import ydb
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.test_meta import link_test_case
 
 ROWS_CHUNK_SIZE = 3000000
 ROWS_CHUNKS_COUNT = 100000
@@ -22,9 +23,8 @@ class TestYdbWorkload(object):
     def teardown_class(cls):
         cls.cluster.stop()
 
+    @link_test_case("#13529")
     def test(self):
-        """As per https://github.com/ydb-platform/ydb/issues/13529"""
-
         driver = ydb.Driver(endpoint=f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', database='/Root')
         session = ydb.QuerySessionPool(driver)
         driver.wait(5, fail_fast=True)

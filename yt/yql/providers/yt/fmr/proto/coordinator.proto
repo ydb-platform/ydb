@@ -29,17 +29,9 @@ message TStartOperationResponse {
     string OperationId = 2;
 }
 
-message TGetOperationRequest {
-    string OperationId = 1;
-}
-
 message TGetOperationResponse {
     EOperationStatus Status = 1;
     repeated TFmrError ErrorMessages = 2;
-}
-
-message TDeleteOperationRequest {
-    string OperationId = 1;
 }
 
 message TDeleteOperationResponse {

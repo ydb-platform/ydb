@@ -16,6 +16,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/test_meta
     ydb/public/sdk/python
     ydb/public/sdk/python/enable_v3_new_behavior
     contrib/python/boto3

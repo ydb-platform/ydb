@@ -95,9 +95,12 @@ public:
                 Self->TryToRelocateBrokenDisksLocallyFirst = state.GetValue<T::TryToRelocateBrokenDisksLocallyFirst>();
                 if (state.HaveValue<T::YamlConfig>()) {
                     Self->YamlConfig = DecompressYamlConfig(state.GetValue<T::YamlConfig>());
+                    Self->YamlConfigHash = GetSingleConfigHash(*Self->YamlConfig);
                 }
                 if (state.HaveValue<T::StorageYamlConfig>()) {
                     Self->StorageYamlConfig = DecompressStorageYamlConfig(state.GetValue<T::StorageYamlConfig>());
+                    Self->StorageYamlConfigVersion = NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0);
+                    Self->StorageYamlConfigHash = NYaml::GetConfigHash(*Self->StorageYamlConfig);
                 }
                 if (state.HaveValue<T::ShredState>()) {
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());

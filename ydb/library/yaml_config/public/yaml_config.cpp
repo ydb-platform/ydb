@@ -777,6 +777,17 @@ TString ReplaceMetadata(const TString& config, const TDatabaseMetadata& metadata
     return ReplaceMetadata(config, serializeMetadata);
 }
 
+TString ReplaceMetadata(const TString& config, const TStorageMetadata& metadata) {
+    auto serializeMetadata = [&](TStringStream& sstr) {
+        sstr
+          << "metadata:"
+          << "\n  kind: StorageConfig"
+          << "\n  cluster: \"" << *metadata.Cluster << "\""
+          << "\n  version: " << *metadata.Version;
+    };
+    return ReplaceMetadata(config, serializeMetadata);
+}
+
 TString ReplaceMetadata(const TString& config, const TVolatileMetadata& metadata) {
     auto serializeMetadata = [&](TStringStream& sstr) {
         sstr

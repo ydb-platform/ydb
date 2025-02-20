@@ -222,20 +222,49 @@ public:
     }
 
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) const {
-        ev.Record.MutableFetchStorageConfig();
+        auto *record = ev.Record.MutableFetchStorageConfig();
+
+        switch (auto& request = *GetProtoRequest(); request.mode_case()) {
+            case Ydb::Config::FetchConfigRequest::ModeCase::kAll:
+                record->SetMainConfig(true);
+                record->SetStorageConfig(true);
+                break;
+
+            case Ydb::Config::FetchConfigRequest::ModeCase::kTarget:
+                // TODO: implement
+                break;
+
+            case Ydb::Config::FetchConfigRequest::ModeCase::MODE_NOT_SET:
+                break;
+        }
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record,
             Ydb::Config::FetchConfigResult& result) {
-        auto conf = record.GetFetchStorageConfig().GetYAML();
-        auto metadata = NYamlConfig::GetMainMetadata(conf);
-        // TODO: !imp error if empty
-        auto& config = *result.add_config();
-        auto& identity = *config.mutable_identity();
-        identity.set_version(*metadata.Version);
-        identity.set_cluster(AppData()->ClusterName);
-        identity.mutable_main();
-        config.set_config(conf);
+        const auto& res = record.GetFetchStorageConfig();
+
+        if (res.HasYAML()) {
+            auto conf = record.GetFetchStorageConfig().GetYAML();
+            auto metadata = NYamlConfig::GetMainMetadata(conf);
+            // TODO: !imp error if empty
+            auto& config = *result.add_config();
+            auto& identity = *config.mutable_identity();
+            identity.set_version(*metadata.Version);
+            identity.set_cluster(AppData()->ClusterName);
+            identity.mutable_main();
+            config.set_config(conf);
+        }
+        if (res.HasStorageYAML()) {
+            auto conf = record.GetFetchStorageConfig().GetStorageYAML();
+            auto metadata = NYamlConfig::GetStorageMetadata(conf);
+            // TODO: !imp error if empty
+            auto& config = *result.add_config();
+            auto& identity = *config.mutable_identity();
+            identity.set_version(*metadata.Version);
+            identity.set_cluster(AppData()->ClusterName);
+            identity.mutable_storage();
+            config.set_config(conf);
+        }
     }
 
     bool IsDistconfEnableQuery() const {

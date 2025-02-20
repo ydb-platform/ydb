@@ -114,8 +114,6 @@ def bulk_upsert(table_client, table_path, rows, column_types,store_type='ROW'):
 
     column_types_map = ydb.BulkUpsertColumns()
     for column_name, column_ydb_type in column_types:
-        #if column_name == 'Suite_not_runned':
-        #    print(1)
         column_type_obj, column_type_str = ydb_type_to_str(column_ydb_type, store_type.upper())
         column_types_map.add_column(column_name, column_type_obj)
 

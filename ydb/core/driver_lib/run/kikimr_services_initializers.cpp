@@ -956,6 +956,11 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
         nodeWardenConfig->YamlConfig.emplace(Config.GetStoredConfigYaml());
     }
 
+    nodeWardenConfig->StartupConfigYaml = Config.GetStartupConfigYaml();
+    nodeWardenConfig->StartupStorageYaml = Config.HasStartupStorageYaml()
+        ? std::make_optional(Config.GetStartupStorageYaml())
+        : std::nullopt;
+
     ObtainTenantKey(&nodeWardenConfig->TenantKey, Config.GetKeyConfig());
     ObtainStaticKey(&nodeWardenConfig->StaticKey);
     ObtainPDiskKey(&nodeWardenConfig->PDiskKey, Config.GetPDiskKeyConfig());

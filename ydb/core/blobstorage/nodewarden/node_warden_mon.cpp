@@ -108,21 +108,27 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             out << "<p>Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "</p>";
             TString s;
             NProtoBuf::TextFormat::PrintToString(StorageConfig, &s);
-            out << "<pre>" << s << "</pre>";
+            out << "<pre>";
+            EscapeHtmlString(out, s);
+            out << "</pre>";
         }
 
         TAG(TH3) { out << "Static service set"; }
         DIV() {
             TString s;
             NProtoBuf::TextFormat::PrintToString(StaticServices, &s);
-            out << "<pre>" << s << "</pre>";
+            out << "<pre>";
+            EscapeHtmlString(out, s);
+            out << "</pre>";
         }
 
         TAG(TH3) { out << "Dynamic service set"; }
         DIV() {
             TString s;
             NProtoBuf::TextFormat::PrintToString(DynamicServices, &s);
-            out << "<pre>" << s << "</pre>";
+            out << "<pre>";
+            EscapeHtmlString(out, s);
+            out << "</pre>";
         }
 
         RenderLocalDrives(out);
@@ -361,4 +367,42 @@ void TNodeWarden::RenderLocalDrives(IOutputStream& out) {
             }
         }
     }
+}
+
+void NKikimr::NStorage::EscapeHtmlString(IOutputStream& out, const TString& s) {
+    size_t begin = 0;
+    auto dump = [&](size_t end) {
+        out << TStringBuf(s.data() + begin, end - begin);
+        begin = end + 1;
+    };
+    for (size_t i = 0, len = s.size(); i < len; ++i) {
+        char ch = s[i];
+        switch (ch) {
+            case '&':
+                dump(i);
+                out << "&amp;";
+                break;
+
+            case '<':
+                dump(i);
+                out << "&lt;";
+                break;
+
+            case '>':
+                dump(i);
+                out << "&gt;";
+                break;
+
+            case '\'':
+                dump(i);
+                out << "&#39;";
+                break;
+
+            case '"':
+                dump(i);
+                out << "&quot;";
+                break;
+        }
+    }
+    dump(s.size());
 }

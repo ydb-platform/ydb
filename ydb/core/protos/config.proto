@@ -327,9 +327,6 @@ message TSelfManagementConfig {
     // generation of the config; when set, one can automatically apply in-filesystem config
     optional uint64 Generation = 2;
 
-    // internally-used field with initial config.yaml loaded on the start (for the bootstrap process); not filled by the user
-    optional bytes InitialConfigYaml = 3;
-
     // subset of DefineStoragePool command
     optional string ErasureSpecies = 11;
     optional NKikimrBlobStorage.TGroupGeometry Geometry = 12;
@@ -2239,8 +2236,8 @@ message TAppConfig {
 
     optional string ConfigStorePath = 104;
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
-    optional bool ConfigLoadedFromStore = 106;
     optional string StartupConfigYaml = 107;
+    optional string StartupStorageYaml = 108;
 }
 
 message TYdbVersion {

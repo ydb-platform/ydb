@@ -1121,7 +1121,6 @@ namespace NKikimr::NYaml {
         if (config.HasSelfManagementConfig()) {
             auto *smConfig = config.MutableSelfManagementConfig();
             Y_ENSURE_BT(smConfig->HasEnabled(), "Enabled field is mandatory");
-            Y_ENSURE_BT(!smConfig->HasInitialConfigYaml(), "InitialConfigYaml is not intended to be filled by user");
             if (smConfig->GetEnabled()) {
                 if (!smConfig->HasErasureSpecies()) {
                     smConfig->SetErasureSpecies(ephemeralConfig.GetStaticErasure());

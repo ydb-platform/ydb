@@ -117,10 +117,10 @@ public:
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::shared_ptr<TReadStats> ReadStats;
 
-    TReadMetadata(const ui64 pathId, const std::shared_ptr<TVersionedIndex> info, const TSnapshot& snapshot, const ESorting sorting,
-        const TProgramContainer& ssaProgram, const std::shared_ptr<IScanCursor>& scanCursor)
-        : TBase(info, sorting, ssaProgram, info->GetSchemaVerified(snapshot), snapshot, scanCursor)
-        , PathId(pathId)
+    TReadMetadata(const std::shared_ptr<TVersionedIndex> schemaIndex, const TReadDescription& read)
+        : TBase(schemaIndex, read.PKRangesFilter->IsReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC, read.GetProgram(),
+              schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(), read.GetScanCursor())
+        , PathId(read.PathId)
         , ReadStats(std::make_shared<TReadStats>()) {
     }
 

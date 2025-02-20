@@ -11,7 +11,7 @@ struct TReadDescription {
 private:
     TSnapshot Snapshot;
     TProgramContainer Program;
-    std::shared_ptr<IScanCursor> ScanCursor;
+    YDB_READONLY_DEF(std::shared_ptr<IScanCursor>, ScanCursor);
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
 
 public:
@@ -29,11 +29,6 @@ public:
 
     // List of columns
     std::vector<ui32> ColumnIds;
-
-    const std::shared_ptr<IScanCursor>& GetScanCursor() const {
-        AFL_VERIFY(ScanCursor);
-        return ScanCursor;
-    }
 
     void SetScanCursor(const std::shared_ptr<IScanCursor>& cursor) {
         AFL_VERIFY(!ScanCursor);

@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package yandex.cloud.logging.v1;
 
-import "ydb/public/api/client/yc_public/common/validation.proto";
-
 option java_package = "yandex.cloud.api.logging.v1";
 
 // Log entry resource specification.
@@ -11,10 +9,10 @@ option java_package = "yandex.cloud.api.logging.v1";
 // May be used either by services and by user.
 message LogEntryResource {
   // Resource type, i.e., `serverless.function`
-  string type = 1 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+  string type = 1; // [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
 
   // Resource ID, i.e., ID of the function producing logs.
-  string id = 2 [(pattern) = "([a-zA-Z0-9][-a-zA-Z0-9_.]{0,63})?"];
+  string id = 2; // [(pattern) = "([a-zA-Z0-9][-a-zA-Z0-9_.]{0,63})?"];
 }
 
 // Log group resource.

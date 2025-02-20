@@ -3,9 +3,8 @@ syntax = "proto3";
 package yandex.cloud.logging.v1;
 
 import "google/rpc/status.proto";
-import "ydb/public/api/client/yc_public/logging/log_entry.proto";
-import "ydb/public/api/client/yc_public/logging/log_resource.proto";
-import "ydb/public/api/client/yc_public/common/validation.proto";
+import "ydb/public/api/client/yc_public/logging/v1/log_entry.proto";
+import "ydb/public/api/client/yc_public/logging/v1/log_resource.proto";
 
 option java_package = "yandex.cloud.api.logging.v1";
 
@@ -19,13 +18,13 @@ message WriteRequest {
   // Log entries destination.
   //
   // See [Destination] for details.
-  Destination destination = 1 [(required) = true];
+  Destination destination = 1; // [(required) = true];
 
   // Common resource (type, ID) specification for log entries.
   LogEntryResource resource = 2;
 
   // List of log entries.
-  repeated IncomingLogEntry entries = 3 [(size) = "1-100"];
+  repeated IncomingLogEntry entries = 3; // [(size) = "1-100"];
 
   // Log entries defaults.
   //

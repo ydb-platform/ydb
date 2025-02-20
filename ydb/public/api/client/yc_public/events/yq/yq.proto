@@ -5,7 +5,6 @@ package yandex.cloud.events.yq;
 import "google/rpc/status.proto";
 import "ydb/public/api/client/yc_public/events/common.proto";
 import "ydb/public/api/client/yc_public/events/options.proto";
-import "ydb/public/api/client/yc_public/common/validation.proto";
 
 option java_package = "yandex.cloud.api.events.yq";
 
@@ -15,17 +14,17 @@ option java_package = "yandex.cloud.api.events.yq";
 message CreateQuery {
   option (include) = true;
 
-  Authentication authentication = 1 [(required) = true];
-  Authorization authorization = 2 [(required) = true];
+  Authentication authentication = 1; // [(required) = true];
+  Authorization authorization = 2; // [(required) = true];
 
-  EventMetadata event_metadata = 3 [(required) = true];
-  RequestMetadata request_metadata = 4 [(required) = true];
+  EventMetadata event_metadata = 3; // [(required) = true];
+  RequestMetadata request_metadata = 4; // [(required) = true];
 
-  EventStatus event_status = 5 [(required) = true];
-  EventDetails details = 6 [(required) = true];
-  RequestParameters request_parameters = 7 [(required) = true];
+  EventStatus event_status = 5; // [(required) = true];
+  EventDetails details = 6; // [(required) = true];
+  RequestParameters request_parameters = 7; // [(required) = true];
   google.rpc.Status error = 8;
-  Response response = 9 [(required) = true];
+  Response response = 9; // [(required) = true];
 
   message EventDetails {
     string query_id = 1;
@@ -50,17 +49,17 @@ message CreateQuery {
 message UpdateQuery {
   option (include) = true;
 
-  Authentication authentication = 1 [(required) = true];
-  Authorization authorization = 2 [(required) = true];
+  Authentication authentication = 1; // [(required) = true];
+  Authorization authorization = 2; // [(required) = true];
 
-  EventMetadata event_metadata = 3 [(required) = true];
-  RequestMetadata request_metadata = 4 [(required) = true];
+  EventMetadata event_metadata = 3; // [(required) = true];
+  RequestMetadata request_metadata = 4; // [(required) = true];
 
-  EventStatus event_status = 5 [(required) = true];
-  EventDetails details = 6 [(required) = true];
-  RequestParameters request_parameters = 7 [(required) = true];
+  EventStatus event_status = 5; // [(required) = true];
+  EventDetails details = 6; // [(required) = true];
+  RequestParameters request_parameters = 7; // [(required) = true];
   google.rpc.Status error = 8;
-  Response response = 9 [(required) = true];
+  Response response = 9; // [(required) = true];
 
   message EventDetails {
     string query_id = 1;
@@ -88,17 +87,17 @@ message UpdateQuery {
 message DeleteQuery {
   option (include) = true;
 
-  Authentication authentication = 1 [(required) = true];
-  Authorization authorization = 2 [(required) = true];
+  Authentication authentication = 1; // [(required) = true];
+  Authorization authorization = 2; // [(required) = true];
 
-  EventMetadata event_metadata = 3 [(required) = true];
-  RequestMetadata request_metadata = 4 [(required) = true];
+  EventMetadata event_metadata = 3; // [(required) = true];
+  RequestMetadata request_metadata = 4; // [(required) = true];
 
-  EventStatus event_status = 5 [(required) = true];
-  EventDetails details = 6 [(required) = true];
-  RequestParameters request_parameters = 7 [(required) = true];
+  EventStatus event_status = 5; // [(required) = true];
+  EventDetails details = 6; // [(required) = true];
+  RequestParameters request_parameters = 7; // [(required) = true];
   google.rpc.Status error = 8;
-  Response response = 9 [(required) = true];
+  Response response = 9; // [(required) = true];
 
   message EventDetails {
     string query_id = 1;
@@ -119,17 +118,17 @@ message DeleteQuery {
 message ControlQuery {
   option (include) = true;
 
-  Authentication authentication = 1 [(required) = true];
-  Authorization authorization = 2 [(required) = true];
+  Authentication authentication = 1; // [(required) = true];
+  Authorization authorization = 2; // [(required) = true];
 
-  EventMetadata event_metadata = 3 [(required) = true];
-  RequestMetadata request_metadata = 4 [(required) = true];
+  EventMetadata event_metadata = 3; // [(required) = true];
+  RequestMetadata request_metadata = 4; // [(required) = true];
 
-  EventStatus event_status = 5 [(required) = true];
-  EventDetails details = 6 [(required) = true];
-  RequestParameters request_parameters = 7 [(required) = true];
+  EventStatus event_status = 5; // [(required) = true];
+  EventDetails details = 6; // [(required) = true];
+  RequestParameters request_parameters = 7; // [(required) = true];
   google.rpc.Status error = 8;
-  Response response = 9 [(required) = true];
+  Response response = 9; // [(required) = true];
 
   message EventDetails {
     string query_id = 1;
@@ -154,17 +153,17 @@ message ControlQuery {
 message CreateConnection {
   option (include) = true;
 
-  Authentication authentication = 1 [(required) = true];
-  Authorization authorization = 2 [(required) = true];
+  Authentication authentication = 1; // [(required) = true];
+  Authorization authorization = 2; // [(required) = true];
 
-  EventMetadata event_metadata = 3 [(required) = true];
-  RequestMetadata request_metadata = 4 [(required) = true];
+  EventMetadata event_metadata = 3; // [(required) = true];
+  RequestMetadata request_metadata = 4; // [(required) = true];
 
-  EventStatus event_status = 5 [(required) = true];
-  EventDetails details = 6 [(required) = true];
-  RequestParameters request_parameters = 7 [(required) = true];
+  EventStatus event_status = 5; // [(required) = true];
+  EventDetails details = 6; // [(required) = true];
+  RequestParameters request_parameters = 7; // [(required) = true];
   google.rpc.Status error = 8;
-  Response response = 9 [(required) = true];
+  Response response = 9; // [(required) = true];
 
   message EventDetails {
     string connection_id = 1;
@@ -184,17 +183,17 @@ message CreateConnection {
 message UpdateConnection {
   option (include) = true;
 
-  Authentication authentication = 1 [(required) = true];
-  Authorization authorization = 2 [(required) = true];
+  Authentication authentication = 1; // [(required) = true];
+  Authorization authorization = 2; // [(required) = true];
 
-  EventMetadata event_metadata = 3 [(required) = true];
-  RequestMetadata request_metadata = 4 [(required) = true];
+  EventMetadata event_metadata = 3; // [(required) = true];
+  RequestMetadata request_metadata = 4; // [(required) = true];
 
-  EventStatus event_status = 5 [(required) = true];
-  EventDetails details = 6 [(required) = true];
-  RequestParameters request_parameters = 7 [(required) = true];
+  EventStatus event_status = 5; // [(required) = true];
+  EventDetails details = 6; // [(required) = true];
+  RequestParameters request_parameters = 7; // [(required) = true];
   google.rpc.Status error = 8;
-  Response response = 9 [(required) = true];
+  Response response = 9; // [(required) = true];
 
   message EventDetails {
     string connection_id = 1;
@@ -215,17 +214,17 @@ message UpdateConnection {
 message DeleteConnection {
   option (include) = true;
 
-  Authentication authentication = 1 [(required) = true];
-  Authorization authorization = 2 [(required) = true];
+  Authentication authentication = 1; // [(required) = true];
+  Authorization authorization = 2; // [(required) = true];
 
-  EventMetadata event_metadata = 3 [(required) = true];
-  RequestMetadata request_metadata = 4 [(required) = true];
+  EventMetadata event_metadata = 3; // [(required) = true];
+  RequestMetadata request_metadata = 4; // [(required) = true];
 
-  EventStatus event_status = 5 [(required) = true];
-  EventDetails details = 6 [(required) = true];
-  RequestParameters request_parameters = 7 [(required) = true];
+  EventStatus event_status = 5; // [(required) = true];
+  EventDetails details = 6; // [(required) = true];
+  RequestParameters request_parameters = 7; // [(required) = true];
   google.rpc.Status error = 8;
-  Response response = 9 [(required) = true];
+  Response response = 9; // [(required) = true];
 
   message EventDetails {
     string connection_id = 1;
@@ -246,17 +245,17 @@ message DeleteConnection {
 message CreateBinding {
   option (include) = true;
 
-  Authentication authentication = 1 [(required) = true];
-  Authorization authorization = 2 [(required) = true];
+  Authentication authentication = 1; // [(required) = true];
+  Authorization authorization = 2; // [(required) = true];
 
-  EventMetadata event_metadata = 3 [(required) = true];
-  RequestMetadata request_metadata = 4 [(required) = true];
+  EventMetadata event_metadata = 3; // [(required) = true];
+  RequestMetadata request_metadata = 4; // [(required) = true];
 
-  EventStatus event_status = 5 [(required) = true];
-  EventDetails details = 6 [(required) = true];
-  RequestParameters request_parameters = 7 [(required) = true];
+  EventStatus event_status = 5; // [(required) = true];
+  EventDetails details = 6; // [(required) = true];
+  RequestParameters request_parameters = 7; // [(required) = true];
   google.rpc.Status error = 8;
-  Response response = 9 [(required) = true];
+  Response response = 9; // [(required) = true];
 
   message EventDetails {
       string binding_id = 1;
@@ -278,17 +277,17 @@ message CreateBinding {
 message UpdateBinding {
   option (include) = true;
 
-  Authentication authentication = 1 [(required) = true];
-  Authorization authorization = 2 [(required) = true];
+  Authentication authentication = 1; // [(required) = true];
+  Authorization authorization = 2; // [(required) = true];
 
-  EventMetadata event_metadata = 3 [(required) = true];
-  RequestMetadata request_metadata = 4 [(required) = true];
+  EventMetadata event_metadata = 3; // [(required) = true];
+  RequestMetadata request_metadata = 4; // [(required) = true];
 
-  EventStatus event_status = 5 [(required) = true];
-  EventDetails details = 6 [(required) = true];
-  RequestParameters request_parameters = 7 [(required) = true];
+  EventStatus event_status = 5; // [(required) = true];
+  EventDetails details = 6; // [(required) = true];
+  RequestParameters request_parameters = 7; // [(required) = true];
   google.rpc.Status error = 8;
-  Response response = 9 [(required) = true];
+  Response response = 9; // [(required) = true];
 
   message EventDetails {
       string binding_id = 1;
@@ -311,17 +310,17 @@ message UpdateBinding {
 message DeleteBinding {
   option (include) = true;
 
-  Authentication authentication = 1 [(required) = true];
-  Authorization authorization = 2 [(required) = true];
+  Authentication authentication = 1; // [(required) = true];
+  Authorization authorization = 2; // [(required) = true];
 
-  EventMetadata event_metadata = 3 [(required) = true];
-  RequestMetadata request_metadata = 4 [(required) = true];
+  EventMetadata event_metadata = 3; // [(required) = true];
+  RequestMetadata request_metadata = 4; // [(required) = true];
 
-  EventStatus event_status = 5 [(required) = true];
-  EventDetails details = 6 [(required) = true];
-  RequestParameters request_parameters = 7 [(required) = true];
+  EventStatus event_status = 5; // [(required) = true];
+  EventDetails details = 6; // [(required) = true];
+  RequestParameters request_parameters = 7; // [(required) = true];
   google.rpc.Status error = 8;
-  Response response = 9 [(required) = true];
+  Response response = 9; // [(required) = true];
 
   message EventDetails {
       string binding_id = 1;

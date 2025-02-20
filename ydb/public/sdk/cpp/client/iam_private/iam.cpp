@@ -2,8 +2,8 @@
 
 #include <ydb/public/sdk/cpp/client/iam/common/iam.h>
 
-#include <ydb/public/api/client/yc_private/iam/iam_token_service.pb.h>
-#include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/iam/v1/iam_token_service.pb.h>
+#include <ydb/public/api/client/yc_private/iam/v1/iam_token_service.grpc.pb.h>
 
 namespace NYdb::inline V2 {
 

@@ -22,7 +22,7 @@ SRCS(
 
 PEERDIR(
     ydb/mvp/core
-    ydb/public/api/client/yc_private/resourcemanager
+    ydb/public/api/client/yc_private/resourcemanager/v1
     yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy

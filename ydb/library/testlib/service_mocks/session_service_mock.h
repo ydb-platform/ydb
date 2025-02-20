@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/public/api/client/yc_private/oauth/session_service.grpc.pb.h>
-#include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/oauth/v1/session_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/iam/v1/iam_token_service.grpc.pb.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/hash.h>
 

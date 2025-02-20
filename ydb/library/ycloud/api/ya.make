@@ -9,10 +9,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/api/client/yc_private/iam
-    ydb/public/api/client/yc_private/servicecontrol
-    ydb/public/api/client/yc_private/accessservice
-    ydb/public/api/client/yc_private/resourcemanager
+    ydb/public/api/client/yc_private/iam/v1
+    ydb/public/api/client/yc_private/servicecontrol/v1
+    ydb/public/api/client/yc_private/accessservice/v2
+    ydb/public/api/client/yc_private/resourcemanager/v1
     ydb/library/actors/core
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/core/base

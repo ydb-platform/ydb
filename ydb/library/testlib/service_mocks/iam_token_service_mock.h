@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/iam/v1/iam_token_service.grpc.pb.h>
 
 class TIamTokenServiceMock : public yandex::cloud::priv::iam::v1::IamTokenService::Service {
 public:

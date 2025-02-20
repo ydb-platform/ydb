@@ -4,7 +4,8 @@ EXCLUDE_TAGS(GO_PROTO)
 
 GRPC()
 SRCS(
-    validation.proto
+    access_service.proto
+    resource.proto
 )
 
 USE_COMMON_GOOGLE_APIS(
@@ -12,4 +13,3 @@ USE_COMMON_GOOGLE_APIS(
 )
 
 END()
-

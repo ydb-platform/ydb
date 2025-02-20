@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/client/yc_private/resourcemanager/transitional/folder_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/resourcemanager/v1/transitional/folder_service.grpc.pb.h>
 
 class TFolderServiceTransitionalMock: public yandex::cloud::priv::resourcemanager::v1::transitional::FolderService::Service {
 public:

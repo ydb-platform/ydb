@@ -4,9 +4,9 @@ package yandex.cloud.priv.iam.v1;
 
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
-import "ydb/public/api/client/yc_private/iam/iam_token_service_subject.proto";
-import "ydb/public/api/client/yc_private/iam/yandex_passport_cookie.proto";
-import "ydb/public/api/client/yc_private/iam/oauth_request.proto";
+import "ydb/public/api/client/yc_private/iam/v1/iam_token_service_subject.proto";
+import "ydb/public/api/client/yc_private/iam/v1/yandex_passport_cookie.proto";
+import "ydb/public/api/client/yc_private/iam/v1/oauth_request.proto";
 
 service IamTokenService {
 

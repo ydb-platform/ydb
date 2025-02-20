@@ -3,8 +3,7 @@ syntax = "proto3";
 package yandex.cloud.events;
 
 import "google/protobuf/timestamp.proto";
-import "ydb/public/api/client/yc_public/common/validation.proto";
-import "ydb/public/api/client/yc_public/events/options.proto";
+// import "ydb/public/api/client/yc_public/events/options.proto";
 
 option java_package = "yandex.cloud.api.events";
 option java_outer_classname = "CommonEvents";
@@ -13,19 +12,19 @@ message EventMetadata {
   // Global unique identifier of current event.
   // Should be treated as opaque string.
   // Could be used for deduplication.
-  string event_id = 1 [(required) = true];
+  string event_id = 1; // [(required) = true];
 
   // Well-known event type in form of fully qualified protobuf
   // message name (eg: yandex.cloud.events.compute.CreateInstance).
-  string event_type = 2 [(required) = true];
+  string event_type = 2; // [(required) = true];
 
   // Wall time of event as seen on producing system.
-  google.protobuf.Timestamp created_at = 3 [(required) = true];
+  google.protobuf.Timestamp created_at = 3; // [(required) = true];
 
   // Additional information about trace tree.
-  TracingContext tracing_context = 4 [(hide) = true];
+  TracingContext tracing_context = 4; // [(hide) = true];
 
-  string cloud_id = 5 [(required) = true];
+  string cloud_id = 5; // [(required) = true];
 
   string folder_id = 6;
 }
@@ -58,27 +57,27 @@ message Authentication {
 message Authorization {
   bool authorized = 1;
 
-  repeated RequestedPermissions permissions = 2 [(hide) = true];
+  repeated RequestedPermissions permissions = 2; // [(hide) = true];
 }
 
 message RequestedPermissions {
   // <service>.<resource>.<action>
-  string permission = 1 [(required) = true];
+  string permission = 1; // [(required) = true];
 
   // <service>.<resource>
-  string resource_type = 2 [(required) = true];
+  string resource_type = 2; // [(required) = true];
 
-  string resource_id = 3 [(required) = true];
+  string resource_id = 3; // [(required) = true];
 
   // is request for permission authorized
   bool authorized = 4;
 }
 
 message RequestMetadata {
-  string remote_address = 1 [(required) = true];
-  string user_agent = 2 [(required) = true];
-  string request_id = 3 [(required) = true];
-  string idempotency_id = 4 [(hide) = true];
+  string remote_address = 1; // [(required) = true];
+  string user_agent = 2; // [(required) = true];
+  string request_id = 3; // [(required) = true];
+  string idempotency_id = 4; // [(hide) = true];
 }
 
 enum EventStatus {
@@ -90,5 +89,5 @@ enum EventStatus {
 }
 
 message Response {
-  string operation_id = 1 [(required) = true];
+  string operation_id = 1; // [(required) = true];
 }

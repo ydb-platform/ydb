@@ -60,21 +60,4 @@ NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::IScanCursor>> IScannerConst
     return result;
 }
 
-std::optional<TReadMetadataBase::TTtlBound> IScannerConstructor::GetTtlBound(
-    const ui64 pathId, const NColumnShard::TTablesManager& tablesManager) const {
-    const TTiering* tiering = tablesManager.GetTableTtl(pathId, Snapshot);
-    if (!tiering) {
-        return std::nullopt;
-    }
-    const auto& lastTier = std::prev(tiering->GetOrderedTiers().end())->Get();
-    if (lastTier.GetExternalStorageId()) {
-        return std::nullopt;
-    }
-    const auto& indexInfo = tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetSchemaVerified(Snapshot)->GetIndexInfo();
-    const ui64 columnId = indexInfo.GetColumnIdVerified(lastTier.GetEvictColumnName());
-    const auto scalar = TValidator::CheckNotNull(lastTier.GetLargestExpiredScalar(
-        Snapshot.GetPlanInstant(), indexInfo.GetColumnFeaturesVerified(columnId).GetArrowField()->type()->id()));
-    return TReadMetadataBase::TTtlBound(columnId, scalar);
-}
-
 }   // namespace NKikimr::NOlap::NReader

@@ -35,7 +35,6 @@ protected:
     const bool IsReverse;
     TConclusionStatus ParseProgram(const TVersionedIndex* vIndex, const NKikimrSchemeOp::EOlapProgramType programType,
         const TString& serializedProgram, TReadDescription& read, const NArrow::NSSA::IColumnResolver& columnResolver) const;
-    std::optional<TReadMetadataBase::TTtlBound> GetTtlBound(const ui64 pathId, const NColumnShard::TTablesManager& tablesManager) const;
 
 private:
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(

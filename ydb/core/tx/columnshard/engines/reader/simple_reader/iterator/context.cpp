@@ -46,6 +46,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
         if (ttlBound->GetColumnId() != GetReadMetadata()->GetIndexInfo().GetPKFirstColumnId()) {
             return false;
         }
+        if (NArrow::ScalarLess(ttlBound->GetLargestExpiredScalar(), NArrow::TReplaceKey::ToScalar(source->GetMinReplaceKey(), 0))) {
+            return false;
+        }
         return true;
     }();
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
@@ -90,23 +93,21 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     }
     {
         result->SetBranchName("exclusive");
-        TColumnsSet columnsFetch = *GetEFColumns();
+        acc.AddFetchingStep(*result, *GetEFColumns(), EStageFeaturesIndexes::Filter);
         if (needFilterDeletion) {
-            columnsFetch = columnsFetch + *GetDeletionColumns();
+            acc.AddFetchingStep(*result, *GetDeletionColumns(), EStageFeaturesIndexes::Filter);
         }
         if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
-            columnsFetch = columnsFetch + *GetSpecColumns();
+            acc.AddFetchingStep(*result, *GetSpecColumns(), EStageFeaturesIndexes::Filter);
         }
         if (partialUsageByPredicate) {
-            columnsFetch = columnsFetch + *GetPredicateColumns();
+            acc.AddFetchingStep(*result, *GetPredicateColumns(), EStageFeaturesIndexes::Filter);
         }
         if (needFilterTtl) {
-            AFL_VERIFY(GetReadMetadata()->GetTtlBound());
-            columnsFetch = columnsFetch + *columnsFetch.BuildSamePtr({ GetReadMetadata()->GetTtlBound()->GetColumnId() });
-        }
-
-        if (columnsFetch.GetColumnsCount()) {
-            acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Filter);
+            acc.AddFetchingStep(*result,
+                TColumnsSet(std::vector<ui32>({ TValidator::CheckNotNull(GetReadMetadata()->GetTtlBound())->GetColumnId() }),
+                    GetReadMetadata()->GetResultSchema()),
+                EStageFeaturesIndexes::Filter);
         }
 
         if (needFilterDeletion) {

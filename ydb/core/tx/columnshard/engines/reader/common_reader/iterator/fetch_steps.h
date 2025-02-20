@@ -21,7 +21,6 @@ private:
         }
     };
     std::vector<TColumnsPack> Packs;
-    THashMap<ui32, THashSet<EMemType>> Control;
     const EStageFeaturesIndexes StageIndex;
     const std::optional<ui64> PredefinedSize;
 
@@ -52,9 +51,7 @@ public:
         if (!ids.GetColumnsCount()) {
             return;
         }
-        for (auto&& i : ids.GetColumnIds()) {
-            AFL_VERIFY(Control[i].emplace(memType).second);
-        }
+        // TODO: valid?
         Packs.emplace_back(ids, memType);
     }
     EStageFeaturesIndexes GetStage() const {
@@ -133,6 +130,15 @@ protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "columns=" << Columns.DebugString() << ";";
+    }
+
+    virtual bool Merge(const std::shared_ptr<const IFetchingStep>& nextStep) override {
+        const auto step = std::dynamic_pointer_cast<const TColumnBlobsFetchingStep>(nextStep);
+        if (!step) {
+            return false;
+        }
+        Columns = Columns + step->Columns;
+        return true;
     }
 
 public:

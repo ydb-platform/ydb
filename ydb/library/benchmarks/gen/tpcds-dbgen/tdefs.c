@@ -71,7 +71,7 @@ GetRowcountByName(char *szName)
     int nTable = -1;
     
     nTable = GetTableNumber(szName);
-    if (nTable >= 0)
+    if (nTable > 0)
         return(get_rowcount(nTable - 1));
 
     nTable = distsize(szName);

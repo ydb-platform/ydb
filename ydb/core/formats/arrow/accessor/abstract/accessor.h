@@ -41,9 +41,9 @@ public:
         Array,
         ChunkedArray,
         SerializedChunkedArray,
+        CompositeChunkedArray,
         SparsedArray,
-        SubColumnsArray,
-        CompositeChunkedArray
+        SubColumnsArray
     };
 
     class TCommonChunkAddress {

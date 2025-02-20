@@ -13,8 +13,8 @@ CREATE TABLE leases
 (
     `id` Int64 NOT NULL,
     `ttl` Int64 NOT NULL,
-    `created` Datetime64 NOT NULL,
-    `updated` Datetime64 NOT NULL,
+    `created` Datetime NOT NULL,
+    `updated` Datetime NOT NULL,
     PRIMARY KEY (`id`)
 );
 

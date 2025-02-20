@@ -128,11 +128,17 @@ TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<
     , PayloadReadSize(payloadReadSize)
     , CommonBufferOffset(commonBufferOffset)
     , CumulativeCompletion(cumulativeCompletion)
+    , ChunkNonce(CumulativeCompletion->GetChunkNonce())
     , Buffer(PDisk->BufferPool->Pop())
     , IsTheLastPart(isTheLastPart)
     , UseT1ha0Hasher(useT1ha0Hasher)
     , Span(std::move(span))
 {
+    TCompletionAction::CanBeExecutedInAdditionalCompletionThread = true;
+
+    TBufferWithGaps *commonBuffer = CumulativeCompletion->GetCommonBuffer();
+    Destination = commonBuffer->RawDataPtr(CommonBufferOffset, PayloadReadSize);
+
     if (!IsTheLastPart) {
         CumulativeCompletion->AddPart();
     }
@@ -167,8 +173,6 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
             Read->Offset + CommonBufferOffset, PayloadReadSize, firstSector, lastSector, sectorOffset);
     Y_ABORT_UNLESS(isOk);
 
-    TBufferWithGaps *commonBuffer = CumulativeCompletion->GetCommonBuffer();
-    ui8 *destination = commonBuffer->RawDataPtr(CommonBufferOffset, PayloadReadSize);
 
     ui8* source = Buffer->Data();
 
@@ -184,8 +188,6 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
         sectorOffset = 0;
     }
 
-    ui64 chunkNonce = CumulativeCompletion->GetChunkNonce();
-
     ui32 beginBadUserOffset = 0xffffffff;
     ui32 endBadUserOffset = 0xffffffff;
     ui32 userSectorSize = format.SectorPayloadSize();
@@ -194,7 +196,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
 
         TSectorRestorator restorator(false, 1, false,
             format, actorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
-        ui64 lastNonce = Min((ui64)0, chunkNonce - 1);
+        ui64 lastNonce = Min((ui64)0, ChunkNonce - 1);
         restorator.Restore(source, format.Offset(Read->ChunkIdx, sectorIdx), format.MagicDataChunk, lastNonce,
                 UseT1ha0Hasher, Read->Owner);
 
@@ -212,7 +214,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
                         << " for owner# " << Read->Owner
                         << " beginBadUserOffet# " << beginBadUserOffset << " endBadUserOffset# " << endBadUserOffset
                         << " due to multiple sectors with incorrect hashes. Marker# BPC001");
-                commonBuffer->AddGap(beginBadUserOffset, endBadUserOffset);
+                CumulativeCompletion->AddGap(beginBadUserOffset, endBadUserOffset);
                 beginBadUserOffset = 0xffffffff;
                 endBadUserOffset = 0xffffffff;
             }
@@ -222,16 +224,16 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
 
         // Decrypt data
         if (beginBadUserOffset != 0xffffffff) {
-            memset(destination, 0, sectorPayloadSize);
+            memset(Destination, 0, sectorPayloadSize);
         } else {
             TDataSectorFooter *footer = (TDataSectorFooter*) (source + format.SectorSize - sizeof(TDataSectorFooter));
-            if (footer->Nonce != chunkNonce + sectorIdx) {
+            if (footer->Nonce != ChunkNonce + sectorIdx) {
                 ui32 userOffset = sectorIdx * userSectorSize;
                 LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDisk->PDiskId
                         << " ReqId# " << Read->ReqId
                         << " Can't read chunk chunkIdx# " << Read->ChunkIdx
                         << " for owner# " << Read->Owner
-                        << " nonce mismatch: expected# " << (ui64)(chunkNonce + sectorIdx)
+                        << " nonce mismatch: expected# " << (ui64)(ChunkNonce + sectorIdx)
                         << ", on-disk# " << (ui64)footer->Nonce
                         << " for userOffset# " << userOffset
                         << " ! Marker# BPC002");
@@ -239,18 +241,18 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
                     beginBadUserOffset = userOffset;
                 }
                 endBadUserOffset = beginUserOffset + userSectorSize;
-                memset(destination, 0, sectorPayloadSize);
+                memset(Destination, 0, sectorPayloadSize);
             } else {
                 cypher.StartMessage(footer->Nonce);
-                if (sectorOffset > 0 || intptr_t(destination) % 32) {
+                if (sectorOffset > 0 || intptr_t(Destination) % 32) {
                     cypher.InplaceEncrypt(source, sectorOffset + sectorPayloadSize);
                     if (CommonBufferOffset == 0 || !IsTheLastPart) {
-                        memcpy(destination, source + sectorOffset, sectorPayloadSize);
+                        memcpy(Destination, source + sectorOffset, sectorPayloadSize);
                     } else {
-                        memcpy(destination, source, sectorPayloadSize);
+                        memcpy(Destination, source, sectorPayloadSize);
                     }
                 } else {
-                    cypher.Encrypt(destination, source, sectorPayloadSize);
+                    cypher.Encrypt(Destination, source, sectorPayloadSize);
                 }
                 if (CanarySize > 0) {
                     ui32 canaryPosition = sectorOffset + sectorPayloadSize;
@@ -260,7 +262,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
                 }
             }
         }
-        destination += sectorPayloadSize;
+        Destination += sectorPayloadSize;
         source += format.SectorSize;
         PayloadReadSize -= sectorPayloadSize;
         sectorPayloadSize = Min(format.SectorPayloadSize(), PayloadReadSize);
@@ -274,7 +276,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
             << " for owner# " << Read->Owner
             << " beginBadUserOffet# " << beginBadUserOffset << " endBadUserOffset# " << endBadUserOffset
             << " due to multiple sectors with incorrect hashes/nonces. Marker# BPC003");
-        commonBuffer->AddGap(beginBadUserOffset, endBadUserOffset);
+        CumulativeCompletion->AddGap(beginBadUserOffset, endBadUserOffset);
         beginBadUserOffset = 0xffffffff;
         endBadUserOffset = 0xffffffff;
     }
@@ -408,4 +410,3 @@ void TChunkTrimCompletion::Exec(TActorSystem *actorSystem) {
 
 } // NPDisk
 } // NKikimr
-

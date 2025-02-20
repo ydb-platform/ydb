@@ -236,7 +236,7 @@ TDriveEstimator::TDriveEstimator(const TString filename)
     , ActorSystemCreator(new TActorSystemCreator)
     , ActorSystem(ActorSystemCreator->GetActorSystem())
     , QueueDepth(4)
-    , Device(CreateRealBlockDevice(filename, 0, PDiskMon, 50, 0, QueueDepth, TDeviceMode::LockFile, 128, nullptr, nullptr))
+    , Device(CreateRealBlockDevice(filename, 0, PDiskMon, 50, 0, QueueDepth, TDeviceMode::LockFile, 128, 1, nullptr, nullptr))
     , BufferPool(CreateBufferPool(BufferSize, 1, false, {}))
     , Buffer(BufferPool->Pop())
 {

@@ -78,7 +78,7 @@ private:
     inline ui64 GetBytesLimit() const { return MaxBytes; }
 
     bool Collect(const NTable::IScan::TRow& row, IOutputStream& out);
-    virtual TMaybe<TBuffer> Flush(bool prepare);
+    virtual TMaybe<TBuffer> Flush(bool prepare, bool last);
 
     static NBackup::IChecksum* CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings);
     static TZStdCompressionProcessor* CreateCompression(const TMaybe<TS3ExportBufferSettings::TCompressionSettings>& settings);
@@ -98,6 +98,7 @@ protected:
 
     NBackup::IChecksum::TPtr Checksum;
     TZStdCompressionProcessor::TPtr Compression;
+    TMaybe<NBackup::TEncryptedFileSerializer> Encryption;
 
     TString ErrorString;
 }; // TS3Buffer
@@ -110,6 +111,13 @@ TS3Buffer::TS3Buffer(TS3ExportBufferSettings&& settings)
     , Checksum(CreateChecksum(settings.ChecksumSettings))
     , Compression(CreateCompression(settings.CompressionSettings))
 {
+    if (settings.EncryptionSettings) {
+        Encryption.ConstructInPlace(
+            std::move(settings.EncryptionSettings->Algorithm),
+            std::move(settings.EncryptionSettings->Key),
+            std::move(settings.EncryptionSettings->IV)
+        );
+    }
 }
 
 NBackup::IChecksum* TS3Buffer::CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings) {
@@ -289,7 +297,7 @@ IEventBase* TS3Buffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& sta
     stats.Rows = Rows;
     stats.BytesRead = BytesRead;
 
-    auto buffer = Flush(true);
+    auto buffer = Flush(true, last);
     if (!buffer) {
         return nullptr;
     }
@@ -304,7 +312,7 @@ IEventBase* TS3Buffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& sta
 }
 
 void TS3Buffer::Clear() {
-    Y_ABORT_UNLESS(Flush(false));
+    Y_ABORT_UNLESS(Flush(false, false));
 }
 
 bool TS3Buffer::IsFilled() const {
@@ -319,7 +327,7 @@ TString TS3Buffer::GetError() const {
     return ErrorString;
 }
 
-TMaybe<TBuffer> TS3Buffer::Flush(bool prepare) {
+TMaybe<TBuffer> TS3Buffer::Flush(bool prepare, bool last) {
     Rows = 0;
     BytesRead = 0;
 
@@ -330,6 +338,11 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool prepare) {
         }
 
         Buffer = std::move(*compressedBuffer);
+    }
+
+    if (Encryption) {
+        TBuffer encryptedBlock = Encryption->AddBlock(TStringBuf(Buffer.Data(), Buffer.Size()), last);
+        Buffer = std::move(encryptedBlock);
     }
 
     return std::exchange(Buffer, TBuffer());

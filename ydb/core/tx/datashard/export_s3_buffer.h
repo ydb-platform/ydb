@@ -5,6 +5,8 @@
 #include "export_iface.h"
 #include "export_scan.h"
 
+#include <ydb/core/backup/common/encryption.h>
+
 #include <util/generic/maybe.h>
 
 namespace NKikimr {
@@ -28,6 +30,12 @@ struct TS3ExportBufferSettings {
         int CompressionLevel = -1;
     };
 
+    struct TEncryptionSettings {
+        TString Algorithm;
+        NBackup::TEncryptionKey Key;
+        NBackup::TEncryptionIV IV;
+    };
+
     IExport::TTableColumns Columns;
     ui64 MaxRows = 0;
     ui64 MinBytes = 0;
@@ -36,6 +44,7 @@ struct TS3ExportBufferSettings {
     // Data processing
     TMaybe<TChecksumSettings> ChecksumSettings;
     TMaybe<TCompressionSettings> CompressionSettings;
+    TMaybe<TEncryptionSettings> EncryptionSettings;
 };
 
 NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings);

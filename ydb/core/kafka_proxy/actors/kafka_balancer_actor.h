@@ -21,11 +21,27 @@
 namespace NKafka {
 using namespace NKikimr;
 
+constexpr ui32 DEFAULT_REBALANCE_TIMEOUT_MS = 45000;
+constexpr ui32 MIN_REBALANCE_TIMEOUT_MS = 3000;
+constexpr ui32 MAX_REBALANCE_TIMEOUT_MS = 300000;
+
+constexpr ui32 DEFAULT_SESSION_TIMEOUT_MS = 45000;
+constexpr ui32 MIN_SESSION_TIMEOUT_MS = 3000;
+constexpr ui32 MAX_SESSION_TIMEOUT_MS = 300000;
+
+constexpr ui32 MAX_GROUPS_COUNT = 1000;
+constexpr ui32 LIMIT_MEMBERS_PER_REQUEST = 999;
+
+constexpr ui8 MASTER_WAIT_JOINS_DELAY_SECONDS = 5;
+constexpr ui8 WAIT_FOR_MASTER_DELAY_SECONDS = 1;
+constexpr ui8 TX_ABORT_MAX_RETRY_COUNT = 5;
+constexpr ui8 TABLES_TO_INIT_COUNT = 2;
+
 extern const TString INSERT_NEW_GROUP;
 extern const TString UPDATE_GROUP;
 extern const TString UPDATE_GROUP_STATE_AND_PROTOCOL;
 extern const TString INSERT_MEMBER;
-extern const TString UPDATE_GROUPS_AND_SELECT_WORKER_STATES;
+extern const TString SELECT_WORKER_STATES;
 extern const TString SELECT_WORKER_STATE_QUERY;
 extern const TString SELECT_MASTER;
 extern const TString UPSERT_ASSIGNMENTS_AND_SET_WORKING_STATE;
@@ -34,6 +50,7 @@ extern const TString FETCH_ASSIGNMENTS;
 extern const TString CHECK_DEAD_MEMBERS;
 extern const TString UPDATE_LASTHEARTBEATS;
 extern const TString UPDATE_LASTHEARTBEAT_TO_LEAVE_GROUP;
+extern const TString CHECK_GROUPS_COUNT;
 
 struct TGroupStatus {
     bool Exists;
@@ -43,6 +60,7 @@ struct TGroupStatus {
     TInstant LastHeartbeat;
     TString ProtocolName;
     TString ProtocolType;
+    ui64 RebalanceTimeoutMs;
 };
 
 class TKafkaBalancerActor : public NActors::TActorBootstrapped<TKafkaBalancerActor> {
@@ -54,8 +72,8 @@ public:
 
         JOIN_TX0_0_BEGIN_TX,
         JOIN_TX0_1_CHECK_STATE_AND_GENERATION,
-        JOIN_TX0_2_INSERT_NEW_GROUP,
-        JOIN_TX0_2_UPDATE_GROUP_STATE_AND_GENERATION,
+        JOIN_TX0_2_CHECK_GROUPS_COUNT,
+        JOIN_TX0_2_ADD_GROUP_OR_UPDATE_EXISTS,
         JOIN_TX0_2_SKIP,
         JOIN_TX0_3_INSERT_MEMBER,
         JOIN_TX0_4_COMMIT_TX,
@@ -63,7 +81,7 @@ public:
 
         JOIN_TX1_0_BEGIN_TX,
         JOIN_TX1_1_CHECK_STATE_AND_GENERATION,
-        JOIN_TX1_2_GET_MEMBERS_AND_SET_STATE_SYNC,
+        JOIN_TX1_2_GET_MEMBERS,
         JOIN_TX1_3_COMMIT_TX,
 
         SYNC_TX0_0_BEGIN_TX,
@@ -114,6 +132,15 @@ public:
 
         GroupId  = JoinGroupRequestData->GroupId.value_or("");
         ProtocolType = JoinGroupRequestData->ProtocolType.value_or("");
+
+        if (JoinGroupRequestData->SessionTimeoutMs) {
+            SessionTimeoutMs = JoinGroupRequestData->SessionTimeoutMs;
+        }
+
+        if (JoinGroupRequestData->RebalanceTimeoutMs) {
+            RebalanceTimeoutMs = JoinGroupRequestData->RebalanceTimeoutMs;
+            WaitingMasterMaxRetryCount = JoinGroupRequestData->RebalanceTimeoutMs / WAIT_FOR_MASTER_DELAY_SECONDS * 1000;
+        }
     }
 
     TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TSyncGroupRequestData> message, ui8 retryNum = 0)
@@ -244,14 +271,16 @@ private:
 
     std::optional<TGroupStatus> ParseCheckStateAndGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
     bool ParseAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, TString& assignments);
-    bool ParseWorkerStatesAndChooseProtocol(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, TString>& workerStates, TString& chosenProtocol);
-    bool ParseDeadCount(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& outCount);
+    bool ParseWorkerStates(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, NKafka::TWorkerState>& workerStates, TString& lastMemberId);
+    bool ParseDeadCountAndSessionTimeout(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& outCount, ui32& outSessionTimeoutMs);
+    bool ParseGroupsCount(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& groupsCount);
+    bool ChooseProtocolAndFillStates();
 
     NYdb::TParamsBuilder BuildCheckGroupStateParams();
     NYdb::TParamsBuilder BuildUpdateOrInsertNewGroupParams();
     NYdb::TParamsBuilder BuildInsertMemberParams();
     NYdb::TParamsBuilder BuildAssignmentsParams();
-    NYdb::TParamsBuilder BuildUpdatesGroupsAndSelectWorkerStatesParams();
+    NYdb::TParamsBuilder BuildSelectWorkerStatesParams();
     NYdb::TParamsBuilder BuildUpdateGroupStateAndProtocolParams();
     NYdb::TParamsBuilder BuildFetchAssignmentsParams();
     NYdb::TParamsBuilder BuildLeaveGroupParams();
@@ -274,15 +303,21 @@ private:
     TString GroupId;
     TString GroupName;
     TString MemberId;
+    ui32 SessionTimeoutMs = DEFAULT_SESSION_TIMEOUT_MS;
+    ui32 RebalanceTimeoutMs = DEFAULT_REBALANCE_TIMEOUT_MS;
 
     ui64 GenerationId = 0;
     ui64 CorrelationId = 0;
     ui64 Cookie = 0;
     ui64 KqpReqCookie = 0;
-    ui8 WaitingWorkingStateRetries = 0;
+    ui8 WaitingMasterRetryCount = 0;
+    ui8 WaitingMasterMaxRetryCount = 10;
+
+    TString WorkerStatesPaginationMemberId = "";
 
     TString Assignments;
     std::unordered_map<TString, TString> WorkerStates;
+    std::unordered_map<TString, NKafka::TWorkerState> AllWorkerStates;
     TString Protocol;
     TString ProtocolType;
     TString Master;

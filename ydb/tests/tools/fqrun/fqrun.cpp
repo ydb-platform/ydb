@@ -185,11 +185,15 @@ protected:
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 TStringBuf topicName, others;
                 TStringBuf(option->CurVal()).Split('@', topicName, others);
+
                 TStringBuf path, partitionCountStr;
                 TStringBuf(others).Split(':', path, partitionCountStr);
                 size_t partitionCount = !partitionCountStr.empty() ? FromString<size_t>(partitionCountStr) : 1;
+                if (!partitionCount) {
+                    ythrow yexception() << "Topic partition count should be at least one";
+                }
                 if (topicName.empty() || path.empty()) {
-                    ythrow yexception() << "Incorrect PQ file mapping, expected form topic@path[:partitions_count]" << Endl;
+                    ythrow yexception() << "Incorrect PQ file mapping, expected form topic@path[:partitions_count]";
                 }
                 if (!PqFilesMapping.emplace(topicName, NYql::TDummyTopic("pq", TString(topicName), TString(path), partitionCount)).second) {
                     ythrow yexception() << "Got duplicated topic name: " << topicName;
@@ -199,15 +203,7 @@ protected:
         options.AddLongOption("cnacel-on-file-finish", "Cancel emulate YDS topics when topic file finished")
             .RequiredArgument("topic")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                TStringBuf topicName;
-                TStringBuf filePath;
-                TStringBuf(option->CurVal()).Split('@', topicName, filePath);
-                if (topicName.empty() || filePath.empty()) {
-                    ythrow yexception() << "Incorrect PQ file mapping, expected form topic@file";
-                }
-                if (!PqFilesMapping.emplace(topicName, filePath).second) {
-                    ythrow yexception() << "Got duplicated topic name: " << topicName;
-                }
+                TopicsSettings[option->CurVal()].CancelOnFileFinish = true;
             });
 
         // Outputs
@@ -259,10 +255,17 @@ protected:
 
         if (!PqFilesMapping.empty()) {
             auto fileGateway = MakeIntrusive<NYql::TDummyPqGateway>();
-            for (const auto& [_, topic] : PqFilesMapping) {
+            for (auto [_, topic] : PqFilesMapping) {
+                if (const auto it = TopicsSettings.find(topic.TopicName); it != TopicsSettings.end()) {
+                    topic.CancelOnFileFinish = it->second.CancelOnFileFinish;
+                    TopicsSettings.erase(it);
+                }
                 fileGateway->AddDummyTopic(topic);
             }
             RunnerOptions.FqSettings.PqGateway = std::move(fileGateway);
+        }
+        if (!TopicsSettings.empty()) {
+            ythrow yexception() << "Found topic settings for not existing topic: '" << TopicsSettings.begin()->first << "'";
         }
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
@@ -302,6 +305,11 @@ private:
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
     std::unordered_map<TString, NYql::TDummyTopic> PqFilesMapping;
+
+    struct TTopicSettings {
+        bool CancelOnFileFinish = false;
+    };
+    std::unordered_map<TString, TTopicSettings> TopicsSettings;
 };
 
 }  // anonymous namespace

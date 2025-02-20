@@ -3,6 +3,8 @@
 #include <ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
 #include <ydb-cpp-sdk/client/config/config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
+#include <util/system/fs.h>
+#include <util/folder/dirut.h>
 
 #include <openssl/sha.h>
 
@@ -12,6 +14,10 @@
 using namespace NKikimr;
 
 namespace NYdb::NConsoleClient::NDynamicConfig {
+
+constexpr const char* CONFIG_FILE_NAME = "config.yaml";
+// constexpr const char* MAIN_CONFIG_FILE_NAME = "main.yaml";
+// constexpr const char* STORAGE_CONFIG_FILE_NAME = "storage.yaml";
 
 TString WrapYaml(const TString& yaml) {
     auto doc = NFyaml::TDocument::Parse(yaml);
@@ -37,6 +43,25 @@ TString WrapStaticConfig(const TString& yaml) {
 
     return TString(newDoc.EmitToCharArray().get());
 }
+bool SaveConfig(const TString& config, const TString& configName, const TString& configDirPath) {
+    try {
+        TString tempPath = TStringBuilder() << configDirPath << "/temp_" << configName;
+        TString configPath = TStringBuilder() << configDirPath << "/" << configName;
+
+        {
+            TFileOutput tempFile(tempPath);
+            tempFile << config;
+            tempFile.Flush();
+        }
+
+        if (!NFs::Rename(tempPath, configPath)) {
+            return false;
+        }
+    } catch (const std::exception& e) {
+        return false;
+    }
+    return true;
+}
 
 TCommandConfig::TCommandConfig(
         TCommandFlagsOverrides commandFlagsOverrides,
@@ -48,6 +73,7 @@ TCommandConfig::TCommandConfig(
     AddCommand(std::make_unique<TCommandConfigReplace>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());
     AddCommand(std::make_unique<TCommandGenerateDynamicConfig>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandConfigInit>());
 }
 
 TCommandConfig::TCommandConfig(bool allowEmptyDatabase)
@@ -758,6 +784,55 @@ int TCommandGenerateDynamicConfig::Run(TConfig& config) {
         Cout << "Startup config is already dynamic" << Endl;
     }
 
+    return EXIT_SUCCESS;
+}
+
+TCommandConfigInit::TCommandConfigInit(bool allowEmptyDatabase)
+    : TYdbCommand("init", {}, "Initialize dynamic config")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandConfigInit::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.Opts->AddLongOption('f', "from-config", "Path to the initial configuration file.")
+        .RequiredArgument("[config.yaml]").StoreResult(&ConfigYamlPath);
+    config.Opts->AddLongOption('d', "config-dir", "Path to the directory for storing configuration files.")
+        .Required().RequiredArgument("[directory]").StoreResult(&ConfigDirPath);
+    config.Opts->AddLongOption('s', "seed-node", "Endpoint of the seed node from which the configuration will be fetched.")
+        .RequiredArgument("[HOST:PORT]").StoreResult(&SeedNodeEndpoint);
+    config.Opts->MutuallyExclusive("from-config", "seed-node");
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+}
+
+int TCommandConfigInit::Run(TConfig& config) {
+
+    MakePathIfNotExist(ConfigDirPath.c_str());
+
+    if (SeedNodeEndpoint) {
+        config.Address = SeedNodeEndpoint;
+        auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
+        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+
+        auto result = client.GetConfig().GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+        TString config = TString{result.GetConfig()};
+        if (SaveConfig(config, CONFIG_FILE_NAME, ConfigDirPath)){
+            Cout << "Initialized cluster config in " << ConfigDirPath << "/" << CONFIG_FILE_NAME << Endl;
+        } else {
+            Cout << "Failed to initialize cluster config in " << ConfigDirPath << "/" << CONFIG_FILE_NAME << Endl;
+            return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+    }
+    const TString& configYaml = TFileInput(ConfigYamlPath).ReadAll();
+    if (SaveConfig(configYaml, CONFIG_FILE_NAME, ConfigDirPath)){
+        Cout << "Initialized cluster config in " << ConfigDirPath << "/" << CONFIG_FILE_NAME << Endl;
+    } else {
+        Cout << "Failed to initialize cluster config in " << ConfigDirPath << "/" << CONFIG_FILE_NAME << Endl;
+        return EXIT_FAILURE;
+    }
     return EXIT_SUCCESS;
 }
 

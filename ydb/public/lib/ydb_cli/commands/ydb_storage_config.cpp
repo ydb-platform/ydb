@@ -164,9 +164,9 @@ int TCommandStorageConfigReplace::Run(TConfig& config) {
     auto client = NYdb::NConfig::TConfigClient(*driver);
 
     auto status = [&]() {
-        if (SwitchDedicatedStorageSection && *SwitchDedicatedStorageSection) {
+        if (SwitchDedicatedStorageSection && !*SwitchDedicatedStorageSection) {
             return client.ReplaceConfigDisableDedicatedStorageSection(ClusterYaml.value()).GetValueSync();
-        } else if (SwitchDedicatedStorageSection && !*SwitchDedicatedStorageSection) {
+        } else if (SwitchDedicatedStorageSection && *SwitchDedicatedStorageSection) {
             return client.ReplaceConfigEnableDedicatedStorageSection(ClusterYaml.value(), StorageYaml.value()).GetValueSync();
         } else if (DedicatedConfigMode) {
             return client.ReplaceConfig(ClusterYaml.value(), StorageYaml.value()).GetValueSync();

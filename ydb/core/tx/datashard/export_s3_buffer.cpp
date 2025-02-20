@@ -125,7 +125,7 @@ NBackup::IChecksum* TS3Buffer::CreateChecksum(const TMaybe<TS3ExportBufferSettin
 TZStdCompressionProcessor* TS3Buffer::CreateCompression(const TMaybe<TS3ExportBufferSettings::TCompressionSettings>& settings) {
     if (settings) {
         switch (settings->Alg) {
-        case TS3ExportBufferSettings::TCompressionSettings::ECompressionAlg::Zstd:
+        case TS3ExportBufferSettings::TCompressionSettings::EAlgorithm::Zstd:
             return new TZStdCompressionProcessor(*settings);
         }
     }

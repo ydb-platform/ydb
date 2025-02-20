@@ -30,21 +30,29 @@ public:
         const ui64 minBytes = Task.GetS3Settings().GetLimits().GetMinWriteBatchSize();
 
         TS3ExportBufferSettings bufferSettings;
-        bufferSettings.Columns = Columns;
-        bufferSettings.MaxRows = maxRows;
-        bufferSettings.MaxBytes = maxBytes;
+        bufferSettings
+            .WithColumns(Columns)
+            .WithMaxRows(maxRows)
+            .WithMaxBytes(maxBytes);
         if (Task.GetEnableChecksums()) {
-            bufferSettings.ChecksumSettings.ConstructInPlace();
+            bufferSettings
+                .WithChecksum(
+                    TS3ExportBufferSettings::TChecksumSettings()
+                        .WithChecksumType(TS3ExportBufferSettings::TChecksumSettings::EChecksumType::Sha256)
+                );
         }
 
         switch (CodecFromTask(Task)) {
         case ECompressionCodec::None:
             break;
         case ECompressionCodec::Zstd:
-            bufferSettings.MinBytes = minBytes;
-            bufferSettings.CompressionSettings.ConstructInPlace();
-            bufferSettings.CompressionSettings->Alg = TS3ExportBufferSettings::TCompressionSettings::ECompressionAlg::Zstd;
-            bufferSettings.CompressionSettings->CompressionLevel = Task.GetCompression().GetLevel();
+            bufferSettings
+                .WithMinBytes(minBytes)
+                .WithCompression(
+                    TS3ExportBufferSettings::TCompressionSettings()
+                        .WithAlgorithm(TS3ExportBufferSettings::TCompressionSettings::EAlgorithm::Zstd)
+                        .WithCompressionLevel(Task.GetCompression().GetLevel())
+                );
             break;
         case ECompressionCodec::Invalid:
             Y_ABORT("unreachable");

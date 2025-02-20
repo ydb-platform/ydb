@@ -23,6 +23,8 @@ struct TExponentialBackoffOptions
     TDuration MaxBackoff = DefaultMaxBackoff;
     double BackoffMultiplier = DefaultBackoffMultiplier;
     double BackoffJitter = DefaultBackoffJitter;
+
+    bool operator==(const TExponentialBackoffOptions& other) const = default;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

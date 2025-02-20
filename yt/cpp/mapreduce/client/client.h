@@ -222,8 +222,6 @@ public:
 
     TBatchRequestPtr CreateBatchRequest() override;
 
-    IClientPtr GetParentClient() override;
-
     IRawClientPtr GetRawClient() const;
 
     const TClientContext& GetContext() const;
@@ -327,6 +325,8 @@ public:
     void Detach() override;
 
     ITransactionPingerPtr GetTransactionPinger() override;
+
+    IClientPtr GetParentClient(bool ignoreGlobalTx) override;
 
 protected:
     TClientPtr GetParentClientImpl() override;
@@ -487,6 +487,8 @@ public:
     void Shutdown() override;
 
     ITransactionPingerPtr GetTransactionPinger() override;
+
+    IClientPtr GetParentClient(bool ignoreGlobalTx) override;
 
     // Helper methods
     TYtPoller& GetYtPoller();

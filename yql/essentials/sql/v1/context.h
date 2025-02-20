@@ -92,10 +92,18 @@ namespace NSQLTranslationV1 {
 
     class TContext {
     public:
+        //FIXME remove
         TContext(const NSQLTranslation::TTranslationSettings& settings,
-                 const NSQLTranslation::TSQLHints& hints,
-                 NYql::TIssues& issues,
-                 const TString& query = {});
+            const NSQLTranslation::TSQLHints& hints,
+            NYql::TIssues& issues,
+            const TString& query = {});
+
+        TContext(const TLexers& lexers,
+                const TParsers& parsers,
+                const NSQLTranslation::TTranslationSettings& settings,
+                const NSQLTranslation::TSQLHints& hints,
+                NYql::TIssues& issues,
+                const TString& query = {});
 
         virtual ~TContext();
 
@@ -249,6 +257,10 @@ namespace NSQLTranslationV1 {
 
     private:
         IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
+
+    public:
+        const TLexers Lexers;
+        const TParsers Parsers;
 
     private:
         NYql::TPosition Position;

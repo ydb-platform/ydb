@@ -936,11 +936,6 @@ TBatchRequestPtr TClientBase::CreateBatchRequest()
     return MakeIntrusive<TBatchRequest>(TransactionId_, GetParentClientImpl());
 }
 
-IClientPtr TClientBase::GetParentClient()
-{
-    return GetParentClientImpl();
-}
-
 IRawClientPtr TClientBase::GetRawClient() const
 {
     return RawClient_;
@@ -1054,6 +1049,11 @@ void TTransaction::Detach()
 ITransactionPingerPtr TTransaction::GetTransactionPinger()
 {
     return TransactionPinger_;
+}
+
+IClientPtr TTransaction::GetParentClient(bool ignoreGlobalTx)
+{
+    return GetParentClientImpl()->GetParentClient(ignoreGlobalTx);
 }
 
 TClientPtr TTransaction::GetParentClientImpl()
@@ -1487,6 +1487,20 @@ ITransactionPingerPtr TClient::GetTransactionPinger()
 TClientPtr TClient::GetParentClientImpl()
 {
     return this;
+}
+
+IClientPtr TClient::GetParentClient(bool ignoreGlobalTx)
+{
+    if (!TransactionId_.IsEmpty() && ignoreGlobalTx) {
+        return MakeIntrusive<TClient>(
+            RawClient_,
+            Context_,
+            TTransactionId(),
+            ClientRetryPolicy_
+        );
+    } else {
+        return this;
+    }
 }
 
 void TClient::CheckShutdown() const

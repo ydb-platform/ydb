@@ -28,6 +28,12 @@ void FromProto(TSpecPatchPtr patch, const NProto::TSpecPatch* protoPatch)
     patch->Value = ConvertToNode(TYsonString(protoPatch->value()));
 }
 
+void FromProto(TSpecPatchPtr* patch, const NProto::TSpecPatch& protoPatch)
+{
+    *patch = New<TSpecPatch>();
+    FromProto(*patch, &protoPatch);
+}
+
 void FormatValue(TStringBuilderBase* builder, const TSpecPatchPtr& patch, TStringBuf /*spec*/)
 {
     builder->AppendString(ConvertToYsonString(patch).ToString());

@@ -76,7 +76,7 @@ class TServerAddressConfig
     : public NYTree::TYsonStruct
 {
 public:
-    TString Address;
+    std::string Address;
     TServerCredentialsConfigPtr Credentials;
 
     REGISTER_YSON_STRUCT(TServerAddressConfig);
@@ -92,10 +92,10 @@ class TServerConfig
     : public NYTree::TYsonStruct
 {
 public:
-    TString ProfilingName;
+    std::string ProfilingName;
 
     std::vector<TServerAddressConfigPtr> Addresses;
-    THashMap<TString, NYTree::INodePtr> GrpcArguments;
+    THashMap<std::string, NYTree::INodePtr> GrpcArguments;
 
     REGISTER_YSON_STRUCT(TServerConfig);
 
@@ -128,7 +128,7 @@ class TChannelConfigTemplate
 {
 public:
     TChannelCredentialsConfigPtr Credentials;
-    THashMap<TString, NYTree::INodePtr> GrpcArguments;
+    THashMap<std::string, NYTree::INodePtr> GrpcArguments;
 
     REGISTER_YSON_STRUCT(TChannelConfigTemplate);
 
@@ -143,7 +143,7 @@ class TChannelConfig
     : public TChannelConfigTemplate
 {
 public:
-    TString Address;
+    std::string Address;
 
     REGISTER_YSON_STRUCT(TChannelConfig);
 

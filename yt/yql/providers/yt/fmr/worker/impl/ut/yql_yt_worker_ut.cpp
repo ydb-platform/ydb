@@ -28,12 +28,12 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
                 *operationResults = "operation_result";
                 return ETaskStatus::Completed;
             }
-            return ETaskStatus::Aborted;
+            return ETaskStatus::Failed;
         };
         TFmrJobFactorySettings settings{.NumThreads = 3, .Function = func};
 
         auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
+        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
         auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
         worker->Start();
         coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
@@ -56,11 +56,11 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
                 }
             }
             *operationResults = "operation_cancelled";
-            return ETaskStatus::Aborted;
+            return ETaskStatus::Failed;
         };
         TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
         auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
+        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
         auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
         worker->Start();
         auto operationId = coordinator->StartOperation(CreateOperationRequest()).GetValueSync().OperationId;
@@ -82,12 +82,12 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
                 (*operationResult)++;
                 return ETaskStatus::Completed;
             }
-            return ETaskStatus::Aborted;
+            return ETaskStatus::Failed;
         };
         TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
         auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings firstWorkerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
-        TFmrWorkerSettings secondWorkerSettings{.WorkerId = 2, .RandomProvider = CreateDeterministicRandomProvider(2)};
+        TFmrWorkerSettings firstWorkerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
+        TFmrWorkerSettings secondWorkerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(2)};
         auto firstWorker = MakeFmrWorker(coordinator, factory, firstWorkerSettings);
         auto secondWorker = MakeFmrWorker(coordinator, factory, secondWorkerSettings);
         firstWorker->Start();

@@ -125,7 +125,7 @@ hosts:
 
 ## domains_config — домен кластера {#domains-config}
 
-Данный раздел содержит конфигурацию кластера {{ ydb-short-name }}, включая [конфигурации Blob Storage](#domains-blob) (хранилища бинарных объектов), [State Storage](#domains-state) (хранилища состояний) и [настройки безопасности](security.md).
+Данный раздел содержит конфигурацию кластера {{ ydb-short-name }}, включая [конфигурации Blob Storage](#domains-blob) (хранилища бинарных объектов), [State Storage](#domains-state) (хранилища состояний) и [настройки безопасности](security_config.md).
 
 ``` yaml
 domains_config:
@@ -156,11 +156,11 @@ domains_config:
 
 Значение по умолчанию: `false`.
     ||
-|| `default_groups` | Отказаться от создания [встроенных групп](../../security/builtin-security.md), даже если явные группы по умолчанию ([`security_config.default_groups`](security.md)) не заданы.
+|| `default_groups` | Отказаться от создания [встроенных групп](../../security/builtin-security.md), даже если явные группы по умолчанию ([`security_config.default_groups`](security_config.md)) не заданы.
 
 Значение по умолчанию: `false`
     ||
-|| `default_access` | Отказаться от добавления прав на корне кластера для [встроенных групп](../../security/builtin-security.md), даже если явные права по умолчанию ([`security_config.default_access`](security.md)) не заданы.
+|| `default_access` | Отказаться от добавления прав на корне кластера для [встроенных групп](../../security/builtin-security.md), даже если явные права по умолчанию ([`security_config.default_access`](security_config.md)) не заданы.
 
 Значение по умолчанию: `false`
     ||

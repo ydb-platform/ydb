@@ -840,6 +840,7 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
         if (taskDuration > Max(collectLongTaskStatsTimeout, LongestTaskDuration)) {
             CollectStatsByLongTasks = true;
             longTask = &task;
+            LongestTaskDuration = taskDuration;
         }
     }
 
@@ -984,6 +985,7 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
         if (taskDuration > Max(collectLongTaskStatsTimeout, LongestTaskDuration)) {
             CollectStatsByLongTasks = true;
             longTask = &task;
+            LongestTaskDuration = taskDuration;
         }
     }
 

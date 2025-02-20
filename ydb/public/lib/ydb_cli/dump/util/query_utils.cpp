@@ -190,7 +190,7 @@ struct TTableRefValidator {
     NYql::TIssues& Issues;
 };
 
-TString GetOpt(TStringInput query, TStringBuf pattern) {
+TString GetToken(TStringInput query, TStringBuf pattern) {
     TString line;
     while (query.ReadLine(line)) {
         StripInPlace(line);
@@ -205,11 +205,26 @@ TString GetOpt(TStringInput query, TStringBuf pattern) {
 } // anonymous
 
 TString GetBackupRoot(const TString& query) {
-    return GetOpt(query, R"(-- backup root: ")");
+    return GetToken(query, R"(-- backup root: ")");
 }
 
 TString GetDatabase(const TString& query) {
-    return GetOpt(query, R"(-- database: ")");
+    return GetToken(query, R"(-- database: ")");
+}
+
+TString GetSecretName(const TString& query) {
+    TString secretName;
+    if (auto pwd = GetToken(query, R"(PASSWORD_SECRET_NAME = ')")) {
+        secretName = std::move(pwd);
+    } else if (auto token = GetToken(query, R"(TOKEN_SECRET_NAME = ')")) {
+        secretName = std::move(token);
+    }
+
+    if (secretName.EndsWith("'")) {
+        secretName.resize(secretName.size() - 1);
+    }
+
+    return secretName;
 }
 
 bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::TIssues& issues) {

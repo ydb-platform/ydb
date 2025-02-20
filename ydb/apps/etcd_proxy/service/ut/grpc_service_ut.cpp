@@ -247,6 +247,10 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).value(), "value2");
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).value(), "value3");
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(3).value(), "value4");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).version(), 1L);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).version(), 1L);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).version(), 1L);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(3).version(), 1L);
             }
 
             Delete("key2", etcd, "key4");

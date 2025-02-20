@@ -55,22 +55,15 @@ int TProxy::Discovery() {
 }
 
 int TProxy::StartServer() {
-    const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetLastRevisionSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-    if (res.IsSuccess()) {
+    if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetLastRevisionSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
         if (auto result = res.GetResultSetParser(0); result.TryNextRow()) {
             const auto revision = NYdb::TValueParser(result.GetValue(0)).GetInt64();
-            std::cout << "The current revision is " << revision << '.' << std::endl;
+            const auto lease = NYdb::TValueParser(result.GetValue(1)).GetInt64();
+            std::cout << "The last revision is " << revision << ", the last lease is " << lease << '.' << std::endl;
             Stuff->Revision.store(revision);
-        } else {
-            std::cout << "Unexpected result of get max revision." << std::endl;
-            return 1;
-        }
-        if (auto result = res.GetResultSetParser(1); result.TryNextRow()) {
-            const auto lease = NYdb::TValueParser(result.GetValue(0)).GetInt64();
-            std::cout << "The current lease is " << lease << '.' << std::endl;
             Stuff->Lease.store(lease);
         } else {
-            std::cout << "Unexpected result of get max lease." << std::endl;
+            std::cout << "Unexpected result of get last revision and lease." << std::endl;
             return 1;
         }
     } else {

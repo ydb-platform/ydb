@@ -9,7 +9,7 @@ std::string GetCreateTablesSQL() {
 }
 
 std::string GetLastRevisionSQL() {
-    return "select nvl(max(`modified`), 1L) from `verhaal`; select nvl(max(`id`), 1L) from `leases`;";
+    return "select nvl(max(`modified`), 1L), nvl(max(`id`), 1L) from `verhaal` cross join `leases`;";
 }
 
 }

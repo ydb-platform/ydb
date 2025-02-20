@@ -55,7 +55,6 @@ jobs:
       - name: Release
         uses: diplodoc-platform/docs-release-action@v2
         with:
-          revision: "${{ github.sha }}"
           version: "${{ steps.extract_version.outputs.version }}"
           storage-bucket: ${{ secrets.DOCS_PROJECT_NAME }}
           storage-access-key-id: ${{ secrets.DOCS_AWS_KEY_ID }}

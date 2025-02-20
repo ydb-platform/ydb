@@ -2074,7 +2074,7 @@ namespace NKikimr {
                     IntQueueHugePutsForeground.get(), IntQueueHugePutsBackground.get() }) {
                 if (queue->IsStuck()) {
                     LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                            << "Stuck internal queue detected, dropping queues, "
+                            << "Stuck internal queue detected, restarting VDisk, "
                             << " Queue.Name# " << queue->Name
                             << " Marker# BSVSF08");
                     TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());

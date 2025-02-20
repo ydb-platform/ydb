@@ -341,7 +341,7 @@ struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
 };
 
 TFileTopicClient::TFileTopicClient(THashMap<TDummyPqGateway::TClusterNPath, TDummyTopic> topics)
-    : Topics_(topics)
+    : Topics_(std::move(topics))
 {}
 
 std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) {

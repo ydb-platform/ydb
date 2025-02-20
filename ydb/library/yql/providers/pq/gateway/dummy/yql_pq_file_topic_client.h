@@ -34,4 +34,5 @@ private:
     THashMap<TDummyPqGateway::TClusterNPath, TDummyTopic> Topics_;
     bool CancelOnFileFinish_ = false;
 };
+
 }

@@ -3,7 +3,7 @@
 set -eux
 
 function cleanup {
-    rm ./profdata
+    sudo rm ./profdata
     rm ./profdata.txt
 }
 trap cleanup EXIT

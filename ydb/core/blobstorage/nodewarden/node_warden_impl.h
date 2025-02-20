@@ -685,6 +685,7 @@ namespace NKikimr::NStorage {
         TString *errorReason);
 
     void EscapeHtmlString(IOutputStream& out, const TString& s);
+    void OutputPrettyMessage(IOutputStream& out, const NProtoBuf::Message& message);
 
 }
 

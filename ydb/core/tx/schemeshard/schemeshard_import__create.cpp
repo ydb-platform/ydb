@@ -643,12 +643,13 @@ private:
 
         Y_ABORT_UNLESS(item.State == EState::CreateChangefeed);
         Y_ABORT_UNLESS(item.DstPathId);
+        Y_ABORT_UNLESS(item.StreamImplPath);
 
-        if (!Self->PathsById.contains(item.DstPathId)) {
+        if (!Self->PathsById.contains(item.StreamImplPath)) {
             return InvalidTxId;
         }
 
-        auto path = Self->PathsById.at(item.DstPathId);
+        auto path = Self->PathsById.at(item.StreamImplPath);
         if (path->PathState != NKikimrSchemeOp::EPathStateAlter) {
             return InvalidTxId;
         }
@@ -1149,8 +1150,20 @@ private:
                 } else if (item.State == EState::CreateChangefeed) {
                     if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
                         txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
+                        if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists) {
+                            item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateConsumers;
+                            AllocateTxId(importInfo, itemIdx);
+                            // return;
+                        }
                     } else {
                         txId = GetActiveCreateConsumerTxId(importInfo, itemIdx);
+                        if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists) {
+                            if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
+                                item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateChangefeed;
+                                AllocateTxId(importInfo, itemIdx);
+                            }
+                            // return;
+                        }
                     }
                 
                 }

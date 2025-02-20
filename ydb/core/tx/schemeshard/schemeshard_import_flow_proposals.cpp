@@ -297,7 +297,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     TSchemeShard* ss,
     TTxId txId,
-    const TImportInfo::TItem& item
+    TImportInfo::TItem& item
 ) {
     Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
 
@@ -311,25 +311,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     auto& pqGroup = *modifyScheme.MutableAlterPersQueueGroup();
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);
-    modifyScheme.SetWorkingDir(dstPath.PathString() + "/" + importChangefeedTopic.GetChangefeed().name());
+    const TString changefeedPath = dstPath.PathString() + "/" + importChangefeedTopic.GetChangefeed().name();
+    modifyScheme.SetWorkingDir(changefeedPath);
     modifyScheme.SetInternal(true);
 
     pqGroup.SetName("streamImpl");
 
-    auto describeSchemeResult = DescribePath(ss, TlsActivationContext->AsActorContext(),
-        dstPath.PathString() + "/" + importChangefeedTopic.GetChangefeed().name() + "/streamImpl");
+    auto describeSchemeResult = DescribePath(ss, TlsActivationContext->AsActorContext(),changefeedPath + "/streamImpl");
 
     const auto& response = describeSchemeResult->GetRecord().GetPathDescription();
+    item.StreamImplPath = {response.GetSelf().GetSchemeshardId(), response.GetSelf().GetPathId()};
     pqGroup.CopyFrom(response.GetPersQueueGroup());
 
     pqGroup.ClearTotalGroupCount();
     pqGroup.MutablePQTabletConfig()->ClearPartitionKeySchema();
-
-    {
-        auto applyIf = modifyScheme.AddApplyIf();
-        applyIf->SetPathId(response.GetSelf().GetPathId());
-        applyIf->SetPathVersion(response.GetSelf().GetPathVersion());
-    }
 
     auto* tabletConfig = pqGroup.MutablePQTabletConfig();
     const auto& pqConfig = AppData()->PQConfig;

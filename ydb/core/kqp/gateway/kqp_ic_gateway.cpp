@@ -722,9 +722,6 @@ namespace {
 }
 
 class TKikimrIcGateway : public IKqpGateway {
-private:
-    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-
 public:
     TKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, const TString& databaseId, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
         TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)

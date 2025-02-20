@@ -729,10 +729,10 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(heartbeatStatus, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS));
     }
 
-    TReadInfo JoinAndSyncGroupAndWaitPartitions(std::vector<TString>& topics, TString& groupId, ui32 expectedPartitionsCount, TString& protocolName, ui32 totalPartitionsCount = 0) {
+    TReadInfo JoinAndSyncGroupAndWaitPartitions(std::vector<TString>& topics, TString& groupId, ui32 expectedPartitionsCount, TString& protocolName, ui32 totalPartitionsCount = 0, ui32 hartbeatTimeout = 1000000) {
         TReadInfo readInfo;
         for (;;) {
-            readInfo = JoinAndSyncGroup(topics, groupId, protocolName, 1000000, totalPartitionsCount);
+            readInfo = JoinAndSyncGroup(topics, groupId, protocolName, hartbeatTimeout, totalPartitionsCount);
             ui32 partitionsCount = 0;
             for (auto topicPartitions: readInfo.Partitions) {
                 partitionsCount += topicPartitions.Partitions.size();
@@ -2513,7 +2513,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         std::vector<TString> topics = {topicName};
-        i32 heartbeatMs = 1000000; // savnik
+        i32 heartbeatTimeout = 15000;
 
         // CHECK THREE READERS GETS 1/3 OF PARTITIONS
 
@@ -2524,7 +2524,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TJoinGroupRequestData joinReq;
         joinReq.GroupId = groupId;
         joinReq.ProtocolType = protocolType;
-        joinReq.SessionTimeoutMs = heartbeatMs;
+        joinReq.SessionTimeoutMs = heartbeatTimeout;
 
         NKafka::TJoinGroupRequestData::TJoinGroupRequestProtocol protocol;
         protocol.Name = protocolName;
@@ -2713,7 +2713,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         // CHECK ONE READER DEAD (NO HEARTBEAT)
 
-        Sleep(TDuration::Seconds(10));
+        Sleep(TDuration::Seconds(5));
 
         UNIT_ASSERT_VALUES_EQUAL(
             clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode,
@@ -2728,7 +2728,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         );
 
         // LAST READER GETS ALL PARTITIONS
-        clientA.JoinAndSyncGroupAndWaitPartitions(topics, groupId, totalPartitions, protocolName, totalPartitions);
+        clientA.JoinAndSyncGroupAndWaitPartitions(topics, groupId, totalPartitions, protocolName, totalPartitions, heartbeatTimeout);
 
 
         // CHECK IF MASTER DIE AFTER JOIN
@@ -2762,14 +2762,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             syncHeaderNotMaster = clientB.Header(NKafka::EApiKey::SYNC_GROUP, 5);
             clientB.WriteToSocket(syncHeaderNotMaster, syncReqNotMaster);
             auto noMasterSyncResponse = clientB.ReadResponse<TSyncGroupResponseData>(syncHeaderNotMaster);
-            UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::REBALANCE_IN_PROGRESS);
+            UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::LEADER_NOT_AVAILABLE);
         } else {
             syncReqNotMaster.GenerationId = joinRespA3->GenerationId;
             syncReqNotMaster.MemberId = joinRespA3->MemberId.value();
             syncHeaderNotMaster = clientA.Header(NKafka::EApiKey::SYNC_GROUP, 5);
             clientA.WriteToSocket(syncHeaderNotMaster, syncReqNotMaster);
             auto noMasterSyncResponse = clientA.ReadResponse<TSyncGroupResponseData>(syncHeaderNotMaster);
-            UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::REBALANCE_IN_PROGRESS);
+            UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::LEADER_NOT_AVAILABLE);
         }
 
     }

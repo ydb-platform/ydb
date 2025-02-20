@@ -1,4 +1,5 @@
 #include "kafka_consumer_members_metadata_initializers.h"
+#include "kafka_balancer_actor.h"
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -47,23 +48,28 @@ void TKafkaConsumerMembersMetaInitializer::DoPrepare(NInitializer::IInitializerI
         }
         {
             auto& column = *request.add_columns();
-            column.set_name("last_heartbeat_time");
+            column.set_name("heartbeat_deadline");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::DATETIME);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("session_timeout_ms");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
         }
         {
             auto* ttlSettings = request.mutable_ttl_settings();
             auto* columnTtl = ttlSettings->mutable_date_type_column();
-            columnTtl->set_column_name("last_heartbeat_time");
-            columnTtl->set_expire_after_seconds(60);
+            columnTtl->set_column_name("heartbeat_deadline");
+            columnTtl->set_expire_after_seconds(NKafka::MAX_SESSION_TIMEOUT_MS * 5);
         }
         {
             auto& index = *request.add_indexes();
-            index.set_name("idx_group_generation_db_lht");
+            index.set_name("idx_group_generation_db_hb");
             *index.mutable_global_index() = Ydb::Table::GlobalIndex();
+            index.add_index_columns("database");
             index.add_index_columns("consumer_group");
             index.add_index_columns("generation");
-            index.add_index_columns("database");
-            index.add_index_columns("last_heartbeat_time");
+            index.add_index_columns("heartbeat_deadline");
         }
         result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogCreateTable>(request, "create"));
     }

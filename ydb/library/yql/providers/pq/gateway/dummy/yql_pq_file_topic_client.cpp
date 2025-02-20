@@ -123,7 +123,7 @@ private:
             size_t size = 0;
             ui64 maxBatchRowSize = 100;
 
-            while (size_t read = fi.ReadLine(rawMsg)) {
+            while (fi.ReadLine(rawMsg)) {
                 msgs.emplace_back(MakeNextMessage(rawMsg));
                 MsgOffset_++;
                 if (!maxBatchRowSize--) {
@@ -133,6 +133,8 @@ private:
             }
             if (!msgs.empty()) {
                 EventsQ_.Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, Session_), size);
+            } else {
+                EventsQ_.Push(NYdb::NTopic::TSessionClosedEvent(NYdb::EStatus::CANCELLED, {NYdb::NIssue::TIssue("PQ file topic was finished")}), size);
             }
 
             Sleep(FILE_POLL_PERIOD);

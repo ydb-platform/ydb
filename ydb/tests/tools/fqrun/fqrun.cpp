@@ -8,6 +8,10 @@
 #include <ydb/tests/tools/kqprun/runlib/application.h>
 #include <ydb/tests/tools/kqprun/runlib/utils.h>
 
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+#include <library/cpp/lfalloc/alloc_profiler/profiler.h>
+#endif
+
 using namespace NKikimrRun;
 
 namespace NFqRun {
@@ -156,6 +160,21 @@ protected:
                 }
             });
 
+        options.AddLongOption("as-cfg", "File with actor system config (TActorSystemConfig), use '-' for default")
+            .RequiredArgument("file")
+            .DefaultValue("./configuration/as_config.conf")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                const TString file(option->CurValOrDef());
+                if (file == "-") {
+                    return;
+                }
+
+                RunnerOptions.FqSettings.ActorSystemConfig = NKikimrConfig::TActorSystemConfig();
+                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &(*RunnerOptions.FqSettings.ActorSystemConfig))) {
+                    ythrow yexception() << "Bad format of actor system configuration";
+                }
+            });
+
         options.AddLongOption("emulate-s3", "Enable readings by s3 provider from files, `bucket` value in connection - path to folder with files")
             .NoArgument()
             .SetFlag(&RunnerOptions.FqSettings.EmulateS3);
@@ -210,6 +229,7 @@ protected:
         ExecutionOptions.Validate(RunnerOptions);
 
         RunnerOptions.FqSettings.YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
+        RunnerOptions.FqSettings.FunctionRegistry = CreateFunctionRegistry().Get();
 
         auto& gatewayConfig = *RunnerOptions.FqSettings.FqConfig.mutable_gateways();
         FillTokens(gatewayConfig.mutable_pq());
@@ -230,7 +250,25 @@ protected:
             RunnerOptions.FqSettings.PqGateway = std::move(fileGateway);
         }
 
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        if (RunnerOptions.FqSettings.VerboseLevel >= 1) {
+            Cout << CoutColors.Cyan() << "Starting profile memory allocations" << CoutColors.Default() << Endl;
+        }
+        NAllocProfiler::StartAllocationSampling(true);
+#else
+        if (ProfileAllocationsOutput) {
+            ythrow yexception() << "Profile memory allocations disabled, please rebuild fqrun with flag `-D PROFILE_MEMORY_ALLOCATIONS`";
+        }
+#endif
+
         RunScript(ExecutionOptions, RunnerOptions);
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        if (RunnerOptions.FqSettings.VerboseLevel >= 1) {
+            Cout << CoutColors.Cyan() << "Finishing profile memory allocations" << CoutColors.Default() << Endl;
+        }
+        FinishProfileMemoryAllocations();
+#endif
 
         return 0;
     }
@@ -246,6 +284,8 @@ private:
     }
 
 private:
+    inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
+
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
     std::unordered_map<TString, NYql::TDummyTopic> PqFilesMapping;

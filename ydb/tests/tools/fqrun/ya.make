@@ -1,5 +1,11 @@
 PROGRAM(fqrun)
 
+IF (PROFILE_MEMORY_ALLOCATIONS)
+    MESSAGE("Enabled profile memory allocations")
+    ALLOCATOR(LF_DBG)
+    CFLAGS(-D PROFILE_MEMORY_ALLOCATIONS)
+ENDIF()
+
 SRCS(
     fqrun.cpp
 )
@@ -7,6 +13,7 @@ SRCS(
 PEERDIR(
     library/cpp/colorizer
     library/cpp/getopt
+    library/cpp/lfalloc/alloc_profiler
     util
     ydb/library/yql/providers/pq/gateway/dummy
     ydb/tests/tools/fqrun/src

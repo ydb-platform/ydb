@@ -20,6 +20,7 @@ PEERDIR(
     ydb/library/security
     ydb/library/yql/providers/pq/provider
     ydb/tests/tools/kqprun/runlib
+    yql/essentials/minikql
 )
 
 YQL_LAST_ABI_VERSION()

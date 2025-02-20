@@ -20,7 +20,10 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/json_value
     ydb/public/lib/ydb_cli/common
+    yql/essentials/minikql
+    yql/essentials/minikql/invoke_builtins
     yql/essentials/public/issue
+    yql/essentials/public/udf
 )
 
 YQL_LAST_ABI_VERSION()

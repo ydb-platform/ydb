@@ -1,15 +1,49 @@
 #include "application.h"
 #include "utils.h"
 
+#include <library/cpp/colorizer/colors.h>
 #include <library/cpp/getopt/last_getopt.h>
 
 #include <util/stream/file.h>
 
 #include <ydb/core/base/backtrace.h>
 
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/public/udf/udf_static_registry.h>
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+#include <library/cpp/lfalloc/alloc_profiler/profiler.h>
+#endif
+
 namespace NKikimrRun {
 
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+void TMainBase::FinishProfileMemoryAllocations() {
+    if (ProfileAllocationsOutput) {
+        NAllocProfiler::StopAllocationSampling(*ProfileAllocationsOutput);
+    } else {
+        TString output;
+        TStringOutput stream(output);
+        NAllocProfiler::StopAllocationSampling(stream);
+
+        Cout << CoutColors.Red() << "Warning: profile memory allocations output is not specified, please use flag `--profile-output` for writing profile info (dump size " << NKikimr::NBlobDepot::FormatByteSize(output.size()) << ")" << CoutColors.Default() << Endl;
+    }
+}
+#endif
+
 void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettings& settings) {
+    options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
+        .RequiredArgument("file")
+        .EmplaceTo(&UdfsPaths);
+
+    options.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory")
+        .RequiredArgument("directory")
+        .StoreResult(&UdfsDirectory);
+
+    options.AddLongOption("exclude-linked-udfs", "Exclude linked udfs when same udf passed from -u or --udfs-dir")
+        .NoArgument()
+        .SetFlag(&ExcludeLinkedUdfs);
+
     options.AddLongOption("log-file", "File with execution logs (writes in stderr if empty)")
         .RequiredArgument("file")
         .StoreResult(&settings.LogOutputFile)
@@ -32,7 +66,6 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
     });
     options.AddLongOption("log-default", "Default log priority")
         .RequiredArgument("priority")
-        .Choices(logPriority.GetChoices())
         .StoreMappedResultT<TString>(&DefaultLogPriority, logPriority);
 
     options.AddLongOption("log", "Component log priority in format <component>=<priority> (e. g. KQP_YQL=trace)")
@@ -54,6 +87,10 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
                 ythrow yexception() << "Got duplicated log service name: " << component;
             }
         });
+
+    options.AddLongOption("profile-output", "File with profile memory allocations output (use '-' to write in stdout)")
+        .RequiredArgument("file")
+        .StoreMappedResultT<TString>(&ProfileAllocationsOutput, &GetDefaultOutput);
 
     options.AddLongOption('M', "monitoring", "Embedded UI port (use 0 to start on random free port), if used will be run as daemon")
         .RequiredArgument("uint")
@@ -108,6 +145,30 @@ IOutputStream* TMainBase::GetDefaultOutput(const TString& file) {
         return FileHolders.back().get();
     }
     return nullptr;
+}
+
+TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> TMainBase::CreateFunctionRegistry() const {
+    if (!UdfsDirectory.empty() || !UdfsPaths.empty()) {
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching udfs..." << colors.Default() << Endl;
+    }
+
+    auto paths = UdfsPaths;
+    NKikimr::NMiniKQL::FindUdfsInDir(UdfsDirectory, &paths);
+    auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, paths)->Clone();
+
+    if (ExcludeLinkedUdfs) {
+        for (const auto& wrapper : NYql::NUdf::GetStaticUdfModuleWrapperList()) {
+            auto [name, ptr] = wrapper();
+            if (!functionRegistry->IsLoadedUdfModule(name)) {
+                functionRegistry->AddModule(TString(NKikimr::NMiniKQL::StaticModulePrefix) + name, name, std::move(ptr));
+            }
+        }
+    } else {
+        NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
+    }
+
+    return functionRegistry;
 }
 
 }  // namespace NKikimrRun

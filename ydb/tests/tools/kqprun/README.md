@@ -42,7 +42,7 @@ For profiling memory allocations build kqprun with ya make flag `-D PROFILE_MEMO
     ./kqprun -M 32000
     ```
 
-    Monitoring endpoint: https://localhost:32000
+    Monitoring endpoint: http://localhost:32000
 
 * gRPC endpoint:
     ```(bash)

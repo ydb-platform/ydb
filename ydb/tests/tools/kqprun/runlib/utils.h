@@ -34,12 +34,18 @@ struct TRequestResult {
 template <typename TResult>
 class TChoices {
 public:
-    explicit TChoices(std::map<TString, TResult> choicesMap)
+    explicit TChoices(std::map<TString, TResult> choicesMap, const TString& optionName = "")
         : ChoicesMap(std::move(choicesMap))
+        , OptionName(optionName)
     {}
 
     TResult operator()(const TString& choice) const {
-        return ChoicesMap.at(choice);
+        const auto it = ChoicesMap.find(choice);
+        // if (it == ChoicesMap.end()) {
+
+        //     throw yexception() << "Value '" << choice << "' is not allowed " << (OptionName ? TStringBuilder() << "for option " << OptionName : TStringBuilder()) << ", available variants:\n" << Join(", ")
+        // }
+        return it->second;
     }
 
     TVector<TString> GetChoices() const {
@@ -57,6 +63,7 @@ public:
 
 private:
     const std::map<TString, TResult> ChoicesMap;
+    const TString OptionName;
 };
 
 class TStatsPrinter {

@@ -22,7 +22,8 @@ public:
 
         return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
             std::move(request),
-            &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig);
+            &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig,
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus ReplaceConfig(const std::string& mainConfig, const std::string& storageConfig, const TReplaceConfigSettings& settings = {}) {
@@ -35,7 +36,8 @@ public:
 
         return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
             std::move(request),
-            &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig);
+            &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig,
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus ReplaceConfigDisableDedicatedStorageSection(const std::string& mainConfig, const TReplaceConfigSettings& settings = {}) {
@@ -46,7 +48,8 @@ public:
 
         return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
             std::move(request),
-            &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig);
+            &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig,
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus ReplaceConfigEnableDedicatedStorageSection(const std::string& mainConfig, const std::string& storageConfig, const TReplaceConfigSettings& settings = {}) {
@@ -59,7 +62,8 @@ public:
 
         return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
             std::move(request),
-            &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig);
+            &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig,
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncFetchConfigResult FetchAllConfigs(const TFetchAllConfigsSettings& settings = {}) {

@@ -90,6 +90,7 @@ private:
     }
 
     TStatus HandleAlterDatabase(TKiAlterDatabase node, TExprContext& ctx) override {
+        // HERE CHECK METADATA
         Y_UNUSED(ctx);
         Y_UNUSED(node);
         return TStatus::Ok;

@@ -7,38 +7,9 @@
 #include <yql/essentials/core/issue/yql_issue.h>
 
 namespace NKikimr::NOlap::NReader {
-constexpr i64 DEFAULT_READ_AHEAD_BYTES = (i64)2 * 1024 * 1024 * 1024;
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
 constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
-namespace {
-class TInFlightGuard: NNonCopyable::TNonCopyable {
-private:
-    static inline TAtomicCounter InFlightGlobal = 0;
-    i64 InFlightGuarded = 0;
-
-public:
-    ~TInFlightGuard() {
-        Return(InFlightGuarded);
-    }
-
-    bool CanTake() {
-        return InFlightGlobal.Val() < DEFAULT_READ_AHEAD_BYTES || !InFlightGuarded;
-    }
-
-    void Take(const ui64 bytes) {
-        InFlightGlobal.Add(bytes);
-        InFlightGuarded += bytes;
-    }
-
-    void Return(const ui64 bytes) {
-        Y_ABORT_UNLESS(InFlightGlobal.Sub(bytes) >= 0);
-        InFlightGuarded -= bytes;
-        Y_ABORT_UNLESS(InFlightGuarded >= 0);
-    }
-};
-
-}   // namespace
 
 void TColumnShardScan::PassAway() {
     Send(ResourceSubscribeActorId, new TEvents::TEvPoisonPill);

@@ -119,7 +119,7 @@ public:
                     .PathsLimit(2) // index and impl-table
                     .DirChildrenLimit();
 
-                if (bool isInternal = Self->TxIdToImport.contains(TTxId(request.GetTxId())); !isInternal) {
+                if (!request.GetInternal()) {
                     checks
                         .ShardsLimit(1); // impl-table
                 }

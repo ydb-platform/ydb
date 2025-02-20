@@ -72,7 +72,7 @@ class IDataAccumulator;
 class TBatch {
     TStringBuilder Data;
     TVector<TLocation> Locations;
-    IDataAccumulator* OriginAccumulator;
+    IDataAccumulator* OriginAccumulator = nullptr;
 
 public:
     void Add(const TLine& line);

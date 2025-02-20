@@ -127,8 +127,8 @@ public:
     {
         KAFKA_LOG_D("HandleJoinGroup request");
 
-        RequestType   = JOIN_GROUP;
-        CurrentStep   = STEP_NONE;
+        RequestType = JOIN_GROUP;
+        CurrentStep = STEP_NONE;
 
         GroupId  = JoinGroupRequestData->GroupId.value_or("");
         ProtocolType = JoinGroupRequestData->ProtocolType.value_or("");
@@ -161,8 +161,8 @@ public:
     {
         KAFKA_LOG_D("HandleSyncGroup request");
 
-        RequestType   = SYNC_GROUP;
-        CurrentStep   = STEP_NONE;
+        RequestType = SYNC_GROUP;
+        CurrentStep = STEP_NONE;
 
         GroupId  = SyncGroupRequestData->GroupId.value_or("");
         MemberId = SyncGroupRequestData->MemberId.value_or("");
@@ -187,8 +187,8 @@ public:
     {
         KAFKA_LOG_D("HandleHeartbeat request");
 
-        RequestType   = HEARTBEAT;
-        CurrentStep   = STEP_NONE;
+        RequestType = HEARTBEAT;
+        CurrentStep = STEP_NONE;
 
         GroupId  = HeartbeatGroupRequestData->GroupId.value_or("");
         MemberId = HeartbeatGroupRequestData->MemberId.value_or("");
@@ -212,8 +212,8 @@ public:
         , LeaveGroupRequestData(message)
     {
         KAFKA_LOG_D("HandleLeaveGroup request");
-        RequestType   = LEAVE_GROUP;
-        CurrentStep   = STEP_NONE;
+        RequestType = LEAVE_GROUP;
+        CurrentStep = STEP_NONE;
 
         GroupId  = LeaveGroupRequestData->GroupId.value_or("");
         MemberId = LeaveGroupRequestData->MemberId.value_or("");
@@ -246,10 +246,44 @@ private:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 
-    void HandleJoinGroupResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void HandleSyncGroupResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void HandleLeaveGroupResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void HandleHeartbeatResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinGroupNextStep(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void SyncGroupNextStep(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void LeaveGroupStep(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void HeartbeatNextStep(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+
+    void JoinStepBeginTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepCheckGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepCreateNewOrJoinGroup(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepCheckGroupsCount(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepInsertNewMember(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepCommitTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepWaitJoinsIfMaster(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepBeginTx2(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinCheckGroupState2(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepSelectWorkerStates(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepWaitProtocolChoosing(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepChooseAndSetProtocol(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+
+    void SyncStepBeginTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void SyncStepCheckGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void SyncStepBuildAssignmentsIfMaster(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void SyncStepCommitTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void SyncStepBeginTx2(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void SyncStepCheckGroupState2(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void SyncStepWaitAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void SyncStepGetAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+
+    void LeaveStepBeginTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void LeaveStepLeaveGroup(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void LeaveStepCommitTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+
+    void HeartbeatStepBeginTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void HeartbeatStepChechDeadMembers(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void HeartbeatStepCommitTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void HeartbeatStepBeginTx2(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void HeartbeatStepChechGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void HeartbeatStepUpdateHeartbeatDeadlines(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void HeartbeatStepCommitTx2(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
 
     void Die(const TActorContext& ctx) override;
 

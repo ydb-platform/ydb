@@ -15,7 +15,7 @@ public:
     }
 
     TAsyncStatus ReplaceConfig(const std::string& mainConfig, const TReplaceConfigSettings& settings = {}) {
-        auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
+        auto request = MakeOperationRequest<Ydb::Config::ReplaceConfigRequest>(settings);
         request.set_replace(mainConfig);
 
         ApplyReplaceSettings(request, settings);
@@ -26,7 +26,7 @@ public:
     }
 
     TAsyncStatus ReplaceConfig(const std::string& mainConfig, const std::string& storageConfig, const TReplaceConfigSettings& settings = {}) {
-        auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
+        auto request = MakeOperationRequest<Ydb::Config::ReplaceConfigRequest>(settings);
         auto& replace = *request.mutable_replace_with_dedicated_storage_section();
         replace.set_main_config(mainConfig);
         replace.set_storage_config(storageConfig);
@@ -39,7 +39,7 @@ public:
     }
 
     TAsyncStatus ReplaceConfigDisableDedicatedStorageSection(const std::string& mainConfig, const TReplaceConfigSettings& settings = {}) {
-        auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
+        auto request = MakeOperationRequest<Ydb::Config::ReplaceConfigRequest>(settings);
         request.set_replace_disable_dedicated_storage_section(mainConfig);
 
         ApplyReplaceSettings(request, settings);
@@ -50,7 +50,7 @@ public:
     }
 
     TAsyncStatus ReplaceConfigEnableDedicatedStorageSection(const std::string& mainConfig, const std::string& storageConfig, const TReplaceConfigSettings& settings = {}) {
-        auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
+        auto request = MakeOperationRequest<Ydb::Config::ReplaceConfigRequest>(settings);
         auto& replace = *request.mutable_replace_enable_dedicated_storage_section();
         replace.set_main_config(mainConfig);
         replace.set_storage_config(storageConfig);
@@ -118,8 +118,7 @@ public:
     }
 
     TAsyncStatus BootstrapCluster(const std::string& selfAssemblyUUID, const TBootstrapClusterSettings& settings = {}) {
-        Y_UNUSED(settings);
-        auto request = MakeRequest<Ydb::Config::BootstrapClusterRequest>();
+        auto request = MakeOperationRequest<Ydb::Config::BootstrapClusterRequest>(settings);
         request.set_self_assembly_uuid(selfAssemblyUUID);
 
         return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::BootstrapClusterRequest,

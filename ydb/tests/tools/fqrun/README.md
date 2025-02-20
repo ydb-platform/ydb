@@ -2,7 +2,7 @@
 
 Tool can be used to execute streaming queries by using FQ proxy infrastructure.
 
-For profiling memory allocations build fqrun with ya make flag `-D PROFILE_MEMORY_ALLOCATIONS`.
+For profiling memory allocations build fqrun with ya make flags `-D PROFILE_MEMORY_ALLOCATIONS -D CXXFLAGS=-DPROFILE_MEMORY_ALLOCATIONS`.
 
 ## Scripts
 

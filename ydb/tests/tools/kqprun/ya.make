@@ -3,7 +3,6 @@ PROGRAM(kqprun)
 IF (PROFILE_MEMORY_ALLOCATIONS)
     MESSAGE("Enabled profile memory allocations")
     ALLOCATOR(LF_DBG)
-    CFLAGS(-D PROFILE_MEMORY_ALLOCATIONS)
 ENDIF()
 
 SRCS(

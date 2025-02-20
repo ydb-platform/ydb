@@ -89,6 +89,8 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
+    NKikimrConfig::TImmediateControlsConfig Controls;
+    TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
 
     TKikimrSettings()
     {
@@ -126,6 +128,8 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
             AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
             return *this;
     }
+    TKikimrSettings& SetControls(const NKikimrConfig::TImmediateControlsConfig& value) { Controls = value; return *this; }
+    TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
 };
 
 class TKikimrRunner {
@@ -389,6 +393,8 @@ void WaitForZeroReadIterators(Tests::TServer& server, const TString& path);
 int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName);
 
 void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, bool checkFollower, bool readsExpected);
+
+void WaitForCompaction(Tests::TServer* server, const TString& path, bool compactBorrowed = false);
 
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);
 

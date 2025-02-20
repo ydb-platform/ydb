@@ -1,16 +1,10 @@
 #pragma once
 
+#include "common/types.h"
+
 #include <ydb-cpp-sdk/client/iam/common/types.h>
 
 namespace NYdb::inline V3 {
-
-struct TIamServiceParams : TIamEndpoint {
-    std::string ServiceId;
-    std::string MicroserviceId;
-    std::string ResourceId;
-    std::string ResourceType;
-    std::string TargetServiceAccountId;
-};
 
 /// Acquire an IAM token using a JSON Web Token (JWT) file name.
 TCredentialsProviderFactoryPtr CreateIamJwtFileCredentialsProviderFactoryPrivate(const TIamJwtFilename& params);

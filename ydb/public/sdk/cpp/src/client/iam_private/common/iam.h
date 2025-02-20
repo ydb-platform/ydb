@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/client/iam_private/iam.h>
+#include <ydb-cpp-sdk/client/iam_private/common/types.h>
 
 #include <src/client/iam/common/iam.h>
 

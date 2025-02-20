@@ -1,13 +1,12 @@
-LIBRARY()
+LIBRARY(client-iam-private-common-include)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 
 SRCS(
-    iam.h
+    types.h
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/common
     ydb/public/sdk/cpp/src/client/iam/common
 )
 

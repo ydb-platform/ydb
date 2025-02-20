@@ -8,7 +8,6 @@
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 

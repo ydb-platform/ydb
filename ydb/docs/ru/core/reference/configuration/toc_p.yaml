@@ -1,7 +1,7 @@
 items:
-- name: TLS
+- name: tls
   href: tls.md
-- name: Aутентификация
-  href: auth.md
-- name: Безопасность
-  href: security.md
+- name: auth_config
+  href: auth_config.md
+- name: security_config
+  href: security_config.md

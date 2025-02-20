@@ -14,9 +14,6 @@
 #include <ydb/tests/tools/kqprun/runlib/utils.h>
 #include <ydb/tests/tools/kqprun/src/kqp_runner.h>
 
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <yql/essentials/public/udf/udf_static_registry.h>
-
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
@@ -399,61 +396,17 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
 }
 
 
-TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistry(const TString& udfsDirectory, TVector<TString> udfsPaths, bool excludeLinkedUdfs) {
-    if (!udfsDirectory.empty() || !udfsPaths.empty()) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching udfs..." << colors.Default() << Endl;
-    }
-
-    NKikimr::NMiniKQL::FindUdfsInDir(udfsDirectory, &udfsPaths);
-    auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, udfsPaths)->Clone();
-
-    if (excludeLinkedUdfs) {
-        for (const auto& wrapper : NYql::NUdf::GetStaticUdfModuleWrapperList()) {
-            auto [name, ptr] = wrapper();
-            if (!functionRegistry->IsLoadedUdfModule(name)) {
-                functionRegistry->AddModule(TString(NKikimr::NMiniKQL::StaticModulePrefix) + name, name, std::move(ptr));
-            }
-        }
-    } else {
-        NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
-    }
-
-    return functionRegistry;
-}
-
-
 class TMain : public TMainBase {
     using EVerbose = TYdbSetupSettings::EVerbose;
 
     inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
-    inline static IOutputStream* ProfileAllocationsOutput = nullptr;
-    inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
 
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
 
     std::unordered_map<TString, TString> Templates;
     THashMap<TString, TString> TablesMapping;
-    TVector<TString> UdfsPaths;
-    TString UdfsDirectory;
-    bool ExcludeLinkedUdfs = false;
     bool EmulateYt = false;
-
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-public:
-    static void FinishProfileMemoryAllocations() {
-        if (ProfileAllocationsOutput) {
-            NAllocProfiler::StopAllocationSampling(*ProfileAllocationsOutput);
-        } else {
-            TString output;
-            TStringOutput stream(output);
-            NAllocProfiler::StopAllocationSampling(stream);
-
-            Cout << CoutColors.Red() << "Warning: profile memory allocations output is not specified, please use flag `--profile-output` for writing profile info (dump size " << NKikimr::NBlobDepot::FormatByteSize(output.size()) << ")" << CoutColors.Default() << Endl;
-        }
-    }
-#endif
 
 protected:
     void RegisterOptions(NLastGetopt::TOpts& options) override {
@@ -534,18 +487,6 @@ protected:
                     ythrow yexception() << "Bad format of app configuration";
                 }
             });
-
-        options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
-            .RequiredArgument("file")
-            .EmplaceTo(&UdfsPaths);
-
-        options.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory")
-            .RequiredArgument("directory")
-            .StoreResult(&UdfsDirectory);
-
-        options.AddLongOption("exclude-linked-udfs", "Exclude linked udfs when same udf passed from -u or --udfs-dir")
-            .NoArgument()
-            .SetFlag(&ExcludeLinkedUdfs);
 
         // Outputs
 
@@ -640,10 +581,6 @@ protected:
                 }
                 RunnerOptions.ScriptQueryTimelineFiles.emplace_back(file);
             });
-
-        options.AddLongOption("profile-output", "File with profile memory allocations output (use '-' to write in stdout)")
-            .RequiredArgument("file")
-            .StoreMappedResultT<TString>(&ProfileAllocationsOutput, &GetDefaultOutput);
 
         // Pipeline settings
 
@@ -842,7 +779,7 @@ protected:
         }
 
         RunnerOptions.YdbSettings.YqlToken = YqlToken;
-        RunnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(UdfsDirectory, UdfsPaths, ExcludeLinkedUdfs).Get();
+        RunnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry().Get();
 
         auto& appConfig = RunnerOptions.YdbSettings.AppConfig;
         if (ExecutionOptions.ResultsRowsLimit) {
@@ -862,7 +799,7 @@ protected:
         }
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.YdbSettings.VerboseLevel >= 1) {
+        if (RunnerOptions.YdbSettings.VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Starting profile memory allocations" << CoutColors.Default() << Endl;
         }
         NAllocProfiler::StartAllocationSampling(true);
@@ -875,7 +812,7 @@ protected:
         RunScript(ExecutionOptions, RunnerOptions);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.YdbSettings.VerboseLevel >= 1) {
+        if (RunnerOptions.YdbSettings.VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Finishing profile memory allocations" << CoutColors.Default() << Endl;
         }
         FinishProfileMemoryAllocations();
@@ -900,27 +837,12 @@ private:
     }
 };
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-void InterruptHandler(int) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cout << colors.Red() << "Execution interrupted, finishing profile memory allocations..." << colors.Default() << Endl;
-    TMain::FinishProfileMemoryAllocations();
-
-    abort();
-}
-#endif
-
 }  // anonymous namespace
 
 }  // namespace NKqpRun
 
 int main(int argc, const char* argv[]) {
     SetupSignalActions();
-
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    signal(SIGINT, &NKqpRun::InterruptHandler);
-#endif
 
     try {
         NKqpRun::TMain().Run(argc, argv);

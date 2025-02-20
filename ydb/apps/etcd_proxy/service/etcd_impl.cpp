@@ -725,12 +725,16 @@ public:
         }
     }
 private:
+    static std::string GetRequestName() {
+        return TRequest::TRequest::descriptor()->name();
+    }
+
     void SendDatabaseRequest() {
         std::ostringstream sql;
         NYdb::TParamsBuilder params;
-        sql << "-- " << TRequest::TRequest::descriptor()->name() << " >>>>" << std::endl;
+        sql << "-- " << GetRequestName() << " >>>>" << std::endl;
         this->MakeQueryWithParams(sql, params);
-        sql << "-- " << TRequest::TRequest::descriptor()->name() << " <<<<" << std::endl;
+        sql << "-- " << GetRequestName() << " <<<<" << std::endl;
         std::cout << std::endl << sql.str() << std::endl;
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
@@ -756,7 +760,7 @@ private:
     void Handle(NEtcd::TEvQueryError::TPtr &ev) {
         TryToRollbackRevision();
         std::ostringstream err;
-        err << "SQL error received:" << std::endl << ev->Get()->Issues.ToString() << std::endl;
+        err << GetRequestName() << " SQL error received:" << std::endl << ev->Get()->Issues.ToString() << std::endl;
         std::cout << err.str();
         this->Request_->ReplyWithRpcStatus(grpc::StatusCode::INTERNAL, err.str());
     }

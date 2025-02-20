@@ -200,7 +200,7 @@ protected:
                 }
             });
 
-        options.AddLongOption("cnacel-on-file-finish", "Cancel emulate YDS topics when topic file finished")
+        options.AddLongOption("cancel-on-file-finish", "Cancel emulate YDS topics when topic file finished")
             .RequiredArgument("topic")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 TopicsSettings[option->CurVal()].CancelOnFileFinish = true;

@@ -47,14 +47,11 @@ public:
 
         const auto it = ChoicesMap.find(choice);
         if (it == ChoicesMap.end()) {
-            auto error = yexception() << "Value '" << choice << "' is not allowed " << (OptionName ? TStringBuilder() << "for option " << OptionName : TStringBuilder()) << ", available variants:\n";
-            for (auto it = ChoicesMap.begin(); it != ChoicesMap.end();) {
-                error << choice;
-                if (++it != ChoicesMap.end()) {
-                    error << ", ";
-                }
+            auto error = yexception() << "Value '" << choice << "' is not allowed " << (OptionName ? TStringBuilder() << "for option " << OptionName : TStringBuilder()) << ", available variants:";
+            for (const auto& [value, _] : ChoicesMap) {
+                error << " " << value;
             }
-            ythrow error;
+            throw error;
         }
         return it->second;
     }

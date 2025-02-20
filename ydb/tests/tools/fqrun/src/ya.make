@@ -9,7 +9,6 @@ SRCS(
 PEERDIR(
     library/cpp/colorizer
     library/cpp/testing/unittest
-    util
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_proxy/events
     ydb/core/fq/libs/init

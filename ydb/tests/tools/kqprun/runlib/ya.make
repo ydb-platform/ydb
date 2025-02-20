@@ -9,7 +9,6 @@ PEERDIR(
     library/cpp/colorizer
     library/cpp/getopt
     library/cpp/json
-    util
     ydb/core/base
     ydb/core/blob_depot
     ydb/core/fq/libs/compute/common

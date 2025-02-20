@@ -977,9 +977,7 @@ TCheckFunc ConsumerExist(const TString& name) {
                 break;
             }
         }
-        if (!isExist) {
-            UNIT_ASSERT(false);
-        }
+        UNIT_ASSERT(isExist);
     };
 }
 

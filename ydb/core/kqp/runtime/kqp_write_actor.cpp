@@ -175,6 +175,7 @@ class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
         enum EEv {
             EvShardRequestTimeout = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
             EvResolveRequestPlanned,
+            EvReattachToShard,
         };
 
         struct TEvShardRequestTimeout : public TEventLocal<TEvShardRequestTimeout, EvShardRequestTimeout> {
@@ -186,6 +187,13 @@ class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
         };
 
         struct TEvResolveRequestPlanned : public TEventLocal<TEvResolveRequestPlanned, EvResolveRequestPlanned> {
+        };
+
+        struct TEvReattachToShard : public TEventLocal<TEvReattachToShard, EvReattachToShard> {
+            const ui64 TabletId;
+
+            explicit TEvReattachToShard(ui64 tabletId)
+                : TabletId(tabletId) {}
         };
     };
 
@@ -370,6 +378,9 @@ public:
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
+                hFunc(TEvDataShard::TEvProposeTransactionAttachResult, Handle);
+                hFunc(TEvPrivate::TEvReattachToShard, Handle);
+                hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 hFunc(TEvPrivate::TEvShardRequestTimeout, Handle);
                 hFunc(TEvPrivate::TEvResolveRequestPlanned, Handle);
@@ -975,6 +986,15 @@ public:
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         if (InconsistentTx) {
             RetryShard(ev->Get()->TabletId, std::nullopt);
+        } else if ((TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::PREPARED
+                    || TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::EXECUTING)
+                && TxManager->ShouldReattach(ev->Get()->TabletId, TlsActivationContext->Now())) {
+            // Disconnected while waiting for other shards to prepare
+            auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
+            CA_LOG_N("Shard " << ev->Get()->TabletId << " delivery problem (reattaching in "
+                        << reattachState.ReattachInfo.Delay << ")");
+
+            Schedule(reattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(ev->Get()->TabletId));
         } else {
             TxManager->SetError(ev->Get()->TabletId);
             if (Mode == EMode::IMMEDIATE_COMMIT) {
@@ -993,6 +1013,89 @@ public:
                         << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
             }
         }
+    }
+
+    void Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletId();
+
+        auto& reattachState = TxManager->GetReattachState(shardId);
+        if (reattachState.Cookie != ev->Cookie) {
+            return;
+        }
+
+        const auto shardState = TxManager->GetState(shardId);
+        switch (shardState) {
+            case IKqpTransactionManager::EXECUTING:
+                YQL_ENSURE(Mode == EMode::COMMIT || Mode == EMode::IMMEDIATE_COMMIT);
+            case IKqpTransactionManager::PREPARED:
+                YQL_ENSURE(Mode == EMode::PREPARE);
+            case IKqpTransactionManager::PREPARING:
+            case IKqpTransactionManager::FINISHED:
+            case IKqpTransactionManager::ERROR:
+            case IKqpTransactionManager::PROCESSING:
+                YQL_ENSURE(false);
+        }
+
+        if (record.GetStatus() == NKikimrProto::OK) {
+            // Transaction still exists at this shard
+            CA_LOG_D("Reattached to shard " << shardId);
+            TxManager->Reattached(shardId);
+            return;
+        }
+
+        if (Mode == EMode::PREPARE) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder()
+                    << "ShardId=" << shardId
+                    << " for table '" << TablePath
+                    << "': attach transaction failed.");
+        } else {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
+                TStringBuilder()
+                    << "ShardId=" << shardId
+                    << " for table '" << TablePath
+                    << "': attach transaction failed.");
+        }
+    }
+
+    void Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletId();
+
+        CA_LOG_D("Got transaction restart event from tabletId: " << shardId);
+
+        switch (TxManager->GetState(shardId)) {
+            case IKqpTransactionManager::EXECUTING: {
+                TxManager->SetRestarting(shardId);
+                return;
+            }
+            case IKqpTransactionManager::FINISHED:
+            case IKqpTransactionManager::ERROR: {
+                return;
+            }
+            case IKqpTransactionManager::PREPARING:
+            case IKqpTransactionManager::PREPARED:
+            case IKqpTransactionManager::PROCESSING: {
+                YQL_ENSURE(false);
+            }
+        }
+    }
+
+    void Handle(TEvPrivate::TEvReattachToShard::TPtr& ev) {
+        const ui64 tabletId = ev->Get()->TabletId;
+        auto& state = TxManager->GetReattachState(tabletId);
+
+        CA_LOG_D("Reattach to shard " << tabletId);
+
+        YQL_ENSURE(TxId);
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
+            new TEvDataShard::TEvProposeTransactionAttach(tabletId, *TxId),
+            tabletId, /* subscribe */ true), 0, ++state.Cookie);
     }
 
     void Prepare() {

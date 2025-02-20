@@ -68,6 +68,8 @@ public:
 
     TAsyncFetchConfigResult FetchAllConfigs(const TFetchAllConfigsSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::Config::FetchConfigRequest>(settings);
+        request.mutable_all();
+
         auto promise = NThreading::NewPromise<TFetchConfigResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {

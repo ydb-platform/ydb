@@ -251,6 +251,11 @@ TString ReplaceMetadata(const TString& config, const TMainMetadata& metadata);
 TString ReplaceMetadata(const TString& config, const TDatabaseMetadata& metadata);
 
 /**
+ * Replaces metadata in storage config
+ */
+TString ReplaceMetadata(const TString& config, const TStorageMetadata& metadata);
+
+/**
  * Replaces volatile metadata in config
  */
 TString ReplaceMetadata(const TString& config, const TVolatileMetadata& metadata);

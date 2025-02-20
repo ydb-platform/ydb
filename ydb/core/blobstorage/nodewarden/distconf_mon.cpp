@@ -1,4 +1,5 @@
 #include "distconf.h"
+#include "node_warden_impl.h"
 
 #include <google/protobuf/util/json_util.h>
 
@@ -171,7 +172,9 @@ namespace NKikimr::NStorage {
                             if (config) {
                                 TString s;
                                 NProtoBuf::TextFormat::PrintToString(*config, &s);
-                                out << "<pre>" << s << "</pre>";
+                                out << "<pre>";
+                                EscapeHtmlString(out, s);
+                                out << "</pre>";
                             } else {
                                 out << "not defined";
                             }

@@ -1101,8 +1101,10 @@ message TEvControllerRegisterNode {
     }
 
     repeated TShredStatus ShredStatus = 9;
-    optional uint64 ConfigVersion = 10;
-    optional uint64 ConfigHash = 11;
+    optional uint64 MainConfigVersion = 10;
+    optional uint64 MainConfigHash = 11;
+    optional uint64 StorageConfigVersion = 12;
+    optional uint64 StorageConfigHash = 13;
 }
 
 message TEvControllerUpdateNodeDrives {
@@ -1111,12 +1113,12 @@ message TEvControllerUpdateNodeDrives {
 }
 
 message TYamlConfig {
-    optional string YAML = 1;
-    optional string DedicatedStorageYAML = 2;
-    optional string DedicatedClusterYAML = 3;
-    optional uint64 ConfigVersion = 4;
-    optional uint64 StorageConfigVersion = 5;
-    optional uint64 ClusterConfigVersion = 6;
+    optional string MainConfig = 1;
+    optional uint64 MainConfigVersion = 2;
+    optional string StorageConfig = 3;
+    optional uint64 StorageConfigVersion = 4;
+    optional bytes CompressedMainConfig = 5;
+    optional bytes CompressedStorageConfig = 6;
 }
 
 message TEvControllerNodeServiceSetUpdate {

@@ -103,8 +103,12 @@ void TNodeWarden::SendRegisterNode() {
     }
 
     if (!Cfg->ConfigStorePath.empty() && YamlConfig) {
-        ev->Record.SetConfigVersion(YamlConfig->GetConfigVersion());
-        ev->Record.SetConfigHash(NKikimr::NYaml::GetConfigHash(YamlConfig->GetYAML()));
+        ev->Record.SetMainConfigVersion(YamlConfig->GetMainConfigVersion());
+        ev->Record.SetMainConfigHash(NYaml::GetConfigHash(YamlConfig->GetMainConfig()));
+        if (YamlConfig->HasStorageConfigVersion()) {
+            ev->Record.SetStorageConfigVersion(YamlConfig->GetStorageConfigVersion());
+            ev->Record.SetStorageConfigHash(NYaml::GetConfigHash(YamlConfig->GetStorageConfig()));
+        }
     }
 
     SendToController(std::move(ev));

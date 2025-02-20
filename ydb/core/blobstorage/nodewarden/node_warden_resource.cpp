@@ -122,17 +122,20 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             STLOG_DEBUG_FAIL(BS_NODE, NW49, "failed to decompose yaml configuration", (Error, error));
         } else if (mainConfigYaml) {
             std::optional<TString> storageConfigYaml;
+            std::optional<ui64> storageConfigYamlVersion;
             if (StorageConfig.HasCompressedStorageYaml()) {
                 try {
                     TStringInput s(StorageConfig.GetCompressedStorageYaml());
                     storageConfigYaml.emplace(TZstdDecompress(&s).ReadAll());
+                    storageConfigYamlVersion.emplace(NYamlConfig::GetStorageMetadata(*storageConfigYaml).Version.value_or(0));
                 } catch (const std::exception& ex) {
                     Y_ABORT("CompressedStorageYaml format incorrect: %s", ex.what());
                 }
             }
 
             // TODO(alexvru): make this blocker for confirmation?
-            PersistConfig(std::move(mainConfigYaml), mainConfigYamlVersion, std::move(storageConfigYaml));
+            PersistConfig(std::move(mainConfigYaml), mainConfigYamlVersion, std::move(storageConfigYaml),
+                storageConfigYamlVersion);
         }
     } else {
         Y_DEBUG_ABORT_UNLESS(!StorageConfig.HasCompressedStorageYaml());

@@ -702,7 +702,7 @@ private:
     }
 
     void DoExecuteImpl() override {
-        PollAsyncInput(!ProcessOutputsState.IsFull && !CpuTimeQuotaAsked);
+        PollAsyncInput(!ProcessOutputsState.IsFull && !(ContinueRunEvent && !ContinueRunInflight && CpuTimeQuotaAsked));
         if (ProcessSourcesState.Inflight == 0) {
             auto req = GetCheckpointRequest();
             CA_LOG_T("DoExecuteImpl: " << (bool) req);

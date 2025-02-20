@@ -43,6 +43,7 @@ void TTenantDataErasureManager::UpdateConfig(const NKikimrConfig::TDataErasureCo
 }
 
 void TTenantDataErasureManager::Start() {
+    TDataErasureManager::Start();
     const auto ctx = SchemeShard->ActorContext();
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Start: Status# " << static_cast<ui32>(Status));
@@ -57,6 +58,7 @@ void TTenantDataErasureManager::Start() {
 }
 
 void TTenantDataErasureManager::Stop() {
+    TDataErasureManager::Stop();
     const auto ctx = SchemeShard->ActorContext();
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Stop");
@@ -197,6 +199,7 @@ void TTenantDataErasureManager::Enqueue(const TShardIdx& shardIdx) {
     if (Queue->Enqueue(shardIdx)) {
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[TenantDataErasureManager] [Enqueue] Enqueued shard# " << shardIdx << " at schemeshard " << SchemeShard->TabletID());
+        WaitingDataErasureShards[shardIdx] = EStatus::IN_PROGRESS;
         UpdateMetrics();
     }  else {
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -386,6 +389,47 @@ bool TTenantDataErasureManager::Remove(const TPathId&) {
     return false;
 }
 
+bool TTenantDataErasureManager::Remove(const TShardIdx& shardIdx) {
+    auto it = WaitingDataErasureShards.find(shardIdx);
+    if (it != WaitingDataErasureShards.end()) {
+        Queue->Remove(shardIdx);
+        ActivePipes.erase(shardIdx);
+        it->second = EStatus::COMPLETED;
+        bool isTenantDataErasureCompleted = true;
+        for (const auto& [shardIdx, status] : WaitingDataErasureShards) {
+            if (status == EStatus::IN_PROGRESS) {
+                isTenantDataErasureCompleted = false;
+            }
+        }
+        if (isTenantDataErasureCompleted) {
+            auto ctx = SchemeShard->ActorContext();
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "[TenantDataErasureManager] [Remove] Data erasure in shards is completed. Send response to root schemeshard");
+            Complete();
+        }
+        return true;
+    }
+    return false;
+}
+
+void TTenantDataErasureManager::HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) {
+    Status = EStatus::IN_PROGRESS;
+    for (const auto& shardIdx : dataErasureShards) {
+        Enqueue(shardIdx); // forward generation
+        db.Table<Schema::WaitingDataErasureShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update<Schema::WaitingDataErasureShards::Status>(static_cast<ui32>(WaitingDataErasureShards[shardIdx]));
+    }
+    if (WaitingDataErasureShards.empty()) {
+        Status = EStatus::COMPLETED;
+    }
+    db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(static_cast<ui32>(Status));
+
+    const auto ctx = SchemeShard->ActorContext();
+    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[TenantDataErasureManager] HandleNewPartitioning: Queue.Size# " << Queue->Size()
+        << ", WaitingDataErasureShards.size# " << WaitingDataErasureShards.size()
+        << ", Status# " << static_cast<ui32>(Status));
+}
+
 void TTenantDataErasureManager::UpdateMetrics() {
     SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_SIZE].Set(Queue->Size());
     SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_RUNNING].Set(Queue->RunningSize());
@@ -527,6 +571,99 @@ struct TSchemeShard::TTxCompleteDataErasureShard : public TSchemeShard::TRwTxBas
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasureShard(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev) {
     return new TTxCompleteDataErasureShard(this, ev);
+}
+
+struct TSchemeShard::TTxAddEntryToDataErasure : public TSchemeShard::TRwTxBase {
+    const std::vector<TShardIdx> DataErasureShards;
+    bool NeedResponseComplete = false;
+
+    TTxAddEntryToDataErasure(TSelf *self, const std::vector<TShardIdx>& dataErasureShards)
+        : TRwTxBase(self)
+        , DataErasureShards(std::move(dataErasureShards))
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_ADD_SHARDS_DATA_ERASURE; }
+
+    void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxAddEntryToDataErasure Execute at schemestard: " << Self->TabletID());
+
+        NIceDb::TNiceDb db(txc.DB);
+        Self->DataErasureManager->HandleNewPartitioning(DataErasureShards, db);
+        if (Self->DataErasureManager->GetStatus() == TDataErasureManager::EStatus::COMPLETED) {
+            if (Self->DataErasureManager->IsRunning()) {
+                NeedResponseComplete = true;
+            }
+        }
+    }
+
+    void DoComplete(const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxAddEntryToDataErasure Complete at schemestard: " << Self->TabletID());
+        if (NeedResponseComplete) {
+            std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
+                new TEvSchemeShard::TEvTenantDataErasureResponse(Self->ParentDomainId, Self->DataErasureManager->GetGeneration(), TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
+
+            const ui64 rootSchemeshard = Self->ParentDomainId.OwnerId;
+            Self->PipeClientCache->Send(
+                ctx,
+                ui64(rootSchemeshard),
+                response.release());
+        }
+    }
+};
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxAddEntryToDataErasure(const std::vector<TShardIdx>& dataErasureShards) {
+    return new TTxAddEntryToDataErasure(this, dataErasureShards);
+}
+
+struct TSchemeShard::TTxCancelDataErasureShards : public TSchemeShard::TRwTxBase {
+    const std::vector<TShardIdx> DataErasureShards;
+    bool NeedResponseComplete = false;
+
+    TTxCancelDataErasureShards(TSelf *self, const std::vector<TShardIdx>& dataErasureShards)
+        : TRwTxBase(self)
+        , DataErasureShards(std::move(dataErasureShards))
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_CANCEL_SHARDS_DATA_ERASURE; }
+
+    void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxCancelDataErasureShards Execute at schemestard: " << Self->TabletID());
+
+        NIceDb::TNiceDb db(txc.DB);
+        for (const auto& shard : DataErasureShards) {
+            if (Self->DataErasureManager->Remove(shard)) {
+                db.Table<Schema::WaitingDataErasureShards>().Key(shard.GetOwnerId(), shard.GetLocalId()).Update<Schema::WaitingDataErasureShards::Status>(static_cast<ui32>(TDataErasureManager::EStatus::COMPLETED));
+            }
+        }
+        if (Self->DataErasureManager->GetStatus() == TDataErasureManager::EStatus::COMPLETED) {
+            db.Table<Schema::TenantDataErasureGenerations>().Key(Self->DataErasureManager->GetGeneration()).Update<Schema::TenantDataErasureGenerations::Status>(static_cast<ui32>(Self->DataErasureManager->GetStatus()));
+            if (Self->DataErasureManager->IsRunning()) {
+                NeedResponseComplete = true;
+            }
+        }
+    }
+
+    void DoComplete(const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxCancelDataErasureShards Complete at schemestard: " << Self->TabletID());
+        if (NeedResponseComplete) {
+            std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
+                new TEvSchemeShard::TEvTenantDataErasureResponse(Self->ParentDomainId, Self->DataErasureManager->GetGeneration(), TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
+
+            const ui64 rootSchemeshard = Self->ParentDomainId.OwnerId;
+            Self->PipeClientCache->Send(
+                ctx,
+                ui64(rootSchemeshard),
+                response.release());
+        }
+    }
+};
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCancelDataErasureShards(const std::vector<TShardIdx>& oldShards) {
+    return new TTxCancelDataErasureShards(this, oldShards);
 }
 
 } // NKikimr::NSchemeShard

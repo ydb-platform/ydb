@@ -7084,17 +7084,23 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
 
             const auto& partitionStats = tableInfo->GetStats().PartitionStats;
             auto it = partitionStats.find(p.ShardIdx);
+            std::vector<TShardIdx> dataErasureShards;
             if (it != partitionStats.end()) {
                 EnqueueBackgroundCompaction(p.ShardIdx, it->second);
                 UpdateShardMetrics(p.ShardIdx, it->second);
+                dataErasureShards.push_back(p.ShardIdx);
             }
+            Execute(CreateTxAddEntryToDataErasure(dataErasureShards), this->ActorContext());
         }
 
+        std::vector<TShardIdx> cancelDataErasureShards;
         for (const auto& p: oldPartitioning) {
             if (!newPartitioningSet.contains(p.ShardIdx)) {
                 // note that queues might not contain the shard
                 OnShardRemoved(p.ShardIdx);
+                cancelDataErasureShards.push_back(p.ShardIdx);
             }
+            Execute(CreateTxCancelDataErasureShards(cancelDataErasureShards), this->ActorContext());
         }
     }
 

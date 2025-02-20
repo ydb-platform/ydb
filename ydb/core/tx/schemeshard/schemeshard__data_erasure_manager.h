@@ -33,6 +33,7 @@ protected:
     TSchemeShard* const SchemeShard;
     EStatus Status = EStatus::UNSPECIFIED;
     ui64 Generation = 0;
+    bool Running = false;
 
 public:
     TDataErasureManager(TSchemeShard* const schemeShard);
@@ -40,8 +41,8 @@ public:
     virtual ~TDataErasureManager() = default;
 
     virtual void UpdateConfig(const NKikimrConfig::TDataErasureConfig& config) = 0;
-    virtual void Start() = 0;
-    virtual void Stop() = 0;
+    virtual void Start();
+    virtual void Stop();
     virtual void ClearOperationQueue() = 0;
     virtual void ClearWaitingDataErasureRequests(NIceDb::TNiceDb& db) = 0;
     virtual void ClearWaitingDataErasureRequests() = 0;
@@ -56,6 +57,8 @@ public:
     virtual void Complete() = 0;
     virtual bool Restore(NIceDb::TNiceDb& db) = 0;
     virtual bool Remove(const TPathId& pathId) = 0;
+    virtual bool Remove(const TShardIdx& shardIdx) = 0;
+    virtual void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) = 0;
 
     void Clear();
 
@@ -65,6 +68,8 @@ public:
     void IncGeneration();
     void SetGeneration(ui64 generation);
     ui64 GetGeneration() const;
+
+    bool IsRunning() const;
 };
 
 //////////////////// TRootDataErasureManager ////////////////////
@@ -126,6 +131,8 @@ public:
     void Complete() override;
     bool Restore(NIceDb::TNiceDb& db) override;
     bool Remove(const TPathId& pathId) override;
+    bool Remove(const TShardIdx& shardIdx) override;
+    void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) override;
 
 private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);
@@ -185,6 +192,8 @@ public:
     void Complete() override;
     bool Restore(NIceDb::TNiceDb& db) override;
     bool Remove(const TPathId& pathId) override;
+    bool Remove(const TShardIdx& shardIdx) override;
+    void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) override;
 
 private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);

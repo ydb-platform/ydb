@@ -60,6 +60,7 @@ void TRootDataErasureManager::UpdateConfig(const NKikimrConfig::TDataErasureConf
 }
 
 void TRootDataErasureManager::Start() {
+    TDataErasureManager::Start();
     const auto ctx = SchemeShard->ActorContext();
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[RootDataErasureManager] Start: Status# " << static_cast<ui32>(Status));
@@ -77,6 +78,7 @@ void TRootDataErasureManager::Start() {
 }
 
 void TRootDataErasureManager::Stop() {
+    TDataErasureManager::Stop();
     const auto ctx = SchemeShard->ActorContext();
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[RootDataErasureManager] Stop");
@@ -471,6 +473,8 @@ bool TRootDataErasureManager::Restore(NIceDb::TNiceDb& db) {
 bool TRootDataErasureManager::Remove(const TPathId& pathId) {
     auto it = WaitingDataErasureTenants.find(pathId);
     if (it != WaitingDataErasureTenants.end()) {
+        Queue->Remove(pathId);
+        ActivePipes.erase(pathId);
         WaitingDataErasureTenants[pathId] = EStatus::COMPLETED;
         bool isDataErasureCompleted = true;
         for (const auto& [pathId, status] : WaitingDataErasureTenants) {
@@ -486,6 +490,17 @@ bool TRootDataErasureManager::Remove(const TPathId& pathId) {
         return true;
     }
     return false;
+}
+
+bool TRootDataErasureManager::Remove(const TShardIdx&) {
+    auto ctx = SchemeShard->ActorContext();
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[RootDataErasureManager] [Remove] Cannot execute in root schemeshard: " << SchemeShard->TabletID());
+    return false;
+}
+
+void TRootDataErasureManager::HandleNewPartitioning(const std::vector<TShardIdx>&, NIceDb::TNiceDb&) {
+    auto ctx = SchemeShard->ActorContext();
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[RootDataErasureManager] [HandleNewPartitioning] Cannot execute in root schemeshard: " << SchemeShard->TabletID());
 }
 
 void TRootDataErasureManager::UpdateMetrics() {

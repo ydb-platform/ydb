@@ -31,4 +31,16 @@ void TDataErasureManager::Clear() {
     ClearWaitingDataErasureRequests();
 }
 
+void TDataErasureManager::Start() {
+    Running = true;
+}
+
+void TDataErasureManager::Stop() {
+    Running = false;
+}
+
+bool TDataErasureManager::IsRunning() const {
+    return Running;
+}
+
 } // NKikimr::NSchemeShard

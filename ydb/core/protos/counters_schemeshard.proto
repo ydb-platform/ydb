@@ -635,4 +635,7 @@ enum ETxTypes {
     TXTYPE_COMPLETE_DATA_ERASURE_SHARD = 95 [(TxTypeOpts) = {Name: "TxCompleteDataErasureShard"}];
     TXTYPE_COMPLETE_DATA_ERASURE_TENANT = 96 [(TxTypeOpts) = {Name: "TxCompleteDataErasureTenant"}];
     TXTYPE_COMPLETE_DATA_ERASURE_BSC = 97 [(TxTypeOpts) = {Name: "TxCompleteDataErasureBSC"}];
+
+    TXTYPE_ADD_SHARDS_DATA_ERASURE = 98 [(TxTypeOpts) = {Name: "TxAddShardsDataErasure"}];
+    TXTYPE_CANCEL_SHARDS_DATA_ERASURE = 99 [(TxTypeOpts) = {Name: "TxCancelShardsDataErasure"}];
 }

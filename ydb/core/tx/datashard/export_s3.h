@@ -35,11 +35,7 @@ public:
             .WithMaxRows(maxRows)
             .WithMaxBytes(maxBytes);
         if (Task.GetEnableChecksums()) {
-            bufferSettings
-                .WithChecksum(
-                    TS3ExportBufferSettings::TChecksumSettings()
-                        .WithChecksumType(TS3ExportBufferSettings::TChecksumSettings::EChecksumType::Sha256)
-                );
+            bufferSettings.WithChecksum(TS3ExportBufferSettings::Sha256Checksum());
         }
 
         switch (CodecFromTask(Task)) {
@@ -48,11 +44,7 @@ public:
         case ECompressionCodec::Zstd:
             bufferSettings
                 .WithMinBytes(minBytes)
-                .WithCompression(
-                    TS3ExportBufferSettings::TCompressionSettings()
-                        .WithAlgorithm(TS3ExportBufferSettings::TCompressionSettings::EAlgorithm::Zstd)
-                        .WithCompressionLevel(Task.GetCompression().GetLevel())
-                );
+                .WithCompression(TS3ExportBufferSettings::ZstdCompression(Task.GetCompression().GetLevel()));
             break;
         case ECompressionCodec::Invalid:
             Y_ABORT("unreachable");

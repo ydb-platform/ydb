@@ -29,9 +29,9 @@ struct DestroyZCtx {
 
 class TZStdCompressionProcessor {
 public:
-    using TPtr = std::unique_ptr<TZStdCompressionProcessor>;
+    using TPtr = THolder<TZStdCompressionProcessor>;
 
-    TZStdCompressionProcessor(const TS3ExportBufferSettings::TCompressionSettings& settings);
+    explicit TZStdCompressionProcessor(const TS3ExportBufferSettings::TCompressionSettings& settings);
 
     TString GetError() const {
         return ZSTD_getErrorName(ErrorCode);
@@ -124,7 +124,7 @@ NBackup::IChecksum* TS3Buffer::CreateChecksum(const TMaybe<TS3ExportBufferSettin
 
 TZStdCompressionProcessor* TS3Buffer::CreateCompression(const TMaybe<TS3ExportBufferSettings::TCompressionSettings>& settings) {
     if (settings) {
-        switch (settings->Alg) {
+        switch (settings->Algorithm) {
         case TS3ExportBufferSettings::TCompressionSettings::EAlgorithm::Zstd:
             return new TZStdCompressionProcessor(*settings);
         }

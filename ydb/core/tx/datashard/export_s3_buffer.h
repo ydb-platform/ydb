@@ -27,14 +27,18 @@ struct TS3ExportBufferSettings {
         EChecksumType ChecksumType = EChecksumType::Sha256;
     };
 
+    static TChecksumSettings Sha256Checksum() {
+        return TChecksumSettings().WithChecksumType(TChecksumSettings::EChecksumType::Sha256);
+    }
+
     struct TCompressionSettings {
         enum class EAlgorithm {
             Zstd,
         };
 
         // Builders
-        TCompressionSettings& WithAlgorithm(EAlgorithm alg) {
-            Alg = alg;
+        TCompressionSettings& WithAlgorithm(EAlgorithm algorithm) {
+            Algorithm = algorithm;
             return *this;
         }
 
@@ -44,9 +48,13 @@ struct TS3ExportBufferSettings {
         }
 
         // Fields
-        EAlgorithm Alg = EAlgorithm::Zstd;
+        EAlgorithm Algorithm = EAlgorithm::Zstd;
         int CompressionLevel = -1;
     };
+
+    static TCompressionSettings ZstdCompression(int level) {
+        return TCompressionSettings().WithAlgorithm(TCompressionSettings::EAlgorithm::Zstd).WithCompressionLevel(level);
+    }
 
     // Builders
     TS3ExportBufferSettings& WithColumns(IExport::TTableColumns columns) {

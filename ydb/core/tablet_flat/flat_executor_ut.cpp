@@ -6819,5 +6819,72 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reboot) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_Gc) {
+    Y_UNIT_TEST(TestFailedGcAfterReboot) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        //env->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
+        //env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
+
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+        env.SendSync(rows.MakeRows(1));
+
+        std::vector<std::pair<ui32, ui32>> gcBarriers;
+        auto gcRequestObserver = env->AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](auto & ev) {
+            auto* msg = ev->Get();
+            if (msg->Channel == 1) {
+                Cerr << "... observed " << msg->ToString() << Endl;
+                gcBarriers.emplace_back(msg->CollectGeneration, msg->CollectStep);
+            }
+        });
+
+        std::deque<TEvBlobStorage::TEvCollectGarbageResult::TPtr> gcResults;
+        auto gcResultObserver = env->AddObserver<TEvBlobStorage::TEvCollectGarbageResult>([&](auto& ev) {
+            auto* msg = ev->Get();
+            if (msg->Channel == 1 && msg->PerGenerationCounter == 1) {
+                Cerr << "... intercepted " << msg->ToString() << Endl;
+                gcResults.push_back(std::move(ev));
+            }
+        });
+
+        Cerr << "... restarting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env->SimulateSleep(TDuration::MilliSeconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(gcBarriers.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(gcResults.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(gcBarriers[0].second, 0u);
+
+        // Replace gc result with an error
+        Cerr << "... faking a gc error" << Endl;
+        {
+            gcResultObserver.Remove();
+            gcResults.front()->Get()->Status = NKikimrProto::ERROR;
+            env->Send(gcResults.front().Release(), 0, true);
+            gcResults.pop_front();
+        }
+
+        // This write will incidentally cause a new gc attempt
+        env.SendSync(rows.MakeRows(1), /* retry */ true);
+
+        env->SimulateSleep(TDuration::MilliSeconds(10));
+        UNIT_ASSERT_C(gcBarriers.size() >= 2, gcBarriers.size());
+        UNIT_ASSERT_C(gcBarriers[0] <= gcBarriers[1], "unexpected barrier decrease");
+    }
+}
+
 }
 }

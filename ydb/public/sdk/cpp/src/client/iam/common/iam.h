@@ -203,7 +203,7 @@ public:
         : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
             [token = params.OAuthToken](TRequest& req) {
                 req.set_yandex_passport_oauth_token(TStringType{token});
-            }) {}
+            }, &TService::Stub::AsyncCreate) {}
 };
 
 template<typename TRequest, typename TResponse, typename TService>

@@ -36,7 +36,8 @@ public:
     }
 
     TKqpPartitionedExecuter(
-        IKqpGateway::TExecPhysicalRequest&& request,
+        IKqpGateway::TExecPhysicalRequest&& literalRequest,
+        IKqpGateway::TExecPhysicalRequest&& physicalRequest,
         const TActorId sessionActorId, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         const TIntrusivePtr<TKqpCounters>& counters,
@@ -48,7 +49,8 @@ public:
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings,
         const TShardIdToTableInfoPtr& shardIdToTableInfo)
-        : Request(std::move(request))
+        : LiteralRequest(std::move(literalRequest))
+        , PhysicalRequest(std::move(physicalRequest))
         , SessionActorId(sessionActorId)
         , Database(database)
         , UserToken(userToken)
@@ -63,20 +65,15 @@ public:
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
     {
-        YQL_ENSURE(Request.LocksOp != ELocksOp::Rollback);
-        YQL_ENSURE(Request.Transactions.size() == 1);
+        YQL_ENSURE(PhysicalRequest.Transactions.size() == 1);
 
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc,
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(LiteralRequest.TxAlloc,
             TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
-        for (const auto& tx : Request.Transactions) {
+        for (const auto& tx : LiteralRequest.Transactions) {
             YQL_ENSURE(tx.Body->StagesSize() > 0);
 
             for (const auto& stage : tx.Body->GetStages()) {
-                if (stage.SinksSize() != 1) {
-                    continue;
-                }
-
                 for (auto& sink : stage.GetSinks()) {
                     FillTableMetaInfo(sink);
                 }
@@ -167,7 +164,7 @@ public:
     }
 
     void CreateExecuterWithBuffer(size_t partitionIdx, bool isRetry) {
-        IKqpGateway::TExecPhysicalRequest newRequest(Request.TxAlloc);
+        IKqpGateway::TExecPhysicalRequest newRequest(PhysicalRequest.TxAlloc);
         FillRequestWithParams(newRequest, partitionIdx);
 
         auto txManager = CreateKqpTransactionManager();
@@ -175,7 +172,7 @@ public:
         TKqpBufferWriterSettings settings {
             .SessionActorId = SelfId(),
             .TxManager = txManager,
-            .TraceId = Request.TraceId.GetTraceId(),
+            .TraceId = PhysicalRequest.TraceId.GetTraceId(),
             .Counters = Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
         };
@@ -419,38 +416,38 @@ private:
     }
 
     void FillNewRequest(IKqpGateway::TExecPhysicalRequest& newRequest) {
-        newRequest.AllowTrailingResults = Request.AllowTrailingResults;
-        newRequest.QueryType = Request.QueryType;
-        newRequest.PerRequestDataSizeLimit = Request.PerRequestDataSizeLimit;
-        newRequest.MaxShardCount = Request.MaxShardCount;
-        newRequest.DataShardLocks = Request.DataShardLocks;
-        newRequest.LocksOp = Request.LocksOp;
-        newRequest.AcquireLocksTxId = Request.AcquireLocksTxId;
-        newRequest.Timeout = Request.Timeout;
-        newRequest.CancelAfter = Request.CancelAfter;
-        newRequest.MaxComputeActors = Request.MaxComputeActors;
-        newRequest.MaxAffectedShards = Request.MaxAffectedShards;
-        newRequest.TotalReadSizeLimitBytes = Request.TotalReadSizeLimitBytes;
-        newRequest.MkqlMemoryLimit = Request.MkqlMemoryLimit;
-        newRequest.PerShardKeysSizeLimitBytes = Request.PerShardKeysSizeLimitBytes;
-        newRequest.StatsMode = Request.StatsMode;
-        newRequest.ProgressStatsPeriod = Request.ProgressStatsPeriod;
-        newRequest.Snapshot = Request.Snapshot;
-        newRequest.ResourceManager_ = Request.ResourceManager_;
-        newRequest.CaFactory_ = Request.CaFactory_;
-        newRequest.IsolationLevel = Request.IsolationLevel;
-        newRequest.RlPath = Request.RlPath;
-        newRequest.NeedTxId = Request.NeedTxId;
-        newRequest.UseImmediateEffects = Request.UseImmediateEffects;
+        newRequest.AllowTrailingResults = PhysicalRequest.AllowTrailingResults;
+        newRequest.QueryType = PhysicalRequest.QueryType;
+        newRequest.PerRequestDataSizeLimit = PhysicalRequest.PerRequestDataSizeLimit;
+        newRequest.MaxShardCount = PhysicalRequest.MaxShardCount;
+        newRequest.DataShardLocks = PhysicalRequest.DataShardLocks;
+        newRequest.LocksOp = PhysicalRequest.LocksOp;
+        newRequest.AcquireLocksTxId = PhysicalRequest.AcquireLocksTxId;
+        newRequest.Timeout = PhysicalRequest.Timeout;
+        newRequest.CancelAfter = PhysicalRequest.CancelAfter;
+        newRequest.MaxComputeActors = PhysicalRequest.MaxComputeActors;
+        newRequest.MaxAffectedShards = PhysicalRequest.MaxAffectedShards;
+        newRequest.TotalReadSizeLimitBytes = PhysicalRequest.TotalReadSizeLimitBytes;
+        newRequest.MkqlMemoryLimit = PhysicalRequest.MkqlMemoryLimit;
+        newRequest.PerShardKeysSizeLimitBytes = PhysicalRequest.PerShardKeysSizeLimitBytes;
+        newRequest.StatsMode = PhysicalRequest.StatsMode;
+        newRequest.ProgressStatsPeriod = PhysicalRequest.ProgressStatsPeriod;
+        newRequest.Snapshot = PhysicalRequest.Snapshot;
+        newRequest.ResourceManager_ = PhysicalRequest.ResourceManager_;
+        newRequest.CaFactory_ = PhysicalRequest.CaFactory_;
+        newRequest.IsolationLevel = PhysicalRequest.IsolationLevel;
+        newRequest.RlPath = PhysicalRequest.RlPath;
+        newRequest.NeedTxId = PhysicalRequest.NeedTxId;
+        newRequest.UseImmediateEffects = PhysicalRequest.UseImmediateEffects;
         // newRequest.Orbit = Request.Orbit;
         // newRequest.TraceId = Request.TraceId;
-        newRequest.UserTraceId = Request.UserTraceId;
-        newRequest.OutputChunkMaxSize = Request.OutputChunkMaxSize;
+        newRequest.UserTraceId = PhysicalRequest.UserTraceId;
+        newRequest.OutputChunkMaxSize = PhysicalRequest.OutputChunkMaxSize;
 
-        newRequest.Transactions.emplace_back(Request.Transactions.front().Body, std::make_shared<TQueryData>(Request.TxAlloc));
+        newRequest.Transactions.emplace_back(PhysicalRequest.Transactions.front().Body, std::make_shared<TQueryData>(PhysicalRequest.TxAlloc));
 
         auto newParams = newRequest.Transactions.front().Params;
-        auto oldParams = Request.Transactions.front().Params;
+        auto oldParams = PhysicalRequest.Transactions.front().Params;
         for (auto& [name, _] : oldParams->GetParams()) {
             if (!name.StartsWith(NBatchParams::Header)) {
                 TTypedUnboxedValue& typedValue = oldParams->GetParameterUnboxedValue(name);
@@ -505,7 +502,8 @@ private:
 
 private:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
-    IKqpGateway::TExecPhysicalRequest Request;
+    IKqpGateway::TExecPhysicalRequest LiteralRequest;
+    IKqpGateway::TExecPhysicalRequest PhysicalRequest;
     const TActorId SessionActorId;
     TVector<TActorId> Executers;
     TVector<TActorId> BufferActors;
@@ -535,16 +533,17 @@ private:
 } // namespace
 
 NActors::IActor* CreateKqpPartitionedExecuter(
-    NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& request, const TActorId sessionActorId, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TIntrusivePtr<NKikimr::NKqp::TKqpCounters>& counters,
-    NKikimr::NKqp::TKqpRequestCounters::TPtr requestCounters, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery,
-    const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
-    const std::optional<NKikimr::NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const NKikimr::NKqp::TShardIdToTableInfoPtr& shardIdToTableInfo)
+    NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& literalRequest, NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& physicalRequest,
+    const TActorId sessionActorId, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    const TIntrusivePtr<NKikimr::NKqp::TKqpCounters>& counters, NKikimr::NKqp::TKqpRequestCounters::TPtr requestCounters,
+    const NKikimrConfig::TTableServiceConfig& tableServiceConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+    TPreparedQueryHolder::TConstPtr preparedQuery, const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext,
+    ui32 statementResultIndex, const std::optional<NKikimr::NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup,
+    const TGUCSettings::TPtr& GUCSettings, const NKikimr::NKqp::TShardIdToTableInfoPtr& shardIdToTableInfo)
 {
-    return new TKqpPartitionedExecuter(std::move(request), sessionActorId, database, userToken, counters, requestCounters, tableServiceConfig, std::move(asyncIoFactory), std::move(preparedQuery), userRequestContext, statementResultIndex, federatedQuerySetup,
-        GUCSettings, shardIdToTableInfo);
+    return new TKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest), sessionActorId, database, userToken,
+        counters, requestCounters, tableServiceConfig, std::move(asyncIoFactory), std::move(preparedQuery), userRequestContext,
+        statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo);
 }
 
 } // namespace NKqp

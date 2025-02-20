@@ -98,16 +98,28 @@ void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQuery
     }
 }
 
-bool FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const TKqpPhyTxHolder::TConstPtr& tx) {
-    for (const auto& stage : tx->GetStages()) {
-        if (stage.SinksSize() != 1) {
-            continue;
-        }
-        for (auto& sink : stage.GetSinks()) {
-            return sink.GetInternalSink().GetSettings().UnpackTo(&settings);
-        }
+bool FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const NKqpProto::TKqpSink& sink) {
+    if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink
+        && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>())
+    {
+        return sink.GetInternalSink().GetSettings().UnpackTo(&settings);
     }
 
+    return false;
+}
+
+bool IsBatchQuery(const NKqpProto::TKqpPhyQuery& physicalQuery) {
+    NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+    for (const auto& tx : physicalQuery.GetTransactions()) {
+        for (const auto& stage : tx.GetStages()) {
+            for (auto& sink : stage.GetSinks()) {
+                auto isFilledSettings = FillTableSinkSettings(sinkSettings, sink);
+                if (isFilledSettings && sinkSettings.GetIsBatch()) {
+                    return true;
+                }
+            }
+        }
+    }
     return false;
 }
 
@@ -1170,13 +1182,53 @@ public:
             return;
         }
 
-        if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
+        if (Settings.TableService.GetEnableOltpSink() && IsBatchQuery(QueryState->PreparedQuery->GetPhysicalQuery())) {
+            ExecutePartitioned(tx);
+        } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
             ExecuteDeferredEffectsImmediately(tx);
         } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
             ExecutePhyTx(tx, commit);
         } else {
             ReplySuccess();
         }
+    }
+
+    void ExecutePartitioned(const TKqpPhyTxHolder::TConstPtr& tx) {
+        auto& txCtx = *QueryState->TxCtx;
+
+        auto literalRequest = PrepareLiteralRequest(QueryState.get());
+        auto physicalRequest = PreparePhysicalRequest(QueryState.get(), txCtx.TxAlloc);
+
+        try {
+            QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txCtx.TxAlloc->TypeEnv);
+        } catch (const yexception& ex) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+        }
+        literalRequest.Transactions.emplace_back(tx, QueryState->QueryData);
+        physicalRequest.Transactions.emplace_back(tx, QueryState->QueryData);
+
+        QueryState->TxCtx->OnNewExecutor(false);
+
+        literalRequest.Orbit = std::move(QueryState->Orbit);
+        literalRequest.TraceId = QueryState->KqpSessionSpan.GetTraceId();
+
+        QueryState->Commited = true;
+
+        for (const auto& effect : txCtx.DeferredEffects) {
+            physicalRequest.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
+
+            LOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction,"
+                    << " current Transactions.size(): " << physicalRequest.Transactions.size());
+        }
+
+        if (!txCtx.DeferredEffects.Empty()) {
+            physicalRequest.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
+        }
+
+        physicalRequest.LocksOp = ELocksOp::Commit;
+
+        SendToPartitionedExecuter(QueryState->TxCtx.Get(), std::move(literalRequest), std::move(physicalRequest));
+        ++QueryState->CurrentTx;
     }
 
     void ExecuteDeferredEffectsImmediately(const TKqpPhyTxHolder::TConstPtr& tx) {
@@ -1421,22 +1473,6 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
-        if (!request.Transactions.empty()) {
-            auto isBatch = IsBatchQuery(request.Transactions.front().Body);
-
-            if (Settings.TableService.GetEnableOltpSink() && isBatch) {
-                if (!Settings.TableService.GetEnableBatchUpdates()) {
-                    ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "Batch updates and deletes are disabled at current time.");
-                }
-
-                SendToPartitionedExecuter(txCtx, std::move(request));
-                return;
-            }
-
-            YQL_ENSURE(!isBatch || Settings.TableService.GetEnableBatchUpdates());
-        }
-
         if (Settings.TableService.GetEnableOltpSink() && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();
             txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
@@ -1482,8 +1518,10 @@ public:
         ExecuterId = exId;
     }
 
-    void SendToPartitionedExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& request) {
-        auto executerActor = CreateKqpPartitionedExecuter(std::move(request), SelfId(), Settings.Database,
+    void SendToPartitionedExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& literalRequest,
+        IKqpGateway::TExecPhysicalRequest&& physicalRequest)
+    {
+        auto executerActor = CreateKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest), SelfId(), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(), Counters,
             RequestCounters, Settings.TableService, AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr,
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),

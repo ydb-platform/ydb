@@ -1420,6 +1420,11 @@ public:
             auto isFilledSettings = FillTableSinkSettings(sinkSettings, request.Transactions.front().Body);
 
             if (Settings.TableService.GetEnableOltpSink() && isFilledSettings && sinkSettings.GetIsBatch()) {
+                if (!Settings.TableService.GetEnableBatchUpdates()) {
+                    ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Batch updates and deletes are disabled at current time.");
+                }
+
                 SendToPartitionedExecuter(txCtx, std::move(request));
                 return;
             }

@@ -17,6 +17,7 @@ NKikimrConfig::TAppConfig GetAppConfig() {
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);
     app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+    app.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
     return app;
 }
 

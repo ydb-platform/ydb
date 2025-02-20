@@ -637,6 +637,25 @@ private:
         return path->LastTxId;
     }
 
+    TTxId GetActiveCreateConsumerTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        const auto& item = importInfo->Items.at(itemIdx);
+
+        Y_ABORT_UNLESS(item.State == EState::CreateChangefeed);
+        Y_ABORT_UNLESS(item.DstPathId);
+
+        if (!Self->PathsById.contains(item.DstPathId)) {
+            return InvalidTxId;
+        }
+
+        auto path = Self->PathsById.at(item.DstPathId);
+        if (path->PathState != NKikimrSchemeOp::EPathStateAlter) {
+            return InvalidTxId;
+        }
+
+        return path->LastTxId;
+    }
+
     static TString MakeIndexBuildUid(TImportInfo::TPtr importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         const auto& item = importInfo->Items.at(itemIdx);
@@ -1060,8 +1079,11 @@ private:
                 break;
             
             case EState::CreateChangefeed:
-                CreateChangefeed(importInfo, i, txId);
-                CreateConsumers(importInfo, i, txId);
+                if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
+                    CreateChangefeed(importInfo, i, txId);
+                } else {
+                    CreateConsumers(importInfo, i, txId);
+                }
                 itemIdx = i;
                 break;
 
@@ -1125,7 +1147,12 @@ private:
                 } else if (item.State == EState::Transferring) {
                     txId = GetActiveRestoreTxId(importInfo, itemIdx);
                 } else if (item.State == EState::CreateChangefeed) {
-                    txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
+                    if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
+                        txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
+                    } else {
+                        txId = GetActiveCreateConsumerTxId(importInfo, itemIdx);
+                    }
+                
                 }
             }
 
@@ -1306,7 +1333,11 @@ private:
             break;
         
         case EState::CreateChangefeed:
-            if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
+            if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
+                item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateConsumers;
+                AllocateTxId(importInfo, itemIdx);
+            } else if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
+                item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateChangefeed;
                 AllocateTxId(importInfo, itemIdx);
             } else {
                 item.State = EState::Done;

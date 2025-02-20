@@ -2845,6 +2845,11 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
             Subscribed,
         };
 
+        enum class EChangefeedState: ui8 {
+            CreateChangefeed = 0,
+            CreateConsumers,
+        };
+
         TString DstPathName;
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
@@ -2856,6 +2861,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
+        EChangefeedState ChangefeedState = EChangefeedState::CreateChangefeed;
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;

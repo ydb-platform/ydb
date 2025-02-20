@@ -907,7 +907,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(Decimal) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"_(
@@ -917,7 +917,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Name: "default"
                 Schema {
                     Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
-                    Columns { Name: "data" Type: "Decimal(35,9)" }
+                    Columns { Name: "data" Type: "Decimal(22,9)" }
                     KeyColumnNames: "timestamp"
                 }
             }
@@ -926,4 +926,29 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
     }
+
+    Y_UNIT_TEST_FLAG(Decimal35, EnableParameterizedDecimalOlap) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimalOlap(EnableParameterizedDecimalOlap));
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"_(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "data" Type: "Decimal(35,10)" }
+                    KeyColumnNames: "timestamp"
+                }
+            }
+        )_", { EnableParameterizedDecimalOlap ? NKikimrScheme::StatusAccepted : NKikimrScheme::StatusSchemeError });
+
+        if (EnableParameterizedDecimalOlap) {
+            env.TestWaitNotification(runtime, txId);
+
+            TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
+        }
+    }    
 }

@@ -102,6 +102,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         FeatureFlags.SetEnableSparsedColumns(true);
         FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
+        FeatureFlags.SetEnableParameterizedDecimalOlap(true);
         FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
         FeatureFlags.SetEnableFollowerStats(true);
         FeatureFlags.SetEnableColumnStore(true);

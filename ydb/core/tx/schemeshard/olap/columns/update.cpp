@@ -93,15 +93,27 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         return false;
     }
 
-    if (Type.GetTypeId() == NScheme::NTypeIds::Pg) {
-        if (!IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc()))) {
-            errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
-            return false;
+    switch (Type.GetTypeId()) {
+        case NScheme::NTypeIds::Decimal: {
+            if (Type != NScheme::TDecimalType::Default() && !AppData()->FeatureFlags.GetEnableParameterizedDecimalOlap()) {
+                errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported. Turn on feature flag 'EnableParameterizedDecimalOlap'");
+                return false;
+            }
+            break;
         }
-    } else {
-        if (!IsAllowedType(Type.GetTypeId())) {
-            errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
-            return false;
+        case NScheme::NTypeIds::Pg: {
+            if (!IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc()))) {
+                errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
+            break;
+        }
+        default: {
+            if (!IsAllowedType(Type.GetTypeId())) {
+                errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
+            break;
         }
     }
 

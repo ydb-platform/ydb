@@ -604,6 +604,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableChangefeedsOnIndexTables(opts.EnableChangefeedsOnIndexTables_);
     app.SetEnableTieringInColumnShard(opts.EnableTieringInColumnShard_);
     app.SetEnableParameterizedDecimal(opts.EnableParameterizedDecimal_);
+    app.SetEnableParameterizedDecimalOlap(opts.EnableParameterizedDecimalOlap_);
     app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
     app.SetEnableBackupService(opts.EnableBackupService_);
     app.SetEnableExportChecksums(true);

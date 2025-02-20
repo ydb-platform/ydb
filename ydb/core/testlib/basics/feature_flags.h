@@ -69,6 +69,7 @@ public:
     FEATURE_FLAG_SETTER(EnableMetadataObjectsOnServerless)
     FEATURE_FLAG_SETTER(EnableOlapCompression)
     FEATURE_FLAG_SETTER(EnableParameterizedDecimal)
+    FEATURE_FLAG_SETTER(EnableParameterizedDecimalOlap)
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForCDC)
     FEATURE_FLAG_SETTER(EnableFollowerStats)
     FEATURE_FLAG_SETTER(EnableExportChecksums)

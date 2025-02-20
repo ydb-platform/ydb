@@ -191,38 +191,68 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnViewsAndTablesWithPermissions) {
-        RunS3({
+    Y_UNIT_TEST(ShouldSucceedOnViewsAndTablesPermissions) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TTestWithReboots t;
+        t.GetTestEnvOptions() = TTestEnvOptions().EnablePermissionsExport(true);
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
-                EPathTypeView,
-                R"(
-                    Name: "View"
-                    QueryText: "some query"
-                )"
-            }, {
-                EPathTypeTable,
-                R"(
-                    Name: "Table"
-                    Columns { Name: "key" Type: "Utf8" }
-                    Columns { Name: "value" Type: "Utf8" }
-                    KeyColumnNames: ["key"]
-                )"
+                TInactiveZone inactive(activeZone);
+                CreateSchemeObjects(t, runtime, {
+                    {
+                        EPathTypeView,
+                        R"(
+                            Name: "View"
+                            QueryText: "some query"
+                        )"
+                    }, {
+                        EPathTypeTable,
+                        R"(
+                            Name: "Table"
+                            Columns { Name: "key" Type: "Utf8" }
+                            Columns { Name: "value" Type: "Utf8" }
+                            KeyColumnNames: ["key"]
+                        )"
+                    }
+                });
+
+                TestExport(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
+                    ExportToS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items {
+                            source_path: "/MyRoot/View"
+                            destination_prefix: "view"
+                        }
+                        items {
+                            source_path: "/MyRoot/Table"
+                            destination_prefix: "table"
+                        }
+                    }
+                )", port));
             }
-        }, R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/View"
-                destination_prefix: "view"
-              }
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: "table"
-              }
+    
+            const ui64 exportId = t.TxId;
+            t.TestEnv->TestWaitNotification(runtime, exportId);
+    
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetExport(runtime, exportId, "/MyRoot");
             }
-        )",
-        TTestEnvOptions().EnablePermissionsExport(true));
+        });
+
+        auto* tablePermissions = s3Mock.GetData().FindPtr("/table/permissions.pb");
+        UNIT_ASSERT(tablePermissions);
+
+        auto* viewPermissions = s3Mock.GetData().FindPtr("/view/permissions.pb");
+        UNIT_ASSERT(viewPermissions);
     }
 
     Y_UNIT_TEST(CancelShouldSucceedOnSingleShardTable) {

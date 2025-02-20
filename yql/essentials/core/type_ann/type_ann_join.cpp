@@ -905,6 +905,20 @@ namespace NTypeAnnImpl {
             else if (optionName == "join_algo") {
                 // do nothing
             }
+            else if (optionName == "shuffle_lhs_by" || optionName == "shuffle_rhs_by") {
+                for (ui64 i = 1; i < child->ChildrenSize(); ++i) {
+                    const auto& shuffleColumn = child->Child(i);
+                    if (!EnsureTupleSize(*shuffleColumn, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (!EnsureAtom(*shuffleColumn->Child(0), ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (!EnsureAtom(*shuffleColumn->Child(1), ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                }
+            }
             else if (optionName == "compact") {
                 if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
                      return IGraphTransformer::TStatus::Error;

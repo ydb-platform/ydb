@@ -796,7 +796,7 @@ public:                                                                         
             {}
 
             template <typename THandleClassType>
-            ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status, const std::optional<THandleClassType>& handleClass = std::nullopt) {
+            ::NMonitoring::TDeprecatedCounter &GetCounterByHandleClass(NKikimrProto::EReplyStatus status, const std::optional<THandleClassType>& handleClass = std::nullopt) {
                 switch (status) {
                     case NKikimrProto::ERROR:
                         return ResponsesWithStatusError.GetCounter(handleClass);
@@ -817,7 +817,13 @@ public:                                                                         
             }
 
             ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status) {
-                return GetCounter(status, std::optional<NKikimrBlobStorage::EPutHandleClass>{});
+                return GetCounterByHandleClass(status, std::optional<NKikimrBlobStorage::EPutHandleClass>{});
+            }
+            ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status, const std::optional<NKikimrBlobStorage::EPutHandleClass>& handleClass) {
+                return GetCounterByHandleClass(status, handleClass);
+            }
+            ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status, const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass) {
+                return GetCounterByHandleClass(status, handleClass);
             }
         };
 

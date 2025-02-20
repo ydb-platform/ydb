@@ -26,22 +26,18 @@ struct TCommonHandleClass {
             TCommonHandleClass(ev.GetHandleClass());
         }
     }
-    template <>
-    TCommonHandleClass(const NKikimrBlobStorage::EPutHandleClass& putHandleClass) {
-        PutHandleClass = putHandleClass;
-    }
-    template <>
-    TCommonHandleClass(const NKikimrBlobStorage::EGetHandleClass& getHandleClass) {
-        GetHandleClass = getHandleClass;
-    }
-    
 
-    std::optional<NKikimrBlobStorage::EPutHandleClass> PutHandleClass;
-    std::optional<NKikimrBlobStorage::EGetHandleClass> GetHandleClass;
+    TCommonHandleClass(const NKikimrBlobStorage::EPutHandleClass& putHandleClass) {
+        HandleClass = putHandleClass;
+    }
+    TCommonHandleClass(const NKikimrBlobStorage::EGetHandleClass& getHandleClass) {
+        HandleClass = getHandleClass;
+    }
+
+    std::variant<std::monostate, NKikimrBlobStorage::EPutHandleClass, NKikimrBlobStorage::EGetHandleClass>  HandleClass;
 };
 
 void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, const TIntrusivePtr<TVDiskContext>& vCtx, const TCommonHandleClass& handleClass);
-
 void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, ui32 channel, const TIntrusivePtr<TVDiskContext>& vCtx, const TCommonHandleClass& handleClass);
 
 }//NKikimr

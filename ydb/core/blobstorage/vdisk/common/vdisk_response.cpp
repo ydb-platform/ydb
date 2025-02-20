@@ -70,16 +70,19 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
     }
 }
 
-template <typename T, typename Tuple>
-struct IsInTypes;
+template <typename... Types>
+struct TypesList {};
+
+template <typename T, typename TapesList>
+struct IsInTypesList;
 
 template <typename T, typename... Types>
-struct IsInTypes<T, std::tuple<Types...>> {
+struct IsInTypesList<T, TypesList<Types...>> {
     static constexpr bool value = (std::is_same_v<T, Types> || ...);
 };
 
 struct TReportingOSStatus {
-    using EnableFor = std::tuple<
+    using EnableFor = TypesList<
         NKikimrBlobStorage::TEvVPutResult,
         NKikimrBlobStorage::TEvVMultiPutResult>;
 
@@ -100,7 +103,7 @@ struct TReportingOSStatus {
 };
 
 struct TReportingResponseStatus {
-    using EnableFor = std::tuple<
+    using EnableFor = TypesList<
         NKikimrBlobStorage::TEvVPutResult,
         NKikimrBlobStorage::TEvVMultiPutResult,
         NKikimrBlobStorage::TEvVGetResult,
@@ -114,22 +117,24 @@ struct TReportingResponseStatus {
 
     template<>
     void Report(const NKikimrBlobStorage::TEvVMultiPutResult& record, const TCommonHandleClass& handleClass, const TIntrusivePtr<TVDiskContext>& vCtx) {
-    for (const auto& item : record.GetItems()) {
-        UpdateMonResponseStatus(item.GetStatus(), handleClass, vCtx->ResponseStatusMonGroup);
+        for (const auto& item : record.GetItems()) {
+            UpdateMonResponseStatus(item.GetStatus(), handleClass, vCtx->ResponseStatusMonGroup);
+        }
     }
-}
 };
 
-#define DEFUNE_REPORT(NAME)                                                                              \
-    template <typename TRecord>                                                                          \
-    typename std::enable_if<IsInTypes<TRecord, TReporting##NAME::EnableFor>::value>::type Report##NAME(  \
-            const TRecord& record, const TCommonHandleClass& handleClass, const TIntrusivePtr<TVDiskContext>& vCtx) {                           \
+#define DEFUNE_REPORT(NAME)                                                                                           \
+    template <typename TRecord>                                                                                       \
+    constexpr bool Is##NAME##Enabled = IsInTypesList<TRecord, TReporting##NAME::EnableFor>::value;                    \
+    template <typename TRecord>                                                                                       \
+    typename std::enable_if<IsInTypesList<TRecord, TReporting##NAME::EnableFor>::value>::type Report##NAME(           \
+            const TRecord& record, const TCommonHandleClass& handleClass, const TIntrusivePtr<TVDiskContext>& vCtx) { \
         TReporting##NAME::Report(record, handleClass, vCtx);                                                          \
-    }                                                                                                    \
-                                                                                                         \
-    template <typename TRecord>                                                                          \
-    typename std::enable_if<!IsInTypes<TRecord, TReporting##NAME::EnableFor>::value>::type Report##NAME( \
-            const TRecord& record, const TCommonHandleClass& handleClass, const TIntrusivePtr<TVDiskContext>& vCtx) {}
+    }                                                                                                                 \
+                                                                                                                      \
+    template <typename TRecord>                                                                                       \
+    typename std::enable_if<!IsInTypesList<TRecord, TReporting##NAME::EnableFor>::value>::type Report##NAME(          \
+            const TRecord&, const TCommonHandleClass&, const TIntrusivePtr<TVDiskContext>&) {}
 
     DEFUNE_REPORT(OSStatus)
     DEFUNE_REPORT(ResponseStatus)
@@ -188,10 +193,10 @@ void UpdateMonResponseStatus(NKikimrProto::EReplyStatus status, const TCommonHan
         return;
     }
 
-    if (handleClass.PutHandleClass) {
-        monGroup->GetCounter(status, handleClass.PutHandleClass).Inc();
-    } else if (handleClass.GetHandleClass) {
-        monGroup->GetCounter(status, handleClass.GetHandleClass).Inc();
+    if (std::holds_alternative<NKikimrBlobStorage::EPutHandleClass>(handleClass.HandleClass)) {
+        monGroup->GetCounter(status, std::get<NKikimrBlobStorage::EPutHandleClass>(handleClass.HandleClass)).Inc();
+    } else if (std::holds_alternative<NKikimrBlobStorage::EGetHandleClass>(handleClass.HandleClass)) {
+        monGroup->GetCounter(status, std::get<NKikimrBlobStorage::EGetHandleClass>(handleClass.HandleClass)).Inc();
     } else {
         monGroup->GetCounter(status).Inc();
     }

@@ -12,7 +12,7 @@ namespace {
 }
 
 bool ShouldReattach(TInstant now, TReattachInfo& reattachInfo) {
-    if (reattachInfo.Reattaching) {
+    if (!reattachInfo.Reattaching) {
         reattachInfo.Deadline = now + MaxReattachDuration;
         reattachInfo.Delay = TDuration::Zero();
         reattachInfo.Reattaching = true;

@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 
-#--table_path perfomance/olap/fast_results --query_path /home/kirrysin/fork/.github/scripts/analytics/query_select.sql --store_type column --partition_keys Run_start_timestamp --primary_keys Db Suite Test Branch Run_start_timestamp --ttl_min 43200 --ttl_key Run_start_timestamp
+#--query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_mart.sql --table_path perfomance/olap/fast_results --store_type column --partition_keys Run_start_timestamp --primary_keys Db Suite Test Branch Run_start_timestamp --ttl_min 43200 --ttl_key Run_start_timestamp
 import argparse
 import ydb
 import configparser
 import os
+import time
 
 # Load configuration
 dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
 config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
 config.read(config_file_path)
+repo_path = os.path.abspath(f"{dir}/../../../")
 
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
@@ -19,8 +21,8 @@ def get_data_from_query_with_metadata(driver, query):
     results = []
     scan_query = ydb.ScanQuery(query, {})
     it = driver.table_client.scan_query(scan_query)
-    print(f"Executing query: {query}")
-    
+    print(f"Executing query")
+    start_time = time.time()
     column_types = None
     while True:
         try:
@@ -32,7 +34,9 @@ def get_data_from_query_with_metadata(driver, query):
         
         except StopIteration:
             break
-    
+
+    end_time = time.time()
+    print(f'Captured {len(results)} rows, duration: {end_time - start_time}s')
     return results, column_types
 
 def ydb_type_to_str(ydb_type, store_type = 'ROW'):
@@ -69,8 +73,6 @@ def create_table(session, table_path, column_types, store_type, partition_keys, 
 
     columns_sql = []
     for column_name, column_ydb_type in column_types:
-        #if column_name == 'Suite_not_runned':
-        #    print(1)
         column_type_obj, column_type_str = ydb_type_to_str(column_ydb_type, store_type.upper())
         if column_name in primary_keys:
             columns_sql.append(f"`{column_name}` {column_type_str.replace('?','')} NOT NULL")
@@ -146,7 +148,8 @@ def main():
     batch_size = 50000
 
     # Read SQL query from file
-    sql_query_path = args.query_path
+    sql_query_path = os.path.join(repo_path, args.query_path)
+    print(f'Query found: {sql_query_path}')
     with open(sql_query_path, 'r') as file:
         sql_query = file.read()
 

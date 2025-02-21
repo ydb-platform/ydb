@@ -2,6 +2,7 @@
 
 #include <util/string/builder.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/ast/yql_expr.h>
 
 namespace NYql::NS3Util {
 
@@ -29,5 +30,7 @@ private:
     std::vector<TParam> Params;
     TString MainUri;
 };
+
+bool ValidateS3ReadWriteSchema(const TStructExprType* schemaStructRowType, TExprContext& ctx);
 
 }

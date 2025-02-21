@@ -150,6 +150,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
         const bool hasPartitioning = objectStorage.projection_size() || objectStorage.partitioned_by_size();
         issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting(), location, hasPartitioning));
+        issues.AddIssues(ValidateSchema(schema));
         issues.AddIssues(ValidateJsonListFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
         issues.AddIssues(ValidateRawFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
         if (hasPartitioning) {
@@ -265,6 +266,22 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "unknown format setting " + key));
             }
         }
+        return issues;
+    }
+
+    template<typename TScheme>
+    static NYql::TIssues ValidateSchema(const TScheme& schema) {
+        NYql::TIssues issues;
+        for (const auto& column: schema.column()) {
+            const auto type = column.type();
+            if (type.has_optional_type() && type.optional_type().item().has_optional_type()) {
+                issues.AddIssue(MakeErrorIssue(
+                    Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder{} << "Double optional types are not supported (you have '" 
+                        << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
+            }
+        }
+
         return issues;
     }
 

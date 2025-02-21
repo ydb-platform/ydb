@@ -11,8 +11,9 @@
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
-#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
@@ -41,9 +42,6 @@ using namespace NLongTxService;
 
 namespace {
 
-static constexpr TDuration MinReattachDelay = TDuration::MilliSeconds(10);
-static constexpr TDuration MaxReattachDelay = TDuration::MilliSeconds(100);
-static constexpr TDuration MaxReattachDuration = TDuration::Seconds(4);
 static constexpr ui32 ReplySizeLimit = 48 * 1024 * 1024; // 48 MB
 
 class TKqpDataExecuter : public TKqpExecuterBase<TKqpDataExecuter, EExecType::Data> {
@@ -51,45 +49,17 @@ class TKqpDataExecuter : public TKqpExecuterBase<TKqpDataExecuter, EExecType::Da
     using TKqpSnapshot = IKqpGateway::TKqpSnapshot;
 
     struct TReattachState {
-        TDuration Delay;
-        TInstant Deadline;
+        TReattachInfo ReattachInfo;
         ui64 Cookie = 0;
-        bool Reattaching = false;
 
         bool ShouldReattach(TInstant now) {
             ++Cookie; // invalidate any previous cookie
 
-            if (!Reattaching) {
-                Deadline = now + MaxReattachDuration;
-                Delay = TDuration::Zero();
-                Reattaching = true;
-                return true;
-            }
-
-            TDuration left = Deadline - now;
-            if (!left) {
-                Reattaching = false;
-                return false;
-            }
-
-            Delay *= 2.0;
-            if (Delay < MinReattachDelay) {
-                Delay = MinReattachDelay;
-            } else if (Delay > MaxReattachDelay) {
-                Delay = MaxReattachDelay;
-            }
-
-            // Add ±10% jitter
-            Delay *= 0.9 + 0.2 * TAppData::RandomProvider->GenRandReal4();
-            if (Delay > left) {
-                Delay = left;
-            }
-
-            return true;
+            return ::NKikimr::NKqp::ShouldReattach(now, ReattachInfo);
         }
 
         void Reattached() {
-            Reattaching = false;
+            ReattachInfo.Reattaching = false;
         }
     };
 
@@ -729,13 +699,13 @@ private:
             case TShardState::EState::Prepared: {
                 // Disconnected while waiting for other shards to prepare
 
-                if ((wasRestarting || shardState->ReattachState.Reattaching) &&
+                if ((wasRestarting || shardState->ReattachState.ReattachInfo.Reattaching) &&
                     shardState->ReattachState.ShouldReattach(TlsActivationContext->Now()))
                 {
                     LOG_N("Shard " << msg->TabletId << " delivery problem (already prepared, reattaching in "
-                        << shardState->ReattachState.Delay << ")");
+                        << shardState->ReattachState.ReattachInfo.Delay << ")");
 
-                    Schedule(shardState->ReattachState.Delay, new TEvPrivate::TEvReattachToShard(msg->TabletId));
+                    Schedule(shardState->ReattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(msg->TabletId));
                     ++shardState->RestartCount;
                     return;
                 }
@@ -1542,13 +1512,13 @@ private:
                 // Proceed with query processing
                 [[fallthrough]];
             case TShardState::EState::Executing: {
-                if ((wasRestarting || shardState->ReattachState.Reattaching) &&
+                if ((wasRestarting || shardState->ReattachState.ReattachInfo.Reattaching) &&
                      shardState->ReattachState.ShouldReattach(TlsActivationContext->Now()))
                 {
                     LOG_N("Shard " << msg->TabletId << " lost pipe while waiting for reply (reattaching in "
-                        << shardState->ReattachState.Delay << ")");
+                        << shardState->ReattachState.ReattachInfo.Delay << ")");
 
-                    Schedule(shardState->ReattachState.Delay, new TEvPrivate::TEvReattachToShard(msg->TabletId));
+                    Schedule(shardState->ReattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(msg->TabletId));
                     ++shardState->RestartCount;
                     return;
                 }

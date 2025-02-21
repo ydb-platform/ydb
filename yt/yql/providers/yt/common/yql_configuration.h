@@ -116,4 +116,6 @@ constexpr bool DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS = false;
 constexpr bool DEFAULT_USE_QL_FILTER = false;
 constexpr bool DEFAULT_PRUNE_QL_FILTER_LAMBDA = true;
 
+constexpr bool DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER = false;
+
 } // NYql

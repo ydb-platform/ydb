@@ -1,5 +1,6 @@
 #include "datashard_kqp.h"
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_user_db.h"
 
 #include <ydb/core/kqp/common/kqp.h>
@@ -843,12 +844,13 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "KqpCommitLock " << lockProto.ShortDebugString());
 
             auto lockKey = MakeLockKey(lockProto);
-            sysLocks.CommitLock(lockKey);
+            auto brokenLocks = sysLocks.CommitLock(lockKey);
 
             TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
             auto txId = lockProto.GetLockId();
 
             userDb.CommitChanges(tableId, txId, writeVersion);
+            NDataIntegrity::LogIntegrityTrailsLocks(TlsActivationContext->AsActorContext(), origin, txId, brokenLocks);
         }
     } else {
         KqpEraseLocks(origin, kqpLocks, sysLocks);

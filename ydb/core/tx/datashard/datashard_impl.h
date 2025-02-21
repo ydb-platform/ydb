@@ -2126,8 +2126,8 @@ public:
      *
      * Returns true on success and false on page fault.
      */
-    bool BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tableId,
-        TArrayRef<const TCell> keyCells, absl::flat_hash_set<ui64>& volatileDependencies);
+    bool BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tableId, ui64 globalTxId,
+        TArrayRef<const TCell> keyCells, absl::flat_hash_set<ui64>& volatileDependencies, const TActorContext& ctx);
 
     /**
      * Handles a specific write conflict txId
@@ -2137,7 +2137,7 @@ public:
      *
      * Either adds txId to volatile dependencies or breaks a known write lock.
      */
-    void BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volatileDependencies);
+    bool BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volatileDependencies);
 
     enum ELogThrottlerType {
         CheckDataTxUnit_Execute = 0,

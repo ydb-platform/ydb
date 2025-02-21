@@ -48,7 +48,7 @@ public:
 
         NKikimrTxDataShard::TEvEraseRowsResponse::EStatus status;
         TString error;
-        if (!TDirectTxErase::CheckRequest(&DataShard, request, status, error)) {
+        if (!TDirectTxErase::CheckRequest(&DataShard, request, status, error, ctx)) {
             return buildUnsuccessfulResult(error);
         }
 

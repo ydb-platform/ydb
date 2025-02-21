@@ -1,6 +1,7 @@
 #include "datashard_user_db.h"
 
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 
 namespace NKikimr::NDataShard {
 
@@ -203,7 +204,8 @@ void TDataShardUserDb::UpsertRowInt(
     if (LockTxId) {
         Self.SysLocksTable().SetWriteLock(tableId, keyCells);
     } else {
-        Self.SysLocksTable().BreakLocks(tableId, keyCells);
+        auto brokenLocks = Self.SysLocksTable().BreakLocks(tableId, keyCells);
+        NDataIntegrity::LogIntegrityTrailsLocks(TlsActivationContext->AsActorContext(), Self.TabletID(), GlobalTxId, brokenLocks);
     }
     Self.SetTableUpdateTime(tableId, Now);
 
@@ -658,6 +660,7 @@ void TDataShardUserDb::BreakWriteConflict(ui64 txId) {
     } else {
         // Break uncommitted locks
         Self.SysLocksTable().BreakLock(txId);
+        NDataIntegrity::LogIntegrityTrailsLocks(TlsActivationContext->AsActorContext(), Self.TabletID(), GlobalTxId, {txId});
     }
 }
 

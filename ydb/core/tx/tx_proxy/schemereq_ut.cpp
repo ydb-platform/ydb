@@ -217,14 +217,22 @@ void SetPermissions(const TTestEnv& env, const TString& path, const TString& tar
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 }
 
-void ChangeOwner(const TTestEnv& env, const TString& path, const TString& targetSid) {
-    auto client = CreateSchemeClient(env, env.RootToken);
+void ChangeOwner(const TTestEnv& env, const TString& path, const TString& targetSid, const TString& token, TString issue = "") {
+    auto client = CreateSchemeClient(env, token);
     auto modify = NYdb::NScheme::TModifyPermissionsSettings();
     auto status = client.ModifyPermissions(path, modify.AddChangeOwner(targetSid))
         .ExtractValueSync();
-    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+    if (!issue) {
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    } else {
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), issue);
+    }
 }
 
+void ChangeOwner(const TTestEnv& env, const TString& path, const TString& targetSid) {
+    ChangeOwner(env, path, targetSid, env.RootToken);
+}
 
 Y_UNIT_TEST_SUITE(SchemeReqAccess) {
 
@@ -674,6 +682,10 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = false
         },
+        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+            .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect"},
+            .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = false
+        },
     };
     struct TTestRegistration_AlterLoginProtect_RootDB {
         TTestRegistration_AlterLoginProtect_RootDB() {
@@ -715,6 +727,26 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
     };
     static TTestRegistration_AlterLoginProtect_RootDB testRegistration_AlterLoginProtect_RootDB;
 
-}
 
+    Y_UNIT_TEST(ChangeOwnerOnDatabase) {
+        auto settings = Tests::TServerSettings()
+                                .SetNodeCount(1)
+                                .SetDynamicNodeCount(1)
+                                .SetEnableStrictUserManagement(true)
+                                .SetEnableDatabaseAdmin(true);
+    
+        TTestEnv env(settings, /* rootToken*/ "root@builtin");
+
+        TString userName = "user";
+
+        TString adminName = "admin";
+        CreateLocalUser(env, env.RootPath, adminName);
+        ChangeOwner(env, env.RootPath, adminName);
+        auto adminToken = LoginUser(env, env.RootPath, adminName, "passwd");
+
+        std::cerr << "============================================================================================================" << std::endl;
+        ChangeOwner(env, env.RootPath, userName, adminToken, "Error: Access denied for admin on path");
+        std::cerr << "============================================================================================================" << std::endl;
+    }
+}
 }  // namespace NKikimr::NTxProxyUT

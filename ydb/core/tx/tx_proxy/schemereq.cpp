@@ -63,6 +63,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     bool CheckDatabaseAdministrator = false;
     bool IsClusterAdministrator = false;
     bool IsDatabaseAdministrator = false;
+    std::unordered_set<TString> ResolvedDatabases;
 
     TBaseSchemeReq(const TTxProxyServices &services, ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon> &txProxyMon)
         : Services(services)
@@ -571,9 +572,28 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
                 request->DatabaseName = CanonizePath(GetRequestProto().GetDatabaseName());
 
-                auto& entry = request->ResultSet.emplace_back();
-                entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-                entry.Path = NKikimr::SplitPath(request->DatabaseName);
+                auto addDatabaseEntry = [&](const TString& database) -> void {
+                    request->ResultSet.push_back({
+                        .Path = NKikimr::SplitPath(database),
+                        .Operation = NSchemeCache::TSchemeCacheNavigate::OpPath
+                    });
+                };
+
+                addDatabaseEntry(request->DatabaseName);
+
+                if (GetModifyScheme().HasModifyACL() && GetModifyScheme().GetModifyACL().HasNewOwner()) {
+                    std::cerr << CanonizePath(
+                        JoinPath({GetModifyScheme().GetWorkingDir(), GetModifyScheme().GetModifyACL().GetName()})
+                    ) << std::endl;
+                    addDatabaseEntry(
+                        // "/dc-1"
+                    // std::cerr << 
+                        CanonizePath(
+                            JoinPath({GetModifyScheme().GetWorkingDir(), GetModifyScheme().GetModifyACL().GetName()})
+                        )
+                    // << std::endl;
+                    );
+                }
 
                 ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 
@@ -987,7 +1007,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             entry.RedirectRequired = toReq.RequireRedirect;
             entry.SyncVersion = true;
             entry.ShowPrivatePath = true;
-
             request->ResultSet.emplace_back(std::move(entry));
         }
 
@@ -1138,8 +1157,13 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     auto isObjectOwner = [](const auto& userToken, const NACLib::TSID& owner) {
                         return userToken->IsExist(owner);
                     };
+                    auto isDatabase = [&](const TString& path) -> bool {
+                        return ResolvedDatabases.contains(path);
+                    };
                     const auto& owner = entry.Self->Info.GetOwner();
-                    const bool allow = (isAdmin || isObjectOwner(UserToken, owner));
+                    const auto& path = CanonizePath(JoinPath({modifyScheme.GetWorkingDir(), modifyScheme.GetModifyACL().GetName()}));
+                    const bool allow = ((isAdmin || isObjectOwner(UserToken, owner)) && (IsClusterAdministrator || !isDatabase(path)));
+
                     if (!allow) {
                         const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
                             << "attempt to change ownership"
@@ -1312,6 +1336,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             << " IsClusterAdministrator: " << IsClusterAdministrator
             << " IsDatabaseAdministrator: " << IsDatabaseAdministrator
         );
+
+        ResolvedDatabases.insert(request.DatabaseName);
 
         static_cast<TDerived*>(this)->Start(ctx);
     }

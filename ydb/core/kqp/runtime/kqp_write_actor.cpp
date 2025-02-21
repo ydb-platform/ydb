@@ -1028,8 +1028,10 @@ public:
         switch (shardState) {
             case IKqpTransactionManager::EXECUTING:
                 YQL_ENSURE(Mode == EMode::COMMIT || Mode == EMode::IMMEDIATE_COMMIT);
+                break;
             case IKqpTransactionManager::PREPARED:
                 YQL_ENSURE(Mode == EMode::PREPARE);
+                break;
             case IKqpTransactionManager::PREPARING:
             case IKqpTransactionManager::FINISHED:
             case IKqpTransactionManager::ERROR:

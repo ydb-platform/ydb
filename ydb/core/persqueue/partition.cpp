@@ -1234,7 +1234,10 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
     }
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
         TxAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
+
+        // A temporary solution. This line should be deleted when we fix the error with the SeqNo promotion.
         WriteAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
+
         tx.WriteInfoApplied = true;
         WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();
         WriteKeysSizeEstimate += tx.WriteInfo->SrcIdInfo.size();

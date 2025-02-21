@@ -285,10 +285,10 @@ message TTableServiceConfig {
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 
-    optional bool EnableOlapSink = 55 [default = true];
+    optional bool EnableOlapSink = 55 [default = false];
 
     optional bool EnablePerStatementQueryExecution = 56 [default = false];
-    optional bool EnableCreateTableAs = 57 [default = true];
+    optional bool EnableCreateTableAs = 57 [default = false];
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3];
     reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
@@ -310,9 +310,9 @@ message TTableServiceConfig {
 
     optional bool EnableConstantFolding = 65 [ default = true ];
 
-    optional bool EnableImplicitQueryParameterTypes = 66 [ default = true ];
+    optional bool EnableImplicitQueryParameterTypes = 66 [ default = false ];
 
-    optional string EnableSpillingNodes = 67 [ default = "All" ];
+    optional string EnableSpillingNodes = 67 [ default = "None" ];
 
     message TComputeSchedulerSettings {
         optional uint64 AdvanceTimeIntervalUsec = 1 [default = 500000];
@@ -325,7 +325,7 @@ message TTableServiceConfig {
 
     optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 
-    optional bool EnableHtapTx = 71 [default = true];
+    optional bool EnableHtapTx = 71 [default = false];
 
     message TWriteActorSettings {
         optional uint64 InFlightMemoryLimitPerActorBytes = 1 [ default = 67108864 ];

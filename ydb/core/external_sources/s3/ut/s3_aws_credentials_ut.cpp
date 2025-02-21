@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
         const TString externalDataSourceName = "/Root/external_data_source";
         auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         auto kikimr = MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, s3ActorsFactory);
-        kikimr->GetTestClient().GrantConnect("root1@builtin");
+        kikimr->GetTestClient().TestGrantConnect("root1@builtin");
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
         const TString query = fmt::format(R"(
@@ -247,10 +247,10 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                 UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
                 NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
-                UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());             
+                UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
             }
         }
-        
+
     }
 
     Y_UNIT_TEST(TestInsertEscaping) {

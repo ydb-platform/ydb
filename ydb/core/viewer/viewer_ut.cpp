@@ -600,8 +600,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
     }
 
     void GrantConnect(TClient& client) {
-        client.CreateUser("/Root", "username", "password");
-        client.GrantConnect("username");
+        client.TestCreateUser("/Root", "username", "password");
+        client.TestGrantConnect("username");
 
         const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
             { "folder_id", "test_folder_id" },

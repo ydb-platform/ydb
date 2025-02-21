@@ -2914,7 +2914,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(AlterIndexImplTableUsingPublicAPI) {
         TKikimrRunner kikimr;
-        kikimr.GetTestClient().GrantConnect("user@builtin");
+        kikimr.GetTestClient().TestGrantConnect("user@builtin");
 
         auto adminSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(adminSession);

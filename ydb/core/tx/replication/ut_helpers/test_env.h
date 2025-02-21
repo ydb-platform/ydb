@@ -79,7 +79,7 @@ public:
     {
         UNIT_ASSERT_STRING_CONTAINS(builtin, "@builtin");
         Init(builtin);
-        Client.ModifyOwner("/", DomainName, builtin);
+        Client.TestModifyOwner("/", DomainName, builtin);
     }
 
     explicit TEnv(const TString& user, const TString& password)
@@ -93,10 +93,8 @@ public:
         const auto db = "/" + ToString(DomainName);
         // create user & set owner
         {
-            auto st = Client.CreateUser(db, user, password);
-            UNIT_ASSERT_VALUES_EQUAL(st, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
-
-            Client.ModifyOwner("/", DomainName, user);
+            Client.TestCreateUser(db, user, password);
+            Client.TestModifyOwner("/", DomainName, user);
         }
         // init security state
         {

@@ -128,21 +128,21 @@ void SetupAuthAccessEnvironment(TTestEnv& env) {
     env.GetClient().SetSecurityToken("root@builtin");
     CreateTenantsAndTables(env, true);
 
-    env.GetClient().CreateUser("/Root", "user1rootadmin", "password1");
-    env.GetClient().CreateUser("/Root", "user2", "password2");
-    env.GetClient().CreateUser("/Root/Tenant1", "user3", "password3");
-    env.GetClient().CreateUser("/Root/Tenant1", "user4", "password4");
+    env.GetClient().TestCreateUser("/Root", "user1rootadmin", "password1");
+    env.GetClient().TestCreateUser("/Root", "user2", "password2");
+    env.GetClient().TestCreateUser("/Root/Tenant1", "user3", "password3");
+    env.GetClient().TestCreateUser("/Root/Tenant1", "user4", "password4");
 
     {
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1rootadmin");
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
-        env.GetClient().ModifyACL("", "Root", acl.SerializeAsString());
+        env.GetClient().TestModifyACL("", "Root", acl.SerializeAsString());
     }
 }
 
 void CheckAuthAdministratorAccessIsRequired(TScanQueryPartIterator& it) {
-    NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, 
+    NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR,
         "Administrator access is required");
 }
 
@@ -1446,7 +1446,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 1;
             )", TTxControl::BeginTx().CommitTx()).GetValueSync();
             NKqp::AssertSuccessResult(result);
-            
+
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             NKqp::CompareYson(R"([
                 [[1u]]
@@ -1459,12 +1459,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 2;
             )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
             NKqp::AssertSuccessResult(result);
-            
+
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             NKqp::CompareYson(R"([
                 [[2u]]
             ])", actual);
-        }        
+        }
 
         size_t rowCount = 0;
         for (size_t iter = 0; iter < 30; ++iter) {
@@ -1476,7 +1476,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                SELECT                     
+                SELECT
                     IntervalEnd,
                     Rank,
                     TabletId,
@@ -1579,8 +1579,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
             check.Uint64(0); // IndexSize
             check.Uint64(0); // InFlightTxCount
             check.Uint64Greater(0); // FollowerId
-        }        
-    }    
+        }
+    }
 
     Y_UNIT_TEST(Describe) {
         TTestEnv env;
@@ -2172,14 +2172,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
-        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
-        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
-        env.GetClient().CreateGroup("/Root", "group1");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group2");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group3");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group4");
+        env.GetClient().TestCreateUser("/Root", "user1", "password1");
+        env.GetClient().TestCreateUser("/Root/Tenant1", "user2", "password2");
+        env.GetClient().TestCreateUser("/Root/Tenant2", "user3", "password3");
+        env.GetClient().TestCreateUser("/Root/Tenant2", "user4", "password4");
+        env.GetClient().TestCreateGroup("/Root", "group1");
+        env.GetClient().TestCreateGroup("/Root/Tenant1", "group2");
+        env.GetClient().TestCreateGroup("/Root/Tenant2", "group3");
+        env.GetClient().TestCreateGroup("/Root/Tenant2", "group4");
 
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
 
@@ -2258,7 +2258,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ])";
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
-        
+
         { // user1rootadmin is /Root admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
@@ -2352,7 +2352,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "u",
             "asdf",
         }) {
-            env.GetClient().CreateUser("/Root", user, "password");
+            env.GetClient().TestCreateUser("/Root", user, "password");
         }
 
         auto it = client.StreamExecuteScanQuery(R"(
@@ -2387,7 +2387,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "user3",
             "user4"
         }) {
-            env.GetClient().CreateUser("/Root", user, "password");
+            env.GetClient().TestCreateUser("/Root", user, "password");
         }
 
         {
@@ -2503,14 +2503,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
-        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
-        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
-        env.GetClient().CreateGroup("/Root", "group1");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group2");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group3");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group4");
+        env.GetClient().TestCreateUser("/Root", "user1", "password1");
+        env.GetClient().TestCreateUser("/Root/Tenant1", "user2", "password2");
+        env.GetClient().TestCreateUser("/Root/Tenant2", "user3", "password3");
+        env.GetClient().TestCreateUser("/Root/Tenant2", "user4", "password4");
+        env.GetClient().TestCreateGroup("/Root", "group1");
+        env.GetClient().TestCreateGroup("/Root/Tenant1", "group2");
+        env.GetClient().TestCreateGroup("/Root/Tenant2", "group3");
+        env.GetClient().TestCreateGroup("/Root/Tenant2", "group4");
 
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
 
@@ -2560,10 +2560,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthAccessEnvironment(env);
         TTableClient client(env.GetDriver());
 
-        env.GetClient().CreateGroup("/Root", "group1");
-        env.GetClient().CreateGroup("/Root", "group2");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group3");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group4");
+        env.GetClient().TestCreateGroup("/Root", "group1");
+        env.GetClient().TestCreateGroup("/Root", "group2");
+        env.GetClient().TestCreateGroup("/Root/Tenant1", "group3");
+        env.GetClient().TestCreateGroup("/Root/Tenant1", "group4");
 
         { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
@@ -2666,7 +2666,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "g",
             "asdf",
         }) {
-            env.GetClient().CreateGroup("/Root", group);
+            env.GetClient().TestCreateGroup("/Root", group);
         }
 
         auto it = client.StreamExecuteScanQuery(R"(
@@ -2701,7 +2701,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "group3",
             "group4",
         }) {
-            env.GetClient().CreateGroup("/Root", group);
+            env.GetClient().TestCreateGroup("/Root", group);
         }
 
         {
@@ -2725,23 +2725,23 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
-        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
-        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
-        env.GetClient().CreateGroup("/Root", "group1");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group2");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group3");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group4");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group5");
+        env.GetClient().TestCreateUser("/Root", "user1", "password1");
+        env.GetClient().TestCreateUser("/Root/Tenant1", "user2", "password2");
+        env.GetClient().TestCreateUser("/Root/Tenant2", "user3", "password3");
+        env.GetClient().TestCreateUser("/Root/Tenant2", "user4", "password4");
+        env.GetClient().TestCreateGroup("/Root", "group1");
+        env.GetClient().TestCreateGroup("/Root/Tenant1", "group2");
+        env.GetClient().TestCreateGroup("/Root/Tenant2", "group3");
+        env.GetClient().TestCreateGroup("/Root/Tenant2", "group4");
+        env.GetClient().TestCreateGroup("/Root/Tenant2", "group5");
 
-        env.GetClient().AddGroupMembership("/Root", "group1", "user1");
-        env.GetClient().AddGroupMembership("/Root/Tenant1", "group2", "user2");
-        env.GetClient().AddGroupMembership("/Root/Tenant2", "group3", "user4");
-        env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "user3");
-        env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "user4");
-        env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "group3");
-        env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "group4");
+        env.GetClient().TestAddGroupMembership("/Root", "group1", "user1");
+        env.GetClient().TestAddGroupMembership("/Root/Tenant1", "group2", "user2");
+        env.GetClient().TestAddGroupMembership("/Root/Tenant2", "group3", "user4");
+        env.GetClient().TestAddGroupMembership("/Root/Tenant2", "group4", "user3");
+        env.GetClient().TestAddGroupMembership("/Root/Tenant2", "group4", "user4");
+        env.GetClient().TestAddGroupMembership("/Root/Tenant2", "group4", "group3");
+        env.GetClient().TestAddGroupMembership("/Root/Tenant2", "group4", "group4");
 
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2").DebugString() << Endl;
@@ -2795,15 +2795,15 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthAccessEnvironment(env);
         TTableClient client(env.GetDriver());
 
-        env.GetClient().CreateGroup("/Root", "group1");
-        env.GetClient().CreateGroup("/Root", "group2");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group3");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group4");
+        env.GetClient().TestCreateGroup("/Root", "group1");
+        env.GetClient().TestCreateGroup("/Root", "group2");
+        env.GetClient().TestCreateGroup("/Root/Tenant1", "group3");
+        env.GetClient().TestCreateGroup("/Root/Tenant1", "group4");
 
-        env.GetClient().AddGroupMembership("/Root", "group1", "user1rootadmin");
-        env.GetClient().AddGroupMembership("/Root", "group2", "user2");
-        env.GetClient().AddGroupMembership("/Root/Tenant1", "group3", "user3");
-        env.GetClient().AddGroupMembership("/Root/Tenant1", "group4", "user4");
+        env.GetClient().TestAddGroupMembership("/Root", "group1", "user1rootadmin");
+        env.GetClient().TestAddGroupMembership("/Root", "group2", "user2");
+        env.GetClient().TestAddGroupMembership("/Root/Tenant1", "group3", "user3");
+        env.GetClient().TestAddGroupMembership("/Root/Tenant1", "group4", "user4");
 
         { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
@@ -2900,7 +2900,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "group2",
             "group",
         }) {
-            env.GetClient().CreateGroup("/Root", group);
+            env.GetClient().TestCreateGroup("/Root", group);
         }
 
         for (auto user : {
@@ -2908,7 +2908,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "user2",
             "user"
         }) {
-            env.GetClient().CreateUser("/Root", user, "password");
+            env.GetClient().TestCreateUser("/Root", user, "password");
         }
 
         for (auto membership : TVector<std::pair<TString, TString>>{
@@ -2919,9 +2919,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
             {"group2", "user2"},
             {"group", "user2"},
         }) {
-            env.GetClient().AddGroupMembership("/Root", membership.first, membership.second);
+            env.GetClient().TestAddGroupMembership("/Root", membership.first, membership.second);
         }
-        
+
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT *
             FROM `Root/.sys/auth_group_members`
@@ -2949,7 +2949,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "group2",
             "group3",
         }) {
-            env.GetClient().CreateGroup("/Root", group);
+            env.GetClient().TestCreateGroup("/Root", group);
         }
 
         for (auto user : {
@@ -2957,7 +2957,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "user2",
             "user3"
         }) {
-            env.GetClient().CreateUser("/Root", user, "password");
+            env.GetClient().TestCreateUser("/Root", user, "password");
         }
 
         for (auto membership : TVector<std::pair<TString, TString>>{
@@ -2969,9 +2969,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
             {"group3", "user1"},
             {"group3", "user2"},
         }) {
-            env.GetClient().AddGroupMembership("/Root", membership.first, membership.second);
+            env.GetClient().TestAddGroupMembership("/Root", membership.first, membership.second);
         }
-        
+
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
@@ -3139,28 +3139,28 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
-        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
-        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group1");
+        env.GetClient().TestCreateUser("/Root", "user1", "password1");
+        env.GetClient().TestCreateUser("/Root/Tenant1", "user2", "password2");
+        env.GetClient().TestCreateUser("/Root/Tenant2", "user3", "password3");
+        env.GetClient().TestCreateUser("/Root/Tenant2", "user4", "password4");
+        env.GetClient().TestCreateGroup("/Root/Tenant2", "group1");
 
-        env.GetClient().MkDir("/Root", "Dir1/SubDir1");
-        env.GetClient().ModifyOwner("/Root", "Dir1", "user1");
-        env.GetClient().ModifyOwner("/Root/Dir1", "SubDir1", "user1");
+        env.GetClient().TestMkDir("/Root", "Dir1/SubDir1");
+        env.GetClient().TestModifyOwner("/Root", "Dir1", "user1");
+        env.GetClient().TestModifyOwner("/Root/Dir1", "SubDir1", "user1");
 
-        env.GetClient().MkDir("/Root/Tenant1", "Dir2/SubDir2");
-        env.GetClient().ModifyOwner("/Root/Tenant1", "Dir2", "user2");
-        env.GetClient().ModifyOwner("/Root/Tenant1/Dir2", "SubDir2", "user2");
+        env.GetClient().TestMkDir("/Root/Tenant1", "Dir2/SubDir2");
+        env.GetClient().TestModifyOwner("/Root/Tenant1", "Dir2", "user2");
+        env.GetClient().TestModifyOwner("/Root/Tenant1/Dir2", "SubDir2", "user2");
 
-        env.GetClient().MkDir("/Root/Tenant2", "Dir3/SubDir33");
-        env.GetClient().MkDir("/Root/Tenant2", "Dir3/SubDir34");
-        env.GetClient().MkDir("/Root/Tenant2", "Dir4/SubDir45");
-        env.GetClient().MkDir("/Root/Tenant2", "Dir4/SubDir46");
-        env.GetClient().ModifyOwner("/Root/Tenant2", "Dir3", "user3");
-        env.GetClient().ModifyOwner("/Root/Tenant2", "Dir4", "user4");
-        env.GetClient().ModifyOwner("/Root/Tenant2/Dir3", "SubDir33", "group1");
-        env.GetClient().ModifyOwner("/Root/Tenant2/Dir4", "SubDir46", "user4");
+        env.GetClient().TestMkDir("/Root/Tenant2", "Dir3/SubDir33");
+        env.GetClient().TestMkDir("/Root/Tenant2", "Dir3/SubDir34");
+        env.GetClient().TestMkDir("/Root/Tenant2", "Dir4/SubDir45");
+        env.GetClient().TestMkDir("/Root/Tenant2", "Dir4/SubDir46");
+        env.GetClient().TestModifyOwner("/Root/Tenant2", "Dir3", "user3");
+        env.GetClient().TestModifyOwner("/Root/Tenant2", "Dir4", "user4");
+        env.GetClient().TestModifyOwner("/Root/Tenant2/Dir3", "SubDir33", "group1");
+        env.GetClient().TestModifyOwner("/Root/Tenant2/Dir4", "SubDir46", "user4");
 
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2").DebugString() << Endl;
@@ -3227,12 +3227,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthAccessEnvironment(env);
         TTableClient client(env.GetDriver());
 
-        env.GetClient().MkDir("/Root", "Dir1");
-        env.GetClient().MkDir("/Root", "Dir2");
-        env.GetClient().MkDir("/Root/Tenant1", "Dir3");
-        env.GetClient().MkDir("/Root/Tenant1", "Dir4");
-        env.GetClient().ModifyOwner("/Root", "Dir1", "user1rootadmin");
-        env.GetClient().ModifyOwner("/Root/Tenant1", "Dir3", "user3");
+        env.GetClient().TestMkDir("/Root", "Dir1");
+        env.GetClient().TestMkDir("/Root", "Dir2");
+        env.GetClient().TestMkDir("/Root/Tenant1", "Dir3");
+        env.GetClient().TestMkDir("/Root/Tenant1", "Dir4");
+        env.GetClient().TestModifyOwner("/Root", "Dir1", "user1rootadmin");
+        env.GetClient().TestModifyOwner("/Root/Tenant1", "Dir3", "user3");
 
         { // anonymous login gives `ydb.granular.describe_schema` access
             auto driverConfig = TDriverConfig()
@@ -3306,7 +3306,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         { // revoke user1rootadmin /Root/Dir2 GenericUse access
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "user1rootadmin");
-            env.GetClient().ModifyACL("/Root", "Dir2", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root", "Dir2", acl.SerializeAsString());
 
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
@@ -3353,9 +3353,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "Dir11/SubDir",
             "Dir/SubDir",
         }) {
-            env.GetClient().MkDir("/Root", path);
+            env.GetClient().TestMkDir("/Root", path);
         }
-        
+
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT *
             FROM `Root/.sys/auth_owners`
@@ -3404,15 +3404,15 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "Dir3/SubDir1",
             "Dir3/SubDir2",
         }) {
-            env.GetClient().MkDir("/Root", path);
+            env.GetClient().TestMkDir("/Root", path);
         }
-        env.GetClient().CreateUser("/Root", "user0", "password0");
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root", "user2", "password2");
-        env.GetClient().ModifyOwner("/Root/Dir1", "SubDir0", "user0");
-        env.GetClient().ModifyOwner("/Root/Dir1", "SubDir1", "user1");
-        env.GetClient().ModifyOwner("/Root/Dir1", "SubDir2", "user2");
-        
+        env.GetClient().TestCreateUser("/Root", "user0", "password0");
+        env.GetClient().TestCreateUser("/Root", "user1", "password1");
+        env.GetClient().TestCreateUser("/Root", "user2", "password2");
+        env.GetClient().TestModifyOwner("/Root/Dir1", "SubDir0", "user0");
+        env.GetClient().TestModifyOwner("/Root/Dir1", "SubDir1", "user1");
+        env.GetClient().TestModifyOwner("/Root/Dir1", "SubDir2", "user2");
+
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
@@ -3684,57 +3684,57 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
-        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
-        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group1");
+        env.GetClient().TestCreateUser("/Root", "user1", "password1");
+        env.GetClient().TestCreateUser("/Root/Tenant1", "user2", "password2");
+        env.GetClient().TestCreateUser("/Root/Tenant2", "user3", "password3");
+        env.GetClient().TestCreateUser("/Root/Tenant2", "user4", "password4");
+        env.GetClient().TestCreateGroup("/Root/Tenant2", "group1");
 
-        env.GetClient().MkDir("/Root", "Dir1/SubDir1");
-        env.GetClient().MkDir("/Root/Tenant1", "Dir2/SubDir2");
-        env.GetClient().MkDir("/Root/Tenant2", "Dir3/SubDir3");
-        env.GetClient().MkDir("/Root/Tenant2", "Dir4/SubDir4");
+        env.GetClient().TestMkDir("/Root", "Dir1/SubDir1");
+        env.GetClient().TestMkDir("/Root/Tenant1", "Dir2/SubDir2");
+        env.GetClient().TestMkDir("/Root/Tenant2", "Dir3/SubDir3");
+        env.GetClient().TestMkDir("/Root/Tenant2", "Dir4/SubDir4");
 
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
-            env.GetClient().ModifyACL("/", "Root", acl.SerializeAsString());
-            env.GetClient().ModifyACL("/Root", "Dir1", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/", "Root", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root", "Dir1", acl.SerializeAsString());
         }
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1");
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user1");
-            env.GetClient().ModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
         }
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Deny, NACLib::UpdateRow, "user1");
-            env.GetClient().ModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
         }
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
-            env.GetClient().ModifyACL("/Root", "Tenant1", acl.SerializeAsString());
-            env.GetClient().ModifyACL("/Root/Tenant1/Dir2", "SubDir2", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root", "Tenant1", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root/Tenant1/Dir2", "SubDir2", acl.SerializeAsString());
         }
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user3");
-            env.GetClient().ModifyACL("/Root", "Tenant2", acl.SerializeAsString());
-            env.GetClient().ModifyACL("/Root/Tenant2", "Dir3", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root", "Tenant2", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root/Tenant2", "Dir3", acl.SerializeAsString());
         }
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user4");
-            env.GetClient().ModifyACL("/Root/Tenant2/Dir4", "SubDir4", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root/Tenant2/Dir4", "SubDir4", acl.SerializeAsString());
         }
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "group1");
-            env.GetClient().ModifyACL("/Root/Tenant2", "Dir4", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root/Tenant2", "Dir4", acl.SerializeAsString());
         }
-        
+
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2/Dir4").DebugString() << Endl;
 
         {
@@ -3793,26 +3793,26 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthAccessEnvironment(env);
         TTableClient client(env.GetDriver());
 
-        env.GetClient().MkDir("/Root", "Dir1");
-        env.GetClient().MkDir("/Root", "Dir2");
-        env.GetClient().MkDir("/Root/Tenant1", "Dir3");
-        env.GetClient().MkDir("/Root/Tenant1", "Dir4");
-        
+        env.GetClient().TestMkDir("/Root", "Dir1");
+        env.GetClient().TestMkDir("/Root", "Dir2");
+        env.GetClient().TestMkDir("/Root/Tenant1", "Dir3");
+        env.GetClient().TestMkDir("/Root/Tenant1", "Dir4");
+
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1rootadmin");
-            env.GetClient().ModifyACL("/Root", "Dir1", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root", "Dir1", acl.SerializeAsString());
         }
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user2");
-            env.GetClient().ModifyACL("/Root", "Dir2", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root", "Dir2", acl.SerializeAsString());
         }
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user3");
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user4");
-            env.GetClient().ModifyACL("/Root/Tenant1", "Dir3", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root/Tenant1", "Dir3", acl.SerializeAsString());
         }
 
         { // anonymous login gives `ydb.granular.describe_schema` access
@@ -3889,7 +3889,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         { // revoke user1rootadmin /Root/Dir2 GenericUse access
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "user1rootadmin");
-            env.GetClient().ModifyACL("/Root", "Dir2", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root", "Dir2", acl.SerializeAsString());
 
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
@@ -3933,7 +3933,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "user2",
             "user"
         }) {
-            env.GetClient().CreateUser("/Root", user, "password");
+            env.GetClient().TestCreateUser("/Root", user, "password");
         }
 
         for (auto dir : {
@@ -3943,9 +3943,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "Dir/SubDir1",
             "Dir/SubDir2"
         }) {
-            env.GetClient().MkDir("/Root", dir);
+            env.GetClient().TestMkDir("/Root", dir);
         }
-        
+
         for (auto acl : TVector<std::tuple<TString, TString, TString, NACLib::EAccessRights>>{
             {"/", "Root", "user1", NACLib::SelectRow},
             {"/", "Root", "user1", NACLib::EraseRow},
@@ -3958,13 +3958,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
             {"/Root", "Dir2", "user1", NACLib::GenericUse},
             {"/Root", "Dir", "user1", NACLib::GenericUse},
             {"/Root", "Dir1", "user1", NACLib::AlterSchema},
-            {"/Root/Dir1", "SubDir1", "user1", NACLib::AlterSchema},
-            {"/Root/Dir1", "SubDir2", "user2", NACLib::AlterSchema},
-            {"/Root/Dir1", "SubDir2", "user1", NACLib::AlterSchema}
+            {"/Root/Dir", "SubDir1", "user1", NACLib::AlterSchema},
+            {"/Root/Dir", "SubDir2", "user2", NACLib::AlterSchema},
+            {"/Root/Dir", "SubDir2", "user1", NACLib::AlterSchema}
         }) {
             NACLib::TDiffACL diffAcl;
             diffAcl.AddAccess(NACLib::EAccessType::Allow, std::get<3>(acl), std::get<2>(acl));
-            env.GetClient().ModifyACL(std::get<0>(acl), std::get<1>(acl), diffAcl.SerializeAsString());
+            Cerr << "TEST " << std::get<0>(acl) << " " << std::get<1>(acl) << " " << std::get<2>(acl) << " " << NACLib::AccessRightsToString(std::get<3>(acl)) << Endl;
+            env.GetClient().TestModifyACL(std::get<0>(acl), std::get<1>(acl), diffAcl.SerializeAsString());
         }
 
         auto it = client.StreamExecuteScanQuery(R"(
@@ -3982,6 +3983,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
             [["/Root/.metadata/workload_manager/pools/default"];["root@builtin"];["ydb.granular.describe_schema"]];
             [["/Root/.metadata/workload_manager/pools/default"];["root@builtin"];["ydb.granular.select_row"]];
             [["/Root/Dir"];["user1"];["ydb.generic.use"]];
+            [["/Root/Dir/SubDir1"];["user1"];["ydb.granular.alter_schema"]];
+            [["/Root/Dir/SubDir2"];["user1"];["ydb.granular.alter_schema"]];
+            [["/Root/Dir/SubDir2"];["user2"];["ydb.granular.alter_schema"]];
             [["/Root/Dir1"];["user1"];["ydb.generic.use"]];
             [["/Root/Dir1"];["user1"];["ydb.granular.alter_schema"]];
             [["/Root/Dir1"];["user2"];["ydb.generic.use"]];
@@ -3998,23 +4002,23 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
+        env.GetClient().TestCreateUser("/Root", "user1", "password1");
+        env.GetClient().TestCreateUser("/Root/Tenant1", "user2", "password2");
 
-        env.GetClient().MkDir("/Root", "Dir1");
-        env.GetClient().MkDir("/Root/Tenant1", "Dir2");
+        env.GetClient().TestMkDir("/Root", "Dir1");
+        env.GetClient().TestMkDir("/Root/Tenant1", "Dir2");
 
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
-            env.GetClient().ModifyACL("/", "Root", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/", "Root", acl.SerializeAsString());
         }
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user2");
-            env.GetClient().ModifyACL("/Root/Tenant1", "Dir2", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root/Tenant1", "Dir2", acl.SerializeAsString());
         }
-        
+
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2/Dir4").DebugString() << Endl;
 
         {
@@ -4062,30 +4066,30 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root", "user2", "password2");
+        env.GetClient().TestCreateUser("/Root", "user1", "password1");
+        env.GetClient().TestCreateUser("/Root", "user2", "password2");
 
-        env.GetClient().MkDir("/Root", "Dir1/SubDir1");
-        env.GetClient().MkDir("/Root", "Dir1/SubDir2");
+        env.GetClient().TestMkDir("/Root", "Dir1/SubDir1");
+        env.GetClient().TestMkDir("/Root", "Dir1/SubDir2");
 
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
-            env.GetClient().ModifyACL("/", "Root", acl.SerializeAsString());
-            env.GetClient().ModifyACL("/Root", "Dir1", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/", "Root", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root", "Dir1", acl.SerializeAsString());
         }
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user2");
-            env.GetClient().ModifyACL("/Root", "Dir1", acl.SerializeAsString());
-            env.GetClient().ModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root", "Dir1", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
         }
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user2");
-            env.GetClient().ModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
+            env.GetClient().TestModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
         }
-        
+
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *

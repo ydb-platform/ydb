@@ -843,7 +843,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         env.GetTenants().Run("/dc-1/USER_0", 1);
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
                                  env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0")));
-        env.GetClient().ModifyOwner("/dc-1", "USER_0", "user0@builtin");
+        env.GetClient().TestModifyOwner("/dc-1", "USER_0", "user0@builtin");
         env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0");
 
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
@@ -851,7 +851,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         env.GetTenants().Run("/dc-1/USER_1", 1);
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
                                  env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_1")));
-        env.GetClient().ModifyOwner("/dc-1", "USER_1", "user1@builtin");
+        env.GetClient().TestModifyOwner("/dc-1", "USER_1", "user1@builtin");
         env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_1");
 
 
@@ -894,7 +894,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         env.GetTenants().Run("/dc-1/USER_0", 1);
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
                                  env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0")));
-        env.GetClient().ModifyOwner("/dc-1", "USER_0", "user0@builtin");
+        env.GetClient().TestModifyOwner("/dc-1", "USER_0", "user0@builtin");
         env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0");
 
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
@@ -902,7 +902,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         env.GetTenants().Run("/dc-1/USER_1", 1);
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
                                  env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_1")));
-        env.GetClient().ModifyOwner("/dc-1", "USER_1", "user1@builtin");
+        env.GetClient().TestModifyOwner("/dc-1", "USER_1", "user1@builtin");
         env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_1");
 
 
@@ -996,13 +996,13 @@ Y_UNIT_TEST_SUITE(TModifyUserTest) {
         auto& client = env.GetClient();
         TString user1Token;
         {
-            client.CreateUser("/dc-1", "user1", "pass1", "root@builtin");
+            client.TestCreateUser("/dc-1", "user1", "pass1", "root@builtin");
             user1Token = CheckLogin(client, env.GetRuntime(), "user1", "pass1");
         }
 
         TString user2Token;
         {
-            client.CreateUser("/dc-1", "user2", "pass2", "root@builtin");
+            client.TestCreateUser("/dc-1", "user2", "pass2", "root@builtin");
             user2Token = CheckLogin(client, env.GetRuntime(), "user2", "pass2");
         }
 
@@ -1038,7 +1038,7 @@ Y_UNIT_TEST_SUITE(TModifyUserTest) {
 
         // grant permission ydb.granular.alter_schema to user1
         {
-            client.Grant("/", "dc-1", "user1", NACLib::EAccessRights::AlterSchema);
+            client.TestGrant("/", "dc-1", "user1", NACLib::EAccessRights::AlterSchema);
 
             // user1 can change password for user2. user1 has ydb.granular.alter_schema permission
             UNIT_ASSERT_VALUES_EQUAL(client.ModifyUser("/dc-1", { .User = "user2", .Password = "pas2user"}, user1Token), NMsgBusProxy::MSTATUS_OK);
@@ -1077,13 +1077,13 @@ Y_UNIT_TEST_SUITE(TModifyUserTest) {
         auto& client = env.GetClient();
         TString user1Token;
         {
-            client.CreateUser("/dc-1", { .User = "user1", .Password = "pass1"}, "root@builtin");
+            client.TestCreateUser("/dc-1", { .User = "user1", .Password = "pass1"}, "root@builtin");
             user1Token = CheckLogin(client, env.GetRuntime(), "user1", "pass1");
         }
 
         TString user2Token;
         {
-            client.CreateUser("/dc-1", { .User = "user2", .Password = "pass2"}, "root@builtin");
+            client.TestCreateUser("/dc-1", { .User = "user2", .Password = "pass2"}, "root@builtin");
             user2Token = CheckLogin(client, env.GetRuntime(), "user2", "pass2");
         }
 

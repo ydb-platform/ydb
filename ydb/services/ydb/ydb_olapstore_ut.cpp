@@ -332,15 +332,15 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         EnableDebugLogs(server);
 
         TClient annoyingClient(*server.ServerSettings);
-        annoyingClient.GrantConnect("alice@builtin");
-        annoyingClient.GrantConnect("bob@builtin");
+        annoyingClient.TestGrantConnect("alice@builtin");
+        annoyingClient.TestGrantConnect("bob@builtin");
 
         TTestOlapTableOptions opts;
         opts.TsType = pkFirstType;
         opts.HashFunction = "HASH_FUNCTION_MODULO_N";
         CreateOlapTable<NotNull>(*server.ServerSettings, "log1", opts);
 
-        annoyingClient.ModifyOwner("/Root/OlapStore", "log1", "alice@builtin");
+        annoyingClient.TestModifyOwner("/Root/OlapStore", "log1", "alice@builtin");
 
         auto connection = ConnectToServer(server);
         {

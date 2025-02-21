@@ -566,9 +566,9 @@ private:
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "Service1_id@as");
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "proxy_sa@as");
 
-        client.ModifyACL("/", "Root", acl.SerializeAsString());
+        client.TestModifyACL("/", "Root", acl.SerializeAsString());
 
-        client.MkDir("/Root", "SQS");
+        client.TestMkDir("/Root", "SQS");
 
         client.CreateTable("/Root/SQS",
            "Name: \".Queues\""

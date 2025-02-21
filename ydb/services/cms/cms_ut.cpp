@@ -530,7 +530,7 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull,
                           "user-1@" BUILTIN_ACL_DOMAIN);
             TClient client(*server.ServerSettings);
-            client.ModifyACL("/", "Root", acl.SerializeAsString());
+            client.TestModifyACL("/", "Root", acl.SerializeAsString());
         }
 
         CheckCreateDatabase(server, channel, "/Root/users/user-1",
@@ -545,7 +545,7 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull,
                           "user-2@" BUILTIN_ACL_DOMAIN);
             TClient client(*server.ServerSettings);
-            client.ModifyACL("/Root/users", "user-1", acl.SerializeAsString());
+            client.TestModifyACL("/Root/users", "user-1", acl.SerializeAsString());
             client.RefreshPathCache(server.Server_->GetRuntime(), "/Root/users/user-1");
         }
 

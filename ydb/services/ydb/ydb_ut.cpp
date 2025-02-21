@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
 
         {
             TClient client(*server.ServerSettings);
-            client.CreateUser("/Root", "qqq", "password");
+            client.TestCreateUser("/Root", "qqq", "password");
         }
         {
             NYdbGrpc::TGRpcClientLow clientLow;

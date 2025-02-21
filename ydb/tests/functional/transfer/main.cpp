@@ -246,11 +246,11 @@ Y_UNIT_TEST_SUITE(Transfer)
         MainTestCase({
             .TableDDL = R"(
                 CREATE TABLE `%s` (
-                    AId_ Uint64 NOT NULL,
+                    Id Uint64 NOT NULL,
                     FirstName Utf8 NOT NULL,
                     LastName Utf8 NOT NULL,
                     Salary Uint64 NOT NULL,
-                    PRIMARY KEY (AId_)
+                    PRIMARY KEY (Id)
                 )  WITH (
                     STORE = COLUMN
                 );
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
                     return [
                         <|
-                            AId_:      Yson::ConvertToUint64($input.id),
+                            Id:        Yson::ConvertToUint64($input.id),
                             FirstName: CAST(Yson::ConvertToString($input.first_name) AS Utf8),
                             LastName:  CAST(Yson::ConvertToString($input.last_name) AS Utf8),
                             Salary:    CAST(Yson::ConvertToString($input.salary) AS UInt64)
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(Transfer)
             })",
 
             .Columns = {
-                _C("AId_", ui64(1)),
+                _C("Id", ui64(1)),
                 _C("FirstName", TString("Vasya")),
                 _C("LastName", TString("Pupkin")),
                 _C("Salary", ui64(123)),

@@ -104,12 +104,6 @@ public:
             }
 
             Out.Value = value.GetElement(0);
-
-            for (size_t i = 0; i < Out.Value.GetListLength(); ++i) {
-                auto v = Out.Value.GetElement(i);
-                Cerr << ">>>>> i = " << i << " HasValue = " << v.HasValue() << Endl << Flush;
-            }
-
             Out.Data.PushRow(&Out.Value, 1);
 
             return &Out;
@@ -189,10 +183,6 @@ NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& columns) {
         .Add("StructType")
         .Add(std::move(rootMembers));
 
-    TStringStream st;
-    r.Save(&st);
-    Cerr << ">>>>> scheme " << st.Str() << Endl << Flush;
-
     return r;
 }
 
@@ -248,41 +238,34 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     });
 
     result.TableColumns.resize(keyColumns);
-    result.ColumnsMetadata.resize(keyColumns);
-    result.WriteIndex.resize(keyColumns);
 
     for (const auto& [_, column] : entry.Columns) {
-        NKikimrKqp::TKqpColumnMetadataProto* c;
-
         if (column.KeyOrder >= 0) {
             result.TableColumns[column.KeyOrder] = {column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn};
-            c = &result.ColumnsMetadata[column.KeyOrder];
-            result.WriteIndex[column.KeyOrder] = column.KeyOrder;
         } else {
             result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn);
-            result.ColumnsMetadata.emplace_back();
-            c = &result.ColumnsMetadata.back();
-            result.WriteIndex.push_back(result.WriteIndex.size());
         }
+    }
 
-        c->SetName(column.Name);
-        c->SetId(column.Id);
-        c->SetTypeId(column.PType.GetTypeId());
+    std::map<TString, TSysTables::TTableColumnInfo> columns;
+    for (const auto& [_, column] : entry.Columns) {
+        columns[column.Name] = column;
+    }
+
+    size_t i = keyColumns;
+    for (const auto& [_, column] : columns) {
+        result.ColumnsMetadata.emplace_back();
+        auto& c = result.ColumnsMetadata.back();
+        result.WriteIndex.push_back(column.KeyOrder >= 0 ? column.KeyOrder : i++);
+
+        c.SetName(column.Name);
+        c.SetId(column.Id);
+        c.SetTypeId(column.PType.GetTypeId());
 
         if (NScheme::NTypeIds::IsParametrizedType(column.PType.GetTypeId())) {
-            NScheme::ProtoFromTypeInfo(column.PType, "", *c->MutableTypeInfo());
+            NScheme::ProtoFromTypeInfo(column.PType, "", *c.MutableTypeInfo());
         }
     }
-
-    TStringBuilder sb;
-    for (size_t i = 0; i < result.TableColumns.size(); ++i) {
-        if (i) {
-            sb << ", ";
-        }
-        sb << result.ColumnsMetadata[i].GetName() << "|" << result.WriteIndex[i];
-    }
-
-    Cerr << ">>>>>> " << sb << Endl << Flush;
 
     return result;
 }
@@ -346,8 +329,6 @@ public:
 
         auto arrowBatch = reinterpret_pointer_cast<arrow::RecordBatch>(data);
         Y_VERIFY(arrowBatch);
-
-        Cerr << ">>>>> BATCH = " << arrowBatch->ToString() << Endl << ::Flush;
 
         Issues = std::make_shared<NYql::TIssues>();
 

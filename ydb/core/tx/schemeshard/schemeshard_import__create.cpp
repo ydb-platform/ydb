@@ -643,13 +643,13 @@ private:
 
         Y_ABORT_UNLESS(item.State == EState::CreateChangefeed);
         Y_ABORT_UNLESS(item.DstPathId);
-        Y_ABORT_UNLESS(item.StreamImplPath);
+        Y_ABORT_UNLESS(item.StreamImplPathId);
 
-        if (!Self->PathsById.contains(item.StreamImplPath)) {
+        if (!Self->PathsById.contains(item.StreamImplPathId)) {
             return InvalidTxId;
         }
 
-        auto path = Self->PathsById.at(item.StreamImplPath);
+        auto path = Self->PathsById.at(item.StreamImplPathId);
         if (path->PathState != NKikimrSchemeOp::EPathStateAlter) {
             return InvalidTxId;
         }
@@ -852,7 +852,11 @@ private:
 
                 switch (item.State) {
                 case EState::CreateChangefeed:
-                    txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
+                    if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
+                        txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
+                    } else {
+                        txId = GetActiveCreateConsumerTxId(importInfo, itemIdx);
+                    }
                     break;
 
                 case EState::Transferring:

@@ -1150,23 +1150,24 @@ private:
                 } else if (item.State == EState::CreateChangefeed) {
                     if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
                         txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
-                        if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists) {
-                            item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateConsumers;
-                            AllocateTxId(importInfo, itemIdx);
-                            // return;
-                        }
                     } else {
                         txId = GetActiveCreateConsumerTxId(importInfo, itemIdx);
-                        if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists) {
-                            if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
-                                item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateChangefeed;
-                                AllocateTxId(importInfo, itemIdx);
-                            }
-                            // return;
-                        }
                     }
                 
                 }
+            }
+
+            if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists && item.State == EState::CreateChangefeed) {
+                if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
+                    item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateConsumers;
+                    AllocateTxId(importInfo, itemIdx);
+                } else if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
+                    item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateChangefeed;
+                    AllocateTxId(importInfo, itemIdx);
+                } else {
+                    item.State = EState::Done;
+                }
+                return;
             }
 
             if (txId == InvalidTxId) {

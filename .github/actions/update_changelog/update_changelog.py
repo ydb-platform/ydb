@@ -15,6 +15,8 @@ VERSION_PREFIX = "## "
 CATEGORY_PREFIX = "### "
 ITEM_PREFIX = "* "
 
+YDBOT_TOKEN = os.getenv("YDBOT_TOKEN")
+
 @functools.cache
 def get_github_api_url():
    return os.getenv('GITHUB_REPOSITORY')
@@ -150,7 +152,7 @@ def fetch_pr_details(pr_id):
     url = f"https://api.github.com/repos/{get_github_api_url()}/pulls/{pr_id}"
     headers = {
         "Accept": "application/vnd.github.v3+json",
-        "Authorization": f"token {GITHUB_TOKEN}"
+        "Authorization": f"token {YDBOT_TOKEN}"
     }
     response = requests.get(url, headers=headers)
     response.raise_for_status()
@@ -160,7 +162,7 @@ def fetch_user_details(username):
     url = f"https://api.github.com/users/{username}"
     headers = {
         "Accept": "application/vnd.github.v3+json",
-        "Authorization": f"token {GITHUB_TOKEN}"
+        "Authorization": f"token {YDBOT_TOKEN}"
     }
     response = requests.get(url, headers=headers)
     response.raise_for_status()
@@ -175,8 +177,6 @@ if __name__ == "__main__":
     changelog_path = sys.argv[2]
     base_branch = sys.argv[3]
     suffix = sys.argv[4]
-
-    GITHUB_TOKEN = os.getenv("UPDATE_REPO_TOKEN")
    
     try:
         with open(pr_data_file, 'r') as file:

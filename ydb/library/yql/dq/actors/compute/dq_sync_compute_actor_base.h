@@ -30,7 +30,7 @@ protected:
     void DoExecuteImpl() override{
         auto sourcesState = static_cast<TDerived*>(this)->GetSourcesState();
 
-        TBase::PollAsyncInput(!this->ProcessOutputsState.IsFull);
+        auto lastPollResult = TBase::PollAsyncInput();
         ERunStatus status = TaskRunner->Run();
 
         CA_LOG_T("Resume execution, run status: " << status);
@@ -44,6 +44,10 @@ protected:
         }
 
         TBase::ProcessOutputsImpl(status);
+
+        if (lastPollResult && (*lastPollResult != EResumeSource::CAPollAsyncNoSpace || status == ERunStatus::PendingInput)) {
+            ContinueExecute(*std::exchange(lastPollResult, {}));
+        }
     }
 
     void DoTerminateImpl() override {
@@ -326,7 +330,6 @@ protected:
         this->ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
         this->ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
         this->ProcessOutputsState.DataWasSent |= (!wasFinished && outputChannel.Finished) || sentChunks;
-        this->ProcessOutputsState.IsFull |= !this->Channels->HasFreeMemoryInChannel(channelId);
     }
     void DrainAsyncOutput(ui64 outputIndex, typename TBase::TAsyncOutputInfoBase& outputInfo) override final {
         this->ProcessOutputsState.AllOutputsFinished &= outputInfo.Finished;
@@ -364,7 +367,6 @@ protected:
 
         this->ProcessOutputsState.HasDataToSend |= !outputInfo.Finished;
         this->ProcessOutputsState.DataWasSent |= outputInfo.Finished || sent;
-        this->ProcessOutputsState.IsFull |= outputInfo.AsyncOutput->GetFreeSpace() <= 0;
     }
 
 protected:

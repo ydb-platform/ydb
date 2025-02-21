@@ -2055,7 +2055,6 @@ protected:
         bool AllOutputsFinished = true;
         ERunStatus LastRunStatus = ERunStatus::PendingInput;
         bool LastPopReturnedNoData = false;
-        bool IsFull = false;
     };
     TProcessOutputsState ProcessOutputsState;
 

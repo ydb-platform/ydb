@@ -8,7 +8,7 @@ import yatest
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-
+from ydb.tests.olap.lib.utils import get_external_param
 
 class TestYdbMixedWorkload(object):
     @classmethod
@@ -16,13 +16,12 @@ class TestYdbMixedWorkload(object):
         cls.cluster = KiKiMR(KikimrConfigGenerator())
         cls.cluster.start()
 
-    @classmethod
-    def get_command_prefix(cls, subcmds: list[str]) -> list[str]:
+    def get_command_prefix(self, subcmds: list[str]) -> list[str]:
         return [
             yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
             '--verbose',
-            '--endpoint', 'grpc://localhost:%d' % cls.cluster.nodes[1].grpc_port,
-            '--database=/Root',
+            '--endpoint', self.endpoint,
+            '--database={}'.format(self.database),
             'workload', 'mixed'
         ] + subcmds
 
@@ -37,9 +36,8 @@ class TestYdbMixedWorkload(object):
             '--str-cols', '5',
         ]
 
-    @classmethod
-    def get_bulk_upsert_cmd(cls, duration: str):
-        return cls.get_command_prefix(subcmds=['run', 'bulk_upsert'] + cls.get_cols_count_command_params()) + [
+    def get_bulk_upsert_cmd(self, duration: str):
+        return self.get_command_prefix(subcmds=['run', 'bulk_upsert'] + self.get_cols_count_command_params()) + [
             '-s', duration,
             '-t', '40',
             '--rows', '1000',
@@ -47,17 +45,15 @@ class TestYdbMixedWorkload(object):
             '--len', '1000',
         ]
 
-    @classmethod
-    def get_select_cmd(cls, duration: str):
-        return cls.get_command_prefix(subcmds=['run', 'select']) + [
+    def get_select_cmd(self, duration: str):
+        return self.get_command_prefix(subcmds=['run', 'select']) + [
             '-s', duration,
             '-t', '5',
             '--rows', '100',
         ]
 
-    @classmethod
-    def get_update_cmd(cls, duration: str):
-        return cls.get_command_prefix(subcmds=['run', 'upsert'] + cls.get_cols_count_command_params()) + [
+    def get_update_cmd(self, duration: str):
+        return self.get_command_prefix(subcmds=['run', 'upsert'] + self.get_cols_count_command_params()) + [
             '-s', duration,
             '-t', '5',
             '--rows', '100',
@@ -79,7 +75,9 @@ class TestYdbMixedWorkload(object):
 
     @pytest.mark.parametrize('store_type', ['row', 'column'])
     def test(self, store_type):
-        duration = '120'
+        duration = get_external_param('duration', '120')
+        self.endpoint = get_external_param('endpoint', 'grpc://localhost:%d' % self.cluster.nodes[1].grpc_port)
+        self.database = get_external_param('database', '/Root')
         yatest.common.execute(
             self.get_command_prefix(subcmds=['clean']))
 

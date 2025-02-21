@@ -24,6 +24,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/olap/lib
 )
 
 

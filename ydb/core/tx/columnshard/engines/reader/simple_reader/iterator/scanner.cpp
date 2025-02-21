@@ -126,7 +126,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     }
     bool changed = false;
     if (!Context->GetCommonContext()->GetReadMetadata()->HasLimit()) {
-        while (SortedSources.size() && FetchingSources.size() < InFlightLimit) {
+        while (SortedSources.size() && FetchingSources.size() < InFlightLimit && Context->IsActive()) {
             SortedSources.front()->StartProcessing(SortedSources.front());
             FetchingSources.emplace_back(SortedSources.front());
             AFL_VERIFY(FetchingSourcesByIdx.emplace(SortedSources.front()->GetSourceIdx(), SortedSources.front()).second);
@@ -139,7 +139,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
         }
         ui32 inFlightCountLocal = GetInFlightIntervalsCount();
         AFL_VERIFY(IntervalsInFlightCount == inFlightCountLocal)("count_global", IntervalsInFlightCount)("count_local", inFlightCountLocal);
-        while (SortedSources.size() && inFlightCountLocal < InFlightLimit) {
+        while (SortedSources.size() && inFlightCountLocal < InFlightLimit && Context->IsActive()) {
             SortedSources.front()->StartProcessing(SortedSources.front());
             FetchingSources.emplace_back(SortedSources.front());
             AFL_VERIFY(FetchingSourcesByIdx.emplace(SortedSources.front()->GetSourceIdx(), SortedSources.front()).second);

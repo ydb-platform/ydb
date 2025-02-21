@@ -103,7 +103,8 @@ namespace {
     template <typename TEvRequest, typename TDerived>
     class TDbResolver: public TActorBootstrapped<TDerived> {
         void Handle() {
-            this->Send(Request->Forward(Cache));
+            Request->Rewrite(Request->GetTypeRewrite(), Cache);
+            this->Send(Request.Release());
             this->PassAway();
         }
 

@@ -24,7 +24,7 @@ domains_config:
     administration_allowed_sids: <list of SIDs that are allowed cluster administration>
 ```
 
-[//]: # (TODO: wait for pull/9387, dynamic_node_registration to add info about "register_dynamic_node_allowed_sids: <список SID'ов с правами подключения динамических нод в кластер>")
+[//]: # (TODO: wait for pull/9387, dynamic_node_registration to add info about "register_dynamic_node_allowed_sids: <list of SIDs that are allowed to add database nodes to the cluster>")
 
 ## Configuring authentication mode {#security-auth}
 
@@ -44,7 +44,7 @@ domains_config:
 
     When `enforce_user_token_check_requirement: true`, requests with authentication errors are blocked.
 
-[//]: # (TODO: добавить про ошибки проверки права на доступ к базе данных, когда появится место для ссылки)
+[//]: # (TODO: Add a reference to errors during access rights verification, when the doc is added)
 
 If the `default_user_sids` parameter is defined and not empty (see the description below), its value is used instead of the missing auth token. In this case, authentication and authorization are performed for the [access subject](../../concepts/glossary.md#access-subject) defined in `default_user_sids`.
 
@@ -95,7 +95,7 @@ The list consists of login-password pairs. The first user in the list is a super
 
 Passwords are specified in plain text, so it is unsafe to use them for an extended period. You must change these passwords in {{ ydb-short-name }} after the first start. For example, use the [`ALTER USER`](../../yql/reference/syntax/alter-user.md) statement.
 
-[//]: # (TODO: добавить про возможность блокировки этих стартовых пользователей, когда такое описание появится)
+[//]: # (TODO: Elaborate on blocking these users, when this feature is available)
 
 {% endnote %}
 
@@ -151,7 +151,7 @@ default_access:
 
 Errors in access right entries are logged but do not affect {{ ydb-short-name }} cluster startup. Access rights with errors will not be granted.
 
-[//]: # (TODO: требуется доработка, сейчас ошибка в формате приводит к падению процесса)
+[//]: # (TODO: Requires a bugfix, right now, errors in access right entries result in the process ending abnormally)
 
 ## Configuring administrative and other privileges {#security-access-levels}
 
@@ -164,7 +164,7 @@ Both segments are used in combination: a [subject](../../concepts/glossary.md#ac
 
 Access levels are defined by the `viewer_allowed_sids`, `monitoring_allowed_sids`, and `administration_allowed_sids` lists in the cluster configuration. The access levels of subjects determine their privileges to manage [scheme objects](../../concepts/glossary.md#scheme-object) as well as privileges that are not related to scheme objects.
 
-[//]: # (TODO: добавить ссылку на справку по viewer api и требуемым правам, когда она появится)
+[//]: # (TODO: add a link to the viewer api reference and the required privileges, when available)
 
 #|
 || Parameter | Description ||

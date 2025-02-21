@@ -1,7 +1,7 @@
 items:
-- name: tls
-  href: tls.md
 - name: auth_config
   href: auth_config.md
 - name: security_config
   href: security_config.md
+- name: tls
+  href: tls.md

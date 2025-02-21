@@ -483,6 +483,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
             inputStats->StorageType);
 
         outputStats.SortColumns = inputStats->SortColumns;
+        outputStats.ShuffledByColumns = inputStats->ShuffledByColumns;
         outputStats.Labels = inputStats->Labels;
         outputStats.Selectivity *= (inputStats->Selectivity * selectivity);
 
@@ -537,6 +538,7 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
         inputStats->StorageType
     );
     outputStats.SortColumns = inputStats->SortColumns;
+    outputStats.ShuffledByColumns = inputStats->ShuffledByColumns;
 
     outputStats.Selectivity *= (selectivity * inputStats->Selectivity);
     outputStats.Labels = inputStats->Labels;
@@ -576,6 +578,20 @@ void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnot
     auto inputStats = typeCtx->GetStats(aggInput.Raw());
     if (!inputStats) {
         return;
+    }
+
+    if (inputStats->ShuffledByColumns) {
+        TString relName{};
+        if (!inputStats->ShuffledByColumns->Data.empty()) {
+            relName = inputStats->ShuffledByColumns->Data.front().RelName;
+        }
+
+        TVector<NDq::TJoinColumn> shuffledBy;
+        shuffledBy.reserve(agg.Keys().Size());
+        for (const auto& key: agg.Keys()) {
+            shuffledBy.push_back(TJoinColumn(relName, key.StringValue()));
+        }
+        inputStats->ShuffledByColumns->Data = std::move(shuffledBy);
     }
 
     typeCtx->SetStats( input.Get(), RemoveOrdering(inputStats));

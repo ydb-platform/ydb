@@ -171,8 +171,16 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
     }
 }
 
-double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const  {
-    Y_UNUSED(outputByteSize);
+double TKqpProviderContext::ComputeJoinCost(
+    const TOptimizerStatistics& leftStats, 
+    const TOptimizerStatistics& rightStats, 
+    const double outputRows, 
+    const double outputByteSize, 
+    EJoinAlgoType joinAlgo,
+    bool shuffleLeftSide,
+    bool shuffleRightSide
+) const  {
+    Y_UNUSED(outputByteSize, shuffleLeftSide, shuffleRightSide);
     
     switch(joinAlgo) {
         case EJoinAlgoType::LookupJoin:
@@ -192,8 +200,7 @@ double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStat
         case EJoinAlgoType::GraceJoin:
             return 1.5 * (leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows);
         default:
-            Y_ENSURE(false, "Illegal join type encountered");
-            return 0;
+            return TBaseProviderContext::ComputeJoinCost(leftStats, rightStats, outputRows, outputByteSize, joinAlgo, shuffleLeftSide, shuffleRightSide);
     }
 }
 

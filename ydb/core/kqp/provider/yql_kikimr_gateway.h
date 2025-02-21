@@ -506,6 +506,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TExternalSource ExternalSource;
     TViewPersistedData ViewPersistedData;
 
+    TVector<TString> PartitionedByColumns;
+
     TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)
         , Name(table)

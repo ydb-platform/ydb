@@ -591,6 +591,7 @@ protected:
     void Handle(TEvPrivate::TEvGenerateTestData::TPtr& ev);
     void Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr& ev);
     void Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev);
+    void HandleInit(TEvPrivate::TEvUpdateFollowers::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateFollowers::TPtr& ev);
 
 protected:

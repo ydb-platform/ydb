@@ -3097,6 +3097,7 @@ STFUNC(THive::StateInit) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvPrivate::TEvProcessBootQueue, HandleInit);
         hFunc(TEvPrivate::TEvProcessTabletBalancer, HandleInit);
+        hFunc(TEvPrivate::TEvUpdateFollowers, HandleInit);
         // We subscribe to config updates before hive is fully loaded
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
         fFunc(NConsole::TEvConsole::TEvConfigNotificationRequest::EventType, EnqueueIncomingEvent);
@@ -3523,6 +3524,11 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
         Send(SelfId(), new TEvPrivate::TEvUpdateFollowers);
         ProcessFollowerUpdatesScheduled = true;
     }
+}
+
+void THive::HandleInit(TEvPrivate::TEvUpdateFollowers::TPtr&) {
+    BLOG_W("Received TEvUpdateFollowers while in StateInit");
+    Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateFollowers());
 }
 
 void THive::Handle(TEvPrivate::TEvUpdateFollowers::TPtr&) {

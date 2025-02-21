@@ -15,7 +15,7 @@ RECURSE(
     kqp
     large_serializable
     limits
-    minidumps
+    # minidumps  # breakpad is disabled now, see KIKIMR-18829 for details
     postgresql
     query_cache
     rename

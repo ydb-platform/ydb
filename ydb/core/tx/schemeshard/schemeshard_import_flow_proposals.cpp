@@ -4,6 +4,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/services/lib/actors/pq_schema_actor.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -290,6 +291,58 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
             cdcStream.SetMaxPartitionCount(maxActivePartitions);
         }
     }
+    return propose;
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    TImportInfo::TItem& item
+) {
+    Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
+
+    const auto& importChangefeedTopic = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx];
+    const auto& topic = importChangefeedTopic.GetTopic();
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto& record = propose->Record;
+    auto& modifyScheme = *record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
+    auto& pqGroup = *modifyScheme.MutableAlterPersQueueGroup();
+
+    const TPath dstPath = TPath::Init(item.DstPathId, ss);
+    const TString changefeedPath = dstPath.PathString() + "/" + importChangefeedTopic.GetChangefeed().name();
+    modifyScheme.SetWorkingDir(changefeedPath);
+    modifyScheme.SetInternal(true);
+
+    pqGroup.SetName("streamImpl");
+
+    NKikimrSchemeOp::TDescribeOptions opts;
+    // opts.SetReturnPartitioningInfo(false);
+    opts.SetReturnPartitionConfig(true);
+    opts.SetReturnBoundaries(true);
+    opts.SetReturnIndexTableBoundaries(true);
+    opts.SetShowPrivateTable(true);
+    auto describeSchemeResult = DescribePath(ss, TlsActivationContext->AsActorContext(),changefeedPath + "/streamImpl", opts);
+
+    const auto& response = describeSchemeResult->GetRecord().GetPathDescription();
+    item.StreamImplPathId = {response.GetSelf().GetSchemeshardId(), response.GetSelf().GetPathId()};
+    pqGroup.CopyFrom(response.GetPersQueueGroup());
+
+    pqGroup.ClearTotalGroupCount();
+    pqGroup.MutablePQTabletConfig()->ClearPartitionKeySchema();
+
+    auto* tabletConfig = pqGroup.MutablePQTabletConfig();
+    const auto& pqConfig = AppData()->PQConfig;
+    auto serviceTypes = NGRpcProxy::V1::GetSupportedClientServiceTypes(pqConfig);
+
+    for (const auto& consumer : topic.consumers()) {
+        auto rule = ::Ydb::PersQueue::V1::TopicSettings_ReadRule();
+        rule.set_consumer_name(consumer.name());
+        rule.set_important(consumer.important());
+        AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig);
+    }
+    
     return propose;
 }
 

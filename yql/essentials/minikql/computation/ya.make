@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    block_layout_converter.cpp
     mkql_block_builder.cpp
     mkql_block_impl.cpp
     mkql_block_reader.cpp
@@ -25,6 +26,7 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
     yql/essentials/minikql/arrow
+    ydb/library/yql/minikql/comp_nodes/packed_tuple
 )
 
 YQL_LAST_ABI_VERSION()

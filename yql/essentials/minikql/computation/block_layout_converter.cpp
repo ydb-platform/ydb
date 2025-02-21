@@ -1,6 +1,7 @@
 #include "block_layout_converter.h"
 
 #include <yql/essentials/minikql/arrow/arrow_util.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
@@ -36,7 +37,7 @@ struct IColumnDataExtractor {
 template <typename TLayout, bool Nullable>
 class TFixedSizeColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TFixedSizeColumnDataExtractor(arrow::MemoryPool* pool, const NUdf::TType* type)
+    TFixedSizeColumnDataExtractor(arrow::MemoryPool* pool, TType* type)
         : Pool_(pool)
         , Type_(type)
     {}
@@ -44,13 +45,13 @@ public:
     TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
         Y_ENSURE(array->buffers.size() == 2);
 
-        return {array->GetMutableValues<ui8*>(1)};
+        return {array->GetMutableValues<ui8>(1)};
     }
 
-    const TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
+    TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
         Y_ENSURE(array->buffers.size() == 2);
 
-        return {array->GetMutableValues<ui8*>(0)};
+        return {array->GetMutableValues<ui8>(0)};
     }
 
     ui32 GetElementSize() override {
@@ -76,13 +77,13 @@ public:
 
 protected:
     arrow::MemoryPool* Pool_;
-    const NUdf::TType* Type_;
+    TType* Type_;
 };
 
 template <bool Nullable>
 class TResourceColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TResourceColumnDataExtractor(arrow::MemoryPool* pool, const NUdf::TType* type)
+    TResourceColumnDataExtractor(arrow::MemoryPool* pool, TType* type)
         : Pool_(pool)
         , Type_(type)
     {}
@@ -91,21 +92,21 @@ public:
         Y_ENSURE(array->buffers.size() == 2);
         Y_ENSURE(array->child_data.empty());
 
-        return {array->GetMutableValues<ui8*>(1)};
+        return {array->GetMutableValues<ui8>(1)};
     }
 
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
         Y_ENSURE(array->buffers.size() == 2);
         Y_ENSURE(array->child_data.empty());
 
-        return {array->GetMutableValues<ui8*>(0)};
+        return {array->GetMutableValues<ui8>(0)};
     }
 
     ui32 GetElementSize() override {
         return sizeof(NUdf::TUnboxedValue);
     }
 
-    NPackedTuple::EColumnSizeType GetElementSizeTypes() override {
+    NPackedTuple::EColumnSizeType GetElementSizeType() override {
         return NPackedTuple::EColumnSizeType::Fixed;
     }
 
@@ -125,7 +126,7 @@ public:
 
 protected:
     arrow::MemoryPool* Pool_;
-    const NUdf::TType* Type_;
+    TType* Type_;
 };
 
 template <typename TStringType, bool Nullable>
@@ -133,7 +134,7 @@ class TStringColumnDataExtractor : public IColumnDataExtractor {
     using TOffset = typename TStringType::offset_type;
 
 public:
-    TStringColumnDataExtractor(arrow::MemoryPool* pool, const NUdf::TType* type)
+    TStringColumnDataExtractor(arrow::MemoryPool* pool, TType* type)
         : Pool_(pool)
         , Type_(type)
     {}
@@ -149,7 +150,7 @@ public:
         Y_ENSURE(array->buffers.size() == 3);
         Y_ENSURE(array->child_data.empty());
 
-        return {array->GetMutableValues<ui8*>(0), nullptr};
+        return {array->GetMutableValues<ui8>(0), nullptr};
     }
 
     ui32 GetElementSize() override {
@@ -174,14 +175,14 @@ public:
 
 protected:
     arrow::MemoryPool* Pool_;
-    const NUdf::TType* Type_;
+    TType* Type_;
 };
 
 template <bool Nullable>
 class TTupleColumnDataExtractor : public IColumnDataExtractor {
 public:
     TTupleColumnDataExtractor(
-        std::vector<IBlockTrimmer::TPtr> children, arrow::MemoryPool* pool, const NUdf::TType* type
+        std::vector<IColumnDataExtractor::TPtr> children, arrow::MemoryPool* pool, TType* type
     )
         : Children_(std::move(children))
         , Pool_(pool)
@@ -205,7 +206,7 @@ public:
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
         Y_ENSURE(array->buffers.size() == 1);
 
-        TVector<const ui8*> childrenData;
+        TVector<ui8*> childrenData;
         Y_ENSURE(array->child_data.size() == Children_.size());
 
         for (size_t i = 0; i < Children_.size(); i++) {
@@ -227,7 +228,7 @@ public:
     }
 
     NPackedTuple::EColumnSizeType GetElementSizeType() override {
-        ui32 result = NPackedTuple::EColumnSizeType::Fixed;
+        auto result = NPackedTuple::EColumnSizeType::Fixed;
 
         for (size_t i = 0; i < Children_.size(); i++) {
             if (Children_[i]->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
@@ -251,13 +252,16 @@ public:
             reservedChildren.push_back(Children_[i]->ReserveArray(bytes, len));
         }
 
-        return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(reservedChildren)});
+        return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap)}, std::move(reservedChildren));
     }
 
 protected:
-    std::vector<IBlockTrimmer::TPtr> Children_;
+    TTupleColumnDataExtractor() = default;
+
+protected:
+    std::vector<IColumnDataExtractor::TPtr> Children_;
     arrow::MemoryPool* Pool_;
-    const NUdf::TType* Type_;
+    TType* Type_;
 };
 
 template<typename TDate, bool Nullable>
@@ -266,12 +270,11 @@ class TTzDateColumnDataExtractor : public TTupleColumnDataExtractor<Nullable> {
     using TDateLayout = typename NUdf::TDataType<TDate>::TLayout;
 
 public:
-    TTzDateBlockTrimmer(arrow::MemoryPool* pool, const NUdf::TType* type)
-        : Pool_(pool)
-        , Type_(type)
-    {
+    TTzDateColumnDataExtractor(arrow::MemoryPool* pool, TType* type) {
         // This highly likely wont be working, because we need another type for datetime components
         // So do not use datetime)
+        this->Pool_ = pool;
+        this->Type_ = type;
         this->Children_.push_back(std::make_unique<TFixedSizeColumnDataExtractor<TDateLayout, false>>(pool, type));
         this->Children_.push_back(std::make_unique<TFixedSizeColumnDataExtractor<ui16, false>>(pool, type));
     }
@@ -280,7 +283,7 @@ public:
 class TExternalOptionalColumnDataExtractor : public IColumnDataExtractor {
 public:
     TExternalOptionalColumnDataExtractor(
-        IColumnDataExtractor::TPtr inner, arrow::MemoryPool* pool, const NUdf::TType* type
+        IColumnDataExtractor::TPtr inner, arrow::MemoryPool* pool, TType* type
     )
         : Inner_(std::move(inner))
         , Pool_(pool)
@@ -315,15 +318,15 @@ public:
         Y_ENSURE(isConverted);
 
         auto nullBitmap = NUdf::MakeDenseFalseBitmap(len, Pool_);
-        auto reservedInner = Inner_->GetElementSizeType(bytes, len);
+        auto reservedInner = Inner_->ReserveArray(bytes, len);
 
-        return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(reservedInner)});
+        return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap)}, {std::move(reservedInner)});
     }
 
 private:
     IColumnDataExtractor::TPtr Inner_;
     arrow::MemoryPool* Pool_;
-    const NUdf::TType* Type_;
+    TType* Type_;
 };
 
 // ------------------------------------------------------------
@@ -344,7 +347,7 @@ struct TColumnDataExtractorTraits {
 
     constexpr static bool PassType = false;
 
-    static TResult::TPtr MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool* pool, const NUdf::TType* type) {
+    static TResult::TPtr MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool* pool, TType* type) {
         Y_UNUSED(pgBuilder);
         if (desc.PassByValue) {
             return std::make_unique<TFixedSize<ui64, true>>(pool, type);
@@ -353,7 +356,7 @@ struct TColumnDataExtractorTraits {
         }
     }
 
-    static TResult::TPtr MakeResource(bool isOptional, arrow::MemoryPool* pool, const NUdf::TType* type) {
+    static TResult::TPtr MakeResource(bool isOptional, arrow::MemoryPool* pool, TType* type) {
         if (isOptional) {
             return std::make_unique<TResource<true>>(pool, type);
         } else {
@@ -362,7 +365,7 @@ struct TColumnDataExtractorTraits {
     }
 
     template<typename TTzDate>
-    static TResult::TPtr MakeTzDate(bool isOptional, arrow::MemoryPool* pool, const NUdf::TType* type) {
+    static TResult::TPtr MakeTzDate(bool isOptional, arrow::MemoryPool* pool, TType* type) {
         if (isOptional) {
             return std::make_unique<TTzDateReader<TTzDate, true>>(pool, type);
         } else {
@@ -382,9 +385,9 @@ public:
         : Extractors_(std::move(extractors))
     {
         Y_ENSURE(roles.size() == Extractors_.size());
-        TVector<TColumnDesc> columnDescrs(Extractors_.size());
+        TVector<NPackedTuple::TColumnDesc> columnDescrs(Extractors_.size());
 
-        for (auto i = 0; i < columnDescrs.size(); ++i) {
+        for (size_t i = 0; i < columnDescrs.size(); ++i) {
             auto& descr = columnDescrs[i];
             descr.Role = roles[i];
             descr.DataSize = Extractors_[i]->GetElementSize();
@@ -399,7 +402,7 @@ public:
         TVector<const ui8*> columnsData;
         TVector<const ui8*> columnsNullBitmap;
 
-        for (auto i = 0; i < columns.size(); ++i) {
+        for (size_t i = 0; i < columns.size(); ++i) {
             const auto& column = columns[i];
 
             auto data = Extractors_[i]->GetColumnsData(column.array());
@@ -427,11 +430,11 @@ public:
 
         std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;
         TupleLayout_->CalculateColumnSized(
-            packed.PackedTuples.data(), packed.Overflow, packed.NTuples, bytesPerColumn);
+            packed.PackedTuples.data(), packed.NTuples, bytesPerColumn);
 
         TVector<ui8*> columnsData;
         TVector<ui8*> columnsNullBitmap;
-        for (auto i = 0; i < columns.size(); ++i) {
+        for (size_t i = 0; i < columns.size(); ++i) {
             columns[i] = Extractors_[i]->ReserveArray(bytesPerColumn[i], packed.NTuples);
 
             auto data = Extractors_[i]->GetColumnsData(columns[i].array());
@@ -451,19 +454,19 @@ public:
 
 private:
     TVector<IColumnDataExtractor::TPtr> Extractors_;
-    std::unique_ptr<NPackedTuple::TTupleLayout> TupleLayout_;
+    THolder<NPackedTuple::TTupleLayout> TupleLayout_;
 };
 
 // ------------------------------------------------------------
 
 IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
-    const NUdf::ITypeInfoHelper& typeInfoHelper, const Tvector<NUdf::TType*>& types,
+    const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
     const TVector<NPackedTuple::EColumnRole>& roles, arrow::MemoryPool* pool)
 {
     TVector<IColumnDataExtractor::TPtr> extractors;
 
     for (auto type: types) {
-        extractors.emplace_back(DispatchByArrowTraits<IColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, pool, type));
+        extractors.emplace_back(DispatchByArrowTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, pool, type));
     }
 
     return std::make_unique<TBlockLayoutConverter>(std::move(extractors), roles);

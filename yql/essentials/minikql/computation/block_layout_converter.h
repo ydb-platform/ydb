@@ -5,6 +5,8 @@
 
 #include <arrow/type.h>
 
+#include <ydb/library/yql/minikql/comp_nodes/packed_tuple/tuple.h>
+
 namespace NKikimr::NMiniKQL {
 
 class IBlockLayoutConverter : private TNonCopyable {
@@ -26,7 +28,7 @@ public:
 };
 
 IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
-    const NUdf::ITypeInfoHelper& typeInfoHelper, const Tvector<NUdf::TType*>& types,
+    const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
     const TVector<NPackedTuple::EColumnRole>& roles, arrow::MemoryPool* pool);
 
 }

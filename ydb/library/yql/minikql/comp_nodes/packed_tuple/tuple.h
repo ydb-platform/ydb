@@ -82,8 +82,7 @@ struct TTupleLayout {
     // Takes packed rows,
     // outputs vector of column sizes in bytes
     virtual void CalculateColumnSized(
-        const ui8* res, const std::vector<ui8, TMKQLAllocator<ui8>>& overflow,
-        ui32 count, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const = 0;
+        const ui8* res, ui32 count, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const = 0;
 };
 
 template <typename TTrait> struct TTupleLayoutFallback : public TTupleLayout {
@@ -99,8 +98,7 @@ template <typename TTrait> struct TTupleLayoutFallback : public TTupleLayout {
                 ui32 start, ui32 count) const override;
     
     void CalculateColumnSized(
-        const ui8* res, const std::vector<ui8, TMKQLAllocator<ui8>>& overflow,
-        ui32 count, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const override;
+        const ui8* res, ui32 count, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const override;
 
   private:
     std::array<std::vector<TColumnDesc>, 5>

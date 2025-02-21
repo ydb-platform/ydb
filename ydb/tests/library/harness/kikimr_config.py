@@ -115,7 +115,6 @@ class KikimrConfigGenerator(object):
             output_path=None,
             enable_pq=True,
             pq_client_service_types=None,
-            pdisks_directory=None,
             pdisk_store_path=None,
             enable_sqs=False,
             domain_name='Root',
@@ -204,7 +203,7 @@ class KikimrConfigGenerator(object):
         if self.state_storage_rings is None:
             self.state_storage_rings = copy.deepcopy(self.__node_ids[: 9 if erasure == Erasure.MIRROR_3_DC else 8])
         self.__use_in_memory_pdisks = _use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks)
-        self.__pdisks_directory = pdisks_directory # os.getenv('YDB_PDISKS_DIRECTORY')
+        self.__pdisks_directory = os.getenv('YDB_PDISKS_DIRECTORY')
         self.static_erasure = erasure
         self.domain_name = domain_name
         self.__number_of_pdisks_per_node = 1 + len(dynamic_pdisks)
@@ -652,10 +651,10 @@ class KikimrConfigGenerator(object):
                     pdisk_size_gb = disk_size / (1024 * 1024 * 1024)
                     pdisk_path = "SectorMap:%d:%d" % (pdisk_id, pdisk_size_gb)
                 elif self.__pdisks_directory:
-                    pdisk_path = self.__pdisks_directory  # os.path.join(self.__pdisks_directory, str(pdisk_id))
+                    pdisk_path = os.path.join(self.__pdisks_directory, str(pdisk_id))
                 else:
                     tmp_file = tempfile.NamedTemporaryFile(prefix="pdisk{}".format(pdisk_id), suffix=".data",
-                                                           dir=self._pdisk_store_path, delete=False)
+                                                           dir=self._pdisk_store_path)
                     pdisk_path = tmp_file.name
 
                 self._pdisks_info.append({'pdisk_path': pdisk_path, 'node_id': node_id, 'disk_size': disk_size,

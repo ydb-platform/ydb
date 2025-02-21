@@ -7,7 +7,8 @@ TEST_SRCS(
     test_column_family.py
 )
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
 
 DEPENDS(
     ydb/apps/ydbd

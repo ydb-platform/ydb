@@ -62,6 +62,7 @@ message StaleModeSettings {
 message SnapshotModeSettings {
 }
 
+// Snapshot Isolation
 message SnapshotRWModeSettings {
 }
 

@@ -31,7 +31,6 @@ public:
     std::vector<ui32> ColumnIds;
 
     const std::shared_ptr<IScanCursor>& GetScanCursor() const {
-        AFL_VERIFY(ScanCursor);
         return ScanCursor;
     }
 

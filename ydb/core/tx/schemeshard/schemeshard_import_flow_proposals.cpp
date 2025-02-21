@@ -317,10 +317,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
 
     pqGroup.SetName("streamImpl");
 
-    auto describeSchemeResult = DescribePath(ss, TlsActivationContext->AsActorContext(),changefeedPath + "/streamImpl");
+    NKikimrSchemeOp::TDescribeOptions opts;
+    // opts.SetReturnPartitioningInfo(false);
+    opts.SetReturnPartitionConfig(true);
+    opts.SetReturnBoundaries(true);
+    opts.SetReturnIndexTableBoundaries(true);
+    opts.SetShowPrivateTable(true);
+    auto describeSchemeResult = DescribePath(ss, TlsActivationContext->AsActorContext(),changefeedPath + "/streamImpl", opts);
 
     const auto& response = describeSchemeResult->GetRecord().GetPathDescription();
-    item.StreamImplPath = {response.GetSelf().GetSchemeshardId(), response.GetSelf().GetPathId()};
+    item.StreamImplPathId = {response.GetSelf().GetSchemeshardId(), response.GetSelf().GetPathId()};
     pqGroup.CopyFrom(response.GetPersQueueGroup());
 
     pqGroup.ClearTotalGroupCount();

@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
 
         runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
         auto& dataErasureConfig = runtime.GetAppData().DataErasureConfig;
-        dataErasureConfig.SetForceManualStartup(true);
+        dataErasureConfig.SetDataErasureIntervalSeconds(0); // do not schedule
         dataErasureConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
 
         auto sender = runtime.AllocateEdgeActor();
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
 
         runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
         auto& dataErasureConfig = runtime.GetAppData().DataErasureConfig;
-        dataErasureConfig.SetForceManualStartup(true);
+        dataErasureConfig.SetDataErasureIntervalSeconds(0); // do not schedule
         dataErasureConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
 
         auto sender = runtime.AllocateEdgeActor();

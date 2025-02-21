@@ -7851,11 +7851,11 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds));
 }
 
-TAutoPtr<TDataErasureManager> TSchemeShard::CreateDataErasureManager(const NKikimrConfig::TDataErasureConfig& config) {
+THolder<TDataErasureManager> TSchemeShard::CreateDataErasureManager(const NKikimrConfig::TDataErasureConfig& config) {
     if (IsDomainSchemeShard) {
-        return new TRootDataErasureManager(this, config);
+        return MakeHolder<TRootDataErasureManager>(this, config);
     } else {
-        return new TTenantDataErasureManager(this, config);
+        return MakeHolder<TTenantDataErasureManager>(this, config);
     }
 }
 

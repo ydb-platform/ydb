@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(DataErasureReboots) {
 
             runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
             auto& dataErasureConfig = runtime.GetAppData().DataErasureConfig;
-            dataErasureConfig.SetForceManualStartup(true);
+            dataErasureConfig.SetDataErasureIntervalSeconds(0); // do not schedule
             dataErasureConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
 
             ui64 txId = 100;

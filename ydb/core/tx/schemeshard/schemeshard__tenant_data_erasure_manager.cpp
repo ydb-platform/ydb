@@ -208,10 +208,6 @@ void TTenantDataErasureManager::Enqueue(const TShardIdx& shardIdx) {
 }
 
 void TTenantDataErasureManager::HandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[TenantDataErasureManager] [Disconnect] Data erasure disconnect "
-        "to tablet: " << tabletId
-        << ", at schemeshard: " << SchemeShard->TabletID());
-
     if (tabletId == TTabletId(SchemeShard->ParentDomainId.OwnerId)) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[TenantDataErasureManager] HandleDisconnect resend response to root schemeshard at schemeshard " << SchemeShard->TabletID());
@@ -233,6 +229,10 @@ void TTenantDataErasureManager::HandleDisconnect(TTabletId tabletId, const TActo
     if (it->second != clientId) {
         return;
     }
+
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[TenantDataErasureManager] [Disconnect] Data erasure disconnect "
+        "to tablet: " << tabletId
+        << ", at schemeshard: " << SchemeShard->TabletID());
 
     ActivePipes.erase(it);
     StartDataErasure(shardIdx);

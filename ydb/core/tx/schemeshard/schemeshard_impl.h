@@ -1503,7 +1503,7 @@ public:
     void ConnectToSA();
     TDuration SendBaseStatsToSA();
 
-    TAutoPtr<TDataErasureManager> CreateDataErasureManager(const NKikimrConfig::TDataErasureConfig& config);
+    THolder<TDataErasureManager> CreateDataErasureManager(const NKikimrConfig::TDataErasureConfig& config);
     void ConfigureDataErasureManager(const NKikimrConfig::TDataErasureConfig& config);
     void StartStopDataErasure();
     void MarkFirstRunRootDataErasureManager();
@@ -1529,7 +1529,7 @@ public:
     void SetShardsQuota(ui64 value) override;
 
     NLogin::TLoginProvider LoginProvider;
-    TAutoPtr<TDataErasureManager> DataErasureManager = nullptr;
+    THolder<TDataErasureManager> DataErasureManager = nullptr;
 
 private:
     void OnDetach(const TActorContext &ctx) override;

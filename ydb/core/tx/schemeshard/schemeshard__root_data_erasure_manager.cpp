@@ -24,7 +24,7 @@ TRootDataErasureManager::TRootDataErasureManager(TSchemeShard* const schemeShard
     , DataErasureBSCInterval(TDuration::Seconds(config.GetBlobStorageControllerRequestIntervalSeconds()))
     , CurrentWakeupInterval(DataErasureInterval)
     , BSC(MakeBSControllerID())
-    , IsManualStartup(config.GetForceManualStartup())
+    , IsManualStartup((DataErasureInterval.Seconds() == 0 ? true : false))
 {
     const auto ctx = SchemeShard->ActorContext();
     ctx.RegisterWithSameMailbox(Queue);
@@ -46,7 +46,7 @@ void TRootDataErasureManager::UpdateConfig(const NKikimrConfig::TDataErasureConf
     DataErasureBSCInterval = TDuration::Seconds(config.GetBlobStorageControllerRequestIntervalSeconds());
     CurrentWakeupInterval = DataErasureInterval;
     BSC = TTabletId(MakeBSControllerID());
-    IsManualStartup = config.GetForceManualStartup();
+    IsManualStartup = (DataErasureInterval.Seconds() == 0 ? true : false);
 
     const auto ctx = SchemeShard->ActorContext();
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -251,10 +251,6 @@ void TRootDataErasureManager::Enqueue(const TPathId& pathId) {
 }
 
 void TRootDataErasureManager::HandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[RootDataErasureManager] [Disconnect] Data erasure disconnect "
-        "to tablet: " << tabletId
-        << ", at schemeshard: " << SchemeShard->TabletID());
-
     if (tabletId == BSC) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[RootDataErasureManager] HandleDisconnect resend request to BSC at schemeshard " << SchemeShard->TabletID());
@@ -281,6 +277,10 @@ void TRootDataErasureManager::HandleDisconnect(TTabletId tabletId, const TActorI
     if (it->second != clientId) {
         return;
     }
+
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[RootDataErasureManager] [Disconnect] Data erasure disconnect "
+        "to tablet: " << tabletId
+        << ", at schemeshard: " << SchemeShard->TabletID());
 
     ActivePipes.erase(pathId);
     StartDataErasure(pathId);

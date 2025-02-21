@@ -64,13 +64,7 @@ int TCommandStorageConfigFetch::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NConfig::TConfigClient(*driver);
 
-    bool needDetach = DedicatedStorageSection || DedicatedClusterSection;
-
     NYdb::NConfig::TFetchAllConfigsSettings settings;
-
-    if (needDetach) {
-        settings.Transform(NYdb::NConfig::EFetchAllConfigsTransform::DETACH_STORAGE_CONFIG_SECTION);
-    }
 
     auto result = client.FetchAllConfigs(settings).GetValueSync();
     NStatusHelpers::ThrowOnError(result);
@@ -82,9 +76,13 @@ int TCommandStorageConfigFetch::Run(TConfig& config) {
         std::visit([&](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, NYdb::NConfig::TMainConfigIdentity>) {
-                clusterConfig = entry.Config;
+                if (DedicatedClusterSection || !DedicatedStorageSection) {
+                    clusterConfig = entry.Config;
+                }
             } else if constexpr (std::is_same_v<T, NYdb::NConfig::TStorageConfigIdentity>) {
-                storageConfig = entry.Config;
+                if (DedicatedStorageSection || !DedicatedClusterSection) {
+                    storageConfig = entry.Config;
+                }
             }
         }, entry.Identity);
     }

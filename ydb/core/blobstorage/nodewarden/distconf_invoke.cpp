@@ -145,8 +145,10 @@ namespace NKikimr::NStorage {
                 case TQuery::kAdvanceGeneration:
                     return AdvanceGeneration();
 
-                case TQuery::kFetchStorageConfig:
-                    return FetchStorageConfig(record.GetFetchStorageConfig().GetManual());
+                case TQuery::kFetchStorageConfig: {
+                    const auto& request = record.GetFetchStorageConfig();
+                    return FetchStorageConfig(request.GetManual(), request.GetMainConfig(), request.GetStorageConfig());
+                }
 
                 case TQuery::kReplaceStorageConfig:
                     return ReplaceStorageConfig(record.GetReplaceStorageConfig());
@@ -632,7 +634,7 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation
 
-        void FetchStorageConfig(bool manual) {
+        void FetchStorageConfig(bool manual, bool fetchMain, bool fetchStorage) {
             if (!Self->StorageConfig) {
                 FinishWithError(TResult::ERROR, "no agreed StorageConfig");
             } else if (!Self->MainConfigFetchYaml) {
@@ -640,10 +642,19 @@ namespace NKikimr::NStorage {
             } else {
                 auto ev = PrepareResult(TResult::OK, std::nullopt);
                 auto *record = &ev->Record;
-                record->MutableFetchStorageConfig()->SetYAML(Self->MainConfigFetchYaml);
+                auto *res = record->MutableFetchStorageConfig();
+                if (fetchMain) {
+                    res->SetYAML(Self->MainConfigFetchYaml);
+                }
+                if (fetchStorage && Self->StorageConfigYaml) {
+                    auto metadata = NYamlConfig::GetStorageMetadata(*Self->StorageConfigYaml);
+                    metadata.Cluster = metadata.Cluster.value_or("unknown"); // TODO: fix this
+                    metadata.Version = metadata.Version.value_or(0) + 1;
+                    res->SetStorageYAML(NYamlConfig::ReplaceMetadata(*Self->StorageConfigYaml, metadata));
+                }
 
                 if (manual) {
-                    // add BlobStorageConfig, NameserviceConfig, DomainsConfig
+                    // add BlobStorageConfig, NameserviceConfig, DomainsConfig into main/storage config
                 }
 
                 Finish(Sender, SelfId(), ev.release(), 0, Cookie);

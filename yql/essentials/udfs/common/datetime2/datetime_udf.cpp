@@ -42,6 +42,9 @@ extern const char EndOfQuarterUDF[] = "EndOfQuarter";
 extern const char EndOfMonthUDF[] = "EndOfMonth";
 extern const char EndOfWeekUDF[] = "EndOfWeek";
 extern const char EndOfDayUDF[] = "EndOfDay";
+extern const char ShiftYearsUDF[] = "ShiftYears";
+extern const char ShiftQuartersUDF[] = "ShiftQuarters";
+extern const char ShiftMonthsUDF[] = "ShiftMonths";
 
 extern const char TMResourceName[] = "DateTime2.TM";
 extern const char TM64ResourceName[] = "DateTime2.TM64";
@@ -451,27 +454,27 @@ TStorage& Reference(TValue& value) {
     return *reinterpret_cast<TStorage*>(value.GetRawPtr());
 }
 
-template<typename TValue>
-TValue DoAddMonths(const TValue& date, i64 months, const NUdf::IDateBuilder& builder) {
+template<const char* TResourceName>
+TUnboxedValuePod DoAddMonths(const TUnboxedValuePod& date, i64 months, const NUdf::IDateBuilder& builder) {
     auto result = date;
-    auto& storage = Reference(result);
+    auto& storage = Reference<TResourceName>(result);
     if (!NYql::DateTime::DoAddMonths(storage, months, builder)) {
-        return TValue{};
+        return TUnboxedValuePod{};
     }
     return result;
 }
 
-template<typename TValue>
-TValue DoAddQuarters(const TValue& date, i64 quarters, const NUdf::IDateBuilder& builder) {
-    return DoAddMonths(date, quarters * 3ll, builder);
+template<const char* TResourceName>
+TUnboxedValuePod DoAddQuarters(const TUnboxedValuePod& date, i64 quarters, const NUdf::IDateBuilder& builder) {
+    return DoAddMonths<TResourceName>(date, quarters * 3ll, builder);
 }
 
-template<typename TValue>
-TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& builder) {
+template<const char* TResourceName>
+TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf::IDateBuilder& builder) {
     auto result = date;
-    auto& storage = Reference(result);
+    auto& storage = Reference<TResourceName>(result);
     if (!NYql::DateTime::DoAddYears(storage, years, builder)) {
-        return TValue{};
+        return TUnboxedValuePod{};
     }
     return result;
 }
@@ -2088,20 +2091,119 @@ private:
         }
     };
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TShiftYears, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
-        return DoAddYears(args[0], args[1].Get<i32>(), valueBuilder->GetDateBuilder());
-    }
-    END_SIMPLE_ARROW_UDF(TShiftYears, TAddKernelExec<DoAddYears<TBlockItem>>::Do);
+template<const char* TUdfName, auto Shifter, auto WShifter>
+class TShift : public TBoxedValue {
+public:
+    typedef bool TTypeAwareMarker;
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TShiftQuarters, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
-        return DoAddQuarters(args[0], args[1].Get<i32>(), valueBuilder->GetDateBuilder());
+    static const TStringRef& Name() {
+        static auto name = TStringRef(TUdfName, std::strlen(TUdfName));
+        return name;
     }
-    END_SIMPLE_ARROW_UDF(TShiftQuarters, TAddKernelExec<DoAddQuarters<TBlockItem>>::Do);
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TShiftMonths, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
-        return DoAddMonths(args[0], args[1].Get<i32>(), valueBuilder->GetDateBuilder());
+    static bool DeclareSignature(
+        const TStringRef& name,
+        TType* userType,
+        IFunctionTypeInfoBuilder& builder,
+        bool typesOnly)
+    {
+        if (Name() != name) {
+            return false;
+        }
+
+        if (!userType) {
+            builder.SetError("User type is missing");
+            return true;
+        }
+
+        builder.UserType(userType);
+
+        const auto typeInfoHelper = builder.TypeInfoHelper();
+        TTupleTypeInspector tuple(*typeInfoHelper, userType);
+        Y_ENSURE(tuple, "Tuple with args and options tuples expected");
+        Y_ENSURE(tuple.GetElementsCount() > 0,
+                 "Tuple has to contain positional arguments");
+
+        TTupleTypeInspector argsTuple(*typeInfoHelper, tuple.GetElementType(0));
+        Y_ENSURE(argsTuple, "Tuple with args expected");
+        if (argsTuple.GetElementsCount() != 2) {
+            builder.SetError("Only two arguments expected");
+            return true;
+        }
+
+        auto argType = argsTuple.GetElementType(0);
+
+        if (const auto optType = TOptionalTypeInspector(*typeInfoHelper, argType)) {
+            argType = optType.GetItemType();
+        }
+
+        TResourceTypeInspector resource(*typeInfoHelper, argType);
+        if (!resource) {
+            TDataTypeInspector data(*typeInfoHelper, argType);
+            if (!data) {
+                SetInvalidTypeError(builder, typeInfoHelper, argType);
+                return true;
+            }
+
+            const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
+            if (features & NUdf::BigDateType) {
+                BuildSignature<TM64ResourceName, WShifter>(builder, typesOnly);
+                return true;
+            }
+            if (features & (NUdf::DateType | NUdf::TzDateType)) {
+                BuildSignature<TMResourceName, Shifter>(builder, typesOnly);
+                return true;
+            }
+
+            SetInvalidTypeError(builder, typeInfoHelper, argType);
+            return true;
+        }
+
+        if (resource.GetTag() == TStringRef::Of(TM64ResourceName)) {
+            BuildSignature<TM64ResourceName, WShifter>(builder, typesOnly);
+            return true;
+        }
+
+        if (resource.GetTag() == TStringRef::Of(TMResourceName)) {
+            BuildSignature<TMResourceName, Shifter>(builder, typesOnly);
+            return true;
+        }
+
+        ::TStringBuilder sb;
+        sb << "Unexpected Resource tag: got '" << resource.GetTag() << "'";
+        builder.SetError(sb);
+        return true;
     }
-    END_SIMPLE_ARROW_UDF(TShiftMonths, TAddKernelExec<DoAddMonths<TBlockItem>>::Do);
+private:
+    template<auto ShiftHanler>
+    class TImpl : public TBoxedValue {
+    public:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+            return ShiftHanler(args[0], args[1].Get<i32>(), valueBuilder->GetDateBuilder());
+        }
+    };
+
+    static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
+        ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+    {
+        ::TStringBuilder sb;
+        sb << "Invalid argument type: got ";
+        TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
+        sb << ", but Resource<" << TMResourceName <<"> or Resource<"
+           << TM64ResourceName << "> expected";
+        builder.SetError(sb);
+    }
+
+    template<const char* TResourceName, auto ShiftHandler>
+    static void BuildSignature(NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        builder.Returns<TOptional<TResource<TResourceName>>>();
+        builder.Args()->Add<TAutoMap<TResource<TResourceName>>>().template Add<i32>();
+        builder.IsStrict();
+        if (!typesOnly) {
+            builder.Implementation(new TImpl<ShiftHandler>());
+        }
+    }
+};
 
     template<size_t Digits, bool Exacly = true>
     struct PrintNDigits;
@@ -2860,9 +2962,9 @@ private:
         TStartOf,
         TTimeOfDay,
 
-        TShiftYears,
-        TShiftQuarters,
-        TShiftMonths,
+        TShift<ShiftYearsUDF, DoAddYears<TMResourceName>, DoAddYears<TM64ResourceName>>,
+        TShift<ShiftQuartersUDF, DoAddQuarters<TMResourceName>, DoAddQuarters<TM64ResourceName>>,
+        TShift<ShiftMonthsUDF, DoAddMonths<TMResourceName>, DoAddMonths<TM64ResourceName>>,
 
         TBoundaryOf<EndOfYearUDF, SimpleDatetimeToDatetimeUdf<TMResourceName, EndOfYear<TTMStorage>>,
                                   SimpleDatetimeToDatetimeUdf<TM64ResourceName, EndOfYear<TTM64Storage>>>,

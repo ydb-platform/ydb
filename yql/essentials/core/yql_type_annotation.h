@@ -56,13 +56,6 @@ public:
         }
     }
 
-    //FIXME remove
-    TModuleResolver(TModulesTable&& modules,
-        ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries = true, THolder<TExprContext> ownedCtx = {})
-        : TModuleResolver(NSQLTranslation::MakeAllTranslators(), std::move(modules), nextUniqueId, clusterMapping, sqlFlags, optimizeLibraries, std::move(ownedCtx))
-    {}
-
     TModuleResolver(const NSQLTranslation::TTranslators& translators, const TModulesTable* parentModules,
         ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
@@ -78,15 +71,6 @@ public:
         , FileAliasPrefix(fileAliasPrefix)
     {
     }
-
-    //FIXME remove
-    TModuleResolver(const TModulesTable* parentModules,
-        ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
-        THashMap<int, TLibraryCohesion>>& libs, const TString& fileAliasPrefix)
-        : TModuleResolver(NSQLTranslation::MakeAllTranslators(), parentModules, nextUniqueId,
-            clusterMapping, sqlFlags, optimizeLibraries, knownPackages, libs, fileAliasPrefix)
-    {}
 
     static TString NormalizeModuleName(const TString& path);
 

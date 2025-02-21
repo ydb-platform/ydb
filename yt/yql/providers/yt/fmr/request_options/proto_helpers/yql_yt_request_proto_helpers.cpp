@@ -64,11 +64,11 @@ TFmrTableRef FmrTableRefFromProto(const NProto::TFmrTableRef protoFmrTableRef) {
 
 NProto::TTableRef TableRefToProto(const TTableRef& tableRef) {
     NProto::TTableRef protoTableRef;
-    if (auto* ytTableRefPtr = std::get_if<TYtTableRef>(&tableRef.TableRef)) {
+    if (auto* ytTableRefPtr = std::get_if<TYtTableRef>(&tableRef)) {
         NProto::TYtTableRef protoYtTableRef = YtTableRefToProto(*ytTableRefPtr);
         protoTableRef.MutableYtTableRef()->Swap(&protoYtTableRef);
     } else {
-        auto* fmrTableRefPtr = std::get_if<TFmrTableRef>(&tableRef.TableRef);
+        auto* fmrTableRefPtr = std::get_if<TFmrTableRef>(&tableRef);
         NProto::TFmrTableRef protoFmrTableRef = FmrTableRefToProto(*fmrTableRefPtr);
         protoTableRef.MutableFmrTableRef()->Swap(&protoFmrTableRef);
     }

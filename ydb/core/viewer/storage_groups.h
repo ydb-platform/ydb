@@ -3,12 +3,9 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer_helper.h"
-#include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
-
-using namespace NProtobufJson;
 
 using TNodeId = ui32;
 using TGroupId = ui32;
@@ -2180,14 +2177,7 @@ public:
             }
         }
         AddEvent("RenderingResult");
-        TStringStream out;
-        Proto2Json(json, out, {
-            .EnumMode = TProto2JsonConfig::EnumValueMode::EnumName,
-            .StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always,
-            .WriteNanAsString = true,
-        });
-        AddEvent("ResultReady");
-        TBase::ReplyAndPassAway(GetHTTPOKJSON(out.Str()));
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 
     static YAML::Node GetSwagger() {

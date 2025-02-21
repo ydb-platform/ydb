@@ -178,6 +178,7 @@ enum ETypeAnnotationFlags : ui32 {
     TypeNonPresortable = 0x1000,
     TypeHasDynamicSize = 0x2000,
     TypeNonComparableInternal = 0x4000,
+    TypeHasError = 0x8000,
 };
 
 const ui64 TypeHashMagic = 0x10000;
@@ -311,6 +312,10 @@ public:
 
     bool IsPresortSupported() const {
         return (GetFlags() & TypeNonPresortable) == 0;
+    }
+
+    bool HasErrors() const {
+        return (GetFlags() & TypeHasError) != 0;
     }
 
     ui32 GetFlags() const {
@@ -1038,7 +1043,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Type;
 
     TTypeExprType(ui64 hash, const TTypeAnnotationNode* type)
-        : TTypeAnnotationNode(KindValue, TypeNonPersistable | TypeNonComputable, hash, 0)
+        : TTypeAnnotationNode(KindValue, TypeNonPersistable | TypeNonComputable | (type->GetFlags() & TypeHasError), hash, 0)
         , Type(type)
     {
     }
@@ -1157,7 +1162,7 @@ public:
 
     TCallableExprType(ui64 hash, const TTypeAnnotationNode* returnType, const TVector<TArgumentInfo>& arguments
         , size_t optionalArgumentsCount, const TStringBuf& payload)
-        : TTypeAnnotationNode(KindValue, MakeFlags(returnType), hash, returnType->GetUsedPgExtensions())
+        : TTypeAnnotationNode(KindValue, MakeFlags(arguments, returnType), hash, returnType->GetUsedPgExtensions())
         , ReturnType(returnType)
         , Arguments(arguments)
         , OptionalArgumentsCount(optionalArgumentsCount)
@@ -1244,9 +1249,13 @@ public:
     }
 
 private:
-    static ui32 MakeFlags(const TTypeAnnotationNode* returnType) {
+    static ui32 MakeFlags(const TVector<TArgumentInfo>& arguments, const TTypeAnnotationNode* returnType) {
         ui32 flags = TypeNonPersistable;
         flags |= returnType->GetFlags();
+        for (const auto& arg : arguments) {
+            flags |= (arg.Type->GetFlags() & TypeHasError);
+        }
+
         return flags;
     }
 
@@ -1346,7 +1355,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Error;
 
     TErrorExprType(ui64 hash, const TIssue& error)
-        : TTypeAnnotationNode(KindValue, 0, hash, 0)
+        : TTypeAnnotationNode(KindValue, TypeHasError, hash, 0)
         , Error(error)
     {}
 

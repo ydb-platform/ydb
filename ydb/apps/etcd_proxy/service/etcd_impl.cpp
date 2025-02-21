@@ -662,11 +662,15 @@ struct TTxn : public TOperation {
             const auto& scalarBoolTwoName = GetNameWithIndex("Two", resultsCounter);
 
             if (txnFilter.empty()) {
-                sql << scalarBoolOneName << " = select " << cmpResultSetName << ';' << std::endl;
-                sql << scalarBoolTwoName << " = select not " << cmpResultSetName << ';' << std::endl;
+                if (!Success.empty())
+                    sql << scalarBoolOneName << " = select " << cmpResultSetName << ';' << std::endl;
+                if (!Failure.empty())
+                    sql << scalarBoolTwoName << " = select not " << cmpResultSetName << ';' << std::endl;
             } else {
-                sql << scalarBoolOneName << " = select " << txnFilter << " and " << cmpResultSetName << ';' << std::endl;
-                sql << scalarBoolTwoName << " = select " << txnFilter << " and not " << cmpResultSetName << ';' << std::endl;
+                if (!Success.empty())
+                    sql << scalarBoolOneName << " = select " << txnFilter << " and " << cmpResultSetName << ';' << std::endl;
+                if (!Failure.empty())
+                    sql << scalarBoolTwoName << " = select " << txnFilter << " and not " << cmpResultSetName << ';' << std::endl;
             }
 
             make(Success, paramsCounter, resultsCounter, scalarBoolOneName);

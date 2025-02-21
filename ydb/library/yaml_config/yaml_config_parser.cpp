@@ -1435,6 +1435,15 @@ namespace NKikimr::NYaml {
         TTransformContext ctx;
         NKikimrConfig::TEphemeralInputFields ephemeralConfig;
 
+        if (json.Has("metadata")) {
+            ValidateMetadata(json["metadata"]);
+
+            Y_ENSURE_BT(json.Has("config") && json["config"].IsMap(),
+                       "'config' must be an object when 'metadata' is present");
+
+            jsonNode = json["config"];
+        }
+
         if (transform) {
             ExtractExtraFields(jsonNode, ctx);
 
@@ -1456,9 +1465,15 @@ namespace NKikimr::NYaml {
         NJson::TJsonValue jsonNode = Yaml2Json(yamlNode, true);
 
         NKikimrConfig::TAppConfig config;
+
         Parse(jsonNode, GetJsonToProtoConfig(), config, transform);
 
         return config;
+    }
+
+    void ValidateMetadata(const NJson::TJsonValue& metadata) {
+        Y_ENSURE_BT(metadata.Has("cluster") && metadata["cluster"].IsString(), "Metadata must contain a string 'cluster' field");
+        Y_ENSURE_BT(metadata.Has("version") && metadata["version"].IsUInteger(), "Metadata must contain an unsigned int 'version' field");
     }
 
 } // NKikimr::NYaml

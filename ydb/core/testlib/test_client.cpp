@@ -589,9 +589,9 @@ namespace Tests {
         }
 
         auto actorSystemConfig = Settings->AppConfig->GetActorSystemConfig();
-        const bool useAutoConfig = actorSystemConfig.HasUseAutoConfig() && actorSystemConfig.GetUseAutoConfig();
+        const bool useAutoConfig = actorSystemConfig.GetUseAutoConfig();
         if (useAutoConfig) {
-            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig);
+            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, false);
         }
 
         TCpuManagerConfig cpuManager;

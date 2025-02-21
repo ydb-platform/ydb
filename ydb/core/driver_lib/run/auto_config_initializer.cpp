@@ -227,7 +227,7 @@ namespace NKikimr::NAutoConfigInitializer {
         return servicePools;
     }
 
-    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config) {
+    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config, bool isDynamicNode) {
         config->SetUseAutoConfig(true);
         config->ClearExecutor();
 
@@ -270,6 +270,10 @@ namespace NKikimr::NAutoConfigInitializer {
         TVector<NKikimrConfig::TActorSystemConfig::TExecutor *> executors;
         for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {
             executors.push_back(config->AddExecutor());
+        }
+
+        if (!config->HasNodeType()) {
+            config->SetNodeType(isDynamicNode ? NKikimrConfig::TActorSystemConfig::COMPUTE : NKikimrConfig::TActorSystemConfig::STORAGE);
         }
 
         auto &cpuTable = (config->GetNodeType() == NKikimrConfig::TActorSystemConfig::STORAGE ? StorageCpuTable :

@@ -504,7 +504,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                                                    const NKikimr::TAppData* appData) {
     bool hasASCfg = Config.HasActorSystemConfig();
     if (!hasASCfg || Config.GetActorSystemConfig().GetUseAutoConfig()) {
-        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig());
+        bool isDynamicNode = appData->DynamicNameserviceConfig->MinDynamicNodeId <= NodeId;
+        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), isDynamicNode);
     }
 
     Y_ABORT_UNLESS(Config.HasActorSystemConfig());

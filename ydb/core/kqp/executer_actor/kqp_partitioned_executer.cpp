@@ -17,12 +17,6 @@ namespace NKqp {
 
 namespace {
 
-template <typename T>
-bool FillParamValue(TQueryData::TPtr queryData, const TString& name, T value) {
-    auto type = queryData->GetParameterType(name);
-    return queryData->AddUVParam(name, type, NUdf::TUnboxedValuePod(value));
-}
-
 class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecuter> {
     enum class EExecuterResponse {
         NONE,
@@ -38,7 +32,9 @@ public:
     TKqpPartitionedExecuter(
         IKqpGateway::TExecPhysicalRequest&& literalRequest,
         IKqpGateway::TExecPhysicalRequest&& physicalRequest,
-        const TActorId sessionActorId, const TString& database,
+        const TActorId sessionActorId,
+        const ::google::protobuf::RepeatedPtrField< ::NKikimrKqp::TParameterDescription>* parameters,
+        const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         const TIntrusivePtr<TKqpCounters>& counters,
         TKqpRequestCounters::TPtr requestCounters,
@@ -52,6 +48,7 @@ public:
         : LiteralRequest(std::move(literalRequest))
         , PhysicalRequest(std::move(physicalRequest))
         , SessionActorId(sessionActorId)
+        , Parameters(parameters)
         , Database(database)
         , UserToken(userToken)
         , Counters(counters)
@@ -65,17 +62,22 @@ public:
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
     {
+        YQL_ENSURE(LiteralRequest.Transactions.size() == 1);
         YQL_ENSURE(PhysicalRequest.Transactions.size() == 1);
 
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(LiteralRequest.TxAlloc,
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(PhysicalRequest.TxAlloc,
             TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
-        for (const auto& tx : LiteralRequest.Transactions) {
+        for (const auto& tx : PhysicalRequest.Transactions) {
             YQL_ENSURE(tx.Body->StagesSize() > 0);
 
             for (const auto& stage : tx.Body->GetStages()) {
                 for (auto& sink : stage.GetSinks()) {
                     FillTableMetaInfo(sink);
+
+                    if (!KeyColumnTypes.empty()) {
+                        break;
+                    }
                 }
             }
         }
@@ -124,9 +126,9 @@ public:
         auto* request = ev->Get()->Request.Get();
 
         if (request->ErrorCount > 0) {
-            CA_LOG_E(TStringBuilder() << "Failed to get table: "
-                << TableId << "'");
-            return;
+            RuntimeError(
+                Ydb::StatusIds::INTERNAL_ERROR,
+                NYql::TIssues({NYql::TIssue("RuntimeError: PrepareState, failed to get table")}));
         }
 
         YQL_ENSURE(request->ResultSet.size() == 1);
@@ -157,7 +159,7 @@ public:
         ExecutersResponses.resize(Partitioning->size(), EExecuterResponse::NONE);
 
         for (size_t i = 0; i < Partitioning->size(); ++i) {
-            CreateExecuterWithBuffer(i, /*isRetry*/ false);
+            CreateExecuterWithBuffer(i, /* isRetry */ false);
         }
 
         Become(&TKqpPartitionedExecuter::ExecuteState);
@@ -165,7 +167,7 @@ public:
 
     void CreateExecuterWithBuffer(size_t partitionIdx, bool isRetry) {
         IKqpGateway::TExecPhysicalRequest newRequest(PhysicalRequest.TxAlloc);
-        FillRequestWithParams(newRequest, partitionIdx);
+        FillPhysicalRequest(newRequest, partitionIdx);
 
         auto txManager = CreateKqpTransactionManager();
 
@@ -372,9 +374,36 @@ private:
         TablePath = settings.GetTable().GetPath();
     }
 
-    void FillRequestWithParams(IKqpGateway::TExecPhysicalRequest& newRequest, size_t partitionIdx) {
+    void FillPhysicalRequest(IKqpGateway::TExecPhysicalRequest& physicalRequest, size_t partitionIdx) {
+        IKqpGateway::TExecPhysicalRequest newLiteralRequest(LiteralRequest.TxAlloc);
+        FillRequestWithParams(newLiteralRequest, LiteralRequest, partitionIdx);
+
+        auto ev = ExecuteLiteral(std::move(newLiteralRequest), RequestCounters, SelfId(), UserRequestContext);
+        auto* response = ev->Record.MutableResponse();
+
+        if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
+            RuntimeError(
+                Ydb::StatusIds::BAD_REQUEST,
+                NYql::TIssues({NYql::TIssue("RuntimeError: Error status from literal.")}));
+        }
+
+        FillRequestWithParams(physicalRequest, PhysicalRequest, partitionIdx);
+
+        auto queryData = physicalRequest.Transactions.front().Params;
+        queryData->ClearPrunedParams();
+
+        if (!ev->GetTxResults().empty()) {
+            queryData->AddTxResults(0, std::move(ev->GetTxResults()));
+        }
+
+        queryData->AddTxHolders(std::move(ev->GetTxHolders()));
+    }
+
+    void FillRequestWithParams(IKqpGateway::TExecPhysicalRequest& newRequest,
+        IKqpGateway::TExecPhysicalRequest& from, size_t partitionIdx)
+    {
         YQL_ENSURE(Partitioning);
-        FillNewRequest(newRequest);
+        FillNewRequest(newRequest, from);
 
         auto& queryData = newRequest.Transactions.front().Params;
 
@@ -413,47 +442,76 @@ private:
                 YQL_ENSURE(FillParamValue(queryData, beginParam, prevCellValue));
             }
         }
+
+        try {
+            for (const auto& paramDesc : *Parameters) {
+                queryData->ValidateParameter(paramDesc.GetName(), paramDesc.GetType(), newRequest.TxAlloc->TypeEnv);
+            }
+
+            for(const auto& paramBinding: newRequest.Transactions.front().Body->GetParamBindings()) {
+                queryData->MaterializeParamValue(true, paramBinding);
+            }
+        } catch (const yexception& ex) {
+            RuntimeError(
+                Ydb::StatusIds::BAD_REQUEST,
+                NYql::TIssues({NYql::TIssue("RuntimeError: Cannot prepare parameters for request.")}));
+        }
     }
 
-    void FillNewRequest(IKqpGateway::TExecPhysicalRequest& newRequest) {
-        newRequest.AllowTrailingResults = PhysicalRequest.AllowTrailingResults;
-        newRequest.QueryType = PhysicalRequest.QueryType;
-        newRequest.PerRequestDataSizeLimit = PhysicalRequest.PerRequestDataSizeLimit;
-        newRequest.MaxShardCount = PhysicalRequest.MaxShardCount;
-        newRequest.DataShardLocks = PhysicalRequest.DataShardLocks;
-        newRequest.LocksOp = PhysicalRequest.LocksOp;
-        newRequest.AcquireLocksTxId = PhysicalRequest.AcquireLocksTxId;
-        newRequest.Timeout = PhysicalRequest.Timeout;
-        newRequest.CancelAfter = PhysicalRequest.CancelAfter;
-        newRequest.MaxComputeActors = PhysicalRequest.MaxComputeActors;
-        newRequest.MaxAffectedShards = PhysicalRequest.MaxAffectedShards;
-        newRequest.TotalReadSizeLimitBytes = PhysicalRequest.TotalReadSizeLimitBytes;
-        newRequest.MkqlMemoryLimit = PhysicalRequest.MkqlMemoryLimit;
-        newRequest.PerShardKeysSizeLimitBytes = PhysicalRequest.PerShardKeysSizeLimitBytes;
-        newRequest.StatsMode = PhysicalRequest.StatsMode;
-        newRequest.ProgressStatsPeriod = PhysicalRequest.ProgressStatsPeriod;
-        newRequest.Snapshot = PhysicalRequest.Snapshot;
-        newRequest.ResourceManager_ = PhysicalRequest.ResourceManager_;
-        newRequest.CaFactory_ = PhysicalRequest.CaFactory_;
-        newRequest.IsolationLevel = PhysicalRequest.IsolationLevel;
-        newRequest.RlPath = PhysicalRequest.RlPath;
-        newRequest.NeedTxId = PhysicalRequest.NeedTxId;
-        newRequest.UseImmediateEffects = PhysicalRequest.UseImmediateEffects;
-        // newRequest.Orbit = Request.Orbit;
-        // newRequest.TraceId = Request.TraceId;
-        newRequest.UserTraceId = PhysicalRequest.UserTraceId;
-        newRequest.OutputChunkMaxSize = PhysicalRequest.OutputChunkMaxSize;
+    void FillNewRequest(IKqpGateway::TExecPhysicalRequest& newRequest, IKqpGateway::TExecPhysicalRequest& from) {
+        newRequest.AllowTrailingResults = from.AllowTrailingResults;
+        newRequest.QueryType = from.QueryType;
+        newRequest.PerRequestDataSizeLimit = from.PerRequestDataSizeLimit;
+        newRequest.MaxShardCount = from.MaxShardCount;
+        newRequest.DataShardLocks = from.DataShardLocks;
+        newRequest.LocksOp = from.LocksOp;
+        newRequest.AcquireLocksTxId = from.AcquireLocksTxId;
+        newRequest.Timeout = from.Timeout;
+        newRequest.CancelAfter = from.CancelAfter;
+        newRequest.MaxComputeActors = from.MaxComputeActors;
+        newRequest.MaxAffectedShards = from.MaxAffectedShards;
+        newRequest.TotalReadSizeLimitBytes = from.TotalReadSizeLimitBytes;
+        newRequest.MkqlMemoryLimit = from.MkqlMemoryLimit;
+        newRequest.PerShardKeysSizeLimitBytes = from.PerShardKeysSizeLimitBytes;
+        newRequest.StatsMode = from.StatsMode;
+        newRequest.ProgressStatsPeriod = from.ProgressStatsPeriod;
+        newRequest.Snapshot = from.Snapshot;
+        newRequest.ResourceManager_ = from.ResourceManager_;
+        newRequest.CaFactory_ = from.CaFactory_;
+        newRequest.IsolationLevel = from.IsolationLevel;
+        newRequest.RlPath = from.RlPath;
+        newRequest.NeedTxId = from.NeedTxId;
+        newRequest.UseImmediateEffects = from.UseImmediateEffects;
+        // newRequest.Orbit = from.Orbit;
+        newRequest.TraceId = NWilson::TTraceId();
+        newRequest.UserTraceId = from.UserTraceId;
+        newRequest.OutputChunkMaxSize = from.OutputChunkMaxSize;
 
-        newRequest.Transactions.emplace_back(PhysicalRequest.Transactions.front().Body, std::make_shared<TQueryData>(PhysicalRequest.TxAlloc));
+        newRequest.Transactions.emplace_back(from.Transactions.front().Body, std::make_shared<TQueryData>(from.TxAlloc));
 
         auto newParams = newRequest.Transactions.front().Params;
-        auto oldParams = PhysicalRequest.Transactions.front().Params;
+        auto oldParams = from.Transactions.front().Params;
         for (auto& [name, _] : oldParams->GetParams()) {
             if (!name.StartsWith(NBatchParams::Header)) {
                 TTypedUnboxedValue& typedValue = oldParams->GetParameterUnboxedValue(name);
                 newParams->AddUVParam(name, typedValue.first, typedValue.second);
             }
         }
+    }
+
+    template <typename T>
+    bool FillParamValue(TQueryData::TPtr queryData, const TString& name, T value) {
+        for (const auto& paramDesc : *Parameters) {
+            if (paramDesc.GetName() != name) {
+                continue;
+            }
+
+            NKikimrMiniKQL::TType protoType = paramDesc.GetType();
+            NKikimr::NMiniKQL::TType* paramType = ImportTypeFromProto(protoType, PhysicalRequest.TxAlloc->TypeEnv);
+            queryData->AddUVParam(name, paramType, NUdf::TUnboxedValuePod(value));
+            return true;
+        }
+        return false;
     }
 
     bool CheckExecutersAreSuccess() const {
@@ -510,6 +568,7 @@ private:
     TVector<EExecuterResponse> ExecutersResponses;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    const ::google::protobuf::RepeatedPtrField< ::NKikimrKqp::TParameterDescription>* Parameters;
     TTableId TableId;
     TString TablePath;
     TString LogPrefix;
@@ -534,14 +593,15 @@ private:
 
 NActors::IActor* CreateKqpPartitionedExecuter(
     NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& literalRequest, NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& physicalRequest,
-    const TActorId sessionActorId, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    const TIntrusivePtr<NKikimr::NKqp::TKqpCounters>& counters, NKikimr::NKqp::TKqpRequestCounters::TPtr requestCounters,
-    const NKikimrConfig::TTableServiceConfig& tableServiceConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    TPreparedQueryHolder::TConstPtr preparedQuery, const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext,
-    ui32 statementResultIndex, const std::optional<NKikimr::NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup,
-    const TGUCSettings::TPtr& GUCSettings, const NKikimr::NKqp::TShardIdToTableInfoPtr& shardIdToTableInfo)
+    const TActorId sessionActorId, const ::google::protobuf::RepeatedPtrField< ::NKikimrKqp::TParameterDescription>* parameters,
+    const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TIntrusivePtr<NKikimr::NKqp::TKqpCounters>& counters,
+    NKikimr::NKqp::TKqpRequestCounters::TPtr requestCounters, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery,
+    const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const std::optional<NKikimr::NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+    const NKikimr::NKqp::TShardIdToTableInfoPtr& shardIdToTableInfo)
 {
-    return new TKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest), sessionActorId, database, userToken,
+    return new TKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest), sessionActorId, parameters, database, userToken,
         counters, requestCounters, tableServiceConfig, std::move(asyncIoFactory), std::move(preparedQuery), userRequestContext,
         statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo);
 }

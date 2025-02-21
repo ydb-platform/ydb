@@ -123,12 +123,6 @@ bool IsBatchQuery(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     return false;
 }
 
-bool IsBatchQuery(const TKqpPhyTxHolder::TConstPtr& tx) {
-    NKikimrKqp::TKqpTableSinkSettings settings;
-    auto isFilledSettings = FillTableSinkSettings(settings, tx);
-    return isFilledSettings && settings.GetIsBatch();
-}
-
 class TRequestFail : public yexception {
 public:
     Ydb::StatusIds::StatusCode Status;
@@ -1183,6 +1177,11 @@ public:
         }
 
         if (Settings.TableService.GetEnableOltpSink() && IsBatchQuery(QueryState->PreparedQuery->GetPhysicalQuery())) {
+            if (!Settings.TableService.GetEnableBatchUpdates()) {
+                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                        "Batch updates and deletes are disabled at current time.");
+            }
+
             ExecutePartitioned(tx);
         } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
             ExecuteDeferredEffectsImmediately(tx);
@@ -1199,11 +1198,6 @@ public:
         auto literalRequest = PrepareLiteralRequest(QueryState.get());
         auto physicalRequest = PreparePhysicalRequest(QueryState.get(), txCtx.TxAlloc);
 
-        try {
-            QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txCtx.TxAlloc->TypeEnv);
-        } catch (const yexception& ex) {
-            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
-        }
         literalRequest.Transactions.emplace_back(tx, QueryState->QueryData);
         physicalRequest.Transactions.emplace_back(tx, QueryState->QueryData);
 
@@ -1320,22 +1314,6 @@ public:
                     break;
                 default:
                     YQL_ENSURE(false, "Unexpected physical tx type in data query: " << (ui32)tx->GetType());
-            }
-
-            for (const auto& paramDesc : QueryState->PreparedQuery->GetParameters()) {
-                if (!paramDesc.GetName().StartsWith(NBatchParams::Header)) {
-                    continue;
-                }
-
-                NKikimrMiniKQL::TType protoType = paramDesc.GetType();
-                NKikimr::NMiniKQL::TType* paramType = ImportTypeFromProto(protoType, txCtx.TxAlloc->TypeEnv);
-
-                NUdf::TUnboxedValue value = MakeDefaultValueByType(paramType);
-                if (paramDesc.GetName() == NBatchParams::IsFirstQuery || paramDesc.GetName() == NBatchParams::IsLastQuery) {
-                    value = NUdf::TUnboxedValuePod(true);
-                }
-
-                QueryState->QueryData->AddUVParam(paramDesc.GetName(), paramType, value);
             }
 
             try {
@@ -1521,7 +1499,8 @@ public:
     void SendToPartitionedExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& literalRequest,
         IKqpGateway::TExecPhysicalRequest&& physicalRequest)
     {
-        auto executerActor = CreateKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest), SelfId(), Settings.Database,
+        auto executerActor = CreateKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest),
+            SelfId(), &QueryState->PreparedQuery->GetParameters(), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(), Counters,
             RequestCounters, Settings.TableService, AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr,
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),

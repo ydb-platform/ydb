@@ -248,6 +248,7 @@ public:
 
     struct TDatabaseState {
         TTabletId HiveId = {};
+        TTabletId SchemeShardId = {};
         TPathId ResourcePathId = {};
         TVector<TNodeId> ComputeNodeIds;
         THashSet<ui64> StoragePools;        // BSConfig case
@@ -288,14 +289,20 @@ public:
             return Sprintf("%04x", (ui32)::crc16(data.data(), data.size()));
         }
 
+        static TString crc32(const TString& data) {
+            return Sprintf("%08x", (ui32)::crc32(data.data(), data.size()));
+        }
+
         static TString GetIssueId(const Ydb::Monitoring::IssueLog& issueLog) {
-            TStringStream id;
-            id << Ydb::Monitoring::StatusFlag_Status_Name(issueLog.status());
             const Ydb::Monitoring::Location& location(issueLog.location());
-            if (location.database().name()) {
-                id << '-' << crc16(location.database().name());
+            TStringStream id;
+            if (issueLog.status() != Ydb::Monitoring::StatusFlag::UNSPECIFIED) {
+                id << Ydb::Monitoring::StatusFlag_Status_Name(issueLog.status()) << '-';
             }
-            id << '-' << crc16(issueLog.message());
+            id << crc16(issueLog.message());
+            if (location.database().name()) {
+                id << '-' << crc32(location.database().name());
+            }
             if (location.storage().node().id()) {
                 id << '-' << location.storage().node().id();
             } else {
@@ -313,7 +320,7 @@ public:
                     id << '-' << location.storage().pool().group().id()[0];
                 } else {
                     if (location.storage().pool().name()) {
-                        id << '-' << crc16(location.storage().pool().name());
+                        id << '-' << crc32(location.storage().pool().name());
                     }
                 }
             }
@@ -335,6 +342,9 @@ public:
             }
             if (location.compute().tablet().type()) {
                 id << '-' << location.compute().tablet().type();
+            }
+            if (location.compute().schema().path()) {
+                id << '-' << crc32(location.compute().schema().path());
             }
             return id.Str();
         }
@@ -631,6 +641,7 @@ public:
     TTabletId RootSchemeShardId;
     TTabletId RootHiveId;
     THashMap<TString, TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult>> DescribeByPath;
+    THashMap<TTabletId, TRequestResponse<TEvSysView::TEvGetPartitionStatsResult>> GetPartitionStatsResult;
     THashMap<TString, THashSet<TString>> PathsByPoolName;
     THashMap<TString, THolder<NTenantSlotBroker::TEvTenantSlotBroker::TEvTenantState>> TenantStateByPath;
     THashMap<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
@@ -686,6 +697,20 @@ public:
     TList<NKikimrWhiteboard::TBSGroupStateInfo> BSGroupAppended;
     std::unordered_map<TGroupId, const NKikimrWhiteboard::TBSGroupStateInfo*> MergedBSGroupState;
 
+    THashMap<ui64, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateKeySet;
+
+    struct THintOverloadedShard {
+        TTabletId TabletId;
+        TFollowerId FollowerId;
+        double CPUCores;
+        TTabletId SchemeShardId;
+        TString Message;
+    };
+
+    THashMap<TString, THintOverloadedShard> OverloadedShardHints;
+    static constexpr size_t MAX_OVERLOADED_SHARDS_HINTS = 10;
+    static constexpr double OVERLOADED_SHARDS_CPU_CORES = 0.01; /* HACK */
+
     struct TTabletRequestsState {
         struct TTabletState {
             TTabletTypes::EType Type = TTabletTypes::Unknown;
@@ -712,6 +737,7 @@ public:
             RequestGroups,
             RequestVSlots,
             RequestPDisks,
+            RequestGetPartitionStats,
         };
 
         void MakeRequest(TTabletId tabletId, const TString& key, ui64 requestId) {
@@ -743,6 +769,7 @@ public:
     TTabletRequestsState TabletRequests;
 
     TDuration Timeout = TDuration::MilliSeconds(20000);
+    bool ReturnHints = false;
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
     bool IsSpecificDatabaseFilter() const {
@@ -754,6 +781,7 @@ public:
         if (Request->Request.operation_params().has_operation_timeout()) {
             Timeout = GetDuration(Request->Request.operation_params().operation_timeout());
         }
+        ReturnHints = Request->Request.return_hints() && IsSpecificDatabaseFilter();
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto *domain = domains->GetDomain();
         DomainPath = "/" + domain->Name;
@@ -870,6 +898,7 @@ public:
             hFunc(TEvSysView::TEvGetGroupsResponse, Handle);
             hFunc(TEvSysView::TEvGetVSlotsResponse, Handle);
             hFunc(TEvSysView::TEvGetPDisksResponse, Handle);
+            hFunc(TEvSysView::TEvGetPartitionStatsResult, Handle);
             hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvVDiskStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvPDiskStateResponse, Handle);
@@ -935,19 +964,33 @@ public:
 
     std::unordered_map<TTabletId, std::vector<TString>> TabletToDescribePath;
 
-    [[nodiscard]] TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult> RequestDescribe(TTabletId schemeShardId, const TString& path) {
+    [[nodiscard]] TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult> RequestDescribe(TTabletId schemeShardId, const TString& path,
+            const NKikimrSchemeOp::TDescribeOptions* options = nullptr) {
         THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();
         NKikimrSchemeOp::TDescribePath& record = request->Record;
         record.SetPath(path);
-        record.MutableOptions()->SetReturnPartitioningInfo(false);
-        record.MutableOptions()->SetReturnPartitionConfig(false);
-        record.MutableOptions()->SetReturnChildren(false);
+        if (options) {
+            record.MutableOptions()->CopyFrom(*options);
+        } else {
+            record.MutableOptions()->SetReturnPartitioningInfo(false);
+            record.MutableOptions()->SetReturnPartitionConfig(false);
+            record.MutableOptions()->SetReturnChildren(false);
+        }
         auto response = RequestTabletPipe<TEvSchemeShard::TEvDescribeSchemeResult>(schemeShardId, request.Release());
         if (response.Span) {
             response.Span.Attribute("path", path);
         }
         TabletToDescribePath[schemeShardId].emplace_back(path);
         return response;
+    }
+
+    [[nodiscard]] TRequestResponse<TEvSysView::TEvGetPartitionStatsResult> RequestPartitionStats(TTabletId schemeShardId, TSubDomainKey subDomainKey) {
+        THolder<TEvSysView::TEvGetPartitionStats> request = MakeHolder<TEvSysView::TEvGetPartitionStats>();
+        NKikimrSysView::TEvGetPartitionStats& record = request->Record;
+        record.MutableFilter()->MutableNotLess()->SetCPUCores(OVERLOADED_SHARDS_CPU_CORES); //
+        record.SetDomainKeyOwnerId(subDomainKey.GetSchemeShard());
+        record.SetDomainKeyPathId(subDomainKey.GetPathId());
+        return RequestTabletPipe<TEvSysView::TEvGetPartitionStatsResult>(schemeShardId, request.Release(), TTabletRequestsState::RequestGetPartitionStats);
     }
 
     [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveInfo> RequestHiveInfo(TTabletId hiveId) {
@@ -977,28 +1020,27 @@ public:
         PDisks = RequestTabletPipe<TEvSysView::TEvGetPDisksResponse>(BsControllerId, requestPDisks.Release(), TTabletRequestsState::RequestPDisks);
     }
 
-    THashMap<ui64, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateKeySet;
-    ui64 NavigateToGo = 0;
+    [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(THolder<TSchemeCacheNavigate> request) {
+        TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0/*flags*/, 0/*cookie*/, response.Span.GetTraceId());
+        ++Requests;
+        return response;
+    }
 
-    void RequestSchemeCacheNavigate(const TString& path) {
-        ui64 cookie = NavigateKeySet.size();
+    [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie) {
         THolder<TSchemeCacheNavigate> request = MakeHolder<TSchemeCacheNavigate>();
         request->Cookie = cookie;
         TSchemeCacheNavigate::TEntry& entry = request->ResultSet.emplace_back();
         entry.Path = NKikimr::SplitPath(path);
         entry.Operation = TSchemeCacheNavigate::EOp::OpPath;
-        TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
-        if (Span) {
+        auto response = MakeRequestSchemeCacheNavigate(std::move(request));
+        if (response.Span) {
             response.Span.Attribute("path", path);
         }
-        NavigateKeySet.emplace(cookie, std::move(response));
-        ++NavigateToGo;
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0/*flags*/, 0/*cookie*/, response.Span.GetTraceId());
-        ++Requests;
+        return response;
     }
 
-    void RequestSchemeCacheNavigate(const TPathId& pathId) {
-        ui64 cookie = NavigateKeySet.size();
+    [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TPathId& pathId, ui64 cookie) {
         THolder<TSchemeCacheNavigate> request = MakeHolder<TSchemeCacheNavigate>();
         request->Cookie = cookie;
         TSchemeCacheNavigate::TEntry& entry = request->ResultSet.emplace_back();
@@ -1006,14 +1048,23 @@ public:
         entry.RequestType = TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
         entry.RedirectRequired = false;
         entry.Operation = TSchemeCacheNavigate::EOp::OpPath;
-        TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
-        if (Span) {
+        auto response = MakeRequestSchemeCacheNavigate(std::move(request));
+        if (response.Span) {
             response.Span.Attribute("path_id", pathId.ToString());
         }
-        NavigateKeySet.emplace(cookie, std::move(response));
-        ++NavigateToGo;
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0/*flags*/, 0/*cookie*/, response.Span.GetTraceId());
-        ++Requests;
+        return response;
+    }
+
+    ui64 RequestSchemeCacheNavigate(const TString& path) {
+        ui64 cookie = NavigateKeySet.size();
+        NavigateKeySet.emplace(cookie, MakeRequestSchemeCacheNavigate(path, cookie));
+        return cookie;
+    }
+
+    ui64 RequestSchemeCacheNavigate(const TPathId& pathId) {
+        ui64 cookie = NavigateKeySet.size();
+        NavigateKeySet.emplace(cookie, MakeRequestSchemeCacheNavigate(pathId, cookie));
+        return cookie;
     }
 
     TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0) {
@@ -1240,6 +1291,9 @@ public:
                     DescribeByPath[path].Error(error);
                 }
             }
+            if (GetPartitionStatsResult.count(tabletId) != 0) {
+                GetPartitionStatsResult[tabletId].Error(error);
+            }
             TabletRequests.TabletStates[tabletId].IsUnresponsive = true;
             for (const auto& [requestId, requestState] : TabletRequests.RequestsInFlight) {
                 if (requestState.TabletId == tabletId) {
@@ -1339,26 +1393,101 @@ public:
         RequestDone("TEvGetPDisksRequest");
     }
 
+    void Handle(TEvSysView::TEvGetPartitionStatsResult::TPtr& ev) {
+        //TTabletId schemeShardId = TabletRequests.CompleteRequest(ev->Cookie);
+        TTabletId schemeShardId = TabletRequests.CompleteRequest(TTabletRequestsState::RequestGetPartitionStats);
+        if (schemeShardId) {
+            auto& partitionStatsResult(GetPartitionStatsResult[schemeShardId]);
+            partitionStatsResult.Set(std::move(ev));
+            if (partitionStatsResult.IsOk()) {
+                std::map<double, std::pair<const NKikimrSysView::TPartitionStatsResult*, const NKikimrSysView::TPartitionStats*>> overloadedPaths;
+                for (const NKikimrSysView::TPartitionStatsResult& statsPath : partitionStatsResult.Get()->Record.GetStats()) {
+                    double cores = 0;
+                    const NKikimrSysView::TPartitionStats* stats = nullptr;
+                    for (const auto& statsShard : statsPath.GetStats()) {
+                        if (statsShard.GetCPUCores() >= OVERLOADED_SHARDS_CPU_CORES && cores < statsShard.GetCPUCores()) {
+                            cores = statsShard.GetCPUCores();
+                            stats = &statsShard;
+                        }
+                    }
+                    if (stats) {
+                        overloadedPaths.emplace(cores, std::make_pair(&statsPath, stats));
+                    }
+                }
+                for (auto rit = overloadedPaths.rbegin(); rit != overloadedPaths.rend(); ++rit) {
+                    const NKikimrSysView::TPartitionStatsResult* statsPath = rit->second.first;
+                    const NKikimrSysView::TPartitionStats* statsShard = rit->second.second;
+                    TString path = statsPath->GetPath();
+                    if (OverloadedShardHints.size() < MAX_OVERLOADED_SHARDS_HINTS) {
+                        if (DescribeByPath.count(path) == 0) {
+                            NKikimrSchemeOp::TDescribeOptions options;
+                            options.SetReturnPartitioningInfo(true);
+                            options.SetReturnPartitionConfig(true);
+                            options.SetReturnChildren(false);
+                            options.SetReturnRangeKey(false);
+                            DescribeByPath[path] = RequestDescribe(schemeShardId, path, &options);
+                            auto& hint = OverloadedShardHints[path];
+                            hint.CPUCores = statsShard->GetCPUCores();
+                            hint.TabletId = statsShard->GetTabletId();
+                            hint.FollowerId = statsShard->GetFollowerId();
+                            hint.SchemeShardId = schemeShardId;
+                        }
+                    }
+                }
+            }
+        }
+        RequestDone("TEvGetPartitionStatsResult");
+    }
+
+    bool IsMaximumShardsReached(const TEvSchemeShard::TEvDescribeSchemeResult& response) {
+        const auto& description(response.GetRecord().GetPathDescription());
+        const auto& policy(description.GetTable().GetPartitionConfig().GetPartitioningPolicy());
+
+        return policy.HasMaxPartitionsCount()
+            && policy.GetMaxPartitionsCount() != 0
+            && policy.GetMaxPartitionsCount() <= description.TablePartitionsSize();
+    }
+
+    bool CheckOverloadedShardHint(const TEvSchemeShard::TEvDescribeSchemeResult& response, THintOverloadedShard& hint) {
+        const auto& policy(response.GetRecord().GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy());
+        if (/*HACK ! */policy.GetSplitByLoadSettings().GetEnabled()) {
+            hint.Message = "Split by load is disabled on the table"; // do not change without changing the logic in the UI
+            return true;
+        }
+        if (IsMaximumShardsReached(response)) {
+            hint.Message = "The table has reached its maximum number of shards"; // do not change without changing the logic in the UI
+            return true;
+        }
+        return false;
+    }
+
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         TabletRequests.CompleteRequest(ev->Cookie);
         TString path = ev->Get()->GetRecord().path();
         auto& response = DescribeByPath[path];
         response.Set(std::move(ev));
         if (response.IsOk()) {
-            TDatabaseState& state(DatabaseState[path]);
-            state.Path = path;
-            for (const auto& storagePool : response.Get()->GetRecord().pathdescription().domaindescription().storagepools()) {
-                TString storagePoolName = storagePool.name();
-                state.StoragePoolNames.emplace(storagePoolName);
-                PathsByPoolName[storagePoolName].emplace(path); // no poolId in TEvDescribeSchemeResult, so it's neccesary to keep poolNames instead
+            auto itOverloadedShardHint = OverloadedShardHints.find(path);
+            if (itOverloadedShardHint != OverloadedShardHints.end()) {
+                if (!CheckOverloadedShardHint(*response.Get(), itOverloadedShardHint->second)) {
+                    OverloadedShardHints.erase(itOverloadedShardHint);
+                }
+            } else {
+                TDatabaseState& state(DatabaseState[path]);
+                state.Path = path;
+                for (const auto& storagePool : response.Get()->GetRecord().pathdescription().domaindescription().storagepools()) {
+                    TString storagePoolName = storagePool.name();
+                    state.StoragePoolNames.emplace(storagePoolName);
+                    PathsByPoolName[storagePoolName].emplace(path); // no poolId in TEvDescribeSchemeResult, so it's neccesary to keep poolNames instead
+                }
+                if (path == DomainPath) {
+                    state.StoragePoolNames.emplace(STATIC_STORAGE_POOL_NAME);
+                    state.StoragePools.emplace(0); // static group has poolId = 0
+                    StoragePoolState[0].Name = STATIC_STORAGE_POOL_NAME;
+                }
+                state.StorageUsage = response.Get()->GetRecord().pathdescription().domaindescription().diskspaceusage().tables().totalsize();
+                state.StorageQuota = response.Get()->GetRecord().pathdescription().domaindescription().databasequotas().data_size_hard_quota();
             }
-            if (path == DomainPath) {
-                state.StoragePoolNames.emplace(STATIC_STORAGE_POOL_NAME);
-                state.StoragePools.emplace(0); // static group has poolId = 0
-                StoragePoolState[0].Name = STATIC_STORAGE_POOL_NAME;
-            }
-            state.StorageUsage = response.Get()->GetRecord().pathdescription().domaindescription().diskspaceusage().tables().totalsize();
-            state.StorageQuota = response.Get()->GetRecord().pathdescription().domaindescription().databasequotas().data_size_hard_quota();
         }
         RequestDone("TEvDescribeSchemeResult");
     }
@@ -1382,7 +1511,6 @@ public:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& response = NavigateKeySet[ev->Get()->Request->Cookie];
         response.Set(std::move(ev));
-        --NavigateToGo;
         if (response.IsOk()) {
             auto domainInfo = response.Get()->Request->ResultSet.begin()->DomainInfo;
             TString path = CanonizePath(response.Get()->Request->ResultSet.begin()->Path);
@@ -1400,7 +1528,8 @@ public:
                 }
             }
 
-            FilterDomainKey[TSubDomainKey(domainInfo->DomainKey.OwnerId, domainInfo->DomainKey.LocalPathId)] = path;
+            TSubDomainKey subDomainKey(domainInfo->DomainKey.OwnerId, domainInfo->DomainKey.LocalPathId);
+            FilterDomainKey[subDomainKey] = path;
 
             TTabletId hiveId = domainInfo->Params.GetHive();
             if (hiveId && NeedToAskHive(hiveId)) {
@@ -1414,11 +1543,17 @@ public:
             if (!schemeShardId) {
                 schemeShardId = RootSchemeShardId;
             } else {
+                DatabaseState[path].SchemeShardId = schemeShardId;
                 TabletRequests.TabletStates[schemeShardId].Database = path;
                 TabletRequests.TabletStates[schemeShardId].Type = TTabletTypes::SchemeShard;
             }
             if (DescribeByPath.count(path) == 0) {
                 DescribeByPath[path] = RequestDescribe(schemeShardId, path);
+            }
+            if (ReturnHints && schemeShardId != RootSchemeShardId) {
+                if (GetPartitionStatsResult.count(schemeShardId) == 0) {
+                    GetPartitionStatsResult[schemeShardId] = RequestPartitionStats(schemeShardId, subDomainKey);
+                }
             }
         }
         RequestDone("TEvNavigateKeySetResult");
@@ -1880,6 +2015,26 @@ public:
         }
         if (tabletsStatus != Ydb::Monitoring::StatusFlag::GREEN) {
             context.ReportStatus(tabletsStatus, "Compute has issues with tablets", ETags::ComputeState, {ETags::TabletState});
+        }
+        if (ReturnHints) {
+            auto schemeShardId = databaseState.SchemeShardId;
+            if (schemeShardId) {
+                for (const auto& [path, hint] : OverloadedShardHints) {
+                    if (hint.SchemeShardId == schemeShardId) {
+                        TSelfCheckContext hintContext(&context, "HINT-OVERLOADED-SHARD");
+                        //hintContext.Location.mutable_compute()->mutable_tablet()->set_type(NKikimrTabletBase::TTabletTypes::EType_Name(NKikimrTabletBase::TTabletTypes::DataShard));
+                        TStringBuilder tabletId;
+                        tabletId << hint.TabletId;
+                        if (hint.FollowerId) {
+                            tabletId << '-' << hint.FollowerId;
+                        }
+                        hintContext.Location.mutable_compute()->mutable_tablet()->add_id(tabletId);
+                        hintContext.Location.mutable_compute()->mutable_schema()->set_type("table");
+                        hintContext.Location.mutable_compute()->mutable_schema()->set_path(path);
+                        hintContext.ReportStatus(Ydb::Monitoring::StatusFlag::UNSPECIFIED, hint.Message);
+                    }
+                }
+            }
         }
         computeStatus.set_overall(context.GetOverallStatus());
     }
@@ -2900,7 +3055,9 @@ public:
         Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
         TSelfCheckResult dbContext;
         dbContext.Type = "DATABASE";
-        dbContext.Location.mutable_database()->set_name(path);
+        if (!IsSpecificDatabaseFilter()) {
+            dbContext.Location.mutable_database()->set_name(path);
+        }
         databaseStatus.set_name(path);
         FillCompute(state, *databaseStatus.mutable_compute(), {&dbContext, "COMPUTE"});
         FillStorage(state, *databaseStatus.mutable_storage(), {&dbContext, "STORAGE"});

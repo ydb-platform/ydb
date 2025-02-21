@@ -101,7 +101,7 @@ TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex)
         case IChunkedArray::EType::CompositeChunkedArray:
         case IChunkedArray::EType::SubColumnsArray:
         case IChunkedArray::EType::ChunkedArray:
-            AFL_VERIFY(false);
+            AFL_VERIFY(false)("type", GetAccessorType(columnIndex));
             return TConstructorContainer();
     }
 }
@@ -141,6 +141,7 @@ void TDictStats::TBuilder::Add(const TString& name, const ui32 recordsCount, con
         AFL_VERIFY(*LastKeyName < name)("last", LastKeyName)("name", name);
     }
     AFL_VERIFY(recordsCount);
+    AFL_VERIFY(accessorType == IChunkedArray::EType::Array || accessorType == IChunkedArray::EType::SparsedArray)("type", accessorType);
     TStatusValidator::Validate(Names->Append(name.data(), name.size()));
     TStatusValidator::Validate(Records->Append(recordsCount));
     TStatusValidator::Validate(DataSize->Append(dataSize));

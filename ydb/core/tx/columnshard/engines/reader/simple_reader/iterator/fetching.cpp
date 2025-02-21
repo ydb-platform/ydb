@@ -158,7 +158,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
     if (!source->GetStageResult().IsEmpty()) {
         resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
         if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
-            filter->Apply(resultBatch, NArrow::TColumnFilter::TApplyContext(StartIndex, RecordsCount).SetTrySlices(true));
+            AFL_VERIFY(filter->Apply(resultBatch, NArrow::TColumnFilter::TApplyContext(StartIndex, RecordsCount).SetTrySlices(true)));
         }
     }
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),

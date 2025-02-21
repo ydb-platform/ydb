@@ -5,6 +5,8 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
 
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
+
 namespace NKikimr::NArrow::NAccessor {
 
 std::optional<ui64> TTrivialArray::DoGetRawSize() const {
@@ -18,6 +20,10 @@ std::shared_ptr<arrow::Scalar> TTrivialArray::DoGetMaxScalar() const {
 
 ui32 TTrivialArray::DoGetValueRawBytes() const {
     return NArrow::GetArrayDataSize(Array);
+}
+
+std::shared_ptr<TTrivialArray> TTrivialArray::BuildEmpty(const std::shared_ptr<arrow::DataType>& type) {
+    return std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(type, 0));
 }
 
 namespace {

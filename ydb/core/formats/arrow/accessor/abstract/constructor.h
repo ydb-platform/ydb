@@ -1,7 +1,8 @@
 #pragma once
 
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/library/formats/arrow/accessor/common/chunk_data.h>
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
+
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 

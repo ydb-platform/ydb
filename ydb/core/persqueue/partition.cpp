@@ -2337,7 +2337,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            NewHead.Offset,
                                            "", // SourceId
                                            0,  // SeqNo
-                                           1,  // TotalParts
+                                           0,  // TotalParts
                                            0,  // TotalSize
                                            Head,
                                            NewHead,
@@ -2366,6 +2366,8 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                               PersistRequest.Get(),
                               ctx);
         }
+
+        PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
 
         NewHead.Clear();
         NewHead.Offset = Parameters->CurOffset;

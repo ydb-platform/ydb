@@ -46,7 +46,7 @@ protected:
         TBase::ProcessOutputsImpl(status);
 
         if (lastPollResult && (*lastPollResult != EResumeSource::CAPollAsyncNoSpace || status == ERunStatus::PendingInput)) {
-            ContinueExecute(*std::exchange(lastPollResult, {}));
+            TBase::ContinueExecute(*lastPollResult);
         }
     }
 

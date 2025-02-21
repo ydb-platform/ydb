@@ -5,7 +5,7 @@ self: super: with self; rec {
     owner = "abseil";
     repo = "abseil-cpp";
     rev = version;
-    hash = "sha256-Tt4F0VT7koEARWNjL/L2E8jrPZbSsPb/Y32Kn86sb+k=";
+    hash = "sha256-uOgUtF8gaEgcxFK9WAoAhv4GoS8P23IoUxHZZVZdpPk=";
   };
 
   patches = [];

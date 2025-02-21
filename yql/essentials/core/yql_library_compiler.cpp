@@ -225,8 +225,4 @@ bool CompileLibraries(const NSQLTranslation::TTranslators& translators, const TU
     return LinkLibraries(libs, ctx, ctx);
 }
 
-bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModulesTable& modules, bool optimize) {
-    return CompileLibraries(NSQLTranslation::MakeAllTranslators(), userData, ctx, modules, optimize);
-}
-
 }

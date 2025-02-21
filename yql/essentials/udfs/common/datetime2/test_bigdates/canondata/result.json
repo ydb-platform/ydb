@@ -19,6 +19,11 @@
             "uri": "file://test.test_Get_/results.txt"
         }
     ],
+    "test.test[Shift]": [
+        {
+            "uri": "file://test.test_Shift_/results.txt"
+        }
+    ],
     "test.test[SplitMake]": [
         {
             "uri": "file://test.test_SplitMake_/results.txt"

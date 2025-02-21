@@ -15,6 +15,4 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 
 bool CompileLibraries(const NSQLTranslation::TTranslators& translators, const TUserDataTable& userData,
     TExprContext& ctx, TModulesTable& modules, bool optimize = true);
-//FIXME remove
-bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModulesTable& modules, bool optimize = true);
 }

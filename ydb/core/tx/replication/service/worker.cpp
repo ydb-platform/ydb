@@ -27,14 +27,16 @@ TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data, TInstant creat
 {
 }
 
-TEvWorker::TEvData::TEvData(const TString& source, const TVector<TRecord>& records)
-    : Source(source)
+TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, const TVector<TRecord>& records)
+    : PartitionId(partitionId)
+    , Source(source)
     , Records(records)
 {
 }
 
-TEvWorker::TEvData::TEvData(const TString& source, TVector<TRecord>&& records)
-    : Source(source)
+TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, TVector<TRecord>&& records)
+    : PartitionId(partitionId)
+    , Source(source)
     , Records(std::move(records))
 {
 }
@@ -160,7 +162,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
             Writer.Registered();
             if (InFlightData) {
-                Send(Writer, new TEvWorker::TEvData(InFlightData->Source, InFlightData->Records));
+                Send(Writer, new TEvWorker::TEvData(InFlightData->PartitionId, InFlightData->Source, InFlightData->Records));
             }
         } else {
             LOG_W("Handshake from unknown actor"
@@ -205,7 +207,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
 
         Y_ABORT_UNLESS(!InFlightData);
-        InFlightData = MakeHolder<TEvWorker::TEvData>(ev->Get()->Source, ev->Get()->Records);
+        InFlightData = MakeHolder<TEvWorker::TEvData>(ev->Get()->PartitionId, ev->Get()->Source, ev->Get()->Records);
 
         if (Writer) {
             Send(ev->Forward(Writer));

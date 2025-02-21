@@ -11,12 +11,18 @@ struct TMessage {
         : Data(data) {
     }
 
+    TMessage& WithPartition(ui64 partition) {
+        Partition = partition;
+        return *this;
+    }
+
     TMessage& WithOffset(ui64 offset) {
         Offset = offset;
         return *this;
     }
 
     const TString& Data;
+    ui32 Partition = 0;
     ui64 Offset = 0;
 };
 

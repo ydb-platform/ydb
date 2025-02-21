@@ -61,7 +61,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             records.emplace_back(msg.GetOffset(), std::move(msg.GetData()), msg.GetCreateTime());
         }
 
-        Send(Worker, new TEvWorker::TEvData(ToString(result.PartitionId), std::move(records)));
+        Send(Worker, new TEvWorker::TEvData(result.PartitionId, ToString(result.PartitionId), std::move(records)));
     }
 
     void Handle(TEvYdbProxy::TEvTopicEndPartition::TPtr& ev) {

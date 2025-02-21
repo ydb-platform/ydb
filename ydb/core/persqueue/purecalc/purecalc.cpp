@@ -14,13 +14,9 @@ using namespace NKikimr::NMiniKQL;
 
 constexpr const char* DataFieldName = "_data";
 constexpr const char* OffsetFieldName = "_offset";
+constexpr const char* PartitionFieldName = "_partition";
 
-constexpr const size_t FieldCount = 2; // Change it when change fields
-
-struct FieldPositions {
-    ui64 Data = 0;
-    ui64 Offset = 0;
-};
+constexpr const size_t FieldCount = 3; // Change it when change fields
 
 
 NYT::TNode CreateTypeNode(const TString& fieldType) {
@@ -42,6 +38,7 @@ NYT::TNode CreateMessageScheme() {
     auto structMembers = NYT::TNode::CreateList();
     AddField(structMembers, DataFieldName, "String");
     AddField(structMembers, OffsetFieldName, "Uint64");
+    AddField(structMembers, PartitionFieldName, "Uint32");
 
     return NYT::TNode::CreateList()
         .Add("StructType")
@@ -60,29 +57,21 @@ struct TMessageWrapper {
     NYql::NUdf::TUnboxedValuePod GetOffset() const {
         return NYql::NUdf::TUnboxedValuePod(Message.Offset);
     }
+
+    NYql::NUdf::TUnboxedValuePod GetPartition() const {
+        return NYql::NUdf::TUnboxedValuePod(Message.Partition);
+    }
 };
 
 class TInputConverter {
 protected:
     IWorker* Worker_;
     TPlainContainerCache Cache_;
-    FieldPositions Position;
 
 public:
     explicit TInputConverter(IWorker* worker)
         : Worker_(worker)
     {
-        const TStructType* structType = worker->GetInputType();
-        const ui64 count = structType->GetMembersCount();
- 
-        for (ui64 i = 0; i < count; ++i) { 
-            const auto name = structType->GetMemberName(i);
-            if (name == DataFieldName) {
-                Position.Data = i;
-            } else if (name == OffsetFieldName) {
-                Position.Offset = i;
-            }
-        }
     }
 
 public:
@@ -92,8 +81,10 @@ public:
         result = Cache_.NewArray(holderFactory, static_cast<ui32>(FieldCount), items);
 
         TMessageWrapper wrap {*message};
-        items[Position.Data] = wrap.GetData();
-        items[Position.Offset] = wrap.GetOffset();
+        // lex order by field name
+        items[0] = wrap.GetData();
+        items[1] = wrap.GetOffset();
+        items[2] = wrap.GetPartition();
     }
 
     void ClearCache() {

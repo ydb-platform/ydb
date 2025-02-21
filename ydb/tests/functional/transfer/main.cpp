@@ -43,6 +43,11 @@ bool Checker<bool>::Get(const ::Ydb::Value& value) {
 }
 
 template<>
+ui32 Checker<ui32>::Get(const ::Ydb::Value& value) {
+    return value.uint32_value();
+}
+
+template<>
 ui64 Checker<ui64>::Get(const ::Ydb::Value& value) {
     return value.uint64_value();
 }
@@ -70,10 +75,15 @@ std::pair<TString, std::shared_ptr<IChecker>> _C(TString&& name, T&& expected) {
     };
 }
 
+struct TMessage {
+    const char* Message;
+    std::optional<ui32> Partition = std::nullopt;
+};
+
 struct TConfig {
     const char* TableDDL;
     const char* Lambda;
-    const char* Message;
+    const TVector<TMessage> Messages;
     TVector<std::pair<TString, std::shared_ptr<IChecker>>> Expectations;
 };
 
@@ -106,7 +116,10 @@ struct MainTestCase {
 
         {
             auto res = session.ExecuteQuery(Sprintf(R"(
-                CREATE TOPIC `%s`;
+                CREATE TOPIC `%s`
+                WITH (
+                    min_active_partitions = 10
+                );
             )", TopicName.data()), TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
@@ -126,20 +139,25 @@ struct MainTestCase {
         }
 
         {
-            TWriteSessionSettings writeSettings;
-            writeSettings.Path(TopicName);
-            writeSettings.DeduplicationEnabled(false);
-            auto writeSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
+            for (const auto& m : Config.Messages) {
+                TWriteSessionSettings writeSettings;
+                writeSettings.Path(TopicName);
+                writeSettings.DeduplicationEnabled(false);
+                if (m.Partition) {
+                    writeSettings.PartitionId(m.Partition);
+                }
+                auto writeSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
 
-            UNIT_ASSERT(writeSession->Write(Config.Message));
-            writeSession->Close(TDuration::Seconds(1));
+                UNIT_ASSERT(writeSession->Write(m.Message));
+                writeSession->Close(TDuration::Seconds(1));
+            }
         }
 
         {
             for (size_t attempt = 20; attempt--; ) {
                 auto res = DoRead(session);
                 Cerr << "Attempt=" << attempt << " count=" << res.first << Endl << Flush;
-                if (res.first == 1) {
+                if (res.first == Config.Messages.size()) {
                     const Ydb::ResultSet& proto = res.second;
                     for (size_t i = 0; i < Config.Expectations.size(); ++i) {
                         auto& c = Config.Expectations[i];
@@ -214,7 +232,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 };
             )",
 
-            .Message = "Message-1",
+            .Messages = {{"Message-1"}},
 
             .Expectations = {
                 _C("Key", ui64(0)),
@@ -247,11 +265,56 @@ Y_UNIT_TEST_SUITE(Transfer)
                 };
             )",
 
-            .Message = "Message-1",
+            .Messages = {{"Message-1"}},
 
             .Expectations = {
                 _C("Key", ui64(0)),
                 _C("Message", TString("Message-1")),
+            }
+        }).Run();
+    }
+
+    Y_UNIT_TEST(Main_ColumnTable_ComplexKey)
+    {
+        MainTestCase({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Key1 Uint64 NOT NULL,
+                    Key3 Uint64 NOT NULL,
+                    Value1 Utf8,
+                    Key2 Uint64 NOT NULL,
+                    Value2 Utf8,
+                    Key4 Uint64 NOT NULL,
+                    PRIMARY KEY (Key3, Key2, Key1, Key4)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key1:CAST(1 AS Uint64),
+                            Key2:CAST(2 AS Uint64),
+                            Value2:CAST("value-2" AS Utf8),
+                            Key4:CAST(4 AS Uint64),
+                            Key3:CAST(3 AS Uint64),
+                            Value1:CAST("value-1" AS Utf8),
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {{"Message-1"}},
+
+            .Expectations = {
+                _C("Key1", ui64(1)),
+                _C("Key2", ui64(2)),
+                _C("Key3", ui64(3)),
+                _C("Key4", ui64(4)),
+                _C("Value1", TString("value-1")),
+                _C("Value2", TString("value-2")),
             }
         }).Run();
     }
@@ -286,12 +349,12 @@ Y_UNIT_TEST_SUITE(Transfer)
                 };
             )",
 
-            .Message = R"({
+            .Messages = {{R"({
                 "id": 1,
                 "first_name": "Vasya",
                 "last_name": "Pupkin",
                 "salary": "123"
-            })",
+            })"}},
 
             .Expectations = {
                 _C("Id", ui64(1)),
@@ -326,7 +389,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 };
             )",
 
-            .Message = "Message-1",
+            .Messages = {{"Message-1"}},
 
             .Expectations = {
                 _C("Key", ui64(0)),
@@ -359,7 +422,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 };
             )",
 
-            .Message = "2025-02-21",
+            .Messages = {{"2025-02-21"}},
 
             .Expectations = {
                 _C("Key", ui64(0)),
@@ -392,7 +455,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 };
             )",
 
-            .Message = "1.23",
+            .Messages = {{"1.23"}},
 
             .Expectations = {
                 _C("Key", ui64(0)),
@@ -425,11 +488,44 @@ Y_UNIT_TEST_SUITE(Transfer)
                 };
             )",
 
-            .Message = "Message-1 long value 0 1234567890 1 1234567890 2 1234567890 3 1234567890 4 1234567890 5 1234567890 6 1234567890",
+            .Messages = {{"Message-1 long value 0 1234567890 1 1234567890 2 1234567890 3 1234567890 4 1234567890 5 1234567890 6 1234567890"}},
 
             .Expectations = {
                 _C("Key", ui64(0)),
                 _C("Message", TString("Message-1 long value 0 1234567890 1 1234567890 2 1234567890 3 1234567890 4 1234567890 5 1234567890 6 1234567890")),
+            }
+        }).Run();
+    }
+
+    Y_UNIT_TEST(Main_MessageField_Partition)
+    {
+        MainTestCase({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Partition Uint32 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Partition)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Partition:CAST($x._partition AS Uint32),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {{"Message-1", 7}},
+
+            .Expectations = {
+                _C("Partition", ui32(7)),
+                _C("Message", TString("Message-1")),
             }
         }).Run();
     }

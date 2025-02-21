@@ -40,11 +40,12 @@ struct TEvWorker {
             void Out(IOutputStream& out) const;
         };
 
+        ui32 PartitionId;
         TString Source;
         TVector<TRecord> Records;
 
-        explicit TEvData(const TString& source, const TVector<TRecord>& records);
-        explicit TEvData(const TString& source, TVector<TRecord>&& records);
+        explicit TEvData(ui32 partitionId, const TString& source, const TVector<TRecord>& records);
+        explicit TEvData(ui32 partitionId, const TString& source, TVector<TRecord>&& records);
         TString ToString() const override;
     };
 

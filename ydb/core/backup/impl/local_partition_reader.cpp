@@ -139,7 +139,7 @@ private:
         }
         SentOffset = gotOffset + 1;
 
-        Send(Worker, new TEvWorker::TEvData(ToString(Partition), std::move(records)));
+        Send(Worker, new TEvWorker::TEvData(Partition, ToString(Partition), std::move(records)));
     }
 
     void Leave(TEvWorker::TEvGone::EStatus status) {

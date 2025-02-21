@@ -9,7 +9,6 @@ ydb/core/blobstorage/ut_vdisk TBsLocalRecovery.WriteRestartReadHugeDecreased
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
 ydb/core/blobstorage/ut_vdisk [*/*] chunk chunk
-ydb/core/blobstorage/ut_vdisk2 VDiskTest.HugeBlobWrite
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/cms/ut_sentinel_unstable sole chunk chunk
 ydb/core/cms/ut_sentinel_unstable sole+chunk+chunk
@@ -62,10 +61,8 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltpNoSink
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltpNoSink
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltpNoSink
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
@@ -91,6 +88,8 @@ ydb/library/actors/http/ut sole+chunk+chunk
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1-kqprun]
+ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-kqprun]
+ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg_pg-kqprun]
 ydb/services/keyvalue/ut sole chunk chunk
 ydb/services/keyvalue/ut sole+chunk+chunk
 ydb/services/persqueue_v1/ut TPersQueueCommonTest.TestLimiterLimitsWithBlobsRateLimit
@@ -249,12 +248,12 @@ ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsert
 ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsertDeleteAndRead.test_insert_delete_and_read_simple_tx
 ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsertDeleteAndRead.test_upsert_delete_and_read_tpch_tx
 ydb/tests/sql/large test_insertinto_selectfrom.py.TestConcurrentInsertAndCount.test_concurrent_upsert_and_count
+ydb/tests/sql/large test_insertinto_selectfrom.py.TestConcurrentInsertAndCount.test_concurrent_upsert_and_count_tx
 ydb/tests/sql/large test_tiering.py.TestYdbS3TTL.test_basic_tiering_operations
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_pool_classifier_init[False]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-False]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-True]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit
-ydb/tests/stress/kv/tests test_workload.py.TestYdbKvWorkload.test[column]
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[row]
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

@@ -69,7 +69,7 @@ PEERDIR(
     yql/essentials/udfs/common/url_base
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/logs/dsv
-    ydb/library/breakpad
+    # ydb/library/breakpad  # not working properly, see KIKIMR-18829 for details
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
 )
 

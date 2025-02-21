@@ -373,10 +373,8 @@ void TReqJoinGroup::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
     SessionTimeoutMs = reader->ReadInt32();
     MemberId = reader->ReadString();
     ProtocolType = reader->ReadString();
-    Protocols.resize(reader->ReadInt32());
-    for (auto& protocol : Protocols) {
-        protocol.Deserialize(reader, apiVersion);
-    }
+
+    NKafka::Deserialize(Protocols, reader, /*isCompact*/ false, apiVersion);
 }
 
 void TRspJoinGroupMember::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
@@ -393,10 +391,7 @@ void TRspJoinGroup::Serialize(IKafkaProtocolWriter* writer, int apiVersion) cons
     writer->WriteString(Leader);
     writer->WriteString(MemberId);
 
-    writer->WriteInt32(Members.size());
-    for (const auto& member : Members) {
-        member.Serialize(writer, apiVersion);
-    }
+    NKafka::Serialize(Members, writer, /*isCompact*/ false, apiVersion);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -410,36 +405,16 @@ void TReqSyncGroupAssignment::Deserialize(IKafkaProtocolReader* reader, int /*ap
 void TReqSyncGroup::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
     GroupId = reader->ReadString();
-    GenerationId = reader->ReadString();
+    GenerationId = reader->ReadInt32();
     MemberId = reader->ReadString();
-    Assignments.resize(reader->ReadInt32());
-    for (auto& assignment : Assignments) {
-        assignment.Deserialize(reader, apiVersion);
-    }
+
+    NKafka::Deserialize(Assignments, reader, /*isCompact*/ false, apiVersion);
 }
 
-void TRspSyncGroupAssignment::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
-{
-    writer->WriteString(Topic);
-    writer->WriteInt32(Partitions.size());
-    for (const auto& partition : Partitions) {
-        writer->WriteInt32(partition);
-    }
-}
-
-void TRspSyncGroup::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
+void TRspSyncGroup::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
 {
     writer->WriteErrorCode(ErrorCode);
-
-    writer->StartBytes();
-    writer->WriteInt16(0);
-    writer->WriteInt32(Assignments.size());
-    for (const auto& assignment : Assignments) {
-        assignment.Serialize(writer, apiVersion);
-    }
-    // User data.
-    writer->WriteBytes(TString{});
-    writer->FinishBytes();
+    writer->WriteBytes(Assignment);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

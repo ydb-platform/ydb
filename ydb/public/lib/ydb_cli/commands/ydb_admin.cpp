@@ -22,7 +22,6 @@ public:
     TCommandNode()
         : TClientCommandTree("node", {}, "Node-wide administration")
     {
-        AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>());
         AddCommand(std::make_unique<NNodeConfig::TCommandNodeConfig>());
     }
 };

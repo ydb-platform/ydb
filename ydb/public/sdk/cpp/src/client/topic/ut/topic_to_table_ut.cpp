@@ -94,6 +94,8 @@ protected:
                                TDuration stabilizationWindow,
                                ui64 downUtilizationPercent,
                                ui64 upUtilizationPercent);
+    void SetPartitionWriteSpeed(const TString& topicPath,
+                                size_t bytesPerSeconds);
 
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
@@ -506,6 +508,18 @@ void TFixture::AlterAutoPartitioning(const TString& topicPath,
             .EndAlterAutoPartitioningSettings()
         .EndAlterTopicPartitioningSettings()
         ;
+
+    auto result = client.AlterTopic(topicPath, settings).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+void TFixture::SetPartitionWriteSpeed(const TString& topicPath,
+                                      size_t bytesPerSeconds)
+{
+    NTopic::TTopicClient client(GetDriver());
+    NTopic::TAlterTopicSettings settings;
+
+    settings.SetPartitionWriteSpeedBytesPerSecond(bytesPerSeconds);
 
     auto result = client.AlterTopic(topicPath, settings).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -3005,9 +3019,6 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3, TFixtureSinks)
 
 Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
 {
-    // Consumes a lot of memory. Temporarily disabled
-    return;
-
     // The test verifies the simultaneous execution of several transactions. There is a topic
     // with PARTITIONS_COUNT partitions. In each transaction, the test writes to all the partitions.
     // The size of the messages is random. Such that both large blobs in the body and small ones in
@@ -3018,6 +3029,8 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
     const size_t TXS_COUNT = 100;
 
     CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
 
     std::vector<NTable::TSession> sessions;
     std::vector<NTable::TTransaction> transactions;
@@ -3039,6 +3052,59 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
 
             size_t count = RandomNumber<size_t>(20) + 3;
             WriteToTopic("topic_A", sourceId, TString(512 * 1000 * count, 'x'), &tx, j);
+
+            WaitForAcks("topic_A", sourceId);
+        }
+    }
+
+    // We are doing an asynchronous commit of transactions. They will be executed simultaneously.
+    std::vector<NTable::TAsyncCommitTransactionResult> futures;
+
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        futures.push_back(transactions[i].Commit());
+    }
+
+    // All transactions must be completed successfully.
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        futures[i].Wait();
+        const auto& result = futures[i].GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions, TFixture)
+{
+    // The test verifies the simultaneous execution of several transactions. There is a topic `topic_A` and
+    // it contains a `PARTITIONS_COUNT' of partitions. In each transaction, the test writes to all partitions.                                                                                                          
+    // The size of the messages is chosen so that only large blobs are recorded in the transaction and there
+    // are no records in the head. Thus, we verify that transaction bundling is working correctly.
+
+    const size_t PARTITIONS_COUNT = 20;
+    const size_t TXS_COUNT = 100;
+
+    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    std::vector<NTable::TSession> sessions;
+    std::vector<NTable::TTransaction> transactions;
+
+    // We open TXS_COUNT transactions and write messages to the topic.
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        sessions.push_back(CreateTableSession());
+        auto& session = sessions.back();
+
+        transactions.push_back(BeginTx(session));
+        auto& tx = transactions.back();
+
+        for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
+            TString sourceId = TEST_MESSAGE_GROUP_ID;
+            sourceId += "_";
+            sourceId += ToString(i);
+            sourceId += "_";
+            sourceId += ToString(j);
+
+            WriteToTopic("topic_A", sourceId, TString(6'500'000, 'x'), &tx, j);
 
             WaitForAcks("topic_A", sourceId);
         }

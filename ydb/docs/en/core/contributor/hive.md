@@ -5,6 +5,7 @@ Hive is a tablet responsible for managing other tablets, including selecting nod
 The creation and deletion of tablets is initiated by the [SchemeShard](../concepts/glossary.md#scheme-shard) tablet. When a tablet is created, Hive assigns it a unique TabletId, fills in [TabletStorageInfo](general-schema.md#history), chooses the most suitable node, and sends a command to start the tablet on that node. In some abnormal situations, a tablet may interrupt its operation, in which case the node on which it was running sends a message to Hive. Hive also assumes that if the connection with a certain node is lost, the tablets running on it have stopped. In such cases, Hive restarts the tablets on other nodes, incrementing the generation.
 
 A {{ ydb-short-name }} cluster runs multiple Hives:
+
 * A single *root Hive* responsible for the [system tablets](../concepts/glossary.md#tablet-types) of all databases in the cluster. All nodes in the cluster are registered in the root Hive.
 * A *database Hive* (one per database) is responsible for the tablets servicing the user load of a specific database. Only the compute nodes of the database are registered in that database's Hive.
 

@@ -255,9 +255,9 @@ A **secret** is a sensitive piece of metadata that requires special handling. Fo
 
 ### Authentication token {#auth-token}
 
-An **Authentication token** or **auth token** is a token that {{ ydb-short-name }} uses for [authentication](../security/authentication.md).
+An **authentication token** or **auth token** is a token that {{ ydb-short-name }} uses for [authentication](../security/authentication.md).
 
-{{ ydb-short-name }} supports different [authentication modes](../security/authentication.md) and token types.
+{{ ydb-short-name }} supports various [authentication modes](../security/authentication.md) and token types.
 
 ### Scheme object {#scheme-object}
 

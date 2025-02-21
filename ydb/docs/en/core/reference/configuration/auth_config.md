@@ -1,10 +1,10 @@
-# Section `auth_config`
+# `auth_config` section
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
 ## Configuring LDAP authentication {#ldap-auth-config}
 
-One of the user authentication methods in {{ ydb-short-name }} is with an LDAP directory. More details about this type of authentication can be found in the section on [interacting with the LDAP directory](../../security/authentication.md#ldap-auth-provider). To configure LDAP authentication, the `ldap_authentication` section must be defined.
+One of the user authentication methods in {{ ydb-short-name }} is using an LDAP directory. For more details, see [Interacting with the LDAP directory](../../security/authentication.md#ldap-auth-provider). To configure LDAP authentication, define the `ldap_authentication` section inside the `auth_config` section.
 
 Example of the `ldap_authentication` section:
 

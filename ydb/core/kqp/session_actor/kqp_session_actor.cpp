@@ -1199,27 +1199,21 @@ public:
         auto physicalRequest = PreparePhysicalRequest(QueryState.get(), txCtx.TxAlloc);
 
         literalRequest.Transactions.emplace_back(tx, QueryState->QueryData);
-        physicalRequest.Transactions.emplace_back(tx, QueryState->QueryData);
-
-        QueryState->TxCtx->OnNewExecutor(false);
-
-        literalRequest.Orbit = std::move(QueryState->Orbit);
-        literalRequest.TraceId = QueryState->KqpSessionSpan.GetTraceId();
-
-        QueryState->Commited = true;
+        QueryState->TxCtx->OnNewExecutor(true);
+        // UpdateTempTablesState();
 
         for (const auto& effect : txCtx.DeferredEffects) {
             physicalRequest.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
-
-            LOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction,"
-                    << " current Transactions.size(): " << physicalRequest.Transactions.size());
         }
+        QueryState->TxCtx->OnNewExecutor(false);
+        QueryState->Commited = true;
+
+        literalRequest.TraceId = QueryState->KqpSessionSpan.GetTraceId();
+        physicalRequest.LocksOp = ELocksOp::Commit;
 
         if (!txCtx.DeferredEffects.Empty()) {
             physicalRequest.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
         }
-
-        physicalRequest.LocksOp = ELocksOp::Commit;
 
         SendToPartitionedExecuter(QueryState->TxCtx.Get(), std::move(literalRequest), std::move(physicalRequest));
         ++QueryState->CurrentTx;
@@ -1499,6 +1493,15 @@ public:
     void SendToPartitionedExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& literalRequest,
         IKqpGateway::TExecPhysicalRequest&& physicalRequest)
     {
+        physicalRequest.Orbit = std::move(QueryState->Orbit);
+        QueryState->StatementResultSize = GetResultsCount(physicalRequest);
+
+        physicalRequest.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
+        physicalRequest.MaxShardCount = RequestControls.MaxShardCount;
+        physicalRequest.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+        physicalRequest.CaFactory_ = CaFactory_;
+        physicalRequest.ResourceManager_ = ResourceManager_;
+
         auto executerActor = CreateKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest),
             SelfId(), &QueryState->PreparedQuery->GetParameters(), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(), Counters,

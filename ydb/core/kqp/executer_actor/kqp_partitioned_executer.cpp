@@ -62,9 +62,6 @@ public:
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
     {
-        YQL_ENSURE(LiteralRequest.Transactions.size() == 1);
-        YQL_ENSURE(PhysicalRequest.Transactions.size() == 1);
-
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(PhysicalRequest.TxAlloc,
             TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
@@ -178,6 +175,7 @@ public:
             .Counters = Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
         };
+
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
         auto bufferActorId = RegisterWithSameMailbox(bufferActor);
         BufferActors[partitionIdx] = bufferActorId;
@@ -185,7 +183,6 @@ public:
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, RequestCounters,
             TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId);
-
         auto exId = RegisterWithSameMailbox(executerActor);
         Executers[partitionIdx] = exId;
 
@@ -376,7 +373,7 @@ private:
 
     void FillPhysicalRequest(IKqpGateway::TExecPhysicalRequest& physicalRequest, size_t partitionIdx) {
         IKqpGateway::TExecPhysicalRequest newLiteralRequest(LiteralRequest.TxAlloc);
-        FillRequestWithParams(newLiteralRequest, LiteralRequest, partitionIdx);
+        FillRequestWithParams(newLiteralRequest, partitionIdx, /* literal */ true);
 
         auto ev = ExecuteLiteral(std::move(newLiteralRequest), RequestCounters, SelfId(), UserRequestContext);
         auto* response = ev->Record.MutableResponse();
@@ -387,7 +384,7 @@ private:
                 NYql::TIssues({NYql::TIssue("RuntimeError: Error status from literal.")}));
         }
 
-        FillRequestWithParams(physicalRequest, PhysicalRequest, partitionIdx);
+        FillRequestWithParams(physicalRequest, partitionIdx, /* literal */ false);
 
         auto queryData = physicalRequest.Transactions.front().Params;
         queryData->ClearPrunedParams();
@@ -399,11 +396,10 @@ private:
         queryData->AddTxHolders(std::move(ev->GetTxHolders()));
     }
 
-    void FillRequestWithParams(IKqpGateway::TExecPhysicalRequest& newRequest,
-        IKqpGateway::TExecPhysicalRequest& from, size_t partitionIdx)
+    void FillRequestWithParams(IKqpGateway::TExecPhysicalRequest& newRequest, size_t partitionIdx, bool literal)
     {
         YQL_ENSURE(Partitioning);
-        FillNewRequest(newRequest, from);
+        FillNewRequest(newRequest, literal);
 
         auto& queryData = newRequest.Transactions.front().Params;
 
@@ -458,7 +454,9 @@ private:
         }
     }
 
-    void FillNewRequest(IKqpGateway::TExecPhysicalRequest& newRequest, IKqpGateway::TExecPhysicalRequest& from) {
+    void FillNewRequest(IKqpGateway::TExecPhysicalRequest& newRequest, bool literal) {
+        auto& from = (literal) ? LiteralRequest : PhysicalRequest;
+
         newRequest.AllowTrailingResults = from.AllowTrailingResults;
         newRequest.QueryType = from.QueryType;
         newRequest.PerRequestDataSizeLimit = from.PerRequestDataSizeLimit;
@@ -482,7 +480,6 @@ private:
         newRequest.RlPath = from.RlPath;
         newRequest.NeedTxId = from.NeedTxId;
         newRequest.UseImmediateEffects = from.UseImmediateEffects;
-        // newRequest.Orbit = from.Orbit;
         newRequest.TraceId = NWilson::TTraceId();
         newRequest.UserTraceId = from.UserTraceId;
         newRequest.OutputChunkMaxSize = from.OutputChunkMaxSize;

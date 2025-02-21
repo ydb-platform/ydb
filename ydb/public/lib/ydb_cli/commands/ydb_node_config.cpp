@@ -95,6 +95,11 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
                      << CONFIG_FILE_NAME << " and " << STORAGE_CONFIG_FILE_NAME << Endl;
                 return EXIT_SUCCESS;
             }
+            Cerr << "Failed to save configs: " 
+                << (clusterSaved ? "" : "main config ") 
+                << (storageSaved ? "and " : "storage config") 
+                << Endl;
+            return EXIT_FAILURE;
         }
 
         if (hasCluster) {
@@ -103,13 +108,10 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
                 Cout << "Initialized config in " << ConfigDirPath << "/" << CONFIG_FILE_NAME << Endl;
                 return EXIT_SUCCESS;
             }
+            Cerr << "Failed to save config to " << ConfigDirPath << Endl;
         }
 
-        if (hasCluster) {
-            Cerr << "Failed to save config(s) to " << ConfigDirPath << Endl;
-        } else {
-            Cerr << "No main config found" << Endl;
-        }
+        Cerr << "No main config found" << Endl;
         return EXIT_FAILURE;
     }
 

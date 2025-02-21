@@ -179,11 +179,9 @@ NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& columns) {
                 .Add(std::move(structMembers)))
     );
 
-    auto r =  NYT::TNode::CreateList()
+    return NYT::TNode::CreateList()
         .Add("StructType")
         .Add(std::move(rootMembers));
-
-    return r;
 }
 
 class TProgramHolder : public NFq::IProgramHolder {
@@ -711,7 +709,6 @@ private:
     TProgramHolder::TPtr ProgramHolder;
 
     mutable TMaybe<TString> LogPrefix;
-    mutable TMaybe<TString> ProcessingError;
 
     std::optional<TActorId> PendingWorker;
     std::optional<TVector<TEvWorker::TEvData::TRecord>> PendingRecords;

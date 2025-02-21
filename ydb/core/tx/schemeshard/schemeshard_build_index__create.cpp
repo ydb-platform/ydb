@@ -113,8 +113,12 @@ public:
                 checks
                     .IsValidLeafName()
                     .PathsLimit(2) // index and impl-table
-                    .DirChildrenLimit()
-                    .ShardsLimit(1); // impl-table
+                    .DirChildrenLimit();
+
+                if (!request.GetInternal()) {
+                    checks
+                        .ShardsLimit(1); // impl-table
+                }
 
                 if (!checks) {
                     return Reply(checks.GetStatus(), checks.GetError());

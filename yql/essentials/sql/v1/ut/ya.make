@@ -13,6 +13,9 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
     yql/essentials/sql/v1/format
     yql/essentials/sql/v1/lexer/antlr3
+    yql/essentials/sql/v1/lexer/antlr3_ansi
+    yql/essentials/sql/v1/proto_parser/antlr3
+    yql/essentials/sql/v1/proto_parser/antlr3_ansi
 )
 
 TIMEOUT(300)

@@ -57,18 +57,10 @@ private:
                 return lexers.Antlr3;
             }
 
-            if (lexers.Antlr4) {
-                return lexers.Antlr4;
-            }
-
             return MakeDummyLexerFactory("antlr3");
         } else if (ansi && !antlr4) {
             if (lexers.Antlr3Ansi) {
                 return lexers.Antlr3Ansi;
-            }
-
-            if (lexers.Antlr4Ansi) {
-                return lexers.Antlr4Ansi;
             }
 
             return MakeDummyLexerFactory("antlr3_ansi");

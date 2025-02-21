@@ -8,6 +8,8 @@
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
+#include <ranges>
+
 namespace NKikimr::NOlap::NReader::NCommon {
 
 TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
@@ -101,6 +103,20 @@ ui64 TAllocateMemoryStep::GetProcessingDataSize(const std::shared_ptr<IDataSourc
 NKikimr::TConclusion<bool> TBuildStageResultStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     source->BuildStageResult(source);
+    return true;
+}
+
+TConclusion<bool> TTtlFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    AFL_VERIFY(source->GetContext()->GetReadMetadata()->GetTtlBound());
+    const auto& bound = *source->GetContext()->GetReadMetadata()->GetTtlBound();
+    auto column = source->GetStageData().GetTable()->GetAccessorVerified(bound.GetColumnId());
+    AFL_VERIFY(column->GetRecordsCount());
+    AFL_VERIFY(source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPKFirstColumnId() == bound.GetColumnId())("first_pk", source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPKFirstColumnId())(
+            "ttl", bound.GetColumnId());
+
+    NArrow::NAccessor::IChunkedArray::TReader reader(column);
+    const ui64 firstNonExpired = reader.UpperBoundPosition(bound.GetLargestExpiredScalar());
+    source->MutableStageData().CutFilter(source->GetRecordsCount(), source->GetRecordsCount() - firstNonExpired, false);
     return true;
 }
 

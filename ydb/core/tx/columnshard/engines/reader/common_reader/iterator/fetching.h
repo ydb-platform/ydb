@@ -95,6 +95,10 @@ public:
         Signals.AddBytes(size);
     }
 
+    virtual bool Merge(const std::shared_ptr<const IFetchingStep>& /*nextStep*/) {
+        return false;
+    }
+
     virtual ~IFetchingStep() = default;
 
     [[nodiscard]] TConclusion<bool> ExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
@@ -162,6 +166,9 @@ public:
 
     void AddStep(const std::shared_ptr<IFetchingStep>& step) {
         AFL_VERIFY(step);
+        if (Steps.size() && Steps.back()->Merge(step)) {
+            return;
+        }
         Steps.emplace_back(step);
     }
 
@@ -233,8 +240,9 @@ public:
 
 class TColumnsAccumulator {
 private:
-    TColumnsSetIds FetchingReadyColumns;
-    TColumnsSetIds AssemblerReadyColumns;
+    // TODO: Consider removing accessors
+    YDB_READONLY_DEF(TColumnsSetIds, FetchingReadyColumns);
+    YDB_READONLY_DEF(TColumnsSetIds, AssemblerReadyColumns);
     ISnapshotSchema::TPtr FullSchema;
     std::shared_ptr<TColumnsSetIds> GuaranteeNotOptional;
 

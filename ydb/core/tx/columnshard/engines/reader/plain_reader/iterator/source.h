@@ -81,6 +81,13 @@ public:
         return FinishReplaceKey;
     }
 
+    virtual const NArrow::TReplaceKey& GetMinReplaceKey() const override {
+        return StartReplaceKey;
+    }
+    virtual const NArrow::TReplaceKey& GetMaxReplaceKey() const override {
+        return FinishReplaceKey;
+    }
+
     void ApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) {
         return DoApplyIndex(indexMeta);
     }

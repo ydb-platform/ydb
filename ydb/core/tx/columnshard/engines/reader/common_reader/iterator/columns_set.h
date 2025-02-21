@@ -88,6 +88,9 @@ public:
     bool IsEmpty() const {
         return ColumnIds.empty();
     }
+    bool Size() const {
+        return ColumnIds.size();
+    }
 
     bool operator!() const {
         return IsEmpty();

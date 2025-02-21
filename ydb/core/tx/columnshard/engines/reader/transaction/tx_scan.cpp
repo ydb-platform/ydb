@@ -62,6 +62,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         }
         read.PathId = request.GetLocalPathId();
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
+        read.ReadExpiredRows = true;
         read.TableName = table;
 
         const TString defaultReader =

@@ -507,6 +507,16 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
 
     Y_UNIT_TEST(UpdateWithIgnoreValue) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            {
+                grpc::ClientContext writeCtx;
+                etcdserverpb::PutRequest putRequest;
+                putRequest.set_key("my_key");
+                putRequest.set_ignore_value(true);
+
+                etcdserverpb::PutResponse putResponse;
+                UNIT_ASSERT(!etcd->Put(&writeCtx, putRequest, &putResponse).ok());
+            }
+
             Put("my_key", "my_val", etcd);
 
             {

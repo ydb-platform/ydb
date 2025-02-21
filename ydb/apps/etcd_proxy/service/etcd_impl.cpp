@@ -200,6 +200,7 @@ struct TRange : public TOperation {
 };
 
 using TNotifier = std::function<void(std::string&&, NEtcd::TData&&, NEtcd::TData&&)>;
+using TGrpcError = std::pair<grpc::StatusCode, std::string>;
 
 struct TPut : public TOperation {
     std::string Key, Value;
@@ -278,7 +279,7 @@ struct TPut : public TOperation {
         sql << "insert into `verhaal` select * from " << newResultSetName << ';' << std::endl;
         sql << (update ? "update `huidig` on" : "upsert into `huidig`") << " select * from " << newResultSetName << ';' << std::endl;
 
-        if (GetPrevious || NotifyWatchtower) {
+        if (GetPrevious || NotifyWatchtower || update) {
             if (resultsCounter)
                 ResultIndex = (*resultsCounter)++;
             sql << "select `value`, `created`, `modified`, `version`, `lease` from " << oldResultSetName << " where `version` > 0L;" << std::endl;
@@ -290,19 +291,24 @@ struct TPut : public TOperation {
         }
     }
 
-    etcdserverpb::PutResponse MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
+    std::variant<etcdserverpb::PutResponse, TGrpcError>
+    MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
         etcdserverpb::PutResponse response;
         FillHeader(revision, *response.mutable_header());
 
-        if (GetPrevious) {
+        if (GetPrevious || IgnoreValue || IgnoreValue) {
             if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow() && 5ULL == parser.ColumnsCount()) {
-                const auto prev = response.mutable_prev_kv();
-                prev->set_key(Key);
-                prev->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
-                prev->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
-                prev->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
-                prev->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
-                prev->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+                if (GetPrevious) {
+                    const auto prev = response.mutable_prev_kv();
+                    prev->set_key(Key);
+                    prev->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
+                    prev->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
+                    prev->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
+                    prev->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
+                    prev->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+                }
+            } else if (IgnoreValue || IgnoreValue) {
+                return std::make_pair(grpc::StatusCode::NOT_FOUND, std::string("key not found"));
             }
         }
         if (NotifyWatchtower && notifier) {
@@ -668,7 +674,8 @@ struct TTxn : public TOperation {
         }
     }
 
-    etcdserverpb::TxnResponse MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
+    std::variant<etcdserverpb::TxnResponse, TGrpcError>
+    MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
         etcdserverpb::TxnResponse response;
         FillHeader(revision, *response.mutable_header());
 
@@ -677,14 +684,23 @@ struct TTxn : public TOperation {
             response.set_succeeded(succeeded);
             for (const auto& operation : succeeded ? Success : Failure) {
                 const auto resp = response.add_responses();
-                if (const auto oper = std::get_if<TRange>(&operation))
+                if (const auto oper = std::get_if<TRange>(&operation)) {
                     *resp->mutable_response_range() = oper->MakeResponse(revision, results);
-                else if (const auto oper = std::get_if<TPut>(&operation))
-                    *resp->mutable_response_put() = oper->MakeResponse(revision, results, notifier);
-                else if (const auto oper = std::get_if<TDeleteRange>(&operation))
+                } else if (const auto oper = std::get_if<TPut>(&operation)) {
+                    const auto& res = oper->MakeResponse(revision, results, notifier);
+                    if (const auto good = std::get_if<etcdserverpb::PutResponse>(&res))
+                        *resp->mutable_response_put() = *good;
+                    else if (const auto bad = std::get_if<TGrpcError>(&res))
+                        return *bad;
+                } else if (const auto oper = std::get_if<TDeleteRange>(&operation)) {
                     *resp->mutable_response_delete_range() = oper->MakeResponse(revision, results, notifier);
-                else if (const auto oper = std::get_if<TTxn>(&operation))
-                    *resp->mutable_response_txn() = oper->MakeResponse(revision, results, notifier);
+                } else if (const auto oper = std::get_if<TTxn>(&operation)) {
+                    const auto& res = oper->MakeResponse(revision, results, notifier);
+                    if (const auto good = std::get_if<etcdserverpb::TxnResponse>(&res))
+                        *resp->mutable_response_txn() = *good;
+                    else if (const auto bad = std::get_if<TGrpcError>(&res))
+                        return *bad;
+                }
             }
         }
         return response;
@@ -780,6 +796,11 @@ protected:
         this->Die(ctx);
     }
 
+    void Reply(grpc::StatusCode code, const std::string& error, const TActorContext& ctx) {
+        this->Request_->ReplyWithRpcStatus(code, TString(error));
+        this->Die(ctx);
+    }
+
     const std::unique_ptr<NKikimr::NGRpcService::IRequestCtx> Request_;
     const TSharedStuff::TPtr Stuff;
 };
@@ -845,8 +866,15 @@ private:
         };
 
         auto response = Put.MakeResponse(Revision, results, notifier);
-        Put.Dump(std::cout) << std::endl;
-        return this->Reply(response, ctx);
+        Put.Dump(std::cout) << '=';
+        if (const auto good = std::get_if<etcdserverpb::PutResponse>(&response)) {
+            std::cout << "ok" << std::endl;
+            return this->Reply(*good, ctx);
+        } else if (const auto bad = std::get_if<TGrpcError>(&response)) {
+            TryToRollbackRevision();
+            std::cout << bad->second << std::endl;
+            return this->Reply(bad->first, bad->second, ctx);
+        }
     }
 
     TPut Put;
@@ -919,8 +947,15 @@ private:
         };
 
         auto response = Txn.MakeResponse(Revision, results, notifier);
-        Txn.Dump(std::cout) << '=' << (response.succeeded() ? "success" : "failure") << std::endl;
-        return this->Reply(response, ctx);
+        Txn.Dump(std::cout) << '=';
+        if (const auto good = std::get_if<etcdserverpb::TxnResponse>(&response)) {
+            std::cout << (good->succeeded() ? "success" : "failure") << std::endl;
+            return this->Reply(*good, ctx);
+        } else if (const auto bad = std::get_if<TGrpcError>(&response)) {
+            TryToRollbackRevision();
+            std::cout << bad->second << std::endl;
+            return this->Reply(bad->first, bad->second, ctx);
+        }
     }
 
     TTxn Txn;

@@ -1462,17 +1462,19 @@ protected:
         }
     }
 
-    void PollAsyncInput(bool continueExecuteOnFull = true) {
+    [[nodiscard]]
+    TMaybe<EResumeSource> PollAsyncInput() {
+        TMaybe<EResumeSource> pollResult;
         if (!Running) {
             CA_LOG_T("Skip polling inputs and sources because not running");
-            return;
+            return pollResult;
         }
 
         CA_LOG_T("Poll inputs");
         for (auto& [inputIndex, transform] : InputTransformsMap) {
             if (auto resume = transform.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
-                if (*resume != EResumeSource::CAPollAsyncNoSpace || continueExecuteOnFull) {
-                    ContinueExecute(*resume);
+                if (!pollResult || *pollResult == EResumeSource::CAPollAsyncNoSpace) {
+                    pollResult = resume;
                 }
             }
         }
@@ -1480,17 +1482,18 @@ protected:
         // Don't produce any input from sources if we're about to save checkpoint.
         if ((Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
             CA_LOG_T("Skip polling sources because of pending checkpoint");
-            return;
+            return pollResult;
         }
 
         CA_LOG_T("Poll sources");
         for (auto& [inputIndex, source] : SourcesMap) {
             if (auto resume =  source.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
-                if (*resume != EResumeSource::CAPollAsyncNoSpace || continueExecuteOnFull) {
-                    ContinueExecute(*resume);
+                if (!pollResult || *pollResult == EResumeSource::CAPollAsyncNoSpace) {
+                    pollResult = resume;
                 }
             }
         }
+        return pollResult;
     }
 
     void OnNewAsyncInputDataArrived(const IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::TPtr& ev) {

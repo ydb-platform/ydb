@@ -2963,6 +2963,8 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, StreamLookup, EvWri
     auto &runtime = *server->GetRuntime();
     auto sender = runtime.AllocateEdgeActor();
 
+    const bool usesVolatileTxs = runtime.GetAppData(0).FeatureFlags.GetEnableDataShardVolatileTransactions();
+
     InitRoot(server, sender);
 
     auto [shards1, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
@@ -2992,6 +2994,32 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, StreamLookup, EvWri
             "{ items { uint32_value: 2 } items { uint32_value: 1 } }");
     }
 
+    auto waitFor = [&](const auto& condition, const TString& description) {
+        if (!condition()) {
+            Cerr << "... waiting for " << description << Endl;
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() {
+                return condition();
+            };
+            runtime.DispatchEvents(options);
+            UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
+        }
+    };
+
+    // Capture and block all readset messages
+    TVector<THolder<IEventHandle>> readSets;
+    auto captureRS = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+        switch (ev->GetTypeRewrite()) {
+            case TEvTxProcessing::TEvReadSet::EventType: {
+                Cerr << "... captured readset" << Endl;
+                readSets.push_back(std::move(ev));
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
+
     Cerr << "===== UPSERT and commit" << Endl;
 
     // Send a commit request, it would block on readset exchange
@@ -2999,8 +3027,14 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, StreamLookup, EvWri
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"), sessionId, txId, true));
 
+    // Wait until we captured both readsets
+    const size_t expectedReadSets = usesVolatileTxs ? 4 : 2;
+    waitFor([&]{ return readSets.size() >= expectedReadSets; }, "commit read sets");
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), expectedReadSets);
+
     // Remove observer and gracefully restart the shard
     Cerr << "===== restarting tablet" << Endl;
+    runtime.SetObserverFunc(prevObserverFunc);
     GracefulRestartTablet(runtime, shards1[0], sender);
 
     // The result of commit should be SUCCESS

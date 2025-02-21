@@ -148,12 +148,12 @@ struct MainTestCase {
             if (i) {
                 columns << ", ";
             }
-            columns << Config.Columns[i].first;
+            columns << "`" << Config.Columns[i].first << "`";
         }
 
 
         auto res = s.ExecuteQuery(
-            Sprintf("SELECT %s FROM `/local/%s`", columns.data(), TableName.data()),
+            Sprintf("SELECT %s FROM `%s`", columns.data(), TableName.data()),
                 TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     
@@ -246,11 +246,11 @@ Y_UNIT_TEST_SUITE(Transfer)
         MainTestCase({
             .TableDDL = R"(
                 CREATE TABLE `%s` (
-                    Id UInt64 NOT NULL,
-                    FirstName String,
-                    LastName String,
-                    Salary Uint64,
-                    PRIMARY KEY (Id)
+                    AId_ Uint64 NOT NULL,
+                    FirstName Utf8 NOT NULL,
+                    LastName Utf8 NOT NULL,
+                    Salary Uint64 NOT NULL,
+                    PRIMARY KEY (AId_)
                 )  WITH (
                     STORE = COLUMN
                 );
@@ -262,9 +262,9 @@ Y_UNIT_TEST_SUITE(Transfer)
 
                     return [
                         <|
-                            Id:        Yson::ConvertToUint64($input.id),
-                            FirstName: Yson::ConvertToString($input.first_name),
-                            LastName:  Yson::ConvertToString($input.last_name),
+                            AId_:      Yson::ConvertToUint64($input.id),
+                            FirstName: CAST(Yson::ConvertToString($input.first_name) AS Utf8),
+                            LastName:  CAST(Yson::ConvertToString($input.last_name) AS Utf8),
                             Salary:    CAST(Yson::ConvertToString($input.salary) AS UInt64)
                         |>
                     ];
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(Transfer)
             })",
 
             .Columns = {
-                _C("Id", ui64(1)),
+                _C("AId_", ui64(1)),
                 _C("FirstName", TString("Vasya")),
                 _C("LastName", TString("Pupkin")),
                 _C("Salary", ui64(123)),

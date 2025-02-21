@@ -104,6 +104,12 @@ public:
             }
 
             Out.Value = value.GetElement(0);
+
+            for (size_t i = 0; i < Out.Value.GetListLength(); ++i) {
+                auto v = Out.Value.GetElement(i);
+                Cerr << ">>>>> i = " << i << " HasValue = " << v.HasValue() << Endl << Flush;
+            }
+
             Out.Data.PushRow(&Out.Value, 1);
 
             return &Out;
@@ -179,9 +185,15 @@ NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& columns) {
                 .Add(std::move(structMembers)))
     );
 
-    return NYT::TNode::CreateList()
+    auto r =  NYT::TNode::CreateList()
         .Add("StructType")
         .Add(std::move(rootMembers));
+
+    TStringStream st;
+    r.Save(&st);
+    Cerr << ">>>>> scheme " << st.Str() << Endl << Flush;
+
+    return r;
 }
 
 class TProgramHolder : public NFq::IProgramHolder {
@@ -237,19 +249,21 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
 
     result.TableColumns.resize(keyColumns);
     result.ColumnsMetadata.resize(keyColumns);
+    result.WriteIndex.resize(keyColumns);
 
     for (const auto& [_, column] : entry.Columns) {
         NKikimrKqp::TKqpColumnMetadataProto* c;
+
         if (column.KeyOrder >= 0) {
             result.TableColumns[column.KeyOrder] = {column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn};
             c = &result.ColumnsMetadata[column.KeyOrder];
+            result.WriteIndex[column.KeyOrder] = column.KeyOrder;
         } else {
             result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn);
             result.ColumnsMetadata.emplace_back();
             c = &result.ColumnsMetadata.back();
+            result.WriteIndex.push_back(result.WriteIndex.size());
         }
-
-        result.WriteIndex.push_back(result.WriteIndex.size());
 
         c->SetName(column.Name);
         c->SetId(column.Id);
@@ -259,6 +273,16 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
             NScheme::ProtoFromTypeInfo(column.PType, "", *c->MutableTypeInfo());
         }
     }
+
+    TStringBuilder sb;
+    for (size_t i = 0; i < result.TableColumns.size(); ++i) {
+        if (i) {
+            sb << ", ";
+        }
+        sb << result.ColumnsMetadata[i].GetName() << "|" << result.WriteIndex[i];
+    }
+
+    Cerr << ">>>>>> " << sb << Endl << Flush;
 
     return result;
 }
@@ -322,6 +346,8 @@ public:
 
         auto arrowBatch = reinterpret_pointer_cast<arrow::RecordBatch>(data);
         Y_VERIFY(arrowBatch);
+
+        Cerr << ">>>>> BATCH = " << arrowBatch->ToString() << Endl << ::Flush;
 
         Issues = std::make_shared<NYql::TIssues>();
 
@@ -704,6 +730,7 @@ private:
     TProgramHolder::TPtr ProgramHolder;
 
     mutable TMaybe<TString> LogPrefix;
+    mutable TMaybe<TString> ProcessingError;
 
     std::optional<TActorId> PendingWorker;
     std::optional<TVector<TEvWorker::TEvData::TRecord>> PendingRecords;

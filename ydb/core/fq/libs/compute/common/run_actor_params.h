@@ -81,7 +81,7 @@ struct TRunActorParams { // TODO2 : Change name
         std::map<TString, Ydb::TypedValue>&& queryParameters,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
         const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager,
-        NYql::IPqGateway::TPtr defaultPqGateway
+        NYql::IPqGateway::TPtr pqGateway
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -147,7 +147,7 @@ struct TRunActorParams { // TODO2 : Change name
     std::map<TString, Ydb::TypedValue> QueryParameters;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
     ::NFq::NConfig::TWorkloadManagerConfig WorkloadManager;
-    NYql::IPqGateway::TPtr DefaultPqGateway;
+    NYql::IPqGateway::TPtr PqGateway;
 };
 
 } /* NFq */

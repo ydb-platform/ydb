@@ -80,4 +80,12 @@ void TDummyPqGateway::UpdateClusterConfigs(
     Y_UNUSED(secure);
 }
 
+void TDummyPqGateway::UpdateClusterConfigs(const TPqGatewayConfigPtr& config) {
+    Y_UNUSED(config);
+}
+
+NYdb::NTopic::TTopicClientSettings TDummyPqGateway::GetTopicClientSettings() const {
+    return NYdb::NTopic::TTopicClientSettings();
+}
+
 } // namespace NYql

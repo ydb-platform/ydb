@@ -269,6 +269,7 @@ namespace NSQLTranslationV1 {
         TVector<TNodePtr>&& terms,
         bool distinct,
         TVector<TNodePtr>&& without,
+        bool forceWithout,
         bool selectStream,
         const TWriteSettings& settings,
         TColumnsSets&& uniqueSets,

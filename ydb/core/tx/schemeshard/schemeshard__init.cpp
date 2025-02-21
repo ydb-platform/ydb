@@ -803,7 +803,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool> TBackupSettingsRec;
+    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool> TBackupSettingsRec;
     typedef TDeque<TBackupSettingsRec> TBackupSettingsRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -816,7 +816,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::NeedToBill>(true),
             rowSet.template GetValueOrDefault<typename SchemaTable::TableDescription>(""),
             rowSet.template GetValueOrDefault<typename SchemaTable::NumberOfRetries>(0),
-            rowSet.template GetValueOrDefault<typename SchemaTable::EnableChecksums>(false)
+            rowSet.template GetValueOrDefault<typename SchemaTable::EnableChecksums>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::EnablePermissions>(false)
         );
     }
 
@@ -3793,6 +3794,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TString tableDesc = std::get<6>(rec);
                 ui32 nRetries = std::get<7>(rec);
                 bool enableChecksums = std::get<8>(rec);
+                bool enablePermissions = std::get<9>(rec);
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
 
@@ -3803,6 +3805,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 tableInfo->BackupSettings.SetNeedToBill(needToBill);
                 tableInfo->BackupSettings.SetNumberOfRetries(nRetries);
                 tableInfo->BackupSettings.SetEnableChecksums(enableChecksums);
+                tableInfo->BackupSettings.SetEnablePermissions(enablePermissions);
 
                 if (ytSerializedSettings) {
                     auto settings = tableInfo->BackupSettings.MutableYTSettings();
@@ -4296,6 +4299,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     exportInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::StartTime>());
                     exportInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::EndTime>());
                     exportInfo->EnableChecksums = rowset.GetValueOrDefault<Schema::Exports::EnableChecksums>(false);
+                    exportInfo->EnablePermissions = rowset.GetValueOrDefault<Schema::Exports::EnablePermissions>(false);
 
                     Self->Exports[id] = exportInfo;
                     if (uid) {

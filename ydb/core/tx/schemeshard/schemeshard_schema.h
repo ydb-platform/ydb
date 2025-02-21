@@ -587,6 +587,7 @@ struct Schema : NIceDb::Schema {
         struct ScanSettings : Column<9, NScheme::NTypeIds::String> {};
         struct NeedToBill : Column<10, NScheme::NTypeIds::Bool> {};
         struct EnableChecksums : Column<11, NScheme::NTypeIds::Bool> {};
+        struct EnablePermissions : Column<12, NScheme::NTypeIds::Bool> {};
         // deprecated
         struct CreateDestinationFlag : Column<4, NScheme::NTypeIds::Bool> {};
         struct EraseOldDataFlag : Column<5, NScheme::NTypeIds::Bool> {};
@@ -603,7 +604,8 @@ struct Schema : NIceDb::Schema {
             NumberOfRetries,
             ScanSettings,
             NeedToBill,
-            EnableChecksums
+            EnableChecksums,
+            EnablePermissions
         >;
     };
 
@@ -619,6 +621,7 @@ struct Schema : NIceDb::Schema {
         struct ScanSettings : Column<10, NScheme::NTypeIds::String> {};
         struct NeedToBill : Column<11, NScheme::NTypeIds::Bool> {};
         struct EnableChecksums : Column<12, NScheme::NTypeIds::Bool> {};
+        struct EnablePermissions : Column<13, NScheme::NTypeIds::Bool> {};
         // deprecated
         struct CreateDestinationFlag : Column<5, NScheme::NTypeIds::Bool> {};
         struct EraseOldDataFlag : Column<6, NScheme::NTypeIds::Bool> {};
@@ -636,7 +639,8 @@ struct Schema : NIceDb::Schema {
             NumberOfRetries,
             ScanSettings,
             NeedToBill,
-            EnableChecksums
+            EnableChecksums,
+            EnablePermissions
         >;
     };
 
@@ -1187,6 +1191,7 @@ struct Schema : NIceDb::Schema {
         struct PeerName : Column<16, NScheme::NTypeIds::Utf8> {};
 
         struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
+        struct EnablePermissions : Column<18, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1206,7 +1211,8 @@ struct Schema : NIceDb::Schema {
             StartTime,
             EndTime,
             PeerName,
-            EnableChecksums
+            EnableChecksums,
+            EnablePermissions
         >;
     };
 

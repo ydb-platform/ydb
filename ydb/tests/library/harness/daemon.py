@@ -92,6 +92,9 @@ class Daemon(object):
         else:
             return None
 
+    def update_command(self, command):
+        self.__command = command
+
     def is_alive(self):
         return self.__daemon is not None and self.__daemon.running
 

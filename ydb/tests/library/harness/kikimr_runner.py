@@ -110,6 +110,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     @property
     def binary_path(self):
         return self.__binary_path
+    
+    def update_binary_path(self, binary_path):
+        self.__binary_path = binary_path
+        super(KiKiMRNode, self).update_command(self.command)
 
     @property
     def command(self):

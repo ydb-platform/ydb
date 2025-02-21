@@ -8,26 +8,6 @@ namespace NYdb::NConsoleClient::NNodeConfig {
 constexpr const char* CONFIG_FILE_NAME = "config.yaml";
 constexpr const char* STORAGE_CONFIG_FILE_NAME = "storage.yaml";
 
-bool SaveConfig(const TString& config, const TString& configName, const TString& configDirPath) {
-    try {
-        TString tempPath = TStringBuilder() << configDirPath << "/temp_" << configName;
-        TString configPath = TStringBuilder() << configDirPath << "/" << configName;
-
-        {
-            TFileOutput tempFile(tempPath);
-            tempFile << config;
-            tempFile.Flush();
-        }
-
-        if (!NFs::Rename(tempPath, configPath)) {
-            return false;
-        }
-    } catch (const std::exception& e) {
-        return false;
-    }
-    return true;
-}
-
 TCommandNodeConfig::TCommandNodeConfig()
     : TClientCommandTree("config", {}, "Node-wide configuration")
     {
@@ -56,6 +36,27 @@ void TCommandNodeConfigInit::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
     config.AllowEmptyDatabase = true;
     config.AllowEmptyAddress = true;
+}
+
+bool TCommandNodeConfigInit::SaveConfig(const TString& config, const TString& configName, const TString& configDirPath) {
+    try {
+        TString tempPath = TStringBuilder() << configDirPath << "/temp_" << configName;
+        TString configPath = TStringBuilder() << configDirPath << "/" << configName;
+
+        {
+            TFileOutput tempFile(tempPath);
+            tempFile << config;
+            tempFile.Flush();
+
+            if (Chmod(tempPath.c_str(), S_IRUSR) != 0) {
+                return false;
+            }
+        }
+
+        return NFs::Rename(tempPath, configPath);
+    } catch (const std::exception& e) {
+        return false;
+    }
 }
 
 int TCommandNodeConfigInit::Run(TConfig& config) {
@@ -96,9 +97,9 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
                 return EXIT_SUCCESS;
             }
             Cerr << "Failed to save configs: " 
-                << (clusterSaved ? "" : "main config ") 
-                << (storageSaved ? "and " : "storage config") 
-                << Endl;
+                 << (clusterSaved ? "" : "main config ") 
+                 << (storageSaved ? "and " : "storage config") 
+                 << Endl;
             return EXIT_FAILURE;
         }
 
@@ -109,6 +110,7 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
                 return EXIT_SUCCESS;
             }
             Cerr << "Failed to save config to " << ConfigDirPath << Endl;
+            return EXIT_FAILURE;
         }
 
         Cerr << "No main config found" << Endl;

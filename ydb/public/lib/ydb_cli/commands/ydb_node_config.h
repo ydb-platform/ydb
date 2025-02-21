@@ -15,6 +15,7 @@ public:
     void PropagateFlags(const TCommandFlags& flags) override;
     void Config(TConfig& config) override;
     int Run(TConfig& config) override;
+    bool SaveConfig(const TString& config, const TString& configName, const TString& configDirPath);
 private:
     TString ConfigYamlPath;
     TString ConfigDirPath;

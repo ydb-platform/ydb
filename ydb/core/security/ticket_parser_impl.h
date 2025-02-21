@@ -746,12 +746,12 @@ private:
             // In a special case, when DomainLoginOnly = false and a user from the root database attempts to
             // access a tenant database, target database must be selected between the two candidates: tenant and the root,
             // based on the database (or audience) embedded in the token itself.
-            const auto database = NLogin::TLoginProvider::GetTokenAudience(record.Ticket);
+            auto database = NLogin::TLoginProvider::GetTokenAudience(record.Ticket);
             BLOG_TRACE("CanInitLoginToken, domain db " << DomainName << ", request db " << record.Database
                 << ", token db " << database << ", DomainLoginOnly " << Config.GetDomainLoginOnly()
             );
             if (database.empty()) {
-                return false;
+                database = DomainName;
             }
             const auto& lookupDatabases = GetLookupDatabases(record);
             BLOG_TRACE("CanInitLoginToken, target database candidates(" << lookupDatabases.size() << "): " << JoinSeq(", ", lookupDatabases));
@@ -1910,9 +1910,9 @@ protected:
         if (record.IsExternalAuthEnabled()) {
             return RefreshTicketViaExternalAuthProvider(key, record);
         }
-        const auto database = NLogin::TLoginProvider::GetTokenAudience(record.Ticket);
+        auto database = NLogin::TLoginProvider::GetTokenAudience(record.Ticket);
         if (database.empty()) {
-            return false;
+            database = DomainName;
         }
         const auto& lookupDatabases = GetLookupDatabases(record);
         if (std::find(lookupDatabases.begin(), lookupDatabases.end(), database) == lookupDatabases.end()) {

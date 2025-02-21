@@ -172,7 +172,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
 
         ConsoleInteraction->Stop(); // distconf will handle the Console from now on
-    } else {
+    } else if (Loaded) {
         ConsoleInteraction->Start(); // we control the Console now
     }
 

@@ -10,6 +10,7 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.olap.lib.utils import get_external_param
 
+
 class TestYdbMixedWorkload(object):
     @classmethod
     def setup_class(cls):

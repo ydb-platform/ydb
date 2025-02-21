@@ -836,8 +836,6 @@ class TEvWriteRows : public std::vector<TEvWriteRow> {
     }
 };
 
-TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithEvWrite(TTestActorRuntime& runtime, TEvWriteRows& rows);
-
 void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values);
 
 struct TSendProposeToCoordinatorOptions {

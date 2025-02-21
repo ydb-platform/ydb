@@ -8,7 +8,7 @@
 
 ### Требования {#requirements}
 
-Ознакомьтесь с [системными требованиями](../../../devops/system-requirements.md) и [топологией кластера](../../../concepts/topology.md).
+Ознакомьтесь с [системными требованиями](../../../devops/concepts/system-requirements.md) и [топологией кластера](../../../concepts/topology.md).
 
 У вас должен быть SSH доступ на все сервера. Это необходимо для установки артефактов и запуска исполняемого файла {{ ydb-short-name }}.
 
@@ -36,7 +36,7 @@
 
 {% endnote %}
 
-Подробнее требования к оборудованию описаны в разделе [{#T}](../../../devops/system-requirements.md).
+Подробнее требования к оборудованию описаны в разделе [{#T}](../../../devops/concepts/system-requirements.md).
 
 ### Подготовка ключей и сертификатов TLS {#tls-certificates}
 
@@ -577,7 +577,7 @@ sudo chmod 700 /opt/ydb/certs
 
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib
-    ydb admin blobstorage bootstrap --uuid <строка> 
+    ydb admin blobstorage bootstrap --uuid <строка>
     echo $?
     ```
 

@@ -55,8 +55,6 @@ common:
     to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/operate.md
     to: /devops/kubernetes/initial-deployment.md
-  - from: /cluster/system-requirements.md
-    to: /devops/system-requirements.md
   - from: /cluster/index.md
     to: /devops/index.md
   - from: /cluster/logs.md
@@ -405,9 +403,9 @@ ru:
 
   # Redirects for Maintenance
   - from: /devops/manual/upgrade.md
-    to: /devops/maintenance/upgrade.md
+    to: /devops/concepts/versioning.md
   - from: /devops/manual/maintenance-without-downtime.md
-    to: /devops/maintenance/maintenance-without-downtime.md
+    to: /devops/concepts/maintenance-without-downtime.md
 
   # Redirects for Federated Queries
   - from: /devops/manual/federated-queries/(.*)$
@@ -422,4 +420,13 @@ ru:
     to: /devops/deployment-options/manual/before-v25.1/state-storage-move.md
   - from: /devops/manual/static-group-move.md
     to: /devops/deployment-options/manual/before-v25.1/static-group-move.md
-    
+
+  # Redirect for system-requirements
+  - from: /devops/system-requirements.md
+    to: /devops/concepts/system-requirements.md
+  - from: /cluster/system-requirements.md
+    to: /devops/concepts/system-requirements.md
+
+en:
+  - from: /cluster/system-requirements.md
+    to: /devops/system-requirements.md

@@ -245,8 +245,20 @@ message TKqpPhyCnUnionAll {
 message TKqpPhyCnMap {
 }
 
+message THashV1 {
+}
+
+message TColumnShardHashV1 {
+    repeated uint32 KeyColumnTypes = 3;
+}
+
 message TKqpPhyCnHashShuffle {
     repeated string KeyColumns = 1;
+
+    oneof HashKind {
+        THashV1 HashV1 = 2;
+        TColumnShardHashV1 ColumnShardHashV1 = 3;
+    }
 }
 
 message TKqpPhyCnBroadcast {
@@ -509,6 +521,7 @@ message TKqpPhyTx {
     repeated TKqpPhyTable Tables = 7;
     TKqpSchemeOperation SchemeOperation = 8;
     repeated string SecretNames = 9;
+    bool EnableShuffleElimination = 10;
 }
 
 message TKqpTableInfo {

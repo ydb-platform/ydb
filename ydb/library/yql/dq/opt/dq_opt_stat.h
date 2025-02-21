@@ -49,10 +49,24 @@ public:
 
         TVector<TColumnStatisticsUsedMember> Data{};
     };
+
+    struct TMemberEqualities {
+        void Add(const NNodes::TCoMember& lhs, const NNodes::TCoMember& rhs) {
+            Data.emplace_back(std::move(lhs), std::move(rhs));
+        }
+
+        TVector<std::pair<NNodes::TCoMember, NNodes::TCoMember>> Data{};
+    };
+
 public:
-    TPredicateSelectivityComputer(const std::shared_ptr<TOptimizerStatistics>& stats, bool collectColumnsStatUsedMembers = false)
+    TPredicateSelectivityComputer(
+        const std::shared_ptr<TOptimizerStatistics>& stats,
+        bool collectColumnsStatUsedMembers = false,
+        bool collectMemberEqualities = false
+    )
         : Stats(stats)
         , CollectColumnsStatUsedMembers(collectColumnsStatUsedMembers)
+        , CollectMemberEqualities(collectMemberEqualities)
     {}
 
     double Compute(const NNodes::TExprBase& input);
@@ -60,6 +74,10 @@ public:
     TColumnStatisticsUsedMembers GetColumnStatsUsedMembers() {
         Y_ENSURE(CollectColumnsStatUsedMembers);
         return ColumnStatsUsedMembers;
+    }
+
+    TMemberEqualities GetMemberEqualities() {
+        return MemberEqualities;
     }
 
 protected:
@@ -70,7 +88,10 @@ protected:
 private:
     const std::shared_ptr<TOptimizerStatistics>& Stats;
     TColumnStatisticsUsedMembers ColumnStatsUsedMembers{};
+    TMemberEqualities MemberEqualities{};
+
     bool CollectColumnsStatUsedMembers = false;
+    bool CollectMemberEqualities = false;
 };
 
 bool NeedCalc(NNodes::TExprBase node);

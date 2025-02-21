@@ -55,7 +55,15 @@ struct TDqCBOProviderContext : public NYql::TBaseProviderContext {
         const TVector<TJoinColumn>& leftJoinKeys, const TVector<TJoinColumn>& rightJoinKeys,
         NYql::EJoinAlgoType joinAlgo,  NYql::EJoinKind joinKind) override;
 
-    virtual double ComputeJoinCost(const NYql::TOptimizerStatistics& leftStats, const NYql::TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, NYql::EJoinAlgoType joinAlgo) const override;
+    virtual double ComputeJoinCost(
+        const NYql::TOptimizerStatistics& leftStats, 
+        const NYql::TOptimizerStatistics& rightStats, 
+        const double outputRows, 
+        const double outputByteSize, 
+        NYql::EJoinAlgoType joinAlgo,
+        bool shuffleLeftSide = false,
+        bool shuffleRightSide = false
+    ) const override;
 
     TDqConfiguration::TPtr Config;
     TTypeAnnotationContext& TypesCtx;
@@ -91,8 +99,16 @@ bool TDqCBOProviderContext::IsJoinApplicable(const std::shared_ptr<NYql::IBaseOp
 }
 
 
-double TDqCBOProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const  {
-    Y_UNUSED(outputByteSize);
+double TDqCBOProviderContext::ComputeJoinCost(
+    const TOptimizerStatistics& leftStats, 
+    const TOptimizerStatistics& rightStats, 
+    const double outputRows, 
+    const double outputByteSize, 
+    EJoinAlgoType joinAlgo,
+    bool shuffleLeftSide,
+    bool shuffleRightSide
+) const  {
+    Y_UNUSED(outputByteSize, shuffleLeftSide, shuffleRightSide);
 
     switch(joinAlgo) {
         case EJoinAlgoType::MapJoin:

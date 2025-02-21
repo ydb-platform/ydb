@@ -151,7 +151,11 @@ TOptimizerStatistics TYtProviderContext::ComputeJoinStats(
     const TVector<NDq::TJoinColumn>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
     EJoinKind /*joinKind*/,
-    TCardinalityHints::TCardinalityHint* /*maybeHint*/) const {
+    TCardinalityHints::TCardinalityHint* /*maybeHint*/,
+    bool shuffleLeftSide,
+    bool shuffleRightSide) const {
+
+    Y_UNUSED(shuffleLeftSide, shuffleRightSide);
 
     const TYtProviderStatistic* leftSpecific = static_cast<const TYtProviderStatistic*>(leftStats.Specific.get());
     const TYtProviderStatistic* rightSpecific = static_cast<const TYtProviderStatistic*>(rightStats.Specific.get());

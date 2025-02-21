@@ -145,7 +145,10 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(cons
 
     if (auto maybeMember = IsAttribute(left)) {
         // In case both arguments refer to an attribute, return 0.2
-        if (IsAttribute(right)) {
+        if (auto maybeAnotherMember = IsAttribute(right)) {
+            if (CollectMemberEqualities) {
+                MemberEqualities.Add(*maybeMember.Get(), *maybeAnotherMember.Get());
+            }
             return 0.3;
         }
         // In case the right side is a constant that can be extracted, compute the selectivity using statistics

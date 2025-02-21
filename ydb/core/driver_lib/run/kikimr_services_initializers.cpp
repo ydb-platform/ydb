@@ -48,6 +48,7 @@
 #include <ydb/core/control/immediate_control_board_actor.h>
 
 #include <ydb/core/driver_lib/version/version.h>
+#include <ydb/core/discovery/discovery.h>
 
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
@@ -1801,6 +1802,9 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             stringsFromProto(desc->AddressesV6, config.GetPublicAddressesV6());
 
             desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
+            if (config.HasEndpointId()) {
+                desc->EndpointId = config.GetEndpointId();
+            }
             endpoints.push_back(std::move(desc));
         }
 
@@ -1815,7 +1819,22 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             desc->TargetNameOverride = config.GetPublicTargetNameOverride();
 
             desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
+            if (config.HasEndpointId()) {
+                desc->EndpointId = config.GetEndpointId();
+            }
             endpoints.push_back(std::move(desc));
+        }
+
+        if (Config.GetKafkaProxyConfig().GetEnableKafkaProxy()) {
+            const auto& kakfaConfig = Config.GetKafkaProxyConfig();
+            TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
+            desc->Address = config.GetPublicHost() ? config.GetPublicHost() : address;
+            desc->Port = kakfaConfig.GetListeningPort();
+            desc->Ssl = kakfaConfig.HasSslCertificate();
+
+            desc->EndpointId = NGRpcService::KafkaEndpointId;
+            endpoints.push_back(std::move(desc));
+
         }
 
         for (auto &sx : config.GetExtEndpoints()) {
@@ -1830,6 +1849,9 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 stringsFromProto(desc->AddressesV6, sx.GetPublicAddressesV6());
 
                 desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
+                if (sx.HasEndpointId()) {
+                    desc->EndpointId = sx.GetEndpointId();
+                }
                 endpoints.push_back(std::move(desc));
             }
 
@@ -1844,6 +1866,9 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 desc->TargetNameOverride = sx.GetPublicTargetNameOverride();
 
                 desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
+                if (sx.HasEndpointId()) {
+                    desc->EndpointId = sx.GetEndpointId();
+                }
                 endpoints.push_back(std::move(desc));
             }
         }
@@ -2801,9 +2826,15 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
 
         setup->LocalServices.emplace_back(
-            TActorId(),
-            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),
+            NKafka::MakeKafkaDiscoveryCacheID(),
+            TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
                 TMailboxType::HTSwap, appData->UserPoolId)
+        );
+        setup->LocalServices.emplace_back(
+            TActorId(),
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(),
+                                                       NKafka::MakeKafkaDiscoveryCacheID()),
+                           TMailboxType::HTSwap, appData->UserPoolId)
         );
 
         IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{appData->Counters});

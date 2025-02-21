@@ -185,7 +185,7 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
-	EvTxBatchComplete,
+	    EvTxBatchComplete,
         EvReadingPartitionStatusRequest,
         EvProcessChangeOwnerRequests,
         EvWakeupReleasePartition,
@@ -195,6 +195,7 @@ struct TEvPQ {
         EvDeletePartition,
         EvDeletePartitionDone,
         EvTransactionCompleted,
+        EvListAllTopicsResponse,
         EvEnd
     };
 
@@ -1167,6 +1168,16 @@ struct TEvPQ {
         }
 
         TMaybe<NPQ::TWriteId> WriteId;
+    };
+
+    struct TEvListAllTopicsResponse : TEventLocal<TEvListAllTopicsResponse, EvListAllTopicsResponse> {
+        explicit TEvListAllTopicsResponse() = default;
+        explicit TEvListAllTopicsResponse(Ydb::StatusIds status, const TString& error);
+
+        TVector<TString> Topics;
+        bool HaveMoreTopics = false;
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        TString Error;
     };
 };
 

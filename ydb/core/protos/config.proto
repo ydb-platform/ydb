@@ -681,6 +681,7 @@ message TGRpcConfig {
 
     optional uint32 GRpcProxyCount = 106 [default = 2];
     optional bool EnableGRpcMemoryQuota = 107 [default = false];
+    optional string EndpointId = 108;
 
     repeated TGRpcConfig ExtEndpoints = 200; // run specific services on separate endpoints
 }
@@ -1911,7 +1912,8 @@ message TKafkaProxyConfig {
     }
 
     optional TProxy Proxy = 7;
-    optional bool MeteringV2Enabled = 10 [default = false];
+    optional bool MeteringV2Enabled = 10 [default = true];
+    optional bool AuthViaApiKey = 11 [default = true];
 }
 
 message TAwsCompatibilityConfig {

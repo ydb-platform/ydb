@@ -586,6 +586,7 @@ protected:
     void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
     void Handle(TEvPrivate::TEvDeleteNode::TPtr& ev);
     void Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev);
+    void HandleInit(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev);
     void Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev);
     void Handle(TEvPrivate::TEvGenerateTestData::TPtr& ev);

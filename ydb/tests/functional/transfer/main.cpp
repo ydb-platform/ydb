@@ -59,7 +59,7 @@ struct TConfig {
     const char* TableDDL;
     const char* Lambda;
     const char* Message;
-    TVector<std::pair<TString, std::shared_ptr<IChecker>>> Columns;
+    TVector<std::pair<TString, std::shared_ptr<IChecker>>> Expectations;
 };
 
 
@@ -126,8 +126,8 @@ struct MainTestCase {
                 Cerr << "Attempt=" << attempt << " count=" << res.first << Endl << Flush;
                 if (res.first == 1) {
                     const Ydb::ResultSet& proto = res.second;
-                    for (size_t i = 0; i < Config.Columns.size(); ++i) {
-                        auto& c = Config.Columns[i];
+                    for (size_t i = 0; i < Config.Expectations.size(); ++i) {
+                        auto& c = Config.Expectations[i];
                         TString msg = TStringBuilder() << "Column '" << c.first << "': ";
                         c.second->Assert(msg, proto.rows(0).items(i));
                     }
@@ -144,11 +144,11 @@ struct MainTestCase {
 
     std::pair<ui64, Ydb::ResultSet> DoRead(TSession& s) {
         TStringBuilder columns;
-        for (size_t i = 0; i < Config.Columns.size(); ++i) {
+        for (size_t i = 0; i < Config.Expectations.size(); ++i) {
             if (i) {
                 columns << ", ";
             }
-            columns << "`" << Config.Columns[i].first << "`";
+            columns << "`" << Config.Expectations[i].first << "`";
         }
 
 
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
             .Message = "Message-1",
 
-            .Columns = {
+            .Expectations = {
                 _C("Key", ui64(0)),
                 _C("Message", TString("Message-1")),
             }
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
             .Message = "Message-1",
 
-            .Columns = {
+            .Expectations = {
                 _C("Key", ui64(0)),
                 _C("Message", TString("Message-1")),
             }
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 "salary": "123"
             })",
 
-            .Columns = {
+            .Expectations = {
                 _C("Id", ui64(1)),
                 _C("FirstName", TString("Vasya")),
                 _C("LastName", TString("Pupkin")),

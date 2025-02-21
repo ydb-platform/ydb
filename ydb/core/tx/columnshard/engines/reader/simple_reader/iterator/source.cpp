@@ -23,7 +23,6 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
 void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr) {
     AFL_VERIFY(!ProcessingStarted);
     AFL_VERIFY(FetchingPlan);
-    AFL_VERIFY(!GetContext()->IsAborted());
     ProcessingStarted = true;
     SourceGroupGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
         GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId());

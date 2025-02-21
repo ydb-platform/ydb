@@ -98,7 +98,7 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
             }
             Cerr << "Failed to save configs: " 
                  << (clusterSaved ? "" : "main config ") 
-                 << (storageSaved ? "and " : "storage config") 
+                 << (storageSaved ? "" : "storage config") 
                  << Endl;
             return EXIT_FAILURE;
         }

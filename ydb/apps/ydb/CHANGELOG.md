@@ -1,3 +1,5 @@
+* Add `ydb admin node config init` command to initialize directory with node config files.
+* Add `ydb admin cluster config generate` command to generate dynamic config from static config on cluster.
 * Fixed memory leak in tpcds generator.
 * Include external data sources and external tables in local backups (`ydb tools dump` and `ydb tools restore`). Both scheme objects are backed up as YQL creation queries saved in the `create_external_data_source.sql` and `create_external_table.sql` files respectively, which can be executed to recreate the original scheme objects.
 * Fixed a bug where `ydb auth get-token` command tried to authenticate twice: while listing andpoints and while executing actual token request.

@@ -1,6 +1,7 @@
 #include "ydb_admin.h"
 
 #include "ydb_dynamic_config.h"
+#include "ydb_node_config.h"
 #include "ydb_storage_config.h"
 #include "ydb_cluster.h"
 
@@ -22,6 +23,7 @@ public:
         : TClientCommandTree("node", {}, "Node-wide administration")
     {
         AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>());
+        AddCommand(std::make_unique<NNodeConfig::TCommandNodeConfig>());
     }
 };
 

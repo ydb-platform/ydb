@@ -479,7 +479,8 @@ public:
                     if (bucket.AsyncWriteOperation.has_value()) return EUpdateResult::Yield;
 
                     bucket.AsyncWriteOperation = bucket.SpilledData->WriteWideItem(BufferForUsedInputItems);
-                    BufferForUsedInputItems.resize(0); //for freeing allocated key value asap
+                    // BufferForUsedInputItems.resize(0); //for freeing allocated key value asap
+                    std::fill(BufferForUsedInputItems.begin(), BufferForUsedInputItems.end(),NUdf::TUnboxedValuePod());
                 }
 
                 if (InputStatus == EFetchResult::Finish) return FlushSpillingBuffersAndWait();
@@ -504,7 +505,7 @@ public:
             // while restoration we process buckets one by one starting from the first in a queue
             bool isNew = SpilledBuckets.front().InMemoryProcessingState->TasteIt();
             Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
-            BufferForUsedInputItems.resize(0);
+            // BufferForUsedInputItems.resize(0);
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
 
@@ -837,7 +838,8 @@ private:
         //process spilled data
         if (!bucket.SpilledData->Empty()) {
             RecoverState = false;
-            BufferForUsedInputItems.resize(UsedInputItemType->GetElementsCount());
+            std::fill(BufferForUsedInputItems.begin(), BufferForUsedInputItems.end(),NUdf::TUnboxedValuePod());
+            // BufferForUsedInputItems.resize(UsedInputItemType->GetElementsCount());
             AsyncReadOperation = bucket.SpilledData->ExtractWideItem(BufferForUsedInputItems);
             if (AsyncReadOperation) {
                 return EUpdateResult::Yield;
@@ -886,6 +888,9 @@ private:
                 YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
+                MKQL_ENSURE(BufferForUsedInputItems.empty(), "MISHA new ensure");
+
+                BufferForUsedInputItems.resize(UsedInputItemType->GetElementsCount());
 
                 std::sort(SpilledBuckets.begin(), SpilledBuckets.end(), [](const TSpilledBucket& lhs, const TSpilledBucket& rhs) {
                     bool lhs_in_memory = lhs.BucketState == TSpilledBucket::EBucketState::InMemory;
@@ -1490,6 +1495,7 @@ public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (state.IsInvalid()) {
             MakeState(ctx, state);
+            std::cerr << "MISHA NON LLVM" << std::endl;
         }
 
         if (const auto ptr = static_cast<TSpillingSupportState*>(state.AsBoxed().Get())) {
@@ -1545,6 +1551,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
+        std::cerr << "MISHA LLVM" << std::endl;
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);

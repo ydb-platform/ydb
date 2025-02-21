@@ -108,6 +108,11 @@ void TTxInit::Complete(const TActorContext& ctx) {
     AFL_VERIFY(!Self->IsTxInitFinished);
     Self->IsTxInitFinished = true;
     Self->TrySwitchToWork(ctx);
+    if (Self->SubDomainPathId) {
+        Self->StartWatchingSubDomainPathId();
+    } else {
+        Self->StartFindSubDomainPathId();
+    }
 }
 
 class TTxUpdateSchema: public TTransactionBase<TColumnShard> {

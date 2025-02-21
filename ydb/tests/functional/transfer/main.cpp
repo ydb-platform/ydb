@@ -38,13 +38,28 @@ struct Checker : public IChecker {
 };
 
 template<>
+bool Checker<bool>::Get(const ::Ydb::Value& value) {
+    return value.bool_value();
+}
+
+template<>
 ui64 Checker<ui64>::Get(const ::Ydb::Value& value) {
     return value.uint64_value();
 }
 
 template<>
+double Checker<double>::Get(const ::Ydb::Value& value) {
+    return value.double_value();
+}
+
+template<>
 TString Checker<TString>::Get(const ::Ydb::Value& value) {
     return value.text_value();
+}
+
+template<>
+TInstant Checker<TInstant>::Get(const ::Ydb::Value& value) {
+    return TInstant::Days(value.uint32_value());
 }
 
 template<typename T>
@@ -283,6 +298,138 @@ Y_UNIT_TEST_SUITE(Transfer)
                 _C("FirstName", TString("Vasya")),
                 _C("LastName", TString("Pupkin")),
                 _C("Salary", ui64(123)),
+            }
+        }).Run();
+    }
+
+    Y_UNIT_TEST(Main_ColumnTable_NullableColumn)
+    {
+        MainTestCase({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Message = "Message-1",
+
+            .Expectations = {
+                _C("Key", ui64(0)),
+                _C("Message", TString("Message-1")),
+            }
+        }).Run();
+    }
+
+    Y_UNIT_TEST(Main_ColumnTable_Date)
+    {
+        MainTestCase({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Date,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message: CAST($x._data AS Date)
+                        |>
+                    ];
+                };
+            )",
+
+            .Message = "2025-02-21",
+
+            .Expectations = {
+                _C("Key", ui64(0)),
+                _C("Message", TInstant::ParseIso8601("2025-02-21")),
+            }
+        }).Run();
+    }
+
+    Y_UNIT_TEST(Main_ColumnTable_Double)
+    {
+        MainTestCase({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Double,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message: CAST($x._data AS Double)
+                        |>
+                    ];
+                };
+            )",
+
+            .Message = "1.23",
+
+            .Expectations = {
+                _C("Key", ui64(0)),
+                _C("Message", 1.23),
+            }
+        }).Run();
+    }
+
+    Y_UNIT_TEST(Main_ColumnTable_Utf8_Long)
+    {
+        MainTestCase({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Message = "Message-1 long value 0 1234567890 1 1234567890 2 1234567890 3 1234567890 4 1234567890 5 1234567890 6 1234567890",
+
+            .Expectations = {
+                _C("Key", ui64(0)),
+                _C("Message", TString("Message-1 long value 0 1234567890 1 1234567890 2 1234567890 3 1234567890 4 1234567890 5 1234567890 6 1234567890")),
             }
         }).Run();
     }

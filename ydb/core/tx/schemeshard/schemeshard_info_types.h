@@ -2870,7 +2870,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         int NextChangefeedIdx = 0;
         TString Issue;
         int ViewCreationRetries = 0;
-        NKikimr::TPathId StreamImplPathId;
+        TPathId StreamImplPathId;
 
         TItem() = default;
 

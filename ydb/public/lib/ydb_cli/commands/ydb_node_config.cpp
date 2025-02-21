@@ -48,7 +48,7 @@ bool TCommandNodeConfigInit::SaveConfig(const TString& config, const TString& co
             tempFile << config;
             tempFile.Flush();
 
-            if (Chmod(tempPath.c_str(), S_IRUSR) != 0) {
+            if (Chmod(tempPath.c_str(), S_IRUSR | S_IRGRP | S_IROTH) != 0) {
                 return false;
             }
         }

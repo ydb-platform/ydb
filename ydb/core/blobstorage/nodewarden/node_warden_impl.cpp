@@ -697,7 +697,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
                     TFileOutput tempFile(tempPath);
                     tempFile << yaml;
                     tempFile.Flush();
-                    if (Chmod(tempPath.c_str(), S_IRUSR) != 0) {
+                    if (Chmod(tempPath.c_str(), S_IRUSR | S_IRGRP | S_IROTH) != 0) {
                         STLOG(PRI_ERROR, BS_NODE, NW92, "Failed to set permissions for temporary file", (Error, LastSystemErrorText()));
                         success = false;
                         return false;

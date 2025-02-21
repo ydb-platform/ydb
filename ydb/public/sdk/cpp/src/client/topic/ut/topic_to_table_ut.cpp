@@ -3125,6 +3125,88 @@ Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions, TFixture)
     }
 }
 
+Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo, TFixture)
+{
+    const ui32 PARTITIONS_COUNT = 20;
+    const size_t TXS_COUNT = 100;
+
+    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    auto tableSession = CreateTableSession();
+    std::vector<std::shared_ptr<NTopic::ISimpleBlockingWriteSession>> topicWriteSessions;
+
+    for (ui32 i = 0; i < PARTITIONS_COUNT; ++i) {
+        TString sourceId = TEST_MESSAGE_GROUP_ID;
+        sourceId += "_";
+        sourceId += ToString(i);
+
+        NTopic::TTopicClient client(GetDriver());
+        NTopic::TWriteSessionSettings options;
+        options.Path("topic_A");
+        options.ProducerId(sourceId);
+        options.MessageGroupId(sourceId);
+        options.PartitionId(i);
+        options.Codec(ECodec::RAW);
+
+        auto session = client.CreateSimpleBlockingWriteSession(options);
+
+        topicWriteSessions.push_back(std::move(session));
+    }
+
+    std::vector<NTable::TSession> sessions;
+    std::vector<NTable::TTransaction> transactions;
+
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        sessions.push_back(CreateTableSession());
+        auto& session = sessions.back();
+
+        transactions.push_back(BeginTx(session));
+        auto& tx = transactions.back();
+
+        for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
+            TString sourceId = TEST_MESSAGE_GROUP_ID;
+            sourceId += "_";
+            sourceId += ToString(j);
+
+            for (size_t k = 0, count = RandomNumber<size_t>(20); k < count; ++k) {
+                const TString data(RandomNumber<size_t>(1'000) + 100, 'x');
+                NTopic::TWriteMessage params(data);
+                params.Tx(tx);
+
+                topicWriteSessions[j]->Write(std::move(params));
+            }
+        }
+    }
+
+    std::vector<NTable::TAsyncCommitTransactionResult> futures;
+
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        futures.push_back(transactions[i].Commit());
+    }
+
+    // Some transactions should end with the error `ABORTED`
+    size_t successCount = 0;
+
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        futures[i].Wait();
+        const auto& result = futures[i].GetValueSync();
+        switch (result.GetStatus()) {
+        case EStatus::SUCCESS:
+            ++successCount;
+            break;
+        case EStatus::ABORTED:
+            break;
+        default:
+            UNIT_FAIL("unexpected status: " << static_cast<const NYdb::TStatus&>(result));
+            break;
+        }
+    }
+
+    UNIT_ASSERT_VALUES_UNEQUAL(successCount, TXS_COUNT);
+}
+
 }
 
 }

@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()

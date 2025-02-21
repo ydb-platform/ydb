@@ -6,7 +6,6 @@
 namespace NYdb::NConsoleClient::NNodeConfig {
 
 constexpr const char* CONFIG_FILE_NAME = "config.yaml";
-constexpr const char* MAIN_CONFIG_FILE_NAME = "main.yaml";
 constexpr const char* STORAGE_CONFIG_FILE_NAME = "storage.yaml";
 
 bool SaveConfig(const TString& config, const TString& configName, const TString& configDirPath) {
@@ -60,7 +59,6 @@ void TCommandNodeConfigInit::Config(TConfig& config) {
 }
 
 int TCommandNodeConfigInit::Run(TConfig& config) {
-
     MakePathIfNotExist(ConfigDirPath.c_str());
     TString configYaml;
 
@@ -83,35 +81,47 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
                 }
             }, entry.Identity);
         }
-        if (!clusterConfig.empty() && !storageConfig.empty()) {
-            if (SaveConfig(clusterConfig, MAIN_CONFIG_FILE_NAME, ConfigDirPath) &&
-                SaveConfig(storageConfig, STORAGE_CONFIG_FILE_NAME, ConfigDirPath)) {
-                Cout << "Initialized cluster and storage configs in " << ConfigDirPath << "/" << MAIN_CONFIG_FILE_NAME << " and " << STORAGE_CONFIG_FILE_NAME << Endl;
+        bool hasCluster = !clusterConfig.empty();
+        bool hasStorage = !storageConfig.empty();
+        bool clusterSaved = false;
+        bool storageSaved = false;
+
+        if (hasCluster && hasStorage) {
+            clusterSaved = SaveConfig(clusterConfig, CONFIG_FILE_NAME, ConfigDirPath);
+            storageSaved = SaveConfig(storageConfig, STORAGE_CONFIG_FILE_NAME, ConfigDirPath);
+
+            if (clusterSaved && storageSaved) {
+                Cout << "Initialized main and storage configs in " << ConfigDirPath << "/" 
+                     << CONFIG_FILE_NAME << " and " << STORAGE_CONFIG_FILE_NAME << Endl;
                 return EXIT_SUCCESS;
-            } else {
-                Cout << "Failed to initialize cluster config in " << ConfigDirPath << "/" << MAIN_CONFIG_FILE_NAME << Endl;
-                return EXIT_FAILURE;
             }
         }
-        else if (!clusterConfig.empty() && storageConfig.empty()) {
-            configYaml = clusterConfig;
+
+        if (hasCluster) {
+            clusterSaved = SaveConfig(clusterConfig, CONFIG_FILE_NAME, ConfigDirPath);
+            if (clusterSaved) {
+                Cout << "Initialized config in " << ConfigDirPath << "/" << CONFIG_FILE_NAME << Endl;
+                return EXIT_SUCCESS;
+            }
         }
-        else {
-            Cout << "No main config found on the seed node" << Endl;
-            return EXIT_FAILURE;
+
+        if (hasCluster) {
+            Cerr << "Failed to save config(s) to " << ConfigDirPath << Endl;
+        } else {
+            Cerr << "No main config found" << Endl;
         }
+        return EXIT_FAILURE;
     }
-    else {
-        configYaml = TFileInput(ConfigYamlPath).ReadAll();
-    }
+
+    configYaml = TFileInput(ConfigYamlPath).ReadAll();
     if (SaveConfig(configYaml, CONFIG_FILE_NAME, ConfigDirPath)){
         Cout << "Initialized cluster config in " << ConfigDirPath << "/" << CONFIG_FILE_NAME << Endl;
+        return EXIT_SUCCESS;
     } else {
         Cout << "Failed to initialize cluster config in " << ConfigDirPath << "/" << CONFIG_FILE_NAME << Endl;
         return EXIT_FAILURE;
     }
-    return EXIT_SUCCESS;
-}
 
+}
 
 } // namespace NYdb::NConsoleClient::NNodeConfig

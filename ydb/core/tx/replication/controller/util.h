@@ -25,7 +25,6 @@ inline auto DefaultRetryableErrors() {
         EStatus::ABORTED,
         EStatus::UNAVAILABLE,
         EStatus::OVERLOADED,
-        EStatus::GENERIC_ERROR,
         EStatus::TIMEOUT,
         EStatus::BAD_SESSION,
         EStatus::SESSION_EXPIRED,

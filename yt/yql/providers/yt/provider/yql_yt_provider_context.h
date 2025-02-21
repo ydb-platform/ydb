@@ -48,7 +48,9 @@ public:
         const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
         EJoinKind joinKind,
-        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const override;
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr,
+        bool shuffleLeftSide = false,
+        bool shuffleRightSide = false) const override;
 
     bool IsJoinApplicable(
         const std::shared_ptr<IBaseOptimizerNode>& leftStats,

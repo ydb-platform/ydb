@@ -68,6 +68,8 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnableOlapPushdown;
     NCommon::TConfSetting<bool, false> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
+    NCommon::TConfSetting<bool, false> OptShuffleElimination;
+    NCommon::TConfSetting<bool, false> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
 
     NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;

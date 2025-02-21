@@ -977,7 +977,7 @@ public:
             RetryShard(ev->Get()->TabletId, std::nullopt);
         } else {
             TxManager->SetError(ev->Get()->TabletId);
-            if (Mode == EMode::IMMEDIATE_COMMIT) {
+            if (Mode == EMode::IMMEDIATE_COMMIT || Mode == EMode::COMMIT) {
                 RuntimeError(
                     NYql::NDqProto::StatusIds::UNDETERMINED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,

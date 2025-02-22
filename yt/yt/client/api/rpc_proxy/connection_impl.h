@@ -76,7 +76,7 @@ private:
     NConcurrency::TPeriodicExecutorPtr UpdateProxyListExecutor_;
 
     // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-    NThreading::TAtomicObject<TString> DiscoveryToken_;
+    NThreading::TAtomicObject<std::string> DiscoveryToken_;
 
     NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
 

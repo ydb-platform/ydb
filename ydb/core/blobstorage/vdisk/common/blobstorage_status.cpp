@@ -70,7 +70,7 @@ namespace NKikimr {
             Result->Record.MergeFrom(ev->Get()->Record);
 
             if (Counter == 0) {
-                ctx.Send(NotifyId, new TEvents::TEvActorDied());
+                ctx.Send(NotifyId, new TEvents::TEvGone());
                 LOG_DEBUG(ctx, BS_VDISK_GET,
                     VDISKP(VCtx->VDiskLogPrefix, "TEvVStatusResult"));
                 SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, Ev->GetChannel(), VCtx);

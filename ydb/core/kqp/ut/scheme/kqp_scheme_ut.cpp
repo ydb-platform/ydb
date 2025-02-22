@@ -2577,6 +2577,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_DEBUG);
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -2585,7 +2587,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         const auto subtypeStr = IndexSubtypeSqlString(type).data();
         const auto withStr = IndexWithSqlString(type).data();
 
-        // Non-covered index
+        // Non-covered index, single column
         {
             auto status = session.ExecuteSchemeQuery(Sprintf(R"(
                 --!syntax_v1
@@ -2610,6 +2612,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             }
         }
 
@@ -2628,7 +2635,58 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
         }
 
-        // Covered index
+        // Non-covered index, multiple columns
+        {
+            auto status = session.ExecuteSchemeQuery(Sprintf(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` ADD INDEX CommentIndex %s %s ON (Group, Comment) %s;
+            )", typeStr, subtypeStr, withStr)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "CommentIndex");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type));
+            std::vector<std::string> indexColumns{"Group", "Comment"};
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns(), indexColumns);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
+
+            if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetIndexSettings()).Settings;
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            }
+        }
+
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` DROP INDEX CommentIndex;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
+        }
+
+        // Covered index, single column
         {
             auto status = session.ExecuteSchemeQuery(Sprintf(R"(
                 --!syntax_v1
@@ -2652,7 +2710,78 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+           }
+        }
+
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` DROP INDEX NameIndex;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
+        }
+
+        // Covered index, multiple columns
+        {
+            auto status = session.ExecuteSchemeQuery(Sprintf(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` ADD INDEX CommentIndex %s %s ON (Group, Comment) COVER (Amount) %s;
+            )", typeStr, subtypeStr, withStr)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "CommentIndex");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type));
+            std::vector<std::string> indexColumns{"Group", "Comment"};
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns(), indexColumns);
+            std::vector<std::string> dataColumns{"Amount"};
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns(), dataColumns);
+
+            if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetIndexSettings()).Settings;
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             }
+        }
+
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` DROP INDEX CommentIndex;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
         }
     }
 
@@ -2823,7 +2952,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = userSession.AlterTable("/Root/SecondaryKeys/Index/indexImplTable", tableSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-                "Error: Access denied for user@builtin to path Root/SecondaryKeys/Index/indexImplTable"
+                "Error: Access denied for user@builtin on path /Root/SecondaryKeys/Index/indexImplTable"
             );
         }
         // grant necessary permission
@@ -12078,11 +12207,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             tableInserter.AddRow().Add(1).AddNull().Add(jsonString);
             tableInserter.AddRow().Add(2).Add(jsonString).Add(jsonBin);
             testHelper.BulkUpsert(testTable, tableInserter);
-        }
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(3).Add(jsonBin).AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter, Ydb::StatusIds::SCHEME_ERROR);
         }
     }
 }

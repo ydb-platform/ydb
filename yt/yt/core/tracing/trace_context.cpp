@@ -155,31 +155,7 @@ TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation l
     return oldContext;
 }
 
-void OnContextSwitchOut()
-{
-    if (auto* context = TryGetCurrentTraceContext()) {
-        auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
-        auto now = GetApproximateCpuInstant();
-        context->IncrementElapsedCpuTime(now - traceContextTimingCheckpoint);
-        SetCurrentTraceContext(nullptr);
-        traceContextTimingCheckpoint = 0;
-    }
-}
-
-void OnContextSwitchIn()
-{
-    if (auto* context = TryGetTraceContextFromPropagatingStorage(GetCurrentPropagatingStorage())) {
-        SetCurrentTraceContext(context);
-        TraceContextTimingCheckpoint() = GetApproximateCpuInstant();
-    } else {
-        SetCurrentTraceContext(nullptr);
-        TraceContextTimingCheckpoint() = 0;
-    }
-}
-
-void OnPropagatingStorageSwitch(
-    const TPropagatingStorage& oldStorage,
-    const TPropagatingStorage& newStorage)
+void OnPropagatingStorageBeforeSwitch(const TPropagatingStorage& oldStorage)
 {
     TCpuInstant now = 0;
     auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
@@ -190,6 +166,12 @@ void OnPropagatingStorageSwitch(
         now = GetApproximateCpuInstant();
         oldContext->IncrementElapsedCpuTime(now - traceContextTimingCheckpoint);
     }
+}
+
+void OnPropagatingStorageAfterSwitch(const TPropagatingStorage& newStorage)
+{
+    TCpuInstant now = 0;
+    auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
 
     if (auto* newContext = TryGetTraceContextFromPropagatingStorage(newStorage)) {
         SetCurrentTraceContext(newContext);
@@ -201,6 +183,24 @@ void OnPropagatingStorageSwitch(
         SetCurrentTraceContext(nullptr);
         traceContextTimingCheckpoint = 0;
     }
+}
+
+void OnPropagatingStorageSwitch(
+    const TPropagatingStorage& oldStorage,
+    const TPropagatingStorage& newStorage)
+{
+    OnPropagatingStorageBeforeSwitch(oldStorage);
+    OnPropagatingStorageAfterSwitch(newStorage);
+}
+
+void OnContextSwitchOut()
+{
+    OnPropagatingStorageBeforeSwitch(GetCurrentPropagatingStorage());
+}
+
+void OnContextSwitchIn()
+{
+    OnPropagatingStorageAfterSwitch(GetCurrentPropagatingStorage());
 }
 
 void InitializeTraceContexts()
@@ -254,7 +254,7 @@ TTraceContext::TTraceContext(
     NDetail::InitializeTraceContexts();
 }
 
-void TTraceContext::SetTargetEndpoint(const std::optional<TString>& targetEndpoint)
+void TTraceContext::SetTargetEndpoint(const std::optional<std::string>& targetEndpoint)
 {
     TargetEndpoint_ = targetEndpoint;
 }
@@ -492,7 +492,7 @@ void TTraceContext::AddErrorTag()
     AddTag(ErrorAnnotationName, ErrorAnnotationValue);
 }
 
-void TTraceContext::AddLogEntry(TCpuInstant at, TString message)
+void TTraceContext::AddLogEntry(TCpuInstant at, std::string message)
 {
     if (!IsRecorded()) {
         return;
@@ -638,7 +638,7 @@ TTraceContextPtr TTraceContext::NewRoot(const std::string& spanName, TTraceId tr
 TTraceContextPtr TTraceContext::NewChildFromSpan(
     TSpanContext parentSpanContext,
     const std::string& spanName,
-    std::optional<TString> endpoint,
+    std::optional<std::string> endpoint,
     TYsonString baggage)
 {
     auto result = New<TTraceContext>(

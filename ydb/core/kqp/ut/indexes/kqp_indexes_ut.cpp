@@ -55,7 +55,7 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
 
-    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr, {}});
+    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, nullptr, {}});
     return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver,
                                federatedQuerySetup, nullptr, nullptr, NKikimrConfig::TQueryServiceConfig(), {}, funcRegistry, funcRegistry, keepConfigChanges, nullptr, actorSystem, nullptr);
 }
@@ -2698,7 +2698,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_C(value.IsMap(), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("version"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_text"), "Incorrect Diagnostics");
+                UNIT_ASSERT_C(!value.Has("query_text"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Diagnostics: table_metadata type should be an array");
@@ -2706,7 +2706,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_plan"), "Incorrect Diagnostics");
+                UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Diagnostics");
             }
 

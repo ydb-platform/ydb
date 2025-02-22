@@ -38,7 +38,13 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/protos
     yql/essentials/ast
+    yql/essentials/sql
     yql/essentials/sql/pg
+    yql/essentials/sql/v1
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
+    yql/essentials/sql/v1/proto_parser/antlr4
+    yql/essentials/sql/v1/proto_parser/antlr4_ansi
 
     library/cpp/getopt
     library/cpp/logger

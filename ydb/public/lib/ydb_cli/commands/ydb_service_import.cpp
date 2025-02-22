@@ -126,6 +126,10 @@ void TCommandImportFromS3::Parse(TConfig& config) {
         throw TMisuseException() << "At least one item should be provided";
     }
 
+}
+
+void TCommandImportFromS3::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Destination, config);
     }
@@ -246,7 +250,6 @@ void TCommandImportFileBase::Config(TConfig& config) {
 
 void TCommandImportFileBase::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
-    AdjustPath(config);
 
     if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) {
         if (bytesPerRequest > TImportFileSettings::MaxBytesPerRequest) {
@@ -273,6 +276,11 @@ void TCommandImportFileBase::Parse(TConfig& config) {
     if (FilePaths.empty() || !IsStdinInteractive()) {
         FilePaths.push_back("");
     }
+}
+
+void TCommandImportFileBase::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    AdjustPath(config);
 }
 
 /// Import CSV

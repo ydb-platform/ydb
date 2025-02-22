@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/utils/log/log.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -198,7 +199,13 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
             SELECT "foo" / "bar"
         )";
 
-        const auto parsedAst = NSQLTranslation::SqlToYql(queryInView, {});
+        NSQLTranslation::TTranslators translators(
+            nullptr,
+            NSQLTranslationV1::MakeTranslator(),
+            nullptr
+        );
+
+        const auto parsedAst = NSQLTranslation::SqlToYql(translators, queryInView, {});
         UNIT_ASSERT_C(parsedAst.IsOk(), parsedAst.Issues.ToString());
 
         const TString creationQuery = std::format(R"(

@@ -1578,8 +1578,10 @@ namespace TEvDataShard {
                                                 TEvDataShard::EvForceDataCleanupResult> {
         TEvForceDataCleanupResult() = default;
 
-        TEvForceDataCleanupResult(ui64 dataCleanupGeneration) {
+        TEvForceDataCleanupResult(ui64 dataCleanupGeneration, ui64 tabletId, NKikimrTxDataShard::TEvForceDataCleanupResult::EStatus status) {
             Record.SetDataCleanupGeneration(dataCleanupGeneration);
+            Record.SetTabletId(tabletId);
+            Record.SetStatus(status);
         }
     };
 

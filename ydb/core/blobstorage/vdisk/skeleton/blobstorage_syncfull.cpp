@@ -127,7 +127,7 @@ namespace NKikimr {
             // send reply
             SendVDiskResponse(ctx, Recipient, Result.release(), 0, HullCtx->VCtx);
             // notify parent about death
-            ctx.Send(ParentId, new TEvents::TEvActorDied);
+            ctx.Send(ParentId, new TEvents::TEvGone);
             Die(ctx);
         }
 

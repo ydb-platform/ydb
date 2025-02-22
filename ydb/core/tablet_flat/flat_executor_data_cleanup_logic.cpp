@@ -10,19 +10,43 @@ TDataCleanupLogic::TDataCleanupLogic(IOps* ops, IExecutor* executor, ITablet* ow
     , GcLogic(gcLogic)
 {}
 
-bool TDataCleanupLogic::TryStartCleanup() {
-    if (State == EDataCleanupState::Idle) {
-        if (auto logl = Logger->Log(ELnLev::Info)) {
-            logl << "TDataCleanupLogic: Starting DataCleanup for tablet with id " << Owner->TabletID();
+bool TDataCleanupLogic::TryStartCleanup(ui64 dataCleanupGeneration, const TActorContext& ctx) {
+    switch (State) {
+        case EDataCleanupState::Idle: {
+            if (CurrentDataCleanupGeneration >= dataCleanupGeneration) {
+                if (auto logl = Logger->Log(ELnLev::Info)) {
+                    logl << "TDataCleanupLogic: DataCleanup for tablet with id " << Owner->TabletID()
+                        << " had already completed for generation " << dataCleanupGeneration
+                        << ", current DataCleanup generation: " << CurrentDataCleanupGeneration;
+                }
+                // repeat DataCleanupComplete callback
+                CompleteDataCleanup(ctx);
+                return false;
+            } else {
+                CurrentDataCleanupGeneration = dataCleanupGeneration;
+                if (auto logl = Logger->Log(ELnLev::Info)) {
+                    logl << "TDataCleanupLogic: Starting DataCleanup for tablet with id " << Owner->TabletID()
+                        << ", current DataCleanup generation: " << CurrentDataCleanupGeneration;
+                }
+                State = EDataCleanupState::PendingCompaction;
+                return true;
+            }
+            break;
         }
-        State = EDataCleanupState::PendingCompaction;
-        return true;
-    } else {
-        if (auto logl = Logger->Log(ELnLev::Info)) {
-            logl << "TDataCleanupLogic: schedule next DataCleanup for tablet with id " << Owner->TabletID();
+        default: { // DataCleanup in progress
+            if (dataCleanupGeneration > CurrentDataCleanupGeneration) {
+                NextDataCleanupGeneration = Max(dataCleanupGeneration, NextDataCleanupGeneration);
+                if (auto logl = Logger->Log(ELnLev::Info)) {
+                    logl << "TDataCleanupLogic: schedule next DataCleanup for tablet with id " << Owner->TabletID()
+                        << ", current DataCleanup generation: " << CurrentDataCleanupGeneration
+                        << ", next DataCleanup generation: " << NextDataCleanupGeneration;
+                }
+                return false;
+            } else {
+                // more recent DataCleanup in progress, so just ignore osolete generation
+                return false;
+            }
         }
-        StartNextCleanup = true;
-        return false;
     }
 }
 
@@ -166,14 +190,16 @@ bool TDataCleanupLogic::NeedGC() {
 }
 
 void TDataCleanupLogic::CompleteDataCleanup(const TActorContext& ctx) {
-    Owner->DataCleanupComplete(ctx);
-    if (auto logl = Logger->Log(ELnLev::Info)) {
-        logl << "TDataCleanupLogic: DataCleanup finished for tablet with id " << Owner->TabletID();
-    }
     State = EDataCleanupState::Idle;
-    if (StartNextCleanup) {
-        StartNextCleanup = false;
-        Executor->CleanupData();
+    if (NextDataCleanupGeneration) {
+        Executor->CleanupData(std::exchange(NextDataCleanupGeneration, 0));
+    } else {
+        // report complete only if all planned cleanups completed
+        Owner->DataCleanupComplete(CurrentDataCleanupGeneration, ctx);
+        if (auto logl = Logger->Log(ELnLev::Info)) {
+            logl << "TDataCleanupLogic: DataCleanup finished for tablet with id " << Owner->TabletID()
+                << ", current DataCleanup generation: " << CurrentDataCleanupGeneration;
+        }
     }
 }
 

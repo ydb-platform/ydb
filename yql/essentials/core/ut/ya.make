@@ -32,6 +32,8 @@ PEERDIR(
     yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
+    yql/essentials/sql
+    yql/essentials/sql/v1
     yql/essentials/udfs/common/string
 )
 

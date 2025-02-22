@@ -18,9 +18,11 @@ class TTableWorkerRegistar: public TActorBootstrapped<TTableWorkerRegistar> {
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
+                LOG_W("Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Retry.");
                 return Retry();
             }
 
+            LOG_E("Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Stop.");
             return; // TODO: hard error
         }
 
@@ -30,7 +32,7 @@ class TTableWorkerRegistar: public TActorBootstrapped<TTableWorkerRegistar> {
             }
 
             auto ev = MakeRunWorkerEv(
-                ReplicationId, TargetId, partition.GetPartitionId(),
+                ReplicationId, TargetId, Config, partition.GetPartitionId(),
                 ConnectionParams, ConsistencySettings, SrcStreamPath, DstPathId);
             Send(Parent, std::move(ev));
         }
@@ -56,7 +58,8 @@ public:
             ui64 rid,
             ui64 tid,
             const TString& srcStreamPath,
-            const TPathId& dstPathId)
+            const TPathId& dstPathId,
+            const TReplication::ITarget::IConfig::TPtr& config)
         : Parent(parent)
         , YdbProxy(proxy)
         , ConnectionParams(connectionParams)
@@ -66,6 +69,7 @@ public:
         , SrcStreamPath(srcStreamPath)
         , DstPathId(dstPathId)
         , LogPrefix("TableWorkerRegistar", ReplicationId, TargetId)
+        , Config(config)
     {
     }
 
@@ -92,12 +96,13 @@ private:
     const TString SrcStreamPath;
     const TPathId DstPathId;
     const TActorLogPrefix LogPrefix;
+    const TReplication::ITarget::IConfig::TPtr Config;
 
 }; // TTableWorkerRegistar
 
 TTargetTableBase::TTargetTableBase(TReplication* replication, ETargetKind finalKind,
-        ui64 id, const TString& srcPath, const TString& dstPath)
-    : TTargetWithStream(replication, finalKind, id, srcPath, dstPath)
+        ui64 id, const IConfig::TPtr& config)
+    : TTargetWithStream(replication, finalKind, id, config)
 {
 }
 
@@ -106,11 +111,11 @@ IActor* TTargetTableBase::CreateWorkerRegistar(const TActorContext& ctx) const {
     const auto& config = replication->GetConfig();
     return new TTableWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
         config.GetSrcConnectionParams(), config.GetConsistencySettings(),
-        replication->GetId(), GetId(), BuildStreamPath(), GetDstPathId());
+        replication->GetId(), GetId(), BuildStreamPath(), GetDstPathId(), GetConfig());
 }
 
-TTargetTable::TTargetTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)
-    : TTargetTableBase(replication, ETargetKind::Table, id, srcPath, dstPath)
+TTargetTable::TTargetTable(TReplication* replication, ui64 id, const IConfig::TPtr& config)
+    : TTargetTableBase(replication, ETargetKind::Table, id, config)
 {
 }
 
@@ -122,13 +127,32 @@ TString TTargetTableBase::GetStreamPath() const {
     return BuildStreamPath();
 }
 
-TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)
-    : TTargetTableBase(replication, ETargetKind::IndexTable, id, srcPath, dstPath)
+TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const IConfig::TPtr& config)
+    : TTargetTableBase(replication, ETargetKind::IndexTable, id, config)
 {
 }
 
 TString TTargetIndexTable::BuildStreamPath() const {
     return CanonizePath(ChildPath(SplitPath(GetSrcPath()), {"indexImplTable", GetStreamName()}));
+}
+
+TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConfig::TPtr& config)
+    : TTargetTableBase(replication, ETargetKind::Transfer, id, config)
+{
+}
+
+TString TTargetTransfer::BuildStreamPath() const {
+    return CanonizePath(GetSrcPath());
+}
+
+TTargetTransfer::TTransferConfig::TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda)
+    : TConfigBase(ETargetKind::Transfer, srcPath, dstPath)
+    , TransformLambda(transformLambda)
+{
+}
+
+const TString& TTargetTransfer::TTransferConfig::GetTransformLambda() const {
+    return TransformLambda;
 }
 
 }

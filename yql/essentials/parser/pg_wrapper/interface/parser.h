@@ -6,6 +6,8 @@
 namespace NSQLTranslation {
 
 struct TTranslationSettings;
+class ITranslator;
+using TTranslatorPtr = TIntrusivePtr<ITranslator>;
 
 } // NSQLTranslation
 
@@ -16,5 +18,6 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
 std::unique_ptr<NYql::NPg::IExtensionSqlParser> CreateExtensionSqlParser();
 std::unique_ptr<NYql::NPg::ISystemFunctionsParser> CreateSystemFunctionsParser();
 std::unique_ptr<NYql::NPg::ISqlLanguageParser> CreateSqlLanguageParser();
+NSQLTranslation::TTranslatorPtr MakeTranslator();
 
 } // NSQLTranslationPG

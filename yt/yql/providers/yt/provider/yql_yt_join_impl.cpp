@@ -1622,13 +1622,49 @@ TExprNode::TPtr BuildBlockMapJoin(TExprNode::TPtr leftFlow, TExprNode::TPtr righ
         }
     }
 
-    auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
-    if (isUniqueKey) {
-        settingsBuilder
-            .Add()
-                .Name()
-                    .Value("rightAny")
-                .Build()
+    auto rightStream = ctx.Builder(pos)
+        .Callable("WideToBlocks")
+            .Callable(0, "FromFlow")
+                .Callable(0, "ExpandMap")
+                    .Add(0, std::move(rightFlow))
+                    .Add(1, std::move(rightExpandLambda))
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto rightStreamItemTypeNode = ctx.Builder(pos)
+        .Callable("StreamItemType")
+            .Callable(0, "TypeOf")
+                .Add(0, rightStream)
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto rightBlockStorage = ctx.Builder(pos)
+        .Callable("BlockStorage")
+            .Add(0, std::move(rightStream))
+        .Seal()
+        .Build();
+
+    if (joinType->Content() != "Cross") {
+        auto indexSettingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
+        if (isUniqueKey) {
+            indexSettingsBuilder
+                .Add()
+                    .Name()
+                        .Value("any")
+                    .Build()
+                .Build();
+        }
+
+        rightBlockStorage = ctx.Builder(pos)
+            .Callable("BlockMapJoinIndex")
+                .Add(0, std::move(rightBlockStorage))
+                .Add(1, rightStreamItemTypeNode)
+                .Add(2, ctx.NewList(pos, TExprNode::TListType(rightKeyColumnPositionNodes)))
+                .Add(3, indexSettingsBuilder.Done().Ptr())
+            .Seal()
             .Build();
     }
 
@@ -1637,28 +1673,21 @@ TExprNode::TPtr BuildBlockMapJoin(TExprNode::TPtr leftFlow, TExprNode::TPtr righ
             .Callable(0, "ToFlow")
                 .Callable(0, "WideFromBlocks")
                     .Callable(0, "BlockMapJoinCore")
-                        .Callable(0, "FromFlow")
-                            .Callable(0, "WideToBlocks")
+                        .Callable(0, "WideToBlocks")
+                            .Callable(0, "FromFlow")
                                 .Callable(0, "ExpandMap")
                                     .Add(0, std::move(leftFlow))
                                     .Add(1, std::move(leftExpandLambda))
                                 .Seal()
                             .Seal()
                         .Seal()
-                        .Callable(1, "FromFlow")
-                            .Callable(0, "WideToBlocks")
-                                .Callable(0, "ExpandMap")
-                                    .Add(0, std::move(rightFlow))
-                                    .Add(1, std::move(rightExpandLambda))
-                                .Seal()
-                            .Seal()
-                        .Seal()
-                        .Add(2, std::move(joinType))
-                        .Add(3, ctx.NewList(pos, std::move(leftKeyColumnPositionNodes)))
-                        .Add(4, ctx.NewList(pos, std::move(leftKeyDropPositionNodes)))
-                        .Add(5, ctx.NewList(pos, std::move(rightKeyColumnPositionNodes)))
-                        .Add(6, ctx.NewList(pos, std::move(rightKeyDropPositionNodes)))
-                        .Add(7, settingsBuilder.Done().Ptr())
+                        .Add(1, std::move(rightBlockStorage))
+                        .Add(2, std::move(rightStreamItemTypeNode))
+                        .Add(3, std::move(joinType))
+                        .Add(4, ctx.NewList(pos, std::move(leftKeyColumnPositionNodes)))
+                        .Add(5, ctx.NewList(pos, std::move(leftKeyDropPositionNodes)))
+                        .Add(6, ctx.NewList(pos, std::move(rightKeyColumnPositionNodes)))
+                        .Add(7, ctx.NewList(pos, std::move(rightKeyDropPositionNodes)))
                     .Seal()
                 .Seal()
             .Seal()

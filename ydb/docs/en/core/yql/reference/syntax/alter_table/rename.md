@@ -10,6 +10,16 @@
 ALTER TABLE old_table_name RENAME TO new_table_name;
 ```
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% cut "See table and column naming rules" %}
+
+{% include [table naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md) %}
+
+{% endcut %}
+
+{% endif %}
+
 If a table with the new name already exists, an error will be returned. The ability to transactionally replace a table under load is supported by specialized methods in CLI and SDK.
 
 {% note warning %}

@@ -33,38 +33,48 @@ NKikimrConfig::TAppConfig YamlToProto(
 }
 
 void ResolveAndParseYamlConfig(
-    const TString& yamlConfig,
+    const TString& mainYamlConfig,
     const TMap<ui64, TString>& volatileYamlConfigs,
     const TMap<TString, TString>& labels,
     NKikimrConfig::TAppConfig& appConfig,
+    std::optional<TString> databaseYamlConfig,
     TString* resolvedYamlConfig,
     TString* resolvedJsonConfig)
 {
-    auto tree = NFyaml::TDocument::Parse(yamlConfig);
-
-    for (auto& [_, config] : volatileYamlConfigs) {
-        auto d = NFyaml::TDocument::Parse(config);
-        NYamlConfig::AppendVolatileConfigs(tree, d);
-    }
-
-    TSet<NYamlConfig::TNamedLabel> namedLabels;
-    for (auto& [name, label] : labels) {
-        namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
-    }
-
-    auto config = NYamlConfig::Resolve(tree, namedLabels);
-
-    if (resolvedYamlConfig) {
-        TStringStream resolvedYamlConfigStream;
-        resolvedYamlConfigStream << config.second;
-        *resolvedYamlConfig = resolvedYamlConfigStream.Str();
-    }
-
     TStringStream resolvedJsonConfigStream;
-    resolvedJsonConfigStream << NFyaml::TJsonEmitter(config.second);
+    if (mainYamlConfig) {
+        auto tree = NFyaml::TDocument::Parse(mainYamlConfig);
 
-    if (resolvedJsonConfig) {
-        *resolvedJsonConfig = resolvedJsonConfigStream.Str();
+        if (databaseYamlConfig) {
+            auto d = NFyaml::TDocument::Parse(*databaseYamlConfig);
+            NYamlConfig::AppendDatabaseConfig(tree, d);
+        }
+
+        for (auto& [_, config] : volatileYamlConfigs) {
+            auto d = NFyaml::TDocument::Parse(config);
+            NYamlConfig::AppendVolatileConfigs(tree, d);
+        }
+
+        TSet<NYamlConfig::TNamedLabel> namedLabels;
+        for (auto& [name, label] : labels) {
+            namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
+        }
+
+        auto config = NYamlConfig::Resolve(tree, namedLabels);
+
+        if (resolvedYamlConfig) {
+            TStringStream resolvedYamlConfigStream;
+            resolvedYamlConfigStream << config.second;
+            *resolvedYamlConfig = resolvedYamlConfigStream.Str();
+        }
+
+        resolvedJsonConfigStream << NFyaml::TJsonEmitter(config.second);
+
+        if (resolvedJsonConfig) {
+            *resolvedJsonConfig = resolvedJsonConfigStream.Str();
+        }
+    } else {
+        resolvedJsonConfigStream << "{}";
     }
 
     NJson::TJsonValue json;

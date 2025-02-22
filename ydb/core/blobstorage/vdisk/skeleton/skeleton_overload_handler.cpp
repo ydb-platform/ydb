@@ -184,6 +184,8 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskConfig> VCfg;
         TPDiskCtxPtr PDiskCtx;
 
+        ui64 WriteSpeedBps = 100'000'000;
+
         TControlWrapper ThrottlingMinInplacedSize;
         TControlWrapper ThrottlingMaxInplacedSize;
 
@@ -211,35 +213,31 @@ namespace NKikimr {
         }
 
         ui64 CalcSstCountSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
-            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
-            ui64 maxSstCount = (ui64)VCfg->ThrottlingMaxSstCount;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinLevel0SstCount;
+            ui64 maxSstCount = (ui64)VCfg->ThrottlingMaxLevel0SstCount;
 
-            return LinearInterpolation(CurrentSstCount, minSstCount, maxSstCount, deviceSpeed);
+            return LinearInterpolation(CurrentSstCount, minSstCount, maxSstCount, WriteSpeedBps);
         }
 
         ui64 CalcInplacedSizeSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
             ui64 minInplacedSize = (ui64)ThrottlingMinInplacedSize;
             ui64 maxInplacedSize = (ui64)ThrottlingMaxInplacedSize;
 
-            return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, deviceSpeed);
+            return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, WriteSpeedBps);
         }
 
         ui64 CalcOccupancySpeedLimit() const {
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
             ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
             ui64 maxOccupancy = (ui64)VCfg->ThrottlingMaxOccupancyPerMille * 1000;
 
-            return LinearInterpolation(CurrentOccupancy, minOccupancy, maxOccupancy, deviceSpeed);
+            return LinearInterpolation(CurrentOccupancy, minOccupancy, maxOccupancy, WriteSpeedBps);
         }
 
         ui64 CalcLogChunkCountSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
             ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
             ui64 maxLogChunkCount = (ui64)VCfg->ThrottlingMaxLogChunkCount;
 
-            return LinearInterpolation(CurrentLogChunkCount, minLogChunkCount, maxLogChunkCount, deviceSpeed);
+            return LinearInterpolation(CurrentLogChunkCount, minLogChunkCount, maxLogChunkCount, WriteSpeedBps);
         }
 
         ui64 CalcSpeedLimit() const {
@@ -267,6 +265,7 @@ namespace NKikimr {
             NPDisk::EDeviceType mediaType = NPDisk::DEVICE_TYPE_UNKNOWN;
             if (PDiskCtx && PDiskCtx->Dsk) {
                 mediaType = PDiskCtx->Dsk->TrueMediaType;
+                WriteSpeedBps = PDiskCtx->Dsk->WriteSpeedBps;
             }
             if (mediaType == NPDisk::DEVICE_TYPE_UNKNOWN) {
                 mediaType = VCfg->BaseInfo.DeviceType;
@@ -285,7 +284,7 @@ namespace NKikimr {
         }
 
         bool IsActive() const {
-            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinLevel0SstCount;
             ui64 minInplacedSize = (ui64)ThrottlingMinInplacedSize;
             ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
             ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
@@ -304,8 +303,7 @@ namespace NKikimr {
             if (!IsActive()) {
                 return 1000;
             }
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
-            double rate = (double)CurrentSpeedLimit / deviceSpeed;
+            double rate = (double)CurrentSpeedLimit / WriteSpeedBps;
             return rate * 1000;
         }
 
@@ -335,7 +333,7 @@ namespace NKikimr {
             Mon.ThrottlingLevel0SstCount() = sstCount;
 
             CurrentInplacedSize = inplacedSize;
-            Mon.ThrottlingAllLevelsInplacedSize() = inplacedSize;
+            Mon.ThrottlingInplacedSize() = inplacedSize;
 
             CurrentOccupancy = occupancy * 1'000'000;
             Mon.ThrottlingOccupancyPerMille() = occupancy * 1000;
@@ -344,11 +342,23 @@ namespace NKikimr {
             Mon.ThrottlingLogChunkCount() = logChunkCount;
 
             Mon.ThrottlingIsActive() = (ui64)IsActive();
+            Mon.ThrottlingDryRun() = VCfg->ThrottlingDryRun;
+
+            Mon.ThrottlingMinLevel0SstCount() = VCfg->ThrottlingMinLevel0SstCount;
+            Mon.ThrottlingMaxLevel0SstCount() = VCfg->ThrottlingMaxLevel0SstCount;
+            Mon.ThrottlingMinInplacedSizeHDD() = VCfg->ThrottlingMinInplacedSizeHDD;
+            Mon.ThrottlingMaxInplacedSizeHDD() = VCfg->ThrottlingMaxInplacedSizeHDD;
+            Mon.ThrottlingMinInplacedSizeSSD() = VCfg->ThrottlingMinInplacedSizeSSD;
+            Mon.ThrottlingMaxInplacedSizeSSD() = VCfg->ThrottlingMaxInplacedSizeSSD;
+            Mon.ThrottlingMinOccupancyPerMille() = VCfg->ThrottlingMinOccupancyPerMille;
+            Mon.ThrottlingMaxOccupancyPerMille() = VCfg->ThrottlingMaxOccupancyPerMille;
+            Mon.ThrottlingMinLogChunkCount() = VCfg->ThrottlingMinLogChunkCount;
+            Mon.ThrottlingMaxLogChunkCount() = VCfg->ThrottlingMaxLogChunkCount;
 
             if (!IsActive()) {
                 CurrentTime = {};
                 AvailableBytes = 0;
-                CurrentSpeedLimit = (ui64)VCfg->ThrottlingDeviceSpeed;
+                CurrentSpeedLimit = WriteSpeedBps;
             } else {
                 if (!prevActive) {
                     CurrentTime = now;
@@ -366,9 +376,70 @@ namespace NKikimr {
             }
             auto us = (now - CurrentTime).MicroSeconds();
             AvailableBytes += CurrentSpeedLimit * us / 1000000;
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
-            AvailableBytes = std::min(AvailableBytes, deviceSpeed);
+            AvailableBytes = std::min(AvailableBytes, WriteSpeedBps);
             CurrentTime = now;
+        }
+
+        void RenderHtml(IOutputStream &str) {
+            HTML(str) {
+                TABLE_CLASS ("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { str << "Throttling"; }
+                            TABLEH() {}
+                        }
+                    }
+                    TABLEBODY() {
+                        TABLER() {
+                            TABLED() { str << "Is dry run enabled"; }
+                            TABLED() { str << (ui64)VCfg->ThrottlingDryRun; }
+                        }
+                        TABLER() {
+                            TABLED() { str << "Is active"; }
+                            TABLED() { str << (ui64)IsActive(); }
+                        }
+                    }
+                }
+                TABLE_CLASS ("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { str << "Property"; }
+                            TABLEH() { str << "Current"; }
+                            TABLEH() { str << "Activation range"; }
+                        }
+                    }
+                    TABLEBODY() {
+                        TABLER() {
+                            TABLED() { str << "Level 0 SST count"; }
+                            TABLED() { str << CurrentSstCount; }
+                            TABLED() { str << "[ "
+                                << (ui64)VCfg->ThrottlingMinLevel0SstCount << "; "
+                                << (ui64)VCfg->ThrottlingMaxLevel0SstCount << " ]"; }
+                        }
+                        TABLER() {
+                            TABLED() { str << "Inplaced size"; }
+                            TABLED() { str << CurrentInplacedSize; }
+                            TABLED() { str << "[ "
+                                << (ui64)ThrottlingMinInplacedSize << "; "
+                                << (ui64)ThrottlingMaxInplacedSize << " ]"; }
+                        }
+                        TABLER() {
+                            TABLED() { str << "Occupancy"; }
+                            TABLED() { str << CurrentOccupancy / 1000 << " / 1000"; }
+                            TABLED() { str << "[ "
+                                << (ui64)VCfg->ThrottlingMinOccupancyPerMille << "; "
+                                << (ui64)VCfg->ThrottlingMaxOccupancyPerMille << " ]"; }
+                        }
+                        TABLER() {
+                            TABLED() { str << "Log chunk count"; }
+                            TABLED() { str << CurrentLogChunkCount; }
+                            TABLED() { str << "[ "
+                                << (ui64)VCfg->ThrottlingMinLogChunkCount << "; "
+                                << (ui64)VCfg->ThrottlingMaxLogChunkCount << " ]"; }
+                        }
+                    }
+                }
+            }
         }
     };
 
@@ -510,6 +581,7 @@ namespace NKikimr {
 
     void TOverloadHandler::RenderHtml(IOutputStream &str) {
         DynamicPDiskWeightsManager->RenderHtml(str);
+        ThrottlingController->RenderHtml(str);
     }
 
     void TOverloadHandler::OnKickEmergencyPutQueue() {

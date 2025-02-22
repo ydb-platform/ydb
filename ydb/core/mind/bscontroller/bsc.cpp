@@ -172,7 +172,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
 
         ConsoleInteraction->Stop(); // distconf will handle the Console from now on
-    } else {
+    } else if (Loaded) {
         ConsoleInteraction->Start(); // we control the Console now
     }
 
@@ -616,40 +616,6 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
     }
 
     Y_ABORT();
-}
-
-TString TBlobStorageController::CompressYamlConfig(const TYamlConfig& yamlConfig) {
-    TStringStream s;
-    {
-        TZstdCompress zstd(&s);
-        Save(&zstd, yamlConfig);
-    }
-    return s.Str();
-}
-
-TString TBlobStorageController::CompressStorageYamlConfig(const TString& storageYamlConfig) {
-    TStringStream s;
-    {
-        TZstdCompress zstd(&s);
-        Save(&zstd, storageYamlConfig);
-    }
-    return s.Str();
-}
-
-TBlobStorageController::TYamlConfig TBlobStorageController::DecompressYamlConfig(const TString& buffer) {
-    TStringInput s(buffer);
-    TZstdDecompress zstd(&s);
-    TYamlConfig res;
-    Load(&zstd, res);
-    return res;
-}
-
-TString TBlobStorageController::DecompressStorageYamlConfig(const TString& buffer) {
-    TStringInput s(buffer);
-    TZstdDecompress zstd(&s);
-    TString res;
-    Load(&zstd, res);
-    return res;
 }
 
 } // NBsController

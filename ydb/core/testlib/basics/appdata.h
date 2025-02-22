@@ -10,6 +10,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/tx/datashard/export_iface.h>
 #include <ydb/core/tx/datashard/export_s3.h>
+#include <ydb/core/tx/schemeshard/schemeshard_operation_factory.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
@@ -57,6 +58,7 @@ namespace NKikimr {
             TIntrusivePtr<TFormatFactory> Formats;
             std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
             std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
+            std::shared_ptr<NSchemeShard::IOperationFactory> SchemeOperationFactory;
 
             ~TMine();
         };

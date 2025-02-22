@@ -34,12 +34,11 @@ namespace NTabletFlatExecutor {
         THolder<NTable::TCompactionParams> Params;
         NTable::TRowVersionRanges::TSnapshot RemovedRowVersions;
 
-        // Non-empty when compaction also needs to write a tx status table part
-        NTable::TTransactionMap CommittedTransactions;
-        NTable::TTransactionSet RemovedTransactions;
-        // The above may contain extra keys, these allow them to be narrowed
+        // Non-empty when compaction also needs to produce a tx status table part
         TVector<TIntrusiveConstPtr<NTable::TMemTable>> Frozen;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
+        // Non-empty for transactions that no longer need their status maintained
+        NTable::TTransactionSet GarbageTransactions;
     };
 
 }

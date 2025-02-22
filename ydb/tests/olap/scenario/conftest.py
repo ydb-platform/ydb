@@ -24,14 +24,14 @@ class YdbClusterInstance():
     _temp_ydb_cluster = None
     _endpoint = None
     _database = None
+    _dyn_nodes_count = None
 
-    def __init__(self, endpoint, database):
+    def __init__(self, endpoint, database, config):
         if endpoint is not None:
             self._endpoint = endpoint
             self._database = database
             self._mon_port = 8765
         else:
-            config = KikimrConfigGenerator(extra_feature_flags=["enable_column_store"])
             cluster = KiKiMR(configurator=config)
             cluster.start()
             node = cluster.nodes[1]
@@ -39,6 +39,7 @@ class YdbClusterInstance():
             self._database = config.domain_name
             self._mon_port = node.mon_port
             self._temp_ydb_cluster = cluster
+            self._dyn_nodes_count = len(cluster.nodes)
         LOGGER.info(f'Using YDB, endpoint:{self._endpoint}, database:{self._database}')
 
     def endpoint(self):
@@ -46,6 +47,9 @@ class YdbClusterInstance():
 
     def database(self):
         return self._database
+
+    def dyn_nodes_count(self):
+        return self._dyn_nodes_count
 
     def mon_port(self):
         return self._mon_port
@@ -65,8 +69,8 @@ class BaseTestSet:
     def setup_class(cls):
         ydb_endpoint = get_external_param('ydb-endpoint', None)
         ydb_database = get_external_param('ydb-db', "").lstrip('/')
-        cls._ydb_instance = YdbClusterInstance(ydb_endpoint, ydb_database)
-        YdbCluster.reset(cls._ydb_instance.endpoint(), cls._ydb_instance.database(), cls._ydb_instance.mon_port())
+        cls._ydb_instance = YdbClusterInstance(ydb_endpoint, ydb_database, cls._get_cluster_config())
+        YdbCluster.reset(cls._ydb_instance.endpoint(), cls._ydb_instance.database(), cls._ydb_instance.mon_port(), cls._ydb_instance.dyn_nodes_count())
         if not external_param_is_true('reuse-tables'):
             ScenarioTestHelper(None).remove_path(cls.get_suite_name())
 
@@ -106,6 +110,10 @@ class BaseTestSet:
             raise
         allure_test_description(ctx.suite, ctx.test, start_time=start_time, end_time=time.time())
         ScenarioTestHelper(None).remove_path(test_path, ctx.suite)
+
+    @classmethod
+    def _get_cluster_config(cls):
+        return KikimrConfigGenerator(extra_feature_flags=["enable_column_store"])
 
 
 def pytest_generate_tests(metafunc):

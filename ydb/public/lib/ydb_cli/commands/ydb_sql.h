@@ -28,6 +28,7 @@ private:
     int PrintResponse(NQuery::TExecuteQueryIterator& result);
 
     TString CollectStatsMode;
+    TString DiagnosticsFile;
     TString Query;
     TString QueryFile;
     TString Syntax;

@@ -631,7 +631,7 @@ Y_UNIT_TEST(PackVarSize) {
         0x1, 0, 0, 0, 0, 0, 0, 0x10, // col2
         0x3, 0x61, 0x62, 0x63, 0, 0, 0, 0, 0, // vcol1
         0x3, 0x41, 0x42, 0x43, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // vcol2
-        0x3f, //NULL bitmap
+        0xff, //NULL bitmap
         0x1, 0, 0, 0x40, // col3
         0x1, 0, 0, 0, 0, 0, 0, 0x30, // col4
         // row2
@@ -640,7 +640,7 @@ Y_UNIT_TEST(PackVarSize) {
         0x2, 0, 0, 0, 0, 0, 0, 0x10, // col2
         0xff,  0, 0, 0, 0,  0xf, 0, 0, 0, // vcol1 [overflow offset, overflow size]
         0xf, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, // vcol2
-        0x3f, // NULL bitmap
+        0xff, // NULL bitmap
         0x2, 0, 0, 0x40, // col3
         0x2, 0, 0, 0, 0, 0, 0, 0x30, // col4
         // row3
@@ -649,7 +649,7 @@ Y_UNIT_TEST(PackVarSize) {
         0x3, 0, 0, 0, 0, 0, 0, 0x10, // col2
         0xff,  0xf, 0, 0, 0,  0xa, 0, 0, 0, // vcol1 [overflow offset, overflow size]
         0xa, 0x7a, 0x79, 0x78, 0x77, 0x76, 0x75, 0x74, 0x73, 0x70, 0x72,  0, 0, 0, 0, 0, // vcol2
-        0x3f, // NULL bitmap
+        0xff, // NULL bitmap
         0x3, 0, 0, 0x40, // col3
         0x3, 0, 0, 0, 0, 0, 0, 0x30, // col4
     };
@@ -762,7 +762,7 @@ Y_UNIT_TEST(UnpackVarSize) {
     std::vector<ui8> colValid((NTuples1 + 7)/8, ~0);
     const ui8 *colsValid[8] = {
             colValid.data(),
-            colValid.data(),
+            nullptr,
             colValid.data(),
             nullptr,
             colValid.data(),
@@ -919,9 +919,10 @@ Y_UNIT_TEST(PackVarSizeBig) {
     cols[3] = (ui8*) vcol1data.data();
 
     std::vector<ui8> colValid((NTuples1 + 7)/8, ~0);
+    std::vector<ui8> colInvalid((NTuples1 + 7)/8, 0);
     const ui8 *colsValid[2 + 1*2] = {
-            colValid.data(),
-            colValid.data(),
+            nullptr,
+            colInvalid.data(),
             colValid.data(),
             nullptr,
     };
@@ -982,7 +983,7 @@ Y_UNIT_TEST(PackVarSizeBig) {
             0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62,
             0x62, 0x62, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66,
             0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c,
-            0x7, // NULL bitmap
+            ui8(~0x2), // NULL bitmap
             // row 2
             0xab,0xa5,0x5f,0xd4, // hash
             0x12, // col1
@@ -1019,7 +1020,7 @@ Y_UNIT_TEST(PackVarSizeBig) {
             0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62,
             0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62,
             0x62, 0x62, 0x72, 0x73, 0x74, 0x75, 0x76,
-            0x7, // NULLs bitmap
+            ui8(~0x2), // NULLs bitmap
     };
     static const ui8 expected_overflow[11] = {
             0x6e, 0x6d, 0x6f, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79,

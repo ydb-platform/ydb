@@ -423,15 +423,18 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Pack(
     ui32 count) const {
     using TTraits = NSimd::TSimdFallbackTraits;
 
-    std::vector<ui64> bitmaskMatrix(BitmaskSize);
+    std::vector<ui64> bitmaskMatrix(BitmaskSize, 0);
 
     if (auto off = (start % 8)) {
         auto bitmaskIdx = start / 8;
 
-        for (ui32 j = Columns.size(); j--;)
-            bitmaskMatrix[j / 8] |=
-                ui64(isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx])
-                << ((j % 8) * 8);
+        for (ui32 j = Columns.size(); j--;) {
+            const ui64 byte =
+                isValidBitmask[Columns[j].OriginalIndex]
+                    ? isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx]
+                    : 0xFF;
+            bitmaskMatrix[j / 8] |= byte << ((j % 8) * 8);
+        }
 
         for (auto &m : bitmaskMatrix) {
             m = transposeBitmatrix(m);
@@ -461,10 +464,13 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Pack(
 
         if ((start % 8) == 0) {
             std::fill(bitmaskMatrix.begin(), bitmaskMatrix.end(), 0);
-            for (ui32 j = Columns.size(); j--;)
-                bitmaskMatrix[j / 8] |=
-                    ui64(isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx])
-                    << ((j % 8) * 8);
+            for (ui32 j = Columns.size(); j--;) {
+                const ui64 byte =
+                isValidBitmask[Columns[j].OriginalIndex]
+                    ? isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx]
+                    : 0xFF;
+                bitmaskMatrix[j / 8] |= byte << ((j % 8) * 8);
+            }
             for (auto &m : bitmaskMatrix)
                 m = transposeBitmatrix(m);
         }
@@ -561,19 +567,25 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Unpack(
         const auto bitmaskShiftC = (start + count) % 8;
 
         /// ready first bitmatrix bytes
-        for (ui32 j = Columns.size(); j--;)
-            bitmaskMatrix[j / 8] |=
-                (isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx] &
-                 ~(0xFF << bitmaskShift))
-                << ((j % 8) * 8);
+        for (ui32 j = Columns.size(); j--;) {
+            const ui64 byte =
+                isValidBitmask[Columns[j].OriginalIndex]
+                    ? isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx] &
+                          ~(0xFF << bitmaskShift)
+                    : 0xFF;
+            bitmaskMatrix[j / 8] |= byte << ((j % 8) * 8);
+        }
 
         /// ready last (which are same as above) bitmatrix bytes if needed
         if (bitmaskIdx == bitmaskIdxC)
-            for (ui32 j = Columns.size(); j--;)
-                bitmaskMatrix[j / 8] |=
-                    (isValidBitmask[Columns[j].OriginalIndex][bitmaskIdxC] &
-                     (0xFF << bitmaskShiftC))
-                    << ((j % 8) * 8);
+            for (ui32 j = Columns.size(); j--;) {
+                const ui64 byte = isValidBitmask[Columns[j].OriginalIndex]
+                                      ? isValidBitmask[Columns[j].OriginalIndex]
+                                                      [bitmaskIdxC] &
+                                            (0xFF << bitmaskShiftC)
+                                      : 0xFF;
+                bitmaskMatrix[j / 8] |= byte << ((j % 8) * 8);
+            }
 
         for (auto &m : bitmaskMatrix)
             m = transposeBitmatrix(m);
@@ -601,18 +613,22 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Unpack(
             for (auto &m : bitmaskMatrix)
                 m = transposeBitmatrix(m);
             for (ui32 j = Columns.size(); j--;)
-                isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx] =
-                    ui8(bitmaskMatrix[j / 8] >> ((j % 8) * 8));
+                if (isValidBitmask[Columns[j].OriginalIndex])
+                    isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx] =
+                        ui8(bitmaskMatrix[j / 8] >> ((j % 8) * 8));
             std::fill(bitmaskMatrix.begin(), bitmaskMatrix.end(), 0);
 
             if (count && count < 8) {
                 /// ready last bitmatrix bytes
-                for (ui32 j = Columns.size(); j--;)
-                    bitmaskMatrix[j / 8] |=
-                        (isValidBitmask[Columns[j].OriginalIndex]
-                                       [bitmaskIdx + 1] &
-                         (0xFF << count))
-                        << ((j % 8) * 8);
+                for (ui32 j = Columns.size(); j--;) {
+                    const ui64 byte =
+                        isValidBitmask[Columns[j].OriginalIndex]
+                            ? isValidBitmask[Columns[j].OriginalIndex]
+                                            [bitmaskIdx + 1] &
+                                  (0xFF << count)
+                            : 0xFF;
+                    bitmaskMatrix[j / 8] |= byte << ((j % 8) * 8);
+                }
 
                 for (auto &m : bitmaskMatrix)
                     m = transposeBitmatrix(m);
@@ -730,21 +746,26 @@ void TTupleLayoutFallback<TTraits>::Pack(
             BlockColsOffsets_.data() + cols_past, TotalRowSize, start);
 
         for (ui32 cols_ind = 0; cols_ind < Columns.size(); cols_ind += 8) {
-            const ui8 *bitmasks[8];
             const size_t cols = std::min<size_t>(8ul, Columns.size() - cols_ind);
+            const ui8 ones_byte = 0xFF;  // dereferencable + all-ones fast path
+            const ui8 *bitmasks[8];
+
             for (size_t ind = 0; ind != cols; ++ind) {
                 const auto &col = Columns[cols_ind + ind];
-                bitmasks[ind] = isValidBitmask[col.OriginalIndex] + start / 8;
+                bitmasks[ind] = 
+                    isValidBitmask[col.OriginalIndex]
+                    ? isValidBitmask[col.OriginalIndex] + start / 8
+                    : &ones_byte;
             }
-            const ui8 ones_byte = 0xFF;
             for (size_t ind = cols; ind != 8; ++ind) {
-                // dereferencable + all-ones fast path
                 bitmasks[ind] = &ones_byte;
             }
 
             const auto advance_masks = [&] {
-                for (size_t ind = 0; ind != cols; ++ind) {
-                    ++bitmasks[ind];
+                for (size_t ind = 0; ind != 8; ++ind) {
+                    if (bitmasks[ind] != &ones_byte) {
+                        ++bitmasks[ind];
+                    }
                 }
             };
 
@@ -760,7 +781,7 @@ void TTupleLayoutFallback<TTraits>::Pack(
                     const auto res = new_res;
 
                     res[BitmaskOffset + cols_ind / 8] = 0;
-                    for (size_t col_ind = 0; col_ind != cols; ++col_ind) {
+                    for (size_t col_ind = 0; col_ind != 8; ++col_ind) {
                         res[BitmaskOffset + cols_ind / 8] |=
                             ((bitmasks[col_ind][0] >> shift) & 1u) << col_ind;
                     }
@@ -924,20 +945,26 @@ void TTupleLayoutFallback<TTraits>::Unpack(
             BlockColsOffsets_.data() + cols_past, TotalRowSize, start);
 
         for (ui32 cols_ind = 0; cols_ind < Columns.size(); cols_ind += 8) {
-            ui8 *bitmasks[8];
             const size_t cols = std::min<size_t>(8ul, Columns.size() - cols_ind);
+            ui8 *bitmasks[8];
+            ui8 trash_byte;  // dereferencable
+
             for (size_t ind = 0; ind != cols; ++ind) {
                 const auto &col = Columns[cols_ind + ind];
-                bitmasks[ind] = isValidBitmask[col.OriginalIndex] + start / 8;
+                bitmasks[ind] =
+                    isValidBitmask[col.OriginalIndex]
+                        ? isValidBitmask[col.OriginalIndex] + start / 8
+                        : &trash_byte;
             }
-            ui8 trash_byte;
             for (size_t ind = cols; ind != 8; ++ind) {
-                bitmasks[ind] = &trash_byte; // dereferencable
+                bitmasks[ind] = &trash_byte;
             }
 
             const auto advance_masks = [&] {
-                for (size_t ind = 0; ind != cols; ++ind) {
-                    ++bitmasks[ind];
+                for (size_t ind = 0; ind != 8; ++ind) {
+                    if (bitmasks[ind] != &trash_byte) {
+                        ++bitmasks[ind];
+                    }
                 }
             };
 

@@ -323,6 +323,10 @@ dbg_text(char *tgt, int min, int max, int sd)
          }
          else /* chop the new sentence off to match the length target */
          {
+            if (needed >= (DSS_HUGE)sizeof(sentence)) {
+                INTERNAL("Array sentence overflow");
+                exit(EXIT_FAILURE);
+            }
             sentence[needed] = '\0';
             strcpy(cp, sentence);
             wordlen += needed;

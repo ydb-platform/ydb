@@ -1,0 +1,46 @@
+diff --git a/include/__memory/allocator.h b/include/__memory/allocator.h
+index 26e5d49..b63a809 100644
+--- a/include/__memory/allocator.h
++++ b/include/__memory/allocator.h
+@@ -31,12 +31,12 @@ _LIBCPP_BEGIN_NAMESPACE_STD
+ template <class _Tp>
+ class allocator;
+ 
+-#if _LIBCPP_STD_VER <= 17
++#if _LIBCPP_STD_VER <= 17 || defined(_LIBCPP_ENABLE_CXX20_REMOVED_ALLOCATOR_VOID_SPECIALIZATION)
+ // These specializations shouldn't be marked _LIBCPP_DEPRECATED_IN_CXX17.
+ // Specializing allocator<void> is deprecated, but not using it.
+ template <>
+ class _LIBCPP_TEMPLATE_VIS allocator<void> {
+-#  if _LIBCPP_STD_VER <= 17
++#  if _LIBCPP_STD_VER <= 17 || defined(_LIBCPP_ENABLE_CXX20_REMOVED_ALLOCATOR_MEMBERS)
+ 
+ public:
+   _LIBCPP_DEPRECATED_IN_CXX17 typedef void* pointer;
+@@ -52,7 +52,7 @@ public:
+ 
+ template <>
+ class _LIBCPP_TEMPLATE_VIS allocator<const void> {
+-#  if _LIBCPP_STD_VER <= 17
++#  if _LIBCPP_STD_VER <= 17 || defined(_LIBCPP_ENABLE_CXX20_REMOVED_ALLOCATOR_MEMBERS)
+ 
+ public:
+   _LIBCPP_DEPRECATED_IN_CXX17 typedef const void* pointer;
+@@ -135,7 +135,7 @@ public:
+   }
+ 
+   // C++20 Removed members
+-#if _LIBCPP_STD_VER <= 17
++#if _LIBCPP_STD_VER <= 17 || defined(_LIBCPP_ENABLE_CXX20_REMOVED_ALLOCATOR_MEMBERS)
+   _LIBCPP_DEPRECATED_IN_CXX17 typedef _Tp* pointer;
+   _LIBCPP_DEPRECATED_IN_CXX17 typedef const _Tp* const_pointer;
+   _LIBCPP_DEPRECATED_IN_CXX17 typedef _Tp& reference;
+@@ -215,7 +215,7 @@ public:
+   }
+ 
+   // C++20 Removed members
+-#if _LIBCPP_STD_VER <= 17
++#if _LIBCPP_STD_VER <= 17 || defined(_LIBCPP_ENABLE_CXX20_REMOVED_ALLOCATOR_MEMBERS)
+   _LIBCPP_DEPRECATED_IN_CXX17 typedef const _Tp* pointer;
+   _LIBCPP_DEPRECATED_IN_CXX17 typedef const _Tp* const_pointer;
+   _LIBCPP_DEPRECATED_IN_CXX17 typedef const _Tp& reference;

@@ -560,7 +560,7 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
     };
 
     // Serialize important in-memory vars
-    {
+    if (InMemoryVarsRestored) {
         auto* vars = state->MutableVars();
         SnapshotManager.GetImmediateWriteEdge().ToProto(vars->MutableImmediateWriteEdge());
         SnapshotManager.GetImmediateWriteEdgeReplied().ToProto(vars->MutableImmediateWriteEdgeReplied());

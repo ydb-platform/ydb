@@ -1,4 +1,5 @@
 RECURSE(
+    common
     controller
     impl
 )

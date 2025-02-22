@@ -34,7 +34,7 @@ protected:
             const auto result = PHINode::Create(arg->getType(), 2U, "result", done);
 
             result->addIncoming(arg, block);
-            BranchInst::Create(good, done, IsExists(arg, block), block);
+            BranchInst::Create(good, done, IsExists(arg, block, context), block);
 
             block = good;
             const auto out = reinterpret_cast<TGeneratorPtr>(Descriptor.Generator)(&arg, ctx, block);

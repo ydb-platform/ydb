@@ -1,0 +1,1 @@
+select key as wat from plato.Input;

@@ -26,7 +26,7 @@ public:
     template <class U>
     T Exchange(U&& u);
 
-    //! Atomically checks if then current value equals #expected.
+    //! Atomically checks if the current value equals to #expected.
     //! If so, replaces it with #desired and returns |true|.
     //! Otherwise, copies it into #expected and returns |false|.
     bool CompareExchange(T& expected, const T& desired);

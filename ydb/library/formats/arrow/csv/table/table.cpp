@@ -3,7 +3,7 @@
 
 namespace NKikimr::NFormats {
 
-arrow::Result<TArrowCSV> TArrowCSVTable::Create(const TVector<NYdb::NTable::TTableColumn>& columns, bool header) {
+arrow::Result<TArrowCSV> TArrowCSVTable::Create(const std::vector<NYdb::NTable::TTableColumn>& columns, bool header) {
     TVector<TString> errors;
     TColummns convertedColumns;
     convertedColumns.reserve(columns.size());
@@ -19,7 +19,7 @@ arrow::Result<TArrowCSV> TArrowCSVTable::Create(const TVector<NYdb::NTable::TTab
             errors.emplace_back("column " + column.Name + ": " + csvArrowType.status().ToString());
             continue;
         }
-        convertedColumns.emplace_back(TColumnInfo{column.Name, *arrowType, *csvArrowType});
+        convertedColumns.emplace_back(TColumnInfo{TString{column.Name}, *arrowType, *csvArrowType});
         if (NYdb::TTypeParser(column.Type).GetKind() != NYdb::TTypeParser::ETypeKind::Optional || column.NotNull.value_or(false)) {
             notNullColumns.emplace(column.Name);
         }

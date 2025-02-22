@@ -28,7 +28,7 @@ public:
     void Load(TStreamLoadContext& context);
 
 private:
-    // NB: this codes are subject to change! Do not rely on their values. Do not serialize them.
+    // NB: This codes are subject to change! Do not rely on their values. Do not serialize them.
     // Use Save/Load methods instead.
     size_t Code_;
 };

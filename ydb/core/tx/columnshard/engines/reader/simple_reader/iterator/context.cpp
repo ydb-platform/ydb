@@ -32,7 +32,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
         switch (source->GetUsageClass()) {
             case TPKRangeFilter::EUsageClass::PartialUsage:
                 return true;
-            case TPKRangeFilter::EUsageClass::DontUsage:
+            case TPKRangeFilter::EUsageClass::NoUsage:
                 return true;
             case TPKRangeFilter::EUsageClass::FullUsage:
                 return false;
@@ -48,21 +48,17 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
         }
     }
     {
-        auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
-                                          [hasDeletions ? 1 : 0];
-        if (!result) {
-            TGuard<TMutex> wg(Mutex);
-            result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
-                                         [hasDeletions ? 1 : 0];
-            if (!result) {
-                result = BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions);
-                CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
-                                    [hasDeletions ? 1 : 0] = result;
+        auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
+                                           [hasDeletions ? 1 : 0];
+        if (result.NeedInitialization()) {
+            TGuard<TMutex> g(Mutex);
+            if (auto gInit = result.StartInitialization()) {
+                gInit->InitializationFinished(
+                    BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions));
             }
+            AFL_VERIFY(!result.NeedInitialization());
         }
-        AFL_VERIFY(result);
-        AFL_VERIFY(*result);
-        return *result;
+        return result.GetScriptVerified();
     }
 }
 
@@ -111,22 +107,21 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*result, *GetSpecColumns(), "SPEC", EStageFeaturesIndexes::Filter, false);
             result->AddStep(std::make_shared<TSnapshotFilter>());
         }
-        for (auto&& i : GetReadMetadata()->GetProgram().GetSteps()) {
-            if (i->GetFilterOriginalColumnIds().empty()) {
-                break;
+        const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
+        for (ui32 stepIdx = 0; stepIdx < chainProgram->GetProcessors().size(); ++stepIdx) {
+            auto& step = chainProgram->GetProcessors()[stepIdx];
+            if (step.GetColumnsToFetch().size()) {
+                TColumnsSet stepColumnIds(
+                    NArrow::NSSA::TColumnChainInfo::ExtractColumnIds(step.GetColumnsToFetch()), GetReadMetadata()->GetResultSchema());
+                acc.AddFetchingStep(*result, stepColumnIds, EStageFeaturesIndexes::Fetching);
+                acc.AddAssembleStep(*result, stepColumnIds, "EF", EStageFeaturesIndexes::Filter, false);
             }
-            TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), GetReadMetadata()->GetResultSchema());
-            acc.AddAssembleStep(*result, stepColumnIds, "EF", EStageFeaturesIndexes::Filter, false);
-            result->AddStep(std::make_shared<TFilterProgramStep>(i));
-            if (!i->IsFilterOnly()) {
-                break;
+            result->AddStep(std::make_shared<NCommon::TProgramStep>(step));
+            if (step->GetProcessorType() == NArrow::NSSA::EProcessorType::Filter && GetReadMetadata()->HasLimit() &&
+                chainProgram->GetLastOriginalDataFilter() == stepIdx) {
+                result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->GetLimitRobust(), GetReadMetadata()->IsDescSorted()));
             }
         }
-        if (GetReadMetadata()->HasLimit()) {
-            result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->GetLimitRobust(), GetReadMetadata()->IsDescSorted()));
-        }
-        acc.AddFetchingStep(*result, *GetFFColumns(), EStageFeaturesIndexes::Fetching);
-        acc.AddAssembleStep(*result, *GetFFColumns(), "LAST", EStageFeaturesIndexes::Fetching, false);
     }
     result->AddStep<NCommon::TBuildStageResultStep>();
     result->AddStep<TPrepareResultStep>();
@@ -144,9 +139,9 @@ TString TSpecialReadContext::ProfileDebugString() const {
     };
 
     for (ui32 i = 0; i < (1 << 5); ++i) {
-        auto script = CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)];
-        if (script && *script) {
-            sb << (*script)->DebugString() << ";";
+        auto& script = CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)];
+        if (script.HasScript()) {
+            sb << script.DebugString() << ";";
         }
     }
     return sb;

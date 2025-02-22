@@ -7,11 +7,11 @@ import cyson
 import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 
 from google.protobuf import text_format
-from yql_utils import execute_sql, get_supported_providers, get_tables, get_files, get_http_files, \
+from yql_utils import execute, get_supported_providers, get_tables, get_files, get_http_files, \
     get_pragmas, KSV_ATTR, is_xfail, get_param, YQLExecResult, yql_binary_path, do_custom_error_check
 from yqlrun import YQLRun
 
-from test_utils import get_parameters_json, DATA_PATH, replace_vars
+from test_utils import get_parameters_json, replace_vars
 
 
 def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is_hybrid=False, allow_llvm=True):
@@ -24,7 +24,7 @@ def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is
             schema.Pattern = 'http_test://(.*)'
             schema.TargetUrl = yql_http_file_server.compose_http_link('$1')
         if force_blocks:
-            config_message.SqlCore.TranslationFlags.extend(['EmitAggApply'])
+            config_message.SqlCore.TranslationFlags.extend(['EmitAggApply', 'EmitTableSource'])
             flags = config_message.YqlCore.Flags.add()
             flags.Name = 'UseBlocks'
         if is_hybrid:
@@ -54,10 +54,7 @@ def check_provider(provider, config):
         pytest.skip('%s provider is not supported here' % provider)
 
 
-def get_sql_query(provider, suite, case, config, data_path=None):
-    if data_path is None:
-        data_path = DATA_PATH
-
+def get_sql_query(provider, suite, case, config, data_path=None, template='.sql'):
     pragmas = get_pragmas(config)
 
     if get_param('TARGET_PLATFORM'):
@@ -67,7 +64,7 @@ def get_sql_query(provider, suite, case, config, data_path=None):
     if get_param('TARGET_PLATFORM') and is_xfail(config):
         pytest.skip('xfail is not supported on non-default target platform')
 
-    program_sql = os.path.join(data_path, suite, '%s.sql' % case)
+    program_sql = os.path.join(data_path, suite, '%s%s' % (case, template))
 
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
@@ -88,12 +85,11 @@ def get_sql_query(provider, suite, case, config, data_path=None):
 
 
 def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
-                      yqlrun_binary=None, extra_args=[], force_blocks=False, allow_llvm=True, data_path=None):
+                      yqlrun_binary=None, extra_args=[], force_blocks=False, allow_llvm=True, data_path=None,
+                      run_sql=True):
     check_provider(provider, config)
-    if data_path is None:
-        data_path = DATA_PATH
 
-    sql_query = get_sql_query(provider, suite, case, config, data_path)
+    sql_query = get_sql_query(provider, suite, case, config, data_path, template='.sql' if run_sql else '.yqls')
     sql_query = replace_vars(sql_query, "yqlrun_var")
 
     xfail = is_xfail(config)
@@ -123,7 +119,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
         udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps')
     )
 
-    res, tables_res = execute_sql(
+    res, tables_res = execute(
         yqlrun,
         program=sql_query,
         input_tables=in_tables,
@@ -131,6 +127,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
         files=files,
         urls=http_files_urls,
         check_error=not xfail,
+        run_sql=run_sql,
         verbose=True,
         parameters=parameters)
 
@@ -156,12 +153,12 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
 
 
 def run_file(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary=None,
-             extra_args=[], force_blocks=False, allow_llvm=True, data_path=None):
+             extra_args=[], force_blocks=False, allow_llvm=True, data_path=None, run_sql=True):
     if (suite, case, cfg) not in run_file.cache:
         run_file.cache[(suite, case, cfg)] = \
             run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                               yqlrun_binary, extra_args, force_blocks=force_blocks, allow_llvm=allow_llvm,
-                              data_path=data_path)
+                              data_path=data_path, run_sql=run_sql)
 
     return run_file.cache[(suite, case, cfg)]
 

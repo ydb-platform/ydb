@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_value
+    ydb/public/sdk/cpp/src/client/value
     contrib/libs/apache/arrow
 )
 

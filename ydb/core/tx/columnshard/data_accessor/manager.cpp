@@ -2,12 +2,14 @@
 
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#include <ydb/library/accessor/positive_integer.h>
+
 namespace NKikimr::NOlap::NDataAccessorControl {
 
 void TLocalManager::DrainQueue() {
     std::optional<ui64> lastPathId;
     IGranuleDataAccessor* lastDataAccessor = nullptr;
-    ui32 countToFlight = 0;
+    TPositiveControlInteger countToFlight;
     while (PortionsAskInFlight + countToFlight < NYDBTest::TControllers::GetColumnShardController()->GetLimitForPortionsMetadataAsk() &&
            PortionsAsk.size()) {
         THashMap<ui64, std::vector<TPortionInfo::TConstPtr>> portionsToAsk;
@@ -63,7 +65,6 @@ void TLocalManager::DrainQueue() {
                     }
                 }
                 RequestsByPortion.erase(it);
-                AFL_VERIFY(countToFlight);
                 --countToFlight;
             }
             if (dataAnalyzed.GetPortionsToAsk().size()) {
@@ -72,7 +73,7 @@ void TLocalManager::DrainQueue() {
             }
         }
     }
-    PortionsAskInFlight += countToFlight;
+    PortionsAskInFlight.Add(countToFlight);
     Counters.FetchingCount->Set(PortionsAskInFlight);
     Counters.QueueSize->Set(PortionsAsk.size());
 }
@@ -119,7 +120,6 @@ void TLocalManager::DoAddPortion(const TPortionDataAccessor& accessor) {
             for (auto&& i : it->second) {
                 i->AddAccessor(accessor);
             }
-            AFL_VERIFY(PortionsAskInFlight);
             --PortionsAskInFlight;
         }
         RequestsByPortion.erase(it);

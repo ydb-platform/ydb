@@ -336,7 +336,7 @@ class TNewRestoreFromAtTable : public TSubOperation {
         Y_ABORT("unreachable");
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState /* state */) override {
         Y_ABORT("unreachable");
     }
 

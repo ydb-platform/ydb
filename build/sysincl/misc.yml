@@ -111,10 +111,6 @@
     - stdatomic.h:    contrib/libs/ffmpeg-3.4.1/compat/atomics/win32/stdatomic.h
     - atomic.h:       contrib/libs/ffmpeg-3.4.1/libavutil/atomic.h
 
-- source_filter: "^contrib/libs/postgresql"
-  includes:
-    - port.h:        contrib/libs/postgresql/src/include/port.h
-
 - source_filter: "^contrib/(deprecated/onednn|libs/intel/onednn)"
 
   includes:
@@ -201,25 +197,6 @@
   includes:
     - cuda.h:        contrib/deprecated/tf/tensorflow/core/platform/cuda.h
 
-# windows sdk includes that we do not want to apply for whole arcadia
-- source_filter: "^contrib"
-  includes:
-    - process.h
-
-- source_filter: "^contrib/libs/ceres-solver"
-  includes:
-    - tbb/tbb_stddef.h
-
-- source_filter: "^contrib/libs/freetype"
-  includes:
-    - hb-ot.h
-    - hb-ft.h
-    - hb.h
-
-- source_filter: "^contrib/libs/libpcap"
-  includes:
-    - strerror.h
-
 - source_filter: "^contrib/libs/(apache/apr|openssl)"
   includes:
     - netinet/sctp.h
@@ -228,11 +205,6 @@
   includes:
     - magic.h
     - xmlparse.h
-
-- source_filter: "^contrib/tools/python"
-  includes:
-    - ioctl.h
-    - utils.h
 
 - source_filter: "^(contrib/libs/cxxsupp/openmp|catboost/cuda/cuda_lib)"
   includes:
@@ -247,25 +219,13 @@
   includes:
     - lzo/lzo1x.h
 
-- source_filter: "^contrib/libs/(gtest|libpng|opencv)"
+- source_filter: "^contrib/libs/opencv"
   includes:
     - mem.h
 
-- source_filter: "^(contrib/restricted/boost/boost/mpi|catboost/cuda/cuda_lib/mpi)"
+- source_filter: "^catboost/cuda/cuda_lib/mpi"
   includes:
     - mpi.h
-
-- source_filter: "^contrib/libs/libf2c"
-  includes:
-    - local.h
-
-- source_filter: "^contrib/libs/libpq"
-  includes:
-    - local.h
-
-- source_filter: "^contrib/libs/breakpad"
-  includes:
-    - stab.h
 
 - source_filter: "^contrib/tools/fluent-bit-(full|minimal)"
   includes:
@@ -499,13 +459,9 @@
       - vendor/github.com/NVIDIA/go-nvml/gen/nvml/nvml.h
       - vendor/github.com/NVIDIA/go-nvml/pkg/nvml/nvml.h
 
-- source_filter: "^smart_devices/third_party/beken_freertos_sdk"
+- source_filter: "^contrib/libs/svt-av1"
   includes:
-    - error.h: smart_devices/third_party/beken_freertos_sdk/beken378/common/error.h
-    - errno.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/errno.h
-    - netdb.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/netdb.h
-    - signal.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/wpa_supplicant_2_9/bk_patch/signal.h
-    - check_config.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/mbedtls/mbedtls-2.27.0/include/mbedtls/check_config.h
+    - filter.h: contrib/libs/svt-av1/Source/Lib/Codec/filter.h
 
 - source_filter: "^sdg/sdc"
   includes:

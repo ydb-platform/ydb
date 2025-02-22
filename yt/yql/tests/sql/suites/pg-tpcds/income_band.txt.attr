@@ -1,0 +1,9 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["ib_income_band_sk";["PgType";"int4";];];
+              ["ib_lower_bound";["PgType";"int4";];];
+              ["ib_upper_bound";["PgType";"int4";];];
+        ];];
+    }
+}

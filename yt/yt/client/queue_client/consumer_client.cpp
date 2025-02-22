@@ -445,7 +445,7 @@ private:
                 YT_ABORT();
             }
 
-            // NB: in BigRT offsets encode the last read row, while we operate with the first unread row.
+            // NB: In BigRT offsets encode the last read row, while we operate with the first unread row.
             auto partitionInfo = TPartitionInfo{
                 .PartitionIndex = FromUnversionedValue<i64>(partitionIndexValue),
                 .NextRowIndex = offset,
@@ -671,6 +671,11 @@ ISubConsumerClientPtr CreateSubConsumerClient(
     TRichYPath queuePath)
 {
     auto queueCluster = queuePath.GetCluster();
+    if (!queueCluster && queueClusterClient) {
+        if (auto queueClusterFromClient = queueClusterClient->GetClusterName()) {
+            queueCluster = *queueClusterFromClient;
+        }
+    }
     if (!queueCluster) {
         if (auto clientCluster = consumerClusterClient->GetClusterName()) {
             queueCluster = *clientCluster;

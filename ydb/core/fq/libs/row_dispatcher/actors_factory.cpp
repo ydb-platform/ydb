@@ -40,7 +40,7 @@ struct TActorFactory : public IActorFactory {
             pqGateway,
             maxBufferSize
         );
-        return NActors::TlsActivationContext->ExecutorThread.RegisterActor(actorPtr.release(), NActors::TMailboxType::HTSwap, Max<ui32>());
+        return NActors::TActivationContext::Register(actorPtr.release(), {}, NActors::TMailboxType::HTSwap, Max<ui32>());
     }
 };
 

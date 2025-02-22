@@ -32,7 +32,6 @@ Examples:
 """
 
 from __future__ import print_function
-import os
 
 from . import writer  # noqa
 from . import parser  # noqa
@@ -40,6 +39,7 @@ from . import yson_types  # noqa
 
 TYPE = None
 HAS_PARQUET = False
+HAS_ORC = False
 
 try:
     from yt_yson_bindings import load, loads, dump, dumps # noqa
@@ -54,14 +54,16 @@ except ImportError as error:
         print("Warning! Failed to import YSON bindings: " + message, file=_sys.stderr)
 
 try:
-    from yt_yson_bindings import upload_parquet, dump_parquet, dump_orc, upload_orc, async_dump_parquet, async_dump_orc # noqa
+    from yt_yson_bindings import upload_parquet, dump_parquet, async_dump_parquet # noqa
     HAS_PARQUET = True
-except ImportError as error:
-    message = str(error)
-    if "No module named" not in message:
-        import sys as _sys
-        if os.environ.get("YT_LOG_LEVEL", "").lower() == "debug":
-            print("Warning! Failed to import dump_parquet binding: " + message, file=_sys.stderr)
+except Exception:
+    pass
+
+try:
+    from yt_yson_bindings import dump_orc, upload_orc, async_dump_orc # noqa
+    HAS_ORC = True
+except Exception:
+    pass
 
 if TYPE is None:
     from .parser import load, loads  # noqa

@@ -22,48 +22,17 @@ private:
     bool AllocationFailed = false;
 
 public:
-    ~TAllocationInfo() {
-        if (GetAllocationStatus() != EAllocationStatus::Failed) {
-            Stage->Free(AllocatedVolume, GetAllocationStatus() == EAllocationStatus::Allocated);
-        }
+    ~TAllocationInfo();
 
-        AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "destroy")("allocation_id", Identifier)("stage", Stage->GetName());
-    }
+    bool IsAllocatable(const ui64 additional) const;
 
-    bool IsAllocatable(const ui64 additional) const {
-        return Stage->IsAllocatable(AllocatedVolume, additional);
-    }
-
-    void SetAllocatedVolume(const ui64 value) {
-        AFL_VERIFY(GetAllocationStatus() != EAllocationStatus::Failed);
-        Stage->UpdateVolume(AllocatedVolume, value, GetAllocationStatus() == EAllocationStatus::Allocated);
-        AllocatedVolume = value;
-    }
+    void SetAllocatedVolume(const ui64 value);
 
     ui64 GetAllocatedVolume() const {
         return AllocatedVolume;
     }
 
-    [[nodiscard]] bool Allocate(const NActors::TActorId& ownerId) {
-        AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier)("stage", Stage->GetName());
-        AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName())(
-            "allocation_internal_group_id", AllocationInternalGroupId);
-        auto allocationResult = Stage->Allocate(AllocatedVolume);
-        if (allocationResult.IsFail()) {
-            AllocationFailed = true;
-            Allocation->OnAllocationImpossible(allocationResult.GetErrorMessage());
-            Allocation = nullptr;
-            return false;
-        }
-        const bool result = Allocation->OnAllocated(
-            std::make_shared<TAllocationGuard>(ProcessId, ScopeId, Allocation->GetIdentifier(), ownerId, Allocation->GetMemory()), Allocation);
-        if (!result) {
-            Stage->Free(AllocatedVolume, true);
-            AllocationFailed = true;
-        }
-        Allocation = nullptr;
-        return result;
-    }
+    [[nodiscard]] bool Allocate(const NActors::TActorId& ownerId);
 
     EAllocationStatus GetAllocationStatus() const {
         if (AllocationFailed) {

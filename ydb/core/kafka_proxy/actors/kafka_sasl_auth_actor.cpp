@@ -49,24 +49,10 @@ void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
 
 void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx) {
     if (ev->Get()->Error) {
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", ev->Get()->Error.Message, ctx);
+        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TString{ev->Get()->Error.Message}, ctx);
         return;
     }
     UserToken = ev->Get()->Token;
-
-    if (ClientAuthData.UserName.empty()) {
-        bool gotPermission = false;
-        for (auto & sid : UserToken->GetGroupSIDs()) {
-            if (sid == NKikimr::NGRpcProxy::V1::KafkaPlainAuthSid) {
-                gotPermission = true;
-                break;
-            }
-        }
-        if (!gotPermission) {
-            SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TStringBuilder() << "no permission '" << NKikimr::NGRpcProxy::V1::KafkaPlainAuthPermission << "'", ctx);
-            return;
-        }
-    }
 
     SendResponseAndDie(EKafkaErrors::NONE_ERROR, "", "", ctx);
 }
@@ -174,8 +160,13 @@ void TKafkaSaslAuthActor::SendLoginRequest(TKafkaSaslAuthActor::TAuthData authDa
 }
 
 void TKafkaSaslAuthActor::SendApiKeyRequest() {
-    auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId, true);
-
+    auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
+    TString ticket;
+    if (Context->Config.GetAuthViaApiKey()) {
+        ticket = "ApiKey " + ClientAuthData.Password;
+    } else {
+        ticket = ClientAuthData.Password;
+    }
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Database = DatabasePath,
         .Ticket = "ApiKey " + ClientAuthData.Password,

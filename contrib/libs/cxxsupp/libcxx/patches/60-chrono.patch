@@ -1,8 +1,8 @@
 diff --git a/include/chrono b/include/chrono
-index b3ed9ac..e05c8bc 100644
+index 5bab3f8..956badd 100644
 --- a/include/chrono
 +++ b/include/chrono
-@@ -829,7 +829,7 @@ constexpr chrono::year                                  operator ""y(unsigned lo
+@@ -853,7 +853,7 @@ constexpr chrono::year                                  operator ""y(unsigned lo
  // [time.syn]
  #include <compare>
  

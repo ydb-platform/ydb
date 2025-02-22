@@ -1,0 +1,14 @@
+{"_yql_row_spec"={
+    "Type"=["StructType";[
+        ["s";["DataType";"String"]];
+        ["u";["DataType";"Utf8"]];
+        ["y";["DataType";"Yson"]];
+        ["j";["DataType";"Json"]];
+        ["jd";["DataType";"JsonDocument"]];
+        ["ud";["DataType";"Uuid"]];
+        ["tzd";["DataType";"TzDate"]];
+        ["tzdt";["DataType";"TzDatetime"]];
+        ["tzts";["DataType";"TzTimestamp"]];
+    ]];
+}}
+

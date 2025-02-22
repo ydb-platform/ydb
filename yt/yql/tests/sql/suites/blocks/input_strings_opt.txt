@@ -1,0 +1,12 @@
+{"key"=#;  "s"="4";"s_opt"="e";"utf"="б"};
+{"key"="3";"s"="2";"s_opt"="k";"utf"="й"};
+{"key"=#;  "s"="7";"s_opt"="f";"utf"="в"};
+{"key"="1";"s"="5";"s_opt"=#;  "utf"="д"};
+{"key"=#;  "s"="1";"s_opt"=#;  "utf"="а"};
+{"key"="2";"s"="3";"s_opt"="i";"utf"="ё"};
+{"key"="1";"s"="3";"s_opt"="q";"utf"="г"};
+{"key"="2";"s"="7";"s_opt"=#;  "utf"="з"};
+{"key"="1";"s"="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1";"s_opt"="c";"utf"="е"};
+{"key"="3";"s"="6";"s_opt"="c";"utf"="и"};
+{"key"="2";"s"="8";"s_opt"="z";"utf"="ж"};
+{"key"="3";"s"="2";"s_opt"="k";"utf"="к"};

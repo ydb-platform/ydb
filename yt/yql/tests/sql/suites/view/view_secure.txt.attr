@@ -1,0 +1,33 @@
+{
+    "_yql_view_secure"="SELECT SecureParam('api:oauth') as k, subkey as s, value as v FROM self";
+    "_yql_view_secure_eval"="SELECT EvaluateCode(FuncCode('SecureParam', AtomCode('api:oauth'))) as k, subkey as s, value as v FROM self";
+    "_yql_view_secure_eval_dynamic"="SELECT EvaluateCode(FuncCode('S' || 'ecureParam', AtomCode('api:oauth'))) as k, subkey as s, value as v FROM self";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

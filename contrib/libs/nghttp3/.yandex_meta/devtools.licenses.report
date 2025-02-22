@@ -156,7 +156,7 @@ BELONGS ya.make
 
 KEEP     MIT                  f759889bc387afe17a80ab852d7af858
 BELONGS ya.make
-FILE_INCLUDE AUTHORS found in files: lib/sfparse/sfparse.c at line 808
+FILE_INCLUDE AUTHORS found in files: lib/sfparse/sfparse.c at line 1076
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: MIT
@@ -164,4 +164,4 @@ FILE_INCLUDE AUTHORS found in files: lib/sfparse/sfparse.c at line 808
         Match type      : TEXT
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        lib/sfparse/sfparse.c [794:812]
+        lib/sfparse/sfparse.c [1062:1080]

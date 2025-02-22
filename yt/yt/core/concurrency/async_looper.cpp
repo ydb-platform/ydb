@@ -83,7 +83,7 @@ void TAsyncLooper::DoStart()
 
 void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
 {
-    VERIFY_SPINLOCK_AFFINITY(StateLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(StateLock_);
     YT_VERIFY(State_ == EState::Running);
     YT_VERIFY(Stage_ == EStage::Idle);
 

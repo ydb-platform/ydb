@@ -81,6 +81,12 @@ struct TValueBoundSerializer;
 template <class T, class C, class = void>
 struct TSerializerTraits;
 
+DEFINE_ENUM(ESerializationDumpMode,
+    (None)
+    (Content)
+    (Checksum)
+);
+
 template <class TKey, class TComparer>
 class TSkipList;
 
@@ -115,9 +121,6 @@ constexpr TChecksum NullChecksum = 0;
 
 template <class T, size_t N>
 class TCompactVector;
-
-class TRef;
-class TMutableRef;
 
 template <class TProto>
 class TRefCountedProto;

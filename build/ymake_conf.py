@@ -1067,13 +1067,9 @@ class GnuToolchainOptions(ToolchainOptions):
         self.objcopy = self.params.get('objcopy')
         self.objdump = self.params.get('objdump')
         self.isystem = self.params.get('isystem')
+        self.nm = self.params.get('nm')
 
         self.dwarf_tool = self.target.find_in_dict(self.params.get('dwarf_tool'))
-
-        # TODO(somov): Унифицировать формат sys_lib
-        self.sys_lib = self.params.get('sys_lib', {})
-        if isinstance(self.sys_lib, dict):
-            self.sys_lib = self.target.find_in_dict(self.sys_lib, [])
 
         self.os_sdk = preset('OS_SDK') or self._default_os_sdk()
 
@@ -1670,6 +1666,7 @@ class LD(Linker):
         self.strip = self.tc.strip
         self.objcopy = self.tc.objcopy
         self.objdump = self.tc.objdump
+        self.nm = self.tc.nm
 
         self.musl = Setting('MUSL', convert=to_bool)
 
@@ -1718,8 +1715,6 @@ class LD(Linker):
         if self.ld_sdk:
             self.ld_flags.append(self.ld_sdk)
 
-        self.sys_lib = self.tc.sys_lib
-
         if target.is_android:
             # Use toolchain defaults to link with libunwind/clang_rt.builtins
             self.use_stdlib = '-nostdlib++'
@@ -1735,9 +1730,9 @@ class LD(Linker):
         emit('STRIP_TOOL_VENDOR', self.strip)
         emit('OBJCOPY_TOOL_VENDOR', self.objcopy)
         emit('OBJDUMP_TOOL_VENDOR', self.objdump)
+        emit('NM_TOOL_VENDOR', self.nm)
 
         emit('_LD_FLAGS', self.ld_flags)
-        emit('_LD_SYS_LIB', self.sys_lib)
         emit('LD_SDK_VERSION', self.ld_sdk)
 
         dwarf_tool = self.tc.dwarf_tool
@@ -2021,10 +2016,6 @@ class MSVCCompiler(MSVC, Compiler):
                 # for msvc compatibility
                 # https://clang.llvm.org/docs/UsersManual.html#microsoft-extensions
                 # '-fdelayed-template-parsing',
-                '-Wno-deprecated-this-capture',
-                '-Wno-c++11-narrowing-const-reference',
-                '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
-                '-Wno-invalid-offsetof',
             ]
             if target.is_x86:
                 flags.append('-m32')
@@ -2045,12 +2036,16 @@ class MSVCCompiler(MSVC, Compiler):
                 # Issue a warning if certain overload is hidden due to inheritance
                 '-Woverloaded-virtual',
                 '-Wno-ambiguous-reversed-operator',
+                '-Wno-c++11-narrowing-const-reference',
                 '-Wno-defaulted-function-deleted',
                 '-Wno-deprecated-anon-enum-enum-conversion',
                 '-Wno-deprecated-enum-enum-conversion',
                 '-Wno-deprecated-enum-float-conversion',
+                '-Wno-deprecated-this-capture',
                 '-Wno-deprecated-volatile',
+                '-Wno-invalid-offsetof',
                 '-Wno-undefined-var-template',
+                '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
             ]
 
         defines.append('/D_WIN32_WINNT={0}'.format(WINDOWS_VERSION_MIN))
@@ -2527,10 +2522,10 @@ class CuDNN(object):
         self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version)
 
     def have_cudnn(self):
-        return self.cudnn_version.value in ('7.6.5', '8.0.5')
+        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0')
 
     def auto_cudnn_version(self):
-        return '8.0.5'
+        return '8.6.0'
 
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():

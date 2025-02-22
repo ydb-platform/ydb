@@ -22,8 +22,8 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
     srcPath->SetDropped(txState.PlanStep, operationId.GetTxId());
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
 
-    srcPath.Parent()->DecAliveChildren();
-    srcPath.DomainInfo()->DecPathsInside();
+    DecAliveChildrenDirect(operationId, srcPath.Parent().Base(), context);
+    srcPath.DomainInfo()->DecPathsInside(context.SS);
 
     IncParentDirAlterVersionWithRepublish(operationId, srcPath, context);
 }
@@ -203,7 +203,7 @@ public:
         dstPath->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        dstPath.DomainInfo()->IncPathsInside();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
 
         dstPath.Activate();
         IncParentDirAlterVersionWithRepublish(OperationId, dstPath, context);
@@ -727,7 +727,7 @@ class TMoveSequence: public TSubOperation {
         case TTxState::ProposedMoveSequence:
             return TTxState::DropParts;
         case TTxState::DropParts:
-            return TTxState::Done;        
+            return TTxState::Done;
         default:
             return TTxState::Invalid;
         }
@@ -940,7 +940,7 @@ public:
             dstPath->ApplyACL(acl);
         }
 
-        dstParentPath->IncAliveChildren();
+        IncAliveChildrenSafeWithUndo(OperationId, dstParentPath, context); // for correct discard of ChildrenExist prop
 
         srcPath.Base()->PathState = TPathElement::EPathState::EPathStateMoving;
         srcPath.Base()->LastTxId = OperationId.GetTxId();

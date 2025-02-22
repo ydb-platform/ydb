@@ -42,12 +42,15 @@ protected:
     TString Database;
     TString SharedDatabase;
     bool Direct = false;
+    bool NeedRedirect = true;
     ui32 Requests = 0;
+    bool PassedAway = false;
     ui32 MaxRequestsInFlight = 200;
     NWilson::TSpan Span;
     IViewer* Viewer = nullptr;
     NMon::TEvHttpInfo::TPtr Event;
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr HttpEvent;
+    TCgiParameters Params;
     TJsonSettings JsonSettings;
     TProto2JsonConfig Proto2JsonConfig;
     TDuration Timeout = TDuration::Seconds(10);
@@ -276,6 +279,19 @@ protected:
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
+    void BuildParamsFromJson(TStringBuf data);
+    void SetupTracing(const TString& handlerName);
+
+    template<typename TJson>
+    void Proto2Json(const NProtoBuf::Message& proto, TJson& json) {
+        try {
+            NProtobufJson::Proto2Json(proto, json, Proto2JsonConfig);
+        }
+        catch (const std::exception& e) {
+            json = TStringBuilder() << "error converting " << proto.GetTypeName() << " to json: " << e.what();
+        }
+    }
+
     void ClosePipes();
     ui32 FailPipeConnect(TTabletId tabletId);
 
@@ -305,6 +321,7 @@ protected:
     TString MakeForward(const std::vector<ui32>& nodes);
 
     void RequestDone(ui32 requests = 1);
+    void CancelAllRequests();
     void AddEvent(const TString& name);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);

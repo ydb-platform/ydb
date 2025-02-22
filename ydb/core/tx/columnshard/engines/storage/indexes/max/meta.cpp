@@ -1,8 +1,9 @@
 #include "meta.h"
 
-#include <ydb/library/formats/arrow/scalar/serialization.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/program/program.h>
+
+#include <ydb/library/formats/arrow/scalar/serialization.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>

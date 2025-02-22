@@ -1,0 +1,10 @@
+/* unrelated lambda in v1 syntax to check that syntax version for libraries in views is correctly passed */
+$unused = ($row) -> ($row);
+
+$lambda_code = QuoteCode(($item) -> (String::AsciiToLower($item)));
+
+$to_lower = EvaluateCode(LambdaCode(($item) -> {
+    return FuncCode("Apply", $lambda_code, $item);
+}));
+
+export $to_lower;

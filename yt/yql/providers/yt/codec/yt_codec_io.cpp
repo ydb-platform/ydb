@@ -901,12 +901,12 @@ protected:
                 return NUdf::TUnboxedValue();
             }
             auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
-            auto val = ReadYsonValue((decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? type : uwrappedType, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+            auto val = ReadYsonValueInTableFormat((decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? type : uwrappedType, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_);
             return (decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? val : val.Release().MakeOptional();
         } else {
             if (Y_LIKELY(cmd != EntitySymbol)) {
                 auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
-                return ReadYsonValue(type, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+                return ReadYsonValueInTableFormat(type, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_);
             }
 
             if (type->GetKind() == TType::EKind::Data && static_cast<TDataType*>(type)->GetSchemeType() == NUdf::TDataType<NUdf::TYson>::Id) {
@@ -1367,7 +1367,7 @@ protected:
         }
 
         if (uwrappedType->IsData()) {
-            return NCommon::ReadSkiffData(uwrappedType, 0, Buf_);
+            return ReadSkiffData(uwrappedType, 0, Buf_);
         } else if (!isOptional && uwrappedType->IsPg()) {
             return NCommon::ReadSkiffPg(static_cast<TPgType*>(uwrappedType), Buf_);
         } else {
@@ -1378,17 +1378,17 @@ protected:
             // parse binary yson...
             YQL_ENSURE(size > 0);
             char cmd = Buf_.Read();
-            auto value = ReadYsonValue(uwrappedType, 0, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+            auto value = ReadYsonValueInTableFormat(uwrappedType, 0, SpecsCache_.GetHolderFactory(), cmd, Buf_);
             return isOptional ? value.Release().MakeOptional() : value;
         }
     }
 
     NUdf::TUnboxedValue ReadSkiffFieldNativeYt(TType* type, ui64 nativeYtTypeFlags) {
-        return NCommon::ReadSkiffNativeYtValue(type, nativeYtTypeFlags, SpecsCache_.GetHolderFactory(), Buf_);
+        return ReadSkiffNativeYtValue(type, nativeYtTypeFlags, SpecsCache_.GetHolderFactory(), Buf_);
     }
 
     void SkipSkiffField(TType* type, ui64 nativeYtTypeFlags) {
-        return NCommon::SkipSkiffField(type, nativeYtTypeFlags, Buf_);
+        return ::NYql::SkipSkiffField(type, nativeYtTypeFlags, Buf_);
     }
 };
 
@@ -1536,7 +1536,7 @@ public:
         YQL_ENSURE(inputFields.size() == ColumnConverters_.size());
 
         auto rowIndices = batch->GetColumnByName("$row_index");
-        YQL_ENSURE(rowIndices || decoder.Dynamic);
+        YQL_ENSURE(rowIndices || decoder.Dynamic || Specs_.IsTableContent_);
 
         arrow::compute::ExecContext execContext(Pool_);
         std::vector<arrow::Datum> convertedBatch;
@@ -1655,7 +1655,7 @@ void TMkqlReaderImpl::SetSpecs(const TMkqlIOSpecs& specs, const NKikimr::NMiniKQ
     if (Specs_->UseBlockInput_) {
         Decoder_.Reset(new TArrowDecoder(Buf_, *Specs_, holderFactory, NUdf::GetYqlMemoryPool()));
     } else if (Specs_->UseSkiff_) {
-#ifndef MKQL_DISABLE_CODEGEN
+#if !defined(MKQL_DISABLE_CODEGEN) && !defined(__aarch64__) && !defined(_win_)
         if (Specs_->OptLLVM_ != "OFF" && NCodegen::ICodegen::IsCodegenAvailable()) {
             Decoder_.Reset(new TSkiffLLVMDecoder(Buf_, *Specs_, holderFactory));
         }
@@ -2065,9 +2065,9 @@ protected:
 
     void WriteSkiffValue(TType* type, const NUdf::TUnboxedValuePod& value, bool wasOptional) {
         if (NativeYtTypeFlags_) {
-            NCommon::WriteSkiffNativeYtValue(type, NativeYtTypeFlags_, value, Buf_);
+            WriteSkiffNativeYtValue(type, NativeYtTypeFlags_, value, Buf_);
         } else if (type->IsData()) {
-            NCommon::WriteSkiffData(type, 0, value, Buf_);
+            WriteSkiffData(type, 0, value, Buf_);
         } else if (!wasOptional && type->IsPg()) {
             NCommon::WriteSkiffPg(static_cast<TPgType*>(type), value, Buf_);
         } else {

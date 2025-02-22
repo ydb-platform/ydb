@@ -140,7 +140,7 @@ public:
             const auto reset = GetNodeValue(Switch, ctx, block);
             if constexpr (Interruptable) {
                 const auto next = BasicBlock::Create(context, "next", ctx.Func);
-                BranchInst::Create(stop, next, IsEmpty(reset, block), block);
+                BranchInst::Create(stop, next, IsEmpty(reset, block, context), block);
                 block = next;
             }
 
@@ -352,7 +352,7 @@ private:
             return f;
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto stateType = Type::getInt8Ty(context);
@@ -362,7 +362,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -374,8 +373,7 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        const auto container = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+        const auto container = static_cast<Value*>(containerArg);
 
         const auto state = new LoadInst(stateType, statePtr, "state", block);
 
@@ -460,7 +458,7 @@ private:
             block = swap;
 
             new StoreInst(ConstantInt::get(state->getType(), static_cast<ui8>(ESqueezeState::NeedInit)), statePtr, block);
-            SafeUnRefUnboxed(valuePtr, ctx, block);
+            SafeUnRefUnboxedOne(valuePtr, ctx, block);
             const auto state = codegenStateArg->CreateGetValue(ctx, block);
             new StoreInst(state, valuePtr, block);
             ValueAddRef(State.State->GetRepresentation(), valuePtr, ctx, block);
@@ -474,7 +472,7 @@ private:
 
         block = stop;
         new StoreInst(ConstantInt::get(state->getType(), static_cast<ui8>(ESqueezeState::Finished)), statePtr, block);
-        SafeUnRefUnboxed(valuePtr, ctx, block);
+        SafeUnRefUnboxedOne(valuePtr, ctx, block);
         const auto result = codegenStateArg->CreateGetValue(ctx, block);
         new StoreInst(result, valuePtr, block);
         ValueAddRef(State.State->GetRepresentation(), valuePtr, ctx, block);

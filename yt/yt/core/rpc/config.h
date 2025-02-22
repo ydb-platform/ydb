@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/concurrency/config.h>
 
+#include <yt/yt/core/misc/backoff_strategy.h>
+
 #include <library/cpp/yt/misc/enum.h>
 
 #include <vector>
@@ -79,7 +81,7 @@ class TServerConfig
     : public TServiceCommonConfig
 {
 public:
-    THashMap<TString, NYTree::INodePtr> Services;
+    THashMap<std::string, NYTree::INodePtr> Services;
 
     REGISTER_YSON_STRUCT(TServerConfig);
 
@@ -113,7 +115,7 @@ class TServerDynamicConfig
     : public TServiceCommonDynamicConfig
 {
 public:
-    THashMap<TString, NYTree::INodePtr> Services;
+    THashMap<std::string, NYTree::INodePtr> Services;
 
     REGISTER_YSON_STRUCT(TServerDynamicConfig);
 
@@ -181,6 +183,12 @@ public:
 
     //! Maximum number of retry attempts to make.
     int RetryAttempts;
+
+    // COMPAT(danilalexeev): YT-23734.
+    bool EnableExponentialRetryBackoffs;
+
+    //! Retry backoff policy.
+    TExponentialBackoffOptions RetryBackoff;
 
     //! Maximum time to spend while retrying.
     //! If null then no limit is enforced.
@@ -296,10 +304,10 @@ class TServiceDiscoveryEndpointsConfig
     : public NYTree::TYsonStruct
 {
 public:
-    std::optional<TString> Cluster;
+    std::optional<std::string> Cluster;
     //! NB: If empty (default) this vector is filled with the cluster above.
-    std::vector<TString> Clusters;
-    TString EndpointSetId;
+    std::vector<std::string> Clusters;
+    std::string EndpointSetId;
     TDuration UpdatePeriod;
 
     //! Use IPv4 address of endpoint.

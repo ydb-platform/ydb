@@ -365,7 +365,7 @@ public:
     }
 
 public:
-    void ParseMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
         LOG_ROW_DISPATCHER_TRACE("Add " << messages.size() << " messages to parse");
 
         Y_ENSURE(!Buffer.Finished, "Cannot parse messages with finished buffer");

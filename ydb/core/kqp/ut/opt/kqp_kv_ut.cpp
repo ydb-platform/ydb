@@ -3,7 +3,7 @@
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <util/system/env.h>
 
 
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         Cout << res << Endl;
         CompareYson(R"(
             [[[0u];[0];["abcde"]];[[137u];[1];["abcde"]];[[274u];[2];["abcde"]];[[411u];[3];["abcde"]];[[548u];[4];["abcde"]];[[685u];[5];["abcde"]];[[822u];[6];["abcde"]];[[959u];[7];["abcde"]];[[1096u];[8];["abcde"]];[[1233u];[9];["abcde"]]]
-        )", res);
+        )", TString{res});
     }
 
     Y_UNIT_TEST(ReadRows_SpecificKey) {
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
                 [5765290426629915225u;3u;"abcde"];
                 [7687053901553772359u;4u;"abcde"]
             ]
-        )", res);
+        )", TString{res});
     }
 
     Y_UNIT_TEST(ReadRows_UnknownTable) {
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         UNIT_ASSERT_C(selectResult.GetIssues().ToString().size(), "Expect non-empty issue in case of error");
         UNIT_ASSERT_EQUAL(selectResult.GetStatus(), EStatus::SCHEME_ERROR);
         auto res = FormatResultSetYson(selectResult.GetResultSet());
-        CompareYson("[]", res);
+        CompareYson("[]", TString{res});
     }
 
     Y_UNIT_TEST(ReadRows_NonExistentKeys) {
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
             auto res = FormatResultSetYson(selectResult.GetResultSet());
             Cerr << res << Endl;
-            CompareYson("[]", res);
+            CompareYson("[]", TString{res});
         }
         {
             NYdb::TValueBuilder keys;
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
                 [12u;2u;"abcde"];
                 [13u;3u;"abcde"];
                 [14u;4u;"abcde"]
-            ])", res);
+            ])", TString{res});
         }
         {
             NYdb::TValueBuilder keys;
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
 
         auto res = FormatResultSetYson(selectResult.GetResultSet());
-        CompareYson(Sprintf("[[%du;%du]]", valueToReturn_1, valueToReturn_2), res);
+        CompareYson(Sprintf("[[%du;%du]]", valueToReturn_1, valueToReturn_2), TString{res});
     }
 
     TVector<::ReadRowsPgParam> readRowsPgParams
@@ -733,7 +733,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
                     ["1.123456789";"1000.123456789";"10.123456789";"1000000.123456789";1u];
                     ["2.123456789";"2000.123456789";"20.123456789";"2000000.123456789";2u]        
                 ]
-            )", res);
+            )", TString{res});
         }
 
         // Good case: lookup overflowed decimal
@@ -749,7 +749,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
             UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
             auto res = FormatResultSetYson(selectResult.GetResultSet());
-            CompareYson(R"([["inf";"inf";"inf";"inf";999999999u];])", res);
+            CompareYson(R"([["inf";"inf";"inf";"inf";999999999u];])", TString{res});
         }        
     }
 

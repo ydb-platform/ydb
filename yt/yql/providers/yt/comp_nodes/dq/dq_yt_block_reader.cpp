@@ -8,7 +8,7 @@
 #include <yt/yql/providers/yt/codec/yt_codec.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>

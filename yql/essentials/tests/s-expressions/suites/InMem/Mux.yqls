@@ -2,7 +2,6 @@
 #comment
 (let res_sink (DataSink 'result))
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let list1 (AsList (String 'a1) (String 'a2) (String 'a3)))
 (let list2 (AsList (Bool 'true) (Bool 'false)))

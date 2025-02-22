@@ -68,9 +68,9 @@ TStringBuf TGrpcMetadataArray::Find(const char* key) const
     return TStringBuf();
 }
 
-THashMap<TString, TString> TGrpcMetadataArray::ToMap() const
+THashMap<std::string, TString> TGrpcMetadataArray::ToMap() const
 {
-    THashMap<TString, TString> result;
+    THashMap<std::string, TString> result;
     for (size_t index = 0; index < Native_.count; ++index) {
         const auto& metadata = Native_.metadata[index];
         result[NYT::ToString(metadata.key)] = NYT::ToString(metadata.value);
@@ -134,7 +134,7 @@ grpc_metadata* TGrpcMetadataArrayBuilder::Unwrap()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGrpcChannelArgs::TGrpcChannelArgs(const THashMap<TString, NYTree::INodePtr>& args)
+TGrpcChannelArgs::TGrpcChannelArgs(const THashMap<std::string, NYTree::INodePtr>& args)
 {
     for (const auto& pair : args) {
         Items_.emplace_back();
@@ -292,7 +292,7 @@ TMessageWithAttachments ByteBufferToMessageWithAttachments(
         fixedHeader.MessageSize = *messageBodySize;
 
         size_t totalMessageSize =
-            sizeof (TEnvelopeFixedHeader) +
+            sizeof(TEnvelopeFixedHeader) +
             fixedHeader.EnvelopeSize +
             fixedHeader.MessageSize;
 
@@ -301,10 +301,10 @@ TMessageWithAttachments ByteBufferToMessageWithAttachments(
             {.InitializeStorage = false});
 
         char* targetFixedHeader = data.Begin();
-        char* targetHeader = targetFixedHeader + sizeof (TEnvelopeFixedHeader);
+        char* targetHeader = targetFixedHeader + sizeof(TEnvelopeFixedHeader);
         targetMessage = targetHeader + fixedHeader.EnvelopeSize;
 
-        memcpy(targetFixedHeader, &fixedHeader, sizeof (fixedHeader));
+        memcpy(targetFixedHeader, &fixedHeader, sizeof(fixedHeader));
         YT_VERIFY(envelope.SerializeToArray(targetHeader, fixedHeader.EnvelopeSize));
     } else {
         data = TSharedMutableRef::Allocate<TMessageTag>(

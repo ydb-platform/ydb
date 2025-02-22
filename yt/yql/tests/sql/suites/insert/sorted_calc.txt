@@ -1,0 +1,4 @@
+{"_yql_column_0"="0233";"key"="023";"subkey"="3";"value"="aaa"};
+{"_yql_column_0"="0375";"key"="037";"subkey"="5";"value"="ddd"};
+{"_yql_column_0"="0751";"key"="075";"subkey"="1";"value"="abc"};
+{"_yql_column_0"="1501";"key"="150";"subkey"="1";"value"="aaa"};

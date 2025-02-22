@@ -1,8 +1,10 @@
 #pragma once
 
+#include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/helpers.h>
 #include <yt/cpp/mapreduce/http/http.h>
 #include <yt/cpp/mapreduce/http/http_client.h>
+#include <yt/cpp/mapreduce/http/requests.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/common.h>
@@ -11,8 +13,6 @@
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/io/helpers.h>
-
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
 #include <util/stream/buffered.h>
 

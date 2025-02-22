@@ -4,6 +4,8 @@
 #include "sys_view.h"
 #include "console_interaction.h"
 
+#include <library/cpp/streams/zstd/zstd.h>
+
 namespace NKikimr {
 
 TString TGroupID::ToString() const {
@@ -97,6 +99,8 @@ NKikimrBlobStorage::TGroupStatus::E TBlobStorageController::DeriveStatus(const T
 }
 
 void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
+    StartConsoleInteraction();
+
     // create stat processor
     StatProcessorActorId = Register(CreateStatProcessorActor());
 
@@ -124,6 +128,7 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
 
 void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     ev->Get()->Config->Swap(&StorageConfig);
+    SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
 
     auto prevStaticPDisks = std::exchange(StaticPDisks, {});
     auto prevStaticVSlots = std::exchange(StaticVSlots, {});
@@ -158,17 +163,21 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
     }
 
-    if (StorageConfig.HasSelfManagementConfig() && StorageConfig.GetSelfManagementConfig().GetEnabled()) {
+    if (SelfManagementEnabled) {
         // assuming that in autoconfig mode HostRecords are managed by the distconf; we need to apply it here to
         // avoid race with box autoconfiguration and node list change
         HostRecords = std::make_shared<THostRecordMap::element_type>(StorageConfig);
         if (SelfHealId) {
             Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
         }
+
+        ConsoleInteraction->Stop(); // distconf will handle the Console from now on
+    } else if (Loaded) {
+        ConsoleInteraction->Start(); // we control the Console now
     }
 
     if (!std::exchange(StorageConfigObtained, true)) { // this is the first time we get StorageConfig in this instance of BSC
-        if (HostRecords) {
+        if (SelfManagementEnabled) {
             OnHostRecordsInitiate();
         } else {
             Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
@@ -189,10 +198,7 @@ void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
 }
 
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
-    if (!StorageConfig.HasBlobStorageConfig() || // this would be strange
-            !ignoreDistconf && (!StorageConfig.HasSelfManagementConfig() ||
-            !StorageConfig.GetSelfManagementConfig().GetEnabled() ||
-            !StorageConfig.GetSelfManagementConfig().GetAutomaticBoxManagement())) {
+    if (!StorageConfig.HasBlobStorageConfig()) {
         return;
     }
     const auto& bsConfig = StorageConfig.GetBlobStorageConfig();
@@ -200,6 +206,11 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     if (Boxes.size() > 1) {
         return;
     }
+
+    if (!ignoreDistconf && (!SelfManagementEnabled || !StorageConfig.GetSelfManagementConfig().GetAutomaticBoxManagement())) {
+        return; // not expected to be managed by BSC
+    }
+
     std::optional<ui64> generation;
     if (!Boxes.empty()) {
         const auto& [boxId, box] = *Boxes.begin();
@@ -290,11 +301,10 @@ void TBlobStorageController::OnHostRecordsInitiate() {
                 "BlobStorageControllerControls.EnableSelfHealWithDegraded");
         }
     }
+    Y_ABORT_UNLESS(!SelfHealId);
     SelfHealId = Register(CreateSelfHealActor());
     PushStaticGroupsToSelfHeal();
-    if (StorageConfigObtained) {
-        Execute(CreateTxInitScheme());
-    }
+    Execute(CreateTxInitScheme());
 }
 
 void TBlobStorageController::IssueInitialGroupContent() {
@@ -423,12 +433,16 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
         hFunc(TEvBlobStorage::TEvControllerProposeConfigResponse, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerConsoleCommitResponse, ConsoleInteraction->Handle);
-        hFunc(TConsoleInteraction::TEvPrivate::TEvValidationTimeout, ConsoleInteraction->Handle);
+        fFunc(TConsoleInteraction::TEvPrivate::EvValidationTimeout, ConsoleInteraction->HandleValidationTimeout);
         hFunc(TEvBlobStorage::TEvControllerReplaceConfigRequest, ConsoleInteraction->Handle);
+        hFunc(TEvBlobStorage::TEvControllerFetchConfigRequest, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerValidateConfigResponse, ConsoleInteraction->Handle);
         hFunc(TEvTabletPipe::TEvClientConnected, ConsoleInteraction->Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvGetBlockResult, ConsoleInteraction->Handle);
+        fFunc(TEvBlobStorage::EvControllerShredRequest, EnqueueIncomingEvent);
+        cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
+        cFunc(TEvPrivate::EvCommitMetrics, CommitMetrics);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -468,9 +482,9 @@ void TBlobStorageController::PassAway() {
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeBlobStorageNodeWardenID(SelfId().NodeId()),
         SelfId(), nullptr, 0));
     if (ConsoleInteraction) {
-        ConsoleInteraction->OnPassAway();
+        ConsoleInteraction->Stop();
     }
-    return TActor::PassAway();
+    TActor::PassAway();
 }
 
 TBlobStorageController::TBlobStorageController(const TActorId &tablet, TTabletStorageInfo *info)
@@ -506,6 +520,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerScrubQuantumFinished:         return 2;
         case TEvBlobStorage::EvControllerScrubReportQuantumInProgress: return 2;
         case TEvBlobStorage::EvControllerUpdateNodeDrives:             return 2;
+        case TEvBlobStorage::EvControllerShredRequest:                 return 2;
 
         // hive-related commands
         case TEvBlobStorage::EvControllerSelectGroups:                 return 4;
@@ -580,6 +595,8 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetVDiskReadOnly:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kRestartPDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskReadOnly:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kStopPDisk:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

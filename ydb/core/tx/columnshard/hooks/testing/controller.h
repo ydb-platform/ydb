@@ -1,10 +1,13 @@
 #pragma once
 #include "ro_controller.h"
-#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/wrappers/unavailable_storage.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
@@ -25,13 +28,12 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideMaxReadStaleness);
     YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
     YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
-    
+    YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
+    YDB_FLAG_ACCESSOR(ExternalStorageUnavailable, false);
+
     YDB_ACCESSOR_DEF(std::optional<NKikimrProto::EReplyStatus>, OverrideBlobPutResultOnWriteValue);
 
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
-
-    YDB_ACCESSOR(std::optional<ui64>, OverrideReduceMemoryIntervalLimit, 1024);
-    YDB_ACCESSOR_DEF(std::optional<ui64>, OverrideRejectMemoryIntervalLimit);
 
     std::optional<ui32> ExpectedShardsCount;
 
@@ -45,6 +47,8 @@ private:
 
     TMutex ActiveTabletsMutex;
     std::set<ui64> ActiveTablets;
+
+    THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> ExternalLocks;
 
     class TBlobInfo {
     private:
@@ -134,8 +138,18 @@ private:
     void CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const;
 
     THashSet<TString> SharingIds;
+
+    std::optional<TString> RestartOnLocalDbTxCommitted;
 protected:
-    virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
+    virtual const NOlap::NSplitter::TSplitSettings& DoGetBlobSplitSettings(const NOlap::NSplitter::TSplitSettings& defaultValue) const override {
+        if (OverrideBlobSplitSettings) {
+            return *OverrideBlobSplitSettings;
+        } else {
+            return defaultValue;
+        }
+    }
+    virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(
+        const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
 
     virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const override {
         return OverrideLimitForPortionsMetadataAsk.value_or(defaultValue);
@@ -193,13 +207,7 @@ protected:
     virtual TDuration DoGetMaxReadStaleness(const TDuration def) const override {
         return OverrideMaxReadStaleness.value_or(def);
     }
-    virtual ui64 DoGetReduceMemoryIntervalLimit(const ui64 def) const override {
-        return OverrideReduceMemoryIntervalLimit.value_or(def);
-    }
-    virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 def) const override {
-        return OverrideRejectMemoryIntervalLimit.value_or(def);
-    }
-    virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 def) const override {
+    virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 /* def */) const override {
         return 0;
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
@@ -216,7 +224,25 @@ protected:
         SharingIds.emplace(sessionId);
     }
 
+    virtual THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> GetExternalDataLocks() const override {
+        TGuard<TMutex> g(Mutex);
+        return ExternalLocks;
+    }
+
+    virtual NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetStorageOperatorOverride(
+        const ::NKikimr::NColumnShard::NTiers::TExternalStorageId& /*storageId*/) const override {
+        if (ExternalStorageUnavailableFlag) {
+            return std::make_shared<NWrappers::NExternalStorage::TUnavailableExternalStorageOperator>(
+                "unavailable", "disabled by test controller");
+        }
+        return nullptr;
+    }
+
 public:
+    virtual bool CheckPortionsToMergeOnCompaction(const ui64 /*memoryAfterAdd*/, const ui32 currentSubsetsCount) override {
+        return currentSubsetsCount > 1;
+    }
+
     virtual NKikimrProto::EReplyStatus OverrideBlobPutResultOnWrite(const NKikimrProto::EReplyStatus originalStatus) const override {
         return OverrideBlobPutResultOnWriteValue.value_or(originalStatus);
     }
@@ -235,6 +261,11 @@ public:
     void DisableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);
         DisabledBackgrounds.emplace(id);
+    }
+
+    bool IsBackgroundEnable(const EBackground id) {
+        TGuard<TMutex> g(Mutex);
+        return !DisabledBackgrounds.contains(id);
     }
 
     void EnableBackground(const EBackground id) {
@@ -260,6 +291,16 @@ public:
         CompactionControl = value;
     }
 
+    void RegisterLock(const TString& name, const std::shared_ptr<NOlap::NDataLocks::ILock>& lock) {
+        TGuard<TMutex> g(Mutex);
+        AFL_VERIFY(ExternalLocks.emplace(name, lock).second)("name", name);
+    }
+
+    void UnregisterLock(const TString& name) {
+        TGuard<TMutex> g(Mutex);
+        AFL_VERIFY(ExternalLocks.erase(name))("name", name);
+    }
+
     bool HasPKSortingOnly() const;
 
     void OnSwitchToWork(const ui64 tabletId) override {
@@ -281,6 +322,13 @@ public:
         TGuard<TMutex> g(ActiveTabletsMutex);
         return ActiveTablets.contains(tabletId);
     }
+
+    void SetRestartOnLocalTxCommitted(std::optional<TString> txInfo) {
+        RestartOnLocalDbTxCommitted = std::move(txInfo);
+    }
+
+    virtual void OnAfterLocalTxCommitted(
+        const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override;
 };
 
 }

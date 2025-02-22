@@ -41,7 +41,6 @@ aggr_factory/avg
 aggr_factory/flatten
 action/eval_folder_via_file
 action/eval_regexp
-action/eval_table_with_view
 agg_apply/sum_decimal
 agg_phases/avg
 action/eval_for_over_subquery
@@ -568,7 +567,6 @@ join/inner_all_right
 join/inner_on_key_only
 optimizers/sort_constraint_in_left
 in/in_types_cast_all
-optimizers/yql-2582_limit_for_join_input_other
 join/left_trivial
 json/json_query/example
 join/left_cast_to_string
@@ -1629,7 +1627,6 @@ pg/select_win_expr_partition
 compute_range/yql-13489
 count/count_all_grouped
 order_by/order_by_expr_simple
-limit/dynamic_limit
 distinct/distinct_window
 pg-tpcds/q17
 pg-tpcds/q40
@@ -1833,14 +1830,12 @@ sampling/system_sampling
 schema/copy
 schema/copy
 schema/insert_sorted
-schema/limit_simple
 join/inner_with_select
 join/lookupjoin_inner
 join/lookupjoin_semi_1o2o
 join/mapjoin_left_null_column
 pg/select_subquery2_qstar
 pg/select_win_column_partition_by
-limit/limit
 join/flatten_columns1
 join/full_join
 join/inner_with_select
@@ -1943,7 +1938,6 @@ sampling/join_right_sample
 sampling/orderedjoin_left_sample
 schema/select_all
 window/generic/aggregations_before_current
-union_all/inner_union_all_with_limits
 join/lookupjoin_with_cache
 join/mapjoin_early_rewrite_sequence
 join/pushdown_filter_over_left
@@ -2338,7 +2332,6 @@ window/full/noncompact_with_tablerow
 sampling/bind_join_right
 sampling/subquery_default
 sampling/subquery_filter
-sampling/zero_percentage
 datetime/date_types
 window/full/session_aliases_compact
 blocks/minmax_tuple
@@ -2364,7 +2357,6 @@ select/if
 expr/as_dict_list_key
 action/eval_column
 pg/select_win_nth_value
-aggregate/group_by_gs_subselect_asterisk
 union_all/union_all_with_top_level_limits_ansi
 view/file_inner_udf
 weak_field/weak_field_join
@@ -2764,7 +2756,6 @@ udf/regexp_udf
 udf/udf_result_member
 pg/join_using_tables4
 pg/numbers_to_pg
-limit/limit
 pg/order_by_distinct_same_expr_agg
 limit/limit_over_sort_desc_in_subquery
 lineage/join_as_struct
@@ -2783,7 +2774,6 @@ pg/range_function_multi_record
 pg/record_from_table_row
 union_all/union_all_multiin
 order_by/ordered_fill
-order_by/warn_offset_wo_sort
 optimizers/multi_to_empty_constraint
 pg/select_agg_gs_cube
 union_all/union_all_null
@@ -2857,7 +2847,6 @@ pg-tpcds/q85
 pg-tpch/q18
 pg-tpch/q21
 pg_catalog/pg_stat_activity
-ypath/limit_with_key
 pg/simple_ops
 produce/process_multi_out_bad_count_fail
 produce/reduce_with_python_row
@@ -2866,7 +2855,6 @@ sampling/orderedjoin_right_sample
 schema/limit_directread
 schema/remap_desc
 schema/select_all_inferschema_op
-ypath/limit_with_range
 pg_catalog/pg_stat_database
 pg_catalog/pg_tables
 pg/sublink_columns_in_test_expr_columns_corr
@@ -2876,7 +2864,6 @@ produce/reduce_all_list
 produce/reduce_by_struct
 sampling/mapjoin_right_sample
 sampling/topsort
-schema/select_all_inferschema_limit
 select/digits
 pg/sublink_projection_expr_corr
 select/host_count

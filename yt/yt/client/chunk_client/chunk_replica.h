@@ -127,9 +127,9 @@ private:
     friend void ToProto(ui32* value, TChunkReplica replica);
     friend void FromProto(TChunkReplica* replica, ui32 value);
 
-    using TLoadContext = NPhoenix2::TLoadContext;
-    using TSaveContext = NPhoenix2::TSaveContext;
-    using TPersistenceContext = NPhoenix2::TPersistenceContext;
+    using TLoadContext = NPhoenix::TLoadContext;
+    using TSaveContext = NPhoenix::TSaveContext;
+    using TPersistenceContext = NPhoenix::TPersistenceContext;
 
     PHOENIX_DECLARE_TYPE(TChunkReplica, 0x004d1b8a);
 };

@@ -1,0 +1,25 @@
+{
+    "schema"=<"strict"=%true; "unique_keys"=%false>[
+        {"name"="key";"type"="string";"required"=%true;"sort_order"="ascending"};
+        {"name"="subkey";"type"="string";"required"=%true};
+        {"name"="value";"type"="string";"required"=%true};
+        {"name"="_yql_column_0";"type"="string";"required"=%true};
+    ];
+    "_yql_row_spec" = {
+        "SortMembers" = ["key"];
+        "SortDirections" = [0];
+        "UniqueKeys" = %false;
+        "Type" = ["StructType";[
+            ["key"; ["DataType";"String"]];
+            ["subkey"; ["DataType";"String"]];
+            ["value"; ["DataType";"String"]];
+        ]];
+        "TypePath" = ["StructType";[]];
+        "SortedByTypes" = [
+            ["DataType";"String"]
+        ];
+        "SortedBy" = [
+            "_yql_column_0"
+        ]
+    }
+}

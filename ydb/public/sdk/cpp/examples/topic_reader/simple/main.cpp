@@ -1,15 +1,12 @@
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 
-#include <util/stream/output.h>
-#include <util/system/env.h>
-
 struct TOptions {
-    TString Endpoint;
-    TString Database;
-    TString TopicPath;
-    TString ConsumerName;
+    std::string Endpoint;
+    std::string Database;
+    std::string TopicPath;
+    std::string ConsumerName;
     bool CommitAfterProcessing = false;
     bool DisableClusterDiscovery = false;
     bool UseSecureConnection = false;
@@ -19,7 +16,7 @@ struct TOptions {
         opts.AddHelpOption('h');
         opts.AddLongOption('e', "endpoint", "YDB endpoint").Required().RequiredArgument("HOST:PORT")
             .StoreResult(&Endpoint);
-        opts.AddLongOption('d', "database", "YDB database name").DefaultValue("/Root").RequiredArgument("PATH")
+        opts.AddLongOption('d', "database", "YDB database name").DefaultValue("/local").RequiredArgument("PATH")
             .StoreResult(&Database);
         opts.AddLongOption('t', "topic-path", "Topic path for reading").Required().RequiredArgument("PATH")
             .StoreResult(&TopicPath);
@@ -38,7 +35,7 @@ struct TOptions {
 std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
 
 void StopHandler(int) {
-    Cerr << "Stopping session" << Endl;
+    std::cerr << "Stopping session" << std::endl;
     if (ReadSession) {
         ReadSession->Close(TDuration::Seconds(3));
     } else {
@@ -57,8 +54,8 @@ int main(int argc, const char* argv[]) {
         .SetNetworkThreadsNum(2)
         .SetEndpoint(opts.Endpoint)
         .SetDatabase(opts.Database)
-        .SetAuthToken(GetEnv("YDB_TOKEN"))
-        .SetLog(CreateLogBackend("cerr"));
+        .SetAuthToken(std::getenv("YDB_TOKEN") ? std::getenv("YDB_TOKEN") : "")
+        .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
 
     if (opts.UseSecureConnection) {
         driverConfig.UseSecureConnection();
@@ -83,13 +80,13 @@ int main(int argc, const char* argv[]) {
     // settings.SetSimpleDataHandlers(
     settings.EventHandlers_.SimpleDataHandlers(
             [](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
-            Cerr << "Data event " << DebugString(event);
+            std::cerr << "Data event " << DebugString(event);
         }, opts.CommitAfterProcessing);
 
     ReadSession = topicClient.CreateReadSession(settings);
     // [END Create read session]
 
-    Cerr << "Session was created" << Endl;
+    std::cerr << "Session was created" << std::endl;
 
     // Wait SessionClosed event.
     ReadSession->GetEvent(/*block = */true);

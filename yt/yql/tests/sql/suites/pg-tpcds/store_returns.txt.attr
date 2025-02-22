@@ -1,0 +1,26 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["sr_returned_date_sk";["PgType";"int4";];];
+              ["sr_return_time_sk";["PgType";"int4";];];
+              ["sr_item_sk";["PgType";"int4";];];
+              ["sr_customer_sk";["PgType";"int4";];];
+              ["sr_cdemo_sk";["PgType";"int4";];];
+              ["sr_hdemo_sk";["PgType";"int4";];];
+              ["sr_addr_sk";["PgType";"int4";];];
+              ["sr_store_sk";["PgType";"int4";];];
+              ["sr_reason_sk";["PgType";"int4";];];
+              ["sr_ticket_number";["PgType";"int4";];];
+              ["sr_return_quantity";["PgType";"int4";];];
+              ["sr_return_amt";["PgType";"numeric";];];
+              ["sr_return_tax";["PgType";"numeric";];];
+              ["sr_return_amt_inc_tax";["PgType";"numeric";];];
+              ["sr_fee";["PgType";"numeric";];];
+              ["sr_return_ship_cost";["PgType";"numeric";];];
+              ["sr_refunded_cash";["PgType";"numeric";];];
+              ["sr_reversed_charge";["PgType";"numeric";];];
+              ["sr_store_credit";["PgType";"numeric";];];
+              ["sr_net_loss";["PgType";"numeric";];];
+        ];];
+    }
+}

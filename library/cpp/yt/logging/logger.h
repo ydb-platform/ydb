@@ -175,7 +175,7 @@ public:
     using TStructuredValidator = std::function<void(const NYson::TYsonString&)>;
     using TStructuredValidators = std::vector<TStructuredValidator>;
 
-    using TStructuredTag = std::pair<TString, NYson::TYsonString>;
+    using TStructuredTag = std::pair<std::string, NYson::TYsonString>;
     // TODO(max42): switch to TCompactVector after YT-15430.
     using TStructuredTags = std::vector<TStructuredTag>;
 
@@ -215,14 +215,16 @@ public:
 
     void Write(TLogEvent&& event) const;
 
-    void AddRawTag(const TString& tag);
+    void AddRawTag(const std::string& tag);
     template <class... TArgs>
     void AddTag(const char* format, TArgs&&... args);
 
     template <class TType>
     void AddStructuredTag(TStringBuf key, TType value);
 
-    TLogger WithRawTag(const TString& tag) const;
+    void AddStructuredValidator(TStructuredValidator validator);
+
+    TLogger WithRawTag(const std::string& tag) const;
     template <class... TArgs>
     TLogger WithTag(const char* format, TArgs&&... args) const;
 
@@ -235,21 +237,31 @@ public:
 
     TLogger WithEssential(bool essential = true) const;
 
-    const TString& GetTag() const;
+    const std::string& GetTag() const;
     const TStructuredTags& GetStructuredTags() const;
 
     const TStructuredValidators& GetStructuredValidators() const;
 
 protected:
+    // NB: Mind TSerializableLogger when changing the state.
     // These fields are set only during logger creation, so they are effectively const
     // and accessing them is thread-safe.
     ILogManager* LogManager_ = nullptr;
     const TLoggingCategory* Category_ = nullptr;
     bool Essential_ = false;
     ELogLevel MinLevel_ = NullLoggerMinLevel;
-    TString Tag_;
-    TStructuredTags StructuredTags_;
-    TStructuredValidators StructuredValidators_;
+
+    struct TCoWState final
+    {
+        std::string Tag;
+        TStructuredTags StructuredTags;
+        TStructuredValidators StructuredValidators;
+    };
+
+    TIntrusivePtr<const TCoWState> CoWState_;
+
+    TCoWState* GetMutableCoWState();
+    void ResetCoWState();
 
 private:
     //! This method checks level against category's min level.

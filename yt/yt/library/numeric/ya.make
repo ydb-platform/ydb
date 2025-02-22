@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/yt/small_containers
+    library/cpp/yt/compact_containers
     library/cpp/yt/string
     util
 )
@@ -19,7 +19,7 @@ CHECK_DEPENDENT_DIRS(
     library
     util
     library/cpp/yt/assert
-    library/cpp/yt/small_containers
+    library/cpp/yt/compact_containers
 )
 
 END()

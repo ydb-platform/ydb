@@ -7,6 +7,11 @@ Video recordings from conferences and webinars. The materials are divided by cat
 
 {% list tabs %}
 
+- 2025
+
+  {% include [FOSDEM](./_includes/conferences/2025/fosdem.md) %}
+
+
 - 2024
 
   {% include [IndiaFOSS](./_includes/conferences/2024/indiafoss.md) %}

@@ -242,7 +242,10 @@ protected:
     bool ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
     bool ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_classifier_action& alterAction);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
-    bool RoleParameters(const std::vector<TRule_create_user_option>& optionsList, TRoleParameters& result);
+    bool PasswordParameter(const TRule_password_option& passwordOption, TUserParameters& result);
+    bool HashParameter(const TRule_hash_option& hashOption, TUserParameters& result);
+    void LoginParameter(const TRule_login_option& loginOption, std::optional<bool>& canLogin);
+    bool UserParameters(const std::vector<TRule_user_option>& optionsList, TUserParameters& result, bool isCreateUser);
     bool PermissionNameClause(const TRule_permission_name_target& node, TVector<TDeferredAtom>& result, bool withGrantOption);
     bool PermissionNameClause(const TRule_permission_name& node, TDeferredAtom& result);
     bool PermissionNameClause(const TRule_permission_id& node, TDeferredAtom& result);
@@ -263,6 +266,7 @@ protected:
         TVector<TDeferredAtom>& addTables,
         TVector<TDeferredAtom>& removeTables,
         const TRule_alter_backup_collection_entries& entries);
+    bool ParseTransferLambda(TString& lambdaText, const TRule_lambda_or_parameter& lambdaOrParameter);
 
     bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);

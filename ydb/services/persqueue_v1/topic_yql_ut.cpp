@@ -1,5 +1,5 @@
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 
 namespace NKikimr::NPersQueueTests {
 

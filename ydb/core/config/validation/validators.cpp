@@ -1,7 +1,12 @@
 #include "validators.h"
 
+#include <ydb/core/config/protos/marker.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
+
+#include <library/cpp/protobuf/json/util.h>
+
+#include <util/string/builder.h>
 
 #include <map>
 #include <set>
@@ -161,9 +166,46 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
     return EValidationResult::Ok;
 }
 
+EValidationResult ValidateDatabaseConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
+    const auto* desc = config.GetDescriptor();
+    const auto* reflection = config.GetReflection();
+
+    for (int i = 0; i < desc->field_count(); i++) {
+        const auto* field = desc->field(i);
+
+        if (field->options().GetExtension(NKikimrConfig::NMarkers::AllowInDatabaseConfig)) {
+            continue;
+        }
+
+        if (!field->is_repeated()) {
+            if (!reflection->HasField(config, field)) {
+                continue;
+            }
+        } else {
+            if (!reflection->FieldSize(config, field)) {
+                continue;
+            }
+        }
+
+        auto fieldName = field->name();
+        NProtobufJson::ToSnakeCaseDense(&fieldName);
+        msg.push_back(TStringBuilder() << "'" << fieldName << "' "
+            << "is not allowed to be used in the database configuration");
+        return EValidationResult::Error;
+    }
+
+    return EValidationResult::Ok;
+}
+
 EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
     if (config.HasAuthConfig()) {
         NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateAuthConfig(config.GetAuthConfig(), msg);
+        if (result == NKikimr::NConfig::EValidationResult::Error) {
+            return EValidationResult::Error;
+        }
+    }
+    if (config.HasColumnShardConfig()) {
+        NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateColumnShardConfig(config.GetColumnShardConfig(), msg);
         if (result == NKikimr::NConfig::EValidationResult::Error) {
             return EValidationResult::Error;
         }

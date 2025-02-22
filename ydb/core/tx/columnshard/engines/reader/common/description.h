@@ -29,7 +29,6 @@ public:
 
     // List of columns
     std::vector<ui32> ColumnIds;
-    std::vector<TString> ColumnNames;
 
     const std::shared_ptr<IScanCursor>& GetScanCursor() const {
         AFL_VERIFY(ScanCursor);

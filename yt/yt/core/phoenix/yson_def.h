@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -15,12 +15,12 @@ namespace NYT::NPhoenix2 {
 #define PHOENIX_DEFINE_YSON_DUMPABLE_TYPE_MIXIN(type)
 
 //! Declares (and also inline-defines) YSON serialization mixin for a template type.
-//! No matching PHEONIX_DEFINE_YSON_* macro is needed.
+//! No matching PHOENIX_DEFINE_YSON_* macro is needed.
 #define PHOENIX_DECLARE_YSON_DUMPABLE_TEMPLATE_MIXIN(type)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 
 #define YSON_DEF_INL_H_
 #include "yson_def-inl.h"

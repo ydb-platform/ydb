@@ -232,6 +232,7 @@ public:
             hFunc(TEvents::TEvUnsubscribe, Handle);
 
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
 
             hFunc(TEvNodeWardenStorageConfig, Handle);
@@ -269,9 +270,12 @@ private:
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr ev);
+    void Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse::TPtr ev);
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev);
 
     void Handle(TEvents::TEvUnsubscribe::TPtr ev);
+
+    void ReplaceNameserverSetup(TIntrusivePtr<TTableNameserverSetup> newStaticConfig);
 
 private:
     TIntrusivePtr<TTableNameserverSetup> StaticConfig;

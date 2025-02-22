@@ -1,0 +1,1 @@
+Supported only for [row-oriented](../concepts/datamodel/table.md#row-oriented-tables) tables.

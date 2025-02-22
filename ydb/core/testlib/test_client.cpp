@@ -16,6 +16,7 @@
 #include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/cms/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
+#include <ydb/services/view/grpc_service.h>
 #include <ydb/services/ymq/grpc_service.h>
 #include <ydb/services/kesus/grpc_service.h>
 #include <ydb/core/grpc_services/grpc_mon.h>
@@ -55,6 +56,7 @@
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
 #include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/formats/clickhouse_block.h>
+#include <ydb/core/client/server/msgbus_server.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/ticket_parser_settings.h>
@@ -62,6 +64,7 @@
 #include <ydb/core/health_check/health_check.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metrics_actor.h>
 #include <ydb/core/kafka_proxy/kafka_listener.h>
+#include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -93,6 +96,7 @@
 #include <ydb/core/mind/tenant_slot_broker.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/mind/node_broker.h>
+#include <ydb/core/mon_alloc/monitor.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -106,6 +110,7 @@
 #include <ydb/core/kesus/tablet/tablet.h>
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
+#include <ydb/core/statistics/service/service.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
@@ -136,6 +141,266 @@
 #include <util/system/env.h>
 
 namespace NKikimr {
+
+class TTestMkqlInvoker {
+
+    THolder<NMsgBusProxy::TBusRequest> Request;
+    TVector<TString*> WriteResolvedKeysTo;
+    TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> Proposal;
+    TAutoPtr<NKikimrTxUserProxy::TEvProposeTransactionStatus> ProposalStatus;
+    TActorId Sender;
+    NActors::TTestActorRuntime* Runtime;
+
+    THashMap<TString, ui64> CompileResolveCookies;
+    TString TextProgramForCompilation;
+    bool CompilationRetried;
+
+    std::unique_ptr<NMsgBusProxy::TBusResponse> ReplyWithResult(NMsgBusProxy::EResponseStatus status, NKikimrTxUserProxy::TEvProposeTransactionStatus &result);
+
+    std::unique_ptr<NMsgBusProxy::TBusResponse> RetryResolve() {
+        if (CompilationRetried || !TextProgramForCompilation)
+            return nullptr;
+
+        auto *compEv = new TMiniKQLCompileServiceEvents::TEvCompile(TextProgramForCompilation);
+        compEv->ForceRefresh = false;
+        compEv->CompileResolveCookies = std::move(CompileResolveCookies);
+
+        Runtime->Send(new IEventHandle(
+            GetMiniKQLCompileServiceID(),
+            Sender,
+            compEv
+        ));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = Runtime->GrabEdgeEventRethrow<TMiniKQLCompileServiceEvents::TEvCompileStatus>(handle);
+        CompilationRetried = true;
+        return Handle(ev);
+    }
+
+    std::unique_ptr<NMsgBusProxy::TBusResponse> Handle(TMiniKQLCompileServiceEvents::TEvCompileStatus* ev) {
+        auto* mkqlTx = Proposal->Record.MutableTransaction()->MutableMiniKQLTransaction();
+
+        const auto& result = ev->Result;
+
+        const bool need2CompileProgram = (bool)TextProgramForCompilation;
+        const bool need2CompileParams = mkqlTx->HasParams() && mkqlTx->GetParams().HasText();
+        const TString& pgm = ev->Program;
+        Y_ABORT_UNLESS((need2CompileProgram && TextProgramForCompilation == pgm) // TODO: do not check texts, trust cookies
+            || (need2CompileParams && mkqlTx->GetParams().GetText() == pgm));
+
+        if (need2CompileProgram && TextProgramForCompilation == pgm) {
+            auto* compileResults = ProposalStatus->MutableMiniKQLCompileResults();
+            auto* pgm = mkqlTx->MutableProgram();
+            if (result.Errors.Empty()) {
+                pgm->ClearText();
+                pgm->SetBin(result.CompiledProgram);
+                compileResults->SetCompiledProgram(result.CompiledProgram);
+            } else {
+                NYql::IssuesToMessage(result.Errors, compileResults->MutableProgramCompileErrors());
+            }
+            CompileResolveCookies = std::move(ev->CompileResolveCookies);
+        }
+
+        if (need2CompileParams && mkqlTx->GetParams().GetText() == pgm) {
+            auto* compileResults = ProposalStatus->MutableMiniKQLCompileResults();
+            auto* params = mkqlTx->MutableParams();
+            if (result.Errors.Empty()) {
+                params->ClearText();
+                params->SetBin(result.CompiledProgram);
+                compileResults->SetCompiledParams(result.CompiledProgram);
+            } else {
+                NYql::IssuesToMessage(result.Errors, compileResults->MutableParamsCompileErrors());
+            }
+        }
+
+        return AllRequestsCompleted();
+    }
+
+public:
+
+    TTestMkqlInvoker(NActors::TTestActorRuntime* runtime, THolder<NMsgBusProxy::TBusRequest> request)
+        : Request(std::move(request))
+        , Runtime(runtime)
+        , CompilationRetried(false)
+    {
+        Sender = Runtime->AllocateEdgeActor();
+    }
+
+    std::unique_ptr<NMsgBusProxy::TBusResponse> AllRequestsCompleted() {
+        auto &transaction = Proposal->Record.GetTransaction();
+        if (transaction.HasMiniKQLTransaction())
+            return AllRequestsCompletedMKQL();
+        else
+            Y_ABORT("Unexpected transaction type");
+
+        Y_UNREACHABLE();
+    }
+
+    std::unique_ptr<NMsgBusProxy::TBusResponse> Handle(TEvTxUserProxy::TEvProposeTransactionStatus* msg) {
+        const TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
+        NKikimrTxUserProxy::TEvProposeTransactionStatus emptyProposeStatus;
+        switch (status) {
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyAccepted:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyResolved:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyPrepared:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorPlanned:
+        // transitional statuses
+            return nullptr;
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAlready:
+        // completion
+            return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_OK, msg->Record);
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout:
+            return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_INPROGRESS, msg->Record);
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyNotReady:
+            return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_NOTREADY, emptyProposeStatus);
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAborted:
+            return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_ABORTED, emptyProposeStatus);
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::EmptyAffectedSet:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResultUnavailable:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecCancelled:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest:
+            return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_ERROR, msg->Record);
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError: {
+            auto reply = RetryResolve();
+            if (!reply)
+                return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_ERROR, msg->Record);
+            return reply;
+        }
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable: {
+            auto reply = RetryResolve();
+            if (!reply) // TODO: retry if partitioning changed due to split/merge
+                return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_REJECTED, msg->Record);
+            return reply;
+        }
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown:
+            return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_TIMEOUT, msg->Record);
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorDeclined:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorAborted:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorOutdated:
+            return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_REJECTED, msg->Record);
+        default:
+            return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_INTERNALERROR, msg->Record);
+        }
+    }
+
+    std::unique_ptr<NMsgBusProxy::TBusResponse> AllRequestsCompletedMKQL() {
+        auto* mkqlTx = Proposal->Record.MutableTransaction()->MutableMiniKQLTransaction();
+        const bool need2CompileProgram = mkqlTx->HasProgram() && mkqlTx->GetProgram().HasText();
+        const bool need2CompileParams = mkqlTx->HasParams() && mkqlTx->GetParams().HasText();
+        const bool programCompiled = need2CompileProgram
+            ? (ProposalStatus->MutableMiniKQLCompileResults()->ProgramCompileErrorsSize() == 0)
+            : true;
+        const bool paramsCompiled = need2CompileParams
+            ? (ProposalStatus->MutableMiniKQLCompileResults()->ParamsCompileErrorsSize() == 0)
+            : true;
+
+        const bool allCompiledOk = programCompiled && paramsCompiled;
+        if (!allCompiledOk) {
+            return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_ERROR, *ProposalStatus.Get());
+        }
+
+        switch (mkqlTx->GetMode()) {
+            case NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE_AND_EXEC: {
+                TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> ev = new TEvTxUserProxy::TEvProposeTransaction();
+                ev->Record.CopyFrom(Proposal->Record);
+                Runtime->Send(new IEventHandle(
+                    MakeTxProxyID(), Sender, ev.Release()
+                ));
+
+                TAutoPtr<IEventHandle> handle;
+                auto ans = Runtime->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(handle);
+                return Handle(ans);
+            }
+            case NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE: {
+                return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_OK, *ProposalStatus.Get());
+            }
+            default:
+                Y_ABORT("Unknown mkqlTxMode.");
+        }
+    }
+
+
+    std::unique_ptr<NMsgBusProxy::TBusResponse> InvokeMkql() {
+        ProposalStatus.Reset(new NKikimrTxUserProxy::TEvProposeTransactionStatus());
+        Proposal.Reset(new TEvTxUserProxy::TEvProposeTransaction());
+        NKikimrTxUserProxy::TEvProposeTransaction &record = Proposal->Record;
+
+        // Transaction protobuf structure might be very heavy (if it has a batch of parameters)
+        // so we don't want to copy it, just move its contents
+        record.MutableTransaction()->Swap(Request->Record.MutableTransaction());
+
+        if (Request->Record.HasProxyFlags())
+            record.SetProxyFlags(Request->Record.GetProxyFlags());
+
+        if (Request->Record.HasExecTimeoutPeriod())
+            record.SetExecTimeoutPeriod(Request->Record.GetExecTimeoutPeriod());
+
+        record.SetStreamResponse(false);
+
+        auto* transaction = record.MutableTransaction();
+        if (transaction->HasMiniKQLTransaction()) {
+            auto& mkqlTx = *transaction->MutableMiniKQLTransaction();
+            if (!mkqlTx.GetFlatMKQL()) {
+                NKikimrTxUserProxy::TEvProposeTransactionStatus status;
+                return ReplyWithResult(NMsgBusProxy::EResponseStatus::MSTATUS_ERROR, status);
+            }
+
+            if (mkqlTx.HasProgram() && mkqlTx.GetProgram().HasText()) {
+                TextProgramForCompilation = mkqlTx.GetProgram().GetText();
+                const bool forceRefresh = (mkqlTx.GetMode() == NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE);
+                auto* compEv = new TMiniKQLCompileServiceEvents::TEvCompile(TextProgramForCompilation);
+                compEv->ForceRefresh = forceRefresh;
+
+                Runtime->Send(new IEventHandle(
+                    GetMiniKQLCompileServiceID(),
+                    Sender,
+                    compEv
+                ));
+
+                TAutoPtr<IEventHandle> handle;
+                auto ev = Runtime->GrabEdgeEventRethrow<TMiniKQLCompileServiceEvents::TEvCompileStatus>(handle);
+                return Handle(ev);
+            }
+
+            Y_ABORT_UNLESS(!mkqlTx.HasParams());
+            return AllRequestsCompleted();
+        }
+
+        Runtime->Send(new IEventHandle(
+            MakeTxProxyID(), Sender, Proposal.Release()
+        ));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = Runtime->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(handle);
+        return Handle(ev);
+    }
+};
+
+std::unique_ptr<NMsgBusProxy::TBusResponse> TTestMkqlInvoker::ReplyWithResult(NMsgBusProxy::EResponseStatus status,
+                                               NKikimrTxUserProxy::TEvProposeTransactionStatus &result)
+{
+    auto Response = std::make_unique<NMsgBusProxy::TBusResponse>();
+    Response.reset(ProposeTransactionStatusToResponse(status, result));
+
+    if (result.HasExecutionEngineEvaluatedResponse()) {
+        Response->Record.MutableExecutionEngineEvaluatedResponse()->Swap(result.MutableExecutionEngineEvaluatedResponse());
+    }
+    if (result.HasSerializedReadTableResponse()) {
+        Response->Record.SetSerializedReadTableResponse(result.GetSerializedReadTableResponse());
+    }
+    if (result.HasStatus()) {
+        Response->Record.SetProxyErrorCode(result.GetStatus());
+    }
+
+    return Response;
+}
+
 
 namespace Tests {
 
@@ -284,7 +549,15 @@ namespace Tests {
         if (!Settings->AppConfig->HasSharedCacheConfig()) {
             Settings->AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(32_MB);
         }
-        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, &Settings->AppConfig->GetSharedCacheConfig(), Settings->EnableForceFollowers);
+
+        SetupTabletServices(
+            *Runtime,
+            &app,
+            mockDisk,
+            Settings->CustomDiskParams,
+            &Settings->AppConfig->GetSharedCacheConfig(),
+            Settings->EnableForceFollowers,
+            Settings->ProxyDSMocks);
 
         // WARNING: must be careful about modifying app data after actor system starts
 
@@ -316,9 +589,9 @@ namespace Tests {
         }
 
         auto actorSystemConfig = Settings->AppConfig->GetActorSystemConfig();
-        const bool useAutoConfig = actorSystemConfig.HasUseAutoConfig() && actorSystemConfig.GetUseAutoConfig();
+        const bool useAutoConfig = actorSystemConfig.GetUseAutoConfig();
         if (useAutoConfig) {
-            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig);
+            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, false);
         }
 
         TCpuManagerConfig cpuManager;
@@ -442,7 +715,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxies, true, 1));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbTabletService(system, counters, grpcRequestProxies, true, 1));
-        if (Settings->EnableYq) {
+        if (Settings->EnableYq || Settings->EnableYqGrpc) {
             GRpcServer->AddService(new NGRpcService::TGRpcFederatedQueryService(system, counters, grpcRequestProxies[0]));
             GRpcServer->AddService(new NGRpcService::TGRpcFqPrivateTaskService(system, counters, grpcRequestProxies[0]));
         }
@@ -456,6 +729,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcYdbLogStoreService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcReplicationService(system, counters, grpcRequestProxies[0], true));
+        GRpcServer->AddService(new NGRpcService::TGRpcViewService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->Start();
     }
 
@@ -613,6 +887,7 @@ namespace Tests {
 
         NKikimrBlobStorage::TDefineBox boxConfig;
         boxConfig.SetBoxId(Settings->BOX_ID);
+        boxConfig.SetItemConfigGeneration(Settings->StorageGeneration);
 
         ui32 nodeId = Runtime->GetNodeId(0);
         Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
@@ -620,11 +895,13 @@ namespace Tests {
 
         NKikimrBlobStorage::TDefineHostConfig hostConfig;
         hostConfig.SetHostConfigId(nodeId);
+        hostConfig.SetItemConfigGeneration(Settings->StorageGeneration);
         TString path;
         if (Settings->UseSectorMap) {
             path ="SectorMap:test-client[:2000]";
         } else {
-            path = TStringBuilder() << Runtime->GetTempDir() << "pdisk_1.dat";
+            TString diskPath = Settings->CustomDiskParams.DiskPath;
+            path = TStringBuilder() << (diskPath ? diskPath : Runtime->GetTempDir()) << "pdisk_1.dat";
         }
         hostConfig.AddDrive()->SetPath(path);
         if (Settings->Verbose) {
@@ -640,7 +917,9 @@ namespace Tests {
 
         for (const auto& [poolKind, storagePool] : Settings->StoragePoolTypes) {
             if (storagePool.GetNumGroups() > 0) {
-                bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
+                auto* command = bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool();
+                command->CopyFrom(storagePool);
+                command->SetItemConfigGeneration(Settings->StorageGeneration);
             }
         }
 
@@ -972,6 +1251,8 @@ namespace Tests {
                     queryServiceConfig.GetGeneric(),
                     queryServiceConfig.GetYt(),
                     Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
+                    queryServiceConfig.GetSolomon(),
+                    Settings->SolomonGateway ? Settings->SolomonGateway : NYql::CreateSolomonGateway(queryServiceConfig.GetSolomon()),
                     Settings->ComputationFactory
                 );
             }
@@ -1075,6 +1356,34 @@ namespace Tests {
         }
 
         {
+            if (Settings->NeedStatsCollectors) {
+                TString filePathPrefix;
+                if (Settings->AppConfig->HasMonitoringConfig()) {
+                    filePathPrefix = Settings->AppConfig->GetMonitoringConfig().GetMemAllocDumpPathPrefix();
+                }
+
+                const TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider(MakeIntrusive<NMemory::TProcessMemoryInfoProvider>());
+
+                IActor* monitorActor = CreateMemProfMonitor(TDuration::Seconds(1), processMemoryInfoProvider,
+                    Runtime->GetAppData(nodeIdx).Counters, filePathPrefix);
+                const TActorId monitorActorId = Runtime->Register(monitorActor, nodeIdx, Runtime->GetAppData(nodeIdx).BatchPoolId);
+                Runtime->RegisterService(MakeMemProfMonitorID(Runtime->GetNodeId(nodeIdx)), monitorActorId, nodeIdx);
+
+                IActor* controllerActor = NMemory::CreateMemoryController(TDuration::Seconds(1), processMemoryInfoProvider,
+                    Settings->AppConfig->GetMemoryControllerConfig(), NKikimrConfigHelpers::CreateMemoryControllerResourceBrokerConfig(*Settings->AppConfig),
+                    Runtime->GetAppData(nodeIdx).Counters);
+                const TActorId controllerActorId = Runtime->Register(controllerActor, nodeIdx, Runtime->GetAppData(nodeIdx).BatchPoolId);
+                Runtime->RegisterService(NMemory::MakeMemoryControllerId(0), controllerActorId, nodeIdx);
+            }
+        }
+
+        {
+            auto statActor = NStat::CreateStatService();
+            const TActorId statActorId = Runtime->Register(statActor.Release(), nodeIdx, Runtime->GetAppData(nodeIdx).UserPoolId);
+            Runtime->RegisterService(NStat::MakeStatServiceID(Runtime->GetNodeId(nodeIdx)), statActorId, nodeIdx);
+        }
+
+        {
             IActor* kesusService = NKesus::CreateKesusProxyService();
             TActorId kesusServiceId = Runtime->Register(kesusService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKesus::MakeKesusProxyServiceId(), kesusServiceId, nodeIdx);
@@ -1091,21 +1400,45 @@ namespace Tests {
             TActorId actorId = Runtime->Register(actor, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId);
             Runtime->RegisterService(MakePollerActorId(), actorId, nodeIdx);
         }
-
         if (Settings->AppConfig->GetKafkaProxyConfig().GetEnableKafkaProxy()) {
+
+            IActor* discoveryCache = CreateDiscoveryCache(NGRpcService::KafkaEndpointId);
+            TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx, userPoolId);
+	    Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
+
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();
+            bool ssl = false;
             if (Settings->AppConfig->GetKafkaProxyConfig().HasSslCertificate()) {
+                ssl = true;
                 settings.SslCertificatePem = Settings->AppConfig->GetKafkaProxyConfig().GetSslCertificate();
             }
 
-            IActor* actor = NKafka::CreateKafkaListener(MakePollerActorId(), settings, Settings->AppConfig->GetKafkaProxyConfig());
+            IActor* actor = NKafka::CreateKafkaListener(MakePollerActorId(), settings, Settings->AppConfig->GetKafkaProxyConfig(),
+                                                        discoveryCacheId);
             TActorId actorId = Runtime->Register(actor, nodeIdx, userPoolId);
             Runtime->RegisterService(TActorId{}, actorId, nodeIdx);
 
             IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{Runtime->GetAppData().Counters->GetSubgroup("counters", "kafka_proxy")});
             TActorId metricsActorId = Runtime->Register(metricsActor, nodeIdx, userPoolId);
             Runtime->RegisterService(NKafka::MakeKafkaMetricsServiceID(), metricsActorId, nodeIdx);
+
+            {
+                auto& appData = Runtime->GetAppData(0);
+
+                TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
+                desc->Address = Settings->AppConfig->GetGRpcConfig().GetHost();
+                desc->Port = settings.Port;
+                desc->Ssl = ssl;
+                desc->EndpointId = NGRpcService::KafkaEndpointId;
+
+                TVector<TString> rootDomains;
+                if (const auto& domain = appData.DomainsInfo->Domain) {
+                    rootDomains.emplace_back("/" + domain->Name);
+                }
+                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
+                Runtime->GetActorSystem(0)->Register(NGRpcService::CreateGrpcEndpointPublishActor(desc.Get()), TMailboxType::ReadAsFilled, appData.UserPoolId);
+            }
         }
 
         if (Settings->EnableYq) {
@@ -1522,6 +1855,8 @@ namespace Tests {
     NBus::EMessageStatus TClient::SendAndWaitCompletion(TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request,
                                                         TAutoPtr<NBus::TBusMessage>& reply,
                                                         TDuration timeout) {
+        PrepareRequest(request);
+
         NBus::EMessageStatus status = SendWhenReady(request, reply, timeout.MilliSeconds());
 
         if (status != NBus::MESSAGE_OK) {
@@ -1535,7 +1870,7 @@ namespace Tests {
         const NKikimrClient::TResponse* response = &flatResponse->Record;
 
         if (response->HasErrorReason()) {
-            Cerr << "reason: " << response->GetErrorReason() << Endl;
+            Cerr << "Error " << response->GetStatus() << ": " << response->GetErrorReason() << Endl;
         }
 
         if (response->GetStatus() != NMsgBusProxy::MSTATUS_INPROGRESS) {
@@ -1560,6 +1895,10 @@ namespace Tests {
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
+    void TClient::TestMkDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
+        auto status = MkDir(parent, name, applyIf);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+    }
 
     NMsgBusProxy::EResponseStatus TClient::RmDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
         NMsgBusProxy::TBusSchemeOperation* request(new NMsgBusProxy::TBusSchemeOperation());
@@ -1574,6 +1913,10 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+    void TClient::TestRmDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
+        auto status = RmDir(parent, name, applyIf);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateSubdomain(const TString &parent, const TString &description) {
@@ -1716,27 +2059,38 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TCreateUserOption& options, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
         op->SetWorkingDir(parent);
 
         auto* createUser = op->MutableAlterLogin()->MutableCreateUser();
-        createUser->SetUser(user);
-        createUser->SetPassword(password);
-
+        createUser->SetUser(options.User);
+        createUser->SetPassword(options.Password);
+        createUser->SetCanLogin(options.CanLogin);
         request->Record.SetSecurityToken(userToken);
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), NMsgBusProxy::EResponseStatus::MSTATUS_OK, response.GetErrorReason());
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
+    void TClient::TestCreateUser(const TString& parent, const TCreateUserOption& options, const TString& userToken) {
+        auto status = CreateUser(parent, options, userToken);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+    }
 
-    NMsgBusProxy::EResponseStatus TClient::ModifyUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+        return CreateUser(parent, {.User = user, .Password = password}, userToken);
+    }
+    void TClient::TestCreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+        auto status = CreateUser(parent, user, password, userToken);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::ModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
@@ -1745,14 +2099,66 @@ namespace Tests {
         request->Record.SetSecurityToken(userToken);
 
         auto* modifyUser = op->MutableAlterLogin()->MutableModifyUser();
-        modifyUser->SetUser(user);
-        modifyUser->SetPassword(password);
+        modifyUser->SetUser(options.User);
+
+        if (options.Password.has_value()) {
+            modifyUser->SetPassword(options.Password.value());
+        }
+
+        if (options.CanLogin.has_value()) {
+            modifyUser->SetCanLogin(options.CanLogin.value());
+        }
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+    void TClient::TestModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken) {
+        auto status = ModifyUser(parent, options, userToken);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::CreateGroup(const TString& parent, const TString& group) {
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+        op->SetWorkingDir(parent);
+
+        auto* createUser = op->MutableAlterLogin()->MutableCreateGroup();
+        createUser->SetGroup(group);
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+    void TClient::TestCreateGroup(const TString& parent, const TString& group) {
+        auto status = CreateGroup(parent, group);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::AddGroupMembership(const TString& parent, const TString& group, const TString& member) {
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+        op->SetWorkingDir(parent);
+
+        auto* createUser = op->MutableAlterLogin()->MutableAddGroupMembership();
+        createUser->SetGroup(group);
+        createUser->SetMember(member);
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+    void TClient::TestAddGroupMembership(const TString& parent, const TString& group, const TString& member) {
+        auto status = AddGroupMembership(parent, group, member);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
     NKikimrScheme::TEvLoginResult TClient::Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
@@ -1929,6 +2335,20 @@ namespace Tests {
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
         op->SetWorkingDir(parent);
         op->MutableCreateColumnTable()->CopyFrom(table);
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.release(), reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse& response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::CreateTopic(const TString& parent,
+                                                        const NKikimrSchemeOp::TPersQueueGroupDescription& topic) {
+        auto request = std::make_unique<NMsgBusProxy::TBusSchemeOperation>();
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
+        op->SetWorkingDir(parent);
+        op->MutableCreatePersQueueGroup()->CopyFrom(topic);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
@@ -2150,7 +2570,7 @@ namespace Tests {
         Y_ABORT_UNLESS(ev);
     }
 
-    void TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner) {
+    NMsgBusProxy::EResponseStatus TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
@@ -2160,9 +2580,15 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+    void TClient::TestModifyOwner(const TString& parent, const TString& name, const TString& owner) {
+        auto status = ModifyOwner(parent, name, owner);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    void TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl) {
+    NMsgBusProxy::EResponseStatus TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
@@ -2172,16 +2598,30 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+    void TClient::TestModifyACL(const TString& parent, const TString& name, const TString& acl) {
+        auto status = ModifyACL(parent, name, acl);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    void TClient::Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights) {
+    NMsgBusProxy::EResponseStatus TClient::Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights) {
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, rights, subject);
-        ModifyACL(parent, name, acl.SerializeAsString());
+        return ModifyACL(parent, name, acl.SerializeAsString());
+    }
+    void TClient::TestGrant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights) {
+        auto status = Grant(parent, name, subject, rights);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    void TClient::GrantConnect(const TString& subject) {
-        Grant("/", DomainName, subject, NACLib::EAccessRights::ConnectDatabase);
+    NMsgBusProxy::EResponseStatus TClient::GrantConnect(const TString& subject) {
+        return Grant("/", DomainName, subject, NACLib::EAccessRights::ConnectDatabase);
+    }
+    void TClient::TestGrantConnect(const TString& subject) {
+        auto status = GrantConnect(subject);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
@@ -2221,6 +2661,24 @@ namespace Tests {
         return res;
     }
 
+    NKikimrScheme::TEvDescribeSchemeResult TClient::Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId) {
+        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
+        request->Record.SetPath(path);
+        const ui64 schemeRoot = GetPatchedSchemeRoot(tabletId, Domain, SupportsRedirect);
+        TActorId sender = runtime->AllocateEdgeActor(0);
+        ForwardToTablet(*runtime, schemeRoot, sender, request.Release(), 0);
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+        auto& record = handle->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
+
+        if (auto schemeShardId = record.GetPathDescription().GetDomainDescription().GetProcessingParams().GetSchemeShard(); schemeShardId && schemeShardId != tabletId) {
+            return Describe(runtime, path, schemeShardId);
+        } else {
+            return record;
+        }
+    }
+
     TString TClient::CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups) {
         Y_ABORT_UNLESS(StoragePoolTypes.contains(poolKind));
         const TString poolName = Sprintf("name_%s_kind_%s", partOfName.c_str(), poolKind.c_str());
@@ -2235,6 +2693,9 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> request(new NMsgBusProxy::TBusBlobStorageConfigRequest());
         request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
         request->Record.SetDomain(Domain);
+        if (SecurityToken) {
+            request->Record.SetSecurityToken(SecurityToken);
+        }
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
@@ -2323,9 +2784,9 @@ namespace Tests {
         return true;
     }
 
-    ui32 TClient::FlatQueryRaw(const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt) {
+    ui32 TClient::FlatQueryRaw(TTestActorRuntime* runtime, const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt) {
         while (retryCnt--) {
-            TAutoPtr<NMsgBusProxy::TBusRequest> request = new NMsgBusProxy::TBusRequest();
+            THolder<NMsgBusProxy::TBusRequest> request = MakeHolder<NMsgBusProxy::TBusRequest>();
             {
                 auto* mkqlTx = request->Record.MutableTransaction()->MutableMiniKQLTransaction();
                 if (opts.IsQueryCompiled)
@@ -2341,17 +2802,16 @@ namespace Tests {
             }
 
             TAutoPtr<NBus::TBusMessage> reply;
-            NBus::EMessageStatus msgStatus = SyncCall(request, reply);
-            UNIT_ASSERT_EQUAL(msgStatus, NBus::MESSAGE_OK);
+            std::unique_ptr<NMsgBusProxy::TBusResponse> result = TTestMkqlInvoker(runtime, std::move(request)).InvokeMkql();
 
-            NMsgBusProxy::TBusResponse * ret = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get());
+            NMsgBusProxy::TBusResponse * ret = result.get();
             ui32 responseStatus = ret->Record.GetStatus();
             if (responseStatus == NMsgBusProxy::MSTATUS_NOTREADY ||
                 responseStatus == NMsgBusProxy::MSTATUS_TIMEOUT ||
                 responseStatus == NMsgBusProxy::MSTATUS_INPROGRESS)
                 continue;
 
-            response.Swap(&static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record);
+            response.Swap(&result.get()->Record);
             break;
         }
 
@@ -2359,7 +2819,7 @@ namespace Tests {
         return response.GetStatus();
     }
 
-    bool TClient::FlatQuery(const TString &query, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult &result, const NKikimrClient::TResponse& expectedResponse) {
+    bool TClient::FlatQuery(TTestActorRuntime* runtime, const TString &query, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult &result, const NKikimrClient::TResponse& expectedResponse) {
         NKikimrClient::TResponse response;
         if (expectedResponse.HasStatus() && expectedResponse.GetStatus() == NMsgBusProxy::MSTATUS_OK) {
             // Client is expecting OK, retry REJECTED replies during restarts and splits
@@ -2368,13 +2828,13 @@ namespace Tests {
                     response.Clear();
                     Cerr << "Retrying rejected query..." << Endl;
                 }
-                FlatQueryRaw(query, opts, response);
+                FlatQueryRaw(runtime, query, opts, response);
                 if (response.GetStatus() != NMsgBusProxy::MSTATUS_REJECTED) {
                     break;
                 }
             }
         } else {
-            FlatQueryRaw(query, opts, response);
+            FlatQueryRaw(runtime, query, opts, response);
         }
 
         if (!response.GetDataShardErrors().empty()) {
@@ -2436,22 +2896,15 @@ namespace Tests {
         return response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete);
     }
 
-    bool TClient::FlatQuery(const TString &query, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult &result, ui32 expectedStatus) {
+    bool TClient::FlatQuery(TTestActorRuntime* runtime, const TString &query, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult &result, ui32 expectedStatus) {
         NKikimrClient::TResponse expectedResponse;
         expectedResponse.SetStatus(expectedStatus);
-        return FlatQuery(query, opts, result, expectedResponse);
+        return FlatQuery(runtime, query, opts, result, expectedResponse);
     }
 
-    bool TClient::FlatQueryParams(const TString& mkql, const TString& params, bool queryCompiled, NKikimrMiniKQL::TResult &result) {
+    bool TClient::FlatQuery(TTestActorRuntime* runtime, const TString& mkql, NKikimrMiniKQL::TResult& result) {
         TFlatQueryOptions opts;
-        opts.Params = params;
-        opts.IsQueryCompiled = queryCompiled;
-        return FlatQuery(mkql, opts, result);
-    }
-
-    bool TClient::FlatQuery(const TString& mkql, NKikimrMiniKQL::TResult& result) {
-        TFlatQueryOptions opts;
-        return FlatQuery(mkql, opts, result);
+        return FlatQuery(runtime, mkql, opts, result);
     }
 
     TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query) {
@@ -2794,7 +3247,7 @@ namespace Tests {
         return Server->DynamicNodes();
     }
 
-    void TTenants::CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes, TDuration timeout) {
+    void TTenants::CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes, TDuration timeout, bool acceptAlreadyExist) {
         const TString path = request.path();
         const bool serverless = request.has_serverless_resources();
 
@@ -2804,7 +3257,7 @@ namespace Tests {
             std::move(request), "", "", runtime.GetActorSystem(0), true
         ).ExtractValueSync();
 
-        if (result.operation().status() != Ydb::StatusIds::SUCCESS) {
+        if (result.operation().status() != Ydb::StatusIds::SUCCESS && (!acceptAlreadyExist || result.operation().status() != Ydb::StatusIds::ALREADY_EXISTS)) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(result.operation().issues(), issues);
             ythrow yexception() << "Failed to create tenant " << path << ", " << result.operation().status() << ", reason:\n" << issues.ToString();

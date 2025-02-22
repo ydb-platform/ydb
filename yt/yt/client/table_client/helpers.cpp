@@ -354,7 +354,7 @@ TVersionedOwningRow YsonToVersionedRow(
     const std::vector<TTimestamp>& deleteTimestamps,
     const std::vector<TTimestamp>& extraWriteTimestamps)
 {
-    // NB: this implementation is extra slow, it is intended only for using in tests.
+    // NB: This implementation is extra slow, it is intended only for using in tests.
     auto rowBuffer = New<TRowBuffer>();
     auto row = YsonToVersionedRow(rowBuffer, keyYson, valueYson, deleteTimestamps, extraWriteTimestamps);
     return TVersionedOwningRow(row);

@@ -1,0 +1,60 @@
+{
+    "_yql_row_spec" = {
+        "StrictSchema" = %true;
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "BannerID";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ]
+                ];
+                [
+                    "BaseNo";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Uint16"
+                        ]
+                    ]
+                ];
+                [
+                    "PhraseID";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Uint64"
+                        ]
+                    ]
+                ];
+                [
+                    "ResultCost";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ]
+                ];
+                [
+                    "ResultFlatCost";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    };
+}

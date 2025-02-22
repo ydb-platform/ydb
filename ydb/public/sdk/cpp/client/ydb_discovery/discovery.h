@@ -12,7 +12,7 @@ namespace Discovery {
 } // namespace Discovery
 } // namespace Ydb
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NDiscovery {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -20,7 +20,7 @@ namespace NDiscovery {
 class TListEndpointsSettings : public TSimpleRequestSettings<TListEndpointsSettings> {};
 
 struct TWhoAmISettings : public TSimpleRequestSettings<TWhoAmISettings> {
-    FLUENT_SETTING_DEFAULT(bool, WithGroups, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, WithGroups, false);
 };
 
 struct TNodeLocation {
@@ -40,14 +40,14 @@ struct TNodeLocation {
 };
 
 struct TNodeRegistrationSettings : public TSimpleRequestSettings<TNodeRegistrationSettings> {
-    FLUENT_SETTING(TString, Host);
-    FLUENT_SETTING(ui32, Port);
-    FLUENT_SETTING(TString, ResolveHost);
-    FLUENT_SETTING(TString, Address);
-    FLUENT_SETTING(TNodeLocation, Location);
-    FLUENT_SETTING(TString, DomainPath);
-    FLUENT_SETTING_DEFAULT(bool, FixedNodeId, false);
-    FLUENT_SETTING(TString, Path);
+    FLUENT_SETTING_DEPRECATED(TString, Host);
+    FLUENT_SETTING_DEPRECATED(ui32, Port);
+    FLUENT_SETTING_DEPRECATED(TString, ResolveHost);
+    FLUENT_SETTING_DEPRECATED(TString, Address);
+    FLUENT_SETTING_DEPRECATED(TNodeLocation, Location);
+    FLUENT_SETTING_DEPRECATED(TString, DomainPath);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, FixedNodeId, false);
+    FLUENT_SETTING_DEPRECATED(TString, Path);
 };
 
 struct TEndpointInfo {

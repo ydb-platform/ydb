@@ -6,7 +6,7 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20240722.0)
+VERSION(20250127.0)
 
 PEERDIR(
     library/cpp/sanitizer/include
@@ -32,6 +32,7 @@ SRCS(
     internal/sysinfo.cc
     internal/thread_identity.cc
     internal/throw_delegate.cc
+    internal/tracing.cc
     internal/unscaledcycleclock.cc
     log_severity.cc
 )

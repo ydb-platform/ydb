@@ -671,8 +671,10 @@ namespace NActors {
                 }
                 Total = UtilizedPart + WaitingCpuPart + IdlePart;
                 if (Total) {
-                    Utilized = (Utilized + WaitingCpuPart) / Total;
+                    Utilized = (UtilizedPart + WaitingCpuPart) / Total;
                     Starving = WaitingCpuPart / Total;
+                } else {
+                    Utilized = Starving = 0;
                 }
                 if (newState) {
                     State = *newState;
@@ -701,15 +703,7 @@ namespace NActors {
         {
         }
 
-        void Bootstrap() {
-            auto sender = SelfId();
-            const auto eventFabric = [&sender](const TActorId& recp) -> IEventHandle* {
-                auto ev = new TEvSessionBufferSizeRequest();
-                return new IEventHandle(recp, sender, ev, IEventHandle::FlagTrackDelivery);
-            };
-            RepliesNumber = TlsActivationContext->ExecutorThread.ActorSystem->BroadcastToProxies(eventFabric);
-            Become(&TInterconnectSessionKiller::StateFunc);
-        }
+        void Bootstrap();
 
         STRICT_STFUNC(StateFunc,
             hFunc(TEvSessionBufferSizeResponse, ProcessResponse)

@@ -19,7 +19,7 @@ PEERDIR(
 
     ydb/library/yql/dq/actors
     ydb/public/api/protos
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id
 
     ydb/library/actors/core
 )

@@ -73,8 +73,31 @@ struct TFakeDatabaseResolver: public IDatabaseAsyncResolver {
     }
 };
 
+
+class TListSplitsIteratorMock: public NConnector::IListSplitsStreamIterator {
+public:
+    TListSplitsIteratorMock() {}
+
+    NConnector::TAsyncResult<NConnector::NApi::TListSplitsResponse> ReadNext() override {
+        NConnector::TResult<NConnector::NApi::TListSplitsResponse> result;
+
+        if (!Responded_) {
+            result.Status = NYdbGrpc::TGrpcStatus(); // OK
+            result.Response = NConnector::NApi::TListSplitsResponse(); 
+            result.Response->add_splits();
+            Responded_ = true;  
+        } else {
+            result.Status = NYdbGrpc::TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
+        }
+
+        return NThreading::MakeFuture<NConnector::TResult<NConnector::NApi::TListSplitsResponse>>(std::move(result));
+    }
+private:
+    bool Responded_ = false;
+};
+
 struct TFakeGenericClient: public NConnector::IClient {
-    NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request) {
+    NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request, TDuration) override {
         UNIT_ASSERT_VALUES_EQUAL(request.table(), "test_table");
         NConnector::TResult<NConnector::NApi::TDescribeTableResponse> result;
         auto& resp = result.Response.emplace();
@@ -123,16 +146,18 @@ struct TFakeGenericClient: public NConnector::IClient {
         return NThreading::MakeFuture<NConnector::TDescribeTableAsyncResult::value_type>(std::move(result));
     }
 
-    NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request) {
+    NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request, TDuration) override {
         Y_UNUSED(request);
-        try {
-            throw std::runtime_error("ListSplits unimplemented");
-        } catch (...) {
-            return NThreading::MakeErrorFuture<NConnector::TListSplitsStreamIteratorAsyncResult::value_type>(std::current_exception());
-        }
+
+        NConnector::TIteratorResult<NConnector::IListSplitsStreamIterator> iteratorResult{
+            NYdbGrpc::TGrpcStatus(),
+            std::make_shared<TListSplitsIteratorMock>(),
+        };
+
+        return NThreading::MakeFuture<NConnector::TIteratorResult<NConnector::IListSplitsStreamIterator>>(std::move(iteratorResult));
     }
 
-    NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request) {
+    NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request, TDuration) override {
         Y_UNUSED(request);
         try {
             throw std::runtime_error("ReadSplits unimplemented");
@@ -144,7 +169,7 @@ struct TFakeGenericClient: public NConnector::IClient {
 
 class TBuildDqSourceSettingsTransformer: public TOptimizeTransformerBase {
 public:
-    explicit TBuildDqSourceSettingsTransformer(TTypeAnnotationContext* types, Generic::TSource* dqSourceSettings, bool* dqSourceSettingsWereBuilt)
+    explicit TBuildDqSourceSettingsTransformer(TTypeAnnotationContext* types, NGeneric::TSource* dqSourceSettings, bool* dqSourceSettingsWereBuilt)
         : TOptimizeTransformerBase(types, NLog::EComponent::ProviderGeneric, {})
         , DqSourceSettings_(dqSourceSettings)
         , DqSourceSettingsWereBuilt_(dqSourceSettingsWereBuilt)
@@ -182,13 +207,13 @@ public:
         TString sourceType;
         dqIntegration->FillSourceSettings(*dqSourceNode, settings, sourceType, 1, ctx);
         UNIT_ASSERT_STRINGS_EQUAL(sourceType, "PostgreSqlGeneric");
-        UNIT_ASSERT(settings.Is<Generic::TSource>());
+        UNIT_ASSERT(settings.Is<NGeneric::TSource>());
         settings.UnpackTo(DqSourceSettings_);
         *DqSourceSettingsWereBuilt_ = true;
     }
 
 private:
-    Generic::TSource* DqSourceSettings_;
+    NGeneric::TSource* DqSourceSettings_;
     bool* DqSourceSettingsWereBuilt_;
 };
 
@@ -207,7 +232,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
 
     TAutoPtr<IGraphTransformer> Transformer;
     TAutoPtr<IGraphTransformer> BuildDqSourceSettingsTransformer;
-    Generic::TSource DqSourceSettings;
+    NGeneric::TSource DqSourceSettings;
     bool DqSourceSettingsWereBuilt = false;
 
     TExprNode::TPtr InitialExprRoot;

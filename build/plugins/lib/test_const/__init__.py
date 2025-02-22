@@ -369,16 +369,20 @@ class TestSize(Enum):
 
 
 class ModuleLang(Enum):
-    ABSENT = "absent"
-    NUMEROUS = "numerous"
-    UNKNOWN = "unknown"
     CPP = "cpp"
     DOCS = "docs"
     GO = "go"
     JAVA = "java"
     KOTLIN = "kotlin"
+    LANG_AGNOSTIC = "agnostic"  # This module (or node) is not language specific
     PY = "py"
     TS = "ts"
+    UNKNOWN = "unknown"
+
+
+class AggregateLang(Enum):
+    ABSENT = "absent"
+    NUMEROUS = "numerous"
 
 
 class NodeType(Enum):
@@ -461,6 +465,8 @@ AUTOINCLUDE_PATHS = (
     'build/conf/autoincludes.json',
     'build/internal/conf/autoincludes.json',
 )
+
+CUSTOM_CLANG_FORMAT_YT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut')
 
 
 class Status(object):

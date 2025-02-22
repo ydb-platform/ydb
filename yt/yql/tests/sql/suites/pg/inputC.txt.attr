@@ -1,0 +1,5 @@
+{
+    "_yql_row_spec"={
+       "Type"=["StructType";[["id";["PgType";"text";];];["CodeGen_FullTime";["PgType";"text";];];];];
+    }
+}

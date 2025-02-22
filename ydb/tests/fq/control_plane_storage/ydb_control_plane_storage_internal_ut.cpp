@@ -1524,7 +1524,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), true);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
                 UNIT_ASSERT_LE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL more than current time");
                 if (parser.TryNextRow()) {
                     UNIT_ASSERT("Row count more than 1");
@@ -1537,7 +1537,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_VALUES_EQUAL(result.Defined(), true);
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), true);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
                 UNIT_ASSERT_LE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL more than current time");
                 if (parser.TryNextRow()) {
                     UNIT_ASSERT("Row count more than 1");
@@ -1550,7 +1550,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_VALUES_EQUAL(result.Defined(), true);
             NYdb::TResultSetParser parser(*result);
             while (parser.TryNextRow()) {
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), true);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
                 UNIT_ASSERT_LE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL more than current time");
             }
         }
@@ -1642,7 +1642,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
-                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), false, *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
+                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), false, *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
                 if (parser.TryNextRow()) {
                     UNIT_ASSERT("Row count more than 1");
                 }
@@ -1657,7 +1657,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
-                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), false, *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
+                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), false, *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
                 if (parser.TryNextRow()) {
                     UNIT_ASSERT("Row count more than 1");
                 }
@@ -1671,7 +1671,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_VALUES_EQUAL(result.Defined(), true);
             NYdb::TResultSetParser parser(*result);
             while (parser.TryNextRow()) {
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), true);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
                 UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
             }
         }
@@ -1742,7 +1742,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), true);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
                 UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
                 if (parser.TryNextRow()) {
                     UNIT_ASSERT("Row count more than 1");
@@ -1755,7 +1755,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_VALUES_EQUAL(result.Defined(), true);
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), true);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
                 UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
                 if (parser.TryNextRow()) {
                     UNIT_ASSERT("Row count more than 1");
@@ -1768,7 +1768,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_VALUES_EQUAL(result.Defined(), true);
             NYdb::TResultSetParser parser(*result);
             while (parser.TryNextRow()) {
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), true);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
                 UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
             }
         }
@@ -1830,7 +1830,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
-                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), false, *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
+                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), false, *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
                 if (parser.TryNextRow()) {
                     UNIT_ASSERT("Row count more than 1");
                 }
@@ -1846,7 +1846,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 2);
             while (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
-                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), false, *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
+                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), false, *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
             }
         }
 
@@ -1907,7 +1907,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), true);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
                 UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
                 if (parser.TryNextRow()) {
                     UNIT_ASSERT("Row count more than 1");
@@ -1921,7 +1921,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 3);
             while (parser.TryNextRow()) {
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), true);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
                 UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
             }
         }
@@ -1931,7 +1931,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_VALUES_EQUAL(result.Defined(), true);
             NYdb::TResultSetParser parser(*result);
             while (parser.TryNextRow()) {
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), true);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
                 UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
             }
         }
@@ -2001,7 +2001,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(RESULT_SETS_EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), true);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(RESULT_SETS_EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(RESULT_SETS_EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), deadline);
                 if (parser.TryNextRow()) {
                     UNIT_ASSERT("Row count more than 1");
@@ -2016,7 +2016,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 5);
             while (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(RESULT_ID_COLUMN_NAME).GetOptionalString(), resId);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().Defined(), true);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), deadline);
             }
         }

@@ -163,12 +163,26 @@ public:
     }
 
     template <typename... Args>
+    auto CreateColumnTable(Args&&... args) {
+        return Client.CreateColumnTable(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto CreateTopic(Args&&... args) {
+        return Client.CreateTopic(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
     auto MkDir(Args&&... args) {
         return Client.MkDir(std::forward<Args>(args)...);
     }
 
     void SendAsync(const TActorId& recipient, IEventBase* ev) {
         Server.GetRuntime()->Send(new IEventHandle(recipient, Sender, ev));
+    }
+
+    void SendAsync(const TActorId& recipient, THolder<IEventBase> ev) {
+        SendAsync(recipient, ev.Release());
     }
 
     template <typename TEvResponse>
@@ -184,6 +198,10 @@ public:
 
     void SendAsync(ui64 tabletId, IEventBase* ev) {
         ForwardToTablet(*Server.GetRuntime(), tabletId, Sender, ev);
+    }
+
+    void SendAsync(ui64 tabletId, THolder<IEventBase> ev) {
+        SendAsync(tabletId, ev.Release());
     }
 
     template <typename TEvResponse>

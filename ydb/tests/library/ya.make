@@ -18,6 +18,7 @@ PY_SRCS(
     common/path_types.py
     common/types.py
     common/wait_for.py
+    common/workload_manager.py
     kv/__init__.py
     kv/helpers.py
     harness/__init__.py
@@ -108,6 +109,7 @@ RECURSE(
     compatibility
     clients
     serializability
+    test_meta
     wardens
     sqs
 )

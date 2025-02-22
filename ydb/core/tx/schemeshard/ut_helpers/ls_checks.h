@@ -174,6 +174,8 @@ namespace NLs {
     void NoBackupInFly(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc BackupHistoryCount(ui64 count);
 
+    TCheckFunc HasGroup(const TString& group, const TSet<TString> members);
+    TCheckFunc HasNoGroup(const TString& group);
     TCheckFunc HasOwner(const TString& owner);
     TCheckFunc HasRight(const TString& right);
     TCheckFunc HasNoRight(const TString& right);

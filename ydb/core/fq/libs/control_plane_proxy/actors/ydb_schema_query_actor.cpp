@@ -10,7 +10,8 @@
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/public/lib/fq/scope.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 namespace NFq::NPrivate {
 
@@ -313,7 +314,7 @@ public:
 
     void SaveIssues(const TString& message, const TStatus& status) {
         auto issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, message);
-        for (const auto& subIssue : RemoveDatabaseFromIssues(status.GetIssues(), DBPath)) {
+        for (const auto& subIssue : RemoveDatabaseFromIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()), DBPath)) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
         }
 
@@ -332,7 +333,7 @@ public:
         try {
             return std::move(future.GetValueSync()); // can throw an exception
         } catch (...) {
-            return TStatus{EStatus::BAD_REQUEST, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}};
+            return TStatus{EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{CurrentExceptionMessage()}}};
         }
     }
 
@@ -406,7 +407,7 @@ public:
 
     IEventBase* MakeTimeoutEventImpl(NYql::TIssue issue) override {
         return new TEvPrivate::TEvRecoveryResponse(
-            Nothing(), TStatus{EStatus::TIMEOUT, NYql::TIssues{std::move(issue)}});
+            Nothing(), TStatus{EStatus::TIMEOUT, NYdb::NIssue::TIssues{NYdb::NAdapters::ToSdkIssue(std::move(issue))}});
     };
 
     void CheckConnectionExistenceInCPS() {
@@ -481,7 +482,7 @@ public:
 
     IEventBase* MakeTimeoutEventImpl(NYql::TIssue issue) override {
         return new TEvPrivate::TEvRecoveryResponse(
-            Nothing(), TStatus{EStatus::TIMEOUT, NYql::TIssues{std::move(issue)}});
+            Nothing(), TStatus{EStatus::TIMEOUT, NYdb::NIssue::TIssues{NYdb::NAdapters::ToSdkIssue(std::move(issue))}});
     }
 
     void CheckBindingExistenceInCPS() {
@@ -527,11 +528,11 @@ private:
 
 bool IsPathDoesNotExistIssue(const TStatus& status) {
     auto oneLineError = status.GetIssues().ToOneLineString();
-    return oneLineError.Contains("Path does not exist") || oneLineError.Contains("path hasn't been resolved");
+    return oneLineError.contains("Path does not exist") || oneLineError.contains("path hasn't been resolved");
 }
 
 bool IsPathExistsIssue(const TStatus& status) {
-    return status.GetIssues().ToOneLineString().Contains("error: path exist");
+    return status.GetIssues().ToOneLineString().contains("error: path exist");
 }
 
 } // namespace
@@ -587,7 +588,7 @@ IActor* MakeCreateConnectionActor(
              &counters,
              permissions](TActorId sender, const TStatus& status) {
                 if (status.GetStatus() == EStatus::ALREADY_EXISTS ||
-                    status.GetIssues().ToOneLineString().Contains("error: path exist")) {
+                    status.GetIssues().ToOneLineString().contains("error: path exist")) {
                     TActivationContext::ActorSystem()->Register(
                         new TGenerateRecoverySQLIfExternalDataSourceAlreadyExistsActor(
                             sender,
@@ -871,7 +872,7 @@ IActor* MakeCreateBindingActor(const TActorId& proxyActorId,
              &counters,
              permissions](TActorId sender, const TStatus& status) {
                 if (status.GetStatus() == EStatus::ALREADY_EXISTS ||
-                    status.GetIssues().ToOneLineString().Contains("error: path exist")) {
+                    status.GetIssues().ToOneLineString().contains("error: path exist")) {
                     TActivationContext::ActorSystem()->Register(
                         new TGenerateRecoverySQLIfExternalDataTableAlreadyExistsActor(
                             sender,

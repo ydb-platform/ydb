@@ -1,0 +1,32 @@
+{
+    "_yql_view_library"="PRAGMA Library('nested_library.sql', 'http_test://nested_library.sql.txt'); import nested_library symbols $to_lower; SELECT key, subkey, value, $to_lower(key) as lower_key from self";
+    "_yql_syntax_version_library"=1;
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

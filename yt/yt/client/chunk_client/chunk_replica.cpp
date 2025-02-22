@@ -21,7 +21,7 @@ using namespace NObjectClient;
 
 void TChunkReplica::RegisterMetadata(auto&& registrar)
 {
-    PHOENIX_REGISTER_FIELD(1, Value_)();
+    PHOENIX_REGISTER_FIELD(1, Value_);
 }
 
 PHOENIX_DEFINE_TYPE(TChunkReplica);

@@ -35,7 +35,7 @@ struct TProfilingTags
 {
     std::string Cluster;
     TString LeadingStatus;
-    TString QueueAgentStage;
+    std::string QueueAgentStage;
     TString ObjectType;
 
     bool operator==(const TProfilingTags& other) const = default;

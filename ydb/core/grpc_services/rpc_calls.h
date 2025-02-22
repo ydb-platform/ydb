@@ -19,7 +19,7 @@
 
 #include <ydb/public/api/grpc/draft/dummy.pb.h>
 
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <util/generic/maybe.h>
 

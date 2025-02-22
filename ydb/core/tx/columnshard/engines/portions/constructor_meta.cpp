@@ -49,7 +49,7 @@ TPortionMeta TPortionMetaConstructor::Build() {
     if (TierName) {
         result.TierName = *TierName;
     }
-    AFL_VERIFY(BlobIds.size());
+    TBase::FullValidation();
     result.BlobIds = BlobIds;
     result.BlobIds.shrink_to_fit();
     result.CompactionLevel = *TValidator::CheckNotNull(CompactionLevel);

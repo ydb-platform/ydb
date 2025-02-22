@@ -9,7 +9,6 @@ from yql_utils import get_param as yql_get_param
 from google.protobuf import text_format
 import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 
-DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 try:
     SQLRUN_PATH = yatest.common.binary_path('yql/essentials/tools/sql2yql/sql2yql')
 except BaseException:
@@ -56,21 +55,22 @@ def recursive_glob(root, begin_template=None, end_template=None):
             yield os.path.relpath(path, root)
 
 
-def pytest_generate_tests_by_template(template, metafunc):
+def pytest_generate_tests_by_template(template, metafunc, data_path):
+    assert data_path is not None
+
     argvalues = []
 
-    suites = [name for name in os.listdir(DATA_PATH) if os.path.isdir(os.path.join(DATA_PATH, name))]
+    suites = [name for name in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, name))]
     for suite in suites:
         for case in sorted([sql_query_path[:-len(template)]
-                            for sql_query_path in recursive_glob(os.path.join(DATA_PATH, suite), end_template=template)]):
+                            for sql_query_path in recursive_glob(os.path.join(data_path, suite), end_template=template)]):
             argvalues.append((suite, case))
 
     metafunc.parametrize(['suite', 'case'], argvalues)
 
 
-def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, currentPart=0, partsCount=1, data_path=None):
-    if data_path is None:
-        data_path = DATA_PATH
+def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, currentPart=0, partsCount=1, data_path=None, mode_expander=None):
+    assert data_path is not None
     argvalues = []
 
     if not suites:
@@ -93,20 +93,26 @@ def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, curren
             ]
             if os.path.exists(suite_dir + '/' + case + '.cfg'):
                 configs.append('')
+            to_append = []
             for cfg in sorted(configs):
                 if _make_hash((suite, case, cfg)) % partsCount == currentPart:
-                    argvalues.append((suite, case, cfg))
+                    to_append.append((suite, case, cfg))
             if not configs and _make_hash((suite, case, 'default.txt')) % partsCount == currentPart:
-                argvalues.append((suite, case, 'default.txt'))
+                to_append.append((suite, case, 'default.txt'))
+            if mode_expander is None:
+                argvalues += to_append
+            else:
+                argvalues += mode_expander(to_append)
 
     metafunc.parametrize(
-        ['suite', 'case', 'cfg'],
+        ['suite', 'case', 'cfg'] + (['what'] if mode_expander is not None else []),
         argvalues,
     )
 
 
-def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None):
-    return pytest_generate_tests_for_run(metafunc, currentPart=currentPart, partsCount=partsCount, data_path=data_path)
+def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None, template='.sql', mode_expander=None):
+    return pytest_generate_tests_for_run(metafunc, currentPart=currentPart, partsCount=partsCount,
+                                         data_path=data_path, template=template, mode_expander=mode_expander)
 
 
 def get_cfg_file(cfg, case):
@@ -125,6 +131,7 @@ def validate_cfg(result):
             "udf",
             "providers",
             "res",
+            "mount",
             "canonize_peephole",
             "canonize_lineage",
             "peephole_use_blocks",
@@ -140,9 +147,8 @@ def validate_cfg(result):
             ), "Unknown command in .cfg: %s" % (r[0])
 
 
-def get_config(suite, case, cfg, data_path=None):
-    if data_path is None:
-        data_path = DATA_PATH
+def get_config(suite, case, cfg, data_path):
+    assert data_path is not None
     result = []
     try:
         default_cfg = get_cfg_file('default.txt', case)
@@ -165,9 +171,8 @@ def load_json_file_strip_comments(path):
         return '\n'.join([line for line in file.readlines() if not line.startswith('#')])
 
 
-def get_parameters_files(suite, config, data_path=None):
-    if data_path is None:
-        data_path = DATA_PATH
+def get_parameters_files(suite, config, data_path):
+    assert data_path is not None
 
     result = []
     for line in config:
@@ -179,7 +184,8 @@ def get_parameters_files(suite, config, data_path=None):
     return result
 
 
-def get_parameters_json(suite, config, data_path=None):
+def get_parameters_json(suite, config, data_path):
+    assert data_path is not None
     parameters_files = get_parameters_files(suite, config, data_path)
     data = {}
     for p in parameters_files:

@@ -6,7 +6,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYdb;
-using namespace NYdb::NView;
+using namespace NYdb::V2::NView;
 
 Y_UNIT_TEST_SUITE(ViewClient) {
     Y_UNIT_TEST(Basic) {

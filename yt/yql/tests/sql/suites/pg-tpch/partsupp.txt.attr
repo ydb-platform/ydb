@@ -1,0 +1,11 @@
+{
+    "_yql_row_spec"={
+       "Type"=["StructType";[
+           ["ps_partkey";["PgType";"int4";];];
+           ["ps_suppkey";["PgType";"int4";];];
+           ["ps_availqty";["PgType";"int4";];];
+           ["ps_supplycost";["PgType";"numeric";];];
+           ["ps_comment";["PgType";"text";];];
+       ];];
+    }
+}

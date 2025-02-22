@@ -1,0 +1,11 @@
+import agg_factory symbols $factory;
+use plato;
+
+define subquery $multiaggr_win() as
+    select
+        MULTI_AGGREGATE_BY(AsStruct(subkey as a,value as b), $factory) over w as ma,
+        ROW_NUMBER() over w as rn
+    from Input window w as (order by key);
+end define;
+
+export $multiaggr_win;

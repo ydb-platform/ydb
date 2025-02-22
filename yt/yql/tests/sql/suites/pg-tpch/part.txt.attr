@@ -1,0 +1,15 @@
+{
+    "_yql_row_spec"={
+       "Type"=["StructType";[
+           ["p_partkey";["PgType";"int4";];];
+           ["p_name";["PgType";"text";];];
+           ["p_mfgr";["PgType";"text";];];
+           ["p_brand";["PgType";"text";];];
+           ["p_type";["PgType";"text";];];
+           ["p_size";["PgType";"int4";];];
+           ["p_container";["PgType";"text";];];
+           ["p_retailprice";["PgType";"numeric";];];
+           ["p_comment";["PgType";"text";];];
+       ];];
+    }
+}

@@ -1,7 +1,7 @@
 import os
 import re
 import requests
-from github import Github
+from github import Github #pip3 install PyGithub
 from urllib.parse import quote, urlencode
 
 
@@ -329,7 +329,6 @@ def generate_github_issue_title_and_body(test_data):
     test_run_history_link = f"{CURRENT_TEST_HISTORY_DASHBOARD}{test_run_history_params}"
 
     # owner
-    owner_link = f"[{owner}](https://github.com/orgs/ydb-platform/teams/{owner.split('/',1)[1]})"
     # Тело сообщения и кодирование
     body_template = (
         f"Mute:<!--mute_list_start-->\n"
@@ -449,7 +448,7 @@ def get_muted_tests_from_issues():
     issues = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
     muted_tests = {}
     for issue in issues:
-        if issues[issue]["status"] == "Muted":
+        if issues[issue]["status"] == "Muted" and issues[issue]["state"] != 'CLOSED':
             for test in issues[issue]['tests']:
                 if test not in muted_tests:
                     muted_tests[test] = []

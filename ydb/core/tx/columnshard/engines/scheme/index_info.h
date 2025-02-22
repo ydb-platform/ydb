@@ -162,6 +162,10 @@ public:
         AFL_VERIFY(MetadataManagerConstructor);
         return MetadataManagerConstructor;
     }
+
+    TConclusion<std::shared_ptr<arrow::Array>> BuildDefaultColumn(const ui32 fieldIndex, const ui32 rowsCount, const bool force) const;
+
+
     bool IsNullableVerifiedByIndex(const ui32 colIndex) const {
         AFL_VERIFY(colIndex < ColumnFeatures.size());
         return ColumnFeatures[colIndex]->GetIsNullable();
@@ -260,15 +264,12 @@ public:
     }
 
     std::optional<ui32> GetColumnIndexOptional(const ui32 id) const;
-    ui32 GetColumnIndexVerified(const ui32 id) const {
-        auto result = GetColumnIndexOptional(id);
-        AFL_VERIFY(result);
-        return *result;
-    }
+    ui32 GetColumnIndexVerified(const ui32 id) const;
     std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> GetColumnFieldVerified(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
+    std::shared_ptr<arrow::Schema> GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId) const;
     virtual const std::shared_ptr<TColumnLoader>& GetColumnLoaderOptional(const ui32 columnId) const override;
     std::optional<std::string> GetColumnNameOptional(const ui32 columnId) const {

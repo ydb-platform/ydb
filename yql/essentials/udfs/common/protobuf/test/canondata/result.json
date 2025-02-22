@@ -13,6 +13,11 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1781765/c2a453956382e0fdfc958f3c4e32ed7740f03d4b/resource.tar.gz#test.test_YQL-16111_/results.txt"
         }
     ],
+    "test.test[YQL-19040]": [
+        {
+            "uri": "file://test.test_YQL-19040_/results.txt"
+        }
+    ],
     "test.test[YQL-3381]": [
         {
             "checksum": "c098af301d5dc8d85071a47455f0f592",

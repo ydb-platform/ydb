@@ -30,17 +30,17 @@ namespace orc {
 
   class TypeImpl : public Type {
    private:
-    TypeImpl* parent;
-    mutable int64_t columnId;
-    mutable int64_t maximumColumnId;
-    TypeKind kind;
-    std::vector<std::unique_ptr<Type>> subTypes;
-    std::vector<std::string> fieldNames;
-    uint64_t subtypeCount;
-    uint64_t maxLength;
-    uint64_t precision;
-    uint64_t scale;
-    std::map<std::string, std::string> attributes;
+    TypeImpl* parent_;
+    mutable int64_t columnId_;
+    mutable int64_t maximumColumnId_;
+    TypeKind kind_;
+    std::vector<std::unique_ptr<Type>> subTypes_;
+    std::vector<std::string> fieldNames_;
+    uint64_t subtypeCount_;
+    uint64_t maxLength_;
+    uint64_t precision_;
+    uint64_t scale_;
+    std::map<std::string, std::string> attributes_;
 
    public:
     /**

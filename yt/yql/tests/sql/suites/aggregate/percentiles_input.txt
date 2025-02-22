@@ -1,0 +1,10 @@
+{"key"="foo";"subkey"="";"value"="1"};
+{"key"="foo";"subkey"="";"value"="1"};
+{"key"="foo";"subkey"="";"value"="1"};
+{"key"="foo";"subkey"="";"value"="1"};
+{"key"="foo";"subkey"="";"value"="1"};
+{"key"="bar";"subkey"="";"value"="1"};
+{"key"="bar";"subkey"="";"value"="2"};
+{"key"="bar";"subkey"="";"value"="3"};
+{"key"="bar";"subkey"="";"value"="4"};
+{"key"="bar";"subkey"="";"value"="5"};

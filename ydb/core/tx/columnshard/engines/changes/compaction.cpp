@@ -71,7 +71,7 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(
 }
 
 TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {
-    Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
+    Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || !NeedGranuleStatusProvide || !IsActive());
 }
 
 }   // namespace NKikimr::NOlap

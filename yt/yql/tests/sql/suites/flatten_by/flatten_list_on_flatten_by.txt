@@ -1,0 +1,9 @@
+{"bc_type_tuple"=["not_discovery";"1org";];"parsed_answers_and_clicks"=[[[1022482316;];1;["bizfinder";];];];};
+{"bc_type_tuple"=["not_discovery";"1org";];"parsed_answers_and_clicks"=[[[63320754500;];1;["bizfinder";];];];};
+{"bc_type_tuple"=["unknown";"other";];"parsed_answers_and_clicks"=[[[56725259;];1;["geocoder";];];];};
+{"bc_type_tuple"=["not_discovery";"1org";];"parsed_answers_and_clicks"=[[[1393063799;];1;["yabs";];];];};
+{"bc_type_tuple"=["not_discovery";"1org";];"parsed_answers_and_clicks"=[[[1102340823;];1;["bizfinder";];];];};
+{"bc_type_tuple"=["not_discovery";"1org";];"parsed_answers_and_clicks"=[[[1030456454;];1;["yabs";];];[[1023091930;];0;["yabs";];];[[91758116818;];0;["bizfinder";];];[[1089475933;];0;["yabs";];];[[1001186033;];0;["bizfinder";];];[[1746904934;];0;["bizfinder";];];[[16660487830;];0;["bizfinder";];];[[1927062611;];0;["bizfinder";];];[[211087055144;];0;["bizfinder";];];[[240631521347;];0;["bizfinder";];];];};
+{"bc_type_tuple"=["not_discovery";"1org";];"parsed_answers_and_clicks"=[[[1128735493;];1;["bizfinder";];];[[1093055816;];0;["bizfinder";];];[[1101660521;];0;["bizfinder";];];];};
+{"bc_type_tuple"=["not_discovery";"1org";];"parsed_answers_and_clicks"=[[[1159830271;];1;["bizfinder";];];[[1030802514;];0;["bizfinder";];];];};
+

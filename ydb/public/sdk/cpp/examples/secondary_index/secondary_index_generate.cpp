@@ -1,11 +1,14 @@
 #include "secondary_index.h"
 
-#include <util/random/random.h>
 #include <util/thread/pool.h>
+
+#include <mutex>
+#include <random>
 
 using namespace NLastGetopt;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NStatusHelpers;
 
 namespace {
 
@@ -26,7 +29,8 @@ public:
     }
 
     void Stop(bool rethrow = true) {
-        with_lock (Lock) {
+        {
+            std::lock_guard guard(Lock);
             Stopped = true;
         }
         Wait(rethrow);
@@ -35,16 +39,16 @@ public:
     void Wait(bool rethrow = true) {
         Queue.Stop();
         if (rethrow) {
-            with_lock (Lock) {
-                if (Exception) {
-                    std::rethrow_exception(Exception);
-                }
+            std::lock_guard guard(Lock);
+            if (Exception) {
+                std::rethrow_exception(Exception);
             }
         }
     }
 
     bool Execute(std::function<void()> callback) {
-        with_lock (Lock) {
+        {
+            std::lock_guard guard(Lock);
             if (Stopped) {
                 if (Exception) {
                     std::rethrow_exception(Exception);
@@ -54,9 +58,9 @@ public:
             }
         }
 
-        THolder<TTask> task = MakeHolder<TTask>(this, std::move(callback));
-        if (Queue.Add(task.Get())) {
-            Y_UNUSED(task.Release());
+        std::unique_ptr<TTask> task = std::make_unique<TTask>(this, std::move(callback));
+        if (Queue.Add(task.get())) {
+            Y_UNUSED(task.release());
             return true;
         }
 
@@ -74,8 +78,9 @@ private:
         { }
 
         void Process(void*) override {
-            THolder<TTask> self(this);
-            with_lock (Owner->Lock) {
+            std::unique_ptr<TTask> self(this);
+            {
+                std::lock_guard guard(Owner->Lock);
                 if (Owner->Stopped) {
                     return;
                 }
@@ -84,11 +89,10 @@ private:
                 auto callback = std::move(Callback);
                 callback();
             } catch (...) {
-                with_lock (Owner->Lock) {
-                    if (!Owner->Stopped && !Owner->Exception) {
-                        Owner->Stopped = true;
-                        Owner->Exception = std::current_exception();
-                    }
+                std::lock_guard guard(Owner->Lock);
+                if (!Owner->Stopped && !Owner->Exception) {
+                    Owner->Stopped = true;
+                    Owner->Exception = std::current_exception();
                 }
             }
         }
@@ -105,10 +109,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static TStatus InsertSeries(TSession& session, const TString& prefix, const TSeries& series) {
-    auto queryText = Sprintf(R"(
+static TStatus InsertSeries(TSession& session, const std::string& prefix, const TSeries& series) {
+    auto queryText = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%1$s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $seriesId AS Uint64;
         DECLARE $title AS Utf8;
@@ -126,7 +130,7 @@ static TStatus InsertSeries(TSession& session, const TString& prefix, const TSer
         -- Insert above already verified series_id is unique, so it is safe to use upsert
         UPSERT INTO series_rev_views (rev_views, series_id)
         VALUES ($revViews, $seriesId);
-    )", prefix.data());
+    )", prefix);
 
     auto prepareResult = session.PrepareDataQuery(queryText).ExtractValueSync();
     if (!prepareResult.IsSuccess()) {
@@ -160,11 +164,11 @@ static TStatus InsertSeries(TSession& session, const TString& prefix, const TSer
     return result;
 }
 
-int RunGenerateSeries(TDriver& driver, const TString& prefix, int argc, char** argv) {
+int RunGenerateSeries(TDriver& driver, const std::string& prefix, int argc, char** argv) {
     TOpts opts = TOpts::Default();
 
-    ui64 seriesId = 1;
-    ui64 count = 10;
+    uint64_t seriesId = 1;
+    uint64_t count = 10;
     size_t threads = 10;
 
     opts.AddLongOption("start", "First id to generate").Optional().RequiredArgument("NUM")
@@ -180,14 +184,16 @@ int RunGenerateSeries(TDriver& driver, const TString& prefix, int argc, char** a
     executor.Start(threads);
 
     size_t generated = 0;
+    std::mt19937_64 engine;
+    std::uniform_int_distribution<uint64_t> dist(0, 1000000);
     while (count > 0) {
-        bool ok = executor.Execute([&client, &prefix, seriesId] {
+        bool ok = executor.Execute([views = dist(engine), &client, &prefix, seriesId] {
             TSeries series;
             series.SeriesId = seriesId;
             series.Title = TStringBuilder() << "Name " << seriesId;
             series.SeriesInfo = TStringBuilder() << "Info " << seriesId;
             series.ReleaseDate = TInstant::Days(TInstant::Now().Days());
-            series.Views = RandomNumber<ui64>(1000000);
+            series.Views = views;
             ThrowOnError(client.RetryOperationSync([&prefix, &series](TSession session) -> TStatus {
                 return InsertSeries(session, prefix, series);
             }));
@@ -201,6 +207,6 @@ int RunGenerateSeries(TDriver& driver, const TString& prefix, int argc, char** a
     }
 
     executor.Wait();
-    Cout << "Generated " << generated << " new series" << Endl;
+    std::cout << "Generated " << generated << " new series" << std::endl;
     return 0;
 }

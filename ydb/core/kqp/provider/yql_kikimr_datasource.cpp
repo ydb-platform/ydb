@@ -16,7 +16,7 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
 #include <util/generic/is_in.h>
 
@@ -163,6 +163,8 @@ private:
             case TKikimrKey::Type::PGObject:
                 return TStatus::Ok;
             case TKikimrKey::Type::Replication:
+                return TStatus::Ok;
+            case TKikimrKey::Type::Transfer:
                 return TStatus::Ok;
             case TKikimrKey::Type::BackupCollection:
                 return TStatus::Ok;

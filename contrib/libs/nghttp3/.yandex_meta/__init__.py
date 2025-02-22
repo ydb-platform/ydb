@@ -1,25 +1,10 @@
-import os
 from devtools.yamaker.project import CMakeNinjaNixProject
 
 
 def post_install(self):
-    includeFilePath = os.path.join(self.dstdir, "lib/includes/nghttp3/nghttp3.h")
-
-    with open(includeFilePath, "r") as file:
-        filedata = file.read()
-
-    filedata = filedata.replace("<nghttp3/version.h>", '"version.h"')
-
-    with open(includeFilePath, "w") as file:
-        file.write(filedata)
-
-    # Add PEERDIR to contrib/libs/nghttp2 and remove sfparse.c from SRCS
-    # because nghttp2 already has sfparse.c.
-    # Using sfparse.c from nghttp3 may cause a linker error in projects
-    # that use nghttp2 and nghttp3 when building with the flag -all_load
+    # Prefix sfparse_parser_dict to avoid conflicts with nghttp2 which also bundles sfparse library
     with self.yamakes["."] as m:
-        m.PEERDIR.add("contrib/libs/nghttp2")
-        m.SRCS.remove("lib/sfparse/sfparse.c")
+        m.CFLAGS.append("-Dsfparse_parser_dict=nghttp3_sfparse_parser_dict")
 
 
 nghttp3 = CMakeNinjaNixProject(
@@ -32,3 +17,8 @@ nghttp3 = CMakeNinjaNixProject(
     platform_dispatchers=["config.h"],
     addincl_global={".": {"./lib/includes"}},
 )
+
+nghttp3.copy_top_sources_except |= {
+    # This is just a git log, ignore it
+    "ChangeLog",
+}

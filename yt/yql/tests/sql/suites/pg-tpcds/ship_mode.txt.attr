@@ -1,0 +1,12 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["sm_ship_mode_sk";["PgType";"int4";];];
+              ["sm_ship_mode_id";["PgType";"text";];];
+              ["sm_type";["PgType";"text";];];
+              ["sm_code";["PgType";"text";];];
+              ["sm_carrier";["PgType";"text";];];
+              ["sm_contract";["PgType";"text";];];
+        ];];
+    }
+}

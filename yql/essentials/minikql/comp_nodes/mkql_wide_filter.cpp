@@ -179,11 +179,11 @@ public:
         auto decr = BasicBlock::Create(context, "decr", ctx.Func);
         auto maybeResultVal = PHINode::Create(TMaybeFetchResult::LLVMType(context), 4, "maybe_res", pass);
 
-        auto stateVal = new LoadInst(statePtrVal->getType()->getPointerElementType(), statePtrVal, "state", block);
+        auto stateVal = new LoadInst(Type::getInt128Ty(context), statePtrVal, "state", block);
         auto needFetchCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, GetFalse(context), stateVal, "need_fetch", block);
         maybeResultVal->addIncoming(TMaybeFetchResult(EFetchResult::Finish).LLVMConst(context), block);
         BranchInst::Create(fetch, pass, needFetchCond, block);
-        
+
         block = fetch;
         auto [fetchResVal, fetchGetters] = fetchGenerator(ctx, block);
         auto passCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, ConstantInt::get(fetchResVal->getType(), static_cast<i32>(EFetchResult::One)), fetchResVal, "not_one", block);
@@ -262,11 +262,11 @@ public:
         auto check = BasicBlock::Create(context, "check", ctx.Func);
         auto maybeResultVal = PHINode::Create(TMaybeFetchResult::LLVMType(context), 3, "maybe_res", pass);
 
-        auto stateVal = new LoadInst(statePtrVal->getType()->getPointerElementType(), statePtrVal, "state", block);
+        auto stateVal = new LoadInst(Type::getInt128Ty(context), statePtrVal, "state", block);
         auto needFetchCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, GetTrue(context), stateVal, "need_fetch", block);
         maybeResultVal->addIncoming(TMaybeFetchResult(EFetchResult::Finish).LLVMConst(context), block);
         BranchInst::Create(fetch, pass, needFetchCond, block);
-        
+
         block = fetch;
         auto [fetchResVal, fetchGetters] = fetchGenerator(ctx, block);
         auto passCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, ConstantInt::get(fetchResVal->getType(), static_cast<i32>(EFetchResult::One)), fetchResVal, "not_one", block);
@@ -338,7 +338,7 @@ public:
         auto maybeResultVal = PHINode::Create(TMaybeFetchResult::LLVMType(context), 3, "maybe_res", pass);
 
         auto [fetchResVal, fetchGetters] = fetchGenerator(ctx, block);
-        auto stateVal = new LoadInst(statePtrVal->getType()->getPointerElementType(), statePtrVal, "state", block);
+        auto stateVal = new LoadInst(Type::getInt128Ty(context), statePtrVal, "state", block);
         auto needCheckCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, GetTrue(context), stateVal, "need_check", block);
         auto oneCond = CmpInst::Create(Instruction::ICmp, CmpInst::ICMP_EQ, ConstantInt::get(fetchResVal->getType(), static_cast<i32>(EFetchResult::One)), fetchResVal, "one", block);
         auto willCheckCond = BinaryOperator::Create(Instruction::And, needCheckCond, oneCond, "will_check", block);
@@ -356,7 +356,7 @@ public:
         BranchInst::Create(pass, block);
 
         block = pass;
-        
+
         return {maybeResultVal, std::move(fetchGetters)};
     }
 #endif

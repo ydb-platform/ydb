@@ -1,7 +1,6 @@
 (
 #comment
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let res_sink (DataSink 'result))
 (let f1 (lambda '(x y) (block '(
@@ -32,34 +31,34 @@
 (let strCall (Callable strType (lambda '() s1)))
 
 # lambdas
-(let world (Write! world res_sink (Key) (NamedApply f1 '((Uint32 '1) (Uint32 '2)) (AsStruct)) '()))
-(let world (Write! world res_sink (Key) (NamedApply f1dep '((Uint32 '1)) (AsStruct) (DependsOn (Uint32 '2))) '()))
+(let world (Write! world res_sink (Key) (NamedApply f1 '((Uint32 '1) (Uint32 '2)) (AsStruct)) '('('type))))
+(let world (Write! world res_sink (Key) (NamedApply f1dep '((Uint32 '1)) (AsStruct) (DependsOn (Uint32 '2))) '('('type))))
 
 # callables
-(let world (Write! world res_sink (Key) (NamedApply call '((Uint32 '1) (Uint32 '2)) (AsStruct)) '()))
-(let world (Write! world res_sink (Key) (NamedApply call (Apply tuple_call) (AsStruct)) '()))
+(let world (Write! world res_sink (Key) (NamedApply call '((Uint32 '1) (Uint32 '2)) (AsStruct)) '('('type))))
+(let world (Write! world res_sink (Key) (NamedApply call (Apply tuple_call) (AsStruct)) '('('type))))
 
 # opt. positional
-(let world (Write! world res_sink (Key) (NamedApply optCall '((Uint32 '1) (Uint32 '2)) (AsStruct)) '()))
-(let world (Write! world res_sink (Key) (NamedApply optCall (Apply optTuple1) (AsStruct)) '()))
-(let world (Write! world res_sink (Key) (NamedApply optCall (Apply optTuple2) (AsStruct)) '()))
-(let world (Write! world res_sink (Key) (NamedApply optCall '((Uint32 '1)) (AsStruct)) '()))
+(let world (Write! world res_sink (Key) (NamedApply optCall '((Uint32 '1) (Uint32 '2)) (AsStruct)) '('('type))))
+(let world (Write! world res_sink (Key) (NamedApply optCall (Apply optTuple1) (AsStruct)) '('('type))))
+(let world (Write! world res_sink (Key) (NamedApply optCall (Apply optTuple2) (AsStruct)) '('('type))))
+(let world (Write! world res_sink (Key) (NamedApply optCall '((Uint32 '1)) (AsStruct)) '('('type))))
 
 # named
 (let world (Write! world res_sink (Key) (NamedApply call '((Uint32 '1)) (AsStruct 
 '('Arg2 (Uint32 '2))
-)) '()))
+)) '('('type))))
 
 (let world (Write! world res_sink (Key) (NamedApply call '() (AsStruct 
 '('Arg2 (Uint32 '2)) '('Arg1 (Uint32 '1))
-)) '()))
+)) '('('type))))
 
-(let world (Write! world res_sink (Key) (NamedApply call '() (Apply strCall)) '()))
+(let world (Write! world res_sink (Key) (NamedApply call '() (Apply strCall)) '('('type))))
 
 #opt. named
 (let world (Write! world res_sink (Key) (NamedApply optCall '() (AsStruct 
 '('Arg1 (Uint32 '1))
-)) '()))
+)) '('('type))))
 
 (let world (Commit! world res_sink))
 (return world)

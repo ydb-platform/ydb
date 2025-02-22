@@ -1,0 +1,5 @@
+{"BannerID"=11830670;"ResultCost"=70000;"ResultFlatCost"=70000;"PhraseID"=0u;"BaseNo"=86u;};
+{"BannerID"=12963892;"ResultCost"=3000;"ResultFlatCost"=0;"PhraseID"=0u;"BaseNo"=53u;};
+{"BannerID"=12977828;"ResultCost"=3000;"ResultFlatCost"=0;"PhraseID"=1u;"BaseNo"=1u;};
+{"BannerID"=13005350;"ResultCost"=3000;"ResultFlatCost"=0;"PhraseID"=1u;"BaseNo"=3u;};
+{"BannerID"=14145807;"ResultCost"=3000;"ResultFlatCost"=0;"PhraseID"=1u;"BaseNo"=10u;};

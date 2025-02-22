@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <yql/essentials/public/udf/arrow/block_builder.h>
+#include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -32,7 +33,7 @@ struct TArrayBuilderTestData {
 };
 
 std::unique_ptr<IArrayBuilder> MakeResourceArrayBuilder(TType* resourceType, TArrayBuilderTestData& data) {
-    auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), resourceType, 
+    auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), resourceType,
         *data.ArrowPool, MAX_BLOCK_SIZE, /* pgBuilder */nullptr);
     UNIT_ASSERT_C(arrayBuilder, "Failed to make resource arrow array builder");
     return arrayBuilder;
@@ -51,7 +52,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
 
         auto value = datum.array()->GetValues<TUnboxedValue>(1)[0];
         UNIT_ASSERT(value.IsEmbedded());
-        UNIT_ASSERT_VALUES_EQUAL_C(TStringRef(value.AsStringRef()), TStringRef(resource.AsStringRef()), 
+        UNIT_ASSERT_VALUES_EQUAL_C(TStringRef(value.AsStringRef()), TStringRef(resource.AsStringRef()),
             "Expected equal values after building array");
     }
 
@@ -66,7 +67,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
         struct TWithDtor {
             int Payload;
             std::shared_ptr<int> DestructorCallsCnt;
-            TWithDtor(int payload, std::shared_ptr<int> destructorCallsCnt): 
+            TWithDtor(int payload, std::shared_ptr<int> destructorCallsCnt):
                 Payload(payload), DestructorCallsCnt(std::move(destructorCallsCnt)) {
             }
             ~TWithDtor() {
@@ -86,7 +87,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
             UNIT_ASSERT_VALUES_EQUAL(datum.length(), 1);
 
             const auto value = datum.array()->GetValues<TUnboxedValuePod>(1)[0];
-            auto boxed = value.AsBoxed().Get(); 
+            auto boxed = value.AsBoxed().Get();
             const auto resource = reinterpret_cast<TTestResource*>(boxed);
             UNIT_ASSERT_VALUES_EQUAL(resource->Get()->get()->Payload, payload);
         }
@@ -110,7 +111,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
             } else {
                 arrayBuilder->Add(TUnboxedValuePod{});
             }
-        } 
+        }
         auto datum = arrayBuilder->Build(true);
         const auto blockReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), resourceType);
         for (int i = 0; i < 4; i++) {
@@ -125,7 +126,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
             }
         }
     }
-    
+
     Y_UNIT_TEST(TestBuilderWithReader) {
         TArrayBuilderTestData data;
         const auto resourceType = data.PgmBuilder.NewResourceType("Test.Resource");
@@ -147,7 +148,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
         UNIT_ASSERT_C(std::memcmp(item1.GetRawPtr(), item1AfterRead.GetRawPtr(), sizeof(TBlockItem)) == 0, "Expected UnboxedValue to equal to BlockItem");
         UNIT_ASSERT_C(std::memcmp(item2.GetRawPtr(), item2AfterRead.GetRawPtr(), sizeof(TBlockItem)) == 0, "Expected UnboxedValue to equal to BlockItem");
     }
-    
+
     Y_UNIT_TEST(TestBoxedResourceReader) {
         TArrayBuilderTestData data;
         const auto resourceType = data.PgmBuilder.NewResourceType(ResourceName);
@@ -179,7 +180,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
     Y_UNIT_TEST(TestTzDateBuilder_Layout) {
         TArrayBuilderTestData data;
         const auto tzDateType = data.PgmBuilder.NewDataType(EDataSlot::TzDate);
-        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tzDateType, 
+        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tzDateType,
             *data.ArrowPool, MAX_BLOCK_SIZE, /* pgBuilder */ nullptr);
 
         auto makeTzDate = [] (ui16 val, ui16 tz) {
@@ -192,7 +193,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
         for (auto date: dates) {
             arrayBuilder->Add(date);
         }
-        
+
         const auto datum = arrayBuilder->Build(true);
         UNIT_ASSERT(datum.is_array());
         UNIT_ASSERT_VALUES_EQUAL(datum.length(), dates.size());
@@ -250,7 +251,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
 
         const TBlockItem hugeItem = sItem2.MakeOptional();
 
-        const size_t stringAllocStep = 
+        const size_t stringAllocStep =
             arrow::BitUtil::RoundUpToMultipleOf64(blockLen + 1) +        // String NullMask
             arrow::BitUtil::RoundUpToMultipleOf64((blockLen + 1) * 4) +  // String Offsets
             NMiniKQL::MaxBlockSizeInBytes;                               // String Data

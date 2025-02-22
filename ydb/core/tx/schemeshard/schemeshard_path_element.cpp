@@ -59,31 +59,27 @@ ui64 TPathElement::GetAliveChildren() const {
     return AliveChildrenCount;
 }
 
-void TPathElement::SetAliveChildren(ui64 val) {
-    AliveChildrenCount = val;
-}
-
 ui64 TPathElement::GetBackupChildren() const {
     return BackupChildrenCount;
 }
 
-void TPathElement::IncAliveChildren(ui64 delta, bool isBackup) {
-    Y_ABORT_UNLESS(Max<ui64>() - AliveChildrenCount >= delta);
-    AliveChildrenCount += delta;
+void TPathElement::IncAliveChildrenPrivate(bool isBackup) {
+    Y_ABORT_UNLESS(Max<ui64>() - AliveChildrenCount >= 1);
+    AliveChildrenCount += 1;
 
     if (isBackup) {
-        Y_ABORT_UNLESS(Max<ui64>() - BackupChildrenCount >= delta);
-        BackupChildrenCount += delta;
+        Y_ABORT_UNLESS(Max<ui64>() - BackupChildrenCount >= 1);
+        BackupChildrenCount += 1;
     }
 }
 
-void TPathElement::DecAliveChildren(ui64 delta, bool isBackup) {
-    Y_ABORT_UNLESS(AliveChildrenCount >= delta);
-    AliveChildrenCount -= delta;
+void TPathElement::DecAliveChildrenPrivate(bool isBackup) {
+    Y_ABORT_UNLESS(AliveChildrenCount >= 1);
+    AliveChildrenCount -= 1;
 
     if (isBackup) {
-        Y_ABORT_UNLESS(BackupChildrenCount >= delta);
-        BackupChildrenCount -= delta;
+        Y_ABORT_UNLESS(BackupChildrenCount >= 1);
+        BackupChildrenCount -= 1;
     }
 }
 
@@ -438,8 +434,8 @@ void TPathElement::SetAsyncReplica(bool value) {
     IsAsyncReplica = value;
 }
 
-void TPathElement::SetRestoreTable() {
-    IsRestoreTable = true;
+void TPathElement::SetIncrementalRestoreTable() {
+    IsIncrementalRestoreTable = true;
 }
 
 bool TPathElement::HasRuntimeAttrs() const {

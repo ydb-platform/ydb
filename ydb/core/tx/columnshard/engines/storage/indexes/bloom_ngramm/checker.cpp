@@ -3,7 +3,7 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/checker.h>
 
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -21,12 +21,15 @@ bool TFilterChecker::DoCheckImpl(const std::vector<TString>& blobs) const {
     for (auto&& blob : blobs) {
         TFixStringBitsStorage bits(blob);
         bool found = true;
+        TStringBuilder sb;
         for (auto&& i : HashValues) {
+            sb << i % bits.GetSizeBits() << ",";
             if (!bits.Get(i % bits.GetSizeBits())) {
                 found = false;
                 break;
             }
         }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("size", bits.GetSizeBits())("found", found)("hashes", sb)("details", bits.DebugString());
         if (found) {
             //            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("size", bArray.length())("data", bArray.ToString())("index_id", GetIndexId());
             return true;

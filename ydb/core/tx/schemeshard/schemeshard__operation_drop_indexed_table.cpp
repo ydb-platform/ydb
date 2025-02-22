@@ -37,10 +37,10 @@ void DropPath(NIceDb::TNiceDb& db, TOperationContext& context,
     context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
     auto domainInfo = context.SS->ResolveDomainInfo(path->PathId);
-    domainInfo->DecPathsInside();
+    domainInfo->DecPathsInside(context.SS);
 
     auto parentDir = path.Parent();
-    parentDir->DecAliveChildren();
+    DecAliveChildrenDirect(operationId, parentDir.Base(), context); // for correct discard of ChildrenExist prop
     ++parentDir->DirAlterVersion;
     context.SS->PersistPathDirAlterVersion(db, parentDir.Base());
 
@@ -427,7 +427,7 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
                     .NotUnderDeleting()
                     .NotUnderOperation();
                 if (!table.Parent()->IsTableIndex() || !NTableIndex::IsBuildImplTable(table.LeafName())) {
-                    checks.IsCommonSensePath();                    
+                    checks.IsCommonSensePath();
                 }
             }
         }

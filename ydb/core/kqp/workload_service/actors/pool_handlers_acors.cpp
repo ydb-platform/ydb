@@ -409,11 +409,11 @@ protected:
         return LocalInFlight;
     }
 
-    TMaybe<TInstant> GetWaitDeadline(TInstant startTime) const {
+    std::optional<TInstant> GetWaitDeadline(TInstant startTime) const {
         if (auto cancelAfter = PoolConfig.QueryCancelAfter) {
             return startTime + cancelAfter;
         }
-        return Nothing();
+        return std::nullopt;
     }
 
     TMaybe<double> GetLoadCpuThreshold() const {

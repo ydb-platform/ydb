@@ -32,6 +32,7 @@
 #include "mkql_decimal_mul.h"
 #include "mkql_dictitems.h"
 #include "mkql_discard.h"
+#include "mkql_dynamic_variant.h"
 #include "mkql_element.h"
 #include "mkql_ensure.h"
 #include "mkql_enumerate.h"
@@ -260,6 +261,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"VariantItem", &WrapVariantItem},
         {"Way", &WrapWay},
         {"VisitAll", &WrapVisitAll},
+        {"DynamicVariant", &WrapDynamicVariant},
         {"AggrCountInit", &WrapAggrCountInit},
         {"AggrCountUpdate", &WrapAggrCountUpdate},
         {"QueueCreate", &WrapQueueCreate},
@@ -282,7 +284,6 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"ToBlocks", &WrapToBlocks},
         {"WideToBlocks", &WrapWideToBlocks},
         {"BlockFunc", &WrapBlockFunc},
-        {"BlockBitCast", &WrapBlockBitCast},
         {"FromBlocks", &WrapFromBlocks},
         {"WideFromBlocks", &WrapWideFromBlocks},
         {"WideSkipBlocks", &WrapWideSkipBlocks},
@@ -314,6 +315,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockDecimalDiv", &WrapBlockDecimalDiv},
         {"BlockDecimalMod", &WrapBlockDecimalMod},
         {"ScalarApply", &WrapScalarApply},
+        {"BlockStorage", &WrapBlockStorage},
+        {"BlockMapJoinIndex", &WrapBlockMapJoinIndex},
         {"BlockMapJoinCore", &WrapBlockMapJoinCore},
         {"MakeHeap", &WrapMakeHeap},
         {"PushHeap", &WrapPushHeap},

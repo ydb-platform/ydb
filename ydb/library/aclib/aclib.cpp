@@ -379,22 +379,6 @@ std::pair<ui32, ui32> TACL::RemoveAccess(const NACLibProto::TACE& filter) {
     return modified;
 }
 
-bool TACL::TryRemoveAccess(const NACLib::TSID& sid) {
-    auto* ACL = MutableACE();
-    
-    auto newEnd = std::remove_if(ACL->begin(), ACL->end(), [&sid](const NACLibProto::TACE& ace) {
-        return ace.GetSID() == sid;
-    });
-
-    if (newEnd == ACL->end()) {
-        return false;
-    }
-    
-    ACL->erase(newEnd, ACL->end());
-    
-    return true;
-}
-
 bool TACL::HasAccess(const NACLib::TSID& sid) {
     for (const auto& ace : GetACE()) {
         if (ace.GetSID() == sid) {
@@ -831,6 +815,11 @@ TString AccessRightsToString(ui32 accessRights) {
 const NACLib::TUserToken& TSystemUsers::Metadata() {
     static TUserToken GlobalMetadataUser = TUserToken(BUILTIN_ACL_METADATA, {});
     return GlobalMetadataUser;
+}
+
+const NACLib::TUserToken& TSystemUsers::Tmp() {
+    static TUserToken GlobalTmpUser = TUserToken(BUILTIN_ACL_TMP, {});
+    return GlobalTmpUser;
 }
 
 }

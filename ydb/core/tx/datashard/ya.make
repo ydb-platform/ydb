@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     alter_cdc_stream_unit.cpp
     alter_table_unit.cpp
-    backup_restore_common.cpp
     backup_restore_traits.cpp
     backup_unit.cpp
     build_and_wait_dependencies_unit.cpp
@@ -51,6 +50,7 @@ SRCS(
     datashard__cleanup_borrowed.cpp
     datashard__cleanup_in_rs.cpp
     datashard__cleanup_tx.cpp
+    datashard__cleanup_uncommitted.cpp
     datashard__column_stats.cpp
     datashard__compact_borrowed.cpp
     datashard__compaction.cpp
@@ -153,7 +153,6 @@ SRCS(
     execution_unit.h
     execution_unit_ctors.h
     execution_unit_kind.h
-    export_checksum.cpp
     export_common.cpp
     export_iface.cpp
     export_iface.h
@@ -256,6 +255,7 @@ PEERDIR(
     library/cpp/l1_distance
     library/cpp/l2_distance
     ydb/core/actorlib_impl
+    ydb/core/backup/common
     ydb/core/base
     ydb/core/change_exchange
     ydb/core/engine
@@ -293,8 +293,7 @@ IF (OS_WINDOWS)
     )
 ELSE()
     SRCS(
-        export_s3_buffer_raw.cpp
-        export_s3_buffer_zstd.cpp
+        export_s3_buffer.cpp
         export_s3_uploader.cpp
         extstorage_usage_config.cpp
         import_s3.cpp

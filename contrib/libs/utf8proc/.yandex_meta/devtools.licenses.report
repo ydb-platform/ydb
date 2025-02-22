@@ -84,7 +84,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        NEWS.md [311:311]
+        NEWS.md [319:319]
 
 KEEP     MIT                  b9f647ef7e29973cc8b999af88006590
 BELONGS ya.make

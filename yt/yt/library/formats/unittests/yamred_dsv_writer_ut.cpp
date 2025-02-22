@@ -11,7 +11,6 @@
 
 #include <cstdio>
 
-
 namespace NYT::NFormats {
 namespace {
 
@@ -117,7 +116,7 @@ protected:
         TString expectedKey;
         VectorStrok outputValue;
         VectorStrok expectedValue;
-        for (int rowIndex = 0; rowIndex < static_cast<int>(outputRows.size()); rowIndex++) {
+        for (int rowIndex = 0; rowIndex < std::ssize(outputRows); rowIndex++) {
             EXPECT_TRUE(ExtractKeyValue(outputRows[rowIndex], outputKey, outputValue, fieldSeparator));
             ASSERT_TRUE(ExtractKeyValue(expectedRows[rowIndex], expectedKey, expectedValue, fieldSeparator));
             EXPECT_EQ(outputKey, expectedKey);
@@ -144,7 +143,7 @@ protected:
         TString expectedSubkey;
         VectorStrok outputValue;
         VectorStrok expectedValue;
-        for (int rowIndex = 0; rowIndex < static_cast<int>(outputRows.size()); rowIndex++) {
+        for (int rowIndex = 0; rowIndex < std::ssize(outputRows); rowIndex++) {
             EXPECT_TRUE(ExtractKeySubkeyValue(outputRows[rowIndex], outputKey, outputSubkey, outputValue, fieldSeparator));
             ASSERT_TRUE(ExtractKeySubkeyValue(expectedRows[rowIndex], expectedKey, expectedSubkey, expectedValue, fieldSeparator));
             EXPECT_EQ(outputKey, expectedKey);

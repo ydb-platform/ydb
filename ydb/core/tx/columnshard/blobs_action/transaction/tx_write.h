@@ -1,13 +1,13 @@
 #pragma once
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/data_sharing/common/transactions/tx_extension.h>
+#include <ydb/core/tx/columnshard/tablet/ext_tx_base.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 
 namespace NKikimr::NColumnShard {
 
-class TTxWrite: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+class TTxWrite: public TExtendedTransactionBase {
 private:
-    using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
+    using TBase = TExtendedTransactionBase;
 
 public:
     TTxWrite(TColumnShard* self, const TEvPrivate::TEvWriteBlobsResult::TPtr& putBlobResult)

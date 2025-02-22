@@ -9,7 +9,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
-namespace NYdb::NDataStreams::V1 {
+namespace NYdb::inline V2::NDataStreams::V1 {
 
     TPartitioningSettingsBuilder<TCreateStreamSettings> TCreateStreamSettings::BeginConfigurePartitioningSettings() {
         return { *this };

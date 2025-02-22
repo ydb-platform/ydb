@@ -41,8 +41,8 @@ class TestSQLLogic(BaseSuiteRunner):
         assert_that(lambda: self.__execute_sqlitedb(statement.text), raises(sqlite3.Error), str(statement))
         super(TestSQLLogic, self).assert_statement_error(statement)
 
-    def get_query_and_output(self, statement_text):
-        return statement_text, self.__execute_sqlitedb(statement_text, query=True)
+    def get_expected_output(self, statement_text):
+        return self.__execute_sqlitedb(statement_text, query=True)
 
     def __execute_sqlitedb(self, statement_text, query=False):
         cursor = self.sqlite_connection.cursor()

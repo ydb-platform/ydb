@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NSdkStats {
 
 using std::string;

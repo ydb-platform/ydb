@@ -97,7 +97,7 @@ const TNameTablePtr& TRowBatchReader::GetNameTable() const
 TFuture<TSharedRange<TUnversionedRow>> TRowBatchReader::GetRows()
 {
     return Underlying_->Read()
-        .Apply(BIND([this, weakThis = MakeWeak(this)](const TSharedRef& block) {
+        .Apply(BIND([this, weakThis = MakeWeak(this)] (const TSharedRef& block) {
             auto this_ = weakThis.Lock();
             if (!this_) {
                 THROW_ERROR_EXCEPTION(NYT::EErrorCode::Canceled, "Reader destroyed");

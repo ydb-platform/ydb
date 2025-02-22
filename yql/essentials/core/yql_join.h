@@ -92,6 +92,7 @@ THashMap<TStringBuf, THashSet<TStringBuf>> CollectEquiJoinKeyColumnsByLabel(cons
 
 bool IsLeftJoinSideOptional(const TStringBuf& joinType);
 bool IsRightJoinSideOptional(const TStringBuf& joinType);
+THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const NNodes::TCoEquiJoinTuple& joinTree);
 
 TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,
     const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx);
@@ -149,6 +150,9 @@ struct TEquiJoinLinkSettings {
     bool ForceSortedMerge = false;
     bool Compact = false;
     TVector<TString> JoinAlgoOptions;
+
+    TVector<NDq::TJoinColumn> ShuffleLhsBy;
+    TVector<NDq::TJoinColumn> ShuffleRhsBy;
 };
 
 TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings);

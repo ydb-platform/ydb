@@ -41,8 +41,8 @@
         NAMES("sender", "coordinatorGeneration", "coordinatorActor")) \
     PROBE(StartSession, \
         GROUPS(), \
-        TYPES(TString, ui32, TString, ui64), \
-        NAMES("sender", "partitionId", "queryId", "size")) \
+        TYPES(TString, TString, ui64), \
+        NAMES("sender", "queryId", "size")) \
     PROBE(GetNextBatch, \
         GROUPS(), \
         TYPES(TString, ui32, TString, ui64), \
@@ -53,16 +53,16 @@
         NAMES("sender", "partitionId", "queryId", "size")) \
     PROBE(StopSession, \
         GROUPS(), \
-        TYPES(TString, ui32, TString, ui64), \
-        NAMES("sender", "partitionId", "queryId", "size")) \
+        TYPES(TString, TString, ui64), \
+        NAMES("sender", "queryId", "size")) \
     PROBE(TryConnect, \
         GROUPS(), \
         TYPES(TString, ui32), \
         NAMES("sender", "nodeId")) \
     PROBE(PrivateHeartbeat, \
         GROUPS(), \
-        TYPES(TString, ui32, TString, ui64), \
-        NAMES("sender", "partitionId", "queryId", "generation")) \
+        TYPES(TString, TString, ui64), \
+        NAMES("sender", "queryId", "generation")) \
     PROBE(NewDataArrived, \
         GROUPS(), \
         TYPES(TString, TString, TString, ui64, ui64), \
@@ -73,12 +73,12 @@
         NAMES("sender", "readActor", "queryId", "generation", "size")) \
     PROBE(SessionError, \
         GROUPS(), \
-        TYPES(TString, TString, ui32, TString, ui64, ui64), \
-        NAMES("sender", "readActor", "partitionId","queryId", "generation", "size")) \
+        TYPES(TString, TString, TString, ui64, ui64), \
+        NAMES("sender", "readActor", "queryId", "generation", "size")) \
     PROBE(Statistics, \
         GROUPS(), \
-        TYPES(TString, TString, ui32, TString, ui64, ui64), \
-        NAMES("sender", "readActor", "partitionId","queryId", "generation", "size")) \
+        TYPES(TString, TString, ui64, ui64), \
+        NAMES("readActor", "queryId", "generation", "size")) \
     PROBE(UpdateMetrics, \
         GROUPS(), \
         TYPES(), \
@@ -90,7 +90,7 @@
     PROBE(SessionStatistic, \
         GROUPS(), \
         TYPES(TString, TString, TString, TString, TString, ui32, ui64, ui64, ui64, ui64, ui64), \
-        NAMES("sender", "readGroup", "endpoint","database", "partitionId", "readBytes", "unreadBytes", "restartSessionByOffsets", "readEvents", "lastReadedOffset")) \
+        NAMES("sender", "readGroup", "endpoint","database", "partitionId", "readBytes", "queuedBytes", "restartSessionByOffsets", "readEvents", "lastReadedOffset")) \
     PROBE(GetInternalState, \
         GROUPS(), \
         TYPES(TString, ui64), \

@@ -1,9 +1,11 @@
 #include "logging.h"
 #include "private_events.h"
 #include "target_discoverer.h"
+#include "target_table.h"
 #include "util.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -42,10 +44,21 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             switch (entry.Type) {
             case NYdb::NScheme::ESchemeEntryType::SubDomain:
             case NYdb::NScheme::ESchemeEntryType::Directory:
-                Pending.erase(it);
-                return ListDirectory(path);
+                if (IsReplication()) {
+                    Pending.erase(it);
+                    return ListDirectory(path);
+                }
+                break;
             case NYdb::NScheme::ESchemeEntryType::Table:
-                return DescribeTable(ev->Cookie);
+                if (IsReplication()) {
+                    return DescribeTable(ev->Cookie);
+                }
+                break;
+            case NYdb::NScheme::ESchemeEntryType::Topic:
+                if (IsTransfer()) {
+                    return DescribeTopic(ev->Cookie);
+                }
+                break;
             default:
                 break;
             }
@@ -54,7 +67,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 << ": path# " << path.first
                 << ", type# " << entry.Type);
 
-            NYql::TIssues issues;
+            NYdb::NIssue::TIssues issues;
             issues.AddIssue(TStringBuilder() << "Unsupported entry type: " << entry.Type);
             Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
         } else {
@@ -98,10 +111,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             LOG_D("Describe table succeeded"
                 << ": path# " << path.first);
 
-            const auto& target = ToAdd.emplace_back(path.first, path.second, TReplication::ETargetKind::Table);
+            const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
+                std::make_shared<TTargetTable::TTableConfig>(path.first, path.second));
             LOG_I("Add target"
-                << ": srcPath# " << target.SrcPath
-                << ", dstPath# " << target.DstPath
+                << ": srcPath# " << target.Config->GetSrcPath()
+                << ", dstPath# " << target.Config->GetDstPath()
                 << ", kind# " << target.Kind);
 
             for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
@@ -114,16 +128,68 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 }
 
                 const auto& target = ToAdd.emplace_back(
-                    CanonizePath(ChildPath(SplitPath(path.first), index.GetIndexName())),
-                    CanonizePath(ChildPath(SplitPath(path.second), {index.GetIndexName(), "indexImplTable"})),
-                    TReplication::ETargetKind::IndexTable);
+                    TReplication::ETargetKind::IndexTable,
+                    std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+                        CanonizePath(ChildPath(SplitPath(path.first), TString{index.GetIndexName()})),
+                        CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))
+                    ));
                 LOG_I("Add target"
-                    << ": srcPath# " << target.SrcPath
-                    << ", dstPath# " << target.DstPath
+                    << ": srcPath# " << target.Config->GetSrcPath()
+                    << ", dstPath# " << target.Config->GetDstPath()
                     << ", kind# " << target.Kind);
             }
         } else {
             LOG_E("Describe table failed"
+                << ": path# " << path.first
+                << ", status# " << result.GetStatus()
+                << ", issues# " << result.GetIssues().ToOneLineString());
+
+            if (IsRetryableError(result)) {
+                return RetryDescribe(*it);
+            } else {
+                Failed.emplace_back(path.first, result);
+            }
+        }
+
+        Pending.erase(it);
+        MaybeReply();
+    }
+
+    void DescribeTopic(ui32 idx) {
+        Y_ABORT_UNLESS(idx < Paths.size());
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(Paths.at(idx).first, {}), 0, idx);
+        Pending.insert(idx);
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        auto it = Pending.find(ev->Cookie);
+        if (it == Pending.end()) {
+            LOG_W("Unknown describe topic response"
+                << ": cookie# " << ev->Cookie);
+            return;
+        }
+
+        Y_ABORT_UNLESS(*it < Paths.size());
+        const auto& path = Paths.at(*it);
+
+        const auto& result = ev->Get()->Result;
+        if (result.IsSuccess()) {
+            LOG_D("Describe topic succeeded"
+                << ": path# " << path.first);
+
+            Y_ABORT_UNLESS((int)*it < Config.GetTransferSpecific().GetTargets().size());
+            const auto& targetConf = Config.GetTransferSpecific().GetTargets().at(*it);
+
+            const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
+                std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, targetConf.GetTransformLambda()));
+            LOG_I("Add target"
+                << ": srcPath# " << target.Config->GetSrcPath()
+                << ", dstPath# " << target.Config->GetDstPath()
+                << ", kind# " << target.Kind);
+        } else {
+            LOG_E("Describe topic failed"
                 << ": path# " << path.first
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());
@@ -170,10 +236,10 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             return false;
         }
 
-        return entry.Name.StartsWith("~")
-            || entry.Name.StartsWith(".sys")
-            || entry.Name.StartsWith(".metadata")
-            || entry.Name.StartsWith("export-");
+        return entry.Name.starts_with("~")
+            || entry.Name.starts_with(".sys")
+            || entry.Name.starts_with(".metadata")
+            || entry.Name.starts_with("export-");
     }
 
     void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {
@@ -258,18 +324,38 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         ListingRetries.clear();
     }
 
+    bool IsReplication() const {
+        return Config.HasSpecific();
+    }
+
+    bool IsTransfer() const {
+        return Config.HasTransferSpecific();
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::REPLICATION_CONTROLLER_TARGET_DISCOVERER;
     }
 
-    explicit TTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy, TVector<std::pair<TString, TString>>&& paths)
+    explicit TTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,
+        const NKikimrReplication::TReplicationConfig& config)
         : Parent(parent)
         , ReplicationId(rid)
         , YdbProxy(proxy)
-        , Paths(std::move(paths))
+        , Config(config)
         , LogPrefix("TargetDiscoverer", ReplicationId)
     {
+        if (Config.HasSpecific()) {
+            for (const auto& target : Config.GetSpecific().GetTargets()) {
+                Paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
+            }
+        } else if (Config.HasTransferSpecific()) {
+            for (const auto& target : Config.GetTransferSpecific().GetTargets()) {
+                Paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
+            }
+        } else {
+            Y_ABORT("Unsupported");
+        }
     }
 
     void Bootstrap() {
@@ -285,6 +371,7 @@ public:
             hFunc(TEvYdbProxy::TEvDescribePathResponse, Handle);
             hFunc(TEvYdbProxy::TEvListDirectoryResponse, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
+            hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
             sFunc(TEvents::TEvWakeup, Retry);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -294,6 +381,7 @@ private:
     const TActorId Parent;
     const ui64 ReplicationId;
     const TActorId YdbProxy;
+    const NKikimrReplication::TReplicationConfig Config;
     TVector<std::pair<TString, TString>> Paths;
     const TActorLogPrefix LogPrefix;
 
@@ -309,9 +397,9 @@ private:
 }; // TTargetDiscoverer
 
 IActor* CreateTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,
-    TVector<std::pair<TString, TString>>&& specificPaths)
+    const NKikimrReplication::TReplicationConfig& config)
 {
-    return new TTargetDiscoverer(parent, rid, proxy, std::move(specificPaths));
+    return new TTargetDiscoverer(parent, rid, proxy, config);
 }
 
 }

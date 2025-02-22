@@ -30,11 +30,11 @@ encodeInt64(int64_t input, std::array<uint8_t, 10> &output) noexcept {
     auto v = val & mask;
     size_t bytesOut = 0;
     while (val >>= 7) {
-        output[bytesOut++] = (v | 0x80);
+        output[bytesOut++] = static_cast<uint8_t>(v | 0x80);
         v = val & mask;
     }
 
-    output[bytesOut++] = v;
+    output[bytesOut++] = static_cast<uint8_t>(v);
     return bytesOut;
 }
 size_t
@@ -46,11 +46,11 @@ encodeInt32(int32_t input, std::array<uint8_t, 5> &output) noexcept {
     auto v = val & mask;
     size_t bytesOut = 0;
     while (val >>= 7) {
-        output[bytesOut++] = (v | 0x80);
+        output[bytesOut++] = static_cast<uint8_t>(v | 0x80);
         v = val & mask;
     }
 
-    output[bytesOut++] = v;
+    output[bytesOut++] = static_cast<uint8_t>(v);
     return bytesOut;
 }
 

@@ -164,6 +164,10 @@ public:
         }
     }
 
+    ITerminator& GetTerminator() {
+        return *ValueBuilder;
+    }
+
     const TComputationMutables& GetMutables() const {
         return Mutables;
     }
@@ -814,8 +818,8 @@ public:
         : Codegen((NYql::NCodegen::ICodegen::IsCodegenAvailable() && opts.OptLLVM != "OFF") || GetEnv(TString("MKQL_FORCE_USE_LLVM")) ? NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native) : NYql::NCodegen::ICodegen::TPtr())
 #endif
     {
-    /// TODO: Enable JIT for AARCH64
-#if defined(__aarch64__)
+    /// TODO: Enable JIT for AARCH64/Win
+#if defined(__aarch64__) || defined(_win_)
         Codegen = {};
 #endif
 
@@ -994,6 +998,7 @@ TIntrusivePtr<TComputationPatternImpl> MakeComputationPatternImpl(TExploringNode
     depScanner.Walk(root.GetNode(), opts.Env);
 
     auto builder = MakeHolder<TComputationGraphBuildingVisitor>(opts);
+    const TBindTerminator bind(&builder->GetPatternNodes()->GetTerminator());
     for (const auto& node : explorer.GetNodes()) {
         Y_ABORT_UNLESS(node->GetCookie() <= IS_NODE_REACHABLE, "TNode graph should not be reused");
         if (node->GetCookie() == IS_NODE_REACHABLE) {

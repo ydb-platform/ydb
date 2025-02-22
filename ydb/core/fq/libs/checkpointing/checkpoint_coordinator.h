@@ -193,6 +193,7 @@ private:
     std::unique_ptr<TPendingInitCoordinator> PendingInit;
     bool GraphIsRunning = false;
     bool InitingZeroCheckpoint = false;
+    bool FailedZeroCheckpoint = false;
     bool RestoringFromForeignCheckpoint = false;
 
     TCheckpointCoordinatorMetrics Metrics;

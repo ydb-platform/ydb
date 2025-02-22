@@ -100,10 +100,11 @@ namespace {
         SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists);
     }
 
-    template <typename TRequest, typename TEvRequest, typename TDerived>
+    template <typename TEvRequest, typename TDerived>
     class TDbResolver: public TActorBootstrapped<TDerived> {
         void Handle() {
-            TlsActivationContext->Send(new IEventHandle(Cache, Sender, new TEvRequest(Request.Release())));
+            Request->Rewrite(Request->GetTypeRewrite(), Cache);
+            this->Send(Request.Release());
             this->PassAway();
         }
 
@@ -112,17 +113,16 @@ namespace {
             return NKikimrServices::TActivity::SCHEME_BOARD_DB_RESOLVER;
         }
 
-        TDbResolver(const TActorId& cache, const TActorId& sender, THolder<TRequest> request, ui64 domainOwnerId)
+        TDbResolver(const TActorId& cache, typename TEvRequest::TPtr& request, ui64 domainOwnerId)
             : Cache(cache)
-            , Sender(sender)
-            , Request(std::move(request))
+            , Request(request)
             , DomainOwnerId(domainOwnerId)
         {
         }
 
         void Bootstrap() {
             TNavigate::TEntry entry;
-            entry.Path = SplitPath(Request->DatabaseName);
+            entry.Path = SplitPath(Request->Get()->Request->DatabaseName);
             entry.Operation = TNavigate::EOp::OpPath;
             entry.RedirectRequired = false;
 
@@ -140,32 +140,31 @@ namespace {
             }
         }
 
-        using TBase = TDbResolver<TRequest, TEvRequest, TDerived>;
+        using TBase = TDbResolver<TEvRequest, TDerived>;
 
     private:
         const TActorId Cache;
-        const TActorId Sender;
-        THolder<TRequest> Request;
+        typename TEvRequest::TPtr Request;
         const ui64 DomainOwnerId;
 
     }; // TDbResolver
 
-    class TDbResolverNavigate: public TDbResolver<TNavigate, TEvNavigate, TDbResolverNavigate> {
+    class TDbResolverNavigate: public TDbResolver<TEvNavigate, TDbResolverNavigate> {
     public:
         using TBase::TBase;
     };
 
-    class TDbResolverResolve: public TDbResolver<TResolve, TEvResolve, TDbResolverResolve> {
+    class TDbResolverResolve: public TDbResolver<TEvResolve, TDbResolverResolve> {
     public:
         using TBase::TBase;
     };
 
-    IActor* CreateDbResolver(const TActorId& cache, const TActorId& sender, THolder<TNavigate> request, ui64 domainOwnerId) {
-        return new TDbResolverNavigate(cache, sender, std::move(request), domainOwnerId);
+    IActor* CreateDbResolver(const TActorId& cache, TEvNavigate::TPtr& request, ui64 domainOwnerId) {
+        return new TDbResolverNavigate(cache, request, domainOwnerId);
     }
 
-    IActor* CreateDbResolver(const TActorId& cache, const TActorId& sender, THolder<TResolve> request, ui64 domainOwnerId) {
-        return new TDbResolverResolve(cache, sender, std::move(request), domainOwnerId);
+    IActor* CreateDbResolver(const TActorId& cache, TEvResolve::TPtr& request, ui64 domainOwnerId) {
+        return new TDbResolverResolve(cache, request, domainOwnerId);
     }
 
     template <typename TContextPtr, typename TEvResult, typename TDerived>
@@ -1007,11 +1006,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             schema.reserve(pqConfig.PartitionKeySchemaSize());
             for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
-                if (keySchema.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    schema.push_back(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(keySchema.GetTypeInfo().GetPgTypeId())));
-                } else {
-                    schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
-                }
+                auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(keySchema.GetTypeId(),
+                    keySchema.HasTypeInfo() ? &keySchema.GetTypeInfo() : nullptr);
+                schema.push_back(NScheme::TTypeInfo(typeInfoMod.TypeInfo));
             }
 
             partitioning.reserve(pqDesc.PartitionsSize());
@@ -1030,19 +1027,17 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             }
 
+            const size_t emptyEndKeyPrefixCount = CountIf(partitioning, [](const auto& partition) {
+                Y_ABORT_UNLESS(partition.Range);
+                return !partition.Range->EndKeyPrefix;
+            });
+            Y_ABORT_UNLESS(emptyEndKeyPrefixCount <= 1);
             Sort(partitioning.begin(), partitioning.end(), [&schema](const auto& lhs, const auto& rhs) {
-                Y_ABORT_UNLESS(lhs.Range && rhs.Range);
-                Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix || rhs.Range->EndKeyPrefix);
-
-                if (!lhs.Range->EndKeyPrefix) {
-                    return false;
+                const bool lhsHasEndKeyPrefix{lhs.Range->EndKeyPrefix};
+                const bool rhsHasEndKeyPrefix{rhs.Range->EndKeyPrefix};
+                if (!lhsHasEndKeyPrefix || !rhsHasEndKeyPrefix) {
+                    return lhsHasEndKeyPrefix > rhsHasEndKeyPrefix;
                 }
-
-                if (!rhs.Range->EndKeyPrefix) {
-                    return true;
-                }
-
-                Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix && rhs.Range->EndKeyPrefix);
 
                 const int compares = CompareTypedCellVectors(
                     lhs.Range->EndKeyPrefix.GetCells().data(),
@@ -2622,7 +2617,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return false;
         }
 
-        Register(CreateDbResolver(SelfId(), ev->Sender, THolder(request.Release()), it->second));
+        Register(CreateDbResolver(SelfId(), ev, it->second));
         return true;
     }
 

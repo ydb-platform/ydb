@@ -1,13 +1,15 @@
 #pragma once
 
+#include "fwd.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 struct TTxOnlineSettings {
     using TSelf = TTxOnlineSettings;
 
-    FLUENT_SETTING_DEFAULT(bool, AllowInconsistentReads, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, AllowInconsistentReads, false);
 
     TTxOnlineSettings() {}
 };
@@ -69,7 +71,7 @@ struct TTxSettings {
         TS_SNAPSHOT_RW,
     };
 
-    FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
+    FLUENT_SETTING_DEPRECATED(TTxOnlineSettings, OnlineSettings);
 
     ETransactionMode GetMode() const {
         return Mode_;
@@ -98,7 +100,7 @@ struct TTxControl {
 
     const TMaybe<TString> TxId_;
     const TMaybe<TTxSettings> TxSettings_;
-    FLUENT_SETTING_FLAG(CommitTx);
+    FLUENT_SETTING_FLAG_DEPRECATED(CommitTx);
 
     bool HasTx() const { return TxId_.Defined() || TxSettings_.Defined(); }
 

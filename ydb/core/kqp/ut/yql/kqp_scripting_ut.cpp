@@ -1,11 +1,11 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/core/kqp/counters/kqp_counters.h>
 
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/json/json_prettifier.h>
 
@@ -611,8 +611,8 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 6);
 
-        auto stats = result.GetStats().Get();
-        auto planJson = NYdb::TProtoAccessor::GetProto(*stats).query_plan();
+        auto stats = result.GetStats().value();
+        auto planJson = NYdb::TProtoAccessor::GetProto(stats).query_plan();
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(planJson, &plan, true);
@@ -732,6 +732,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         }
         UNIT_ASSERT(unsuccessStatus);
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     void DoStreamExecuteYqlScriptTimeoutBruteForce(bool clientTimeout, bool operationTimeout) {
@@ -774,6 +775,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptScanCancelAfterBruteForce) {
@@ -816,6 +818,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     // Check in case of CANCELED status we have no made changes in the table
@@ -866,6 +869,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptWriteCancelAfterBruteForced) {
@@ -900,11 +904,12 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
                 expected += createExpectedRow(createKey(i));
                 if (i != maxTimeoutMs)
                     expected += ";";
-                CompareYson(TString("[") + expected + "]", yson);
+                CompareYson(TString("[") + expected + "]", TString{yson});
             }
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptScanClientTimeoutBruteForce) {
@@ -1107,10 +1112,10 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets()[0].RowsCount(), 1);
         TResultSetParser rs0(result.GetResultSets()[0]);
         UNIT_ASSERT(rs0.TryNextRow());
-        UNIT_ASSERT_VALUES_EQUAL(*rs0.ColumnParser(0).GetOptionalUint32().Get(), 101u);
+        UNIT_ASSERT_VALUES_EQUAL(rs0.ColumnParser(0).GetOptionalUint32().value(), 101u);
         TResultSetParser rs1(result.GetResultSets()[1]);
         UNIT_ASSERT(rs1.TryNextRow());
-        UNIT_ASSERT_VALUES_EQUAL(*rs1.ColumnParser(0).GetOptionalUint32().Get(), 102u);
+        UNIT_ASSERT_VALUES_EQUAL(rs1.ColumnParser(0).GetOptionalUint32().value(), 102u);
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptEmptyResults) {

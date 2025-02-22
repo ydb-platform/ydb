@@ -96,6 +96,9 @@ DECLARE_REFCOUNTED_CLASS(TProtobufInteropDynamicConfig);
  */
 class TProtobufMessageType;
 
+//! A reflected counterpart of ::google::protobuf::FieldDescriptor::Type.
+YT_DEFINE_STRONG_TYPEDEF(TProtobufElementType, int);
+
 //! An opaque reflected counterpart of ::google::protobuf::EnumDescriptor.
 class TProtobufEnumType;
 

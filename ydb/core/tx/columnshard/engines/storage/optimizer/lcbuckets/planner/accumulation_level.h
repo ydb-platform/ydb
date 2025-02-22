@@ -50,6 +50,10 @@ private:
         return 1000.0 * PortionsInfo.GetCount() * PortionsInfo.GetCount() / mb;
     }
 
+    virtual TInstant DoGetWeightExpirationInstant() const override {
+        return TInstant::Max();
+    }
+
 public:
     TAccumulationLevelPortions(const ui64 levelId, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters)
         : TBase(levelId, nextLevel)

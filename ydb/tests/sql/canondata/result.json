@@ -4036,102 +4036,102 @@
             "value": "transactional_update"
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_dynumber": [
+    "test_kv.TestYdbKvWorkload.test_dynumber": [
         {
             "column0": 4
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[Int32--2147483648-False]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[Int32--2147483648-False]": [
         {
             "id": 1,
             "value": -2147483648
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[Int32--2147483648-True]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[Int32--2147483648-True]": [
         {
             "id": 1,
             "value": -2147483648
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[Int32-2147483647-False]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[Int32-2147483647-False]": [
         {
             "id": 1,
             "value": 2147483647
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[Int32-2147483647-True]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[Int32-2147483647-True]": [
         {
             "id": 1,
             "value": 2147483647
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[Int64--9223372036854775808-False]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[Int64--9223372036854775808-False]": [
         {
             "id": 1,
             "value": -9223372036854775808
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[Int64--9223372036854775808-True]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[Int64--9223372036854775808-True]": [
         {
             "id": 1,
             "value": -9223372036854775808
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[Int64-9223372036854775807-False]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[Int64-9223372036854775807-False]": [
         {
             "id": 1,
             "value": 9223372036854775807
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[Int64-9223372036854775807-True]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[Int64-9223372036854775807-True]": [
         {
             "id": 1,
             "value": 9223372036854775807
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[UInt32-0-False]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[UInt32-0-False]": [
         {
             "id": 1,
             "value": 0
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[UInt32-0-True]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[UInt32-0-True]": [
         {
             "id": 1,
             "value": 0
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[UInt32-4294967295-False]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[UInt32-4294967295-False]": [
         {
             "id": 1,
             "value": 4294967295
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[UInt32-4294967295-True]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[UInt32-4294967295-True]": [
         {
             "id": 1,
             "value": 4294967295
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[Uint64-0-False]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[Uint64-0-False]": [
         {
             "id": 1,
             "value": 0
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[Uint64-0-True]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[Uint64-0-True]": [
         {
             "id": 1,
             "value": 0
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[Uint64-18446744073709551615-False]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[Uint64-18446744073709551615-False]": [
         {
             "id": 1,
             "value": 18446744073709551615
         }
     ],
-    "test_sql.TestYdbKvWorkload.test_minimal_maximal_values[Uint64-18446744073709551615-True]": [
+    "test_kv.TestYdbKvWorkload.test_minimal_maximal_values[Uint64-18446744073709551615-True]": [
         {
             "id": 1,
             "value": 18446744073709551615

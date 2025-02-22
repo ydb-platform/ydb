@@ -1,6 +1,5 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "backup_restore_common.h"
 #include "datashard.h"
 #include "export_common.h"
 #include "export_s3.h"
@@ -9,9 +8,13 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/events/common.h>
+#include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -31,7 +34,13 @@
 namespace NKikimr {
 namespace NDataShard {
 
+using namespace NBackup;
 using namespace NBackupRestoreTraits;
+
+struct TChangefeedExportDescriptions {
+    const Ydb::Table::ChangefeedDescription ChangefeedDescription;
+    const Ydb::Topic::DescribeTopicResult Topic;
+};
 
 class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
@@ -159,10 +168,12 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         if (!MetadataUploaded) {
             UploadMetadata();
-        } else if (!PermissionsUploaded) {
+        } else if (EnablePermissions && !PermissionsUploaded) {
             UploadPermissions();
         } else if (!SchemeUploaded) {
             UploadScheme();
+        } else if (!ChangefeedsUploaded) {
+            UploadChangefeed();
         } else {
             this->Become(&TThis::StateUploadData);
 
@@ -174,57 +185,86 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         }
     }
 
+    template <typename T>
+    void PutData(TString&& data, const TString& key, T stateFunc) {
+        auto request = Aws::S3::Model::PutObjectRequest().WithKey(key);
+        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(data)));
+        this->Become(stateFunc);
+    }
+
+    template <typename T>
+    void PutDataWithChecksum(TString&& data, const TString& key, TString& checksum, T stateFunc) {
+        if (EnableChecksums) {
+            checksum = ComputeChecksum(data);
+        }
+        PutData(std::move(data), key, stateFunc);
+    }
+
+    template <typename T>
+    void PutMessage(const google::protobuf::Message& message, const TString& key, TString& checksum, T stateFunc) {
+        google::protobuf::TextFormat::PrintToString(message, &Buffer);
+        PutDataWithChecksum(std::move(Buffer), key, checksum, stateFunc);
+    }
+
+    void PutScheme(const Ydb::Table::CreateTableRequest& scheme) {
+        PutMessage(scheme, Settings.GetSchemeKey(), SchemeChecksum, &TThis::StateUploadScheme);
+    }
+
     void UploadScheme() {
         Y_ABORT_UNLESS(!SchemeUploaded);
 
         if (!Scheme) {
             return Finish(false, "Cannot infer scheme");
         }
+        PutScheme(Scheme.GetRef());
+    }
 
-        google::protobuf::TextFormat::PrintToString(Scheme.GetRef(), &Buffer);
-        if (EnableChecksums) {
-            SchemeChecksum = ComputeExportChecksum(Buffer);
-        }
-
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Settings.GetSchemeKey());
-        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
-
-        this->Become(&TThis::StateUploadScheme);
+    void PutPermissions(const Ydb::Scheme::ModifyPermissionsRequest& permissions) {
+        PutMessage(permissions, Settings.GetPermissionsKey(), PermissionsChecksum, &TThis::StateUploadPermissions);
     }
 
     void UploadPermissions() {
-        Y_ABORT_UNLESS(!PermissionsUploaded);
+        Y_ABORT_UNLESS(EnablePermissions && !PermissionsUploaded);
 
         if (!Permissions) {
             return Finish(false, "Cannot infer permissions");
         }
+        PutPermissions(Permissions.GetRef());
+    }
 
-        google::protobuf::TextFormat::PrintToString(Permissions.GetRef(), &Buffer);
-        if (EnableChecksums) {
-            PermissionsChecksum = ComputeExportChecksum(Buffer);
+    void PutChangefeedDescription(const Ydb::Table::ChangefeedDescription& changefeed, const TString& changefeedName) {
+        PutMessage(changefeed, Settings.GetChangefeedKey(changefeedName), ChangefeedChecksum, &TThis::StateUploadChangefeed);
+    }
+
+    const TString& GetCurrentChangefeedName() const {
+        return Changefeeds.at(IndexExportedChangefeed).ChangefeedDescription.Getname();
+    }
+
+    void UploadChangefeed() {
+        if (IndexExportedChangefeed == Changefeeds.size()) {
+            ChangefeedsUploaded = true;
+            if (Scanner) {
+                this->Send(Scanner, new TEvExportScan::TEvFeed());
+            }
+            this->Become(&TThis::StateUploadData);
+            return;
         }
+        PutChangefeedDescription(Changefeeds[IndexExportedChangefeed].ChangefeedDescription, GetCurrentChangefeedName());
+    }
 
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Settings.GetPermissionsKey());
-        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
+    void PutTopicDescription(const Ydb::Topic::DescribeTopicResult& topic, const TString& changefeedName) {
+        PutMessage(topic, Settings.GetTopicKey(changefeedName), TopicChecksum, &TThis::StateUploadTopic);
+    }
 
-        this->Become(&TThis::StateUploadPermissions);
+    void UploadTopic() {
+        PutTopicDescription(Changefeeds[IndexExportedChangefeed].Topic, GetCurrentChangefeedName());
     }
 
     void UploadMetadata() {
         Y_ABORT_UNLESS(!MetadataUploaded);
 
         Buffer = std::move(Metadata);
-        if (EnableChecksums) {
-            MetadataChecksum = ComputeExportChecksum(Buffer);
-        }
-
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Settings.GetMetadataKey());
-        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
-
-        this->Become(&TThis::StateUploadMetadata);
+        PutDataWithChecksum(std::move(Buffer), Settings.GetMetadataKey(), MetadataChecksum, &TThis::StateUploadMetadata);
     }
 
     void UploadChecksum(TString&& checksum, const TString& checksumKey, const TString& objectKeySuffix, 
@@ -232,13 +272,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     {   
         // make checksum verifiable using sha256sum CLI
         checksum += ' ' + objectKeySuffix;
-
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(checksumKey);
-        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(checksum)));
-
+        PutData(std::move(checksum), checksumKey, &TThis::StateUploadChecksum);
         ChecksumUploadedCallback = checksumUploadedCallback;
-        this->Become(&TThis::StateUploadChecksum);
     }
 
     void HandleScheme(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
@@ -254,11 +289,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         auto nextStep = [this]() {
             SchemeUploaded = true;
-
-            if (Scanner) {
-                this->Send(Scanner, new TEvExportScan::TEvFeed());
-            }
-            this->Become(&TThis::StateUploadData);
+            UploadChangefeed();
         };
 
         if (EnableChecksums) {
@@ -293,6 +324,51 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         }
     }
 
+    void HandleChangefeed(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        EXPORT_LOG_D("HandleChangefeed TEvExternalStorage::TEvPutObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, TStringBuf("PutObject (changefeed)"))) {
+            return;
+        }
+
+        auto nextStep = [this]() {
+            UploadTopic();
+        };
+        if (EnableChecksums) {
+            TString checksumKey = ChecksumKey(Settings.GetChangefeedKey(GetCurrentChangefeedName()));
+            UploadChecksum(std::move(ChangefeedChecksum), checksumKey, ChangefeedKeySuffix(), nextStep);
+        } else {
+            nextStep();
+        }
+    }
+
+    void HandleTopic(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        EXPORT_LOG_D("HandleTopic TEvExternalStorage::TEvPutObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, TStringBuf("PutObject (topic)"))) {
+            return;
+        }
+
+        auto nextStep = [this]() {
+            ++IndexExportedChangefeed;
+            UploadChangefeed();
+        };
+        if (EnableChecksums) {
+            TString checksumKey = ChecksumKey(Settings.GetTopicKey(GetCurrentChangefeedName()));
+            UploadChecksum(std::move(TopicChecksum), checksumKey, TopicKeySuffix(), nextStep);
+        } else {
+            nextStep();
+        }
+    }
+
     void HandleMetadata(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
@@ -306,7 +382,11 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         auto nextStep = [this]() {
             MetadataUploaded = true;
-            UploadPermissions();
+            if (EnablePermissions) {
+                UploadPermissions();
+            } else {
+                UploadScheme();
+            }
         };
 
         if (EnableChecksums) {
@@ -342,7 +422,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return PassAway();
         }
 
-        if (ProxyResolved && SchemeUploaded && MetadataUploaded && PermissionsUploaded) {
+        const bool permissionsDone = !EnablePermissions || PermissionsUploaded;
+        if (ProxyResolved && SchemeUploaded && MetadataUploaded && permissionsDone && ChangefeedsUploaded) {
             this->Send(Scanner, new TEvExportScan::TEvFeed());
         }
     }
@@ -659,6 +740,7 @@ public:
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
+            TVector<TChangefeedExportDescriptions> changefeeds,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
         : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
@@ -670,15 +752,18 @@ public:
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))
+        , Changefeeds(std::move(changefeeds))
         , Metadata(std::move(metadata))
         , Permissions(std::move(permissions))
         , Retries(task.GetNumberOfRetries())
         , Attempt(0)
         , Delay(TDuration::Minutes(1))
         , SchemeUploaded(ShardNum == 0 ? false : true)
+        , ChangefeedsUploaded(ShardNum == 0 ? false : true)
         , MetadataUploaded(ShardNum == 0 ? false : true)
         , PermissionsUploaded(ShardNum == 0 ? false : true)
         , EnableChecksums(task.GetEnableChecksums())
+        , EnablePermissions(task.GetEnablePermissions())
     {
     }
 
@@ -723,6 +808,22 @@ public:
     STATEFN(StateUploadPermissions) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandlePermissions);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    STATEFN(StateUploadChangefeed) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleChangefeed);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    STATEFN(StateUploadTopic) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleTopic);
         default:
             return StateBase(ev);
         }
@@ -773,17 +874,20 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
+    const TVector<TChangefeedExportDescriptions> Changefeeds;
     const TString Metadata;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
     const ui32 Retries;
     ui32 Attempt;
+    ui64 IndexExportedChangefeed = 0;
 
     TDuration Delay;
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 
     TActorId Client;
     bool SchemeUploaded;
+    bool ChangefeedsUploaded;
     bool MetadataUploaded;
     bool PermissionsUploaded;
     bool MultiPart;
@@ -797,8 +901,12 @@ private:
     TMaybe<TString> Error;
 
     bool EnableChecksums;
+    bool EnablePermissions;
+
     TString DataChecksum;
     TString MetadataChecksum;
+    TString ChangefeedChecksum;
+    TString TopicChecksum;
     TString SchemeChecksum;
     TString PermissionsChecksum;
     std::function<void()> ChecksumUploadedCallback;
@@ -810,22 +918,47 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
-    auto permissions = (Task.GetShardNum() == 0)
+    const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
+    const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
+    Y_ASSERT(persQueues.size() == cdcStreams.size());
+
+    const int changefeedsCount = cdcStreams.size();
+    TVector <TChangefeedExportDescriptions> changefeeds;
+    changefeeds.reserve(changefeedsCount);
+
+    for (int i = 0; i < changefeedsCount; ++i) {
+        Ydb::Table::ChangefeedDescription changefeed;
+        const auto& cdcStream = cdcStreams.at(i);
+        FillChangefeedDescription(changefeed, cdcStream);
+
+        Ydb::Topic::DescribeTopicResult topic;
+        const auto& pq = persQueues.at(i);
+        Ydb::StatusIds::StatusCode status;
+        TString error;
+        FillTopicDescription(topic, pq.GetPersQueueGroup(), pq.GetSelf(), cdcStream.GetName(), status, error);
+        // Unnecessary fields
+        topic.clear_self();
+        topic.clear_topic_stats();
+        
+        changefeeds.emplace_back(changefeed, topic);
+    }
+
+    auto permissions = (Task.GetEnablePermissions() && Task.GetShardNum() == 0)
         ? GenYdbPermissions(Task.GetTable())
         : Nothing();
 
-    NBackupRestore::TMetadata metadata;
+    NBackup::TMetadata metadata;
     metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
 
-    NBackupRestore::TFullBackupMetadata::TPtr backup = new NBackupRestore::TFullBackupMetadata{
-        .SnapshotVts = NBackupRestore::TVirtualTimestamp(
+    NBackup::TFullBackupMetadata::TPtr backup = new NBackup::TFullBackupMetadata{
+        .SnapshotVts = NBackup::TVirtualTimestamp(
             Task.GetSnapshotStep(),
             Task.GetSnapshotTxId())
     };
     metadata.AddFullBackup(backup);
 
     return new TS3Uploader(
-        dataShard, txId, Task, std::move(scheme), std::move(permissions), metadata.Serialize());
+        dataShard, txId, Task, std::move(scheme), std::move(changefeeds), std::move(permissions), metadata.Serialize());
 }
 
 } // NDataShard

@@ -208,7 +208,7 @@ private:
 
         TFuture<void> Send(TSharedRefArray message, const NBus::TSendOptions& /*options*/) override
         {
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             auto messageType = GetMessageType(message);
             switch (messageType) {

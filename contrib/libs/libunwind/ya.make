@@ -11,11 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(18.1.0-rc1)
+VERSION(19.1.7)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-18.1.0-rc1.tar.gz)
-
-DISABLE(USE_LTO)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-19.1.7.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include
@@ -29,12 +27,15 @@ NO_RUNTIME()
 
 NO_UTIL()
 
+NO_LTO()
+
 NO_SANITIZE()
 
 NO_SANITIZE_COVERAGE()
 
 CFLAGS(
-    GLOBAL -D_libunwind_
+    -D_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER
+    -D_LIBUNWIND_IS_NATIVE_ONLY
     -fno-exceptions
     -fno-rtti
     -funwind-tables
@@ -47,9 +48,6 @@ IF (SANITIZER_TYPE == memory)
 ENDIF()
 
 IF (NOT OS_EMSCRIPTEN)
-    CFLAGS(
-        -D_LIBUNWIND_IS_NATIVE_ONLY
-    )
     SRCS(
         src/Unwind-EHABI.cpp
         src/Unwind-seh.cpp
@@ -77,7 +75,7 @@ ELSEIF (OS_EMSCRIPTEN AND NOT ARCH_WASM32)
     )
     CFLAGS(
         -D_LIBUNWIND_HIDE_SYMBOLS
-        -D__USING_WASM_EXCEPTIONS__
+        -D__WASM_EXCEPTIONS__
     )
     SRCS(
         src/Unwind-wasm.c

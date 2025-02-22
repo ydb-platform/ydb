@@ -510,6 +510,8 @@ def check_data(fields, unit, *args):
     if not dart_record[df.TestFiles.KEY]:
         return
 
+    dart_record[df.ModuleLang.KEY] = consts.ModuleLang.LANG_AGNOSTIC
+
     data = dump_test(unit, dart_record)
     if data:
         unit.set_property(["DART_DATA", data])
@@ -542,6 +544,7 @@ def check_resource(fields, unit, *args):
     )
 
     dart_record = create_dart_record(fields, unit, flat_args, spec_args)
+    dart_record[df.ModuleLang.KEY] = consts.ModuleLang.LANG_AGNOSTIC
 
     data = dump_test(unit, dart_record)
     if data:
@@ -790,13 +793,21 @@ def onadd_check_py_imports(fields, unit, *args):
     if unit.get("TIDY") == "yes":
         # graph changed for clang_tidy tests
         return
+
     if unit.get('NO_CHECK_IMPORTS_FOR_VALUE').strip() == "":
         return
+
     unit.onpeerdir(['library/python/testing/import_test'])
 
     dart_record = create_dart_record(fields, unit, (), {})
     dart_record[df.TestName.KEY] = 'pyimports'
     dart_record[df.ScriptRelPath.KEY] = 'py.imports'
+    # Import tests work correctly in this mode, but can slow down by 2-3 times,
+    # due to the fact that files need to be read from the file system.
+    # Therefore, we disable them, since the external-py-files mode is designed exclusively
+    # to speed up the short cycle of developing regular tests.
+    if unit.get('EXTERNAL_PY_FILES'):
+        dart_record[df.SkipTest.KEY] = 'Import tests disabled in external-py-files mode'
 
     data = dump_test(unit, dart_record)
     if data:

@@ -1,0 +1,19 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+            ["key";["DataType";"String"]];
+            ["subkey";["DataType";"String"]];
+            ["value";["DataType";"String"]];
+        ]];
+        "DefaultValues"={
+            "key"="\"def_key\"";
+            "subkey"="\"def_subkey\"";
+            "value"="\"def_value\"";
+        };
+    };
+    "schema"=<"strict" = %true> [
+        {"type"="string"; "name"="key"};
+        {"type"="string"; "name"="subkey"};
+        {"type"="string"; "name"="value"}
+    ]
+}

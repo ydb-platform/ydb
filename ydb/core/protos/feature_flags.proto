@@ -104,7 +104,7 @@ message TFeatureFlags {
     optional bool EnableDataShardGenericReadSets = 81 [default = false];
     // enable alter database operation to create subdomain's system tablets
     // directly in subdomain's hive
-    optional bool EnableAlterDatabaseCreateHiveFirst = 82 [default = false];
+    optional bool EnableAlterDatabaseCreateHiveFirst = 82 [default = true];
     reserved 83; // EnableKqpDataQuerySourceRead
     optional bool EnableSmallDiskOptimization = 84 [default = true];
     optional bool EnableDataShardVolatileTransactions = 85 [default = true];
@@ -185,4 +185,15 @@ message TFeatureFlags {
     optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = false];
     optional bool DisableLocalDBEraseCache = 161 [default = false];
     optional bool EnableExportChecksums = 162 [default = false];
+    optional bool EnableTopicTransfer = 163 [default = false];
+    optional bool EnableViewExport = 164 [default = false];
+    optional bool EnableColumnStore = 165 [default = false];
+    optional bool EnableStrictAclCheck = 166 [default = false];
+    optional bool DatabaseYamlConfigAllowed = 167 [default = false];
+    // deny non-administrators the privilege of administering local users and groups
+    optional bool EnableStrictUserManagement = 168 [default = false];
+    optional bool EnableDatabaseAdmin = 169 [default = false];
+    optional bool EnableChangefeedsImport = 170 [default = false];
+    optional bool EnablePermissionsExport = 171 [default = false];
+    optional bool EnableDataErasure = 172 [default = false];
 }

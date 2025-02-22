@@ -16,7 +16,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_query/impl/exec_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 using TRetryContextResultAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
 using TRetryContextAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
@@ -130,7 +130,7 @@ public:
 
     TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex, const TFetchScriptResultsSettings& settings) {
         auto request = MakeRequest<Ydb::Query::FetchScriptResultsRequest>();
-        request.set_operation_id(NKikimr::NOperationId::ProtoToString(operationId));
+        request.set_operation_id(operationId.ToString());
         request.set_result_set_index(resultSetIndex);
         return FetchScriptResultsImpl(std::move(request), settings);
     }
@@ -341,7 +341,7 @@ public:
         const auto sessionId = resp->session_id();
         request.set_session_id(sessionId);
 
-        auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, endpoint, client);
+        auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, endpoint, client, client);
 
         // Do not pass client timeout here. Session must be alive
         TRpcRequestSettings rpcSettings;
@@ -358,7 +358,7 @@ public:
                 TSession::TImpl::MakeImplAsync(processor, args);
             } else {
                 TStatus st(std::move(status));
-                args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession()));
+                args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession(args->Client)));
             }
         },
         &Ydb::Query::V1::QueryService::Stub::AsyncAttachSession,
@@ -381,13 +381,13 @@ public:
                     NYql::TIssues opIssues;
                     NYql::IssuesFromMessage(resp->issues(), opIssues);
                     TStatus st(static_cast<EStatus>(resp->status()), std::move(opIssues));
-                    promise.SetValue(TCreateSessionResult(std::move(st), TSession()));
+                    promise.SetValue(TCreateSessionResult(std::move(st), TSession(self)));
                 } else {
                     self->DoAttachSession(resp, promise, status.Endpoint, self);
                 }
             } else {
                 TStatus st(std::move(status));
-                promise.SetValue(TCreateSessionResult(std::move(st), TSession()));
+                promise.SetValue(TCreateSessionResult(std::move(st), TSession(self)));
             }
         };
 
@@ -626,6 +626,14 @@ TSession TCreateSessionResult::GetSession() const {
 ////////////////////////////////////////////////////////////////////////////////
 
 TSession::TSession()
+{}
+
+TSession::TSession(std::shared_ptr<TQueryClient::TImpl> client)
+    : Client_(client)
+    , SessionImpl_(
+        new TSession::TImpl(nullptr, "", "", client),
+        TKqpSessionCommon::GetSmartDeleter(client)
+    )
 {}
 
 TSession::TSession(std::shared_ptr<TQueryClient::TImpl> client, TSession::TImpl* session)

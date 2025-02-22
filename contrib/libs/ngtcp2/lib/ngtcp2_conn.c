@@ -51,8 +51,12 @@
 /* NGTCP2_MIN_COALESCED_PAYLOADLEN is the minimum length of QUIC
    packet payload that should be coalesced to a long packet. */
 #define NGTCP2_MIN_COALESCED_PAYLOADLEN 128
+/* NGTCP2_MAX_ACK_PER_PKT is the maximum number of ACK frame per an
+   incoming QUIC packet to process.  ACK frames that exceed this limit
+   are not processed. */
+#define NGTCP2_MAX_ACK_PER_PKT 1
 
-ngtcp2_objalloc_def(strm, ngtcp2_strm, oplent);
+ngtcp2_objalloc_def(strm, ngtcp2_strm, oplent)
 
 /*
  * conn_local_stream returns nonzero if |stream_id| indicates that it
@@ -767,6 +771,8 @@ static int cid_less(const ngtcp2_ksl_key *lhs, const ngtcp2_ksl_key *rhs) {
   return ngtcp2_cid_less(lhs, rhs);
 }
 
+ngtcp2_ksl_search_def(cid_less, cid_less)
+
 static int retired_ts_less(const ngtcp2_pq_entry *lhs,
                            const ngtcp2_pq_entry *rhs) {
   const ngtcp2_scid *a = ngtcp2_struct_of(lhs, ngtcp2_scid, pe);
@@ -1159,7 +1165,8 @@ static int conn_new(ngtcp2_conn **pconn, const ngtcp2_cid *dcid,
 
   ngtcp2_gaptr_init(&(*pconn)->dcid.seqgap, mem);
 
-  ngtcp2_ksl_init(&(*pconn)->scid.set, cid_less, sizeof(ngtcp2_cid), mem);
+  ngtcp2_ksl_init(&(*pconn)->scid.set, cid_less, ksl_cid_less_search,
+                  sizeof(ngtcp2_cid), mem);
 
   ngtcp2_pq_init(&(*pconn)->scid.used, retired_ts_less, mem);
 
@@ -1657,8 +1664,9 @@ static int conn_ensure_ack_ranges(ngtcp2_conn *conn, size_t n) {
  * ACK.
  */
 static ngtcp2_duration conn_compute_ack_delay(ngtcp2_conn *conn) {
-  return ngtcp2_min_uint64(conn->local.transport_params.max_ack_delay,
-                           conn->cstat.smoothed_rtt / 8);
+  return ngtcp2_min_uint64(
+    conn->local.transport_params.max_ack_delay,
+    ngtcp2_max_uint64(conn->cstat.smoothed_rtt / 8, NGTCP2_NANOSECONDS));
 }
 
 int ngtcp2_conn_create_ack_frame(ngtcp2_conn *conn, ngtcp2_frame **pfr,
@@ -2901,7 +2909,7 @@ static int conn_should_send_max_stream_data(ngtcp2_conn *conn,
   uint64_t inc = strm->rx.unsent_max_offset - strm->rx.max_offset;
   (void)conn;
 
-  return strm->rx.window < 2 * inc;
+  return strm->rx.window < 4 * inc;
 }
 
 /*
@@ -2911,7 +2919,7 @@ static int conn_should_send_max_stream_data(ngtcp2_conn *conn,
 static int conn_should_send_max_data(ngtcp2_conn *conn) {
   uint64_t inc = conn->rx.unsent_max_offset - conn->rx.max_offset;
 
-  return conn->rx.window < 2 * inc;
+  return conn->rx.window < 4 * inc;
 }
 
 /*
@@ -3423,10 +3431,9 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
         ngtcp2_acktr_commit_ack(&pktns->acktr);
         ngtcp2_acktr_add_ack(&pktns->acktr, hd->pkt_num,
                              ackfr->ack.largest_ack);
-        if (type == NGTCP2_PKT_1RTT) {
-          conn_handle_unconfirmed_key_update_from_remote(
-            conn, ackfr->ack.largest_ack, ts);
-        }
+        assert(NGTCP2_PKT_1RTT == type);
+        conn_handle_unconfirmed_key_update_from_remote(
+          conn, ackfr->ack.largest_ack, ts);
         pkt_empty = 0;
       }
     }
@@ -4209,7 +4216,7 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
       ngtcp2_rtb_entry_objalloc_new(&ent, hd, NULL, ts, (size_t)nwrite,
                                     rtb_entry_flags, &conn->rtb_entry_objalloc);
     if (rv != 0) {
-      assert(ngtcp2_err_is_fatal((int)nwrite));
+      assert(ngtcp2_err_is_fatal(rv));
       return rv;
     }
 
@@ -5315,15 +5322,14 @@ int ngtcp2_conn_detect_lost_pkt(ngtcp2_conn *conn, ngtcp2_pktns *pktns,
  * conn_recv_ack processes received ACK frame |fr|.  |pkt_ts| is the
  * timestamp when packet is received.  |ts| should be the current
  * time.  Usually they are the same, but for buffered packets,
- * |pkt_ts| would be earlier than |ts|.
+ * |pkt_ts| would be earlier than |ts|.  This function needs to be
+ * called after |fr| is validated by ngtcp2_pkt_validate_ack.
  *
  * This function returns 0 if it succeeds, or one of the following
  * negative error codes:
  *
  * NGTCP2_ERR_NOMEM
  *     Out of memory
- * NGTCP2_ERR_ACK_FRAME
- *     ACK frame is malformed.
  * NGTCP2_ERR_PROTO
  *     |fr| acknowledges a packet this endpoint has not sent.
  * NGTCP2_ERR_CALLBACK_FAILURE
@@ -5331,17 +5337,11 @@ int ngtcp2_conn_detect_lost_pkt(ngtcp2_conn *conn, ngtcp2_pktns *pktns,
  */
 static int conn_recv_ack(ngtcp2_conn *conn, ngtcp2_pktns *pktns, ngtcp2_ack *fr,
                          ngtcp2_tstamp pkt_ts, ngtcp2_tstamp ts) {
-  int rv;
   ngtcp2_ssize num_acked;
   ngtcp2_conn_stat *cstat = &conn->cstat;
 
   if (pktns->tx.last_pkt_num < fr->largest_ack) {
     return NGTCP2_ERR_PROTO;
-  }
-
-  rv = ngtcp2_pkt_validate_ack(fr, conn->local.settings.initial_pkt_num);
-  if (rv != 0) {
-    return rv;
   }
 
   ngtcp2_acktr_recv_ack(&pktns->acktr, fr);
@@ -6109,6 +6109,7 @@ conn_recv_handshake_pkt(ngtcp2_conn *conn, const ngtcp2_path *path,
   ngtcp2_strm *crypto;
   ngtcp2_encryption_level encryption_level;
   int invalid_reserved_bits = 0;
+  size_t num_ack_processed = 0;
 
   if (pktlen == 0) {
     return 0;
@@ -6553,6 +6554,13 @@ conn_recv_handshake_pkt(ngtcp2_conn *conn, const ngtcp2_path *path,
     case NGTCP2_FRAME_ACK_ECN:
       fr->ack.ack_delay = 0;
       fr->ack.ack_delay_unscaled = 0;
+
+      rv =
+        ngtcp2_pkt_validate_ack(&fr->ack, conn->local.settings.initial_pkt_num);
+      if (rv != 0) {
+        return rv;
+      }
+
       break;
     }
 
@@ -6561,6 +6569,9 @@ conn_recv_handshake_pkt(ngtcp2_conn *conn, const ngtcp2_path *path,
     switch (fr->type) {
     case NGTCP2_FRAME_ACK:
     case NGTCP2_FRAME_ACK_ECN:
+      if (num_ack_processed >= NGTCP2_MAX_ACK_PER_PKT) {
+        break;
+      }
       if (!conn->server && hd.type == NGTCP2_PKT_HANDSHAKE) {
         conn->flags |= NGTCP2_CONN_FLAG_SERVER_ADDR_VERIFIED;
       }
@@ -6568,6 +6579,7 @@ conn_recv_handshake_pkt(ngtcp2_conn *conn, const ngtcp2_path *path,
       if (rv != 0) {
         return rv;
       }
+      ++num_ack_processed;
       break;
     case NGTCP2_FRAME_PADDING:
       break;
@@ -8676,6 +8688,7 @@ conn_recv_delayed_handshake_pkt(ngtcp2_conn *conn, const ngtcp2_pkt_info *pi,
   int rv;
   int require_ack = 0;
   ngtcp2_pktns *pktns;
+  size_t num_ack_processed = 0;
 
   assert(hd->type == NGTCP2_PKT_HANDSHAKE);
 
@@ -8702,6 +8715,13 @@ conn_recv_delayed_handshake_pkt(ngtcp2_conn *conn, const ngtcp2_pkt_info *pi,
     case NGTCP2_FRAME_ACK_ECN:
       fr->ack.ack_delay = 0;
       fr->ack.ack_delay_unscaled = 0;
+
+      rv =
+        ngtcp2_pkt_validate_ack(&fr->ack, conn->local.settings.initial_pkt_num);
+      if (rv != 0) {
+        return rv;
+      }
+
       break;
     }
 
@@ -8710,6 +8730,9 @@ conn_recv_delayed_handshake_pkt(ngtcp2_conn *conn, const ngtcp2_pkt_info *pi,
     switch (fr->type) {
     case NGTCP2_FRAME_ACK:
     case NGTCP2_FRAME_ACK_ECN:
+      if (num_ack_processed >= NGTCP2_MAX_ACK_PER_PKT) {
+        break;
+      }
       if (!conn->server) {
         conn->flags |= NGTCP2_CONN_FLAG_SERVER_ADDR_VERIFIED;
       }
@@ -8717,6 +8740,7 @@ conn_recv_delayed_handshake_pkt(ngtcp2_conn *conn, const ngtcp2_pkt_info *pi,
       if (rv != 0) {
         return rv;
       }
+      ++num_ack_processed;
       break;
     case NGTCP2_FRAME_PADDING:
       break;
@@ -8878,6 +8902,7 @@ static ngtcp2_ssize conn_recv_pkt(ngtcp2_conn *conn, const ngtcp2_path *path,
   int recv_ncid = 0;
   int new_cid_used = 0;
   int path_challenge_recved = 0;
+  size_t num_ack_processed = 0;
 
   if (conn->server && conn->local.transport_params.disable_active_migration &&
       !ngtcp2_path_eq(&conn->dcid.current.ps.path, path) &&
@@ -9182,6 +9207,13 @@ static ngtcp2_ssize conn_recv_pkt(ngtcp2_conn *conn, const ngtcp2_path *path,
       assert(conn->remote.transport_params);
       assign_recved_ack_delay_unscaled(
         &fr->ack, conn->remote.transport_params->ack_delay_exponent);
+
+      rv =
+        ngtcp2_pkt_validate_ack(&fr->ack, conn->local.settings.initial_pkt_num);
+      if (rv != 0) {
+        return rv;
+      }
+
       break;
     }
 
@@ -9228,6 +9260,9 @@ static ngtcp2_ssize conn_recv_pkt(ngtcp2_conn *conn, const ngtcp2_path *path,
     switch (fr->type) {
     case NGTCP2_FRAME_ACK:
     case NGTCP2_FRAME_ACK_ECN:
+      if (num_ack_processed >= NGTCP2_MAX_ACK_PER_PKT) {
+        break;
+      }
       if (!conn->server) {
         conn->flags |= NGTCP2_CONN_FLAG_SERVER_ADDR_VERIFIED;
       }
@@ -9236,6 +9271,7 @@ static ngtcp2_ssize conn_recv_pkt(ngtcp2_conn *conn, const ngtcp2_path *path,
         return rv;
       }
       non_probing_pkt = 1;
+      ++num_ack_processed;
       break;
     case NGTCP2_FRAME_STREAM:
       rv = conn_recv_stream(conn, &fr->stream);
@@ -11703,7 +11739,11 @@ static ngtcp2_ssize conn_write_vmsg_wrapper(ngtcp2_conn *conn,
 
   if (cstat->bytes_in_flight >= cstat->cwnd) {
     conn->rst.is_cwnd_limited = 1;
-  } else if (nwrite == 0 && conn_pacing_pkt_tx_allowed(conn, ts)) {
+  } else if (conn->rst.app_limited == 0 &&
+             (cstat->cwnd >= cstat->ssthresh ||
+              cstat->bytes_in_flight * 2 < cstat->cwnd) &&
+             nwrite == 0 && conn_pacing_pkt_tx_allowed(conn, ts) &&
+             (conn->flags & NGTCP2_CONN_FLAG_HANDSHAKE_COMPLETED)) {
     conn->rst.app_limited = conn->rst.delivered + cstat->bytes_in_flight;
 
     if (conn->rst.app_limited == 0) {
@@ -12792,6 +12832,8 @@ int ngtcp2_conn_get_tls_early_data_rejected(ngtcp2_conn *conn) {
 int ngtcp2_conn_update_rtt(ngtcp2_conn *conn, ngtcp2_duration rtt,
                            ngtcp2_duration ack_delay, ngtcp2_tstamp ts) {
   ngtcp2_conn_stat *cstat = &conn->cstat;
+
+  assert(rtt > 0);
 
   if (cstat->min_rtt == UINT64_MAX) {
     cstat->latest_rtt = rtt;

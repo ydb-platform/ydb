@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/program/program.h>
-#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/program.h>
+#include <ydb/core/tx/program/resolver.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -382,7 +382,7 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 
     settings->MutableTable()->CopyFrom(streamLookup.GetTable());
 
-    auto columnToProto = [] (TString columnName, 
+    auto columnToProto = [] (TString columnName,
         TMap<TString, NSharding::IShardingBase::TColumn>::const_iterator columnIt,
         ::NKikimrKqp::TKqpColumnMetadataProto* columnProto)
     {
@@ -682,6 +682,18 @@ TString TShardKeyRanges::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, c
     return sb;
 }
 
+bool TShardKeyRanges::HasRanges() const {
+    if (IsFullRange()) {
+        return true;
+    }
+    for (const auto& range : Ranges) {
+        if (std::holds_alternative<TSerializedTableRange>(range)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange* proto) const {
     if (IsFullRange()) {
         auto& protoRange = *proto->MutableFullRange();
@@ -724,12 +736,12 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskM
     }
 }
 
-void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto) const {
+void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto, bool allowPoints) const {
     if (IsFullRange()) {
         auto& protoRange = *proto->MutableRanges()->AddKeyRanges();
         FullRange->Serialize(protoRange);
     } else {
-        bool usePoints = true;
+        bool usePoints = allowPoints;
         for (auto& range : Ranges) {
             if (std::holds_alternative<TSerializedTableRange>(range)) {
                 usePoints = false;
@@ -948,18 +960,49 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
                 olapProgram->SetParametersSchema(schema);
                 olapProgram->SetParameters(parameters);
 
+                class TResolverTable: public NArrow::NSSA::IColumnResolver {
+                private:
+                    const TTableConstInfo& TableInfo;
+                public:
+                    TResolverTable(const TTableConstInfo& tableInfo) 
+                        : TableInfo(tableInfo) {
+
+                    }
+
+                    virtual TString GetColumnName(ui32 id, bool required = true) const override {
+                        for (auto&& i : TableInfo.Columns) {
+                            if (i.second.Id == id) {
+                                return i.first;
+                            }
+                        }
+                        AFL_ENSURE(!required)("id", id);
+                        return "";
+                    }
+                    virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const override {
+                        auto it = TableInfo.Columns.find(name);
+                        if (it == TableInfo.Columns.end()) {
+                            return std::nullopt;
+                        } else {
+                            return it->second.Id;
+                        }
+                    }
+                    virtual NArrow::NSSA::TColumnInfo GetDefaultColumn() const override {
+                        AFL_ENSURE(false);
+                        return NArrow::NSSA::TColumnInfo::Generated(0, "");
+                    }
+                };
+
                 if (!!stageInfo.Meta.ColumnTableInfoPtr) {
                     std::shared_ptr<NSchemeShard::TOlapSchema> olapSchema = std::make_shared<NSchemeShard::TOlapSchema>();
                     olapSchema->ParseFromLocalDB(stageInfo.Meta.ColumnTableInfoPtr->Description.GetSchema());
                     if (olapSchema->GetIndexes().GetIndexes().size()) {
                         NOlap::TProgramContainer container;
-                        NOlap::TSchemaResolverColumnsOnly resolver(olapSchema);
-                        TString error;
-                        YQL_ENSURE(container.Init(resolver, *olapProgram, error), "" << error);
+                        TResolverTable resolver(*tableInfo);
+                        container.Init(resolver, *olapProgram).Ensure();
                         auto data = NOlap::NIndexes::NRequest::TDataForIndexesCheckers::Build(container);
                         if (data) {
                             for (auto&& [indexId, i] : olapSchema->GetIndexes().GetIndexes()) {
-                                AFL_VERIFY(!!i.GetIndexMeta());
+                                AFL_ENSURE(!!i.GetIndexMeta());
                                 i.GetIndexMeta()->FillIndexCheckers(data, *olapSchema);
                             }
                             auto checker = data->GetCoverChecker();
@@ -1148,7 +1191,11 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
     }
 }
 
-void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) {
+void SerializeTaskToProto(
+        const TKqpTasksGraph& tasksGraph,
+        const TTask& task,
+        NYql::NDqProto::TDqTask* result,
+        bool serializeAsyncIoSettings) {
     auto& stageInfo = tasksGraph.GetStageInfo(task.StageId);
     ActorIdToProto(task.Meta.ExecuterId, result->MutableExecuter()->MutableActorId());
     result->SetId(task.Id);
@@ -1178,7 +1225,7 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
 
     bool enableSpilling = false;
     if (task.Outputs.size() > 1) {
-        enableSpilling = AppData()->EnableKqpSpilling;
+        enableSpilling = tasksGraph.GetMeta().AllowWithSpilling;
     }
     for (const auto& output : task.Outputs) {
         FillOutputDesc(tasksGraph, *result->AddOutputs(), output, enableSpilling);
@@ -1186,6 +1233,7 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
 
     const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
     result->MutableProgram()->CopyFrom(stage.GetProgram());
+
     for (auto& paramName : stage.GetProgramParameters()) {
         auto& dqParams = *result->MutableParameters();
         if (task.Meta.ShardId) {
@@ -1197,7 +1245,7 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
 
     SerializeCtxToMap(*tasksGraph.GetMeta().UserRequestContext, *result->MutableRequestContext());
 
-    result->SetEnableMetering(enableMetering);
+    result->SetDisableMetering(!enableMetering);
     FillTaskMeta(stageInfo, task, *result);
 }
 

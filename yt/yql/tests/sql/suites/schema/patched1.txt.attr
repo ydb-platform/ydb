@@ -1,0 +1,11 @@
+{
+    "schema"=<"strict"=%true; "unique_keys"=%false>[
+        {"name"="key";"type"="string"};
+        {"name"="subkey";"type"="string"};
+        {"name"="value";"type"="string"};
+    ];
+    "_yql_row_spec"={
+        "TypePatch"=["StructType";[
+        ]];
+    };
+}

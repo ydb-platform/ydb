@@ -10,15 +10,6 @@ namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-static constexpr int MaxLabelSize = 200;
-static constexpr int HalfMaxLabelSize = MaxLabelSize / 2;
-
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 void TTagRegistry::SetLabelSanitizationPolicy(ELabelSanitizationPolicy labelSanitizationPolicy)
 {
     LabelSanitizationPolicy_ = labelSanitizationPolicy;
@@ -115,7 +106,7 @@ void TTagRegistry::DumpTags(NProto::TSensorDump* dump)
 
 bool TTagRegistry::TSanitizeParameters::IsSanitizationRequired() const
 {
-    return ForbiddenCharCount > 0 || ResultingLength > MaxLabelSize;
+    return ForbiddenCharCount > 0 || ResultingLength > MaxSolomonLabelSize;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -159,13 +150,15 @@ TTagRegistry::TSanitizeParameters TTagRegistry::ScanForSanitize(const std::strin
 
 std::string TTagRegistry::SanitizeMonitoringTagValue(const std::string& value, int resultingLength) const
 {
-    bool needTrim = resultingLength > MaxLabelSize;
+    static constexpr int HalfMaxSolomonLabelSize = MaxSolomonLabelSize / 2;
+
+    bool needTrim = resultingLength > MaxSolomonLabelSize;
 
     std::string result;
-    result.resize(std::min(resultingLength, MaxLabelSize));
+    result.resize(std::min(resultingLength, MaxSolomonLabelSize));
 
     int resultIndex = 0;
-    for (int index = 0; resultIndex < (needTrim ? HalfMaxLabelSize : resultingLength); ++index) {
+    for (int index = 0; resultIndex < (needTrim ? HalfMaxSolomonLabelSize : resultingLength); ++index) {
         unsigned char c = value[index];
 
         if (IsAllowedMonitoringTagValueChar(c)) {
@@ -181,8 +174,8 @@ std::string TTagRegistry::SanitizeMonitoringTagValue(const std::string& value, i
         return result;
     }
 
-    resultIndex = MaxLabelSize - 1;
-    for (int index = ssize(value) - 1; resultIndex > HalfMaxLabelSize + 2; --index) {
+    resultIndex = MaxSolomonLabelSize - 1;
+    for (int index = ssize(value) - 1; resultIndex > HalfMaxSolomonLabelSize + 2; --index) {
         unsigned char c = value[index];
 
         if (IsAllowedMonitoringTagValueChar(value[index])) {
@@ -194,9 +187,9 @@ std::string TTagRegistry::SanitizeMonitoringTagValue(const std::string& value, i
         }
     }
 
-    result[HalfMaxLabelSize] = '.';
-    result[HalfMaxLabelSize + 1] = '.';
-    result[HalfMaxLabelSize + 2] = '.';
+    result[HalfMaxSolomonLabelSize] = '.';
+    result[HalfMaxSolomonLabelSize + 1] = '.';
+    result[HalfMaxSolomonLabelSize + 2] = '.';
 
     return result;
 }

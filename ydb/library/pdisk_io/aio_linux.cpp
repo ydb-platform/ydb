@@ -13,10 +13,18 @@
 
 #undef RWF_APPEND
 
+#if !defined(_musl_)
 #include <liburing.h>
+#endif
 #include <libaio.h>
+#if !defined(_musl_)
 #include <linux/fs.h>
+#endif
 #include <sys/ioctl.h>
+
+#if defined(_musl_)
+#define BLKDISCARD _IO(0x12,119)
+#endif
 
 namespace NKikimr {
 namespace NPDisk {
@@ -380,6 +388,7 @@ public:
 /*
     TAsyncIoOperationLiburing
 */
+#if !defined(_musl_)
 struct TAsyncIoOperationLiburing : IAsyncIoOperation {
     void* Cookie = nullptr;
     ICallback *Callback = nullptr;
@@ -706,6 +715,7 @@ public:
     void OnAsyncIoOperationCompletion(IAsyncIoOperation *) override {
     }
 };
+#endif
 
 /*
     CreateAsyncIoContextReal

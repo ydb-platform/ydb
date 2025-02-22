@@ -9,7 +9,7 @@
 #include <library/cpp/yt/threading/event_count.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <contrib/libs/grpc/include/grpc/grpc.h>
 #include <contrib/libs/grpc/include/grpc/grpc_security.h>
@@ -165,7 +165,7 @@ class TGrpcMetadataArray
 public:
     TStringBuf Find(const char* key) const;
 
-    THashMap<TString, TString> ToMap() const;
+    THashMap<std::string, TString> ToMap() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -217,7 +217,7 @@ private:
 class TGrpcChannelArgs
 {
 public:
-    explicit TGrpcChannelArgs(const THashMap<TString, NYTree::INodePtr>& args);
+    explicit TGrpcChannelArgs(const THashMap<std::string, NYTree::INodePtr>& args);
 
     grpc_channel_args* Unwrap();
 

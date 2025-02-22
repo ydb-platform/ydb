@@ -137,7 +137,7 @@ IComputationNode* WrapWideStreamDethrottler(TCallable& callable, const TComputat
 
 }
 
-TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType) {
+TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool scalar) {
     const auto itemTypes = AS_TYPE(TTupleType, tupleType)->GetElements();
     const auto ui64Type = pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id);
     const auto blockLenType = pgmBuilder.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
@@ -145,12 +145,49 @@ TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType) {
     TVector<TType*> blockItemTypes;
     std::transform(itemTypes.cbegin(), itemTypes.cend(), std::back_inserter(blockItemTypes),
         [&](const auto& itemType) {
-            return pgmBuilder.NewBlockType(itemType, TBlockType::EShape::Many);
+            return pgmBuilder.NewBlockType(itemType, scalar ? TBlockType::EShape::Scalar : TBlockType::EShape::Many);
         });
     // XXX: Mind the last block length column.
     blockItemTypes.push_back(blockLenType);
 
     return pgmBuilder.NewTupleType(blockItemTypes);
+}
+
+TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
+    TType* leftStreamType, const TVector<ui32>& leftKeyDrops,
+    TType* rightStreamType, const TVector<ui32>& rightKeyDrops
+) {
+    const auto leftStreamItems = ValidateBlockStreamType(leftStreamType);
+    const auto rightStreamItems = ValidateBlockStreamType(rightStreamType);
+
+    TVector<TType*> joinReturnItems;
+
+    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
+    for (size_t i = 0; i < leftStreamItems.size() - 1; i++) {  // Excluding block size
+        if (leftKeyDropsSet.contains(i)) {
+            continue;
+        }
+        joinReturnItems.push_back(pgmBuilder.NewBlockType(leftStreamItems[i], TBlockType::EShape::Many));
+    }
+
+    if (joinKind != EJoinKind::LeftSemi && joinKind != EJoinKind::LeftOnly) {
+        const THashSet<ui32> rightKeyDropsSet(rightKeyDrops.cbegin(), rightKeyDrops.cend());
+        for (size_t i = 0; i < rightStreamItems.size() - 1; i++) {  // Excluding block size
+            if (rightKeyDropsSet.contains(i)) {
+                continue;
+            }
+
+            joinReturnItems.push_back(pgmBuilder.NewBlockType(
+                joinKind == EJoinKind::Inner ? rightStreamItems[i]
+                    : IsOptionalOrNull(rightStreamItems[i]) ? rightStreamItems[i]
+                    : pgmBuilder.NewOptionalType(rightStreamItems[i]),
+                TBlockType::EShape::Many
+            ));
+        }
+    }
+
+    joinReturnItems.push_back(pgmBuilder.NewBlockType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
+    return pgmBuilder.NewStreamType(pgmBuilder.NewMultiType(joinReturnItems));
 }
 
 NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
@@ -201,6 +238,37 @@ NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
             listValues = listValues.Append(std::move(tuple));
         }
     }
+    return holderFactory.CreateDirectListHolder(std::move(listValues));
+}
+
+NUdf::TUnboxedValuePod MakeUint64ScalarBlock(TComputationContext& ctx, size_t blockSize,
+    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values
+) {
+    // Creates a block of scalar values using the first element of the given list
+
+    for (auto type : types) {
+        // Because IScalarBuilder has no implementations
+        Y_ENSURE(AS_TYPE(TDataType, type)->GetDataSlot() == NYql::NUdf::EDataSlot::Uint64);
+    }
+
+    const auto& holderFactory = ctx.HolderFactory;
+    const size_t width = types.size();
+    const size_t rowsCount = values.GetListLength();
+
+    NUdf::TUnboxedValue row;
+    Y_ENSURE(values.GetListIterator().Next(row));
+    TDefaultListRepresentation listValues;
+    for (size_t rowOffset = 0; rowOffset < rowsCount; rowOffset += blockSize) {
+        NUdf::TUnboxedValue* items = nullptr;
+        const auto tuple = holderFactory.CreateDirectArrayHolder(width + 1, items);
+        for (size_t i = 0; i < width; i++) {
+            const NUdf::TUnboxedValuePod& item = row.GetElement(i);
+            items[i] = holderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(item.Get<ui64>())));
+        }
+        items[width] = MakeBlockCount(holderFactory, std::min(blockSize, rowsCount - rowOffset));
+        listValues = listValues.Append(std::move(tuple));
+    }
+
     return holderFactory.CreateDirectListHolder(std::move(listValues));
 }
 

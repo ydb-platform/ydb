@@ -1,0 +1,8 @@
+{"_yql_row_spec"={
+	"Type"=["StructType";[
+		["hostname";["DataType";"String"]];
+		["fqdn";["DataType";"String"]];
+		["ip4";["DataType";"String"]];
+		["ip6";["DataType";"String"]]
+	]];
+}}

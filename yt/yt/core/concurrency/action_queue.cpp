@@ -508,7 +508,7 @@ private:
 
     void IncrementSemaphore(int delta)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         Semaphore_ += delta;
         YT_ASSERT(Semaphore_ >= 0 && Semaphore_ <= MaxConcurrentInvocations_ && (!PendingMaxConcurrentInvocations_.has_value() || delta <= 0));

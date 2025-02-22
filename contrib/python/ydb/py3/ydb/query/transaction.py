@@ -283,7 +283,7 @@ class BaseQueryTxContext:
         )
 
     def _move_to_beginned(self, tx_id: str) -> None:
-        if self._tx_state._already_in(QueryTxStateEnum.BEGINED):
+        if self._tx_state._already_in(QueryTxStateEnum.BEGINED) or not tx_id:
             return
         self._tx_state._change_state(QueryTxStateEnum.BEGINED)
         self._tx_state.tx_id = tx_id

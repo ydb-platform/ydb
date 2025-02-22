@@ -39,6 +39,8 @@ items:
   href: bulk-upsert.md
 - name: Установка режима выполнения транзакции
   href: tx-control.md
+- name: Настройка TTL
+  href: ttl.md
 - name: Координация
   items:
   - name: Распределённая блокировка

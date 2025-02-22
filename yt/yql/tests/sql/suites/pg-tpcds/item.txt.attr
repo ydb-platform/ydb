@@ -1,0 +1,28 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["i_item_sk";["PgType";"int4";];];
+              ["i_item_id";["PgType";"text";];];
+              ["i_rec_start_date";["PgType";"date";];];
+              ["i_rec_end_date";["PgType";"date";];];
+              ["i_item_desc";["PgType";"text";];];
+              ["i_current_price";["PgType";"numeric";];];
+              ["i_wholesale_cost";["PgType";"numeric";];];
+              ["i_brand_id";["PgType";"int4";];];
+              ["i_brand";["PgType";"text";];];
+              ["i_class_id";["PgType";"int4";];];
+              ["i_class";["PgType";"text";];];
+              ["i_category_id";["PgType";"int4";];];
+              ["i_category";["PgType";"text";];];
+              ["i_manufact_id";["PgType";"int4";];];
+              ["i_manufact";["PgType";"text";];];
+              ["i_size";["PgType";"text";];];
+              ["i_formulation";["PgType";"text";];];
+              ["i_color";["PgType";"text";];];
+              ["i_units";["PgType";"text";];];
+              ["i_container";["PgType";"text";];];
+              ["i_manager_id";["PgType";"int4";];];
+              ["i_product_name";["PgType";"text";];];
+        ];];
+    }
+}

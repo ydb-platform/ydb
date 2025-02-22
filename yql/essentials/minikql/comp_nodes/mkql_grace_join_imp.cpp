@@ -340,7 +340,7 @@ ui64 ComputeNumberOfSlots(ui64 tuplesNum) {
     return (3 * tuplesNum + 1) | 1;
 }
 
-bool TTable::TryToPreallocateMemoryForJoin(TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLeftTuples, bool hasMoreRightTuples) {
+bool TTable::TryToPreallocateMemoryForJoin(TTable & t1, TTable & t2, EJoinKind /* joinKind */, bool hasMoreLeftTuples, bool hasMoreRightTuples) {
     // If the batch is final or the only one, then the buckets are processed sequentially, the memory for the hash tables is freed immediately after processing.
     // So, no preallocation is required.
     if (!hasMoreLeftTuples && !hasMoreRightTuples) return true;
@@ -353,7 +353,7 @@ bool TTable::TryToPreallocateMemoryForJoin(TTable & t1, TTable & t2, EJoinKind j
         if (!tableForPreallocation.TableBucketsStats[bucket].TuplesNum || tableForPreallocation.TableBuckets[bucket].NSlots) continue;
 
         TTableBucket& bucketForPreallocation = tableForPreallocation.TableBuckets[bucket];
-        const TTableBucketStats& bucketForPreallocationStats = tableForPreallocation.TableBucketsStats[bucket];
+        TTableBucketStats& bucketForPreallocationStats = tableForPreallocation.TableBucketsStats[bucket];
 
         const auto nSlots = ComputeJoinSlotsSizeForBucket(bucketForPreallocation, bucketForPreallocationStats, tableForPreallocation.HeaderSize,
                 tableForPreallocation.NumberOfKeyStringColumns != 0, tableForPreallocation.NumberOfKeyIColumns != 0);
@@ -361,14 +361,20 @@ bool TTable::TryToPreallocateMemoryForJoin(TTable & t1, TTable & t2, EJoinKind j
 
         try {
             bucketForPreallocation.JoinSlots.reserve(nSlots*slotSize);
+            bucketForPreallocationStats.BloomFilter.Reserve(bucketForPreallocationStats.TuplesNum);
         } catch (TMemoryLimitExceededException) {
             for (ui64 i = 0; i < bucket; ++i) {
-                GraceJoin::TTableBucket * b1 = &JoinTable1->TableBuckets[i];
-                b1->JoinSlots.resize(0);
-                b1->JoinSlots.shrink_to_fit();
-                GraceJoin::TTableBucket * b2 = &JoinTable2->TableBuckets[i];
-                b2->JoinSlots.resize(0);
-                b2->JoinSlots.shrink_to_fit();
+                auto& b1 = t1.TableBuckets[i];
+                b1.JoinSlots.resize(0);
+                b1.JoinSlots.shrink_to_fit();
+                auto& s1 = t1.TableBucketsStats[i];
+                s1.BloomFilter.Shrink();
+
+                auto& b2 = t2.TableBuckets[i];
+                b2.JoinSlots.resize(0);
+                b2.JoinSlots.shrink_to_fit();
+                auto& s2 = t2.TableBucketsStats[i];
+                s2.BloomFilter.Shrink();
             }
             return false;
         }

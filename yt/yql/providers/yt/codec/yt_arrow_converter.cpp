@@ -3,7 +3,6 @@
 
 #include <yql/essentials/public/udf/arrow/defs.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
-#include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
@@ -461,7 +460,10 @@ struct TComplexTypeYsonReaderTraits {
     using TStrings = TStringYsonReader<TStringType, Nullable, OriginalT, Native>;
     using TExtOptional = TExternalOptYsonReader<Native>;
 
+    constexpr static bool PassType = false;
+
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
+        Y_UNUSED(pgBuilder);
         return BuildPgYsonColumnReader(desc);
     }
 
@@ -495,7 +497,7 @@ template<bool Native, bool IsTopOptional>
 class TComplexTypeYsonColumnConverter final : public IYtColumnConverter {
 public:
     TComplexTypeYsonColumnConverter(TYtColumnConverterSettings&& settings) : Settings_(std::move(settings)) {
-        Reader_ = NUdf::MakeBlockReaderImpl<TComplexTypeYsonReaderTraits<Native>>(TTypeInfoHelper(), settings.Type, settings.PgBuilder);
+        Reader_ = NUdf::DispatchByArrowTraits<TComplexTypeYsonReaderTraits<Native>>(TTypeInfoHelper(), settings.Type, settings.PgBuilder);
     }
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) {
@@ -681,11 +683,12 @@ std::unique_ptr<IYtColumnConverter> MakeYtColumnConverter(TType* type, const NUd
         case NUdf::EDataSlot::Bool:
             // YT type for bool is arrow::Type::BOOL, but yql type is arrow::Type::UINT8
             return std::make_unique<TTopLevelSimpleCastConverter<arrow::Type::BOOL>>(std::move(settings));
-        case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Json:
-        case NUdf::EDataSlot::Yson: // Yson there is top-level optional
-            // YT type for Yson, Json, String is arrow::Type::BINARY, but yql type is arrow::Type::String
             return std::make_unique<TTopLevelSimpleCastConverter<arrow::Type::BINARY>>(std::move(settings));
+        case NUdf::EDataSlot::JsonDocument:
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Double:
         case NUdf::EDataSlot::Int8:
         case NUdf::EDataSlot::Uint8:

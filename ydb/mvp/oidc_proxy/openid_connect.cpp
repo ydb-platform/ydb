@@ -121,10 +121,11 @@ const TString& GetAuthCallbackUrl() {
     return callbackUrl;
 }
 
-TString CreateSecureCookie(const TString& name, const TString& value) {
+TString CreateSecureCookie(const TString& name, const TString& value, const ui32 expiredSeconds) {
     TStringBuilder cookieBuilder;
     cookieBuilder << name << "=" << value
-            << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned";
+            << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned"
+            << "; Max-Age=" << expiredSeconds;
     return cookieBuilder;
 }
 

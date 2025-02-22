@@ -46,8 +46,8 @@ public:
             return ColumnIds;
         }
 
-        TMaybe<ui64> GetNextMessageOffset() const override {
-            return Nothing();
+        std::optional<ui64> GetNextMessageOffset() const override {
+            return std::nullopt;
         }
 
         void OnFilterStarted() override {
@@ -356,7 +356,7 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         MakeFilter(
             {{"a1", "[DataType; String]"}},
             "where a2 ... 50",
-            [&](ui64 offset) {}
+            [&](ui64 /* offset */) {}
         );
     }
 }
@@ -411,11 +411,11 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         CheckSuccess(MakeFilter(
             {{"a1", "[DataType; String]"}},
             "where a1 = \"str1\"",
-            [&](ui64 offset) {}
+            [&](ui64 /* offset */) {}
         ));
 
         CheckError(
-            FiltersSet->AddFilter(MakeIntrusive<TFilterSetConsumer>(FilterIds.back(), TVector<ui64>(), TVector<TSchemaColumn>(), TString(), [&](ui64 offset) {}, CompileError)),
+            FiltersSet->AddFilter(MakeIntrusive<TFilterSetConsumer>(FilterIds.back(), TVector<ui64>(), TVector<TSchemaColumn>(), TString(), [&](ui64 /* offset */) {}, CompileError)),
             EStatusId::INTERNAL_ERROR,
             "Failed to create new filter, filter with id [0:0:0] already exists"
         );
@@ -426,7 +426,7 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         MakeFilter(
             {{"a1", "[DataType; String]"}},
             "where a2 ... 50",
-            [&](ui64 offset) {}
+            [&](ui64 /* offset */) {}
         );
     }
 }

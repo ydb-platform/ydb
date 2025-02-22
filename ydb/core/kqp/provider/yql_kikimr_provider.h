@@ -251,6 +251,9 @@ enum class TYdbOperation : ui64 {
     Backup                 = 1ull << 31,
     BackupIncremental      = 1ull << 32,
     Restore                = 1ull << 33,
+    CreateTransfer         = 1ull << 34,
+    AlterTransfer          = 1ull << 35,
+    DropTransfer           = 1ull << 36,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);

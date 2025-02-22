@@ -1,5 +1,7 @@
 #include "storage.h"
 
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+
 namespace NKikimr::NOlap {
 
 bool TCommonBlobsTracker::IsBlobInUsage(const NOlap::TUnifiedBlobId& blobId) const {
@@ -42,4 +44,8 @@ void IBlobsStorageOperator::Stop() {
     Stopped = true;
 }
 
+const NSplitter::TSplitSettings& IBlobsStorageOperator::GetBlobSplitSettings() const {
+    return NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(DoGetBlobSplitSettings());
 }
+
+}   // namespace NKikimr::NOlap

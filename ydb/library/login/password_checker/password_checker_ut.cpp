@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/builder.h>
 #include "password_checker.h"
+#include "hash_checker.h"
 
 using namespace NLogin;
 
@@ -168,4 +169,113 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
         UNIT_ASSERT_STRINGS_EQUAL(result.Error, "Password is too short");
     }
 
+    Y_UNIT_TEST(HashChecker) {
+        {
+            auto hash = R"(
+                {
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }
+            )";
+
+            auto result = THashChecker::Check(hash);
+            UNIT_ASSERT(result.Success);
+        }
+        {
+            auto hash = R"(
+                {
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "wrongSaltLength",
+                    "type": "argon2id"
+                }
+            )";
+
+            auto result = THashChecker::Check(hash);
+            UNIT_ASSERT(!result.Success);
+            UNIT_ASSERT_STRING_CONTAINS(result.Error, "Length of field \'salt\' is 15, but it must be equal 24");
+        }
+        {
+            auto hash = R"(
+                {
+                    "hash": "wrongHashLength",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }
+            )";
+
+            auto result = THashChecker::Check(hash);
+            UNIT_ASSERT(!result.Success);
+            UNIT_ASSERT_STRING_CONTAINS(result.Error, "Length of field \'hash\' is 15, but it must be equal 44");
+        }
+        {
+            auto hash = R"(
+                {
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "wrongtype"
+                }
+            )";
+
+            auto result = THashChecker::Check(hash);
+            UNIT_ASSERT(!result.Success);
+            UNIT_ASSERT_STRING_CONTAINS(result.Error, "Field \'type\' must be equal \"argon2id\"");
+        }
+
+        {
+            auto hash = R"(
+                {{{{}}}
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+            )";
+
+            auto result = THashChecker::Check(hash);
+            UNIT_ASSERT(!result.Success);
+            UNIT_ASSERT_STRING_CONTAINS(result.Error, "Cannot parse hash value; it should be in JSON-format");
+        }
+
+        {
+            auto hash = R"(
+                {
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id",
+                    "some_strange_field": "some_strange_value"
+                }
+            )";
+
+            auto result = THashChecker::Check(hash);
+            UNIT_ASSERT(!result.Success);
+            UNIT_ASSERT_STRING_CONTAINS(result.Error, "There should be strictly three fields here: salt, hash and type");
+        }
+
+        {
+            auto hash = R"(
+                {
+                    "hash": "Field not in base64format but with 44 length",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }
+            )";
+
+            auto result = THashChecker::Check(hash);
+            UNIT_ASSERT(!result.Success);
+            UNIT_ASSERT_STRING_CONTAINS(result.Error, "Field \'hash\' must be in base64 format");
+        }
+
+        {
+            auto hash = R"(
+                {
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "Not in base64 format =) ",
+                    "type": "argon2id"
+                }
+            )";
+
+            auto result = THashChecker::Check(hash);
+            UNIT_ASSERT(!result.Success);
+            UNIT_ASSERT_STRING_CONTAINS(result.Error, "Field \'salt\' must be in base64 format");
+        }
+    }
 }

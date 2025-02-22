@@ -1,6 +1,6 @@
-G_BENCHMARK()
+G_BENCHMARK(core_tablet_flat_benchmark)
 
-TAG(ya:fat)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 SIZE(LARGE)
 
 IF (BENCHMARK_MAKE_LARGE_PART)

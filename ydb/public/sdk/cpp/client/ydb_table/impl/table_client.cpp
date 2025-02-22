@@ -1,6 +1,6 @@
 #include "table_client.h"
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 namespace NTable {
 

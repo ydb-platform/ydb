@@ -16,7 +16,7 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/fq/libs/row_dispatcher/format_handler/common
 
-    ydb/public/sdk/cpp/client/ydb_topic/include
+    ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic
 
     yql/essentials/minikql
     yql/essentials/minikql/dom

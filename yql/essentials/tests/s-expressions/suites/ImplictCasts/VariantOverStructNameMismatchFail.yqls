@@ -1,6 +1,6 @@
+# /* custom error:Failed to convert type: Variant<'A':Int32,'B':Int32,'X':Int32> to Variant<'A':Int32,'B':Int32,'C':Int32>*/
 (
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 (let res_sink (DataSink 'result))
 
 (let origType (VariantType (StructType '('A (DataType 'Int32)) '('B (DataType 'Int32)) '('C (DataType 'Int32)))))

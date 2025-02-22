@@ -148,7 +148,7 @@ void TFutureState<void>::InstallAbandonedError() const
 
 void TFutureState<void>::InstallAbandonedError()
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     if (AbandonedUnset_ && !Set_) {
         // NB(arkady-e1ppa): Once AbandonedUnset_ is |true| we are guaranteed
         // to have a cancelation error.
@@ -162,7 +162,7 @@ void TFutureState<void>::ResetResult()
 
 void TFutureState<void>::SetResultError(const TError& error)
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     ResultError_ = error;
 }
 
@@ -173,7 +173,7 @@ bool TFutureState<void>::TrySetError(const TError& error)
 
 bool TFutureState<void>::DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard)
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     return VoidResultHandlers_.TryRemove(cookie, guard);
 }
 

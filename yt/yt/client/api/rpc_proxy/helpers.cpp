@@ -6,6 +6,8 @@
 
 #include <yt/yt/client/sequoia_client/public.h>
 
+#include <yt/yt/client/signature/signature.h>
+
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/logical_type.h>
@@ -277,19 +279,19 @@ void ToProto(
 
     if (result.PoolTreeCounts) {
         auto* poolTreeCounts = proto->mutable_pool_tree_counts()->mutable_entries();
-        for (const auto& entry: *result.PoolTreeCounts) {
+        for (const auto& entry : *result.PoolTreeCounts) {
             (*poolTreeCounts)[entry.first] = entry.second;
         }
     }
     if (result.PoolCounts) {
-        for (const auto& entry: *result.PoolCounts) {
+        for (const auto& entry : *result.PoolCounts) {
             auto* newPoolCount = proto->mutable_pool_counts()->add_entries();
             newPoolCount->set_pool(entry.first);
             newPoolCount->set_count(entry.second);
         }
     }
     if (result.UserCounts) {
-        for (const auto& entry: *result.UserCounts) {
+        for (const auto& entry : *result.UserCounts) {
             auto* newUserCount = proto->mutable_user_counts()->add_entries();
             newUserCount->set_user(entry.first);
             newUserCount->set_count(entry.second);
@@ -297,7 +299,7 @@ void ToProto(
     }
 
     if (result.StateCounts) {
-        for (const auto& state: TEnumTraits<NScheduler::EOperationState>::GetDomainValues()) {
+        for (const auto& state : TEnumTraits<NScheduler::EOperationState>::GetDomainValues()) {
             if ((*result.StateCounts)[state] != 0) {
                 auto* newStateCount = proto->mutable_state_counts()->add_entries();
                 newStateCount->set_state(ConvertOperationStateToProto(state));
@@ -306,7 +308,7 @@ void ToProto(
         }
     }
     if (result.TypeCounts) {
-        for (const auto& type: TEnumTraits<NScheduler::EOperationType>::GetDomainValues()) {
+        for (const auto& type : TEnumTraits<NScheduler::EOperationType>::GetDomainValues()) {
             if ((*result.TypeCounts)[type] != 0) {
                 auto* newTypeCount = proto->mutable_type_counts()->add_entries();
                 newTypeCount->set_type(ConvertOperationTypeToProto(type));
@@ -339,7 +341,7 @@ void FromProto(
 
     if (proto.has_pool_counts()) {
         result->PoolCounts.emplace();
-        for (const auto& poolCount: proto.pool_counts().entries()) {
+        for (const auto& poolCount : proto.pool_counts().entries()) {
             auto pool = poolCount.pool();
             YT_VERIFY((*result->PoolCounts)[pool] == 0);
             (*result->PoolCounts)[pool] = poolCount.count();
@@ -349,7 +351,7 @@ void FromProto(
     }
     if (proto.has_user_counts()) {
         result->UserCounts.emplace();
-        for (const auto& userCount: proto.user_counts().entries()) {
+        for (const auto& userCount : proto.user_counts().entries()) {
             auto user = userCount.user();
             YT_VERIFY((*result->UserCounts)[user] == 0);
             (*result->UserCounts)[user] = userCount.count();
@@ -361,7 +363,7 @@ void FromProto(
     if (proto.has_state_counts()) {
         result->StateCounts.emplace();
         std::fill(result->StateCounts->begin(), result->StateCounts->end(), 0);
-        for (const auto& stateCount: proto.state_counts().entries()) {
+        for (const auto& stateCount : proto.state_counts().entries()) {
             auto state = ConvertOperationStateFromProto(stateCount.state());
             YT_VERIFY(result->StateCounts->IsValidIndex(state));
             YT_VERIFY((*result->StateCounts)[state] == 0);
@@ -373,7 +375,7 @@ void FromProto(
     if (proto.has_type_counts()) {
         result->TypeCounts.emplace();
         std::fill(result->TypeCounts->begin(), result->TypeCounts->end(), 0);
-        for (const auto& typeCount: proto.type_counts().entries()) {
+        for (const auto& typeCount : proto.type_counts().entries()) {
             auto type = ConvertOperationTypeFromProto(typeCount.type());
             YT_VERIFY(result->TypeCounts->IsValidIndex(type));
             YT_VERIFY((*result->TypeCounts)[type] == 0);
@@ -641,6 +643,7 @@ void ToProto(
     protoStatistics->set_incomplete_input(statistics.IncompleteInput);
     protoStatistics->set_incomplete_output(statistics.IncompleteOutput);
     protoStatistics->set_memory_usage(statistics.MemoryUsage);
+    protoStatistics->set_total_grouped_row_count(statistics.TotalGroupedRowCount);
 
     ToProto(protoStatistics->mutable_inner_statistics(), statistics.InnerStatistics);
 }
@@ -662,6 +665,7 @@ void FromProto(
     statistics->IncompleteInput = protoStatistics.incomplete_input();
     statistics->IncompleteOutput = protoStatistics.incomplete_output();
     statistics->MemoryUsage = protoStatistics.memory_usage();
+    statistics->TotalGroupedRowCount = protoStatistics.total_grouped_row_count();
 
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
@@ -726,6 +730,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
 
     if (operation.Suspended) {
         protoOperation->set_suspended(*operation.Suspended);
+    }
+
+    if (operation.SuspendReason) {
+        protoOperation->set_suspend_reason(*operation.SuspendReason);
     }
 
     if (operation.Events) {
@@ -1010,6 +1018,9 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     if (job.MonitoringDescriptor) {
         protoJob->set_monitoring_descriptor(*job.MonitoringDescriptor);
     }
+    if (job.OperationIncarnation) {
+        protoJob->set_operation_incarnation(*job.OperationIncarnation);
+    }
 }
 
 void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
@@ -1159,6 +1170,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->MonitoringDescriptor.reset();
     }
+    if (protoJob.has_operation_incarnation()) {
+        job->OperationIncarnation = protoJob.operation_incarnation();
+    } else {
+        job->OperationIncarnation.reset();
+    }
 }
 
 void ToProto(
@@ -1166,7 +1182,7 @@ void ToProto(
     const NApi::TListJobsStatistics& statistics)
 {
     protoStatistics->mutable_state_counts()->clear_entries();
-    for (const auto& state: TEnumTraits<NJobTrackerClient::EJobState>::GetDomainValues()) {
+    for (const auto& state : TEnumTraits<NJobTrackerClient::EJobState>::GetDomainValues()) {
         if (statistics.StateCounts[state] != 0) {
             auto* newStateCount = protoStatistics->mutable_state_counts()->add_entries();
             newStateCount->set_state(ConvertJobStateToProto(state));
@@ -1175,7 +1191,7 @@ void ToProto(
     }
 
     protoStatistics->mutable_type_counts()->clear_entries();
-    for (const auto& type: TEnumTraits<NJobTrackerClient::EJobType>::GetDomainValues()) {
+    for (const auto& type : TEnumTraits<NJobTrackerClient::EJobType>::GetDomainValues()) {
         if (statistics.TypeCounts[type] != 0) {
             auto* newTypeCount = protoStatistics->mutable_type_counts()->add_entries();
             newTypeCount->set_type(ConvertJobTypeToProto(type));
@@ -1189,7 +1205,7 @@ void FromProto(
     const NProto::TListJobsStatistics& protoStatistics)
 {
     std::fill(statistics->StateCounts.begin(), statistics->StateCounts.end(), 0);
-    for (const auto& stateCount: protoStatistics.state_counts().entries()) {
+    for (const auto& stateCount : protoStatistics.state_counts().entries()) {
         auto state = ConvertJobStateFromProto(stateCount.state());
         YT_VERIFY(statistics->StateCounts.IsValidIndex(state));
         YT_VERIFY(statistics->StateCounts[state] == 0);
@@ -1197,7 +1213,7 @@ void FromProto(
     }
 
     std::fill(statistics->TypeCounts.begin(), statistics->TypeCounts.end(), 0);
-    for (const auto& typeCount: protoStatistics.type_counts().entries()) {
+    for (const auto& typeCount : protoStatistics.type_counts().entries()) {
         auto type = ConvertJobTypeFromProto(typeCount.type());
         YT_VERIFY(statistics->TypeCounts.IsValidIndex(type));
         YT_VERIFY(statistics->TypeCounts[type] == 0);
@@ -1964,6 +1980,7 @@ void FillRequest(
     const TDistributedWriteSessionStartOptions& options)
 {
     ToProto(req->mutable_path(), path);
+    req->set_cookie_count(options.CookieCount);
 
     if (options.TransactionId) {
         ToProto(req->mutable_transactional_options(), options);
@@ -1976,6 +1993,7 @@ void ParseRequest(
     const TReqStartDistributedWriteSession& req)
 {
     *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
+    mutableOptions->CookieCount = req.cookie_count();
     if (req.has_transactional_options()) {
         FromProto(mutableOptions, req.transactional_options());
     }
@@ -1985,19 +2003,31 @@ void ParseRequest(
 
 void FillRequest(
     TReqFinishDistributedWriteSession* req,
-    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options)
 {
-    req->set_session(ConvertToYsonString(session).ToString());
+    YT_VERIFY(sessionWithResults.Session);
+
+    req->set_signed_session(ConvertToYsonString(sessionWithResults.Session).ToString());
+    for (const auto& writeResult : sessionWithResults.Results) {
+        YT_VERIFY(writeResult);
+        req->add_signed_write_results(ConvertToYsonString(writeResult).ToString());
+    }
     req->set_max_children_per_attach_request(options.MaxChildrenPerAttachRequest);
 }
 
 void ParseRequest(
-    TDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionWithResults* mutableSessionWithResults,
     TDistributedWriteSessionFinishOptions* mutableOptions,
     const TReqFinishDistributedWriteSession& req)
 {
-    *mutableSession = ConvertTo<TDistributedWriteSessionPtr>(TYsonString(req.session()));
+    mutableSessionWithResults->Results.reserve(req.signed_write_results().size());
+    for (const auto& writeResult : req.signed_write_results()) {
+        mutableSessionWithResults->Results.push_back(ConvertTo<TSignedWriteFragmentResultPtr>(TYsonString(writeResult)));
+    }
+
+    mutableSessionWithResults->Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
+
     mutableOptions->MaxChildrenPerAttachRequest = req.max_children_per_attach_request();
 }
 
@@ -2005,10 +2035,10 @@ void ParseRequest(
 
 void FillRequest(
     TReqWriteTableFragment* req,
-    const TFragmentWriteCookiePtr& cookie,
-    const TFragmentTableWriterOptions& options)
+    const TSignedWriteFragmentCookiePtr& cookie,
+    const TTableFragmentWriterOptions& options)
 {
-    req->set_cookie(ConvertToYsonString(cookie).ToString());
+    req->set_signed_cookie(ConvertToYsonString(cookie).ToString());
 
     if (options.Config) {
         req->set_config(ConvertToYsonString(*options.Config).ToString());
@@ -2016,11 +2046,11 @@ void FillRequest(
 }
 
 void ParseRequest(
-    TFragmentWriteCookiePtr* mutableCookie,
-    TFragmentTableWriterOptions* mutableOptions,
+    TSignedWriteFragmentCookiePtr* mutableCookie,
+    TTableFragmentWriterOptions* mutableOptions,
     const TReqWriteTableFragment& req)
 {
-    *mutableCookie = ConvertTo<TFragmentWriteCookiePtr>(TYsonString(req.cookie()));
+    *mutableCookie = ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(req.signed_cookie()));
     if (req.has_config()) {
         mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(req.config()));
     } else {

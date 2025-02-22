@@ -50,6 +50,8 @@ struct TProtoTypeConfig {
     bool OptionalLists = false;
     //! Заполнять ли пустые Optional типы дефолтным значением (только для proto3).
     bool SyntaxAware = false;
+    //! Использовать ли детерминированную сериализацию
+    bool Deterministic = false;
 };
 
 struct TProtoTypeConfigOptions {
@@ -69,6 +71,8 @@ struct TProtoTypeConfigOptions {
     bool OptionalLists = false;
     //! Заполнять ли пустые Optional типы дефолтным значением (только для proto3).
     bool SyntaxAware = false;
+    //! Использовать ли детерминированную сериализацию
+    bool Deterministic = false;
 
     TProtoTypeConfigOptions& SetProtoFormat(EProtoFormat value) {
         ProtoFormat = value;
@@ -158,4 +162,5 @@ private:
     ui32 SkipBytes_;
     bool OptionalLists_;
     bool SyntaxAware_;
+    bool Deterministic_;
 };

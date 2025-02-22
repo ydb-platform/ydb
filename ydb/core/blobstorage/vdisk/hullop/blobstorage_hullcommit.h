@@ -123,9 +123,10 @@ namespace NKikimr {
             }
 
             LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS,
-                      VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "COMMIT: PDiskId# %s Lsn# %s type# %s msg# %s",
+                      VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "COMMIT: PDiskId# %s Lsn# %s type# %s msg# %s RemovedHugeBlobs# %s",
                             Ctx->PDiskCtx->PDiskIdString.data(), LsnSeg.ToString().data(),
-                            THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data()));
+                            THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data(),
+                            Metadata.RemovedHugeBlobs.ToString().data()));
 
             ctx.Send(Ctx->LoggerId, CommitMsg.release());
         }
@@ -165,6 +166,10 @@ namespace NKikimr {
 
             // advance LSN
             LevelIndex->CurEntryPointLsn = LsnSeg.Last;
+
+            if (CommitRecord.DeleteChunks) {
+                ctx.Send(Ctx->SkeletonId, new TEvNotifyChunksDeleted(LsnSeg.Last, CommitRecord.DeleteChunks));
+            }
 
             Finish(ctx);
         }
@@ -236,6 +241,13 @@ namespace NKikimr {
             CommitRecord.CommitChunks = std::move(Metadata.CommitChunks);
             CommitRecord.DeleteChunks = std::move(Metadata.DeleteChunks);
             CommitRecord.DeleteToDecommitted = Metadata.DeleteToDecommitted;
+
+            // notify PDisk about dirty chunks (the ones from which huge slots are being freed right now)
+            THashSet<TChunkIdx> chunkIds;
+            for (const TDiskPart& p : Metadata.RemovedHugeBlobs) {
+                chunkIds.insert(p.ChunkIdx);
+            }
+            CommitRecord.DirtyChunks = {chunkIds.begin(), chunkIds.end()};
 
             // validate its contents
             VerifyCommitRecord(CommitRecord);

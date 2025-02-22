@@ -6,6 +6,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
 
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -167,7 +168,7 @@ using TBaseComputation = TMutableComputationNode<TKikScan<Async>>;
             void ProcessError(const NYdb::NClickhouseInternal::TScanResult& res) {
                 const std::unique_lock lock(Sync);
                 RequestSent = false;
-                Issues = res.GetIssues();
+                Issues = NYdb::NAdapters::ToYqlIssues(res.GetIssues());
                 while (!Blocks.empty())
                     Blocks.pop();
             }

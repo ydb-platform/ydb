@@ -1,0 +1,5 @@
+{"key"="020";"subkey"="1";"data3"=33;datahole3=3};
+{"key"="075";"subkey"="5";"data3"=100500;datahole3=1};
+{"key"="150";"subkey"="4";"data3"=123;datahole3=#};
+{"key"="500";"subkey"="2";"data3"=42;datahole3=2};
+{"key"="800";"subkey"="3";"data3"=321;datahole3=#};

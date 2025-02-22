@@ -11,6 +11,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
+#include <util/generic/bitmap.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
@@ -21,28 +22,26 @@ private:
     template <ui32 CharsRemained>
     class THashesBuilder {
     public:
-        static ui64 Build(const ui8* data, ui64& h) {
-            h = h ^ uint64_t(*data);
-            h = h * 16777619;
-            return THashesBuilder<CharsRemained - 1>::Build(data + 1, h);
+        static ui64 Build(const ui8* data, const ui64 h) {
+            return THashesBuilder<CharsRemained - 1>::Build(data + 1, (h ^ uint64_t(*data)) * 16777619);
         }
     };
 
     template <>
     class THashesBuilder<0> {
     public:
-        static ui64 Build(const ui8* /*data*/, ui64& hash) {
+        static ui64 Build(const ui8* /*data*/, const ui64 hash) {
             return hash;
         }
     };
 
     template <ui32 HashIdx, ui32 CharsCount>
     class THashesCountSelector {
+        static constexpr ui64 HashStart = (ui64)HashIdx * (ui64)2166136261;
     public:
         template <class TActor>
         static void BuildHashes(const ui8* data, TActor& actor) {
-            ui64 hash = (ui64)2166136261 * (ui64)HashIdx;
-            actor(THashesBuilder<CharsCount>::Build(data, hash));
+            actor(THashesBuilder<CharsCount>::Build(data, HashStart));
             THashesCountSelector<HashIdx - 1, CharsCount>::BuildHashes(data, actor);
         }
     };
@@ -179,45 +178,80 @@ public:
 
 class TVectorInserter {
 private:
-    bool* Values;
+    TDynBitMap& Values;
     const ui32 Size;
 
 public:
-    TVectorInserter(std::vector<bool>& values)
-        : Values(&values[0])
-        , Size(values.size()) {
+    TVectorInserter(TDynBitMap& values)
+        : Values(values)
+        , Size(values.Size()) {
+        AFL_VERIFY(values.Size());
     }
 
     void operator()(const ui64 hash) {
-        Values[hash % Size] = true;
+        Values.Set(hash % Size);
     }
 };
 
-TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+class TVectorInserterPower2 {
+private:
+    TDynBitMap& Values;
+    const ui32 SizeMask;
+
+public:
+    TVectorInserterPower2(TDynBitMap& values)
+        : Values(values)
+        , SizeMask(values.Size() - 1) {
+        AFL_VERIFY(values.Size());
+    }
+
+    void operator()(const ui64 hash) {
+        Values.Set(hash & SizeMask);
+    }
+};
+
+TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     TNGrammBuilder builder(HashesCount);
 
-    std::vector<bool> bitsVector(FilterSizeBytes * 8, false);
-    TVectorInserter inserter(bitsVector);
-    for (reader.Start(); reader.IsCorrect();) {
-        builder.FillNGrammHashes(NGrammSize, reader.begin()->GetCurrentChunk(), inserter);
-        reader.ReadNext(reader.begin()->GetCurrentChunk()->length());
+    TDynBitMap bitMap;
+    ui32 size = FilterSizeBytes * 8;
+    if ((size & (size - 1)) == 0) {
+        ui32 recordsCountBase = RecordsCount;
+        while (recordsCountBase < recordsCount && size * 2 <= TConstants::MaxFilterSizeBytes) {
+            size <<= 1;
+            recordsCountBase *= 2;
+        }
+    } else {
+        size *= ((recordsCount <= RecordsCount) ? 1.0 : (1.0 * recordsCount / RecordsCount));
     }
-    return TFixStringBitsStorage(bitsVector).GetData();
+    bitMap.Reserve(size * 8);
+
+    const auto doFillFilter = [&](auto& inserter) {
+        for (reader.Start(); reader.IsCorrect();) {
+            builder.FillNGrammHashes(NGrammSize, reader.begin()->GetCurrentChunk(), inserter);
+            reader.ReadNext(reader.begin()->GetCurrentChunk()->length());
+        }
+    };
+
+    if ((size & (size - 1)) == 0) {
+        TVectorInserterPower2 inserter(bitMap);
+        doFillFilter(inserter);
+    } else {
+        TVectorInserter inserter(bitMap);
+        doFillFilter(inserter);
+    }
+    return TFixStringBitsStorage(bitMap).GetData();
 }
 
 void TIndexMeta::DoFillIndexCheckers(
-    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {
+    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
     for (auto&& branch : info->GetBranches()) {
         std::map<ui32, NRequest::TLikeDescription> foundColumns;
         for (auto&& cId : ColumnIds) {
-            auto c = schema.GetColumns().GetById(cId);
-            if (!c) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect index column")("id", cId);
-                return;
-            }
-            auto it = branch->GetLikes().find(c->GetName());
+            auto it = branch->GetLikes().find(cId);
             if (it == branch->GetLikes().end()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("warn", "not found like for column")("id", cId);
                 break;
             }
             foundColumns.emplace(cId, it->second);

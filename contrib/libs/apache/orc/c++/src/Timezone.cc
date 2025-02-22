@@ -184,49 +184,49 @@ namespace orc {
    * day = J<day without 2/29>|<day with 2/29>|M<month>.<week>.<day of week>
    */
   class FutureRuleImpl : public FutureRule {
-    std::string ruleString;
-    TimezoneVariant standard;
-    bool hasDst;
-    TimezoneVariant dst;
-    Transition start;
-    Transition end;
+    std::string ruleString_;
+    TimezoneVariant standard_;
+    bool hasDst_;
+    TimezoneVariant dst_;
+    Transition start_;
+    Transition end_;
 
     // expanded time_t offsets of transitions
-    std::vector<int64_t> offsets;
+    std::vector<int64_t> offsets_;
 
     // Is the epoch (1 Jan 1970 00:00) in standard time?
     // This code assumes that the transition dates fall in the same order
     // each year. Hopefully no timezone regions decide to move across the
     // equator, which is about what it would take.
-    bool startInStd;
+    bool startInStd_;
 
     void computeOffsets() {
-      if (!hasDst) {
-        startInStd = true;
-        offsets.resize(1);
+      if (!hasDst_) {
+        startInStd_ = true;
+        offsets_.resize(1);
       } else {
         // Insert a transition for the epoch and two per a year for the next
         // 400 years. We assume that the all even positions are in standard
         // time if and only if startInStd and the odd ones are the reverse.
-        offsets.resize(400 * 2 + 1);
-        startInStd = start.getTime(1970) < end.getTime(1970);
+        offsets_.resize(400 * 2 + 1);
+        startInStd_ = start_.getTime(1970) < end_.getTime(1970);
         int64_t base = 0;
         for (int64_t year = 1970; year < 1970 + 400; ++year) {
-          if (startInStd) {
-            offsets[static_cast<uint64_t>(year - 1970) * 2 + 1] =
-                base + start.getTime(year) - standard.gmtOffset;
-            offsets[static_cast<uint64_t>(year - 1970) * 2 + 2] =
-                base + end.getTime(year) - dst.gmtOffset;
+          if (startInStd_) {
+            offsets_[static_cast<uint64_t>(year - 1970) * 2 + 1] =
+                base + start_.getTime(year) - standard_.gmtOffset;
+            offsets_[static_cast<uint64_t>(year - 1970) * 2 + 2] =
+                base + end_.getTime(year) - dst_.gmtOffset;
           } else {
-            offsets[static_cast<uint64_t>(year - 1970) * 2 + 1] =
-                base + end.getTime(year) - dst.gmtOffset;
-            offsets[static_cast<uint64_t>(year - 1970) * 2 + 2] =
-                base + start.getTime(year) - standard.gmtOffset;
+            offsets_[static_cast<uint64_t>(year - 1970) * 2 + 1] =
+                base + end_.getTime(year) - dst_.gmtOffset;
+            offsets_[static_cast<uint64_t>(year - 1970) * 2 + 2] =
+                base + start_.getTime(year) - standard_.gmtOffset;
           }
           base += (isLeap(year) ? 366 : 365) * SECONDS_PER_DAY;
         }
       }
-      offsets[0] = 0;
+      offsets_[0] = 0;
     }
 
    public:
@@ -247,34 +247,34 @@ namespace orc {
   }
 
   bool FutureRuleImpl::isDefined() const {
-    return ruleString.size() > 0;
+    return ruleString_.size() > 0;
   }
 
   const TimezoneVariant& FutureRuleImpl::getVariant(int64_t clk) const {
-    if (!hasDst) {
-      return standard;
+    if (!hasDst_) {
+      return standard_;
     } else {
       int64_t adjusted = clk % SECONDS_PER_400_YEARS;
       if (adjusted < 0) {
         adjusted += SECONDS_PER_400_YEARS;
       }
-      int64_t idx = binarySearch(offsets, adjusted);
-      if (startInStd == (idx % 2 == 0)) {
-        return standard;
+      int64_t idx = binarySearch(offsets_, adjusted);
+      if (startInStd_ == (idx % 2 == 0)) {
+        return standard_;
       } else {
-        return dst;
+        return dst_;
       }
     }
   }
 
   void FutureRuleImpl::print(std::ostream& out) const {
     if (isDefined()) {
-      out << "  Future rule: " << ruleString << "\n";
-      out << "  standard " << standard.toString() << "\n";
-      if (hasDst) {
-        out << "  dst " << dst.toString() << "\n";
-        out << "  start " << start.toString() << "\n";
-        out << "  end " << end.toString() << "\n";
+      out << "  Future rule: " << ruleString_ << "\n";
+      out << "  standard " << standard_.toString() << "\n";
+      if (hasDst_) {
+        out << "  dst " << dst_.toString() << "\n";
+        out << "  start " << start_.toString() << "\n";
+        out << "  end " << end_.toString() << "\n";
       }
     }
   }
@@ -285,40 +285,40 @@ namespace orc {
   class FutureRuleParser {
    public:
     FutureRuleParser(const std::string& str, FutureRuleImpl* rule)
-        : ruleString(str), length(str.size()), position(0), output(*rule) {
-      output.ruleString = str;
-      if (position != length) {
-        parseName(output.standard.name);
-        output.standard.gmtOffset = -parseOffset();
-        output.standard.isDst = false;
-        output.hasDst = position < length;
-        if (output.hasDst) {
-          parseName(output.dst.name);
-          output.dst.isDst = true;
-          if (ruleString[position] != ',') {
-            output.dst.gmtOffset = -parseOffset();
+        : ruleString_(str), length_(str.size()), position_(0), output_(*rule) {
+      output_.ruleString_ = str;
+      if (position_ != length_) {
+        parseName(output_.standard_.name);
+        output_.standard_.gmtOffset = -parseOffset();
+        output_.standard_.isDst = false;
+        output_.hasDst_ = position_ < length_;
+        if (output_.hasDst_) {
+          parseName(output_.dst_.name);
+          output_.dst_.isDst = true;
+          if (ruleString_[position_] != ',') {
+            output_.dst_.gmtOffset = -parseOffset();
           } else {
-            output.dst.gmtOffset = output.standard.gmtOffset + 60 * 60;
+            output_.dst_.gmtOffset = output_.standard_.gmtOffset + 60 * 60;
           }
-          parseTransition(output.start);
-          parseTransition(output.end);
+          parseTransition(output_.start_);
+          parseTransition(output_.end_);
         }
-        if (position != length) {
+        if (position_ != length_) {
           throwError("Extra text");
         }
-        output.computeOffsets();
+        output_.computeOffsets();
       }
     }
 
    private:
-    const std::string& ruleString;
-    size_t length;
-    size_t position;
-    FutureRuleImpl& output;
+    const std::string& ruleString_;
+    size_t length_;
+    size_t position_;
+    FutureRuleImpl& output_;
 
     void throwError(const char* msg) {
       std::stringstream buffer;
-      buffer << msg << " at " << position << " in '" << ruleString << "'";
+      buffer << msg << " at " << position_ << " in '" << ruleString_ << "'";
       throw TimezoneError(buffer.str());
     }
 
@@ -328,46 +328,46 @@ namespace orc {
      * and set the output string.
      */
     void parseName(std::string& result) {
-      if (position == length) {
+      if (position_ == length_) {
         throwError("name required");
       }
-      size_t start = position;
-      if (ruleString[position] == '<') {
-        while (position < length && ruleString[position] != '>') {
-          position += 1;
+      size_t start = position_;
+      if (ruleString_[position_] == '<') {
+        while (position_ < length_ && ruleString_[position_] != '>') {
+          position_ += 1;
         }
-        if (position == length) {
+        if (position_ == length_) {
           throwError("missing close '>'");
         }
-        position += 1;
+        position_ += 1;
       } else {
-        while (position < length) {
-          char ch = ruleString[position];
+        while (position_ < length_) {
+          char ch = ruleString_[position_];
           if (isdigit(ch) || ch == '-' || ch == '+' || ch == ',') {
             break;
           }
-          position += 1;
+          position_ += 1;
         }
       }
-      if (position == start) {
+      if (position_ == start) {
         throwError("empty string not allowed");
       }
-      result = ruleString.substr(start, position - start);
+      result = ruleString_.substr(start, position_ - start);
     }
 
     /**
      * Parse an integer of the form [0-9]+ and return it.
      */
     int64_t parseNumber() {
-      if (position >= length) {
+      if (position_ >= length_) {
         throwError("missing number");
       }
       int64_t result = 0;
-      while (position < length) {
-        char ch = ruleString[position];
+      while (position_ < length_) {
+        char ch = ruleString_[position_];
         if (isdigit(ch)) {
           result = result * 10 + (ch - '0');
-          position += 1;
+          position_ += 1;
         } else {
           break;
         }
@@ -383,17 +383,17 @@ namespace orc {
     int64_t parseOffset() {
       int64_t scale = 3600;
       bool isNegative = false;
-      if (position < length) {
-        char ch = ruleString[position];
+      if (position_ < length_) {
+        char ch = ruleString_[position_];
         isNegative = ch == '-';
         if (ch == '-' || ch == '+') {
-          position += 1;
+          position_ += 1;
         }
       }
       int64_t result = parseNumber() * scale;
-      while (position < length && scale > 1 && ruleString[position] == ':') {
+      while (position_ < length_ && scale > 1 && ruleString_[position_] == ':') {
         scale /= 60;
-        position += 1;
+        position_ += 1;
         result += parseNumber() * scale;
       }
       if (isNegative) {
@@ -407,35 +407,35 @@ namespace orc {
      *   ,(J<number>|<number>|M<number>.<number>.<number>)(/<offset>)?
      */
     void parseTransition(Transition& transition) {
-      if (length - position < 2 || ruleString[position] != ',') {
+      if (length_ - position_ < 2 || ruleString_[position_] != ',') {
         throwError("missing transition");
       }
-      position += 1;
-      char ch = ruleString[position];
+      position_ += 1;
+      char ch = ruleString_[position_];
       if (ch == 'J') {
         transition.kind = TRANSITION_JULIAN;
-        position += 1;
+        position_ += 1;
         transition.day = parseNumber();
       } else if (ch == 'M') {
         transition.kind = TRANSITION_MONTH;
-        position += 1;
+        position_ += 1;
         transition.month = parseNumber();
-        if (position == length || ruleString[position] != '.') {
+        if (position_ == length_ || ruleString_[position_] != '.') {
           throwError("missing first .");
         }
-        position += 1;
+        position_ += 1;
         transition.week = parseNumber();
-        if (position == length || ruleString[position] != '.') {
+        if (position_ == length_ || ruleString_[position_] != '.') {
           throwError("missing second .");
         }
-        position += 1;
+        position_ += 1;
         transition.day = parseNumber();
       } else {
         transition.kind = TRANSITION_DAY;
         transition.day = parseNumber();
       }
-      if (position < length && ruleString[position] == '/') {
-        position += 1;
+      if (position_ < length_ && ruleString_[position_] == '/') {
+        position_ += 1;
         transition.time = parseOffset();
       } else {
         transition.time = 2 * 60 * 60;
@@ -565,7 +565,7 @@ namespace orc {
 
   class TimezoneImpl : public Timezone {
    public:
-    TimezoneImpl(const std::string& _filename, const std::vector<unsigned char>& buffer);
+    TimezoneImpl(const std::string& filename, const std::vector<unsigned char>& buffer);
     virtual ~TimezoneImpl() override;
 
     /**
@@ -576,11 +576,11 @@ namespace orc {
     void print(std::ostream&) const override;
 
     uint64_t getVersion() const override {
-      return version;
+      return version_;
     }
 
     int64_t getEpoch() const override {
-      return epoch;
+      return epoch_;
     }
 
     int64_t convertToUTC(int64_t clk) const override {
@@ -599,31 +599,31 @@ namespace orc {
     void parseZoneFile(const unsigned char* ptr, uint64_t sectionOffset, uint64_t fileLength,
                        const VersionParser& version);
     // filename
-    std::string filename;
+    std::string filename_;
 
     // the version of the file
-    uint64_t version;
+    uint64_t version_;
 
     // the list of variants for this timezone
-    std::vector<TimezoneVariant> variants;
+    std::vector<TimezoneVariant> variants_;
 
     // the list of the times where the local rules change
-    std::vector<int64_t> transitions;
+    std::vector<int64_t> transitions_;
 
     // the variant that starts at this transition.
-    std::vector<uint64_t> currentVariant;
+    std::vector<uint64_t> currentVariant_;
 
     // the variant before the first transition
-    uint64_t ancientVariant;
+    uint64_t ancientVariant_;
 
     // the rule for future times
-    std::shared_ptr<FutureRule> futureRule;
+    std::shared_ptr<FutureRule> futureRule_;
 
     // the last explicit transition after which we use the future rule
-    int64_t lastTransition;
+    int64_t lastTransition_;
 
     // The ORC epoch time in this timezone.
-    int64_t epoch;
+    int64_t epoch_;
   };
 
   DIAGNOSTIC_PUSH
@@ -639,8 +639,8 @@ namespace orc {
     // PASS
   }
 
-  TimezoneImpl::TimezoneImpl(const std::string& _filename, const std::vector<unsigned char>& buffer)
-      : filename(_filename) {
+  TimezoneImpl::TimezoneImpl(const std::string& filename, const std::vector<unsigned char>& buffer)
+      : filename_(filename) {
     parseZoneFile(&buffer[0], 0, buffer.size(), Version1Parser());
     // Build the literal for the ORC epoch
     // 2015 Jan 1 00:00:00
@@ -653,7 +653,7 @@ namespace orc {
     epochStruct.tm_year = 2015 - 1900;
     epochStruct.tm_isdst = 0;
     time_t utcEpoch = timegm(&epochStruct);
-    epoch = utcEpoch - getVariant(utcEpoch).gmtOffset;
+    epoch_ = utcEpoch - getVariant(utcEpoch).gmtOffset;
   }
 
   std::string getTimezoneDirectory() {
@@ -783,9 +783,9 @@ namespace orc {
                                        uint64_t variantCount, uint64_t nameOffset,
                                        uint64_t nameCount) {
     for (uint64_t variant = 0; variant < variantCount; ++variant) {
-      variants[variant].gmtOffset =
+      variants_[variant].gmtOffset =
           static_cast<int32_t>(decode32(ptr + variantOffset + 6 * variant));
-      variants[variant].isDst = ptr[variantOffset + 6 * variant + 4] != 0;
+      variants_[variant].isDst = ptr[variantOffset + 6 * variant + 4] != 0;
       uint64_t nameStart = ptr[variantOffset + 6 * variant + 5];
       if (nameStart >= nameCount) {
         std::stringstream buffer;
@@ -793,7 +793,7 @@ namespace orc {
                << " >= " << nameCount;
         throw TimezoneError(buffer.str());
       }
-      variants[variant].name =
+      variants_[variant].name =
           std::string(reinterpret_cast<const char*>(ptr) + nameOffset + nameStart);
     }
   }
@@ -833,7 +833,7 @@ namespace orc {
     if (fileLength < headerOffset + 6 * 4 ||
         strncmp(reinterpret_cast<const char*>(ptr) + magicOffset, "TZif", 4) != 0) {
       std::stringstream buffer;
-      buffer << "non-tzfile " << filename;
+      buffer << "non-tzfile " << filename_;
       throw TimezoneError(buffer.str());
     }
 
@@ -854,7 +854,7 @@ namespace orc {
 
     if (sectionLength > fileLength) {
       std::stringstream buffer;
-      buffer << "tzfile too short " << filename << " needs " << sectionLength << " and has "
+      buffer << "tzfile too short " << filename_ << " needs " << sectionLength << " and has "
              << fileLength;
       throw TimezoneError(buffer.str());
     }
@@ -864,82 +864,82 @@ namespace orc {
       parseZoneFile(ptr, sectionLength, fileLength, Version2Parser());
       return;
     }
-    version = versionParser.getVersion();
-    variants.resize(variantCount);
-    transitions.resize(timeCount);
-    currentVariant.resize(timeCount);
+    version_ = versionParser.getVersion();
+    variants_.resize(variantCount);
+    transitions_.resize(timeCount);
+    currentVariant_.resize(timeCount);
     parseTimeVariants(ptr, variantOffset, variantCount, nameOffset, nameCount);
     bool foundAncient = false;
     for (uint64_t t = 0; t < timeCount; ++t) {
-      transitions[t] = versionParser.parseTime(ptr + timeOffset + t * versionParser.getTimeSize());
-      currentVariant[t] = ptr[timeVariantOffset + t];
-      if (currentVariant[t] >= variantCount) {
+      transitions_[t] = versionParser.parseTime(ptr + timeOffset + t * versionParser.getTimeSize());
+      currentVariant_[t] = ptr[timeVariantOffset + t];
+      if (currentVariant_[t] >= variantCount) {
         std::stringstream buffer;
-        buffer << "tzfile rule out of range " << filename << " references rule "
-               << currentVariant[t] << " of " << variantCount;
+        buffer << "tzfile rule out of range " << filename_ << " references rule "
+               << currentVariant_[t] << " of " << variantCount;
         throw TimezoneError(buffer.str());
       }
       // find the oldest standard time and use that as the ancient value
-      if (!foundAncient && !variants[currentVariant[t]].isDst) {
+      if (!foundAncient && !variants_[currentVariant_[t]].isDst) {
         foundAncient = true;
-        ancientVariant = currentVariant[t];
+        ancientVariant_ = currentVariant_[t];
       }
     }
     if (!foundAncient) {
-      ancientVariant = 0;
+      ancientVariant_ = 0;
     }
-    futureRule = parseFutureRule(
+    futureRule_ = parseFutureRule(
         versionParser.parseFutureString(ptr, sectionLength, fileLength - sectionLength));
 
     // find the lower bound for applying the future rule
-    if (futureRule->isDefined()) {
+    if (futureRule_->isDefined()) {
       if (timeCount > 0) {
-        lastTransition = transitions[timeCount - 1];
+        lastTransition_ = transitions_[timeCount - 1];
       } else {
-        lastTransition = INT64_MIN;
+        lastTransition_ = INT64_MIN;
       }
     } else {
-      lastTransition = INT64_MAX;
+      lastTransition_ = INT64_MAX;
     }
   }
 
   const TimezoneVariant& TimezoneImpl::getVariant(int64_t clk) const {
     // if it is after the last explicit entry in the table,
     // use the future rule to get an answer
-    if (clk > lastTransition) {
-      return futureRule->getVariant(clk);
+    if (clk > lastTransition_) {
+      return futureRule_->getVariant(clk);
     } else {
-      int64_t transition = binarySearch(transitions, clk);
+      int64_t transition = binarySearch(transitions_, clk);
       uint64_t idx;
       if (transition < 0) {
-        idx = ancientVariant;
+        idx = ancientVariant_;
       } else {
-        idx = currentVariant[static_cast<size_t>(transition)];
+        idx = currentVariant_[static_cast<size_t>(transition)];
       }
-      return variants[idx];
+      return variants_[idx];
     }
   }
 
   void TimezoneImpl::print(std::ostream& out) const {
-    out << "Timezone file: " << filename << "\n";
-    out << "  Version: " << version << "\n";
-    futureRule->print(out);
-    for (uint64_t r = 0; r < variants.size(); ++r) {
-      out << "  Variant " << r << ": " << variants[r].toString() << "\n";
+    out << "Timezone file: " << filename_ << "\n";
+    out << "  Version: " << version_ << "\n";
+    futureRule_->print(out);
+    for (uint64_t r = 0; r < variants_.size(); ++r) {
+      out << "  Variant " << r << ": " << variants_[r].toString() << "\n";
     }
-    for (uint64_t t = 0; t < transitions.size(); ++t) {
+    for (uint64_t t = 0; t < transitions_.size(); ++t) {
       tm timeStruct;
       tm* result = nullptr;
       char buffer[25];
       if (sizeof(time_t) >= 8) {
-        time_t val = transitions[t];
+        time_t val = transitions_[t];
         result = gmtime_r(&val, &timeStruct);
         if (result) {
           strftime(buffer, sizeof(buffer), "%F %H:%M:%S", &timeStruct);
         }
       }
-      out << "  Transition: " << (result == nullptr ? "null" : buffer) << " (" << transitions[t]
-          << ") -> " << variants[currentVariant[t]].name << "\n";
+      out << "  Transition: " << (result == nullptr ? "null" : buffer) << " (" << transitions_[t]
+          << ") -> " << variants_[currentVariant_[t]].name << "\n";
     }
   }
 

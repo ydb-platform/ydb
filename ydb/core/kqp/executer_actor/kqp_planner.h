@@ -43,26 +43,19 @@ public:
     struct TArgs {
         TKqpTasksGraph& TasksGraph;
         const ui64 TxId;
-        const TMaybe<ui64> LockTxId;
-        const ui32 LockNodeId;
-        const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
         const TActorId& Executer;
-        const IKqpGateway::TKqpSnapshot& Snapshot;
         const TString& Database;
         const TIntrusiveConstPtr<NACLib::TUserToken>& UserToken;
         const TInstant Deadline;
         const Ydb::Table::QueryStatsCollection::Mode& StatsMode;
-        const bool WithSpilling;
         const TMaybe<NKikimrKqp::TRlPath>& RlPath;
         NWilson::TSpan& ExecuterSpan;
         TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
-        const bool UseDataQueryPool;
         const bool LocalComputeTasks;
         const ui64 MkqlMemoryLimit;
         const NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
         const bool AllowSinglePartitionOpt;
-        const TIntrusivePtr<TUserRequestContext>& UserRequestContext;
         const std::optional<TKqpFederatedQuerySetup>& FederatedQuerySetup;
         const ui64 OutputChunkMaxSize = 0;
         const TGUCSettings::TPtr GUCSettings;
@@ -71,6 +64,7 @@ public:
         const std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory>& CaFactory_;
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
         const TMaybe<ui8> ArrayBufferMinFillPercentage;
+        const bool VerboseMemoryLimitException;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -106,18 +100,13 @@ private:
 
 private:
     const ui64 TxId;
-    const TMaybe<ui64> LockTxId;
-    const ui32 LockNodeId;
-    const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     const TActorId ExecuterId;
     TVector<ui64> ComputeTasks;
     THashMap<ui64, TVector<ui64>> TasksPerNode;
-    const IKqpGateway::TKqpSnapshot Snapshot;
     TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
-    const bool WithSpilling;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
@@ -127,22 +116,18 @@ private:
     TVector<TTaskResourceEstimation> ResourceEstimations;
     TVector<TRequestData> Requests;
     TKqpTasksGraph& TasksGraph;
-    const bool UseDataQueryPool;
-    const bool LocalComputeTasks;
     ui64 MkqlMemoryLimit;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     ui32 nComputeTasks = 0;
     ui32 nScanTasks = 0;
-    bool AllowSinglePartitionOpt;
 
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
     THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources
 
-    TIntrusivePtr<TUserRequestContext> UserRequestContext;
+    const TIntrusivePtr<TUserRequestContext>& UserRequestContext;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const ui64 OutputChunkMaxSize;
     const TGUCSettings::TPtr GUCSettings;
-    const bool MayRunTasksLocally;
     TString SerializedGUCSettings;
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
@@ -150,6 +135,7 @@ private:
     TVector<TProgressStat> LastStats;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
+    const bool VerboseMemoryLimitException;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

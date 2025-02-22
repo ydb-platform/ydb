@@ -20,9 +20,6 @@ public:
     //! Constructs an empty TSignature.
     TSignature() = default;
 
-    //! Creates a TSignature containing the given payload without an actual signature.
-    explicit TSignature(NYson::TYsonString payload);
-
     [[nodiscard]] const NYson::TYsonString& Payload() const;
 
 private:
@@ -30,8 +27,15 @@ private:
     NYson::TYsonString Payload_;
     std::vector<std::byte> Signature_;
 
-    friend class ISignatureGenerator;
-    friend class ISignatureValidator;
+    friend struct ISignatureGenerator;
+    friend struct TDummySignatureGenerator;
+    friend struct TAlwaysThrowingSignatureGenerator;
+    friend class TSignatureGenerator;
+
+    friend struct ISignatureValidator;
+    friend struct TDummySignatureValidator;
+    friend struct TAlwaysThrowingSignatureValidator;
+    friend class TSignatureValidator;
 
     friend void Serialize(const TSignature& signature, NYson::IYsonConsumer* consumer);
     friend void Deserialize(TSignature& signature, NYTree::INodePtr node);

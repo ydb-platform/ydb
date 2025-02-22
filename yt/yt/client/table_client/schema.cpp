@@ -282,9 +282,9 @@ i64 TColumnSchema::GetMemoryUsage() const
         (Group_ ? Group_->size() : 0);
 }
 
-i64 TColumnSchema::GetMemoryUsage(i64 limit) const
+i64 TColumnSchema::GetMemoryUsage(i64 threshold) const
 {
-    YT_ASSERT(limit > 0);
+    YT_ASSERT(threshold > 0);
 
     auto usage = static_cast<i64>(
         sizeof(TColumnSchema) +
@@ -295,11 +295,11 @@ i64 TColumnSchema::GetMemoryUsage(i64 limit) const
         (Aggregate_ ? Aggregate_->size() : 0) +
         (Group_ ? Group_->size() : 0));
 
-    if (usage >= limit) {
+    if (usage >= threshold) {
         return usage;
     }
 
-    return usage + LogicalType_->GetMemoryUsage(limit - usage);
+    return usage + LogicalType_->GetMemoryUsage(threshold - usage);
 }
 
 bool TColumnSchema::IsOfV1Type() const
@@ -812,7 +812,7 @@ bool TTableSchema::IsCGComparatorApplicable() const
 
     auto keyTypes = GetKeyColumnTypes();
     return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
-        return type == EValueType::Any;
+        return type == EValueType::Any || type == EValueType::Null;
     });
 }
 
@@ -1019,6 +1019,43 @@ TTableSchemaPtr TTableSchema::ToQuery() const
         return New<TTableSchema>(std::move(columns), true, false,
             ETableSchemaModification::None, DeletedColumns());
     }
+}
+
+TTableSchemaPtr TTableSchema::WithSystemColumns(const TSystemColumnOptions& options) const
+{
+    std::vector<TColumnSchema> columns;
+    auto safeAdd = [&] (const std::string& name, const ESimpleLogicalValueType type) {
+        const auto existing = FindColumn(name);
+        if (!existing) {
+            columns.push_back(TColumnSchema(name, type));
+        } else if (!existing->IsOfV1Type(type)) {
+            THROW_ERROR_EXCEPTION("Cannot add column %Qv because of type mismatch", name);
+        }
+    };
+
+    if (options.EnableTableIndex) {
+        safeAdd(TableIndexColumnName, ESimpleLogicalValueType::Int64);
+    }
+
+    if (options.EnableRowIndex) {
+        safeAdd(RowIndexColumnName, ESimpleLogicalValueType::Int64);
+    }
+
+    if (options.EnableRangeIndex) {
+        safeAdd(RangeIndexColumnName, ESimpleLogicalValueType::Int64);
+    }
+
+    if (ColumnInfo_) {
+        const auto& info = *ColumnInfo_;
+        columns.insert(columns.end(), info.Columns.begin(), info.Columns.end());
+    }
+
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        SchemaModification_,
+        DeletedColumns());
 }
 
 TTableSchemaPtr TTableSchema::ToWriteViaQueueProducer() const
@@ -1459,17 +1496,17 @@ i64 TTableSchema::GetMemoryUsage() const
     return usage;
 }
 
-i64 TTableSchema::GetMemoryUsage(i64 limit) const
+i64 TTableSchema::GetMemoryUsage(i64 threshold) const
 {
-    YT_ASSERT(limit > 0);
+    YT_ASSERT(threshold > 0);
 
     auto usage = static_cast<i64>(sizeof(TTableSchema));
     for (const auto& column : Columns()) {
-        if (usage >= limit) {
+        if (usage >= threshold) {
             return usage;
         }
 
-        usage += column.GetMemoryUsage(limit - usage);
+        usage += column.GetMemoryUsage(threshold - usage);
     }
     return usage;
 }
@@ -1613,19 +1650,19 @@ void PrintTo(const TTableSchema& tableSchema, std::ostream* os)
 
 TTableSchemaTruncatedFormatter::TTableSchemaTruncatedFormatter(
     const TTableSchemaPtr& schema,
-    i64 memoryLimit)
+    i64 memoryThreshold)
     : Schema_(schema.Get())
-    , Limit_(memoryLimit)
+    , Threshold_(memoryThreshold)
 {
-    YT_ASSERT(Limit_ >= 0);
+    YT_ASSERT(Threshold_ >= 0);
 }
 
 void TTableSchemaTruncatedFormatter::operator()(TStringBuilderBase* builder) const
 {
     if (!Schema_) {
         builder->AppendString(ToString(nullptr));
-    } else if (Limit_ > 0 && Schema_->GetMemoryUsage(Limit_) <= Limit_) {
-        builder->AppendFormat("%v", *Schema_);
+    } else if (Threshold_ > 0 && Schema_->GetMemoryUsage(Threshold_) < Threshold_) {
+        FormatValue(builder, *Schema_, "v");
     } else {
         builder->AppendString("<schema memory usage is over the logging threshold>");
     }
@@ -1839,9 +1876,17 @@ void ValidateDynamicTableKeyColumnCount(int count)
 void ValidateSystemColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted,
-    bool allowUnversionedUpdateColumns,
-    bool allowTimestampColumns)
+    const TSchemaValidationOptions& options)
 {
+    static const auto allowedOperationSystemColumns = THashMap<std::string, ESimpleLogicalValueType>{
+        // Operation system columns are appended in context of job input query.
+        // Table index column is intentionally disabled in the result of input query, since it can be arbitrarily
+        // changed by the query itself, and final values would violate assumptions about the possible values of
+        // $table_index inside format writers.
+        {RowIndexColumnName, ESimpleLogicalValueType::Int64},
+        {RangeIndexColumnName, ESimpleLogicalValueType::Int64},
+    };
+
     static const auto allowedSortedTablesSystemColumns = THashMap<std::string, ESimpleLogicalValueType>{
         {EmptyValueColumnName, ESimpleLogicalValueType::Int64},
         {TtlColumnName, ESimpleLogicalValueType::Uint64},
@@ -1880,7 +1925,15 @@ void ValidateSystemColumnSchema(
         return;
     }
 
-    if (allowUnversionedUpdateColumns) {
+    if (options.AllowOperationColumns) {
+        auto it = allowedOperationSystemColumns.find(name);
+        if (it != allowedOperationSystemColumns.end()) {
+            validateType(it->second);
+            return;
+        }
+    }
+
+    if (options.AllowUnversionedUpdateColumns) {
         // Unversioned update schema system column.
         if (name == TUnversionedUpdateSchema::ChangeTypeColumnName) {
             validateType(ESimpleLogicalValueType::Uint64);
@@ -1894,7 +1947,7 @@ void ValidateSystemColumnSchema(
         }
     }
 
-    if (allowTimestampColumns) {
+    if (options.AllowTimestampColumns) {
         if (name.starts_with(TimestampColumnPrefix)) {
             validateType(ESimpleLogicalValueType::Uint64);
             return;
@@ -1924,8 +1977,7 @@ void ValidateColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted,
     bool isTableDynamic,
-    bool allowUnversionedUpdateColumns,
-    bool allowTimestampColumns)
+    const TSchemaValidationOptions& options)
 {
     static const auto allowedAggregates = THashSet<std::string, THash<TStringBuf>, TEqualTo<>>{
         "sum",
@@ -1954,8 +2006,7 @@ void ValidateColumnSchema(
             ValidateSystemColumnSchema(
                 columnSchema,
                 isTableSorted,
-                allowUnversionedUpdateColumns,
-                allowTimestampColumns);
+                options);
         }
 
         {
@@ -2293,8 +2344,7 @@ void ValidateSchemaAttributes(const TTableSchema& schema)
 void ValidateTableSchema(
     const TTableSchema& schema,
     bool isTableDynamic,
-    bool allowUnversionedUpdateColumns,
-    bool allowTimestampColumns)
+    const TSchemaValidationOptions& options)
 {
     int totalTypeComplexity = 0;
     for (const auto& column : schema.Columns()) {
@@ -2302,8 +2352,7 @@ void ValidateTableSchema(
             column,
             schema.IsSorted(),
             isTableDynamic,
-            allowUnversionedUpdateColumns,
-            allowTimestampColumns);
+            options);
         if (!schema.GetStrict() && column.IsRenamed()) {
             THROW_ERROR_EXCEPTION("Renamed column %v in non-strict schema",
                 column.GetDiagnosticNameString());

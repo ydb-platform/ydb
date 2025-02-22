@@ -521,6 +521,17 @@ public:
             auto section = sectionList.Item(i);
             auto paths = section.Paths();
             for (const auto& path : section.Paths()) {
+                auto rowSpec = TYtTableBaseInfo::GetRowSpec(path.Table());
+                if (!rowSpec) {
+                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "table without rowspec");
+                    return false;
+                }
+
+                if (rowSpec->GetNativeYtTypeFlags() & NTCF_JSON) {
+                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "native json is not supported yet by arrow encoder at YT side");
+                    return false;
+                }
+
                 if (!IsYtTableSuitableForArrowInput(path.Table(), [&ctx, &node](const TString& msg) {
                     BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), msg);
                 })) {

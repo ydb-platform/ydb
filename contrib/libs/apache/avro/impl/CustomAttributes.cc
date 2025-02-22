@@ -17,9 +17,9 @@
  * limitations under the License.
  */
 #include "CustomAttributes.hh"
+#include "Exception.hh"
 #include <map>
 #include <memory>
-#include "Exception.hh"
 
 namespace avro {
 
@@ -28,26 +28,26 @@ boost::optional<std::string> CustomAttributes::getAttribute(const std::string &n
     std::map<std::string, std::string>::const_iterator iter =
         attributes_.find(name);
     if (iter == attributes_.end()) {
-      return result;
+        return result;
     }
     result = iter->second;
     return result;
 }
 
-void CustomAttributes::addAttribute(const std::string& name,
-                                    const std::string& value) {
-  auto iter_and_find =
-      attributes_.insert(std::pair<std::string, std::string>(name, value));
-  if (!iter_and_find.second) {
-    throw Exception(name + " already exists and cannot be added");
-  }
+void CustomAttributes::addAttribute(const std::string &name,
+                                    const std::string &value) {
+    auto iter_and_find =
+        attributes_.insert(std::pair<std::string, std::string>(name, value));
+    if (!iter_and_find.second) {
+        throw Exception(name + " already exists and cannot be added");
+    }
 }
 
-void CustomAttributes::printJson(std::ostream& os,
-                                  const std::string& name) const {
+void CustomAttributes::printJson(std::ostream &os,
+                                 const std::string &name) const {
     if (attributes().find(name) == attributes().end()) {
         throw Exception(name + " doesn't exist");
     }
     os << "\"" << name << "\": \"" << attributes().at(name) << "\"";
 }
-}  // namespace avro
+} // namespace avro

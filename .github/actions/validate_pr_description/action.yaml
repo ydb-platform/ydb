@@ -1,0 +1,31 @@
+name: "validate-pr-description"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Save PR body to temporary file
+      shell: bash
+      run: |
+        echo "${{ inputs.pr_body }}" > pr_body.txt
+
+    - name: Run validation script
+      id: validate
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        python3 -m pip install PyGithub
+        python3 ${{ github.action_path }}/validate_pr_description.py pr_body.txt
+
+inputs:
+  pr_body:
+    description: "The body of the pull request."
+    required: true
+
+outputs:
+  status:
+    description: "The status of the PR description validation."
+    value: ${{ steps.validate.outcome }}
+
+files:
+  - validate_pr_description.py

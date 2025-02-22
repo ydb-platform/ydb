@@ -233,6 +233,9 @@ class TDataShard
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
     class TTxRemoveSchemaSnapshots;
+    class TTxCleanupUncommitted;
+    class TTxDataCleanup;
+    class TTxCompleteDataCleanup;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -1157,6 +1160,8 @@ class TDataShard
             Sys_InMemoryStateActorId = 45,
             Sys_InMemoryStateGeneration = 46,
 
+            Sys_DataCleanupCompletedGeneration = 47,
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -1422,6 +1427,9 @@ class TDataShard
     void Cleanup(const TActorContext &ctx);
     void SwitchToWork(const TActorContext &ctx);
     void SyncConfig();
+
+    // Cleanup for bug https://github.com/ydb-platform/ydb/issues/13387
+    void CleanupUncommitted(const TActorContext &ctx);
 
     TMaybe<TInstant> GetTxPlanStartTimeAndCleanup(ui64 step);
 
@@ -1773,6 +1781,7 @@ public:
     void SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext, const TActorContext &ctx) override;
     void CompactionComplete(ui32 tableId, const TActorContext &ctx) override;
     void CompletedLoansChanged(const TActorContext &ctx) override;
+    void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext &ctx) override;
 
     void ReplyCompactionWaiters(
         ui32 tableId,
@@ -2146,6 +2155,8 @@ public:
         Y_ABORT_UNLESS(type != ELogThrottlerType::LAST);
         return LogThrottlers[type];
     };
+
+    void OnTableCreated(TTransactionContext& txc, const TActorContext& ctx);
 
 private:
     ///
@@ -2749,7 +2760,6 @@ private:
 
     struct TCoordinatorSubscription {
         ui64 CoordinatorId;
-        TMediatorTimecastReadStep::TCPtr ReadStep;
     };
 
     TVector<TCoordinatorSubscription> CoordinatorSubscriptions;
@@ -2967,6 +2977,8 @@ private:
     // from the front
     THashMap<ui32, TCompactionWaiterList> CompactionWaiters;
 
+    TMap<ui64, TActorId> DataCleanupWaiters;
+
     struct TCompactBorrowedWaiter : public TThrRefBase {
         TCompactBorrowedWaiter(TActorId actorId, TLocalPathId requestedTable)
             : ActorId(actorId)
@@ -3016,6 +3028,8 @@ private:
 
     ui32 StatisticsScanTableId = 0;
     ui64 StatisticsScanId = 0;
+
+    ui64 CurrentDataCleanupGeneration = 0;
 
 public:
     auto& GetLockChangeRecords() {
@@ -3390,7 +3404,7 @@ protected:
             ev->Record.MutableTableStats()->SetLocksWholeShard(TabletCounters->Cumulative()[COUNTER_LOCKS_WHOLE_SHARD].Get());
             ev->Record.MutableTableStats()->SetLocksBroken(TabletCounters->Cumulative()[COUNTER_LOCKS_BROKEN].Get());
 
-            ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
+            ev->Record.SetNodeId(ctx.SelfID.NodeId());
             ev->Record.SetStartTime(StartTime().MilliSeconds());
 
             if (DstSplitDescription)

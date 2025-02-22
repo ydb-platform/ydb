@@ -24,6 +24,7 @@ private:
         }
         return false;
     }
+    virtual void DoSerializeToProto(NKikimrTxColumnShard::TCommitWriteTxBody& result) const = 0;
 
 public:
     using TBase::TBase;
@@ -31,7 +32,13 @@ public:
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveResultAckTx(TColumnShard& owner, const ui64 recvTabletId) const = 0;
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveBrokenFlagTx(
         TColumnShard& owner, const ui64 sendTabletId, const bool broken) const = 0;
-    virtual NKikimrTxColumnShard::TCommitWriteTxBody SerializeToProto() const = 0;
+    NKikimrTxColumnShard::TCommitWriteTxBody SerializeToProto() {
+        NKikimrTxColumnShard::TCommitWriteTxBody result;
+        AFL_VERIFY(LockId);
+        result.SetLockId(LockId);
+        DoSerializeToProto(result);
+        return result;
+    }
 };
 
 }   // namespace NKikimr::NColumnShard

@@ -33,7 +33,7 @@ public:
 
     // IConnection implementation.
     TClusterTag GetClusterTag() const override;
-    const TString& GetLoggingTag() const override;
+    const std::string& GetLoggingTag() const override;
     const TString& GetClusterId() const override;
     const std::optional<std::string>& GetClusterName() const override;
 
@@ -63,7 +63,7 @@ private:
     std::atomic<bool> Terminated_ = false;
 
     const TGuid ConnectionId_;
-    const TString LoggingTag_;
+    const std::string LoggingTag_;
     const TString ClusterId_;
     const NLogging::TLogger Logger;
     const NRpc::IChannelFactoryPtr ChannelFactory_;
@@ -76,7 +76,7 @@ private:
     NConcurrency::TPeriodicExecutorPtr UpdateProxyListExecutor_;
 
     // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-    NThreading::TAtomicObject<TString> DiscoveryToken_;
+    NThreading::TAtomicObject<std::string> DiscoveryToken_;
 
     NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
 

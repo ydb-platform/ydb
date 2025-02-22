@@ -102,7 +102,7 @@ class TBatchInfo
 {
 public:
     TBatchInfo() = default;
-    explicit TBatchInfo(const TString& endpoint);
+    explicit TBatchInfo(const std::string& endpoint);
 
     void PopFront();
     void EmplaceBack(int size, NYT::TSharedRef&& value);

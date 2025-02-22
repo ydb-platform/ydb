@@ -231,8 +231,6 @@ public:
     virtual NBus::EMessageStatus ExecuteRequest(NThreading::TPromise<TResult> promise, TAutoPtr<NBus::TBusMessage> request) override {
         const ui32 type = request->GetHeader()->Type;
         switch(type) {
-        case NMsgBusProxy::MTYPE_CLIENT_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusRequest>(&NGRpcProxy::TGRpcClient::Request, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_FLAT_TX_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusSchemeOperation>(&NGRpcProxy::TGRpcClient::SchemeOperation, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST:
@@ -265,8 +263,6 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusCmsRequest, NMsgBusProxy::TBusCmsResponse>(&NGRpcProxy::TGRpcClient::CmsRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CHOOSE_PROXY:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusChooseProxy>(&NGRpcProxy::TGRpcClient::ChooseProxy, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusSqsRequest, NMsgBusProxy::TBusSqsResponse>(&NGRpcProxy::TGRpcClient::SqsRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_INTERCONNECT_DEBUG:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusInterconnectDebug>(&NGRpcProxy::TGRpcClient::InterconnectDebug, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST:
@@ -285,7 +281,7 @@ public:
     virtual TString GetCurrentLocation() const override {
         TString host;
         ui32 port;
-        NMsgBusProxy::TMsgBusClientConfig::CrackAddress(GRpcClient->GetConfig().Locator, host, port);
+        NMsgBusProxy::TMsgBusClientConfig::CrackAddress(TString{GRpcClient->GetConfig().Locator}, host, port);
         return host;
     }
 
@@ -305,7 +301,7 @@ public:
         NGRpcProxy::TGRpcClientConfig config(GRpcClient->GetConfig());
         TString hostname;
         ui32 port;
-        NMsgBusProxy::TMsgBusClientConfig::CrackAddress(config.Locator, hostname, port);
+        NMsgBusProxy::TMsgBusClientConfig::CrackAddress(TString{config.Locator}, hostname, port);
         TString newLocation = TStringBuilder() << EscapeIPv6(location) << ':' << port;
         if (newLocation == config.Locator) {
             return TCleanupCallback();

@@ -46,7 +46,7 @@ namespace orc {
 
     // return selected read type
     const Type* getReadType() const {
-      return readType.get();
+      return readType_.get();
     }
 
    private:
@@ -54,9 +54,9 @@ namespace orc {
     void buildSafePPDConversionMap(const Type* readType, const Type* fileType);
 
    private:
-    const std::shared_ptr<Type> readType;
-    std::unordered_map<uint64_t, const Type*> readTypeMap;
-    std::unordered_set<uint64_t> safePPDConversionMap;
+    const std::shared_ptr<Type> readType_;
+    std::unordered_map<uint64_t, const Type*> readTypeMap_;
+    std::unordered_set<uint64_t> safePPDConversionMap_;
   };
 
 }  // namespace orc

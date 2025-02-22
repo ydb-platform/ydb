@@ -1,0 +1,20 @@
+У autocommand лицензия LGPL-3 и транзитивно через jaraco.text поджигает проверку у Catboost
+
+В Аркидии этим ни кто не пользуется, потому просто удаляю
+--- contrib/python/jaraco.text/jaraco/text/show-newlines.py	(index)
++++ contrib/python/jaraco.text/jaraco/text/show-newlines.py	(working tree)
+@@ -1 +0,0 @@
+-import autocommand
+@@ -30,3 +28,0 @@ def report_newlines(filename):
+-
+-
+-autocommand.autocommand(__name__)(report_newlines)
+--- contrib/python/jaraco.text/jaraco/text/strip-prefix.py	(index)
++++ contrib/python/jaraco.text/jaraco/text/strip-prefix.py	(working tree)
+@@ -3,2 +2,0 @@ import sys
+-import autocommand
+-
+@@ -19,3 +16,0 @@ def strip_prefix():
+-
+-
+-autocommand.autocommand(__name__)(strip_prefix)

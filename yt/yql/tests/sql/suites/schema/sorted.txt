@@ -1,0 +1,6 @@
+{"key"="023";"subkey"="3";"value"="aaa"};
+{"key"="037";"subkey"="5";"value"="ddd"};
+{"key"="075";"subkey"="1";"value"="abc"};
+{"key"="150";"subkey"="1";"value"="aaa"};
+{"key"="151";"subkey"="3";"value"="iii"};
+{"key"="152";"subkey"="8";"value"="zzz"};

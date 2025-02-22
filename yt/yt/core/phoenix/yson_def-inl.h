@@ -27,7 +27,7 @@
     \
     void type::YsonSerializeFields(::NYT::NYson::IYsonConsumer* consumer) const \
     { \
-        ::NYT::NPhoenix2::NDetail::YsonSerializeFieldsImpl(this, consumer); \
+        ::NYT::NPhoenix::NDetail::YsonSerializeFieldsImpl(this, consumer); \
     }
 
 #define PHOENIX_DECLARE_YSON_DUMPABLE_TEMPLATE_MIXIN(type) \
@@ -43,12 +43,12 @@ public: \
 private: \
     void YsonSerializeFields(::NYT::NYson::IYsonConsumer* consumer) const \
     { \
-        ::NYT::NPhoenix2::NDetail::YsonSerializeFieldsImpl(this, consumer); \
+        ::NYT::NPhoenix::NDetail::YsonSerializeFieldsImpl(this, consumer); \
     }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NYT::NPhoenix2::NDetail {
+namespace NYT::NPhoenix::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -106,4 +106,4 @@ void YsonSerializeFieldsImpl(const TThis* this_, NYson::IYsonConsumer* consumer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2::NDetail
+} // namespace NYT::NPhoenix::NDetail

@@ -2,6 +2,7 @@
 
 #include <openssl/sha.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/common/events/events.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
@@ -113,6 +114,25 @@ inline void LogIntegrityTrails(const TString& txType, const TString& traceId, ui
     };
 
     LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(txType, traceId, txId, shardId));
+}
+
+// WriteActor,BufferActor
+inline void LogIntegrityTrails(const TString& txType, ui64 txId, TMaybe<ui64> shardId, const TActorContext& ctx, const TStringBuf component) {
+    auto log = [](const auto& type, const auto& txId, const auto& shardId, const auto component) {
+        TStringStream ss;
+        LogKeyValue("Component", component, ss);
+        LogKeyValue("PhyTxId", ToString(txId), ss);
+
+        if (shardId) {
+            LogKeyValue("ShardId", ToString(*shardId), ss);
+        }
+
+        LogKeyValue("Type", type, ss, /*last*/ true);
+
+        return ss.Str();
+    };
+
+    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(txType, txId, shardId, component));
 }
 
 }

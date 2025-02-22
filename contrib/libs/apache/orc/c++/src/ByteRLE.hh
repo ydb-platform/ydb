@@ -59,6 +59,13 @@ namespace orc {
      * suppress the data and reset to initial state
      */
     virtual void suppress() = 0;
+
+    /**
+     * Finalize the encoding process. This function should be called after all data required for
+     * encoding has been added. It ensures that any remaining data is processed and the final state
+     * of the encoder is set.
+     */
+    virtual void finishEncode() = 0;
   };
 
   class ByteRleDecoder {

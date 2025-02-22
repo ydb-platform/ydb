@@ -1,4 +1,5 @@
 #include "service_coordination.h"
+#include <ydb/core/base/auth.h>
 #include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_common/rpc_common.h"
@@ -94,7 +95,7 @@ private:
         auto path = ::NKikimr::SplitPath(table);
         TMaybe<ui64> tabletId = TryParseLocalDbPath(path);
         if (tabletId) {
-            if (Request->GetSerializedToken().empty() || !IsSuperUser(NACLib::TUserToken(Request->GetSerializedToken()), *AppData(ctx))) {
+            if (!IsAdministrator(AppData(ctx), Request->GetInternalToken().Get())) {
                 return ReplyWithError(Ydb::StatusIds::NOT_FOUND, "Invalid table path specified", ctx);
             }
 
@@ -178,7 +179,7 @@ private:
             auto* colMeta = Result.add_columns();
             colMeta->set_name(col.second.Name);
             auto& typeInfo = col.second.PType;
-            ProtoFromTypeInfo(typeInfo, *colMeta->mutable_type());
+            ProtoFromTypeInfo(typeInfo, *colMeta->mutable_type(), false);
 
             if (col.second.KeyOrder == -1)
                 continue;

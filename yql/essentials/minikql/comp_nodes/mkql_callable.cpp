@@ -104,23 +104,15 @@ private:
         const auto argsType = ArrayType::get(valueType, ArgNodes.size());
         const auto contextType = GetCompContextType(context);
 
-        const auto funcType = codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ?
-            FunctionType::get(valueType, {PointerType::getUnqual(contextType), PointerType::getUnqual(argsType)}, false):
-            FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(valueType), PointerType::getUnqual(contextType), PointerType::getUnqual(argsType)}, false);
+        const auto funcType =
+            FunctionType::get(valueType, {PointerType::getUnqual(contextType), PointerType::getUnqual(argsType)}, false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
-
-        const auto resultArg = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? &*args++ : nullptr;
-        if (resultArg) {
-            resultArg->addAttr(Attribute::StructRet);
-            resultArg->addAttr(Attribute::NoAlias);
-        }
 
         ctx.Ctx = &*args;
         const auto argsPtr = &*++args;
@@ -140,12 +132,7 @@ private:
 
         const auto result = GetNodeValue(ResultNode, ctx, block);
 
-        if (resultArg) {
-            new StoreInst(result, resultArg, block);
-            ReturnInst::Create(context, block);
-        } else {
-            ReturnInst::Create(context, result, block);
-        }
+        ReturnInst::Create(context, result, block);
         return ctx.Func;
     }
 

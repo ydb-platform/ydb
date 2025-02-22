@@ -30,6 +30,7 @@ SRCS(
     GLOBAL bus/tcp/configure_dispatcher.cpp
     bus/tcp/packet.cpp
     bus/tcp/client.cpp
+    bus/tcp/local_bypass.cpp
     bus/tcp/server.cpp
     bus/tcp/ssl_context.cpp
     bus/tcp/ssl_helpers.cpp
@@ -71,7 +72,6 @@ SRCS(
     concurrency/invoker_alarm.cpp
     concurrency/invoker_queue.cpp
     concurrency/lease_manager.cpp
-    concurrency/new_fair_share_thread_pool.cpp
     concurrency/nonblocking_batcher.cpp
     concurrency/notify_manager.cpp
     concurrency/periodic_executor.cpp
@@ -115,7 +115,6 @@ SRCS(
     logging/zstd_compression.cpp
 
     misc/arithmetic_formula.cpp
-    GLOBAL misc/assert.cpp
     misc/backoff_strategy.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp
@@ -126,11 +125,11 @@ SRCS(
     misc/codicil.cpp
     misc/config.cpp
     misc/coro_pipe.cpp
-    misc/crash_handler.cpp
+    GLOBAL misc/crash_handler.cpp
     misc/digest.cpp
     misc/error.cpp
     misc/fs.cpp
-    # NB: it is necessary to prevent linker optimization of
+    # NB: It is necessary to prevent linker optimization of
     # REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION macros for TGuid.
     GLOBAL misc/guid.cpp
     misc/hazard_ptr.cpp
@@ -143,7 +142,6 @@ SRCS(
     misc/relaxed_mpsc_queue.cpp
     misc/parser_helpers.cpp
     misc/pattern_formatter.cpp
-    misc/phoenix.cpp
     misc/pool_allocator.cpp
     misc/proc.cpp
     misc/process_exit_profiler.cpp
@@ -270,6 +268,7 @@ SRCS(
     yson/string_merger.cpp
     yson/ypath_designated_consumer.cpp
     yson/ypath_filtering_consumer.cpp
+    yson/yson_builder.cpp
     yson/depth_limiting_yson_consumer.cpp
     yson/list_verb_lazy_yson_consumer.cpp
     yson/attributes_stripper.cpp
@@ -301,6 +300,7 @@ SRCS(
     ytree/ypath_service.cpp
     ytree/yson_struct.cpp
     ytree/yson_struct_detail.cpp
+    ytree/yson_struct_update.cpp
 
     json/config.cpp
     json/json_callbacks.cpp
@@ -362,7 +362,7 @@ PEERDIR(
     library/cpp/yt/backtrace
     library/cpp/yt/coding
     library/cpp/yt/malloc
-    library/cpp/yt/small_containers
+    library/cpp/yt/compact_containers
     library/cpp/yt/system
     library/cpp/yt/threading
 

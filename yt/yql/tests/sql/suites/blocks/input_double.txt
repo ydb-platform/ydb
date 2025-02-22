@@ -1,0 +1,9 @@
+{"key"=10u;"subkey"=1.0};
+{"key"=20u;"subkey"=-2.0};
+{"key"=20u;"subkey"=2.0};
+{"key"=10u;"subkey"=%-inf};
+{"key"=10u;"subkey"=%nan};
+{"key"=10u;"subkey"=%inf};
+{"key"=20u;"subkey"=3.0};
+{"key"=20u;"subkey"=-10.0};
+{"key"=20u;"subkey"=55.5};

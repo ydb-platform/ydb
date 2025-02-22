@@ -1,0 +1,30 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["wr_returned_date_sk";["PgType";"int4";];];
+              ["wr_returned_time_sk";["PgType";"int4";];];
+              ["wr_item_sk";["PgType";"int4";];];
+              ["wr_refunded_customer_sk";["PgType";"int4";];];
+              ["wr_refunded_cdemo_sk";["PgType";"int4";];];
+              ["wr_refunded_hdemo_sk";["PgType";"int4";];];
+              ["wr_refunded_addr_sk";["PgType";"int4";];];
+              ["wr_returning_customer_sk";["PgType";"int4";];];
+              ["wr_returning_cdemo_sk";["PgType";"int4";];];
+              ["wr_returning_hdemo_sk";["PgType";"int4";];];
+              ["wr_returning_addr_sk";["PgType";"int4";];];
+              ["wr_web_page_sk";["PgType";"int4";];];
+              ["wr_reason_sk";["PgType";"int4";];];
+              ["wr_order_number";["PgType";"int4";];];
+              ["wr_return_quantity";["PgType";"int4";];];
+              ["wr_return_amt";["PgType";"numeric";];];
+              ["wr_return_tax";["PgType";"numeric";];];
+              ["wr_return_amt_inc_tax";["PgType";"numeric";];];
+              ["wr_fee";["PgType";"numeric";];];
+              ["wr_return_ship_cost";["PgType";"numeric";];];
+              ["wr_refunded_cash";["PgType";"numeric";];];
+              ["wr_reversed_charge";["PgType";"numeric";];];
+              ["wr_account_credit";["PgType";"numeric";];];
+              ["wr_net_loss";["PgType";"numeric";];];
+        ];];
+    }
+}

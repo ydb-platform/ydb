@@ -26,6 +26,23 @@ The format of data files is `.csv`, where each row corresponds to a record in th
 1,"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"
 ```
 
+## Checksums {#checksums}
+
+{% note info %}
+
+File checksums are only generated when exporting to S3-compatible object storage.
+
+{% endnote %}
+
+{{ ydb-short-name }} generates a checksum for each export file and saves it to a corresponding file with the `.sha256` suffix.
+
+The file checksum can be validated using the `sha256sum` console utility:
+
+```sh
+$ sha256sum -c scheme.pb.sha256
+scheme.pb: OK
+```
+
 ## Examples {#example}
 
 ### Tables {#example-table}
@@ -106,14 +123,8 @@ column_families {
 Contents of the `series/update_feed/topic_description.pb` file:
 
 ```proto
-self {
-  name: "update_feed"
-  owner: "Alice"
-  type: TOPIC
-  created_at {
-    plan_step: 1734362034420
-    tx_id: 281474982949619
-  }
+retention_period {
+  seconds: 86400
 }
 consumers {
   name: "my_consumer"

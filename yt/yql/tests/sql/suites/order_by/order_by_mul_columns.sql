@@ -1,0 +1,1 @@
+select key, subkey, value from plato.Input order by value, subkey;

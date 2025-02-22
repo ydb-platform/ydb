@@ -616,6 +616,56 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!EnsureArgsCount(*input, 11, ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_Output), ctx)) {
+        return TStatus::Error;
+    }
+    if (!TDqOutput::Match(input->Child(TDqCnStreamLookup::idx_Output))) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Child(TDqCnStreamLookup::idx_Output)->Pos()), TStringBuilder() << "Expected " << TDqOutput::CallableName()));
+        return TStatus::Error;
+    }
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_LeftLabel), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_RightInput), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_RightLabel), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_JoinType), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureTuple(*input->Child(TDqCnStreamLookup::idx_JoinKeys), ctx)) {
+        return TStatus::Error;
+    }
+    for (auto& child: input->Child(TDqCnStreamLookup::idx_JoinKeys)->Children()) {
+        if (!EnsureTupleSize(*child, 4, ctx)) {
+            return TStatus::Error;
+        }
+        for (auto& subChild: child->Children()) {
+            if (!EnsureAtom(*subChild, ctx)) {
+                return TStatus::Error;
+            }
+        }
+    }
+    if (!EnsureTupleOfAtoms(*input->Child(TDqCnStreamLookup::idx_LeftJoinKeyNames), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureTupleOfAtoms(*input->Child(TDqCnStreamLookup::idx_RightJoinKeyNames), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_TTL), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_MaxDelayedRows), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_MaxCachedRows), ctx)) {
+        return TStatus::Error;
+    }
     auto cnStreamLookup = TDqCnStreamLookup(input);
     auto leftInputType = GetDqConnectionType(TDqConnection(input), ctx);
     if (!leftInputType) {
@@ -625,18 +675,33 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         ctx.AddError(TIssue(ctx.GetPosition(joinType.Pos()), "Streamlookup supports only LEFT JOIN ... ANY"));
         return TStatus::Error;
     }
-    const auto leftRowType = GetSeqItemType(leftInputType);
-    const auto rightRowType = GetSeqItemType(cnStreamLookup.RightInput().Raw()->GetTypeAnn());
+    auto rightInput = cnStreamLookup.RightInput();
+    if (!rightInput.Raw()->IsCallable("TDqLookupSourceWrap")) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightInput.Pos()), TStringBuilder() << "DqCnStreamLookup: RightInput: Expected TDqLookupSourceWrap, but got " << rightInput.Raw()->Content()));
+        return TStatus::Error;
+    }
+    const auto& leftRowType = GetSeqItemType(*leftInputType);
+    if (!EnsureStructType(input->Pos(), leftRowType, ctx)) {
+        return TStatus::Error;
+    }
+    const auto rightInputType = rightInput.Raw()->GetTypeAnn();
+    const auto& rightRowType = GetSeqItemType(*rightInputType);
+    if (!EnsureStructType(input->Pos(), rightRowType, ctx)) {
+        return TStatus::Error;
+    }
     const auto outputRowType = GetDqJoinResultType<true>(
         input->Pos(),
-        *leftRowType->Cast<TStructExprType>(),
+        *leftRowType.Cast<TStructExprType>(),
         cnStreamLookup.LeftLabel().Cast<TCoAtom>().StringValue(),
-        *rightRowType->Cast<TStructExprType>(),
+        *rightRowType.Cast<TStructExprType>(),
         cnStreamLookup.RightLabel().StringValue(),
         cnStreamLookup.JoinType().StringValue(),
         cnStreamLookup.JoinKeys(),
         ctx
     );
+    if (!outputRowType) {
+        return TStatus::Error;
+    }
     if (!EnsureConvertibleTo<ui64>(cnStreamLookup.MaxCachedRows().Ref(), "MaxCachedRows", ctx) ||
         !EnsureConvertibleTo<ui64>(cnStreamLookup.TTL().Ref(), "TTL", ctx) ||
         !EnsureConvertibleTo<ui64>(cnStreamLookup.MaxDelayedRows().Ref(), "MaxDelayedRows", ctx)) {

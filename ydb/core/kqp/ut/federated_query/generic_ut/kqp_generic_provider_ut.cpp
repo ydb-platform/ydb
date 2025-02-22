@@ -5,9 +5,9 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/database_resolver_mock.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/query/query.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -110,9 +110,6 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
-                    .What()
-                        .Column("col1", Ydb::Type::UINT16)
-                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -161,7 +158,7 @@ namespace NKikimr::NKqp {
             auto db = kikimr->GetQueryClient();
             auto scriptExecutionOperation = db.ExecuteScript(query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+            UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
             UNIT_ASSERT_C(readyOp.Metadata().ExecStatus == EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
@@ -209,9 +206,6 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
-                    .What()
-                        // Empty
-                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -302,9 +296,6 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
-                    .What()
-                        // Empty
-                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -375,8 +366,12 @@ namespace NKikimr::NKqp {
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
             const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+
             // clang-format off
-            const NApi::TSelect select = TConnectorClientMock::TSelectBuilder<>()
+            const NApi::TSelect selectInListSplits = TConnectorClientMock::TSelectBuilder<>()
+                .DataSourceInstance(dataSourceInstance).GetResult();
+
+            const NApi::TSelect selectInReadSplits = TConnectorClientMock::TSelectBuilder<>()
                 .DataSourceInstance(dataSourceInstance)
                 .What()
                     .NullableColumn("data_column", Ydb::Type::STRING)
@@ -406,11 +401,11 @@ namespace NKikimr::NKqp {
             // step 2: ListSplits
             // clang-format off
             clientMock->ExpectListSplits()
-                .Select(select)
+                .Select(selectInListSplits)
                 .Result()
                     .AddResponse(NewSuccess())
                         .Description("some binary description")
-                        .Select(select);
+                        .Select(selectInReadSplits);
             // clang-format on
 
             // step 3: ReadSplits
@@ -424,7 +419,7 @@ namespace NKikimr::NKqp {
                 .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
-                    .Select(select)
+                    .Select(selectInReadSplits)
                     .Done()
                 .Result()
                     .AddResponse(MakeRecordBatch(

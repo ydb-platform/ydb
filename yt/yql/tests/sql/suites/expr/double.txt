@@ -1,0 +1,12 @@
+{"key"=23.0;"subkey"="3";"value"="aaa"};
+{"key"=37.0;"subkey"="5";"value"="ddd"};
+{"key"=75.1;"subkey"="1";"value"="abc"};
+{"key"=150.0;"subkey"="1";"value"="aaa"};
+{"key"=150.0;"subkey"="3";"value"="iii"};
+{"key"=150.0;"subkey"="8";"value"="zzz"};
+{"key"=150.0;"subkey"="7";"value"="qqq"};
+{"key"=527.2;"subkey"="4";"value"="bbb"};
+{"key"=%inf;"subkey"="6";"value"="ccc"};
+{"key"=%+inf;"subkey"="11";"value"="qqq"};
+{"key"=%nan;"subkey"="2";"value"="kkk"};
+{"key"=%-inf;"subkey"="9";"value"="uuu"};

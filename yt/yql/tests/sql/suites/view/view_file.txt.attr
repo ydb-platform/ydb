@@ -1,0 +1,33 @@
+{
+    "_yql_view_file_eval"="SELECT EvaluateCode(FuncCode('FileContent', AtomCode('foo.txt'))) as k, subkey as s, value as v FROM self";
+    "_yql_view_file_outer"="SELECT FileContent('foo' || '.txt') as k, subkey as s, value as v FROM self";
+    "_yql_view_file_inner"="pragma file('foo.txt','http_test://foo.txt');SELECT FileContent('foo.txt') as k, subkey as s, value as v FROM self";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

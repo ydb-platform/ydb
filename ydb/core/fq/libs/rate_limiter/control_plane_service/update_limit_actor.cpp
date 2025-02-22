@@ -34,7 +34,7 @@ public:
         Become(&TUpdateCloudRateLimitActor::StateFunc);
 
         if (CloudId.empty()) {
-            SendResponseAndPassAway(NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, NYql::TIssues({NYql::TIssue("Cloud id is empty")})));
+            SendResponseAndPassAway(NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, NYdb::NIssue::TIssues({NYdb::NIssue::TIssue("Cloud id is empty")})));
             return;
         }
 

@@ -22,6 +22,8 @@ std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* it
 
 using NYql::NUdf::AllocateBitmapWithReserve;
 using NYql::NUdf::MakeDenseBitmap;
+using NYql::NUdf::MakeDenseBitmapCopy;
+using NYql::NUdf::MakeDenseFalseBitmap;
 
 inline arrow::internal::Bitmap GetBitmap(const arrow::ArrayData& arr, int index) {
     return arrow::internal::Bitmap{ arr.buffers[index], arr.offset, arr.length };

@@ -13,7 +13,7 @@ PEERDIR(
     ydb/core/testlib/default
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/src/client/driver
 )
 
 YQL_LAST_ABI_VERSION()

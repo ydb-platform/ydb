@@ -1,0 +1,15 @@
+{
+    "schema"=<"strict"=%true; "unique_keys"=%false>[
+        {"name"="key";"type"="string";"required"=%true;"sort_order"="ascending"};
+        {"name"="subkey";"type"="string";"required"=%true;"sort_order"="ascending"};
+        {"name"="value";"type"="string";"required"=%true};
+    ];
+    "_yql_row_spec"={
+        "TypePatch"=["StructType";[
+        ]];
+        "SortedBy"=["key"];
+        "SortDirections"=[1];
+        "SortMembers"=["key"];
+        "SortedByTypes"=[["DataType";"String"]];
+    };
+}

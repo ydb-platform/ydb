@@ -192,7 +192,7 @@ public:
 
     IInvoker* GetProfilingTagSettingInvoker(int profilingTag);
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) override;
+    DECLARE_SIGNAL_OVERRIDE(TWaitTimeObserver::TSignature, WaitTimeObserved);
 
 private:
     const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_;
@@ -220,8 +220,7 @@ private:
 
     std::vector<IInvokerPtr> ProfilingTagSettingInvokers_;
 
-    std::atomic<bool> IsWaitTimeObserverSet_;
-    TWaitTimeObserver WaitTimeObserver_;
+    TCallbackList<TWaitTimeObserver::TSignature> WaitTimeObserved_;
 
     TCountersPtr CreateCounters(const NProfiling::TTagSet& tagSet, NProfiling::IRegistryPtr registry);
 

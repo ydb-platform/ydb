@@ -288,9 +288,11 @@ def normalize_yson(y):
         return [normalize_yson(i) for i in y]
     if isinstance(y, dict):
         return {normalize_yson(k): normalize_yson(v) for k, v in six.iteritems(y)}
-    if not isinstance(y, bytes):
-        return str(y).encode('ascii')
-    return y
+    if isinstance(y, bytes):
+        return y
+    if isinstance(y, six.text_type):
+        return y.encode('utf-8')
+    return str(y).encode('ascii')
 
 
 volatile_attrs = {'DataSize', 'ModifyTime', 'Id', 'Revision'}
@@ -375,9 +377,10 @@ def get_program_cfg(suite, case, data_path):
         config = os.path.join(data_path, suite if suite else '', 'default.cfg')
 
     if os.path.exists(config):
-        for line in open(config, 'r'):
-            if line.strip():
-                ret.append(tuple(line.split()))
+        with open(config, 'r') as f:
+            for line in f:
+                if line.strip():
+                    ret.append(tuple(line.split()))
     else:
         in_filename = case + '.in'
         in_path = os.path.join(data_path, in_filename)
@@ -877,9 +880,9 @@ def normalize_table_yson(y):
 
 
 def dump_table_yson(res_yson, sort=True):
-    rows = normalize_table_yson(cyson.loads('[' + res_yson + ']'))
+    rows = normalize_table_yson(cyson.loads(b'[' + res_yson + b']'))
     if sort:
-        rows = sorted(rows)
+        rows = sorted(rows, key=cyson.dumps)
     return cyson.dumps(rows, format="pretty")
 
 
@@ -962,14 +965,36 @@ def normalize_result(res, sort):
     res = replace_vals(res)
     for r in res:
         for data in r[b'Write']:
-            if sort and b'Data' in data:
+            is_list = (b'Type' in data) and (data[b'Type'][0] == b'ListType')
+            if is_list and sort and b'Data' in data:
                 data[b'Data'] = sorted(data[b'Data'])
             if b'Ref' in data:
                 data[b'Ref'] = []
                 data[b'Truncated'] = True
-            if b'Data' in data and len(data[b'Data']) == 0:
+            if is_list and b'Data' in data and len(data[b'Data']) == 0:
                 del data[b'Data']
     return res
+
+
+def is_sorted_table(table):
+    assert table.attr is not None
+    for column in cyson.loads(table.attr)[b'schema']:
+        if b'sort_order' in column:
+            return True
+    return False
+
+
+def is_unordered_result(res):
+    path = res.results_file
+    assert os.path.exists(path)
+    with open(path, 'rb') as f:
+        res = f.read()
+    res = cyson.loads(res)
+    for r in res:
+        for data in r[b'Write']:
+            if b'Unordered' in data:
+                return True
+    return False
 
 
 def stable_write(writer, node):

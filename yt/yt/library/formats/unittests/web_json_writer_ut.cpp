@@ -601,7 +601,7 @@ void CheckYqlType(
     ASSERT_EQ(typeNode->GetType(), ENodeType::String);
     auto typeIndexString = typeNode->GetValue<TString>();
     auto typeIndex = FromString<int>(typeIndexString);
-    ASSERT_LT(typeIndex, static_cast<int>(yqlTypes.size()));
+    ASSERT_LT(typeIndex, std::ssize(yqlTypes));
     ASSERT_GE(typeIndex, 0);
     const auto& yqlType = yqlTypes[typeIndex];
     EXPECT_EQ(yqlType->GetType(), ENodeType::List);

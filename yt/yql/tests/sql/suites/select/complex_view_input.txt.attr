@@ -1,0 +1,32 @@
+{
+    "_yql_view_struct"="SELECT YQL::@@(AsStruct '('k (Member row 'key)) '('s (Member row 'subkey)) '('v (Member row 'value)))@@ as struct FROM self;";
+    "_yql_view_tuple"="SELECT YQL::@@'((Member row 'key) (Member row 'subkey) (Member row 'value))@@ as tuple FROM self;";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

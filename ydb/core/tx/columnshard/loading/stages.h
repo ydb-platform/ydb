@@ -138,4 +138,14 @@ public:
     using TBase::TBase;
 };
 
+class TTiersManagerInitializer: public ITxShardInitReader {
+private:
+    using TBase = ITxShardInitReader;
+    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+
+public:
+    using TBase::TBase;
+};
+
 }   // namespace NKikimr::NColumnShard::NLoading

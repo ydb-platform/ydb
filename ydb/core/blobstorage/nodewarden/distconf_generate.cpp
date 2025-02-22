@@ -2,13 +2,15 @@
 
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
 namespace NKikimr::NStorage {
 
     std::optional<TString> TDistributedConfigKeeper::GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config,
             const TString& selfAssemblyUUID) {
-        if (!config->HasSelfManagementConfig() || !config->GetSelfManagementConfig().GetEnabled()) {
+        if (!config->GetSelfManagementConfig().GetEnabled()) {
             return "self-management is not enabled";
         }
         const auto& smConfig = config->GetSelfManagementConfig();
@@ -41,15 +43,43 @@ namespace NKikimr::NStorage {
 
         // initial config YAML is taken from the Cfg->SelfManagementConfig as it is cleared in TStorageConfig while
         // deriving it from NodeWarden configuration
-        if (!Cfg->SelfManagementConfig || !Cfg->SelfManagementConfig->HasInitialConfigYaml()) {
+        if (!Cfg->StartupConfigYaml) {
             return "missing initial config YAML";
         }
-        TStringStream ss;
-        {
-            TZstdCompress zstd(&ss);
-            zstd << Cfg->SelfManagementConfig->GetInitialConfigYaml();
+
+        ui64 version = 0;
+        try {
+            version = NYamlConfig::GetMainMetadata(Cfg->StartupConfigYaml).Version.value_or(0);
+        } catch (const std::exception& ex) {
+            return TStringBuilder() << "failed to parse initial main YAML: " << ex.what();
         }
-        config->SetStorageConfigCompressedYAML(ss.Str());
+        if (version) {
+            return TStringBuilder() << "initial main config version must be zero";
+        }
+
+        if (const auto& error = UpdateConfigComposite(*config, Cfg->StartupConfigYaml, std::nullopt)) {
+            return TStringBuilder() << "failed to update config yaml: " << *error;
+        }
+
+        if (Cfg->StartupStorageYaml) {
+            ui64 storageVersion = 0;
+            try {
+                storageVersion = NYamlConfig::GetStorageMetadata(*Cfg->StartupStorageYaml).Version.value_or(0);
+            } catch (const std::exception& ex) {
+                return TStringBuilder() << "failed to parse initial storage YAML: " << ex.what();
+            }
+            if (storageVersion) {
+                return TStringBuilder() << "initial storage config version must be zero";
+            }
+
+            TString s;
+            if (TStringOutput output(s); true) {
+                TZstdCompress zstd(&output);
+                zstd << *Cfg->StartupStorageYaml;
+            }
+            config->SetCompressedStorageYaml(s);
+            config->SetExpectedStorageYamlVersion(storageVersion + 1);
+        }
 
         if (!Cfg->DomainsConfig) { // no automatic configuration required
         } else if (Cfg->DomainsConfig->StateStorageSize() == 1) { // the StateStorage config is already defined explicitly, just migrate it

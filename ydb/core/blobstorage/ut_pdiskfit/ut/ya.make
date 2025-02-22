@@ -3,7 +3,7 @@ IF (OS_LINUX AND NOT WITH_VALGRIND)
 
     SIZE(LARGE)
 
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
     IF (BUILD_TYPE != "DEBUG")
         SRCS(

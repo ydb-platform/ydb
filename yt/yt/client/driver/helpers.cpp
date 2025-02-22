@@ -51,7 +51,7 @@ void FormatValue(TStringBuilderBase* builder, const TEtag& tag, TStringBuf /*spe
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void PutMethodInfoInTraceContext(const TStringBuf& methodName)
+void PutMethodInfoInTraceContext(TStringBuf methodName)
 {
     if (auto* traceContext = TryGetCurrentTraceContext()) {
         auto baggage = traceContext->UnpackOrCreateBaggage();

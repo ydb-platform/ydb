@@ -1,0 +1,1 @@
+{"p_brand"="Brand#13";"p_comment"="ly. slyly ironi";"p_container"="JUMBO PKG";"p_mfgr"="Manufacturer#1";"p_name"="goldenrod lavender spring chocolate lace";"p_partkey"=1;"p_retailprice"="\0\1\0\0\0\0\0\0\3\x85";"p_size"=7;"p_type"="PROMO BURNISHED COPPER";};

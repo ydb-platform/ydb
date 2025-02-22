@@ -1117,9 +1117,9 @@ void TTestChunkUnlockRestart::TestFSM(const TActorContext &ctx) {
     switch (TestStep) {
     case 0:
         WhiteboardID = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(WhiteboardID, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(WhiteboardID, SelfId());
         NodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(NodeWardenId, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(NodeWardenId, SelfId());
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         VERBOSE_COUT(" Sending TEvInit");
         ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid, TActorId(), SelfId()));
@@ -1138,7 +1138,7 @@ void TTestChunkUnlockRestart::TestFSM(const TActorContext &ctx) {
             SignalDoneEvent();
             break;
         }
-        ctx.Send(NodeWardenId, new TEvBlobStorage::TEvAskWardenRestartPDisk(LastResponse.whiteboardPDiskResult->Record.GetPDiskId()));
+        ctx.Send(NodeWardenId, new TEvBlobStorage::TEvAskWardenRestartPDisk(LastResponse.whiteboardPDiskResult->Record.GetPDiskId(), false));
         break;
     case 30:
         TEST_RESPONSE(EvHarakiri, OK);
@@ -1324,9 +1324,9 @@ void TTestWhiteboard::TestFSM(const TActorContext &ctx) {
     {
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         TActorId whiteboardID = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(whiteboardID, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(whiteboardID, SelfId());
         TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(nodeWardenId, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(nodeWardenId, SelfId());
         for (int owner = 0; owner < ExpectedOwnerCount; ++owner) {
             ctx.Send(Yard, new NPDisk::TEvYardInit(2, TVDiskID(TGroupId::Zero(), 0, 0, 0, owner), *PDiskGuid, TActorId(), SelfId()));
         }

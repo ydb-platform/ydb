@@ -44,8 +44,6 @@
 #include <stddef.h>
 #include <string.h>
 
-#include <stdio.h>
-
 #include "client/linux/minidump_writer/line_reader.h"
 #include "common/linux/elfutils.h"
 #include "common/linux/file_id.h"

@@ -67,7 +67,9 @@ public:
         Y_ABORT_UNLESS(step != 0);
 
         if (const auto* record = DataShard.GetScanManager().Get(params.GetBuildIndexId())) {
-            DataShard.CancelScan(tableInfo->LocalTid, record->ScanId);
+            for (auto scanId : record->ScanIds) {
+                DataShard.CancelScan(tableInfo->LocalTid, scanId);
+            }
             DataShard.GetScanManager().Drop(params.GetBuildIndexId());
         }
 

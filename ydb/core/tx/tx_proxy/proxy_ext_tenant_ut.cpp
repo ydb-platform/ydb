@@ -689,7 +689,7 @@ void GenericCases(TTestEnvWithPoolsSupport& env) {
 
     {
         NKikimrMiniKQL::TResult result;
-        env.GetClient().FlatQuery("("
+        env.GetClient().FlatQuery(&env.GetRuntime(), "("
                                   "(let row0_ '('('key (Uint64 '42))))"
                                   "(let cols_ '('value))"
                                   "(let select0_ (SelectRow '/dc-1/USER_0/dir/dir_0/table row0_ cols_))"

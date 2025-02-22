@@ -138,8 +138,21 @@ public:                                                                         
 
                 COUNTER_INIT_IF_EXTENDED(ThrottlingCurrentSpeedLimit, false);
                 COUNTER_INIT_IF_EXTENDED(ThrottlingIsActive, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingDryRun, false);
                 COUNTER_INIT_IF_EXTENDED(ThrottlingLevel0SstCount, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingAllLevelsInplacedSize, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinLevel0SstCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxLevel0SstCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingInplacedSize, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinInplacedSizeHDD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxInplacedSizeHDD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinInplacedSizeSSD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxInplacedSizeSSD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingLogChunkCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinLogChunkCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxLogChunkCount, false);
             }
 
             COUNTER_DEF(EmergencyMovedPatchQueueItems);
@@ -161,8 +174,21 @@ public:                                                                         
 
             COUNTER_DEF(ThrottlingCurrentSpeedLimit);
             COUNTER_DEF(ThrottlingIsActive);
+            COUNTER_DEF(ThrottlingDryRun);
             COUNTER_DEF(ThrottlingLevel0SstCount);
-            COUNTER_DEF(ThrottlingAllLevelsInplacedSize);
+            COUNTER_DEF(ThrottlingMinLevel0SstCount);
+            COUNTER_DEF(ThrottlingMaxLevel0SstCount);
+            COUNTER_DEF(ThrottlingInplacedSize);
+            COUNTER_DEF(ThrottlingMinInplacedSizeHDD);
+            COUNTER_DEF(ThrottlingMaxInplacedSizeHDD);
+            COUNTER_DEF(ThrottlingMinInplacedSizeSSD);
+            COUNTER_DEF(ThrottlingMaxInplacedSizeSSD);
+            COUNTER_DEF(ThrottlingOccupancyPerMille);
+            COUNTER_DEF(ThrottlingMinOccupancyPerMille);
+            COUNTER_DEF(ThrottlingMaxOccupancyPerMille);
+            COUNTER_DEF(ThrottlingLogChunkCount);
+            COUNTER_DEF(ThrottlingMinLogChunkCount);
+            COUNTER_DEF(ThrottlingMaxLogChunkCount);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -723,6 +749,29 @@ public:                                                                         
             COUNTER_DEF(SmallBlobBytesRead);
             COUNTER_DEF(UnreadableBlobsFound);
             COUNTER_DEF(BlobsFixed);
+        };
+
+        class TMalfunctionGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TMalfunctionGroup)
+            {
+                COUNTER_INIT(DroppingStuckInternalQueue, false);
+            }
+
+            COUNTER_DEF(DroppingStuckInternalQueue);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TTimerGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TTimerGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TTimerGroup)
+            {
+                COUNTER_INIT(SkeletonFrontUptimeSeconds, false);
+            }
+
+            COUNTER_DEF(SkeletonFrontUptimeSeconds);
         };
 
     } // NMonGroup

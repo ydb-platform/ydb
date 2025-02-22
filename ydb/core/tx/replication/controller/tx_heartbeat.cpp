@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
 namespace NKikimr::NReplication::NController {
 
 THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(ui64 writeTxId, const TVector<TString>& tables) {
@@ -15,6 +17,9 @@ THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(ui64 writeTxId
 }
 
 class TController::TTxHeartbeat: public TTxBase {
+    // TODO(ilnaz): configurable
+    static constexpr ui32 MaxBatchSize = 1000;
+
     THolder<TEvTxUserProxy::TEvProposeTransaction> CommitProposal;
 
 public:
@@ -44,7 +49,8 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        while (!Self->PendingHeartbeats.empty()) {
+        ui32 i = 0;
+        while (!Self->PendingHeartbeats.empty() && i++ < MaxBatchSize) {
             auto it = Self->PendingHeartbeats.begin();
             const auto& id = it->first;
             const auto& version = it->second;
@@ -110,6 +116,9 @@ public:
         CLOG_D(ctx, "Complete"
             << ": pending# " << Self->PendingHeartbeats.size());
 
+        Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();
+        Self->TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = Self->PendingHeartbeats.size();
+
         if (auto& ev = CommitProposal) {
             CLOG_N(ctx, "Propose commit"
                 << ": writeTxId# " << Self->CommittingTxId);
@@ -164,6 +173,11 @@ public:
         const auto& record = Status->Get()->Record;
         const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
         if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
+            CLOG_W(ctx, "Error committing changes"
+                << ": writeTxId# " << Self->CommittingTxId
+                << ", issues# " << NYql::IssuesFromMessageAsString(record.GetIssues()));
+            Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
+
             CommitProposal = MakeCommitProposal(Self->CommittingTxId, replication->GetTargetTablePaths());
             return true;
         }
@@ -190,6 +204,8 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         CLOG_D(ctx, "Complete");
+
+        Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
 
         if (auto& ev = CommitProposal) {
             CLOG_N(ctx, "Propose commit"

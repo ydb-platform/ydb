@@ -6,8 +6,9 @@
 #include <string>
 
 namespace NYdb {
-
-    class TResultSet;
+    inline namespace V3 {
+        class TResultSet;
+    }
 
     class TResultSetParquetPrinter {
     public:

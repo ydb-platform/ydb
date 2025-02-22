@@ -1,6 +1,6 @@
 #include "topic_read.h"
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
 #include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
 
 namespace NYdb::NConsoleClient {
@@ -142,7 +142,7 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        NTopic::TReadSessionSettings PrepareReadSessionSettings(const TString& topicPath) {
+        NTopic::TReadSessionSettings PrepareReadSessionSettings(const std::string& topicPath) {
             NTopic::TReadSessionSettings settings;
             settings.ConsumerName("cli");
             settings.AppendTopics(topicPath);

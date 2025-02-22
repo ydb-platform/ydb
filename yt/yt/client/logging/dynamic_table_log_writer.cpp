@@ -171,7 +171,7 @@ private:
     // at once. Changing this would require modifying the logging event pipeline significantly.
     i64 WriteImpl(const TLogEvent& event) override
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         // This writer has its own buffer, so we reimplement some of the log manager logic :(
         auto backlogWeight = BacklogWeight_.load(std::memory_order::relaxed);
@@ -217,7 +217,7 @@ private:
 
     void RotateBuffer()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         if (CurrentBuffer_.empty()) {
             return;
@@ -237,7 +237,7 @@ private:
     // This is important to avoid log reordering.
     void DoFlush()
     {
-        VERIFY_INVOKER_AFFINITY(Invoker_);
+        YT_ASSERT_INVOKER_AFFINITY(Invoker_);
 
         TBuffer bufferToFlush;
 
@@ -293,7 +293,7 @@ private:
 
     i64 DoFlushIteration(const TSharedRef& ysonRows)
     {
-        VERIFY_INVOKER_AFFINITY(Invoker_);
+        YT_ASSERT_INVOKER_AFFINITY(Invoker_);
 
         auto client = ClientHolder_->Client.Acquire();
 

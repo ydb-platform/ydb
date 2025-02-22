@@ -52,6 +52,12 @@ public:
         return result;
     }
 
+    static const std::set<std::string>& GetSnapshotColumnNamesSet() {
+        static const std::set<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID),
+            std::string(SPEC_COL_WRITE_ID) };
+        return result;
+    }
+
     static const std::vector<ui32>& GetSnapshotColumnIds() {
         static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID };
         return result;
@@ -85,18 +91,17 @@ public:
         fields.push_back(f);
     }
 
-    static const std::vector<std::string>& SnapshotColumnNames() {
-        static std::vector<std::string> result = { SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID };
-        return result;
-    }
-
     static void AddSnapshotFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
         static const std::shared_ptr<arrow::Field> ps = arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64());
         static const std::shared_ptr<arrow::Field> txid = arrow::field(SPEC_COL_TX_ID, arrow::uint64());
-        static const std::shared_ptr<arrow::Field> writeId = arrow::field(SPEC_COL_WRITE_ID, arrow::uint64());
         fields.push_back(ps);
         fields.push_back(txid);
-        fields.push_back(writeId);
+        fields.push_back(GetWriteIdField());
+    }
+
+    static const std::shared_ptr<arrow::Field>& GetWriteIdField() {
+        static const std::shared_ptr<arrow::Field> writeId = arrow::field(SPEC_COL_WRITE_ID, arrow::uint64());
+        return writeId;
     }
 
     static void AddDeleteFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
@@ -140,7 +145,12 @@ public:
         return result;
     }
 
-    std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
+    static std::optional<ui32> GetColumnIdOptional(const std::string& name);
+    static ui32 GetColumnIdVerified(const std::string& name) {
+        auto result = GetColumnIdOptional(name);
+        AFL_VERIFY(!!result);
+        return *result;
+    }
     std::optional<ui32> GetColumnIndexOptional(const std::string& name, const ui32 shift) const;
     TString GetColumnName(const ui32 id, const bool required) const;
     static std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId);

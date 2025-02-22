@@ -25,15 +25,15 @@ PEERDIR(
     ydb/library/yql/providers/solomon/provider
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
-    ydb/public/sdk/cpp/client/ydb_params
-    ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+    ydb/public/sdk/cpp/src/client/params
+    ydb/public/sdk/cpp/src/client/persqueue_public/codecs
 )
 
 YQL_LAST_ABI_VERSION()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

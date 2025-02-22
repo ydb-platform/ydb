@@ -15,7 +15,7 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     }
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), columnId,
-        HashesCount, FilterSizeBytes, NGrammSize);
+        HashesCount, FilterSizeBytes, NGrammSize, RecordsCount);
 }
 
 TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
@@ -27,6 +27,14 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
     }
     if (!ColumnName) {
         return TConclusionStatus::Fail("empty column_name in bloom ngramm filter features");
+    }
+
+    if (!jsonInfo["records_count"].IsUInteger()) {
+        return TConclusionStatus::Fail("records_count have to be in bloom filter features as uint field");
+    }
+    RecordsCount = jsonInfo["records_count"].GetUInteger();
+    if (!TConstants::CheckRecordsCount(RecordsCount)) {
+        return TConclusionStatus::Fail("records_count have to be in bloom ngramm filter in interval " + TConstants::GetRecordsCountIntervalString());
     }
 
     if (!jsonInfo["ngramm_size"].IsUInteger()) {
@@ -64,6 +72,10 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
         return TConclusionStatus::Fail(errorMessage);
     }
     auto& bFilter = proto.GetBloomNGrammFilter();
+    RecordsCount = bFilter.GetRecordsCount();
+    if (!TConstants::CheckRecordsCount(RecordsCount)) {
+        return TConclusionStatus::Fail("RecordsCount have to be in " + TConstants::GetRecordsCountIntervalString());
+    }
     NGrammSize = bFilter.GetNGrammSize();
     if (!TConstants::CheckNGrammSize(NGrammSize)) {
         return TConclusionStatus::Fail("NGrammSize have to be in " + TConstants::GetNGrammSizeIntervalString());
@@ -86,6 +98,7 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
 void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableBloomNGrammFilter();
     filterProto->SetColumnName(ColumnName);
+    filterProto->SetRecordsCount(RecordsCount);
     filterProto->SetNGrammSize(NGrammSize);
     filterProto->SetFilterSizeBytes(FilterSizeBytes);
     filterProto->SetHashesCount(HashesCount);

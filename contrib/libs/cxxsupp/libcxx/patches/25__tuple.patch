@@ -1,48 +1,41 @@
 diff --git a/include/__tuple/sfinae_helpers.h b/include/__tuple/sfinae_helpers.h
-index b57f2a4..a96947d 100644
+index 35a57ff..dfd00f5 100644
 --- a/include/__tuple/sfinae_helpers.h
 +++ b/include/__tuple/sfinae_helpers.h
-@@ -48,23 +48,29 @@ struct __tuple_sfinae_base {
+@@ -41,7 +41,7 @@ struct __tuple_sfinae_base {
    static auto __do_test(...) -> false_type;
  
    template <class _FromArgs, class _ToArgs>
 -  using __constructible = decltype(__do_test<is_constructible>(_ToArgs{}, _FromArgs{}));
 +  using __constructible = decltype(__do_test<is_constructible>(declval<_ToArgs>(), declval<_FromArgs>()));
-   template <class _FromArgs, class _ToArgs>
--  using __convertible = decltype(__do_test<is_convertible>(_FromArgs{}, _ToArgs{}));
-+  using __convertible = decltype(__do_test<is_convertible>(declval<_FromArgs>(), declval<_ToArgs>()));
-   template <class _FromArgs, class _ToArgs>
--  using __assignable = decltype(__do_test<is_assignable>(_ToArgs{}, _FromArgs{}));
-+  using __assignable = decltype(__do_test<is_assignable>(declval<_ToArgs>(), declval<_FromArgs>()));
  };
  
- // __tuple_convertible
- 
+ // __tuple_constructible
+@@ -49,11 +49,17 @@ struct __tuple_sfinae_base {
  template <class _Tp,
            class _Up,
--          bool = __tuple_like_ext<__libcpp_remove_reference_t<_Tp> >::value,
+           bool = __tuple_like_ext<__libcpp_remove_reference_t<_Tp> >::value,
 -          bool = __tuple_like_ext<_Up>::value>
-+          bool  = __tuple_like_ext<__libcpp_remove_reference_t<_Tp> >::value,
-+          bool  = __tuple_like_ext<_Up>::value,
++          bool = __tuple_like_ext<_Up>::value,
 +          class = void>
- struct __tuple_convertible : public false_type {};
+ struct __tuple_constructible : public false_type {};
  
  template <class _Tp, class _Up>
--struct __tuple_convertible<_Tp, _Up, true, true>
-+struct __tuple_convertible<
+-struct __tuple_constructible<_Tp, _Up, true, true>
++struct __tuple_constructible<
 +    _Tp,
 +    _Up,
 +    true,
 +    true,
 +    typename enable_if<(tuple_size<typename remove_reference<_Tp>::type>::value == tuple_size<_Up>::value)>::type>
-     : public __tuple_sfinae_base::__convertible< typename __make_tuple_types<_Tp>::type,
-                                                  typename __make_tuple_types<_Up>::type > {};
+     : public __tuple_sfinae_base::__constructible< typename __make_tuple_types<_Tp>::type,
+                                                    typename __make_tuple_types<_Up>::type > {};
  
 diff --git a/include/__tuple/tuple_element.h b/include/__tuple/tuple_element.h
-index 2b9ac66..e811a21 100644
+index 55b3b47..c6818f2 100644
 --- a/include/__tuple/tuple_element.h
 +++ b/include/__tuple/tuple_element.h
-@@ -63,11 +63,26 @@ __indexed<_Idx, _Tp> __at_index(__indexed<_Idx, _Tp> const&);
+@@ -60,11 +60,26 @@ __indexed<_Idx, _Tp> __at_index(__indexed<_Idx, _Tp> const&);
  
  } // namespace __indexer_detail
  

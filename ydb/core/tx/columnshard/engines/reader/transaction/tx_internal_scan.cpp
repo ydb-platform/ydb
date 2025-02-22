@@ -47,7 +47,6 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
-        read.ColumnNames = request.GetColumnNames();
         if (request.RangesFilter) {
             read.PKRangesFilter = request.RangesFilter;
         }
@@ -56,7 +55,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         AFL_VERIFY(vIndex);
         {
             TProgramContainer pContainer;
-            pContainer.OverrideProcessingColumns(read.ColumnNames);
+            pContainer.OverrideProcessingColumns(read.ColumnIds);
             read.SetProgram(std::move(pContainer));
         }
 

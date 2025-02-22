@@ -1,0 +1,10 @@
+{"key"=10u;"subkey"=%true;"value"=%false;};
+{"key"=20u;"subkey"=%false;"value"=%true;};
+{"key"=30u;"subkey"=%false;"value"=%false;};
+{"key"=40u;"subkey"=#;"value"=%false;};
+{"key"=50u;"subkey"=%false;"value"=%true;};
+{"key"=60u;"subkey"=#;"value"=%true;};
+{"key"=70u;"subkey"=%true;"value"=%false;};
+{"key"=80u;"subkey"=%false;"value"=%true;};
+{"key"=90u;"subkey"=%false;"value"=%false;};
+{"key"=99u;"subkey"=%true;"value"=%true;};

@@ -10,11 +10,13 @@ TFairShareQueueSchedulerThread::TFairShareQueueSchedulerThread(
     TFairShareInvokerQueuePtr queue,
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
     const TString& threadGroupName,
-    const TString& threadName)
+    const TString& threadName,
+    NThreading::TThreadOptions options)
     : TSchedulerThread(
         std::move(callbackEventCount),
         threadGroupName,
-        threadName)
+        threadName,
+        options)
     , Queue_(std::move(queue))
 { }
 

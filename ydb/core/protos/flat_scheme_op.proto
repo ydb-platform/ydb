@@ -23,6 +23,7 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_table.proto";
+import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 
 import "google/protobuf/empty.proto";
@@ -317,6 +318,7 @@ message TTableDescription {
 
     optional bool OmitFollowers = 36 [default = false]; // used with CopyFromTable
     optional bool IsBackup = 37 [default = false];
+    optional bool IsRestore = 45 [default = false];
 
     repeated TCdcStreamDescription CdcStreams = 38;
     repeated TSequenceDescription Sequences = 39;
@@ -396,6 +398,7 @@ message TRequestedBloomNGrammFilter {
     optional uint32 FilterSizeBytes = 2;
     optional uint32 HashesCount = 3;
     optional string ColumnName = 4;
+    optional uint32 RecordsCount = 5;
 }
 
 message TRequestedMaxIndex {
@@ -432,6 +435,7 @@ message TBloomNGrammFilter {
     optional uint32 FilterSizeBytes = 2;
     optional uint32 HashesCount = 3;
     optional uint32 ColumnId = 4;
+    optional uint32 RecordsCount = 5;
 }
 
 message TMaxIndex {
@@ -482,6 +486,7 @@ message TCompactionLevelConstructorContainer {
     message TZeroLevel {
         optional uint32 PortionsLiveDurationSeconds = 1;
         optional uint64 ExpectedBlobsSize = 2;
+        optional uint64 PortionsCountAvailable = 3;
     }
 
     oneof Implementation {
@@ -845,11 +850,15 @@ message TReshardColumnTable {
 message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2;
+    optional bool CanLogin = 3 [default = true];
+    optional bool IsHashedPassword = 4 [default = false];
 }
 
 message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2;
+    optional bool CanLogin = 3;
+    optional bool IsHashedPassword = 4 [default = false];
 }
 
 message TLoginRemoveUser {
@@ -1228,6 +1237,7 @@ message TBackupTask {
     }
 
     optional TPathDescription Table = 10; // for further restore
+    repeated TPathDescription ChangefeedUnderlyingTopics = 17; // for further restore
 
     message TScanSettings {
         optional uint64 RowsBatchSize = 1 [default = 0]; // no limit
@@ -1242,11 +1252,13 @@ message TBackupTask {
         optional int32 Level = 2;
     }
 
-    optional TCompressionOptions Compression = 13; // currently available for s3
-
     optional uint64 SnapshotStep = 14;
     optional uint64 SnapshotTxId = 15;
-    optional bool EnableChecksums = 16; // currently available for s3
+
+    // currently available only for s3:
+    optional TCompressionOptions Compression = 13;
+    optional bool EnableChecksums = 16; 
+    optional bool EnablePermissions = 18;
 }
 
 message TRestoreTask {
@@ -1259,6 +1271,8 @@ message TRestoreTask {
     oneof Settings {
         TS3Settings S3Settings = 6;
     }
+
+    optional bool ValidateChecksums = 7; // currently available for s3
 }
 
 message TPersQueueGroupAllocate {
@@ -1512,6 +1526,7 @@ message TReplicationDescription {
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
     optional NKikimrReplication.TReplicationState State = 6;
+    optional string TransferTransformLambda = 7;
 }
 
 message TBlobDepotDescription {
@@ -1857,6 +1872,7 @@ message TDirEntry {
     optional uint64 PathVersion = 13;
     optional EPathSubType PathSubType = 14;
     optional TPathVersion Version = 15;
+    optional bool ChildrenExist = 16;
 
     optional uint64 BalancerTabletID = 999; //temporary optimization for old PQ read/write protocol. Must be removed later
 }
@@ -2110,4 +2126,12 @@ message TBackupBackupCollection {
     optional string Name = 1;
     optional NKikimrProto.TPathID PathId = 2;
     optional string TargetDir = 3; // must be set on Rewrite
+}
+
+message TImportTableChangefeeds {
+    message TImportChangefeedTopic {
+        optional Ydb.Table.ChangefeedDescription Changefeed = 1;
+        optional Ydb.Topic.DescribeTopicResult Topic = 2;
+    }
+    repeated TImportChangefeedTopic Changefeeds = 1;
 }

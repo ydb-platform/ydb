@@ -22,9 +22,8 @@ DEFINE_REFCOUNTED_TYPE(IFairShareThreadPool)
 
 IFairShareThreadPoolPtr CreateFairShareThreadPool(
     int threadCount,
-    const TString& threadNamePrefix);
+    const std::string& threadNamePrefix);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
-

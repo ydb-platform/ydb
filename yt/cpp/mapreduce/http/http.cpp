@@ -766,23 +766,25 @@ THttpResponse::THttpResponse(
         return;
     }
 
-    ErrorResponse_ = TErrorResponse(HttpCode_, Context_.RequestId);
-
-    auto logAndSetError = [&] (const TString& rawError) {
+    auto logAndSetError = [&] (int code, const TString& rawError) {
         YT_LOG_ERROR("RSP %v - HTTP %v - %v",
             Context_.RequestId,
             HttpCode_,
             rawError.data());
-        ErrorResponse_->SetRawError(rawError);
+        ErrorResponse_ = TErrorResponse(TYtError(code, rawError), Context_.RequestId);
     };
 
     switch (HttpCode_) {
         case 429:
-            logAndSetError("request rate limit exceeded");
+            logAndSetError(NClusterErrorCodes::NSecurityClient::RequestQueueSizeLimitExceeded, "request rate limit exceeded");
             break;
 
         case 500:
-            logAndSetError(::TStringBuilder() << "internal error in proxy " << Context_.HostName);
+            logAndSetError(NClusterErrorCodes::NRpc::Unavailable, ::TStringBuilder() << "internal error in proxy " << Context_.HostName);
+            break;
+
+        case 503:
+            logAndSetError(NClusterErrorCodes::NBus::TransportError, "service unavailable");
             break;
 
         default: {
@@ -804,8 +806,7 @@ THttpResponse::THttpResponse(
             if (auto parsedResponse = ParseError(HttpInput_->Headers())) {
                 ErrorResponse_ = parsedResponse.GetRef();
             } else {
-                ErrorResponse_->SetRawError(
-                    errorString + " - X-YT-Error is missing in headers");
+                ErrorResponse_ = TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), Context_.RequestId);
             }
             break;
         }
@@ -851,8 +852,9 @@ TMaybe<TErrorResponse> THttpResponse::ParseError(const THttpHeaders& headers)
 {
     for (const auto& header : headers) {
         if (header.Name() == "X-YT-Error") {
-            TErrorResponse errorResponse(HttpCode_, Context_.RequestId);
-            errorResponse.ParseFromJsonError(header.Value());
+            TYtError error;
+            error.ParseFrom(header.Value());
+            TErrorResponse errorResponse(std::move(error), Context_.RequestId);
             if (errorResponse.IsOk()) {
                 return Nothing();
             }

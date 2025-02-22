@@ -1,0 +1,8 @@
+{"_yql_row_spec"={
+	"Type"=["StructType";[
+		["counters";["ListType";["DataType";"Int64"]]];
+		["names";["ListType";["DataType";"String"]]];
+		["id";["DataType";"String"]]
+	]];
+}}
+

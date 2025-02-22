@@ -204,6 +204,15 @@
             ]
         },
         {
+            "Name": "TYtBlockTableContent",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YtBlockTableContent"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
             "Name": "TYtLength",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "YtLength"},
@@ -491,6 +500,15 @@
                 {"Index": 0, "Name": "PickledUserState", "Type": "TExprBase"},
                 {"Index": 1, "Name": "UserStateType", "Type": "TExprBase"},
                 {"Index": 2, "Name": "ProcessStateKey", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TYtQLFilter",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YtQLFilter"},
+            "Children": [
+                {"Index": 0, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Predicate", "Type": "TCoLambda"}
             ]
         }
     ]

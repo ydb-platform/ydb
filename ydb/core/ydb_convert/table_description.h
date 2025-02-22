@@ -51,6 +51,7 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
+void FillColumnDescription(Ydb::Table::ColumnMeta& out, const NKikimrSchemeOp::TColumnDescription& in);
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out,
     NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
@@ -82,11 +83,15 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
     const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
+void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
+    const NKikimrSchemeOp::TCdcStreamDescription& in);
 void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 // in
 bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
     const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+    const Ydb::Table::ChangefeedDescription& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
@@ -145,7 +150,7 @@ bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
 
 // in
 bool FillSequenceDescription(
-    NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in, 
+    NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in,
     Ydb::StatusIds::StatusCode& status, TString& error);
 
 } // namespace NKikimr

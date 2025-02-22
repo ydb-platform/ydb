@@ -1,0 +1,5 @@
+--- contrib/python/jaraco.text/jaraco/text/__init__.py	(index)
++++ contrib/python/jaraco.text/jaraco/text/__init__.py	(working tree)
+@@ -231,1 +231,1 @@ def unwrap(s):
+-    files(__name__).joinpath('Lorem ipsum.txt').read_text(encoding='utf-8')
++    files(__name__).joinpath('Lorem_ipsum.txt').read_text(encoding='utf-8')

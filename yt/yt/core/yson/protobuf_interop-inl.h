@@ -18,7 +18,8 @@ const TProtobufMessageType* ReflectProtobufMessageType()
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class ProtoType, class Type, bool UseParseOptionsInSerialize>
-static const void* DoRegisterIntermediateProtoInteropRepresentation() {
+static const void* DoRegisterIntermediateProtoInteropRepresentation()
+{
     NYT::NYson::AddProtobufConverterRegisterAction([] {
         auto* descriptor = ProtoType::default_instance().GetDescriptor();
         NYT::NYson::TProtobufMessageConverter converter;

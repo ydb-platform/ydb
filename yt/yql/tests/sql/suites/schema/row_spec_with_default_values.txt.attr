@@ -1,0 +1,19 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+            ["key";["DataType";"String";];];
+            ["subkey";["DataType";"String";];];
+            ["value";["DataType";"String";];];
+        ]];
+        "SortedBy"=["key";"subkey";];
+        "SortDirections"=[1;1;];
+        "SortMembers"=["key";"subkey";];
+        "SortedByTypes"=[["DataType";"String";];["DataType";"String";];];
+        "DefaultValues"={"key"="\"\"";"subkey"="\"\"";"value"="\"\"";};
+    };
+    "schema"=<"strict" = %true> [
+        {"type"="string"; "name"="key"; "sort_order"="ascending"};
+        {"type"="string"; "name"="subkey"; "sort_order"="ascending"};
+        {"type"="string"; "name"="value"}
+    ]
+}

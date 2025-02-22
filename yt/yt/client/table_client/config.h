@@ -440,6 +440,9 @@ public:
     //! Maximum number of heavy columns in approximate statistics.
     int MaxHeavyColumns;
 
+    std::optional<i64> BlockSize;
+    std::optional<i64> BufferSize;
+
     void EnableValidationOptions(bool validateAnyIsValidYson = false);
 
     REGISTER_YSON_STRUCT(TChunkWriterOptions);

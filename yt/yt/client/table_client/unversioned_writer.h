@@ -6,9 +6,9 @@
 
 #include <yt/yt/core/actions/future.h>
 
-#include <yt/yt/core/misc/range.h>
-
 #include <yt/yt/core/crypto/crypto.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 namespace NYT::NTableClient {
 
@@ -59,6 +59,17 @@ struct IUnversionedWriter
 };
 
 DEFINE_REFCOUNTED_TYPE(IUnversionedWriter)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct IUnversionedTableFragmentWriter
+    : public IUnversionedWriter
+{
+    //! Returns signed write result. Only safe to use after |Stop|.
+    virtual TSignedWriteFragmentResultPtr GetWriteFragmentResult() const = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IUnversionedTableFragmentWriter)
 
 ////////////////////////////////////////////////////////////////////////////////
 

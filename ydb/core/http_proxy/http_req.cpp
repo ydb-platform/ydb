@@ -37,8 +37,8 @@
 #include <ydb/library/ycloud/impl/iam_token_service.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
+#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <src/client/topic/impl/common.h>
 
 #include <ydb/services/datastreams/datastreams_proxy.h>
 #include <ydb/services/datastreams/next_token.h>
@@ -65,6 +65,8 @@
 #include <ydb/core/ymq/actor/serviceid.h>
 
 #include <ydb/library/http_proxy/error/error.h>
+
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <ydb/services/ymq/rpc_params.h>
 #include <ydb/services/ymq/utils.h>
@@ -306,8 +308,16 @@ namespace NKikimr::NHttpProxy {
                         NYql::IssuesFromMessage(response.operation().issues(), issues);
                         result->Status = MakeHolder<NYdb::TStatus>(
                             NYdb::EStatus(response.operation().status()),
-                            std::move(issues)
+                            NYdb::NAdapters::ToSdkIssues(std::move(issues))
                         );
+                        Ydb::Ymq::V1::QueueTags queueTags;
+                        response.operation().metadata().UnpackTo(&queueTags);
+                        for (const auto& [k, v] : queueTags.GetTags()) {
+                            if (!result->QueueTags.Get()) {
+                                result->QueueTags = MakeHolder<THashMap<TString, TString>>();
+                            }
+                            result->QueueTags->emplace(k, v);
+                        }
                         actorSystem->Send(actorId, result.Release());
                     }
                 );
@@ -374,6 +384,9 @@ namespace NKikimr::NHttpProxy {
                     );
                     HttpContext.ResponseData.IsYmq = true;
                     HttpContext.ResponseData.YmqHttpCode = 200;
+                    if (ev->Get()->QueueTags) {
+                        HttpContext.ResponseData.QueueTags = std::move(*ev->Get()->QueueTags);
+                    }
                     ReplyToHttpContext(ctx);
                 } else {
                     auto retryClass = NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());
@@ -417,7 +430,7 @@ namespace NKikimr::NHttpProxy {
                             ctx,
                             get<1>(errorAndCode),
                             get<0>(errorAndCode),
-                            issues.begin()->GetMessage()
+                            TString{issues.begin()->GetMessage()}
                         );
                     }
                 }
@@ -510,40 +523,8 @@ namespace NKikimr::NHttpProxy {
                     SendGrpcRequestNoDriver(ctx);
                 } else {
                     auto requestHolder = MakeHolder<NKikimrClient::TSqsRequest>();
-                    // TODO? action = NSQS::ActionFromString(Method);
-                    NSQS::EAction action = NSQS::EAction::Unknown;
-                    if (Method == "CreateQueue") {
-                        action = NSQS::EAction::CreateQueue;
-                    } else if (Method == "GetQueueUrl") {
-                        action = NSQS::EAction::GetQueueUrl;
-                    } else if (Method == "SendMessage") {
-                        action = NSQS::EAction::SendMessage;
-                    } else if (Method == "ReceiveMessage") {
-                        action = NSQS::EAction::ReceiveMessage;
-                    } else if (Method == "GetQueueAttributes") {
-                        action = NSQS::EAction::GetQueueAttributes;
-                    } else if (Method == "ListQueues") {
-                        action = NSQS::EAction::ListQueues;
-                    } else if (Method == "DeleteMessage") {
-                        action = NSQS::EAction::DeleteMessage;
-                    } else if (Method == "PurgeQueue") {
-                        action = NSQS::EAction::PurgeQueue;
-                    } else if (Method == "DeleteQueue") {
-                        action = NSQS::EAction::DeleteQueue;
-                    } else if (Method == "ChangeMessageVisibility") {
-                        action = NSQS::EAction::ChangeMessageVisibility;
-                    } else if (Method == "SetQueueAttributes") {
-                        action = NSQS::EAction::SetQueueAttributes;
-                    } else if (Method == "SendMessageBatch") {
-                        action = NSQS::EAction::SendMessageBatch;
-                    }else if (Method == "DeleteMessageBatch") {
-                        action = NSQS::EAction::DeleteMessageBatch;
-                    } else if (Method == "ChangeMessageVisibilityBatch") {
-                        action = NSQS::EAction::ChangeMessageVisibilityBatch;
-                    } else if (Method == "ListDeadLetterSourceQueues") {
-                        action = NSQS::EAction::ListDeadLetterSourceQueues;
-                    }
 
+                    NSQS::EAction action = NSQS::ActionFromString(Method);
                     requestHolder->SetRequestId(HttpContext.RequestId);
 
                     NSQS::TAuthActorData data {
@@ -711,7 +692,7 @@ namespace NKikimr::NHttpProxy {
                     NYql::TIssues issues;
                     NYql::IssuesFromMessage(response.operation().issues(), issues);
                     result->Status = MakeHolder<NYdb::TStatus>(NYdb::EStatus(response.operation().status()),
-                                                               std::move(issues));
+                                                               NYdb::NAdapters::ToSdkIssues(std::move(issues)));
                     actorSystem->Send(actorId, result.Release());
                 });
                 return;
@@ -1081,6 +1062,9 @@ namespace NKikimr::NHttpProxy {
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(DeleteMessageBatch);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibilityBatch);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListDeadLetterSourceQueues);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListQueueTags);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(TagQueue);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(UntagQueue);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
     }
 
@@ -1264,6 +1248,9 @@ namespace NKikimr::NHttpProxy {
             requestAttributes.SourceAddress = SourceAddress;
             requestAttributes.ResourceId = ResourceId;
             requestAttributes.Action = NSQS::ActionFromString(MethodName);
+            for (const auto& [k, v] : ResponseData.QueueTags) {
+                requestAttributes.QueueTags[k] = v;
+            }
 
             LOG_SP_DEBUG_S(
                 ctx,
@@ -1505,7 +1492,7 @@ namespace NKikimr::NHttpProxy {
         void HandleTicketParser(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
 
             if (ev->Get()->Error) {
-                return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, ev->Get()->Error.Message);
+                return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
             }
             ctx.Send(Sender, new TEvServerlessProxy::TEvToken(ev->Get()->Token->GetUserSID(), "", ev->Get()->SerializedToken, {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 

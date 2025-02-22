@@ -157,7 +157,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             }
 
             subdomain->AddPrivateShard(shardIdx);
-            subdomain->AddInternalShard(shardIdx);
+            subdomain->AddInternalShard(shardIdx, Self);
 
             subdomain->Initialize(Self->ShardInfos);
             Self->PersistSubDomain(db, Self->RootPathId(), *subdomain);

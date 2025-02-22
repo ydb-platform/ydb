@@ -44,7 +44,7 @@ public:
         const auto state = PHINode::Create(load->getType(), 2U, "state", main);
         state->addIncoming(load, block);
 
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
+        BranchInst::Create(init, main, IsInvalid(load, block, context), block);
 
         block = init;
 
@@ -71,7 +71,7 @@ public:
         block = work;
         const auto item = GetNodeValue(Flow, ctx, block);
         result->addIncoming(item, block);
-        BranchInst::Create(done, good, IsSpecial(item, block), block);
+        BranchInst::Create(done, good, IsSpecial(item, block, context), block);
 
         block = good;
         result->addIncoming(item, block);
@@ -131,7 +131,7 @@ public:
         const auto state = PHINode::Create(load->getType(), 2U, "state", main);
         state->addIncoming(load, block);
 
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
+        BranchInst::Create(init, main, IsInvalid(load, block, context), block);
 
         block = init;
 
@@ -265,20 +265,10 @@ public:
         const auto cnt = GetNodeValue(Count, ctx, block);
         const auto count = GetterFor<ui64>(cnt, context, block);
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(list->getType(), {factory->getType(), builder->getType(), list->getType(), count->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            const auto result = CallInst::Create(funType, funcPtr, {factory, builder, list, count}, "result", block);
-            return result;
-        } else {
-            const auto retPtr = new AllocaInst(list->getType(), 0U, "ret_ptr", block);
-            new StoreInst(list, retPtr, block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {factory->getType(), retPtr->getType(), builder->getType(), retPtr->getType(), count->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            CallInst::Create(funType, funcPtr, {factory, retPtr, builder, retPtr, count}, "", block);
-            const auto result = new LoadInst(list->getType(), retPtr, "result", block);
-            return result;
-        }
+        const auto funType = FunctionType::get(list->getType(), {factory->getType(), builder->getType(), list->getType(), count->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
+        const auto result = CallInst::Create(funType, funcPtr, {factory, builder, list, count}, "result", block);
+        return result;
     }
 #endif
 private:

@@ -1,7 +1,6 @@
 (
 #comment
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let res_sink (DataSink 'result))
 (let predicate (== (Int32 '1) (Int32 '2)))
@@ -12,7 +11,7 @@
 ))))
 (let sep (If predicate (Just (String '_)) (Just (String '+))))
 (let data (IfPresent sep outLambda (AsList (String 'none))))
-(let world (Write! world res_sink (Key) data '()))
+(let world (Write! world res_sink (Key) data '('('type))))
 (let world (Commit! world res_sink))
 (return world)
 )

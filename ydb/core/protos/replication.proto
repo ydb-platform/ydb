@@ -213,6 +213,7 @@ message TEvDescribeReplicationResult {
 
     optional EStatus Status = 1;
     optional TConnectionParams ConnectionParams = 2;
+    optional TConsistencySettings ConsistencySettings = 5;
     repeated TReplicationConfig.TTargetSpecific.TTarget Targets = 3;
     optional TReplicationState State = 4;
 }
@@ -247,6 +248,11 @@ message TLocalTableWriterSettings {
     optional NKikimrProto.TPathID PathId = 1;
 }
 
+message TTransferWriterSettings {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional string TransformLambda = 2;
+}
+
 message TRunWorkerCommand {
     oneof Reader {
         TRemoteTopicReaderSettings RemoteTopicReader = 1;
@@ -254,6 +260,7 @@ message TRunWorkerCommand {
 
     oneof Writer {
         TLocalTableWriterSettings LocalTableWriter = 2;
+        TTransferWriterSettings TransferWriter = 4;
     }
 
     optional TConsistencySettings ConsistencySettings = 3;

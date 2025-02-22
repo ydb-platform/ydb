@@ -2,8 +2,6 @@
 
 #include "defs.h"
 
-#include "export_checksum.h"
-
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 
 #include <util/generic/ptr.h>

@@ -1,0 +1,17 @@
+{
+    "schema" = <"strict" = %true; "unique_keys" = %false> [
+        { "type" = "int64"; "required" = %true; "name" = "row" };
+        { "type" = "int32"; "required" = %true; "name" = "d32" };
+        { "type" = "int64"; "required" = %true; "name" = "dt64" };
+        { "type" = "int64"; "required" = %true; "name" = "ts64" };
+        { "type" = "int64"; "required" = %true; "name" = "i64" };
+    ];
+    "_yql_row_spec" = {
+        "TypePatch" = ["StructType";[
+            ["d32"; ["DataType"; "Date32"]];
+            ["dt64"; ["DataType"; "Datetime64"]];
+            ["ts64" ;["DataType"; "Timestamp64"]];
+            ["i64"; ["DataType"; "Interval64"]];
+        ]];
+    };
+}

@@ -25,7 +25,7 @@ To accelerate data uploads, consider the following recommendations:
 
 {% note warning %}
 
-The `BulkUpsert` method isn't supported for tables with secondary indexes.
+The `BulkUpsert` method isn't supported for tables with synchronous secondary indexes.
 
 {% endnote %}
 

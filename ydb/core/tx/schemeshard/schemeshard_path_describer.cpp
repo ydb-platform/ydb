@@ -176,6 +176,8 @@ void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElem
         descr->SetCreateStep(ui64(pathEl->StepCreated));
     }
 
+    descr->SetChildrenExist(pathEl->GetAliveChildren() > 0);
+
     if (pathEl->PathType == NKikimrSchemeOp::EPathTypePersQueueGroup) {
         auto it = Self->Topics.FindPtr(pathEl->PathId);
         Y_ABORT_UNLESS(it, "PersQueueGroup is not found");
@@ -1327,6 +1329,7 @@ void TSchemeShard::DescribeTable(
     }
 
     entry->SetIsBackup(tableInfo.IsBackup);
+    entry->SetIsRestore(tableInfo.IsRestore);
 }
 
 void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name,

@@ -5178,7 +5178,7 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
 
     TVector<TString> statements;
     NYql::TIssues issues;
-    if (!SplitQueryToStatements(Ctx.Query, statements, issues, Ctx.Settings)) {
+    if (!SplitQueryToStatements(Ctx.Lexers, Ctx.Parsers, Ctx.Query, statements, issues, Ctx.Settings)) {
         return {};
     }
 

@@ -3,6 +3,10 @@
 #include <yql/essentials/core/yql_library_compiler.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/utils/log/profile.h>
 
 #include <library/cpp/resource/resource.h>
@@ -126,9 +130,15 @@ namespace NYql {
         TUserDataTable mounts;
         LoadYqlDefaultMounts(mounts);
 
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+        NSQLTranslationV1::TParsers parsers;
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
         NSQLTranslation::TTranslators translators(
             nullptr,
-            NSQLTranslationV1::MakeTranslator(),
+            NSQLTranslationV1::MakeTranslator(lexers, parsers),
             nullptr
         );
 

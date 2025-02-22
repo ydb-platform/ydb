@@ -2,9 +2,6 @@
 
 #include "yql_library_compiler.h"
 
-#include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
-
 namespace NYql {
 
 Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
@@ -14,7 +11,7 @@ Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
     static bool CompileAndLink(const THashMap<TString, TString>& libs, TExprContext& ctx) {
         NSQLTranslation::TTranslators translators(
             nullptr,
-            NSQLTranslationV1::MakeTranslator(),
+            nullptr,
             nullptr
         );
 
@@ -36,7 +33,7 @@ Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
 
         NSQLTranslation::TTranslators translators(
             nullptr,
-            NSQLTranslationV1::MakeTranslator(),
+            nullptr,
             nullptr
         );
 
@@ -58,7 +55,7 @@ Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
 
         NSQLTranslation::TTranslators translators(
             nullptr,
-            NSQLTranslationV1::MakeTranslator(),
+            nullptr,
             nullptr
         );
 

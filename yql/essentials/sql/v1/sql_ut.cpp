@@ -8178,13 +8178,18 @@ Y_UNIT_TEST_SUITE(QuerySplit) {
 
         NSQLTranslation::TTranslationSettings settings;
         settings.AnsiLexer = false;
-        settings.Antlr4Parser = true;
+        settings.Antlr4Parser = false;
         settings.Arena = &Arena;
 
         TVector<TString> statements;
         NYql::TIssues issues;
 
-        UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(query, statements, issues, settings));
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+        NSQLTranslationV1::TParsers parsers;
+        parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
+
+        UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(lexers, parsers, query, statements, issues, settings));
 
         UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
 

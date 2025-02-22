@@ -16,6 +16,8 @@ public:
 
     using TFactory = NObjectFactory::TObjectFactory<IKernelLogic, TString>;
 
+    virtual TString GetClassName() const = 0;
+
     TConclusion<bool> Execute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const {
         if (!resources) {
@@ -31,6 +33,10 @@ public:
         return "JsonValue";
     }
 private:
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
+
     static const inline TFactory::TRegistrator<TGetJsonPath> Registrator = TFactory::TRegistrator<TGetJsonPath>(GetClassNameStatic());
 
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,

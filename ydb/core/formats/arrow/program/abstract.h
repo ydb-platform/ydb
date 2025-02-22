@@ -50,6 +50,10 @@ public:
     virtual ~IColumnResolver() = default;
     virtual TString GetColumnName(ui32 id, bool required = true) const = 0;
     virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const = 0;
+    bool HasColumn(const ui32 id) const {
+        return !!GetColumnName(id, false);
+    }
+
     ui32 GetColumnIdVerified(const char* name) const {
         auto result = GetColumnIdOptional(name);
         AFL_VERIFY(!!result);
@@ -174,11 +178,22 @@ private:
     virtual NJson::TJsonValue DoDebugJson() const {
         return NJson::JSON_MAP;
     }
+    virtual bool DoHasExecutionData(const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const;
 
 public:
+    virtual bool IsAggregation() const = 0;
+
     virtual ~IResourceProcessor() = default;
 
+    virtual TString GetKernelClassNameDef(const TString& defaultValue) const {
+        return defaultValue;
+    }
+
     NJson::TJsonValue DebugJson() const;
+
+    bool HasExecutionData(const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const {
+        return DoHasExecutionData(columnId, resources);
+    }
 
     ui32 GetOutputColumnIdOnce() const {
         AFL_VERIFY(Output.size() == 1)("size", Output.size());
@@ -202,15 +217,17 @@ public:
 class TResourceProcessorStep {
 private:
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, ColumnsToFetch);
+    YDB_READONLY_DEF(std::vector<TColumnChainInfo>, OriginalColumnsToUse);
     YDB_READONLY_DEF(std::shared_ptr<IResourceProcessor>, Processor);
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, ColumnsToDrop);
 
 public:
     NJson::TJsonValue DebugJson() const;
 
-    TResourceProcessorStep(
-        std::vector<TColumnChainInfo>&& toFetch, std::shared_ptr<IResourceProcessor>&& processor, std::vector<TColumnChainInfo>&& toDrop)
+    TResourceProcessorStep(std::vector<TColumnChainInfo>&& toFetch, std::vector<TColumnChainInfo>&& originalToUse,
+        std::shared_ptr<IResourceProcessor>&& processor, std::vector<TColumnChainInfo>&& toDrop)
         : ColumnsToFetch(std::move(toFetch))
+        , OriginalColumnsToUse(std::move(originalToUse))
         , Processor(std::move(processor))
         , ColumnsToDrop(std::move(toDrop)) {
         AFL_VERIFY(Processor);

@@ -27,6 +27,10 @@ TConclusionStatus IResourceProcessor::Execute(const std::shared_ptr<TAccessorsCo
     return DoExecute(resources);
 }
 
+bool IResourceProcessor::DoHasExecutionData(const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const {
+    return resources->HasColumn(columnId);
+}
+
 NJson::TJsonValue TResourceProcessorStep::DebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     if (ColumnsToFetch.size()) {

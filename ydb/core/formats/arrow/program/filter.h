@@ -9,6 +9,10 @@ private:
 
     virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const override;
 
+    virtual bool IsAggregation() const override {
+        return false;
+    }
+
 public:
     TFilterProcessor(std::vector<TColumnChainInfo>&& input)
         : TBase(std::move(input), {}, EProcessorType::Filter) {

@@ -45,8 +45,10 @@ TConclusion<TProgramChain> TProgramChain::Build(std::vector<std::shared_ptr<IRes
     THashSet<TColumnChainInfo> sourceColumns;
     std::optional<ui32> lastFilter;
     std::optional<ui32> firstAggregation;
+    std::vector<std::vector<TColumnChainInfo>> originalsToUse;
+    originalsToUse.resize(processors.size());
     for (auto&& i : processors) {
-        if (i->GetProcessorType() == EProcessorType::Aggregation) {
+        if (!firstAggregation && i->IsAggregation()) {
             firstAggregation = stepIdx;
         }
         if (!firstAggregation && i->GetProcessorType() == EProcessorType::Filter) {
@@ -62,9 +64,12 @@ TConclusion<TProgramChain> TProgramChain::Build(std::vector<std::shared_ptr<IRes
         }
         for (auto&& c : i->GetInput()) {
             auto it = contextUsage.find(c);
+            const bool isOriginalColumn = resolver.HasColumn(c);
+            if (isOriginalColumn) {
+                originalsToUse[stepIdx].emplace_back(c);
+            }
             if (it == contextUsage.end()) {
-                if (!resolver.GetColumnName(c, false)) {
-                    resolver.GetColumnName(c, true);
+                if (!isOriginalColumn) {
                     return TConclusionStatus::Fail("incorrect input column: " + ::ToString(c));
                 }
                 it = contextUsage.emplace(c, TColumnUsage::Fetch(stepIdx, i)).first;
@@ -94,7 +99,8 @@ TConclusion<TProgramChain> TProgramChain::Build(std::vector<std::shared_ptr<IRes
     }
     TProgramChain result;
     for (ui32 i = 0; i < processors.size(); ++i) {
-        result.Processors.emplace_back(std::move(columnsToFetch[i]), std::move(processors[i]), std::move(columnsToDrop[i]));
+        result.Processors.emplace_back(
+            std::move(columnsToFetch[i]), std::move(originalsToUse[i]), std::move(processors[i]), std::move(columnsToDrop[i]));
     }
     auto initStatus = result.Initialize();
     result.LastOriginalDataFilter = lastFilter;

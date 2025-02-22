@@ -23,6 +23,14 @@ private:
         , Function(function) {
     }
 
+    virtual TString GetKernelClassNameDef(const TString& defaultValue) const override {
+        return KernelLogic ? KernelLogic->GetClassName() : defaultValue;
+    }
+
+    virtual bool IsAggregation() const override {
+        return Function->IsAggregation();
+    }
+
 public:
     static TConclusion<std::shared_ptr<TCalculationProcessor>> Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, 
         const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic = nullptr);

@@ -39,21 +39,26 @@ struct TOperation {
     size_t ResultIndex = 0ULL;
 };
 
-void MakeSlice(const std::string_view& key, const std::string_view& rangeEnd, std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter, const i64 revision = 0LL) {
+void MakeSlice(const std::string_view& where, std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter, const i64 revision = 0LL) {
     sql << "select * from ";
     if (revision) {
-        sql << "(select max_by(TableRow(), `modified`) from `verhaal` where ";
-        MakeSimplePredicate(key, rangeEnd, sql, params, paramsCounter);
+        sql << "(select max_by(TableRow(), `modified`) from `verhaal`" << where;
         if (revision)
             sql << " and " << AddParam("Rev", params, revision, paramsCounter) << " >= `modified`";
         sql << " group by `key`) flatten columns where 0L < `version`";
     } else {
-        sql << "`huidig` where ";
-        MakeSimplePredicate(key, rangeEnd, sql, params, paramsCounter);
+        sql << "`huidig`" << where;
     }
 }
 
-static constexpr auto NoEnd = "\0"sv;
+void MakeSlice(const std::string_view& key, const std::string_view& rangeEnd, std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter, const i64 revision = 0LL) {
+    std::ostringstream where;
+    where << " where ";
+    MakeSimplePredicate(key, rangeEnd, where, params, paramsCounter);
+    MakeSlice(where.view(), sql, params, paramsCounter, revision);
+}
+
+static constexpr auto Endless = "\0"sv;
 
 struct TRange : public TOperation {
     std::string Key, RangeEnd;
@@ -113,13 +118,13 @@ struct TRange : public TOperation {
         if (Key.empty())
             return "key is not provided";
 
-        if (!RangeEnd.empty() && NoEnd != RangeEnd && RangeEnd < Key)
+        if (!RangeEnd.empty() && Endless != RangeEnd && RangeEnd < Key)
             return "invalid range end";
 
         return {};
     }
 
-    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
+    void MakeQueryWithParams(std::ostream& sql, const std::string_view& where, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr) {
         if (resultsCounter)
             ResultIndex = (*resultsCounter)++;
 
@@ -128,11 +133,8 @@ struct TRange : public TOperation {
         if (KeysOnly)
             sql << "'' as ";
         sql << "`value` from (" << std::endl << '\t';
-        MakeSlice(Key, RangeEnd, sql, params, paramsCounter, KeyRevision);
+        MakeSlice(where, sql, params, paramsCounter, KeyRevision);
         sql << std::endl << ')';
-
-        if (!txnFilter.empty())
-            sql << " where " << txnFilter;
 
         if (MinCreateRevision) {
             sql << std::endl << '\t' << "and `created` >= " << AddParam("MinCreateRevision", params, MinCreateRevision, paramsCounter);
@@ -168,6 +170,15 @@ struct TRange : public TOperation {
             }
             sql << ';' << std::endl;
         }
+    }
+
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
+        std::ostringstream where;
+        where << " where ";
+        if (!txnFilter.empty())
+            where << txnFilter << " and ";
+        MakeSimplePredicate(Key, RangeEnd, where, params, paramsCounter);
+        MakeQueryWithParams(sql, where.view(), params, paramsCounter, resultsCounter);
     }
 
     etcdserverpb::RangeResponse MakeResponse(i64 revision, const NYdb::TResultSets& results) const {
@@ -245,18 +256,15 @@ struct TPut : public TOperation {
         return {};
     }
 
-    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
-        const auto& keyParamName = AddParam("Key", params, Key, paramsCounter);
+    void MakeQueryWithParams(std::ostream& sql, const std::string_view& keyParamName, const std::string_view& keyFilter, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
         const auto& valueParamName = IgnoreValue ? std::string("NULL") : AddParam("Value", params, Value, paramsCounter);
         const auto& leaseParamName = IgnoreLease ? std::string("NULL") : AddParam("Lease", params, Lease, paramsCounter);
 
         const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
         const auto& newResultSetName = GetNameWithIndex("New", resultsCounter);
 
-        sql << oldResultSetName << " = select `key`, `created`, `modified`, `version`, `value`, `lease` from `verhaal` where ";
-        if (!txnFilter.empty())
-            sql << txnFilter << " and ";
-        sql << "`key` = " << keyParamName << " order by `modified` desc limit 1;" << std::endl;
+        sql << oldResultSetName << " = select `key`, `created`, `modified`, `version`, `value`, `lease` from `verhaal`";
+        sql << keyFilter << " order by `modified` desc limit 1;" << std::endl;
 
         sql << newResultSetName << " = select" << std::endl;
         sql << '\t' << keyParamName << " as `key`," << std::endl;
@@ -272,9 +280,7 @@ struct TPut : public TOperation {
             sql << oldResultSetName;
         else
             sql << "(select * from " << oldResultSetName <<" union all select * from as_table([<|`key`:'', `created`:0L, `modified`: 0L, `version`:0L, `value`:'', `lease`:0L|>]) order by `created` desc limit 1)";
-        if (!txnFilter.empty())
-            sql << " where " << txnFilter;
-        sql << ';' << std::endl;
+        sql << txnFilter << ';' << std::endl;
 
         sql << "insert into `verhaal` select * from " << newResultSetName << ';' << std::endl;
         sql << (update ? "update `huidig` on" : "upsert into `huidig`") << " select * from " << newResultSetName << ';' << std::endl;
@@ -289,6 +295,18 @@ struct TPut : public TOperation {
                 ++(*resultsCounter);
             sql << "select `value`, `created`, `modified`, `version`, `lease` from " << newResultSetName << ';' << std::endl;
         }
+    }
+
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
+        std::ostringstream keyFilter, newFilter;
+        keyFilter << " where ";
+        if (!txnFilter.empty()) {
+            keyFilter << txnFilter << " and ";
+            newFilter << " where " << txnFilter;
+        }
+        const auto& keyParamName = AddParam("Key", params, Key, paramsCounter);
+        keyFilter << keyParamName << " = `key`";
+        MakeQueryWithParams(sql, keyParamName, keyFilter.view(), params, paramsCounter, resultsCounter, newFilter.view());
     }
 
     std::variant<etcdserverpb::PutResponse, TGrpcError>
@@ -354,26 +372,20 @@ struct TDeleteRange : public TOperation {
         if (Key.empty())
             return "key is not provided";
 
-        if (!RangeEnd.empty() && NoEnd != RangeEnd && RangeEnd < Key)
+        if (!RangeEnd.empty() && Endless != RangeEnd && RangeEnd < Key)
             return "invalid range end";
 
         return {};
     }
 
-    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
+    void MakeQueryWithParams(std::ostream& sql, const std::string_view& where, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr) {
         if (resultsCounter)
             ResultIndex = (*resultsCounter)++;
 
-        std::ostringstream where;
-        where << "where ";
-        if (!txnFilter.empty())
-            where << txnFilter << " and ";
-        MakeSimplePredicate(Key, RangeEnd, where, params, paramsCounter);
-
         const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
         sql << oldResultSetName << " = select * from (";
-        MakeSlice(Key, RangeEnd, sql, params, paramsCounter);
-        sql << ')' << ' ' << where.str() << ';' << std::endl;
+        MakeSlice(where, sql, params, paramsCounter);
+        sql << ')' << ';' << std::endl;
 
         sql << "insert into `verhaal`" << std::endl;
         sql << "select `key`, `created`, $Revision as `modified`, 0L as `version`, `value`, `lease` from " << oldResultSetName << ';' << std::endl;
@@ -384,7 +396,16 @@ struct TDeleteRange : public TOperation {
                 ++(*resultsCounter);
             sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from " << oldResultSetName << ';' << std::endl;
         }
-        sql << "delete from `huidig` " << where.str() << ';' << std::endl;
+        sql << "delete from `huidig`" << where << ';' << std::endl;
+    }
+
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
+        std::ostringstream where;
+        where << " where ";
+        if (!txnFilter.empty())
+            where << txnFilter << " and ";
+        MakeSimplePredicate(Key, RangeEnd, where, params, paramsCounter);
+        MakeQueryWithParams(sql, where.view(), params, paramsCounter, resultsCounter);
     }
 
     etcdserverpb::DeleteRangeResponse MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
@@ -462,7 +483,7 @@ struct TCompare {
         if (Key.empty())
             return "key is not provided";
 
-        if (!RangeEnd.empty() && NoEnd != RangeEnd && RangeEnd < Key)
+        if (!RangeEnd.empty() && Endless != RangeEnd && RangeEnd < Key)
             return "invalid range end";
 
         return {};
@@ -1193,7 +1214,7 @@ void MakeSimplePredicate(const std::string_view& key, const std::string_view& ra
     const auto& keyParamName = AddParam("Key", params, key, paramsCounter);
     if (rangeEnd.empty())
         sql << keyParamName << " = `key`";
-    else if (NoEnd == rangeEnd)
+    else if (Endless == rangeEnd)
         sql << keyParamName << " <= `key`";
     else if (rangeEnd == key)
         sql << "startswith(`key`, " << keyParamName << ')';

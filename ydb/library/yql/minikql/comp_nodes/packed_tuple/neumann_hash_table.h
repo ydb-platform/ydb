@@ -149,8 +149,6 @@ class TNeumannHashTable {
         DirectoryHashShift_ = sizeof(Hash) * 8 - DirectoryHashBits_;
         Directories_.resize((1ul << DirectoryHashBits_) + 1);
 
-        Y_ASSERT((kBloomHashBits + DirectoryHashBits_) <= sizeof(Hash) * 8);
-
         for (ui32 ind = 0; ind != nItems; ++ind) {
             const THash thash =
                 ReadUnaligned<THash>(tuples + Layout_->TotalRowSize * ind);

@@ -110,12 +110,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
         for (ui32 stepIdx = 0; stepIdx < chainProgram->GetProcessors().size(); ++stepIdx) {
             auto& step = chainProgram->GetProcessors()[stepIdx];
-            if (step.GetColumnsToFetch().size()) {
-                TColumnsSet stepColumnIds(
-                    NArrow::NSSA::TColumnChainInfo::ExtractColumnIds(step.GetColumnsToFetch()), GetReadMetadata()->GetResultSchema());
-                acc.AddFetchingStep(*result, stepColumnIds, EStageFeaturesIndexes::Fetching);
-                acc.AddAssembleStep(*result, stepColumnIds, "EF", EStageFeaturesIndexes::Filter, false);
-            }
+            result->AddStep(std::make_shared<NCommon::TProgramStepPrepare>(step));
+            result->AddStep(std::make_shared<NCommon::TProgramStepAssemble>(step));
             result->AddStep(std::make_shared<NCommon::TProgramStep>(step));
             if (step->GetProcessorType() == NArrow::NSSA::EProcessorType::Filter && GetReadMetadata()->HasLimit() &&
                 chainProgram->GetLastOriginalDataFilter() == stepIdx) {

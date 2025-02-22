@@ -1,6 +1,9 @@
+#include "constructor.h"
 #include "fetch_steps.h"
 #include "fetching.h"
 #include "source.h"
+
+#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 
 #include <util/string/builder.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
@@ -163,12 +166,51 @@ bool TColumnsAccumulator::AddAssembleStep(
     return true;
 }
 
-TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool> TProgramStepPrepare::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const ISnapshotSchema::TPtr ssSchema = source->GetSourceSchema();
+    TReadActionsCollection readActions;
+    THashMap<ui32, std::shared_ptr<IKernelFetchLogic>> fetchers;
+    for (auto&& i : Step.GetOriginalColumnsToUse()) {
+        if (Step->HasExecutionData(i, source->GetStageData().GetTable())) {
+            continue;
+        }
+        const std::shared_ptr<TColumnLoader> loader = ssSchema->GetColumnLoaderVerified(i);
+        auto logic = IKernelFetchLogic::TFactory::MakeHolder(Step->GetKernelClassNameDef("default"), i, source);
+        AFL_VERIFY(!!logic);
+        logic->Start(source->GetStageData().GetTable(), readActions);
+        AFL_VERIFY(fetchers.emplace(i, logic.Release()).second)("column_id", i);
+    }
+    if (readActions.IsEmpty()) {
+        NBlobOperations::NRead::TCompositeReadBlobs blobs;
+        for (auto&& i : fetchers) {
+            i.second->OnDataReceived(readActions, blobs);
+            source->MutableStageData().AddFetcher(i.second);
+        }
+        AFL_VERIFY(readActions.IsEmpty());
+        return true;
+    }
+    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
+        std::make_shared<TColumnsFetcherTask>(std::move(readActions), fetchers, source, step, GetName(), "")));
+    return false;
+}
+
+TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*cursor*/) const {
     auto result = Step->Execute(source->GetStageData().GetTable());
     if (result.IsFail()) {
         return result;
     }
     source->GetStageData().GetTable()->Remove(Step.GetColumnsToDrop());
+    return true;
+}
+
+TConclusion<bool> TProgramStepAssemble::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*cursor*/) const {
+    for (auto&& i : Step.GetOriginalColumnsToUse()) {
+        if (Step->HasExecutionData(i, source->GetStageData().GetTable())) {
+            continue;
+        }
+        auto fetcher = source->MutableStageData().ExtractFetcherVerified(i);
+        fetcher->OnDataCollected(source->GetStageData().GetTable());
+    }
     return true;
 }
 

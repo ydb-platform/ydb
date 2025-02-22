@@ -19,9 +19,13 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+class IKernelFetchLogic;
+
 class TFetchedData {
 private:
     using TBlobs = THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>;
+    using TFetchers = THashMap<ui32, std::shared_ptr<IKernelFetchLogic>>;
+    TFetchers Fetchers;
     YDB_ACCESSOR_DEF(TBlobs, Blobs);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>, Table);
     YDB_READONLY(bool, Aborted, false);
@@ -30,6 +34,26 @@ private:
     std::optional<TPortionDataAccessor> PortionAccessor;
 
 public:
+    void AddFetchers(const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchers);
+    void AddFetcher(const std::shared_ptr<IKernelFetchLogic>& fetcher);
+
+    std::shared_ptr<IKernelFetchLogic> ExtractFetcherOptional(const ui32 columnId) {
+        auto it = Fetchers.find(columnId);
+        if (it == Fetchers.end()) {
+            return nullptr;
+        } else {
+            auto result = it->second;
+            Fetchers.erase(it);
+            return result;
+        }
+    }
+
+    std::shared_ptr<IKernelFetchLogic> ExtractFetcherVerified(const ui32 columnId) {
+        auto result = ExtractFetcherOptional(columnId);
+        AFL_VERIFY(!!result)("column_id", columnId);
+        return result;
+    }
+
     void Abort() {
         Aborted = true;
     }

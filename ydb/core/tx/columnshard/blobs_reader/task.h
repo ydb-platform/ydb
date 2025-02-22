@@ -92,7 +92,7 @@ private:
     const ui64 TaskIdentifier = 0;
     const TString ExternalTaskId;
     bool AbortFlag = false;
-    TString TaskCustomer;
+    YDB_READONLY_DEF(TString, TaskCustomer);
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     i64 BlobsWaitingCount = 0;
     bool ResultsExtracted = false;

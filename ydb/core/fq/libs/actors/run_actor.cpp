@@ -566,12 +566,19 @@ private:
 
         if (QueryStateUpdateRequest.resources().topic_consumers_state() == Fq::Private::TaskResources::PREPARE) {
             if (!ReadRulesCreatorId) {
+                NYql::TPqGatewayServices pqServices(
+                    Params.YqSharedResources->UserSpaceYdbDriver,
+                    Params.PqCmConnections,
+                    Params.CredentialsFactory,
+                    std::make_shared<NYql::TPqGatewayConfig>(),
+                    Params.FunctionRegistry
+                );
                 ReadRulesCreatorId = Register(
                     ::NFq::MakeReadRuleCreatorActor(
                         SelfId(),
                         Params.QueryId,
                         Params.YqSharedResources->UserSpaceYdbDriver,
-                        Params.PqGateway,
+                        Params.PqGatewayFactory->CreatePqGateway(pqServices),
                         Params.Resources.topic_consumers(),
                         PrepareReadRuleCredentials()
                     )
@@ -1431,12 +1438,19 @@ private:
     }
 
     void RunReadRulesDeletionActor() {
+        NYql::TPqGatewayServices pqServices(
+            Params.YqSharedResources->UserSpaceYdbDriver,
+            Params.PqCmConnections,
+            Params.CredentialsFactory,
+            std::make_shared<NYql::TPqGatewayConfig>(),
+            Params.FunctionRegistry
+        );
         Register(
             ::NFq::MakeReadRuleDeleterActor(
                 SelfId(),
                 Params.QueryId,
                 Params.YqSharedResources->UserSpaceYdbDriver,
-                Params.PqGateway,
+                Params.PqGatewayFactory->CreatePqGateway(pqServices),
                 Params.Resources.topic_consumers(),
                 PrepareReadRuleCredentials()
             )
@@ -1947,9 +1961,6 @@ private:
             gatewaysConfig,
             clusters);
 
-        auto pqGateway = Params.PqGateway;
-        pqGateway->UpdateClusterConfigs(std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()));
-
         TVector<TDataProviderInitializer> dataProvidersInit;
         const std::shared_ptr<IDatabaseAsyncResolver> dbResolver = std::make_shared<TDatabaseAsyncResolverImpl>(
             NActors::TActivationContext::ActorSystem(),
@@ -1975,6 +1986,14 @@ private:
         }
 
         {
+            NYql::TPqGatewayServices pqServices(
+                Params.YqSharedResources->UserSpaceYdbDriver,
+                Params.PqCmConnections,
+                Params.CredentialsFactory,
+                std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()),
+                Params.FunctionRegistry
+            );
+            auto pqGateway = Params.PqGatewayFactory->CreatePqGateway(pqServices);
             dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
         }
 

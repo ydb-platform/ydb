@@ -40,12 +40,11 @@ public:
         const TString& database,
         bool secure) override;
 
-    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) override;
-
     ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override;
 
 private:
+    void InitClusterConfigs();
     TPqSession::TPtr GetExistingSession(const TString& sessionId) const;
 
 private:
@@ -71,12 +70,12 @@ TPqNativeGateway::TPqNativeGateway(const TPqGatewayServices& services)
     , CommonTopicClientSettings(services.CommonTopicClientSettings)
 {
     Y_UNUSED(FunctionRegistry);
-    UpdateClusterConfigs(Config);
+    InitClusterConfigs();
 }
 
-void TPqNativeGateway::UpdateClusterConfigs(const TPqGatewayConfigPtr& config) {
+void TPqNativeGateway::InitClusterConfigs() {
     ClusterConfigs = std::make_shared<TPqClusterConfigsMap>();
-    for (const auto& cfg : config->GetClusterMapping()) {
+    for (const auto& cfg : Config->GetClusterMapping()) {
         auto& config = (*ClusterConfigs)[cfg.GetName()];
         config = cfg;
     }
@@ -155,5 +154,17 @@ NYdb::NTopic::TTopicClientSettings TPqNativeGateway::GetTopicClientSettings() co
 TPqNativeGateway::~TPqNativeGateway() {
     Sessions.clear();
 }
+
+class TPqNativeGatewayFactory : public IPqGatewayFactory {
+    public:
+    IPqGateway::TPtr CreatePqGateway(const NYql::TPqGatewayServices& services) override {
+        return CreatePqNativeGateway(services);
+    }
+};
+
+IPqGatewayFactory::TPtr CreatePqNativeGatewayFactory() {
+    return MakeIntrusive<TPqNativeGatewayFactory>();
+}
+
 
 } // namespace NYql

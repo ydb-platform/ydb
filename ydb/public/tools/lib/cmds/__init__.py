@@ -377,6 +377,7 @@ def deploy(arguments):
         extra_feature_flags=enable_feature_flags,
         extra_grpc_services=arguments.enabled_grpc_services,
         generic_connector_config=generic_connector_config(),
+        column_shard_config={"disabled_on_scheme_shard": False},
         **optionals
     )
 

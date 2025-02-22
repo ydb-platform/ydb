@@ -12,9 +12,7 @@ class TestYdbWorkload(object):
     def setup_class(cls):
         config_generator = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
-            column_shard_config= {
-                "disabled_on_scheme_shard": False,
-            }
+            column_shard_config={"disabled_on_scheme_shard": False}
         )
         config_generator.yaml_config["table_service_config"]["allow_olap_data_query"] = True
         cls.cluster = KiKiMR(config_generator)

@@ -149,7 +149,7 @@ public:
         Y_ENSURE(array->buffers.size() == 3);
         Y_ENSURE(array->child_data.empty());
 
-        return {array->GetMutableValues<ui8*>(1), array->GetMutableValues<ui8*>(2)};
+        return {array->GetMutableValues<ui8>(1), array->GetMutableValues<ui8>(2)};
     }
 
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {

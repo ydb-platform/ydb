@@ -16,6 +16,7 @@
 #include "mkql_block_just.h"
 #include "mkql_block_logical.h"
 #include "mkql_block_map_join.h"
+#include "mkql_block_grace_join.h"
 #include "mkql_block_compress.h"
 #include "mkql_block_skiptake.h"
 #include "mkql_block_top.h"

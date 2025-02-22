@@ -451,7 +451,7 @@ public:
         columns.resize(TupleLayout_->Columns.size());
 
         std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;
-        TupleLayout_->CalculateColumnSized(
+        TupleLayout_->CalculateColumnSizes(
             packed.PackedTuples.data(), packed.NTuples, bytesPerColumn);
 
         TVector<ui8*> columnsData;

@@ -22,7 +22,8 @@ enum class EColumnRole { Key, Payload };
 // Describes layout and size of particular column
 struct TColumnDesc {
     ui32 ColumnIndex = 0;   // Index of the column in particular layout
-    ui32 OriginalIndex = 0; // Index of the column in input representation
+    ui32 OriginalColumnIndex = 0; // Index of the column in input representation
+    ui32 OriginalIndex = 0; // Index of the buffer in input representation
     EColumnRole Role = EColumnRole::Payload; // Role of the particular column in
                                              // tuple (Key or Payload)
     EColumnSizeType SizeType =
@@ -81,7 +82,7 @@ struct TTupleLayout {
     
     // Takes packed rows,
     // outputs vector of column sizes in bytes
-    virtual void CalculateColumnSized(
+    virtual void CalculateColumnSizes(
         const ui8* res, ui32 count, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const = 0;
 };
 
@@ -97,7 +98,7 @@ template <typename TTrait> struct TTupleLayoutFallback : public TTupleLayout {
                 const std::vector<ui8, TMKQLAllocator<ui8>> &overflow,
                 ui32 start, ui32 count) const override;
     
-    void CalculateColumnSized(
+    void CalculateColumnSizes(
         const ui8* res, ui32 count, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const override;
 
   private:

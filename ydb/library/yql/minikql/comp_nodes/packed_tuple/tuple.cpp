@@ -114,6 +114,7 @@ TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
         auto &col = OrigColumns[i];
 
         col.OriginalIndex = idx;
+        col.OriginalColumnIndex = i;
 
         if (col.SizeType == EColumnSizeType::Variable) {
             // we cannot handle (rare) overflow strings unless we have at least
@@ -121,7 +122,7 @@ TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
             // bytes, limit maximum inline data size
             col.DataSize = std::max<ui32>(1 + 2 * sizeof(ui32),
                                           std::min<ui32>(255, col.DataSize));
-            idx += 2; // Variable-size takes two columns: one for offsets, and
+            idx += 2; // Variable-size takes two buffers: one for offsets, and
                       // another for payload
         } else {
             idx += 1;
@@ -1081,7 +1082,7 @@ TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Unpack(
     ui32 count) const;
 
 template <typename TTraits>
-void TTupleLayoutFallback<TTraits>::CalculateColumnSized(
+void TTupleLayoutFallback<TTraits>::CalculateColumnSizes(
     const ui8* res,
     ui32 count,
     std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const {
@@ -1091,7 +1092,7 @@ void TTupleLayoutFallback<TTraits>::CalculateColumnSized(
     // handle fixed size columns
     for (const auto& column: OrigColumns) {
         if (column.SizeType == EColumnSizeType::Fixed) {
-            bytes[column.OriginalIndex] = column.DataSize * count;
+            bytes[column.OriginalColumnIndex] = column.DataSize * count;
         }
     }
 
@@ -1104,7 +1105,7 @@ void TTupleLayoutFallback<TTraits>::CalculateColumnSized(
                 const auto overflowSize = ReadUnaligned<ui32>(res + col.Offset + 1 + 1 * sizeof(ui32));
                 size = prefixSize + overflowSize;
             }
-            bytes[col.OriginalIndex] += size;
+            bytes[col.OriginalColumnIndex] += size;
         }
     }
 }

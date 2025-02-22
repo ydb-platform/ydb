@@ -32,6 +32,7 @@ PEERDIR(
     library/cpp/threading/local_executor
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy
+    ydb/library/yql/minikql/comp_nodes/packed_tuple
 )
 
 YQL_LAST_ABI_VERSION()

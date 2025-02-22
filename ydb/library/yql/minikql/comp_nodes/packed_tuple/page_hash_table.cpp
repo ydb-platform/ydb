@@ -1,3 +1,4 @@
+// TODO: POSSIBLY DEPRECATED AND NEED TO BE DELETED DUE TO PERFORMANCE ISSUES
 #include "page_hash_table.h"
 
 #include <ydb/library/yql/utils/simd/simd.h>

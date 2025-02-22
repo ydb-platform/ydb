@@ -1,3 +1,4 @@
+// TODO: POSSIBLY DEPRECATED AND NEED TO BE DELETED DUE TO PERFORMANCE ISSUES
 #pragma once
 
 #include <yql/essentials/minikql/mkql_node.h>

@@ -1,3 +1,4 @@
+// TODO: POSSIBLY DEPRECATED AND NEED TO BE DELETED DUE TO PERFORMANCE ISSUES
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <library/cpp/testing/unittest/registar.h>

@@ -2954,7 +2954,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
                 "Error: Access denied for user@builtin on path /Root/SecondaryKeys/Index/indexImplTable",
-                result.GetIssues().ToString(),
+                result.GetIssues().ToString()
             );
         }
         // grant necessary permission

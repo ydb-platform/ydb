@@ -217,7 +217,9 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 primary key (id)
             ) WITH (STORE=%s);
         )", isOlap ? "COLUMN" : "ROW");
-    
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr;
 
         {

@@ -105,6 +105,7 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
         TTestHelper testHelper(settings);
 

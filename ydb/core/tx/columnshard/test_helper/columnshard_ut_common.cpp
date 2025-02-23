@@ -418,13 +418,18 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
     if (specials.CompressionLevel) {
         schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
     }
+    if (specials.UseLegacyCompaction) {
+        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer legacyOptimizer;
+        *schema->MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() = legacyOptimizer;
+        schema->MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets");
+    }
 }
 
 }
 
 namespace NKikimr::NColumnShard {
     NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
-                         const std::vector<NArrow::NTest::TTestColumn>& key) {
+                         const std::vector<NArrow::NTest::TTestColumn>& key, const bool isStandalone) {
         THashMap<ui32, NTable::TColumn> columns;
         THashMap<TString, ui32> columnIdByName;
         for (ui32 i = 0; i < ydbSchema.size(); ++i) {
@@ -445,7 +450,7 @@ namespace NKikimr::NColumnShard {
             columns[*it].KeyOrder = idx++;
             pkIds.push_back(*it);
         }
-        return NOlap::TIndexInfo::BuildDefault(NOlap::TTestStoragesManager::GetInstance(), columns, pkIds);
+        return NOlap::TIndexInfo::BuildDefault(NOlap::TTestStoragesManager::GetInstance(), columns, pkIds, isStandalone);
     }
 
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed) {
@@ -468,7 +473,7 @@ namespace NKikimr::NColumnShard {
         using namespace NTxUT;
         NOlap::TSnapshot snapshot(10, 10);
         TString txBody;
-        auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
+        auto specials = TTestSchema::TTableSpecials().WithCodec(codec).WithLegacyCompactionOptimizer(table.UseLegacyCompaction);
         if (table.InStore) {
             txBody = TTestSchema::CreateTableTxBody(pathId, table.Schema, table.Pk, specials);
         } else {

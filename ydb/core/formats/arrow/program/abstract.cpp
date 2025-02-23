@@ -27,10 +27,6 @@ TConclusionStatus IResourceProcessor::Execute(const std::shared_ptr<TAccessorsCo
     return DoExecute(resources);
 }
 
-bool IResourceProcessor::DoHasExecutionData(const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const {
-    return resources->HasColumn(columnId);
-}
-
 std::optional<TFetchingInfo> IResourceProcessor::BuildFetchTask(
     const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const {
     if (resources->HasColumn(columnId)) {

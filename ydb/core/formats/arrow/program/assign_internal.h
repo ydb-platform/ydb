@@ -34,9 +34,9 @@ private:
 public:
     virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const override {
         if (!KernelLogic) {
-            return TBase::BuildFetchTask(columnId, GetInput(), resources);
+            return TBase::BuildFetchTask(columnId, resources);
         }
-        return KernelLogic->BuildFetchTask(columnId, Input, resources);
+        return KernelLogic->BuildFetchTask(columnId, GetInput(), resources);
     }
 
     static TConclusion<std::shared_ptr<TCalculationProcessor>> Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, 

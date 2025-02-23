@@ -85,23 +85,7 @@ private:
     static const inline TFactory::TRegistrator<TGetJsonPath> Registrator = TFactory::TRegistrator<TGetJsonPath>(GetClassNameStatic());
 
     virtual std::optional<TFetchingInfo> BuildFetchTask(
-        const ui32 columnId, const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const override {
-        AFL_VERIFY(input.size() == 2 && input.front() == columnId);
-        auto description = BuildDescription(input, resources).DetachResult();
-        if (!description.GetInputAccessor()) {
-            const std::vector<TString> subColumns = { TString(description.GetJsonPath().data(), description.GetJsonPath().size()) };
-            return TFetchingInfo::BuildSubColumnsRestore(subColumns);
-        } else if (description.GetInputAccessor()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsArray) {
-            return std::nullopt;
-        } else if (description.GetInputAccessor()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
-            auto arr = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(description.GetInputAccessor());
-            if (arr->NeedFetch(description.GetJsonPath())) {
-                const std::vector<TString> subColumns = { TString(description.GetJsonPath().data(), description.GetJsonPath().size()) };
-                return TFetchingInfo::BuildSubColumnsRestore(subColumns);
-            }
-            return std::nullopt;
-        }
-    }
+        const ui32 columnId, const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const override;
 
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const override;

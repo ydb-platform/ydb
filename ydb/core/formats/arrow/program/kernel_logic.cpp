@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/partial.h>
 
 namespace NKikimr::NArrow::NSSA {
 
@@ -25,7 +26,7 @@ TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& i
             if (i->GetType() != IChunkedArray::EType::SubColumnsArray && i->GetType() != IChunkedArray::EType::SubColumnsPartialArray) {
                 return false;
             }
-            builder.AddChunk(ExtractArray(i, svPath));
+            builder.AddChunk(ExtractArray(i, description->GetJsonPath()));
         }
         resources->AddVerified(output.front().GetColumnId(), builder.Finish());
         return true;
@@ -33,12 +34,11 @@ TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& i
     if (accJson->GetType() != IChunkedArray::EType::SubColumnsArray && accJson->GetType() != IChunkedArray::EType::SubColumnsPartialArray) {
         return false;
     }
-    resources->AddVerified(output.front().GetColumnId(), ExtractArray(accJson, svPath));
+    resources->AddVerified(output.front().GetColumnId(), ExtractArray(accJson, description->GetJsonPath()));
     return true;
 }
 
-std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(
-    const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
+std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
     if (jsonAcc->GetType() == IChunkedArray::EType::SubColumnsArray) {
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsArray>(jsonAcc);
         return accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
@@ -50,8 +50,23 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(
 }
 
 std::optional<TFetchingInfo> TGetJsonPath::BuildFetchTask(
-    const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const {
-    resources->
+    const ui32 columnId, const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const {
+    AFL_VERIFY(input.size() == 2 && input.front().GetColumnId() == columnId);
+    auto description = BuildDescription(input, resources).DetachResult();
+    if (!description.GetInputAccessor()) {
+        const std::vector<TString> subColumns = { TString(description.GetJsonPath().data(), description.GetJsonPath().size()) };
+        return TFetchingInfo::BuildSubColumnsRestore(subColumns);
+    } else if (description.GetInputAccessor()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsArray) {
+        return std::nullopt;
+    } else if (description.GetInputAccessor()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
+        auto arr = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(description.GetInputAccessor());
+        if (arr->NeedFetch(description.GetJsonPath())) {
+            const std::vector<TString> subColumns = { TString(description.GetJsonPath().data(), description.GetJsonPath().size()) };
+            return TFetchingInfo::BuildSubColumnsRestore(subColumns);
+        }
+        return std::nullopt;
+    }
+    return std::nullopt;
 }
 
 }   // namespace NKikimr::NArrow::NSSA

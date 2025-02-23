@@ -28,7 +28,8 @@ namespace NKikimr::NOlap {
 
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
+    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const TSchemaInitializationData& schema,
+    const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
@@ -38,7 +39,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , LastPortion(0)
     , LastGranule(0) {
     ActualizationController = std::make_shared<NActualizer::TController>();
-    RegisterSchemaVersion(snapshot, presetId, schema);
+    RegisterSchemaVersion(snapshot, schema);
 }
 
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
@@ -88,7 +89,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     }
 }
 
-void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) {
+void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) {
     AFL_VERIFY(VersionedIndex.IsEmpty() || schema.GetVersion() >= VersionedIndex.GetLastSchema()->GetVersion())("empty", VersionedIndex.IsEmpty())("current", schema.GetVersion())(
                                             "last", VersionedIndex.GetLastSchema()->GetVersion());
 
@@ -102,10 +103,10 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
     }
     AFL_VERIFY(indexInfoOptional);
-    RegisterSchemaVersion(snapshot, presetId, std::move(*indexInfoOptional));
+    RegisterSchemaVersion(snapshot, schema.GetPresetId(), std::move(*indexInfoOptional));
 }
 
-void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) {
+void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) {
     AFL_VERIFY(!VersionedIndex.IsEmpty());
 
     ui64 version = schema.GetVersion();
@@ -133,7 +134,7 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
     }
 
     AFL_VERIFY(indexInfoOptional);
-    VersionedIndex.AddIndex(snapshot, SchemaObjectsCache->UpsertIndexInfo(presetId, std::move(*indexInfoOptional)));
+    VersionedIndex.AddIndex(snapshot, SchemaObjectsCache->UpsertIndexInfo(schema.GetPresetId(), std::move(*indexInfoOptional)));
 }
 
 std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) {

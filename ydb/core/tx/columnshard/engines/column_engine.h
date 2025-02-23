@@ -90,6 +90,7 @@ protected:
 public:
     class TSchemaInitializationData {
     private:
+        const ui64 PresetId;
         YDB_READONLY_DEF(std::optional<NKikimrSchemeOp::TColumnTableSchema>, Schema);
         YDB_READONLY_DEF(std::optional<NKikimrSchemeOp::TColumnTableSchemaDiff>, Diff);
 
@@ -99,20 +100,18 @@ public:
             return *Schema;
         }
 
-        TSchemaInitializationData(
-            const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema, const std::optional<NKikimrSchemeOp::TColumnTableSchemaDiff>& diff)
-            : Schema(schema)
-            , Diff(diff) {
-            AFL_VERIFY(Schema || Diff);
-        }
-
-        TSchemaInitializationData(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
+        TSchemaInitializationData(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info)
+            : PresetId(info.GetId()) {
             if (info.HasSchema()) {
                 Schema = info.GetSchema();
             }
             if (info.HasDiff()) {
                 Diff = info.GetDiff();
             }
+        }
+
+        ui64 GetPresetId() const {
+            return PresetId;
         }
 
         ui64 GetVersion() const {
@@ -158,8 +157,8 @@ public:
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& info) = 0;
-    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) = 0;
-    virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) = 0;
+    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) = 0;
+    virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) = 0;
 
     virtual ui64 MemoryUsage() const {
         return 0;

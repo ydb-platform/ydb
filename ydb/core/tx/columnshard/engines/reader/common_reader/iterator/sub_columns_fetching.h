@@ -43,7 +43,6 @@ private:
     THashMap<TString, TSubColumnChunkRestoreInfo> Chunks;
     YDB_ACCESSOR_DEF(std::optional<TBlobRange>, HeaderRange);
     std::shared_ptr<NArrow::NAccessor::TSubColumnsPartialArray> PartialArray;
-    YDB_READONLY(bool, NeedToAddResource, false);
     YDB_READONLY_DEF(TBlobRange, FullChunkRange);
     YDB_ACCESSOR_DEF(std::optional<TBlobRange>, OthersReadData);
     YDB_READONLY_DEF(std::optional<TString>, OthersBlobs);
@@ -115,7 +114,6 @@ public:
         AFL_VERIFY(!!HeaderRange);
         AFL_VERIFY(!PartialArray);
         HeaderRange = std::nullopt;
-        NeedToAddResource = true;
         PartialArray = NArrow::NAccessor::NSubColumns::TConstructor::BuildPartialReader(blob, ChunkExternalInfo).DetachResult();
     }
 
@@ -123,7 +121,6 @@ public:
         const ui32 columnId, const ui32 positionStart, const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>& resources) {
         AFL_VERIFY(!HeaderRange);
         AFL_VERIFY(!PartialArray);
-        NeedToAddResource = false;
         auto columnAccessor = resources->GetAccessorVerified(columnId);
         auto partialArray = columnAccessor->GetArraySlow(positionStart, columnAccessor);
         AFL_VERIFY(partialArray.GetArray()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
@@ -164,16 +161,9 @@ private:
 
     std::vector<TColumnChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
+    bool NeedToAddResource = false;
     virtual void DoOnDataCollected() override {
-        std::optional<bool> needToAddResource;
-        for (auto&& i : ColumnChunks) {
-            if (!needToAddResource) {
-                needToAddResource = i.GetNeedToAddResource();
-            } else {
-                AFL_VERIFY(needToAddResource == i.GetNeedToAddResource());
-            }
-        }
-        if (*needToAddResource) {
+        if (NeedToAddResource) {
             NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
             for (auto&& i : ColumnChunks) {
                 i.Finish(nullptr);
@@ -241,14 +231,14 @@ private:
         auto itFilter = cFilter.GetIterator(false, Source->GetRecordsCount());
         bool itFinished = false;
 
-        const bool hasColumn = Resources->HasColumn(GetColumnId());
+        NeedToAddResource = !Resources->HasColumn(GetColumnId());
         ui32 posCurrent = 0;
         for (auto&& c : columnChunks) {
             AFL_VERIFY(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 const TBlobRange range = Source->RestoreBlobRange(c->BlobRange);
                 ColumnChunks.emplace_back(range, ChunkExternalInfo.GetSubset(c->GetMeta().GetRecordsCount()));
-                if (hasColumn) {
+                if (!NeedToAddResource) {
                     ColumnChunks.back().InitPartialReader(GetColumnId(), posCurrent, Resources);
                 }
                 ColumnChunks.back().InitReading(reading, SubColumns);

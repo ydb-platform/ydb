@@ -193,19 +193,51 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
     return GetColumnsSchema({ columnId });
 }
 
-void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {
+namespace {
+    NKikimrSchemeOp::TCompactionLevelConstructorContainer GetZeroLevelProto(std::optional<TDuration> duration, std::optional<ui64> BlobsSize, std::optional<ui64> portionsCount) {
+        NKikimrSchemeOp::TCompactionLevelConstructorContainer level;
+        level.SetClassName(("Zero"));
+        auto* zero = level.MutableZeroLevel();
+        if (duration) {
+            zero->SetPortionsLiveDurationSeconds(duration->Seconds());
+        }
+        if (BlobsSize) {
+            zero->SetExpectedBlobsSize(*BlobsSize);
+        }
+        if (portionsCount) {
+            zero->SetPortionsCountAvailable(*portionsCount);
+        }
+        return level;
+    }
+    NKikimrSchemeOp::TCompactionPlannerConstructorContainer GetDefaultCompactionPlannerConstructorProto(bool isStandalone) {
+        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLCOptimizer optimizer;
+        if (isStandalone) {
+            *optimizer.AddLevels() = GetZeroLevelProto(TDuration::Seconds(60), 1 << 20, std::nullopt);
+            *optimizer.AddLevels() = GetZeroLevelProto(std::nullopt, 1 << 20, std::nullopt);
+            *optimizer.AddLevels() = GetZeroLevelProto(std::nullopt, std::nullopt, std::nullopt);
+        } else {
+            *optimizer.AddLevels() = GetZeroLevelProto(std::nullopt, 1 << 20, std::nullopt);
+            *optimizer.AddLevels() = GetZeroLevelProto(std::nullopt, std::nullopt, std::nullopt);
+        }
+        NKikimrSchemeOp::TCompactionPlannerConstructorContainer compactionPlannerConstructor;
+        compactionPlannerConstructor.SetClassName("lc-buckets");
+        return compactionPlannerConstructor;
+    }
+} // namespace
+
+void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto, const bool isStandalone) {
     TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Options");
     SchemeNeedActualization = optionsProto.GetSchemeNeedActualization();
     if (optionsProto.HasScanReaderPolicyName()) {
         ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
     }
-    if (optionsProto.HasCompactionPlannerConstructor()) {
-        auto container =
-            NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(optionsProto.GetCompactionPlannerConstructor());
-        CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
-    } else {
-        CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
-    }
+
+    const auto& compactionPlannerContructorProto = optionsProto.HasCompactionPlannerConstructor()
+        ? optionsProto.GetCompactionPlannerConstructor()
+        : GetDefaultCompactionPlannerConstructorProto(isStandalone);
+    auto container = NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(compactionPlannerContructorProto);
+    CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
+
     if (optionsProto.HasMetadataManagerConstructor()) {
         auto container =
             NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(optionsProto.GetMetadataManagerConstructor());
@@ -242,10 +274,9 @@ TConclusion<std::shared_ptr<TColumnFeatures>> TIndexInfo::CreateColumnFeatures(c
 }
 
 bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
-    const std::shared_ptr<TSchemaObjectsCache>& cache) {
+    const std::shared_ptr<TSchemaObjectsCache>& cache, const bool isStandlalone) {
     AFL_VERIFY(cache);
-
-    DeserializeOptionsFromProto(schema.GetOptions());
+    DeserializeOptionsFromProto(schema.GetOptions(), isStandlalone);
 
     if (schema.HasDefaultCompression()) {
         if (!DeserializeDefaultCompressionFromProto(schema.GetDefaultCompression())) {
@@ -326,19 +357,19 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
 }
 
 std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema,
-    const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache) {
-    TIndexInfo result;
-    if (!result.DeserializeFromProto(schema, operators, cache)) {
+    const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache, const bool isStandlalone) {
+    TIndexInfo result{};
+    if (!result.DeserializeFromProto(schema, operators, cache, isStandlalone)) {
         return std::nullopt;
     }
     return result;
 }
 
 std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& diff, const TIndexInfo& prevSchema,
-    const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache) {
+    const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache, const bool isStandalone) {
     TSchemaDiffView diffView;
     diffView.DeserializeFromProto(diff).Validate();
-    return TIndexInfo(prevSchema, diffView, operators, cache);
+    return TIndexInfo(prevSchema, diffView, operators, cache, isStandalone);
 }
 
 std::vector<std::shared_ptr<arrow::Field>> TIndexInfo::MakeArrowFields(
@@ -508,7 +539,7 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexV
 }
 
 TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, const std::shared_ptr<IStoragesManager>& operators,
-    const std::shared_ptr<TSchemaObjectsCache>& cache) {
+    const std::shared_ptr<TSchemaObjectsCache>& cache, const bool isStandalone) {
     {
         std::vector<std::shared_ptr<arrow::Field>> fields;
         const auto addFromOriginal = [&](const ui32 index) {
@@ -567,7 +598,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
         }
     }
 
-    DeserializeOptionsFromProto(diff.GetSchemaOptions());
+    DeserializeOptionsFromProto(diff.GetSchemaOptions(), isStandalone);
     Version = diff.GetVersion();
     PrimaryKey = original.PrimaryKey;
     if (diff.GetCompressionOptions()) {
@@ -630,10 +661,15 @@ void TIndexInfo::Validate() const {
     }
 }
 
-TIndexInfo TIndexInfo::BuildDefault() {
-    TIndexInfo result;
-    result.CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+
+TIndexInfo TIndexInfo::BuildDefault(const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<ui32>& pkIds, const bool isStandalone) {
+    auto compactionPlanner = NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(GetDefaultCompactionPlannerConstructorProto(isStandalone));
+    TIndexInfo result{};
+    result.CompactionPlannerConstructor = compactionPlanner.DetachResult().GetObjectPtrVerified();
     result.MetadataManagerConstructor = NDataAccessorControl::IManagerConstructor::BuildDefault();
+    result.PKColumnIds = pkIds;
+    result.SetAllKeys(operators, columns);
+    result.Validate();
     return result;
 }
 

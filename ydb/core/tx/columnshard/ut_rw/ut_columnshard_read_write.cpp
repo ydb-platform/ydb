@@ -2318,7 +2318,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         pk[0].SetType(TTypeInfo(typeId));
         schema[1].SetType(TTypeInfo(typeId));
         pk[1].SetType(TTypeInfo(typeId));
-        TestTableDescription table{ .Schema = schema, .Pk = pk };
+        TestTableDescription table{ .Schema = schema, .Pk = pk, .UseLegacyCompaction = true };
         TestCompactionSplitGranuleImpl(table, opts);
     }
 

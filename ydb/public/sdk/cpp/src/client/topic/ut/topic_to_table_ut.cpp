@@ -94,7 +94,7 @@ protected:
                                TDuration stabilizationWindow,
                                ui64 downUtilizationPercent,
                                ui64 upUtilizationPercent);
-    void SetPartitionWriteSpeed(const TString& topicPath,
+    void SetPartitionWriteSpeed(const std::string& topicPath,
                                 size_t bytesPerSeconds);
 
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
@@ -513,7 +513,7 @@ void TFixture::AlterAutoPartitioning(const TString& topicPath,
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void TFixture::SetPartitionWriteSpeed(const TString& topicPath,
+void TFixture::SetPartitionWriteSpeed(const std::string& topicPath,
                                       size_t bytesPerSeconds)
 {
     NTopic::TTopicClient client(GetDriver());
@@ -3075,7 +3075,7 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
 Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions, TFixture)
 {
     // The test verifies the simultaneous execution of several transactions. There is a topic `topic_A` and
-    // it contains a `PARTITIONS_COUNT' of partitions. In each transaction, the test writes to all partitions.                                                                                                          
+    // it contains a `PARTITIONS_COUNT' of partitions. In each transaction, the test writes to all partitions.
     // The size of the messages is chosen so that only large blobs are recorded in the transaction and there
     // are no records in the head. Thus, we verify that transaction bundling is working correctly.
 
@@ -3170,8 +3170,8 @@ Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo, TFixture)
             sourceId += "_";
             sourceId += ToString(j);
 
-            for (size_t k = 0, count = RandomNumber<size_t>(20); k < count; ++k) {
-                const TString data(RandomNumber<size_t>(1'000) + 100, 'x');
+            for (size_t k = 0, count = RandomNumber<size_t>(20) + 1; k < count; ++k) {
+                const std::string data(RandomNumber<size_t>(1'000) + 100, 'x');
                 NTopic::TWriteMessage params(data);
                 params.Tx(tx);
 

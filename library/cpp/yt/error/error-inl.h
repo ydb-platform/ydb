@@ -55,14 +55,14 @@ constexpr bool TErrorCode::operator == (TErrorCode rhs) const
 namespace NDetail {
 
 template <class... TArgs>
-TString FormatErrorMessage(TStringBuf format, TArgs&&... args)
+std::string FormatErrorMessage(TStringBuf format, TArgs&&... args)
 {
     return Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...);
 }
 
-inline TString FormatErrorMessage(TStringBuf format)
+inline std::string FormatErrorMessage(TStringBuf format)
 {
-    return TString(format);
+    return std::string(format);
 }
 
 } // namespace NDetail

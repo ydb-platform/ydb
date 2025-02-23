@@ -83,8 +83,8 @@ public:
     { };
     static constexpr TDisableFormat DisableFormat = {};
 
-    TErrorOr(TString message, TDisableFormat);
-    TErrorOr(TErrorCode code, TString message, TDisableFormat);
+    TErrorOr(std::string message, TDisableFormat);
+    TErrorOr(TErrorCode code, std::string message, TDisableFormat);
 
     template <class... TArgs>
     explicit TErrorOr(
@@ -110,8 +110,8 @@ public:
     TErrorCode GetNonTrivialCode() const;
     THashSet<TErrorCode> GetDistinctNonTrivialErrorCodes() const;
 
-    const TString& GetMessage() const;
-    TError& SetMessage(TString message);
+    const std::string& GetMessage() const;
+    TError& SetMessage(std::string message);
 
     bool HasOriginAttributes() const;
     TProcessId GetPid() const;
@@ -197,7 +197,7 @@ public:
     //! In order to prevent core -> re2 dependency, implementation belongs to a separate library
     //! yt/yt/library/error_skeleton. Calling this method without PEERDIR'ing implementation
     //! results in an exception.
-    TString GetSkeleton() const;
+    std::string GetSkeleton() const;
 
     TError& operator <<= (const TErrorAttribute& attribute) &;
     TError& operator <<= (const std::vector<TErrorAttribute>& attributes) &;
@@ -281,7 +281,7 @@ public:
     const char* what() const noexcept override;
 
 private:
-    mutable TString CachedWhat_;
+    mutable std::string CachedWhat_;
 };
 
 // Make these templates to avoid type erasure during throw.

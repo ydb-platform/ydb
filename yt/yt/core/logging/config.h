@@ -166,9 +166,9 @@ public:
     THashMap<TString, i64> CategoryRateLimits;
 
     //! Messages with these prefixes will not be logged regardless of the configured levels.
-    std::vector<TString> SuppressedMessages;
+    std::vector<std::string> SuppressedMessages;
     //! Overrides levels of messages with a matching prefix .
-    THashMap<TString, ELogLevel> MessageLevelOverrides;
+    THashMap<std::string, ELogLevel> MessageLevelOverrides;
 
     TDuration RequestSuppressionTimeout;
 
@@ -224,8 +224,8 @@ public:
     std::optional<std::vector<TRuleConfigPtr>> Rules;
     std::optional<THashMap<TString, i64>> CategoryRateLimits;
 
-    std::optional<std::vector<TString>> SuppressedMessages;
-    THashMap<TString, ELogLevel> MessageLevelOverrides;
+    std::optional<std::vector<std::string>> SuppressedMessages;
+    THashMap<std::string, ELogLevel> MessageLevelOverrides;
 
     std::optional<TDuration> RequestSuppressionTimeout;
 

@@ -548,6 +548,46 @@ void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& call
     }
 }
 
+class TErrorHandlingPolicy {
+private:
+    static std::optional<double> DetectExtremeDouble(const std::string_view token) {
+        const ui64 mantissaPos = [&token]() {
+            if (const ui64 pos = token.find('e'); pos != std::string_view::npos) {
+                return pos;
+            }
+            if (const ui64 pos = token.find('E'); pos != std::string_view::npos) {
+                return pos;
+            }
+            return std::string_view::npos;
+        }();
+        if (mantissaPos == std::string_view::npos) {
+            return std::nullopt;
+        }
+
+        const double expectedValue = token.starts_with('-') ? std::numeric_limits<double>::lowest() : std::numeric_limits<double>::max();
+        const ui64 precision = mantissaPos - 1 - (token.starts_with('-') ? 1 : 0);
+        std::ostringstream ss;
+        ss << std::setprecision(precision) << expectedValue;
+        if (ss.str() == token) {
+            return expectedValue;
+        }
+
+        return std::nullopt;
+    }
+
+public:
+    [[nodiscard]] static simdjson::error_code OnDoubleError(
+        const simdjson::error_code status, const std::string_view token, TBinaryJsonCallbacks& callbacks) {
+        if (status == simdjson::NUMBER_ERROR) {
+            if (const auto value = DetectExtremeDouble(token)) {
+                callbacks.OnDouble(*value);
+                return simdjson::SUCCESS;
+            }
+        }
+        return status;
+    }
+};
+
 template <typename TOnDemandValue>
     requires std::is_same_v<TOnDemandValue, simdjson::ondemand::value> || std::is_same_v<TOnDemandValue, simdjson::ondemand::document>
 [[nodiscard]] simdjson::error_code SimdJsonToJsonIndex(TOnDemandValue& value, TBinaryJsonCallbacks& callbacks) {
@@ -573,7 +613,10 @@ template <typename TOnDemandValue>
             switch (value.get_number_type()) {
                 case simdjson::builtin::number_type::floating_point_number: {
                     double v;
-                    RETURN_IF_NOT_SUCCESS(value.get(v));
+                    if (const auto& error = value.get(v); Y_UNLIKELY(error != simdjson::SUCCESS)) {
+                        RETURN_IF_NOT_SUCCESS(TErrorHandlingPolicy::OnDoubleError(error, value.raw_json_token(), callbacks));
+                        break;
+                    };
                     callbacks.OnDouble(v);
                     break;
                 }

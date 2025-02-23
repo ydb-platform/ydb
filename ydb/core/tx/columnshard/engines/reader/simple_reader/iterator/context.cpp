@@ -80,7 +80,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     }
     {
         result->SetBranchName("exclusive");
-        TColumnsSet columnsFetch = *GetEFColumns();
+        TColumnsSet columnsFetch;
         if (needFilterDeletion) {
             columnsFetch = columnsFetch + *GetDeletionColumns();
         }

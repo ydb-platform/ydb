@@ -186,7 +186,8 @@ private:
         }
     }
 
-    virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
+    virtual void DoOnDataReceived(
+        TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
         AFL_VERIFY(ColumnChunks.size());
         AFL_VERIFY(!!StorageId);
         TBlobsAction blobsAction(Source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);

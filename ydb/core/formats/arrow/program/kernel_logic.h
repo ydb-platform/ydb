@@ -18,6 +18,9 @@ public:
 
     virtual TString GetClassName() const = 0;
 
+    virtual std::optional<TFetchingInfo> BuildFetchTask(
+        const ui32 columnId, const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
+
     TConclusion<bool> Execute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const {
         if (!resources) {
@@ -33,11 +36,72 @@ public:
         return "JsonValue";
     }
 private:
+    class TDescription {
+    private:
+        std::shared_ptr<NAccessor::IChunkedArray> InputAccessor;
+        std::string_view JsonPath;
+    public:
+        TDescription(const std::shared_ptr<NAccessor::IChunkedArray>& inputAccessor, const std::string_view jsonPath)
+            : InputAccessor(inputAccessor)
+            , JsonPath(jsonPath)
+        {
+
+        }
+
+        const std::shared_ptr<NAccessor::IChunkedArray>& GetInputAccessor() const {
+            return InputAccessor;
+        }
+        std::string_view GetJsonPath() const {
+            return JsonPath;
+        }
+    };
+
+    TConclusion<TDescription> BuildDescription(
+        const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const {
+        if (input.size() != 2) {
+            return TConclusionStatus::Fail("incorrect parameters count (2 expected) for json path extraction");
+        }
+        auto jsonPathScalar = resources->GetConstantScalarOptional(input[1].GetColumnId());
+        if (!jsonPathScalar) {
+            return TConclusionStatus::Fail("no data for json path (cannot find parameter)");
+        }
+        if (jsonPathScalar->type->id() != arrow::utf8()->id()) {
+            return TConclusionStatus::Fail("incorrect json path (have to be utf8)");
+        }
+        const auto buffer = std::static_pointer_cast<arrow::StringScalar>(jsonPathScalar)->value;
+        std::string_view svPath((const char*)buffer->data(), buffer->size());
+        if (!svPath.starts_with("$.") || svPath.size() == 2) {
+            return TConclusionStatus::Fail("incorrect path format: have to be as '$.**...**'");
+        }
+        svPath = svPath.substr(2);
+
+        return TDescription(resources->GetAccessorOptional(input.front().GetColumnId()), svPath);
+    }
+
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
 
     static const inline TFactory::TRegistrator<TGetJsonPath> Registrator = TFactory::TRegistrator<TGetJsonPath>(GetClassNameStatic());
+
+    virtual std::optional<TFetchingInfo> BuildFetchTask(
+        const ui32 columnId, const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const override {
+        AFL_VERIFY(input.size() == 2 && input.front() == columnId);
+        auto description = BuildDescription(input, resources).DetachResult();
+        if (!description.GetInputAccessor()) {
+            const std::vector<TString> subColumns = { TString(description.GetJsonPath().data(), description.GetJsonPath().size()) };
+            return TFetchingInfo::BuildSubColumnsRestore(subColumns);
+        } else if (description.GetInputAccessor()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsArray) {
+            return std::nullopt;
+        } else if (description.GetInputAccessor()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
+            auto arr = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(description.GetInputAccessor());
+            if (arr->NeedFetch(description.GetJsonPath())) {
+                const std::vector<TString> subColumns = { TString(description.GetJsonPath().data(), description.GetJsonPath().size()) };
+                return TFetchingInfo::BuildSubColumnsRestore(subColumns);
+            }
+            return std::nullopt;
+        }
+    }
 
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const override;

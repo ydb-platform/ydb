@@ -69,6 +69,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
                 case IChunkedArray::EType::SerializedChunkedArray:
                 case IChunkedArray::EType::CompositeChunkedArray:
                 case IChunkedArray::EType::SubColumnsArray:
+                case IChunkedArray::EType::SubColumnsPartialArray:
                 case IChunkedArray::EType::ChunkedArray:
                     AFL_VERIFY(false);
             }

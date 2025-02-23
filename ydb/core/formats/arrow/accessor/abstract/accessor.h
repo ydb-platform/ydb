@@ -43,7 +43,8 @@ public:
         SerializedChunkedArray,
         CompositeChunkedArray,
         SparsedArray,
-        SubColumnsArray
+        SubColumnsArray,
+        SubColumnsPartialArray
     };
 
     class TCommonChunkAddress {
@@ -423,6 +424,7 @@ public:
             case EType::SparsedArray:
             case EType::ChunkedArray:
             case EType::SubColumnsArray:
+            case EType::SubColumnsPartialArray:
             case EType::Array:
                 return true;
             case EType::Undefined:

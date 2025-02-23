@@ -151,6 +151,11 @@ TBlobRange::TBlobRange(const TUnifiedBlobId& blobId /*= TUnifiedBlobId()*/, ui32
     }
 }
 
+TBlobRange TBlobRange::BuildSubset(const ui32 offset, const ui32 size) const {
+    AFL_VERIFY(offset + size < Size)("offset", offset)("req_size", size)("own_size", Size);
+    return TBlobRange(BlobId, Offset + offset, size);
+}
+
 NKikimr::TConclusionStatus TBlobRangeLink16::DeserializeFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto) {
     BlobIdx = proto.GetBlobIdx();
     Offset = proto.GetOffset();

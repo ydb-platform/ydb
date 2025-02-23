@@ -31,6 +31,14 @@ bool IResourceProcessor::DoHasExecutionData(const ui32 columnId, const std::shar
     return resources->HasColumn(columnId);
 }
 
+std::optional<TFetchingInfo> IResourceProcessor::BuildFetchTask(
+    const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const {
+    if (resources->HasColumn(columnId)) {
+        return std::nullopt;
+    }
+    return TFetchingInfo::BuildFullRestore();
+}
+
 NJson::TJsonValue TResourceProcessorStep::DebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     if (ColumnsToFetch.size()) {

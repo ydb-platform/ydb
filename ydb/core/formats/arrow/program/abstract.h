@@ -167,6 +167,23 @@ enum class EProcessorType {
     Aggregation
 };
 
+class TFetchingInfo {
+private:
+    YDB_READONLY(bool, FullRestore, true);
+    YDB_READONLY_DEF(std::vector<TString>, SubColumns);
+
+public:
+    static TFetchingInfo BuildFullRestore() {
+        return TFetchingInfo();
+    }
+    static TFetchingInfo BuildSubColumnsRestore(const std::vector<TString>& subColumns) {
+        TFetchingInfo result;
+        result.FullRestore = false;
+        result.SubColumns = subColumns;
+        return result;
+    }
+};
+
 class IResourceProcessor {
 private:
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, Input);
@@ -178,9 +195,10 @@ private:
     virtual NJson::TJsonValue DoDebugJson() const {
         return NJson::JSON_MAP;
     }
-    virtual bool DoHasExecutionData(const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const;
 
 public:
+    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const;
+
     virtual bool IsAggregation() const = 0;
 
     virtual ~IResourceProcessor() = default;
@@ -190,10 +208,6 @@ public:
     }
 
     NJson::TJsonValue DebugJson() const;
-
-    bool HasExecutionData(const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const {
-        return DoHasExecutionData(columnId, resources);
-    }
 
     ui32 GetOutputColumnIdOnce() const {
         AFL_VERIFY(Output.size() == 1)("size", Output.size());

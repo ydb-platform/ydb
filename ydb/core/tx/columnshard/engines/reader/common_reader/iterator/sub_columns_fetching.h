@@ -44,9 +44,10 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TBlobRange>, HeaderRange);
     std::shared_ptr<NArrow::NAccessor::TSubColumnsPartialArray> PartialArray;
     YDB_READONLY(bool, NeedToAddResource, false);
-    const TBlobRange FullChunkRange;
+    YDB_READONLY_DEF(TBlobRange, FullChunkRange);
     YDB_ACCESSOR_DEF(std::optional<TBlobRange>, OthersReadData);
     YDB_READONLY_DEF(std::optional<TString>, OthersBlobs);
+    YDB_ACCESSOR_DEF(TString, SavedBlob);
 
 public:
     void SetOthersBlob(const TString& blob) {
@@ -194,19 +195,23 @@ private:
         auto reading = blobsAction.GetReading(*StorageId);
         for (auto&& i : ColumnChunks) {
             if (!!i.GetHeaderRange()) {
-                auto blob = blobs.Extract(*StorageId, *i.GetHeaderRange());
+                const TString readBlob = blobs.Extract(*StorageId, *i.GetHeaderRange());
+                const TString blob = i.GetSavedBlob() ? (i.GetSavedBlob() + readBlob) : readBlob;
                 const auto fullHeader = NArrow::NAccessor::NSubColumns::TConstructor::GetFullHeaderSize(blob);
-                if (!fullHeader.IsFail() && *fullHeader <= i.GetHeaderRange()->GetSize()) {
+                if (!fullHeader.IsFail() && *fullHeader <= blob.size()) {
+                    i.SetSavedBlob(Default<TString>());
                     i.InitPartialReader(blob);
                     i.InitReading(reading, SubColumns);
                 } else {
+                    i.SetSavedBlob(blob);
                     ui32 size = 0;
                     if (fullHeader.IsFail()) {
                         size = NArrow::NAccessor::NSubColumns::TConstructor::GetHeaderSize(blob).DetachResult();
                     } else {
                         size = *fullHeader;
                     }
-                    const TBlobRange headerRange = i.GetHeaderRange()->ExtendRange(size);
+                    AFL_VERIFY(blob.size() < size)("blob", blob.size())("size", size);
+                    const TBlobRange headerRange = i.GetFullChunkRange().BuildSubset(blob.size(), size - blob.size());
                     reading->AddRange(headerRange);
                     i.SetHeaderRange(headerRange);
                 }

@@ -1,6 +1,8 @@
 #include "abstract.h"
 #include "collection.h"
 
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow::NSSA {
@@ -29,10 +31,23 @@ TConclusionStatus IResourceProcessor::Execute(const std::shared_ptr<TAccessorsCo
 
 std::optional<TFetchingInfo> IResourceProcessor::BuildFetchTask(
     const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const {
-    if (resources->HasColumn(columnId)) {
-        return std::nullopt;
+    auto acc = resources->GetAccessorOptional(columnId);
+    if (!acc) {
+        return TFetchingInfo::BuildFullRestore();
     }
-    return TFetchingInfo::BuildFullRestore();
+    if (acc->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
+        resources->Remove({ columnId });
+        return TFetchingInfo::BuildFullRestore();
+    } else if (acc->GetType() == NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
+        auto accComposite = std::static_pointer_cast<NAccessor::TCompositeChunkedArray>(acc);
+        for (auto it = NAccessor::TCompositeChunkedArray::BuildIterator(accComposite); it.IsValid(); it.Next()) {
+            if (it.GetArray()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
+                resources->Remove({ columnId });
+                return TFetchingInfo::BuildFullRestore();
+            }
+        }
+    }
+    return std::nullopt;
 }
 
 NJson::TJsonValue TResourceProcessorStep::DebugJson() const {

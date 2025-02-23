@@ -46,19 +46,25 @@ private:
     YDB_READONLY(bool, NeedToAddResource, false);
     const TBlobRange FullChunkRange;
     YDB_ACCESSOR_DEF(std::optional<TBlobRange>, OthersReadData);
+    YDB_READONLY_DEF(std::optional<TString>, OthersBlobs);
 
 public:
-    void InitOthers(const TString& blob) {
+    void SetOthersBlob(const TString& blob) {
         AFL_VERIFY(!!OthersReadData);
-        PartialArray->InitOthers(blob, ChunkExternalInfo);
-        OthersReadData.reset();
+        OthersReadData = std::nullopt;
+        OthersBlobs = blob;
     }
 
     ui32 GetRecordsCount() const {
         return ChunkExternalInfo.GetRecordsCount();
     }
 
-    void Finish() {
+    void Finish(const std::shared_ptr<NArrow::TColumnFilter>& applyFilter) {
+        if (!!OthersBlobs) {
+            PartialArray->InitOthers(*OthersBlobs, ChunkExternalInfo);
+            OthersBlobs.reset();
+        }
+
         AFL_VERIFY(PartialArray);
         AFL_VERIFY(!HeaderRange);
         AFL_VERIFY(!OthersReadData);
@@ -68,8 +74,13 @@ public:
                 PartialArray->GetHeader().GetField(i.second.GetColumnIdx()), nullptr, 0);
             std::vector<NArrow::NAccessor::TDeserializeChunkedArray::TChunk> chunks = { NArrow::NAccessor::TDeserializeChunkedArray::TChunk(
                 GetRecordsCount(), i.second.GetBlobDataVerified()) };
-            PartialArray->AddColumn(i.first,
-                std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(GetRecordsCount(), columnLoader, std::move(chunks), true));
+            auto arrOriginal =
+                std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(GetRecordsCount(), columnLoader, std::move(chunks), true);
+            if (applyFilter) {
+                PartialArray->AddColumn(i.first, applyFilter->Apply(arrOriginal));
+            } else {
+                PartialArray->AddColumn(i.first, arrOriginal);
+            }
         }
     }
 
@@ -164,13 +175,13 @@ private:
         if (*needToAddResource) {
             NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
             for (auto&& i : ColumnChunks) {
-                i.Finish();
+                i.Finish(nullptr);
                 compositeBuilder.AddChunk(i.GetPartialArray());
             }
             Resources->AddVerified(GetColumnId(), compositeBuilder.Finish());
         } else {
             for (auto&& i : ColumnChunks) {
-                i.Finish();
+                i.Finish(Resources->GetAppliedFilter());
             }
         }
     }
@@ -200,7 +211,7 @@ private:
                 }
             } else {
                 if (!!i.GetOthersReadData()) {
-                    i.InitOthers(blobs.Extract(*StorageId, *i.GetOthersReadData()));
+                    i.SetOthersBlob(blobs.Extract(*StorageId, *i.GetOthersReadData()));
                 }
                 for (auto&& [subColName, chunkData] : i.MutableChunks()) {
                     if (!!chunkData.GetBlobRangeOptional()) {

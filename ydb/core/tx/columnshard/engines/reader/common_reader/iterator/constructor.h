@@ -27,7 +27,9 @@ public:
 
     IKernelFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source)
         : ColumnId(columnId)
-        , Source(source) {
+        , Source(source)
+        , Resources(Source->GetStageData().GetTable()) {
+        AFL_VERIFY(Resources);
     }
 
     void Start(TReadActionsCollection& nextRead) {

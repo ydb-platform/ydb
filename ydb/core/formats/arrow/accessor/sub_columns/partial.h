@@ -21,7 +21,7 @@ public:
 
     const std::shared_ptr<IChunkedArray>& GetAccessorVerified(const ui32 columnId) const {
         auto it = ColumnsData.find(columnId);
-        AFL_VERIFY(it != ColumnsData.end());
+        AFL_VERIFY(it != ColumnsData.end())("id", columnId);
         return it->second;
     }
 
@@ -49,6 +49,7 @@ private:
     TPartialColumnsData PartialColumnsData;
     std::optional<NSubColumns::TOthersData> OthersData;
     NSubColumns::TSettings Settings;
+    TString StoreOthersString;
 
 protected:
     virtual ui32 DoGetNullsCount() const override {

@@ -43,7 +43,6 @@ private:
     }
 
 public:
-
     class TSlicesIterator {
     private:
         const TColumnFilter& Owner;
@@ -52,6 +51,7 @@ public:
         ui32 CurrentStartIndex = 0;
         bool CurrentIsFiltered = false;
         std::vector<ui32>::const_iterator CurrentIterator;
+
     public:
         TSlicesIterator(const TColumnFilter& owner, const std::optional<ui32> start, const std::optional<ui32> count);
 
@@ -84,7 +84,6 @@ public:
         }
 
         bool Next();
-
     };
 
     TSlicesIterator BuildSlicesIterator(const std::optional<ui32> startIndex, const std::optional<ui32> count) const {
@@ -181,7 +180,13 @@ public:
         bool Next(const ui32 size);
     };
 
+    TString DebugString() const;
+
     TIterator GetIterator(const bool reverse, const ui32 expectedSize) const;
+
+    bool CheckSlice(const ui32 offset, const ui32 count) const;
+
+    TColumnFilter Slice(const ui32 offset, const ui32 count) const;
 
     bool empty() const {
         return Filter.empty();

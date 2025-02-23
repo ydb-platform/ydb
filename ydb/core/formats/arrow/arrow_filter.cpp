@@ -707,4 +707,77 @@ ui32 TColumnFilter::GetFilteredCountVerified() const {
     return *result;
 }
 
+TColumnFilter TColumnFilter::Slice(const ui32 offset, const ui32 count) const {
+    AFL_VERIFY(count);
+    if (IsTotalAllowFilter()) {
+        return TColumnFilter::BuildAllowFilter();
+    }
+    if (IsTotalDenyFilter()) {
+        return TColumnFilter::BuildDenyFilter();
+    }
+    AFL_VERIFY(offset + count <= GetRecordsCountVerified())("offset", offset)("count", count)("records_count", GetRecordsCountVerified());
+    std::vector<ui32> chunks;
+    ui32 index = 0;
+    bool currentValue = GetStartValue();
+    for (auto&& i : Filter) {
+        const ui32 nextIndex = index + i;
+        if (index >= offset + count) {
+            TColumnFilter result = TColumnFilter::BuildAllowFilter();
+            result.LastValue = !currentValue;
+            result.Filter = std::move(chunks);
+            result.RecordsCount = count;
+            return result;
+        } else if (nextIndex > offset) {
+            chunks.emplace_back(std::min(nextIndex, offset + count) - std::max(index, offset));
+        }
+        currentValue = !currentValue;
+        index = nextIndex;
+    }
+    AFL_VERIFY(index == offset + count);
+    TColumnFilter result = TColumnFilter::BuildAllowFilter();
+    result.LastValue = !currentValue;
+    result.Filter = std::move(chunks);
+    result.RecordsCount = count;
+    return result;
+}
+
+bool TColumnFilter::CheckSlice(const ui32 offset, const ui32 count) const {
+    if (IsTotalAllowFilter()) {
+        return true;
+    }
+    if (IsTotalDenyFilter()) {
+        return false;
+    }
+    ui32 index = 0;
+    bool currentValue = GetStartValue();
+    for (auto&& i : Filter) {
+        const ui32 nextIndex = index + i;
+        if (index >= offset + count) {
+            return false;
+        } else if (nextIndex > offset) {
+            if (currentValue) {
+                return true;
+            }
+        }
+        currentValue = !currentValue;
+        index = nextIndex;
+    }
+    AFL_VERIFY(index == offset + count);
+    return false;
+}
+
+TString TColumnFilter::DebugString() const {
+    TStringBuilder sb;
+    sb << "{" << GetStartValue() << "}";
+    sb << "[";
+    for (ui32 i = 0; i < Filter.size(); ++i) {
+        sb << Filter[i];
+        if (i + 1 < Filter.size()) {
+            sb << ",";
+        }
+    }
+    sb << "]";
+    return sb;
+}
+
 }   // namespace NKikimr::NArrow

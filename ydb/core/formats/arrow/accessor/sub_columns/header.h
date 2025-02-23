@@ -86,11 +86,11 @@ public:
         , HeaderSize(headerSize) {
         ColumnsSize = 0;
         for (ui32 i = 0; i < (ui32)AddressesProto.GetKeyColumns().size(); ++i) {
-            ColumnsSize += proto.GetKeyColumns(i).GetSize();
+            ColumnsSize += AddressesProto.GetKeyColumns(i).GetSize();
         }
         OthersSize = 0;
         for (ui32 i = 0; i < (ui32)AddressesProto.GetOtherColumns().size(); ++i) {
-            OthersSize += proto.GetOtherColumns(i).GetSize();
+            OthersSize += AddressesProto.GetOtherColumns(i).GetSize();
         }
     }
 

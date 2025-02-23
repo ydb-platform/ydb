@@ -53,18 +53,40 @@ std::optional<TFetchingInfo> TGetJsonPath::BuildFetchTask(
     const ui32 columnId, const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const {
     AFL_VERIFY(input.size() == 2 && input.front().GetColumnId() == columnId);
     auto description = BuildDescription(input, resources).DetachResult();
+    const std::vector<TString> subColumns = { TString(description.GetJsonPath().data(), description.GetJsonPath().size()) };
     if (!description.GetInputAccessor()) {
-        const std::vector<TString> subColumns = { TString(description.GetJsonPath().data(), description.GetJsonPath().size()) };
         return TFetchingInfo::BuildSubColumnsRestore(subColumns);
     } else if (description.GetInputAccessor()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsArray) {
         return std::nullopt;
     } else if (description.GetInputAccessor()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
         auto arr = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(description.GetInputAccessor());
         if (arr->NeedFetch(description.GetJsonPath())) {
-            const std::vector<TString> subColumns = { TString(description.GetJsonPath().data(), description.GetJsonPath().size()) };
             return TFetchingInfo::BuildSubColumnsRestore(subColumns);
         }
         return std::nullopt;
+    } else if (description.GetInputAccessor()->GetType() == NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
+        auto arr = std::static_pointer_cast<NAccessor::TCompositeChunkedArray>(description.GetInputAccessor());
+        std::optional<bool> needRestore;
+        for (auto it = NAccessor::TCompositeChunkedArray::BuildIterator(arr); it.IsValid(); it.Next()) {
+            bool needRestoreLocal = false;
+            if (it.GetArray()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsArray) {
+                needRestoreLocal = false;
+            } else if (it.GetArray()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
+                auto arr = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(it.GetArray());
+                needRestoreLocal = arr->NeedFetch(description.GetJsonPath());
+            } else {
+                needRestoreLocal = false;
+            }
+            if (!needRestore) {
+                needRestore = needRestoreLocal;
+            } else {
+                AFL_VERIFY(needRestoreLocal == needRestore);
+            }
+        }
+        AFL_VERIFY(!!needRestore);
+        if (*needRestore) {
+            return TFetchingInfo::BuildSubColumnsRestore(subColumns);
+        }
     }
     return std::nullopt;
 }

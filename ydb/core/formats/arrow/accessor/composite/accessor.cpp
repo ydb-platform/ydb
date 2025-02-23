@@ -1,4 +1,6 @@
 #include "accessor.h"
+
+#include <ydb/core/formats/arrow/arrow_filter.h>
 namespace NKikimr::NArrow::NAccessor {
 
 namespace {
@@ -53,6 +55,26 @@ std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoISlice(const ui32 offse
         return chunks.front();
     } else {
         return std::make_shared<TCompositeChunkedArray>(std::move(chunks), count, GetDataType());
+    }
+}
+
+std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoApplyFilter(const TColumnFilter& filter) const {
+    std::optional<IChunkedArray::TFullChunkedArrayAddress> arrAddress;
+    std::vector<std::shared_ptr<IChunkedArray>> chunks;
+    ui32 currentIndex = 0;
+    while (currentIndex < GetRecordsCount()) {
+        arrAddress = GetArray(arrAddress, currentIndex, nullptr);
+        if (!filter.CheckSlice(currentIndex, arrAddress->GetArray()->GetRecordsCount())) {
+            continue;
+        }
+        auto sliceFilter = filter.Slice(currentIndex, arrAddress->GetArray()->GetRecordsCount());
+        chunks.emplace_back(sliceFilter.Apply(arrAddress->GetArray()));
+        currentIndex += arrAddress->GetArray()->GetRecordsCount();
+    }
+    if (chunks.size() == 1) {
+        return chunks.front();
+    } else {
+        return std::make_shared<TCompositeChunkedArray>(std::move(chunks), filter.GetFilteredCountVerified(), GetDataType());
     }
 }
 

@@ -11,6 +11,7 @@ void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstr
     AFL_VERIFY(!OthersData);
     auto container = NSubColumns::TConstructor::BuildOthersContainer(blob, Header.GetAddressesProto(), externalInfo);
     OthersData = NSubColumns::TOthersData(Header.GetOtherStats(), container.DetachResult());
+    StoreOthersString = blob;
 }
 
 std::shared_ptr<IChunkedArray> TSubColumnsPartialArray::GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {

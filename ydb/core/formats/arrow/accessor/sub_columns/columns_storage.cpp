@@ -26,6 +26,9 @@ TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
 }
 
 TColumnsData TColumnsData::ApplyFilter(const TColumnFilter& filter) const {
+    if (!Stats.GetColumnsCount()) {
+        return *this;
+    }
     auto records = Records;
     AFL_VERIFY(filter.Apply(records));
     if (records->GetRecordsCount()) {

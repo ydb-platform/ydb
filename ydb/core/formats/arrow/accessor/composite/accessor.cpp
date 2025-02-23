@@ -64,11 +64,10 @@ std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoApplyFilter(const TColu
     ui32 currentIndex = 0;
     while (currentIndex < GetRecordsCount()) {
         arrAddress = GetArray(arrAddress, currentIndex, nullptr);
-        if (!filter.CheckSlice(currentIndex, arrAddress->GetArray()->GetRecordsCount())) {
-            continue;
+        if (filter.CheckSlice(currentIndex, arrAddress->GetArray()->GetRecordsCount())) {
+            auto sliceFilter = filter.Slice(currentIndex, arrAddress->GetArray()->GetRecordsCount());
+            chunks.emplace_back(sliceFilter.Apply(arrAddress->GetArray()));
         }
-        auto sliceFilter = filter.Slice(currentIndex, arrAddress->GetArray()->GetRecordsCount());
-        chunks.emplace_back(sliceFilter.Apply(arrAddress->GetArray()));
         currentIndex += arrAddress->GetArray()->GetRecordsCount();
     }
     if (chunks.size() == 1) {

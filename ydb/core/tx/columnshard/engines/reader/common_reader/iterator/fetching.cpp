@@ -177,7 +177,8 @@ TConclusion<bool> TProgramStepPrepare::DoExecuteInplace(const std::shared_ptr<ID
             continue;
         }
         std::shared_ptr<IKernelFetchLogic> logic;
-        if (customFetchInfo->GetFullRestore()) {
+        if (customFetchInfo->GetFullRestore() || source->GetSourceSchema()->GetColumnLoaderVerified(i)->GetAccessorConstructor()->GetType() !=
+                                                     NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
             logic = std::make_shared<TDefaultFetchLogic>(i, source);
         } else {
             AFL_VERIFY(customFetchInfo->GetSubColumns().size());

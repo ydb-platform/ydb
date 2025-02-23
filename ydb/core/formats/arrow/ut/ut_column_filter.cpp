@@ -61,4 +61,15 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         AFL_VERIFY(filter.CheckSlice(4, 3));
         AFL_VERIFY(!filter.CheckSlice(6, 1));
     }
+
+    Y_UNIT_TEST(FilterSlice1) {
+        TColumnFilter filter = TColumnFilter::BuildAllowFilter();
+        filter.Add(true, 100);
+        filter.Add(false, 1000);
+        auto slice = filter.Slice(0, 130);
+        AFL_VERIFY(slice.DebugString() == "{1}[100,30]")("slice_debug", slice.DebugString());
+        AFL_VERIFY(filter.CheckSlice(0, 100));
+        AFL_VERIFY(!filter.CheckSlice(100, 130));
+        AFL_VERIFY(filter.CheckSlice(0, 130));
+    }
 }

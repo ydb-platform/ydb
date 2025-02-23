@@ -733,7 +733,7 @@ TColumnFilter TColumnFilter::Slice(const ui32 offset, const ui32 count) const {
         currentValue = !currentValue;
         index = nextIndex;
     }
-    AFL_VERIFY(index == offset + count);
+    AFL_VERIFY(offset + count <= index)("index", index)("offset", offset)("count", count);
     TColumnFilter result = TColumnFilter::BuildAllowFilter();
     result.LastValue = !currentValue;
     result.Filter = std::move(chunks);
@@ -762,7 +762,7 @@ bool TColumnFilter::CheckSlice(const ui32 offset, const ui32 count) const {
         currentValue = !currentValue;
         index = nextIndex;
     }
-    AFL_VERIFY(index == offset + count);
+    AFL_VERIFY(offset + count <= index)("index", index)("offset", offset)("count", count);
     return false;
 }
 

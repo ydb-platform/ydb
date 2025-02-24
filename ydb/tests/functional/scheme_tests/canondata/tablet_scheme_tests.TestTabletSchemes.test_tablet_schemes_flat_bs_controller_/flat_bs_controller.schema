@@ -122,13 +122,13 @@
                 "ColumnType": "String"
             },
             {
-                "ColumnId": 25,
-                "ColumnName": "ConfigVersion",
-                "ColumnType": "Uint32"
-            },
-            {
                 "ColumnId": 26,
                 "ColumnName": "ShredState",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 27,
+                "ColumnName": "StorageYamlConfig",
                 "ColumnType": "String"
             }
         ],
@@ -159,8 +159,8 @@
                     22,
                     23,
                     24,
-                    25,
-                    26
+                    26,
+                    27
                 ],
                 "RoomID": 0,
                 "Codec": 0,

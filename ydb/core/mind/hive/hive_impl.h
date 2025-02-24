@@ -241,6 +241,7 @@ protected:
     friend class TTxMonEvent_TabletAvailability;
     friend class TLoggedMonTransaction;
     friend class TTxProcessUpdateFollowers;
+    friend class TTxMonEvent_StopDomain;
 
     friend class TDeleteTabletActor;
 
@@ -279,7 +280,9 @@ protected:
     ITransaction* CreateCheckTablets();
     ITransaction* CreateSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec);
     ITransaction* CreateStopTablet(TTabletId tabletId, const TActorId& actorToNotify);
+    ITransaction* CreateStopTabletByTenant(TTabletId tabletId);
     ITransaction* CreateResumeTablet(TTabletId tabletId, const TActorId& actorToNotify);
+    ITransaction* CreateResumeTabletByTenant(TTabletId tabletId);
     ITransaction* CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external = false);
     ITransaction* CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev);
     ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup);
@@ -297,7 +300,7 @@ protected:
     ITransaction* CreateReleaseTablets(TEvHive::TEvReleaseTablets::TPtr event);
     ITransaction* CreateReleaseTabletsReply(TEvHive::TEvReleaseTabletsReply::TPtr event);
     ITransaction* CreateConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event);
-    ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator);
+    ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo = 0);
     ITransaction* CreateSwitchDrainOff(TNodeId nodeId, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements);
     ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
@@ -424,6 +427,8 @@ protected:
     std::queue<TActorId> NodePingQueue;
     std::unordered_set<TNodeId> NodePingsInProgress;
     TFollowerUpdates PendingFollowerUpdates;
+    std::queue<TTabletId> StopTenantTabletsQueue;
+    std::queue<TTabletId> ResumeTenantTabletsQueue;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -436,6 +441,9 @@ protected:
 
     ui64 UpdateTabletMetricsInProgress = 0;
     static constexpr ui64 MAX_UPDATE_TABLET_METRICS_IN_PROGRESS = 10000; // 10K
+    i64 DeleteTabletInProgress = 0;
+    static constexpr i64 MAX_DELETE_TABLET_IN_PROGRESS = 100;
+    std::queue<TTabletId> DeleteTabletQueue;
 
     TString BootStateBooting = "Booting";
     TString BootStateStarting = "Starting";
@@ -632,7 +640,7 @@ protected:
 
     template <NKikimrConfig::THiveConfig::EHiveNodeSelectStrategy Strategy>
     TNodeInfo* SelectNode(const std::vector<TSelectedNode>& selectedNodes);
-    TVector<TSelectedNode> SelectMaxPriorityNodes(TVector<TSelectedNode> selectedNodes, const TTabletInfo& tablet) const;
+    TVector<TSelectedNode> SelectMaxPriorityNodes(TVector<TSelectedNode> selectedNodes, const TTabletInfo& tablet, TDataCenterPriority& dcPriority) const;
 
 public:
     void AssignTabletGroups(TLeaderTabletInfo& tablet);
@@ -710,6 +718,9 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     TDuration GetBalancerCooldown(EBalancerType balancerType) const;
     void UpdateObjectCount(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff);
     ui64 GetObjectImbalance(TFullObjectId object);
+    void BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects);
+    void ProcessPendingStopTablet();
+    void ProcessPendingResumeTablet();
 
     ui32 GetEventPriority(IEventHandle* ev);
     void PushProcessIncomingEvent();
@@ -989,6 +1000,10 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
 
     ui64 GetMaxPingsInFlight() const {
         return CurrentConfig.GetMaxPingsInFlight();
+    }
+
+    ui64 GetNodeRestartsForPenalty() const {
+        return CurrentConfig.GetNodeRestartsForPenalty();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

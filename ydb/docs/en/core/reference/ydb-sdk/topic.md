@@ -866,6 +866,19 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 {% list tabs group=lang %}
 
+- C++
+
+  To write to a topic within a transaction, it is necessary to pass a transaction object reference to the `Write` method of the writing session.
+
+  ```c++
+    auto tableSession = tableClient.GetSession().GetValueSync().GetSession();
+    auto transaction = tableSession.BeginTransaction().GetValueSync().GetTransaction();
+    NYdb::NTopic::TWriteMessage writeMessage("message");
+
+    topicSession->Write(std::move(writeMessage), transaction);
+    transaction.Commit().GetValueSync();
+  ```
+
 - Go
 
   To write to a topic within a transaction, create a transactional writer by calling [TopicClient.StartTransactionalWriter](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic#Client.StartTransactionalWriter) with the `tx` argument. Once created, you can send messages as usual. There's no need to close the transactional writer manually, as it will be closed automatically when the transaction ends.
@@ -1399,6 +1412,8 @@ If a commit fails with an error, the application should log it and continue; it 
    }
    ```
 
+   The `Commit` call is fast by default, saving data into an internal buffer and returning control to the caller. The real message to the server is sent in the background. To prevent losing the last commits, call the `Reader.Close()` method before exiting the program.
+
 - Python
 
    ```python
@@ -1407,6 +1422,8 @@ If a commit fails with an error, the application should log it and continue; it 
        process(message)
        reader.commit(message)
    ```
+
+   The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
 
 - Java
 
@@ -1468,6 +1485,8 @@ If a commit fails with an error, the application should log it and continue; it 
    }
    ```
 
+   The `Commit` call is fast by default, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
+
 - Python
 
    ```python
@@ -1476,6 +1495,8 @@ If a commit fails with an error, the application should log it and continue; it 
      process(batch)
      reader.commit(batch)
    ```
+
+   The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
 
 - Java (sync)
 
@@ -1928,5 +1949,64 @@ In case of a _hard interruption_, the client receives a notification that it is 
       logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
   }
   ```
+
+{% endlist %}
+
+### Topic autoscaling {#autoscaling}
+
+{% list tabs group=lang %}
+
+- Python
+
+  Autoscaling of a topic can be enabled during its creation using the `auto_partitioning_settings` argument of `create_topic`:
+
+  ```python
+      driver.topic_client.create_topic(
+          topic,
+          consumers=[consumer],
+          min_active_partitions=10,
+          max_active_partitions=100,
+          auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+              strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+              up_utilization_percent=80,
+              down_utilization_percent=20,
+              stabilization_window=datetime.timedelta(seconds=300),
+          ),
+      )
+  ```
+
+  Changes to an existing topic can be made using the `alter_auto_partitioning_settings` argument of `alter_topic`:
+
+  ```python
+      driver.topic_client.alter_topic(
+          topic_path,
+          alter_auto_partitioning_settings=ydb.TopicAlterAutoPartitioningSettings(
+              set_strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+              set_up_utilization_percent=80,
+              set_down_utilization_percent=20,
+              set_stabilization_window=datetime.timedelta(seconds=300),
+          ),
+      )
+  ```
+
+  The SDK supports two topic reading modes with autoscaling enabled: full support mode and compatibility mode. The reading mode can be set in the `auto_partitioning_support` argument when creating the reader. Full support mode is used by default.
+
+  ```python
+  reader = driver.topic_client.reader(
+      topic,
+      consumer,
+      auto_partitioning_support=True, # Full support is enabled
+  )
+
+  # or
+
+  reader = driver.topic_client.reader(
+      topic,
+      consumer,
+      auto_partitioning_support=False, # Compatibility mode is enabled
+  )
+  ```
+
+  From a practical perspective, these modes do not differ for the end user. However, the full support mode differs from the compatibility mode in terms of who guarantees the order of reading—the client or the server. Compatibility mode is achieved through server-side processing and generally operates slower.
 
 {% endlist %}

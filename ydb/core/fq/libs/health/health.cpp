@@ -40,7 +40,7 @@ public:
         if (mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "yq_health", "YQ Health", false,
-                TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                TlsActivationContext->ActorSystem(), SelfId());
         }
 
         Become(&THealthActor::StateFunc);

@@ -230,6 +230,13 @@ public:
         const TTableSchema& Schema_;
     };
 
+    struct TSystemColumnOptions
+    {
+        bool EnableTableIndex;
+        bool EnableRowIndex;
+        bool EnableRangeIndex;
+    };
+
 public:
     const std::vector<TColumnSchema>& Columns() const;
     const std::vector<TDeletedColumn>& DeletedColumns() const;
@@ -327,6 +334,9 @@ public:
     //! For sorted tables, return the current schema as-is.
     //! For ordered tables, prepends the current schema with |(tablet_index, row_index)| key columns.
     TTableSchemaPtr ToQuery() const;
+
+    //! Appends |$table_index|, |$row_index| and/or |$range_index|, based on the options.
+    TTableSchemaPtr WithSystemColumns(const TSystemColumnOptions& options) const;
 
     //! For sorted tables, return the current schema without computed columns.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column
@@ -521,18 +531,27 @@ void ValidateDynamicTableKeyColumnCount(int count);
 
 void ValidateColumnName(const std::string& name);
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TSchemaValidationOptions
+{
+    bool AllowUnversionedUpdateColumns = false;
+    bool AllowTimestampColumns = false;
+    bool AllowOperationColumns = false;
+};
+
 void ValidateColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted = false,
     bool isTableDynamic = false,
-    bool allowUnversionedUpdateColumns = false,
-    bool allowTimestampColumns = false);
+    const TSchemaValidationOptions& options = {});
 
 void ValidateTableSchema(
     const TTableSchema& schema,
     bool isTableDynamic = false,
-    bool allowUnversionedUpdateColumns = false,
-    bool allowTimestampColumns = false);
+    const TSchemaValidationOptions& options = {});
+
+////////////////////////////////////////////////////////////////////////////////
 
 void ValidateNoDescendingSortOrder(const TTableSchema& schema);
 

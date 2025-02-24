@@ -13,7 +13,9 @@ void TSideEffects::ProposeToCoordinator(TOperationId opId, TPathId pathId, TStep
 }
 
 void TSideEffects::CoordinatorAck(TActorId coordinator, TStepId stepId, TTxId txId) {
-    CoordinatorAcks.push_back(TCoordinatorAck(coordinator, stepId, txId));
+    if (coordinator) {
+        CoordinatorAcks.push_back(TCoordinatorAck(coordinator, stepId, txId));
+    }
 }
 
 void TSideEffects::MediatorAck(TActorId mediator, TStepId stepId) {

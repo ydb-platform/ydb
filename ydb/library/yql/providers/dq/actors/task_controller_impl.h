@@ -295,6 +295,16 @@ private:
                     } else if (name == "EgressRows" && taskLevelCounter) {
                         publicCounterName = "query.sink_output_records";
                         isDeriv = true;
+                    } else if (name == "IngressFilteredBytes" && taskLevelCounter) {
+                        publicCounterName = "query.input_filtered_bytes";
+                        isDeriv = true;
+                    } else if (name == "IngressFilteredRows" && taskLevelCounter) {
+                        publicCounterName = "query.source_input_filtered_records";
+                        isDeriv = true;
+                    } else if (name == "IngressQueuedBytes" && taskLevelCounter) {
+                        publicCounterName = "query.input_queued_bytes";
+                    } else if (name == "IngressQueuedRows" && taskLevelCounter) {
+                        publicCounterName = "query.source_input_queued_records";
                     } else if (name == "Tasks") {
                         publicCounterName = "query.running_tasks";
                         isDeriv = false;
@@ -351,9 +361,12 @@ private:
         ui64 taskId = s.GetTaskId();
         ui64 stageId = Stages.Value(taskId, s.GetStageId());
 
+#define SET_COUNTER(name) \
+        TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, #name), stats.Get ## name ()); \
+
 #define ADD_COUNTER(name) \
         if (stats.Get ## name()) { \
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, #name), stats.Get ## name ()); \
+            SET_COUNTER(name); \
         }
 
         std::map<TString, TString> commonLabels = {
@@ -379,6 +392,11 @@ private:
         ADD_COUNTER(OutputBytes)
         ADD_COUNTER(ResultRows)
         ADD_COUNTER(ResultBytes)
+
+        ADD_COUNTER(IngressFilteredBytes)
+        ADD_COUNTER(IngressFilteredRows)
+        SET_COUNTER(IngressQueuedBytes)
+        SET_COUNTER(IngressQueuedRows)
 
         ADD_COUNTER(StartTimeMs)
         ADD_COUNTER(FinishTimeMs)

@@ -230,6 +230,7 @@ protected:
                         mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(map.Output().Item(0).RowSpec()));
                     }
                     mapOut.SetUnique(path.Ref().GetConstraint<TDistinctConstraintNode>(), map.Mapper().Pos(), ctx);
+                    mapOut.RowSpec->SetConstraints(path.Ref().GetConstraintSet());
 
                     TExprBase newColumns = Build<TCoVoid>(ctx, path.Pos()).Done();
                     if (keepColumns) {
@@ -271,6 +272,7 @@ protected:
                         mergeOut.RowSpec->CopyTypeOrders(*nativeType);
                     }
                     mergeOut.SetUnique(path.Ref().GetConstraint<TDistinctConstraintNode>(), merge.Pos(), ctx);
+                    mergeOut.RowSpec->SetConstraints(path.Ref().GetConstraintSet());
 
                     TSet<TStringBuf> columnSet(effectiveColumns.begin(), effectiveColumns.end());
                     if (mergeOut.RowSpec->HasAuxColumns()) {

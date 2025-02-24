@@ -14,6 +14,7 @@ import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
 import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
+import "yt_proto/yt/client/scheduler/proto/spec_patch.proto";
 import "yt_proto/yt/client/table_client/proto/versioned_io_options.proto";
 import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
 
@@ -1682,6 +1683,7 @@ message TReqCopyNode
     optional bool lock_existing = 13 [default = false];
     optional bool pessimistic_quota_check = 9 [default = true];
     optional bool enable_cross_cell_copying = 15 [default = true];
+    optional bool allow_secondary_index_abandonment = 16 [default = false];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -1711,6 +1713,7 @@ message TReqMoveNode
     optional bool preserve_acl = 14 [default = false];
     optional bool pessimistic_quota_check = 7 [default = true];
     optional bool enable_cross_cell_copying = 13 [default = true];
+    optional bool allow_secondary_index_abandonment = 15 [default = false];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -2265,6 +2268,7 @@ message TReqSuspendOperation
         string operation_alias = 3;
     }
     optional bool abort_running_jobs = 2 [default = false];
+    optional string reason = 4;
 }
 
 message TRspSuspendOperation
@@ -2310,6 +2314,21 @@ message TReqUpdateOperationParameters
 }
 
 message TRspUpdateOperationParameters
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqPatchOperationSpec
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    repeated NYT.NScheduler.NProto.TSpecPatch patches = 3;
+}
+
+message TRspPatchOperationSpec
 {
 }
 
@@ -2416,6 +2435,8 @@ message TReqListJobs
     optional string task_name = 19;
 
     optional bool with_monitoring_descriptor = 21;
+
+    optional string operation_incarnation = 25;
 
     optional uint64 from_time = 22; // TInstant
     optional uint64 to_time = 23; // TInstant
@@ -2997,6 +3018,7 @@ message TReqGetFlowView
 {
     required bytes pipeline_path = 1; // YPath
     optional bytes view_path = 2; // YPath
+    optional bool cache = 3 [default = true];
 }
 
 message TRspGetFlowView
@@ -3038,6 +3060,7 @@ message TOperation
     optional bytes runtime_parameters = 16; // YSON
 
     optional bool suspended = 17;
+    optional string suspend_reason = 29;
 
     optional bytes events = 18; // YSON
     optional bytes result = 19; // YSON
@@ -3154,6 +3177,7 @@ message TJob
     optional uint64 job_cookie = 27;
     optional bytes archive_features = 29; // YSON
     optional string monitoring_descriptor = 30;
+    optional string operation_incarnation = 31;
 }
 
 message TListJobsStatistics
@@ -3305,6 +3329,7 @@ message TRspGetQueryResult
     optional TTableSchema schema = 4;
     required NYT.NChunkClient.NProto.TDataStatistics data_statistics = 5;
     required bool is_truncated = 6;
+    optional bytes full_result = 7; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3424,6 +3449,7 @@ message TRspGetQueryTrackerInfo
     required bytes supported_features = 2; // YSON
     repeated string access_control_objects = 3;
     optional string query_tracker_stage = 4;
+    repeated string clusters = 5;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

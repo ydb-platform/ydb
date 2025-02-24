@@ -30,27 +30,36 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     using TUnderlying = std::function<void(const TVector<TTypedScheme>&, const TString&, TTestWithReboots&)>;
 
-    void Decorate(const TVector<TTypedScheme>& schemeObjects, const TString& request, TUnderlying func) {
+    void Decorate(const TVector<TTypedScheme>& schemeObjects, const TString& request,
+        TUnderlying func, const TTestEnvOptions& opts)
+    {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
         TTestWithReboots t;
+        t.GetTestEnvOptions() = opts;
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
         func(schemeObjects, Sprintf(request.c_str(), port), t);
     }
 
-    void RunS3(const TVector<TTypedScheme>& schemeObjects, const TString& request) {
-        Decorate(schemeObjects, request, &Run);
+    void RunS3(const TVector<TTypedScheme>& schemeObjects, const TString& request,
+        const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions())
+    {
+        Decorate(schemeObjects, request, &Run, opts);
     }
 
-    void CancelS3(const TVector<TTypedScheme>& schemeObjects, const TString& request) {
-        Decorate(schemeObjects, request, &Cancel);
+    void CancelS3(const TVector<TTypedScheme>& schemeObjects, const TString& request,
+        const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions())
+    {
+        Decorate(schemeObjects, request, &Cancel, opts);
     }
 
-    void ForgetS3(const TVector<TTypedScheme>& schemeObjects, const TString& request) {
-        Decorate(schemeObjects, request, &Forget);
+    void ForgetS3(const TVector<TTypedScheme>& schemeObjects, const TString& request,
+        const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions())
+    {
+        Decorate(schemeObjects, request, &Forget, opts);
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
@@ -131,11 +140,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     Y_UNIT_TEST(ShouldSucceedOnSingleView) {
         RunS3({
             {
+                EPathTypeView,
                 R"(
                     Name: "View"
                     QueryText: "some query"
-                )",
-                EPathTypeView
+                )"
             }
         }, R"(
             ExportToS3Settings {
@@ -152,19 +161,19 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     Y_UNIT_TEST(ShouldSucceedOnViewsAndTables) {
         RunS3({
             {
+                EPathTypeView,
                 R"(
                     Name: "View"
                     QueryText: "some query"
-                )",
-                EPathTypeView
+                )"
             }, {
+                EPathTypeTable,
                 R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Utf8" }
                     Columns { Name: "value" Type: "Utf8" }
                     KeyColumnNames: ["key"]
-                )",
-                EPathTypeTable
+                )"
             }
         }, R"(
             ExportToS3Settings {
@@ -180,6 +189,70 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
               }
             }
         )");
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnViewsAndTablesPermissions) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TTestWithReboots t;
+        t.GetTestEnvOptions() = TTestEnvOptions().EnablePermissionsExport(true);
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            {
+                TInactiveZone inactive(activeZone);
+                CreateSchemeObjects(t, runtime, {
+                    {
+                        EPathTypeView,
+                        R"(
+                            Name: "View"
+                            QueryText: "some query"
+                        )"
+                    }, {
+                        EPathTypeTable,
+                        R"(
+                            Name: "Table"
+                            Columns { Name: "key" Type: "Utf8" }
+                            Columns { Name: "value" Type: "Utf8" }
+                            KeyColumnNames: ["key"]
+                        )"
+                    }
+                });
+
+                TestExport(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
+                    ExportToS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items {
+                            source_path: "/MyRoot/View"
+                            destination_prefix: "view"
+                        }
+                        items {
+                            source_path: "/MyRoot/Table"
+                            destination_prefix: "table"
+                        }
+                    }
+                )", port));
+            }
+    
+            const ui64 exportId = t.TxId;
+            t.TestEnv->TestWaitNotification(runtime, exportId);
+    
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetExport(runtime, exportId, "/MyRoot");
+            }
+        });
+
+        auto* tablePermissions = s3Mock.GetData().FindPtr("/table/permissions.pb");
+        UNIT_ASSERT(tablePermissions);
+
+        auto* viewPermissions = s3Mock.GetData().FindPtr("/view/permissions.pb");
+        UNIT_ASSERT(viewPermissions);
     }
 
     Y_UNIT_TEST(CancelShouldSucceedOnSingleShardTable) {
@@ -260,11 +333,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     Y_UNIT_TEST(CancelShouldSucceedOnSingleView) {
         CancelS3({
             {
+                EPathTypeView,
                 R"(
                     Name: "View"
                     QueryText: "some query"
-                )",
-                EPathTypeView
+                )"
             }
         }, R"(
             ExportToS3Settings {
@@ -281,19 +354,19 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     Y_UNIT_TEST(CancelShouldSucceedOnViewsAndTables) {
         CancelS3({
             {
+                EPathTypeView,
                 R"(
                     Name: "View"
                     QueryText: "some query"
-                )",
-                EPathTypeView
+                )"
             }, {
+                EPathTypeTable,
                 R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Utf8" }
                     Columns { Name: "value" Type: "Utf8" }
                     KeyColumnNames: ["key"]
-                )",
-                EPathTypeTable
+                )"
             }
         }, R"(
             ExportToS3Settings {
@@ -389,11 +462,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     Y_UNIT_TEST(ForgetShouldSucceedOnSingleView) {
         ForgetS3({
             {
+                EPathTypeView,
                 R"(
                     Name: "View"
                     QueryText: "some query"
-                )",
-                EPathTypeView
+                )"
             }
         }, R"(
             ExportToS3Settings {
@@ -410,19 +483,19 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     Y_UNIT_TEST(ForgetShouldSucceedOnViewsAndTables) {
         ForgetS3({
             {
+                EPathTypeView,
                 R"(
                     Name: "View"
                     QueryText: "some query"
-                )",
-                EPathTypeView
+                )"
             }, {
+                EPathTypeTable,
                 R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Utf8" }
                     Columns { Name: "value" Type: "Utf8" }
                     KeyColumnNames: ["key"]
-                )",
-                EPathTypeTable
+                )"
             }
         }, R"(
             ExportToS3Settings {

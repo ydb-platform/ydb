@@ -157,15 +157,17 @@ class LoadSuiteBase:
             s = f'{int(duration)}s ' if duration >= 1 else ''
             return f'{s}{int(duration * 1000) % 1000}ms'
 
-        def _attach_plans(plan: YdbCliHelper.QueryPlan) -> None:
+        def _attach_plans(plan: YdbCliHelper.QueryPlan, name: str) -> None:
             if plan.plan is not None:
-                allure.attach(json.dumps(plan.plan), 'Plan json', attachment_type=allure.attachment_type.JSON)
+                allure.attach(json.dumps(plan.plan), f'{name} json', attachment_type=allure.attachment_type.JSON)
             if plan.table is not None:
-                allure.attach(plan.table, 'Plan table', attachment_type=allure.attachment_type.TEXT)
+                allure.attach(plan.table, f'{name} table', attachment_type=allure.attachment_type.TEXT)
             if plan.ast is not None:
-                allure.attach(plan.ast, 'Plan ast', attachment_type=allure.attachment_type.TEXT)
+                allure.attach(plan.ast, f'{name} ast', attachment_type=allure.attachment_type.TEXT)
             if plan.svg is not None:
-                allure.attach(plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
+                allure.attach(plan.svg, f'{name} svg', attachment_type=allure.attachment_type.SVG)
+            if plan.stats is not None:
+                allure.attach(plan.stats, f'{name} stats', attachment_type=allure.attachment_type.TEXT)
 
         test = cls._test_name(query_num)
         stats = result.stats.get(test)
@@ -174,9 +176,9 @@ class LoadSuiteBase:
         if result.query_out is not None:
             allure.attach(result.query_out, 'Query output', attachment_type=allure.attachment_type.TEXT)
 
-        if result.explain.plan is not None:
+        if result.explain.final_plan is not None:
             with allure.step('Explain'):
-                _attach_plans(result.explain.plan)
+                _attach_plans(result.explain.final_plan, 'Plan')
 
         for iter_num in sorted(result.iterations.keys()):
             iter_res = result.iterations[iter_num]
@@ -185,7 +187,8 @@ class LoadSuiteBase:
                 s.params['duration'] = _duration_text(iter_res.time)
             try:
                 with s:
-                    _attach_plans(iter_res.plan)
+                    _attach_plans(iter_res.final_plan, 'Final plan')
+                    _attach_plans(iter_res.in_progress_plan, 'In-progress plan')
                     if iter_res.error_message:
                         pytest.fail(iter_res.error_message)
             except BaseException:

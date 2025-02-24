@@ -325,6 +325,15 @@ void Load(C& context, T& value, TArgs&&... args);
 template <class T, class C, class... TArgs>
 T Load(C& context, TArgs&&... args);
 
+template <class TSerializer, class T, class C, class... TArgs>
+void LoadWith(C& context, T& value, TArgs&&... args);
+
+template <class TSerializer, class T, class C, class... TArgs>
+void SaveWith(C& context, const T& value, TArgs&&... args);
+
+template <class TSerializer, class T, class C, class... TArgs>
+T LoadWith(C& context, TArgs&&... args);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

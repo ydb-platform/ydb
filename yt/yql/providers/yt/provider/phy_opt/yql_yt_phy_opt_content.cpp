@@ -2,6 +2,7 @@
 
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <yt/yql/providers/yt/provider/yql_yt_optimize.h>
+#include <yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_helper.h>
 
 namespace NYql {
 
@@ -154,6 +155,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
                         }
                     }
                     if (materialize) {
+                        if (!NPrivate::EnsurePersistableYsonTypes(section.Pos(), *section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx, state)) {
+                            return {};
+                        }
                         auto path = CopyOrTrivialMap(section.Pos(),
                             TExprBase(world),
                             TYtDSink(ctx.RenameNode(read.DataSource().Ref(), "DataSink")),

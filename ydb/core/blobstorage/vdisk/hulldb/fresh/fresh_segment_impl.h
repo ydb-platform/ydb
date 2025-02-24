@@ -702,7 +702,7 @@ namespace NKikimr {
             struct {
                 std::vector<std::pair<TKey, TMemRec>>& Recs;
 
-                void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64) {
+                void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64, const void*) {
                     Y_DEBUG_ABORT("should not be called");
                 }
 

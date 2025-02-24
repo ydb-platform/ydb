@@ -1205,4 +1205,9 @@ namespace NKikimr::NBsController {
             settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
         }
 
+        void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& /*cmd*/,
+                TStatus& status) {
+            status.SetInterfaceVersion(BSC_INTERFACE_VERSION);
+        }
+
 } // NKikimr::NBsController

@@ -138,6 +138,40 @@ struct TMetadataInfoHolder {
     }
 };
 
+THashMap<TString, NYql::TKikimrTableMetadataPtr> ExtractStaticMetadata(const NJson::TJsonValue& data) {
+    EMetaSerializationType metaType = EMetaSerializationType::EncodedProto;
+    if (data.Has("table_meta_serialization_type")) {
+        metaType = static_cast<EMetaSerializationType>(data["table_meta_serialization_type"].GetUIntegerSafe());
+    }
+    THashMap<TString, NYql::TKikimrTableMetadataPtr> meta;
+
+    if (metaType == EMetaSerializationType::EncodedProto) {
+        static NJson::TJsonReaderConfig readerConfig;
+        NJson::TJsonValue tablemetajson;
+        TStringInput in(data["table_metadata"].GetStringSafe());
+        NJson::ReadJsonTree(&in, &readerConfig, &tablemetajson, false);
+        Y_ENSURE(tablemetajson.IsArray());
+        for (auto& node : tablemetajson.GetArray()) {
+            NKikimrKqp::TKqpTableMetadataProto proto;
+
+            TString decoded = Base64Decode(node.GetStringRobust());
+            Y_ENSURE(proto.ParseFromString(decoded));
+
+            NYql::TKikimrTableMetadataPtr ptr = MakeIntrusive<NYql::TKikimrTableMetadata>(&proto);
+            meta.emplace(proto.GetName(), ptr);
+        }
+    } else {
+        Y_ENSURE(data["table_metadata"].IsArray());
+        for (auto& node : data["table_metadata"].GetArray()) {
+            NKikimrKqp::TKqpTableMetadataProto proto;
+            NProtobufJson::Json2Proto(node.GetStringRobust(), proto);
+            NYql::TKikimrTableMetadataPtr ptr = MakeIntrusive<NYql::TKikimrTableMetadata>(&proto);
+            meta.emplace(proto.GetName(), ptr);
+        }
+    }
+    return meta;
+}
+
 
 class TStaticTableMetadataLoader: public NYql::IKikimrGateway::IKqpTableMetadataLoader, public NYql::IDbSchemeResolver {
     TActorSystem* ActorSystem;
@@ -237,8 +271,10 @@ public:
         , FunctionRegistry(functionRegistry)
         , HttpGateway(std::move(httpGateway))
     {
-        Config->EnablePreparedDdl = true;
         Config->EnableAntlr4Parser = enableAntlr4Parser;
+        Config->DefaultCostBasedOptimizationLevel = 2;
+        Config->EnableKqpDataQueryStreamLookup = true;
+        Config->IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX;
     }
 
     void Bootstrap() {
@@ -311,7 +347,7 @@ private:
         }
     }
     void Continue() {
-        TActorSystem* actorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
+        TActorSystem* actorSystem = TActivationContext::ActorSystem();
         TActorId selfId = SelfId();
         auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
             bool finished = future.GetValue();
@@ -532,46 +568,12 @@ private:
         PassAway();
     }
 
-    static THashMap<TString, NYql::TKikimrTableMetadataPtr> ExtractStaticMetadata(const NJson::TJsonValue& data, EMetaSerializationType metaType) {
-        THashMap<TString, NYql::TKikimrTableMetadataPtr> meta;
-
-        if (metaType == EMetaSerializationType::EncodedProto) {
-            static NJson::TJsonReaderConfig readerConfig;
-            NJson::TJsonValue tablemetajson;
-            TStringInput in(data.GetStringSafe());
-            NJson::ReadJsonTree(&in, &readerConfig, &tablemetajson, false);
-            Y_ENSURE(tablemetajson.IsArray());
-            for (auto& node : tablemetajson.GetArray()) {
-                NKikimrKqp::TKqpTableMetadataProto proto;
-
-                TString decoded = Base64Decode(node.GetStringRobust());
-                Y_ENSURE(proto.ParseFromString(decoded));
-
-                NYql::TKikimrTableMetadataPtr ptr = MakeIntrusive<NYql::TKikimrTableMetadata>(&proto);
-                meta.emplace(proto.GetName(), ptr);
-            }
-        } else {
-            Y_ENSURE(data.IsArray());
-            for (auto& node : data.GetArray()) {
-                NKikimrKqp::TKqpTableMetadataProto proto;
-                NProtobufJson::Json2Proto(node.GetStringRobust(), proto);
-                NYql::TKikimrTableMetadataPtr ptr = MakeIntrusive<NYql::TKikimrTableMetadata>(&proto);
-                meta.emplace(proto.GetName(), ptr);
-            }
-        }
-        return meta;
-    }
-
     void Handle(TQueryReplayEvents::TEvCompileRequest::TPtr& ev) {
         Owner = ev->Sender;
 
         ReplayDetails = std::move(ev->Get()->ReplayDetails);
 
-        EMetaSerializationType metaType = EMetaSerializationType::EncodedProto;
-        if (ReplayDetails.Has("table_meta_serialization_type")) {
-            metaType = static_cast<EMetaSerializationType>(ReplayDetails["table_meta_serialization_type"].GetUIntegerSafe());
-        }
-        TableMetadata = std::make_shared<TMetadataInfoHolder>(std::move(ExtractStaticMetadata(ReplayDetails["table_metadata"], metaType)));
+        TableMetadata = std::make_shared<TMetadataInfoHolder>(std::move(ExtractStaticMetadata(ReplayDetails)));
         TString queryText = UnescapeC(ReplayDetails["query_text"].GetStringSafe());
 
         std::map<TString, Ydb::Type> queryParameterTypes;
@@ -630,8 +632,8 @@ private:
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
 
         Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, Query->DatabaseId, std::move(loader),
-            TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
-        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr, {}});
+            TActivationContext::ActorSystem(), SelfId().NodeId(), counters);
+        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, nullptr, {}});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
             federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 

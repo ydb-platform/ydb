@@ -95,6 +95,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
                 // For integer types we can add 1 to med
                 ui64 val = 0;
                 size_t sz =  keyMed.GetCells()[i].Size();
+                Y_ABORT_UNLESS(sz <= sizeof(ui64));
                 memcpy(&val, keyMed.GetCells()[i].Data(), sz);
                 val++;
                 splitKey[i] = TCell((const char*)&val, sz);

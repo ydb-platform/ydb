@@ -5,5 +5,5 @@ items:
   include: { mode: link, path: syntax/toc_i.yaml }
 - name: Встроенные функции
   include: { mode: link, path: builtins/toc_i.yaml }
-- name: Репецпты
+- name: Рецепты
   include: { mode: link, path: recipes/toc_i.yaml }

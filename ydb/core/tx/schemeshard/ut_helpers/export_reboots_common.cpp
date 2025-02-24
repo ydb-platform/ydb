@@ -13,7 +13,7 @@ namespace NExportReboots {
 
 void CreateSchemeObjects(TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<TTypedScheme>& schemeObjects) {
     TSet<ui64> toWait;
-    for (const auto& [scheme, type] : schemeObjects) {
+    for (const auto& [type, scheme, _] : schemeObjects) {
         switch (type) {
             case EPathTypeTable:
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", scheme);

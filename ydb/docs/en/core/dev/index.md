@@ -27,6 +27,4 @@ Main resources:
   - [{#T}](../postgresql/intro.md)
   - [{#T}](../reference/kafka-api/index.md)
 
-- [{#T}](troubleshooting/index.md)
-
 If you're interested in developing {{ ydb-short-name }} core or satellite projects, refer to the [documentation for contributors](../contributor/index.md).

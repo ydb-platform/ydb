@@ -289,7 +289,7 @@ void TRspMetadataBroker::Serialize(IKafkaProtocolWriter* writer, int apiVersion)
     writer->WriteString(Host);
     writer->WriteInt32(Port);
     if (apiVersion >= 1) {
-        writer->WriteString(Rack);
+        writer->WriteNullableString(Rack);
     }
     if (apiVersion >= 9) {
         NKafka::Serialize(TagBuffer, writer, /*isCompact*/ true);
@@ -332,6 +332,9 @@ void TRspMetadataTopic::Serialize(IKafkaProtocolWriter* writer, int apiVersion) 
 void TRspMetadata::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
     NKafka::Serialize(Brokers, writer, apiVersion >= 9, apiVersion);
+    if (apiVersion >= 2) {
+        writer->WriteNullableString(ClusterId);
+    }
     if (apiVersion >= 1) {
         writer->WriteInt32(ControllerId);
     }
@@ -370,10 +373,8 @@ void TReqJoinGroup::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
     SessionTimeoutMs = reader->ReadInt32();
     MemberId = reader->ReadString();
     ProtocolType = reader->ReadString();
-    Protocols.resize(reader->ReadInt32());
-    for (auto& protocol : Protocols) {
-        protocol.Deserialize(reader, apiVersion);
-    }
+
+    NKafka::Deserialize(Protocols, reader, /*isCompact*/ false, apiVersion);
 }
 
 void TRspJoinGroupMember::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
@@ -390,10 +391,7 @@ void TRspJoinGroup::Serialize(IKafkaProtocolWriter* writer, int apiVersion) cons
     writer->WriteString(Leader);
     writer->WriteString(MemberId);
 
-    writer->WriteInt32(Members.size());
-    for (const auto& member : Members) {
-        member.Serialize(writer, apiVersion);
-    }
+    NKafka::Serialize(Members, writer, /*isCompact*/ false, apiVersion);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -407,36 +405,16 @@ void TReqSyncGroupAssignment::Deserialize(IKafkaProtocolReader* reader, int /*ap
 void TReqSyncGroup::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
     GroupId = reader->ReadString();
-    GenerationId = reader->ReadString();
+    GenerationId = reader->ReadInt32();
     MemberId = reader->ReadString();
-    Assignments.resize(reader->ReadInt32());
-    for (auto& assignment : Assignments) {
-        assignment.Deserialize(reader, apiVersion);
-    }
+
+    NKafka::Deserialize(Assignments, reader, /*isCompact*/ false, apiVersion);
 }
 
-void TRspSyncGroupAssignment::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
-{
-    writer->WriteString(Topic);
-    writer->WriteInt32(Partitions.size());
-    for (const auto& partition : Partitions) {
-        writer->WriteInt32(partition);
-    }
-}
-
-void TRspSyncGroup::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
+void TRspSyncGroup::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
 {
     writer->WriteErrorCode(ErrorCode);
-
-    writer->StartBytes();
-    writer->WriteInt16(0);
-    writer->WriteInt32(Assignments.size());
-    for (const auto& assignment : Assignments) {
-        assignment.Serialize(writer, apiVersion);
-    }
-    // User data.
-    writer->WriteBytes(TString{});
-    writer->FinishBytes();
+    writer->WriteBytes(Assignment);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -601,8 +579,10 @@ void TRspFetch::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TReqSaslHandshake::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
+void TReqSaslHandshake::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
+    ApiVersion = apiVersion;
+
     Mechanism = reader->ReadString();
 }
 
@@ -751,5 +731,58 @@ void TRspProduce::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void TReqListOffsetsTopicPartition::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
+{
+    PartitionIndex = reader->ReadInt32();
+    Timestamp = reader->ReadInt64(); // TODO: use timestamp?
+    MaxNumOffsets = reader->ReadInt32();
+}
+
+void TReqListOffsetsTopic::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
+{
+    Name = reader->ReadString();
+    Partitions.resize(reader->ReadInt32());
+    for (auto& partition : Partitions) {
+        partition.Deserialize(reader, apiVersion);
+    }
+}
+
+void TReqListOffsets::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
+{
+    ReplicaId = reader->ReadInt32();
+    Topics.resize(reader->ReadInt32());
+    for (auto& topic : Topics) {
+        topic.Deserialize(reader, apiVersion);
+    }
+}
+
+void TRspListOffsetsTopicPartition::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
+{
+    writer->WriteInt32(PartitionIndex);
+    writer->WriteErrorCode(ErrorCode);
+    writer->WriteInt64(Offset);
+}
+
+void TRspListOffsetsTopic::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
+{
+    writer->WriteString(Name);
+    writer->WriteInt32(Partitions.size());
+    for (const auto& partition : Partitions) {
+        partition.Serialize(writer, apiVersion);
+    }
+}
+
+void TRspListOffsets::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
+{
+    writer->WriteInt32(Topics.size());
+    for (const auto& topic : Topics) {
+        topic.Serialize(writer, apiVersion);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
 
 } // namespace NYT::NKafka

@@ -14,6 +14,7 @@ SRCS(
     kqp_table_resolver.cpp
     kqp_tasks_graph.cpp
     kqp_tasks_validate.cpp
+    kqp_partitioned_executer.cpp
 )
 
 PEERDIR(

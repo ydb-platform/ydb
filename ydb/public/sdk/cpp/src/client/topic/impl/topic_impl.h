@@ -42,20 +42,6 @@ public:
     {
     }
 
-    template <class TSettings>
-    static void ConvertConsumerToProto(const TConsumerSettings<TSettings>& settings, Ydb::Topic::Consumer& consumerProto) {
-        consumerProto.set_name(TStringType{settings.ConsumerName_});
-        consumerProto.set_important(settings.Important_);
-        consumerProto.mutable_read_from()->set_seconds(settings.ReadFrom_.Seconds());
-
-        for (const auto& codec : settings.SupportedCodecs_) {
-            consumerProto.mutable_supported_codecs()->add_codecs((static_cast<Ydb::Topic::Codec>(codec)));
-        }
-        for (auto& pair : settings.Attributes_) {
-            (*consumerProto.mutable_attributes())[pair.first] = pair.second;
-        }
-    }
-
     static void ConvertAlterConsumerToProto(const TAlterConsumerSettings& settings, Ydb::Topic::AlterConsumer& consumerProto) {
         consumerProto.set_name(TStringType{settings.ConsumerName_});
         if (settings.SetImportant_)
@@ -78,34 +64,7 @@ public:
     static Ydb::Topic::CreateTopicRequest MakePropsCreateRequest(const std::string& path, const TCreateTopicSettings& settings) {
         Ydb::Topic::CreateTopicRequest request = MakeOperationRequest<Ydb::Topic::CreateTopicRequest>(settings);
         request.set_path(TStringType{path});
-
-        request.mutable_partitioning_settings()->set_min_active_partitions(settings.PartitioningSettings_.GetMinActivePartitions());
-        request.mutable_partitioning_settings()->set_partition_count_limit(settings.PartitioningSettings_.GetPartitionCountLimit());
-        request.mutable_partitioning_settings()->set_max_active_partitions(settings.PartitioningSettings_.GetMaxActivePartitions());
-        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetStrategy()));
-        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetStabilizationWindow().Seconds());
-        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetUpUtilizationPercent());
-        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetDownUtilizationPercent());
-
-        request.mutable_retention_period()->set_seconds(settings.RetentionPeriod_.Seconds());
-
-        for (const auto& codec : settings.SupportedCodecs_) {
-            request.mutable_supported_codecs()->add_codecs((static_cast<Ydb::Topic::Codec>(codec)));
-        }
-        request.set_partition_write_speed_bytes_per_second(settings.PartitionWriteSpeedBytesPerSecond_);
-        request.set_partition_write_burst_bytes(settings.PartitionWriteBurstBytes_);
-        request.set_retention_storage_mb(settings.RetentionStorageMb_);
-        request.set_metering_mode(TProtoAccessor::GetProto(settings.MeteringMode_));
-
-        for (auto& pair : settings.Attributes_) {
-            (*request.mutable_attributes())[pair.first] = pair.second;
-        }
-
-        for (const auto& consumer : settings.Consumers_) {
-            Ydb::Topic::Consumer& consumerProto = *request.add_consumers();
-            ConvertConsumerToProto(consumer, consumerProto);
-        }
-
+        settings.SerializeTo(request);
         return request;
     }
 
@@ -171,8 +130,7 @@ public:
         }
 
         for (const auto& consumer : settings.AddConsumers_) {
-            Ydb::Topic::Consumer& consumerProto = *request.add_add_consumers();
-            ConvertConsumerToProto(consumer, consumerProto);
+            consumer.SerializeTo(*request.add_add_consumers());
         }
 
         for (const auto& consumer : settings.DropConsumers_) {

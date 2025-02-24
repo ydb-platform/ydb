@@ -296,8 +296,8 @@ inline constexpr TStringBuf IndexWithSqlString(EIndexTypeSql type) {
 }
 
 TString ReformatYson(const TString& yson);
-void CompareYson(const TString& expected, const TString& actual);
-void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual);
+void CompareYson(const TString& expected, const TString& actual, const TString& message = {});
+void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message = {});
 
 void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,
     ui32 dataTextSize, ui32 batchSizeRows = 100, ui32 fillShardsCount = 8, ui32 largeTableKeysPerShard = 1000000);

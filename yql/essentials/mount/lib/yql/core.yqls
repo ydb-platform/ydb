@@ -522,6 +522,13 @@ def signature(script, name):
     )))
 ))))
 
+(let Opaque (lambda '(x) (block '(
+    (let t (TypeOf x))
+    (let ct (CallableType '('0) '(t)))
+    (let c (Callable ct (lambda '() x)))
+    (return (Apply c))
+))))
+
 (export Equals)
 (export Unequals)
 (export FindIndex)
@@ -562,4 +569,5 @@ def signature(script, name):
 (export ListSampleImpl)
 (export ListSampleNImpl)
 (export ListShuffleImpl)
+(export Opaque)
 )

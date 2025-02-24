@@ -239,7 +239,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery, int ensureTupleSize, TScopedStatePtr scoped);
     TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex = -1);
     TNodePtr BuildInvalidSubqueryRef(TPosition subqueryPos);
-    TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false);
+    TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false, bool withTables = false);
     TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);
     TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom = false, bool inSubquery = false);
     TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList = false, bool wrapByTableSource = false);
@@ -269,6 +269,7 @@ namespace NSQLTranslationV1 {
         TVector<TNodePtr>&& terms,
         bool distinct,
         TVector<TNodePtr>&& without,
+        bool forceWithout,
         bool selectStream,
         const TWriteSettings& settings,
         TColumnsSets&& uniqueSets,
@@ -304,6 +305,8 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildBatchDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source, TNodePtr options = nullptr);
 
     // Implemented in query.cpp
+    TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped);
+    TNodePtr BuildAlterDatabase(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAlterDatabaseParameters& params,TScopedStatePtr scoped);
     TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TViewDescription& view);
     TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& func, const TVector<TTableArg>& args);
     TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name);
@@ -315,6 +318,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options,
         TScopedStatePtr scoped);
     TNodePtr BuildAnalyze(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAnalyzeParams& params, TScopedStatePtr scoped);
+    TNodePtr BuildShowCreate(TPosition pos, const TTableRef& table, TScopedStatePtr scoped);
     TNodePtr BuildAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& id, const TSequenceParameters& params, TScopedStatePtr scoped);
     TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
         TNodePtr node, const TString& view = {});

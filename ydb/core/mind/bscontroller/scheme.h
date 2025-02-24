@@ -110,15 +110,16 @@ struct Schema : NIceDb::Schema {
         struct UseSelfHealLocalPolicy : Column<22, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct TryToRelocateBrokenDisksLocallyFirst : Column<23, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct YamlConfig : Column<24, NScheme::NTypeIds::String> {};
-        struct ConfigVersion : Column<25, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        //struct ConfigVersion : Column<25, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct ShredState : Column<26, NScheme::NTypeIds::String> {};
+        struct StorageYamlConfig : Column<27, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
               InstanceId, SelfHealEnable, DonorModeEnable, ScrubPeriodicity, SerialManagementStage, NextStoragePoolId,
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
-              UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ConfigVersion, ShredState>;
+              UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ShredState, StorageYamlConfig>;
     };
 
     struct VSlot : Table<5> {

@@ -1,42 +1,45 @@
 #!/bin/bash
 set -eu
 
-TARGET_INFO_FILE="$(realpath $1)"
+TARGET_INFO_FILE="$1"
 
 if [ ! -f $TARGET_INFO_FILE ]; then
     echo "File $TARGET_INFO_FILE doesn't exist. Creating new one"
 
     if [ "$2" == "" ]; then
         echo "Expected source folder as the second argument" >&2
-        exit
+        exit 1
     fi
 
     if [ ! -d "$2" ]; then
         echo "Expected $2 to be a directory" >&2
-        exit
+        exit 1
     fi
 
     FROM=$(realpath $2)
     ARC_ROOT=$(cd $FROM; arc root)
     HEAD=$(cd $FROM; arc rev-parse HEAD)
     # Normalize FROM relativly to the arc root
-    FROM=${FROM#$ARC_ROOT/}
-    echo "$HEAD;$FROM" > $TARGET_INFO_FILE
+    ARC_FROM=${FROM#$ARC_ROOT/}
+    echo "$HEAD;$ARC_FROM" > $TARGET_INFO_FILE
     echo "Filled in $TARGET_INFO_FILE"
     exit
 fi
 
-IFS=';' read -r BASE_REV INFO_FROM < "$TARGET_INFO_FILE"
+TARGET_INFO_FILE="$(realpath $TARGET_INFO_FILE)"
+IFS=';' read -r BASE_REV ARC_FROM < "$TARGET_INFO_FILE"
 TO=$(dirname $(realpath "$TARGET_INFO_FILE"))
 HEAD_REV=$(cd $TO; arc rev-parse HEAD)
 ARC_ROOT=$(cd $TO; arc root)
-FROM="$ARC_ROOT/$INFO_FROM"
+FROM="$ARC_ROOT/$ARC_FROM"
+ARC_TO=${TO#$ARC_ROOT/}
+DATETIME=$(date '+%Y-%m-%d-%H-%M-%S')
 
 echo "Base revision: $BASE_REV"
 echo "Head revision: $HEAD_REV"
 echo "Arc root: $ARC_ROOT"
-echo "Source: $FROM"
-echo "Target: $TO"
+echo "Source: $ARC_FROM"
+echo "Target: $ARC_TO"
 
 if [ "$(cd $TO; arc status -s -u all | wc -l)" != "0" ]; then
     echo "Target $TO has uncommited changes" >&2
@@ -45,44 +48,45 @@ fi
 
 cd $ARC_ROOT
 
-CURRENT_BRANCH=$(arc info | grep 'branch:')
-CURRENT_BRANCH=${CURRENT_BRANCH#branch: }
 PATCH_FILE=$(mktemp)
-BRANCH=upgrade-$(date '+%Y-%m-%d-%H-%M-%S')
+EXPORT_DIR=$(mktemp -d)
 
-clean_up () {
-    ARG=$?
-    echo "Deleting patch file"
-    rm $PATCH_FILE
-    exit $ARG
-}
-trap clean_up EXIT
-
-echo "Use $BRANCH temporary branch, $PATCH_FILE patch file"
-arc co $BASE_REV -b $BRANCH
-rsync -r --delete --filter='. -' -v $TO/ $FROM << EOF
+echo "Use $EXPORT_DIR export dir"
+arc export $BASE_REV "$ARC_FROM" --to "$EXPORT_DIR"
+rsync -r --delete --filter='. -' "$EXPORT_DIR/$ARC_FROM/" "$TO" << EOF
 + /*/
 + *.md
 + toc_*.yaml
 - /*
 EOF
 
-arc add -A $INFO_FROM
+rm -rf "$EXPORT_DIR" || true
 
-arc diff --cached --relative=$INFO_FROM > $PATCH_FILE
-arc reset
-arc co $INFO_FROM
+arc add -A $ARC_TO
+
+arc diff --cached --reverse --relative=$ARC_TO > $PATCH_FILE
+arc reset --hard
 arc clean -d
-arc st
-arc co "$CURRENT_BRANCH"
-arc br -D $BRANCH
-rsync -r --delete --filter='. -' -v $FROM/ $TO << EOF
+arc status
+
+rsync -r --delete --filter='. -' "$FROM/" "$TO" << EOF
 + /*/
 + *.md
 + toc_*.yaml
+P _assets/*
 - /*
 EOF
 
-patch -d $TO -p0 -N -E --no-backup-if-mismatch --merge -i $PATCH_FILE -t
+patch -d "$TO" -p0 -N -E --no-backup-if-mismatch --merge -i $PATCH_FILE -t || echo "Patch has conflicts. Consider to review them before commit"
 
-echo "$HEAD_REV;$INFO_FROM" > $TARGET_INFO_FILE
+if [ "$(cd $TO; arc status -s -u all | wc -l)" != "0" ]; then
+    echo "$HEAD_REV;$ARC_FROM" > $TARGET_INFO_FILE
+else
+    echo "Nothing changed"
+fi
+
+if [ -v KEEP_PATCH ]; then
+    mv "$PATCH_FILE" "$TO/$DATETIME.patch"
+else
+    rm "$PATCH_FILE"
+fi

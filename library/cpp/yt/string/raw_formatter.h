@@ -84,11 +84,12 @@ public:
         }
     }
 
-    //! Appends a single character and updates the internal cursor.
-    void AppendChar(char ch)
+    //! Appends a single character given number of times and updates the internal cursor.
+    void AppendChar(char ch, int count = 1)
     {
-        if (Cursor_ < End_) {
+        while (Cursor_ < End_ && count > 0) {
             *Cursor_++ = ch;
+            count--;
         }
     }
 
@@ -96,6 +97,8 @@ public:
     void AppendNumber(uintptr_t number, int radix = 10, int width = 0, char ch = ' ')
     {
         int digits = 0;
+
+        width = std::min(width, GetBytesRemaining());
 
         if (radix == 16) {
             // Optimize output of hex numbers.
@@ -140,22 +143,6 @@ public:
         }
     }
 
-    //! Formats |number| as hexadecimal number and updates the internal cursor.
-    //! Padding will be added in front if needed.
-    void AppendNumberAsHexWithPadding(uintptr_t number, int width)
-    {
-        char* begin = Cursor_;
-        AppendString("0x");
-        AppendNumber(number, 16);
-        // Move to right and add padding in front if needed.
-        if (Cursor_ < begin + width) {
-            auto delta = begin + width - Cursor_;
-            std::copy(begin, Cursor_, begin + delta);
-            std::fill(begin, begin + delta, ' ');
-            Cursor_ = begin + width;
-        }
-    }
-
     //! Formats |guid| and updates the internal cursor.
     void AppendGuid(TGuid guid)
     {
@@ -185,7 +172,6 @@ private:
     char* const Begin_;
     char* Cursor_;
     char* const End_;
-
 };
 
 template <size_t N>
@@ -203,7 +189,6 @@ public:
 
 private:
     char Buffer_[N];
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////

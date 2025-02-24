@@ -40,7 +40,7 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
 
         {
@@ -94,7 +94,7 @@ public:
                 query << " WHERE name=$name";
                 params.AddParam("$name", NYdb::TValueBuilder().Utf8(name).Build());
             }
-            NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+            NActors::TActorSystem* actorSystem = ctx.ActorSystem();
             NActors::TActorId actorId = ctx.SelfID;
             Session->ExecuteDataQuery(query,
                                      NYdb::NTable::TTxControl::BeginTx(

@@ -58,6 +58,24 @@ bool TLoginProvider::CheckAllowedName(const TString& name) {
     return name.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789") == std::string::npos;
 }
 
+bool TLoginProvider::CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const {
+    if (IsHashedPassword) {
+        auto hashCheckResult = HashChecker.Check(password);
+        if (!hashCheckResult.Success) {
+            error = hashCheckResult.Error;
+            return false;
+        }
+    } else {
+        auto passwordCheckResult = PasswordChecker.Check(user, password);
+        if (!passwordCheckResult.Success) {
+            error = passwordCheckResult.Error;
+            return false;
+        }
+    }
+
+    return true;
+}
+
 TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserRequest& request) {
     TBasicResponse response;
 
@@ -66,9 +84,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
         return response;
     }
 
-    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
-    if (!passwordCheckResult.Success) {
-        response.Error = passwordCheckResult.Error;
+    if (!CheckPasswordOrHash(request.IsHashedPassword, request.User, request.Password, response.Error)) {
         return response;
     }
 
@@ -84,7 +100,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
 
     TSidRecord& user = itUserCreate.first->second;
     user.Name = request.User;
-    user.PasswordHash = Impl->GenerateHash(request.Password);
+    user.PasswordHash = request.IsHashedPassword ? request.Password : Impl->GenerateHash(request.Password);
     user.CreatedAt = std::chrono::system_clock::now();
     user.LastFailedLogin = std::chrono::system_clock::time_point();
     user.IsEnabled = request.CanLogin;
@@ -100,6 +116,10 @@ bool TLoginProvider::CheckUserExists(const TString& user) {
     return CheckSubjectExists(user, ESidType::USER);
 }
 
+bool TLoginProvider::CheckGroupExists(const TString& group) {
+    return CheckSubjectExists(group, ESidType::GROUP);
+}
+
 TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserRequest& request) {
     TBasicResponse response;
 
@@ -112,17 +132,19 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
     TSidRecord& user = itUserModify->second;
 
     if (request.Password.has_value()) {
-        TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password.value());
-        if (!passwordCheckResult.Success) {
-            response.Error = passwordCheckResult.Error;
+        if (!CheckPasswordOrHash(request.IsHashedPassword, request.User, request.Password.value(), response.Error)) {
             return response;
         }
 
-        user.PasswordHash = Impl->GenerateHash(request.Password.value());
+        user.PasswordHash = request.IsHashedPassword ? request.Password.value() : Impl->GenerateHash(request.Password.value());
     }
 
     if (request.CanLogin.has_value()) {
         user.IsEnabled = request.CanLogin.value();
+
+        if (user.IsEnabled && CheckLockoutByAttemptCount(user)) {
+            ResetFailedLoginAttemptCount(&user);
+        }
     }
 
     return response;
@@ -278,31 +300,29 @@ TLoginProvider::TRenameGroupResponse TLoginProvider::RenameGroup(const TRenameGr
     return response;
 }
 
-TLoginProvider::TRemoveGroupResponse TLoginProvider::RemoveGroup(const TRemoveGroupRequest& request) {
+TLoginProvider::TRemoveGroupResponse TLoginProvider::RemoveGroup(const TString& group) {
     TRemoveGroupResponse response;
 
-    auto itGroupModify = Sids.find(request.Group);
+    auto itGroupModify = Sids.find(group);
     if (itGroupModify == Sids.end() || itGroupModify->second.Type != ESidType::GROUP) {
-        if (!request.MissingOk) {
-            response.Error = "Group not found";
-        }
+        response.Error = "Group not found";
         return response;
     }
 
-    auto itChildToParentIndex = ChildToParentIndex.find(request.Group);
+    auto itChildToParentIndex = ChildToParentIndex.find(group);
     if (itChildToParentIndex != ChildToParentIndex.end()) {
         for (const TString& parent : itChildToParentIndex->second) {
             auto itGroup = Sids.find(parent);
             if (itGroup != Sids.end()) {
                 response.TouchedGroups.emplace_back(itGroup->first);
-                itGroup->second.Members.erase(request.Group);
+                itGroup->second.Members.erase(group);
             }
         }
         ChildToParentIndex.erase(itChildToParentIndex);
     }
 
     for (const TString& member : itGroupModify->second.Members) {
-        ChildToParentIndex[member].erase(request.Group);
+        ChildToParentIndex[member].erase(group);
     }
 
     Sids.erase(itGroupModify);
@@ -331,9 +351,12 @@ std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) 
     return groups;
 }
 
+bool TLoginProvider::CheckLockoutByAttemptCount(const TSidRecord& sid) const {
+    return AccountLockout.AttemptThreshold != 0 && sid.FailedLoginAttemptCount >= AccountLockout.AttemptThreshold;
+}
+
 bool TLoginProvider::CheckLockout(const TSidRecord& sid) const {
-    return  !sid.IsEnabled
-            || AccountLockout.AttemptThreshold != 0 && sid.FailedLoginAttemptCount >= AccountLockout.AttemptThreshold;
+    return !sid.IsEnabled || CheckLockoutByAttemptCount(sid);
 }
 
 void TLoginProvider::ResetFailedLoginAttemptCount(TSidRecord* sid) {
@@ -348,9 +371,11 @@ bool TLoginProvider::ShouldResetFailedAttemptCount(const TSidRecord& sid) const 
     if (sid.FailedLoginAttemptCount == 0) {
         return false;
     }
+
     if (AccountLockout.AttemptResetDuration == std::chrono::system_clock::duration::zero()) {
         return false;
     }
+
     return sid.LastFailedLogin + AccountLockout.AttemptResetDuration < std::chrono::system_clock::now();
 }
 
@@ -360,7 +385,7 @@ bool TLoginProvider::ShouldUnlockAccount(const TSidRecord& sid) const {
 
 bool TLoginProvider::IsLockedOut(const TSidRecord& user) const {
     Y_ABORT_UNLESS(user.Type == NLoginProto::ESidType::USER);
-    
+
     if (AccountLockout.AttemptThreshold == 0) {
         return false;
     }
@@ -508,6 +533,7 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
             // we check audience manually because we want an explicit error instead of wrong key id in case of databases mismatch
             auto audience = decoded_token.get_audience();
             if (audience.empty() || TString(*audience.begin()) != Audience) {
+                response.WrongAudience = true;
                 response.Error = "Wrong audience";
                 return response;
             }

@@ -100,10 +100,12 @@ Feel free to change these settings if needed, but it is not necessary in straigh
       - static-node-3.ydb-cluster.com
   ```
 
-The value of the `ydb_database_groups` variable in the `vars` section has a fixed value tied to the redundancy type and does not depend on the size of the cluster:
+The optimal value of the `ydb_database_groups` setting in the `vars` section depends on available disk drives. Assuming only one database in the cluster, use the following logic:
 
-* For the redundancy type `block-4-2`, the value of `ydb_database_groups` is seven.
-* For the redundancy type `mirror-3-dc`, the value of `ydb_database_groups` is eight.
+* For production-grade deployments, use disks with a capacity of over 800 GB and high IOPS, then choose the value for this setting based on the cluster topology:
+  * For `block-4-2`, set `ydb_database_groups` to 95% of your total disk drive count, rounded down.
+  * For `mirror-3-dc`, set `ydb_database_groups` to 84% of your total disk drive count, rounded down.
+* For testing {{ ydb-short-name }} on small disks, set `ydb_database_groups` to 1 regardless of cluster topology.
 
 The values of the `system_timezone` and `system_ntp_servers` variables depend on the infrastructure properties where the {{ ydb-short-name }} cluster is being deployed. By default, `system_ntp_servers` includes a set of NTP servers without considering the geographical location of the infrastructure on which the {{ ydb-short-name }} cluster will be deployed. We strongly recommend using a local NTP server for on-premise infrastructure and the following NTP servers for cloud providers:
 

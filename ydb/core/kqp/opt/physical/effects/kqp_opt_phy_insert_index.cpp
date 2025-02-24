@@ -107,6 +107,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
         .Input(insertRowsPrecompute)
         .Columns(insert.Columns())
         .ReturningColumns(insert.ReturningColumns())
+        .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
         .Done();
 
     TVector<TExprBase> effects;
@@ -142,6 +143,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             .Input(upsertIndexRows)
             .Columns(BuildColumnsList(indexTableColumns, insert.Pos(), ctx))
             .ReturningColumns<TCoAtomList>().Build()
+            .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
             .Done();
 
         effects.emplace_back(upsertIndex);

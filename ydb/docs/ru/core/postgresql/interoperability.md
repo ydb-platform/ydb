@@ -80,7 +80,7 @@
 
 Таблица соответствия типов данных YQL, при их использовании в PostgreSQL запросах:
 
-{% include [topg](../yql/reference/udf/list/_includes/topg.md) %}
+{% include [topg](../yql/reference/_includes/topg.md) %}
 
 ### Использование данных таблиц, созданных в PostgreSQL синтаксисе, в синтаксисе YQL {#frompg}
 

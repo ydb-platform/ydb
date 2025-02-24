@@ -85,15 +85,25 @@ namespace NSQLTranslationV1 {
         Allow,
         AsStringLiteral,
         AsPgType,
-        MatchRecognize,
+        MatchRecognizeMeasures,
+        MatchRecognizeDefine,
+        MatchRecognizeDefineAggregate,
     };
 
     class TContext {
     public:
+        //FIXME remove
         TContext(const NSQLTranslation::TTranslationSettings& settings,
-                 const NSQLTranslation::TSQLHints& hints,
-                 NYql::TIssues& issues,
-                 const TString& query = {});
+            const NSQLTranslation::TSQLHints& hints,
+            NYql::TIssues& issues,
+            const TString& query = {});
+
+        TContext(const TLexers& lexers,
+                const TParsers& parsers,
+                const NSQLTranslation::TTranslationSettings& settings,
+                const NSQLTranslation::TSQLHints& hints,
+                NYql::TIssues& issues,
+                const TString& query = {});
 
         virtual ~TContext();
 
@@ -204,10 +214,42 @@ namespace NSQLTranslationV1 {
             return TopLevelColumnReferenceState;
         }
 
-        TStringBuf GetMatchRecognizeDefineVar() const {
-            YQL_ENSURE(EColumnRefState::MatchRecognize == ColumnReferenceState,
-                       "DefineVar can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+        [[nodiscard]] TString GetMatchRecognizeDefineVar() const {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
             return MatchRecognizeDefineVar;
+        }
+
+        TString ExtractMatchRecognizeAggrVar() {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+            return std::exchange(MatchRecognizeAggrVar, "");
+        }
+
+        [[nodiscard]] bool SetMatchRecognizeAggrVar(TString var) {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+            if (MatchRecognizeAggrVar.empty()) {
+                MatchRecognizeAggrVar = std::move(var);
+            } else if (MatchRecognizeAggrVar != var) {
+                Error() << "Illegal use of aggregates or navigation operators in MATCH_RECOGNIZE";
+                return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] auto& GetMatchRecognizeAggregations() {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+            return MatchRecognizeAggregations;
         }
 
         TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
@@ -215,6 +257,10 @@ namespace NSQLTranslationV1 {
 
     private:
         IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
+
+    public:
+        const TLexers Lexers;
+        const TParsers Parsers;
 
     private:
         NYql::TPosition Position;
@@ -231,6 +277,12 @@ namespace NSQLTranslationV1 {
         EColumnRefState ColumnReferenceState = EColumnRefState::Deny;
         EColumnRefState TopLevelColumnReferenceState = EColumnRefState::Deny;
         TString MatchRecognizeDefineVar;
+        TString MatchRecognizeAggrVar;
+        struct TMatchRecognizeAggregation {
+            TString Var;
+            TAggregationPtr Aggr;
+        };
+        TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations;
         TString NoColumnErrorContext = "in current scope";
         TVector<TBlocks*> CurrentBlocks;
 
@@ -331,6 +383,8 @@ namespace NSQLTranslationV1 {
         bool SeqMode = false;
         bool EmitUnionMerge = false;
         TVector<size_t> ForAllStatementsParts;
+
+        TMaybe<TString> Engine;
     };
 
     class TColumnRefScope {
@@ -347,7 +401,13 @@ namespace NSQLTranslationV1 {
             } else {
                 Ctx.ColumnReferenceState = state;
             }
-            YQL_ENSURE(defineVar.empty() || EColumnRefState::MatchRecognize == state, "Internal logic error");
+            YQL_ENSURE(
+                defineVar.empty()
+                || EColumnRefState::MatchRecognizeMeasures == state
+                || EColumnRefState::MatchRecognizeDefine == state
+                || EColumnRefState::MatchRecognizeDefineAggregate == state,
+                "Internal logic error"
+            );
             ctx.MatchRecognizeDefineVar = defineVar;
         }
 

@@ -27,6 +27,7 @@ struct TCommitRecord {
     ui64 FirstLsnToKeep = 0; // 0 == not set
     TVector<TChunkIdx> CommitChunks;
     TVector<TChunkIdx> DeleteChunks;
+    TVector<TChunkIdx> DirtyChunks;
     bool IsStartingPoint = false;
     bool DeleteToDecommitted = false; // 1 == set chunks to Decommitted state that requires a ChunkForget event or a restart
     // the value of DeleteToDecommitted is not stored as a part of the commit record.
@@ -74,6 +75,8 @@ struct TCommitRecord {
         PrintChunks(str, CommitChunks);
         str << " DeleteChunks# ";
         PrintChunks(str, DeleteChunks);
+        str << " DirtyChunks# ";
+        PrintChunks(str, DirtyChunks);
         str << "}";
         return str.Str();
     }
@@ -1584,7 +1587,6 @@ struct TEvShredPDiskResult : TEventLocal<TEvShredPDiskResult, TEvBlobStorage::Ev
 // PDisk sends this message to VDisk to ask for full compaction before shredding
 struct TEvPreShredCompactVDisk : TEventLocal<TEvPreShredCompactVDisk, TEvBlobStorage::EvPreShredCompactVDisk> {
     ui64 ShredGeneration;
-    std::vector<TChunkIdx> ChunksToShred;
 
     TEvPreShredCompactVDisk(ui64 shredGeneration)
         : ShredGeneration(shredGeneration)
@@ -1671,29 +1673,19 @@ struct TEvShredVDiskResult : TEventLocal<TEvShredVDiskResult, TEvBlobStorage::Ev
     }
 };
 
-// VDisk sends this message to PDisk to mark a single chunk as dirty
-// No response is expected from PDisk as the operation has very high priority and always succeeds
-struct TEvMarkDirty : TEventLocal<TEvMarkDirty, TEvBlobStorage::EvMarkDirty> {
-    TOwner Owner;
-    TOwnerRound OwnerRound;
-    TStackVec<TChunkIdx, 1> ChunksToMarkDirty;
-
-    TEvMarkDirty(TOwner owner, TOwnerRound ownerRound, TStackVec<TChunkIdx, 1> chunksToMarkDirty)
-        : Owner(owner)
-        , OwnerRound(ownerRound)
-        , ChunksToMarkDirty(chunksToMarkDirty)
+// PDisk sends this message to itself
+struct TEvContinueShred : TEventLocal<TEvContinueShred, TEvBlobStorage::EvContinueShred> {
+    TEvContinueShred()
     {}
 
     TString ToString() const {
         TStringStream str;
-        str << "{EvMarkDirty OwnerId# " << (ui32)Owner
-            << " OwnerRound# " << OwnerRound
-            << " ChunkToMarkDirty# ";
-        FormatList(str, ChunksToMarkDirty);
+        str << "{EvContinueShred ";
         str << "}";
         return str.Str();
     }
 };
+
 
 /*
  * One common context in the PDisk's world.

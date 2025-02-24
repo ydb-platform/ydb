@@ -171,14 +171,14 @@ TYsonStructRegistrar<TStruct>::TYsonStructRegistrar(IYsonStructMeta* meta)
 
 template <class TStruct>
 template <class TValue>
-TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::Parameter(const TString& key, TValue(TStruct::*field))
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::Parameter(const std::string& key, TValue(TStruct::*field))
 {
     return BaseClassParameter<TStruct, TValue>(key, field);
 }
 
 template <class TStruct>
 template <class TBase, class TValue>
-TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::BaseClassParameter(const TString& key, TValue(TBase::*field))
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::BaseClassParameter(const std::string& key, TValue(TBase::*field))
 {
     static_assert(std::derived_from<TStruct, TBase>);
     int fieldIndex = ssize(Meta_->GetParameterMap());
@@ -189,7 +189,7 @@ TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::BaseClassParameter(
 
 template <class TStruct>
 template <class TValue>
-TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ParameterWithUniversalAccessor(const TString& key, std::function<TValue&(TStruct*)> accessor)
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ParameterWithUniversalAccessor(const std::string& key, std::function<TValue&(TStruct*)> accessor)
 {
     int fieldIndex = ssize(Meta_->GetParameterMap());
     auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TUniversalYsonParameterAccessor<TStruct, TValue>>(std::move(accessor)), fieldIndex);
@@ -216,7 +216,7 @@ void TYsonStructRegistrar<TStruct>::Postprocessor(std::function<void(TStruct*)> 
 template <class TStruct>
 template <class TExternal, class TValue>
     // requires std::derived_from<TStruct, TExternalizedYsonStruct<TExternal, TStruct>>
-TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalClassParameter(const TString& key, TValue(TExternal::*field))
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalClassParameter(const std::string& key, TValue(TExternal::*field))
 {
     static_assert(std::derived_from<TStruct, TExternalizedYsonStruct>);
     static_assert(std::same_as<typename TStruct::TExternal, TExternal>);
@@ -251,7 +251,7 @@ void TYsonStructRegistrar<TStruct>::ExternalPostprocessor(TExternalPostprocessor
 
 template <class TStruct>
 template <class TBase, class TValue>
-TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalBaseClassParameter(const TString& key, TValue(TBase::*field))
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalBaseClassParameter(const std::string& key, TValue(TBase::*field))
 {
     static_assert(std::derived_from<TStruct, TExternalizedYsonStruct>);
     static_assert(std::derived_from<typename TStruct::TExternal, TBase>);
@@ -337,8 +337,7 @@ THashMap<TKey, TIntrusivePtr<TValue>> CloneYsonStructs(const THashMap<TKey, TInt
     THashMap<TKey, TIntrusivePtr<TValue>> clonedObjs;
     clonedObjs.reserve(objs.size());
     for (const auto& [key, obj] : objs) {
-        // TODO(babenko): switch to std::string
-        clonedObjs.emplace(TString(key), CloneYsonStruct(obj));
+        clonedObjs.emplace(key, CloneYsonStruct(obj));
     }
     return clonedObjs;
 }

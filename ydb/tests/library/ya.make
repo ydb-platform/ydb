@@ -109,6 +109,7 @@ RECURSE(
     compatibility
     clients
     serializability
+    test_meta
     wardens
     sqs
 )

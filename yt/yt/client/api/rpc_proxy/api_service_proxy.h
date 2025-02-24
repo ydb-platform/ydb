@@ -109,6 +109,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ResumeOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CompleteOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, UpdateOperationParameters);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PatchOperationSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListOperations);
 

@@ -460,6 +460,24 @@ size_t TSerializedCellVec::SerializedSize(TConstArrayRef<TCell> cells) {
     return size;
 }
 
+TCell TSerializedCellVec::ExtractCell(std::string_view data, size_t pos) {
+    TSerializedCellReader reader{data};
+
+    ui16 cellCount = 0;
+    if (!reader.Read(&cellCount) || cellCount <= pos) {
+        return {};
+    }
+
+    TCell cell;
+    for (ui16 i = 0; i <= pos; ++i) {
+        cell = {};
+        if (!reader.ReadNewCell(&cell)) {
+            return {};
+        }
+    }
+    return cell;
+}
+
 bool TSerializedCellVec::DoTryParse() {
     if (!TryDeserializeCellVec(Buf, Cells)) {
         Buf.clear();
@@ -714,4 +732,3 @@ size_t GetCellHeaderSize() {
 }
 
 } // namespace NKikimr
-

@@ -732,6 +732,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
         protoOperation->set_suspended(*operation.Suspended);
     }
 
+    if (operation.SuspendReason) {
+        protoOperation->set_suspend_reason(*operation.SuspendReason);
+    }
+
     if (operation.Events) {
         protoOperation->set_events(operation.Events.ToString());
     }
@@ -1014,6 +1018,9 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     if (job.MonitoringDescriptor) {
         protoJob->set_monitoring_descriptor(*job.MonitoringDescriptor);
     }
+    if (job.OperationIncarnation) {
+        protoJob->set_operation_incarnation(*job.OperationIncarnation);
+    }
 }
 
 void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
@@ -1162,6 +1169,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
         job->MonitoringDescriptor = protoJob.monitoring_descriptor();
     } else {
         job->MonitoringDescriptor.reset();
+    }
+    if (protoJob.has_operation_incarnation()) {
+        job->OperationIncarnation = protoJob.operation_incarnation();
+    } else {
+        job->OperationIncarnation.reset();
     }
 }
 

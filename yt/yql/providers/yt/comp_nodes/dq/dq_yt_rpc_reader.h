@@ -58,6 +58,8 @@ protected:
 
     virtual void Next() override;
 
+    TString DebugInfo() const override;
+
     void Finish();
 
     void RunNext();

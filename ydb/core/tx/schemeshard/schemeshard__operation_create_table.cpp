@@ -503,9 +503,13 @@ public:
                     .IsValidLeafName()
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .ShardsLimit(shardsToCreate)
-                    .PathShardsLimit(shardsToCreate)
                     .IsValidACL(acl);
+
+                if (!Transaction.GetInternal()) {
+                    checks
+                        .ShardsLimit(shardsToCreate)
+                        .PathShardsLimit(shardsToCreate);
+                }
             }
 
             if (!checks) {

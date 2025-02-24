@@ -1,26 +1,20 @@
-#include <yql/essentials/public/issue/yql_issue.h>
+#pragma once
+
+#include <util/generic/string.h>
+
+namespace NYql {
+    class TIssues;
+}
 
 namespace NYdb::NDump {
-
-TString RewriteAbsolutePath(TStringBuf path, TStringBuf backupRoot, TStringBuf restoreRoot);
-
-bool RewriteTableRefs(TString& scheme, TStringBuf backupRoot, TStringBuf restoreRoot, NYql::TIssues& issues);
-
-struct TViewQuerySplit {
-    TString ContextRecreation;
-    TString Select;
-};
-
-TViewQuerySplit SplitViewQuery(TStringInput query);
-
-// returns void, because the validation is non-blocking
-void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssues& issues);
-
-bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues);
 
 TString BuildCreateViewQuery(
     const TString& name, const TString& dbPath, const TString& viewQuery, const TString& backupRoot,
     NYql::TIssues& issues
 );
 
-}
+bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool restoreRootIsDatabase,
+    const TString& dbPath, NYql::TIssues& issues
+);
+
+} // NYdb::NDump

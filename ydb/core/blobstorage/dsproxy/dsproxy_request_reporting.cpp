@@ -19,11 +19,11 @@ bool GetFromBucket(TReportLeakBucket& bucket) {
     return true;
 }
 
-bool AllowToReport(NKikimrBlobStorage::EPutHandleClass handleClass) {
+bool PopAllowToken(NKikimrBlobStorage::EPutHandleClass handleClass) {
     return GetFromBucket(ReportPutPermissions[(ui32)handleClass]);
 }
 
-bool AllowToReport(NKikimrBlobStorage::EGetHandleClass handleClass) {
+bool PopAllowToken(NKikimrBlobStorage::EGetHandleClass handleClass) {
     return GetFromBucket(ReportGetPermissions[(ui32)handleClass]);
 }
 

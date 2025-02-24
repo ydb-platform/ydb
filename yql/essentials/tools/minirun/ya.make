@@ -18,8 +18,8 @@ PEERDIR(
     yql/essentials/tools/yql_facade_run
     yql/essentials/providers/pure
     yql/essentials/providers/common/provider
-    yql/essentials/minikql/invoke_builtins/llvm14
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/invoke_builtins/llvm16
+    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/terminate_policy
     yql/essentials/sql/pg

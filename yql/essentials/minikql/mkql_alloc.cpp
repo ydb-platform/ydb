@@ -49,13 +49,18 @@ void TAllocState::CleanupPAllocList(TListEntry* root) {
 void TAllocState::CleanupArrowList(TListEntry* root) {
     for (auto curr = root->Right; curr != root; ) {
         auto next = curr->Right;
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-        free(curr);
-#else
-        auto size = ((TMkqlArrowHeader*)curr)->Size;
-        auto fullSize = size + sizeof(TMkqlArrowHeader);
-        ReleaseAlignedPage(curr, fullSize);
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+        if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
+            free(curr);
+        } else {
 #endif
+            auto size = ((TMkqlArrowHeader*)curr)->Size;
+            auto fullSize = size + sizeof(TMkqlArrowHeader);
+            ReleaseAlignedPage(curr, fullSize);
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+        }
+#endif
+
         curr = next;
     }
 
@@ -256,15 +261,21 @@ void* MKQLArrowAllocate(ui64 size) {
         state->OffloadAlloc(fullSize);
     }
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    auto ptr = malloc(fullSize);
-    if (!ptr) {
-        throw TMemoryLimitExceededException();
-    }
-#else
-    auto ptr = GetAlignedPage(fullSize);
+    void* ptr;
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
+        ptr = malloc(fullSize);
+        if (!ptr) {
+            throw TMemoryLimitExceededException();
+        }
+    } else {
 #endif
-    auto header = (TMkqlArrowHeader*)ptr;
+        ptr = GetAlignedPage(fullSize);
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    }
+#endif
+
+    auto* header = (TMkqlArrowHeader*)ptr;
     if (state->EnableArrowTracking) {
         header->Entry.Link(&state->ArrowBlocksRoot);
         Y_ENSURE(state->ArrowBuffers.insert(header + 1).second);
@@ -297,11 +308,14 @@ void MKQLArrowFree(const void* mem, ui64 size) {
     }
 
     Y_ENSURE(size == header->Size);
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    free(header);
-#else
-    ReleaseAlignedPage(header, fullSize);
+
+#if defined(ALLOW_MEMORY_ALLOCATOR)
+    if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
+        free(header);
+        return;
+    }
 #endif
+    ReleaseAlignedPage(header, fullSize);
 }
 
 void MKQLArrowUntrack(const void* mem) {

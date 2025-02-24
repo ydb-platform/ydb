@@ -158,7 +158,6 @@ private:
         CASE_COUNT_REQUEST(LogRead);
         CASE_COUNT_REQUEST(ShredPDisk);
         CASE_COUNT_REQUEST(ShredVDiskResult);
-        CASE_COUNT_REQUEST(MarkDirty);
         default: break;
         }
     }

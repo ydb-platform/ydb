@@ -41,11 +41,11 @@ public:
         const TMultiLookupOptions& options) override;
 
     TFuture<TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options) override;
 
     TFuture<NYson::TYsonString> ExplainQuery(
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options) override;
 
     TFuture<TPullRowsResult> PullRows(

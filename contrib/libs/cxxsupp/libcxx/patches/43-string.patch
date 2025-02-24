@@ -1,5 +1,5 @@
 diff --git a/include/string b/include/string
-index ca5b3fa..653aa6f 100644
+index a456f8c..804373b 100644
 --- a/include/string
 +++ b/include/string
 @@ -83,6 +83,7 @@ template <> struct char_traits<char32_t>;

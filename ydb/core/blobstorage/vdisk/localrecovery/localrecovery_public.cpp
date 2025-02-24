@@ -201,7 +201,7 @@ namespace NKikimr {
                         TThis* const Self;
 
                         void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound,
-                                const TKeyLogoBlob& /*key*/, ui64 /*circaLsn*/) {
+                                const TKeyLogoBlob& /*key*/, ui64 /*circaLsn*/, const void* /*sst*/) {
                             if (memRec.GetType() == TBlobType::HugeBlob || memRec.GetType() == TBlobType::ManyHugeBlobs) {
                                 TDiskDataExtractor extr;
                                 memRec.GetDiskData(&extr, outbound);

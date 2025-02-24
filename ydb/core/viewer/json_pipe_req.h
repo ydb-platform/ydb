@@ -42,6 +42,7 @@ protected:
     TString Database;
     TString SharedDatabase;
     bool Direct = false;
+    bool NeedRedirect = true;
     ui32 Requests = 0;
     bool PassedAway = false;
     ui32 MaxRequestsInFlight = 200;
@@ -280,6 +281,17 @@ protected:
     void InitConfig(const TRequestSettings& settings);
     void BuildParamsFromJson(TStringBuf data);
     void SetupTracing(const TString& handlerName);
+
+    template<typename TJson>
+    void Proto2Json(const NProtoBuf::Message& proto, TJson& json) {
+        try {
+            NProtobufJson::Proto2Json(proto, json, Proto2JsonConfig);
+        }
+        catch (const std::exception& e) {
+            json = TStringBuilder() << "error converting " << proto.GetTypeName() << " to json: " << e.what();
+        }
+    }
+
     void ClosePipes();
     ui32 FailPipeConnect(TTabletId tabletId);
 

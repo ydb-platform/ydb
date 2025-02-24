@@ -375,7 +375,7 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
             settings.WithProgress = true;
 
             if (PlanFileName) {
-                settings.PlanFileName = TStringBuilder() << PlanFileName << "." << queryN << "." << ToString(i);
+                settings.PlanFileName = TStringBuilder() << PlanFileName << "." << queryN << "." << ToString(i) << ".in_progress";
             }
 
             try {

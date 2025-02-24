@@ -257,6 +257,10 @@ def enable_tls():
     return os.getenv('YDB_GRPC_ENABLE_TLS') == 'true'
 
 
+def report_monitoring_info():
+    return os.getenv('YDB_REPORT_MONITORING_INFO') == 'true'
+
+
 def generic_connector_config():
     endpoint = os.getenv("FQ_CONNECTOR_ENDPOINT")
     if not endpoint:
@@ -410,7 +414,8 @@ def deploy(arguments):
     recipe.write_endpoint(endpoint)
     recipe.write_database(cluster.domain_name)
     recipe.write_connection_string(("grpcs://" if enable_tls() else "grpc://") + endpoint + "?database=/" + cluster.domain_name)
-    recipe.write_mon_port(mon_port)
+    if report_monitoring_info():
+        recipe.write_mon_port(mon_port)
     if enable_tls():
         recipe.write_certificates_path(configuration.grpc_tls_ca.decode("utf-8"))
     return endpoint, database

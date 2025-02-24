@@ -99,6 +99,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, MaxTasksPerStage);
     REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
 
+    REGISTER_SETTING(*this, KMeansTreeSearchTopSize);
+
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
 

@@ -171,7 +171,7 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
 
 void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds,
                   NOlap::TSnapshot snap, ui64 scanId) {
-    auto scan = std::make_unique<TEvColumnShard::TEvScan>();
+    auto scan = std::make_unique<TEvDataShard::TEvKqpScan>();
     auto& record = scan->Record;
 
     record.SetTxId(snap.GetPlanStep());
@@ -527,16 +527,18 @@ namespace NKikimr::NColumnShard {
         SetupSchema(runtime, sender, schemaTxBody, NOlap::TSnapshot(1000, 100), succeed);
     }
 
-    std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {
-        std::vector<TString> fields;
-        for (auto&& f : schema) {
-            fields.emplace_back(f.GetName());
-        }
-
-        NTxUT::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
-        reader.SetReplyColumns(fields);
-        auto rb = reader.ReadAll();
-        UNIT_ASSERT(reader.IsCorrectlyFinished());
-        return rb ? rb : NArrow::MakeEmptyBatch(NArrow::MakeArrowSchema(schema));
-    }
+     std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {
+         std::vector<ui32> fields;
+         ui32 idx = 1;
+         for (auto&& f : schema) {
+             Y_UNUSED(f);
+             fields.emplace_back(idx++);
+         }
+ 
+         NTxUT::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+         reader.SetReplyColumnIds(fields);
+         auto rb = reader.ReadAll();
+         UNIT_ASSERT(reader.IsCorrectlyFinished());
+         return rb ? rb : NArrow::MakeEmptyBatch(NArrow::MakeArrowSchema(schema));
+     }
 }

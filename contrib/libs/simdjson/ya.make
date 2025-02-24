@@ -10,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.11.6)
+VERSION(3.12.2)
 
-ORIGINAL_SOURCE(https://github.com/simdjson/simdjson/archive/v3.11.6.tar.gz)
+ORIGINAL_SOURCE(https://github.com/simdjson/simdjson/archive/v3.12.2.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/simdjson/include

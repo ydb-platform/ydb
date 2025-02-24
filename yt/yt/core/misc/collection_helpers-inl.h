@@ -155,7 +155,7 @@ TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set)
 }
 
 template <class TMap, class TKeySet>
-void DropMissingKeys(TMap&& map, const TKeySet& set)
+void DropMissingKeys(TMap&& map, TKeySet&& set)
 {
     for (auto it = map.begin(); it != map.end(); ) {
         if (!set.contains(it->first)) {

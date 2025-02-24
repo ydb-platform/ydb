@@ -126,11 +126,12 @@ public:
 
         if (Database.empty()) {
             ListTenantsResponse = MakeRequestConsoleListTenants();
+            NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
         } else {
-            NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
             if (Database != DomainPath) {
                 TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
             }
+            NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
         }
 
         if (Database.empty() || Database == DomainPath) {
@@ -140,7 +141,6 @@ public:
             tenant.SetType(NKikimrViewer::Domain);
             tenant.SetName(DomainPath);
             RequestMetadataCacheHealthCheck(DomainPath);
-            NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
         }
 
         HiveDomainStats[RootHiveId] = MakeRequestHiveDomainStats(RootHiveId);
@@ -280,6 +280,7 @@ public:
             request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
         }
         request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkUtilizationFieldNumber);
+        request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkWriteThroughputFieldNumber);
     }
 
     void SendWhiteboardSystemStateRequest(const TNodeId nodeId) {
@@ -849,6 +850,9 @@ public:
                         if (nodeInfo.HasNetworkUtilization()) {
                             tenant.SetNetworkUtilization(tenant.GetNetworkUtilization() + nodeInfo.GetNetworkUtilization());
                             ++nodesWithNetworkUtilization;
+                        }
+                        if (nodeInfo.HasNetworkWriteThroughput()) {
+                            tenant.SetNetworkWriteThroughput(tenant.GetNetworkWriteThroughput() + nodeInfo.GetNetworkWriteThroughput());
                         }
                         overall = Max(overall, GetViewerFlag(nodeInfo.GetSystemState()));
                     }

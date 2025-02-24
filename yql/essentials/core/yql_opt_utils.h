@@ -176,4 +176,26 @@ bool CheckSupportedTypes(
     bool allowNestedOptionals = true
 );
 
+template<const char* OptName>
+bool IsOptimizerEnabled(const TTypeAnnotationContext& types) {
+    struct TFlag {
+        TFlag(const TTypeAnnotationContext& types)
+            : Value(types.OptimizerFlags.contains(to_lower(TString(OptName))))
+        {}
+        const bool Value;
+    };
+    return Singleton<TFlag>(types)->Value;
+}
+
+template<const char* OptName>
+bool IsOptimizerDisabled(const TTypeAnnotationContext& types) {
+    struct TFlag {
+        TFlag(const TTypeAnnotationContext& types)
+            : Value(types.OptimizerFlags.contains(to_lower("Disable" + TString(OptName))))
+        {}
+        const bool Value;
+    };
+    return Singleton<TFlag>(types)->Value;
+}
+
 }

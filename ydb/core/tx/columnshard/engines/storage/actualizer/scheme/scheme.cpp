@@ -85,11 +85,21 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
             TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
             features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
 
-            if (!tasksContext.AddPortion(portion, std::move(features), {})) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "cannot_add_portion")("context", tasksContext.DebugString());
+            bool limitExceeded = false;
+            switch (tasksContext.AddPortion(portion, std::move(features), {})) {
+                case TTieringProcessContext::EAddPortionResult::TASK_LIMIT_EXCEEDED:
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "cannot_add_portion")("reason", "limit_exceeded")(
+                        "context", tasksContext.DebugString());
+                    limitExceeded = true;
+                    break;
+                case TTieringProcessContext::EAddPortionResult::PORTION_LOCKED:
+                    break;
+                case TTieringProcessContext::EAddPortionResult::SUCCESS:
+                    portionsToRemove.emplace(portion->GetPortionId());
+                    break;
+            }
+            if (limitExceeded) {
                 break;
-            } else {
-                portionsToRemove.emplace(portion->GetPortionId());
             }
         }
     }

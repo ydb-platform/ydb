@@ -61,23 +61,18 @@ static constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
 }
 
 // return count, parts, step
-static std::tuple<ui32, ui32, ui32> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
+static std::tuple<NTableIndex::TClusterId, NTableIndex::TClusterId, NTableIndex::TClusterId> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
     const auto& kmeans = buildInfo.KMeans;
     Y_ASSERT(kmeans.K != 0);
-    Y_ASSERT((kmeans.K & (kmeans.K - 1)) == 0);
     const auto count = TIndexBuildInfo::TKMeans::BinPow(kmeans.K, kmeans.Level);
-    ui32 step = 1;
+    NTableIndex::TClusterId step = 1;
     auto parts = count;
     auto shards = tableInfo.GetShard2PartitionIdx().size();
-    if (!buildInfo.KMeans.NeedsAnotherLevel() || shards <= 1) {
-        shards = 1;
-        parts = 1;
+    if (!buildInfo.KMeans.NeedsAnotherLevel() || count <= 1 || shards <= 1) {
+        return {1, 1, 1};
     }
-    for (; shards < parts; parts /= 2) {
+    for (; 2 * shards <= parts; parts = (parts + 1) / 2) {
         step *= 2;
-    }
-    for (; parts < shards / 2; parts *= 2) {
-        Y_ASSERT(step == 1);
     }
     return {count, parts, step};
 }
@@ -102,8 +97,8 @@ protected:
     TActorId Uploader;
     ui32 RetryCount = 0;
     ui32 RowsBytes = 0;
-    ui32 Parent = 0;
-    ui32 Child = 0;
+    NTableIndex::TClusterId Parent = 0;
+    NTableIndex::TClusterId Child = 0;
 
     NDataShard::TUploadStatus UploadStatus;
 
@@ -113,8 +108,8 @@ public:
                    const TActorId& responseActorId,
                    ui64 buildIndexId,
                    TIndexBuildInfo::TSample::TRows init,
-                   ui32 parent,
-                   ui32 child)
+                   NTableIndex::TClusterId parent,
+                   NTableIndex::TClusterId child)
         : TargetTable(std::move(targetTable))
         , ResponseActorId(responseActorId)
         , BuildIndexId(buildIndexId)
@@ -164,7 +159,7 @@ public:
 
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
-        type.set_type_id(Ydb::Type::UINT32);
+        type.set_type_id(NTableIndex::ClusterIdType);
         (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
         (*Types)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
         type.set_type_id(Ydb::Type::STRING);
@@ -341,8 +336,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
-    const char* suffix = buildInfo.KMeans.Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
-    op = CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}, suffix);
+    std::string_view suffix = buildInfo.KMeans.Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
+    op = CalcVectorKmeansTreePostingImplTableDesc({}, tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}, suffix);
 
     const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo);
 
@@ -351,25 +346,24 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
 
     auto& policy = *config.MutablePartitioningPolicy();
     policy.SetSizeToSplit(0); // disable auto split/merge
-    policy.SetMinPartitionsCount(parts);
-    policy.SetMaxPartitionsCount(parts);
     policy.ClearFastSplitSettings();
     policy.ClearSplitByLoadSettings();
 
     op.ClearSplitBoundary();
-    if (parts <= 1) {
-        return propose;
-    }
-    auto i = buildInfo.KMeans.Parent;
-    for (const auto end = i + count;;) {
-        i += step;
-        if (i >= end) {
-            Y_ASSERT(op.SplitBoundarySize() == std::min(count, parts) - 1);
-            break;
+    static constexpr std::string_view LogPrefix = "Create build table boundaries for ";
+    LOG_D(buildInfo.Id << " table " << suffix
+        << ", count: " << count << ", parts: " << parts << ", step: " << step
+        << ", kmeans: " << buildInfo.KMeansTreeToDebugStr());
+    if (parts > 1) {
+        const auto parentFrom = buildInfo.KMeans.ParentEnd + 1;
+        for (auto i = parentFrom + step, e = parentFrom + count; i < e; i += step) {
+            LOG_D(buildInfo.Id << " table " << suffix << " value: " << i);
+            auto cell = TCell::Make(i);
+            op.AddSplitBoundary()->SetSerializedKeyPrefix(TSerializedCellVec::Serialize({&cell, 1}));
         }
-        auto cell = TCell::Make(i);
-        op.AddSplitBoundary()->SetSerializedKeyPrefix(TSerializedCellVec::Serialize({&cell, 1}));
     }
+    policy.SetMinPartitionsCount(op.SplitBoundarySize() + 1);
+    policy.SetMaxPartitionsCount(op.SplitBoundarySize() + 1);
     return propose;
 }
 
@@ -574,7 +568,7 @@ private:
         auto& clusters = *ev->Record.MutableClusters();
         clusters.Reserve(buildInfo.Sample.Rows.size());
         for (const auto& [_, row] : buildInfo.Sample.Rows) {
-            *clusters.Add() = row;
+            *clusters.Add() = TSerializedCellVec::ExtractCell(row, 0).AsBuf();
         }
 
         ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
@@ -772,7 +766,7 @@ private:
             InitMultiKMeans(buildInfo);
             return false;
         }
-        std::array<NScheme::TTypeInfo, 1> typeInfos{NScheme::NTypeIds::Uint32};
+        std::array<NScheme::TTypeInfo, 1> typeInfos{ClusterIdTypeId};
         auto range = ParentRange(buildInfo.KMeans.Parent);
         auto addRestricted = [&] (const auto& idx) {
             const auto& status = buildInfo.Shards.at(idx);
@@ -864,10 +858,10 @@ private:
 
     void PersistKMeansState(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         NIceDb::TNiceDb db{txc.DB};
-        db.Table<Schema::KMeansTreeState>().Key(buildInfo.Id).Update(
-            NIceDb::TUpdate<Schema::KMeansTreeState::Level>(buildInfo.KMeans.Level),
-            NIceDb::TUpdate<Schema::KMeansTreeState::Parent>(buildInfo.KMeans.Parent),
-            NIceDb::TUpdate<Schema::KMeansTreeState::State>(buildInfo.KMeans.State)
+        db.Table<Schema::KMeansTreeProgress>().Key(buildInfo.Id).Update(
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::Level>(buildInfo.KMeans.Level),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::State>(buildInfo.KMeans.State),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::Parent>(buildInfo.KMeans.Parent)
         );
     }
 
@@ -927,7 +921,9 @@ private:
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexUploadReset(db, buildInfo);
-            ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
+            ChangeState(BuildId, buildInfo.KMeans.Level > 2
+                                    ? TIndexBuildInfo::EState::DropBuild
+                                    : TIndexBuildInfo::EState::CreateBuild);
             Progress(BuildId);
             return false;
         }
@@ -1016,8 +1012,12 @@ public:
             } else if (!buildInfo.InitiateTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.InitiateTxId)));
             } else {
-                if (buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.NeedsAnotherLevel()) {
-                    ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
+                if (buildInfo.IsBuildVectorIndex() && buildInfo.IndexColumns.size() != 1) {
+                    // TODO(mbkkt) in this state every prefixed vector index is empty
+                    // So we need some new code to fill it
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Applying);
+                } else if (buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.NeedsAnotherLevel()) {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
                 } else {
                     ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 }
@@ -1043,6 +1043,7 @@ public:
         }
         case TIndexBuildInfo::EState::DropBuild:
             Y_ASSERT(buildInfo.IsBuildVectorIndex());
+            Y_ASSERT(buildInfo.KMeans.Level > 2);
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
@@ -1050,9 +1051,6 @@ public:
             } else if (!buildInfo.ApplyTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
-                buildInfo.SnapshotTxId = {};
-                buildInfo.SnapshotStep = {};
-
                 buildInfo.ApplyTxId = {};
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
                 buildInfo.ApplyTxDone = false;
@@ -1061,7 +1059,6 @@ public:
                 Self->PersistBuildIndexApplyTxId(db, buildInfo);
                 Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
                 Self->PersistBuildIndexApplyTxDone(db, buildInfo);
-                Self->PersistBuildIndexProcessed(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
                 Progress(BuildId);
@@ -1076,6 +1073,9 @@ public:
             } else if (!buildInfo.ApplyTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
+                buildInfo.SnapshotTxId = {};
+                buildInfo.SnapshotStep = {};
+
                 buildInfo.ApplyTxId = {};
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
                 buildInfo.ApplyTxDone = false;
@@ -1184,7 +1184,7 @@ public:
         return TSerializedTableRange(TSerializedCellVec::Serialize(cells), "", true, false);
     }
 
-    static TSerializedTableRange ParentRange(ui32 parent) {
+    static TSerializedTableRange ParentRange(NTableIndex::TClusterId parent) {
         if (parent == 0) {
             return {};  // empty
         }

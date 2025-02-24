@@ -2,14 +2,11 @@ LIBRARY()
 
 PEERDIR(
     library/cpp/deprecated/split
-    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/ast
+    yql/essentials/parser/proto_ast
+    yql/essentials/parser/lexer_common
+    yql/essentials/public/issue
     yql/essentials/sql/settings
-    yql/essentials/sql/v0
-    yql/essentials/sql/v0/lexer
-    yql/essentials/sql/v1
-    yql/essentials/sql/v1/format
-    yql/essentials/sql/v1/lexer
-    yql/essentials/sql/v1/proto_parser
     yql/essentials/utils
 )
 

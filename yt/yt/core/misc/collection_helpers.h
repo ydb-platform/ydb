@@ -43,7 +43,7 @@ template <class TMap, class TKeySet>
 [[nodiscard]] TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set);
 
 template <class TMap, class TKeySet>
-void DropMissingKeys(TMap&& map, const TKeySet& set);
+void DropMissingKeys(TMap&& map, TKeySet&& set);
 
 /*!
  * This function is supposed to replace a frequent pattern

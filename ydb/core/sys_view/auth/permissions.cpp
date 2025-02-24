@@ -23,7 +23,7 @@ public:
     TPermissionsScan(bool effective, const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), false)
+        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), false, true)
         , Effective(effective)
     {
     }
@@ -36,11 +36,10 @@ protected:
             batch.Finished = false;
             return;
         }
-        
-        TVector<TCell> cells(::Reserve(Columns.size()));
 
         auto entryPath = CanonizePath(entry.Path);
-
+        
+        TVector<std::pair<TString, TString>> permissions;
         for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
             if (ace.GetAccessType() != (ui32)NACLib::EAccessType::Allow) {
                 continue;
@@ -48,33 +47,49 @@ protected:
             if (!Effective && ace.GetInherited()) {
                 continue;
             }
+            if (!ace.HasSID()) {
+                continue;
+            }
 
-            auto permissions = ConvertACLMaskToYdbPermissionNames(ace.GetAccessRight());
-            for (const auto& permission : permissions) {
-                for (auto& column : Columns) {
-                    switch (column.Tag) {
-                    case Schema::AuthPermissions::Path::ColumnId:
-                        cells.push_back(TCell(entryPath.data(), entryPath.size()));
-                        break;
-                    case Schema::AuthPermissions::Sid::ColumnId:
-                        if (ace.HasSID()) {
-                            cells.push_back(TCell(ace.GetSID().data(), ace.GetSID().size()));
-                        } else {
-                            cells.emplace_back();
-                        }
-                        break;
-                    case Schema::AuthPermissions::Permission::ColumnId:
-                        cells.push_back(TCell(permission.data(), permission.size()));
-                        break;
-                    default:
+            auto acePermissions = ConvertACLMaskToYdbPermissionNames(ace.GetAccessRight());
+            for (const auto& permission : acePermissions) {
+                if (StringKeyIsInTableRange({entryPath, ace.GetSID(), permission})) {
+                    permissions.emplace_back(ace.GetSID(), std::move(permission));
+                }
+            }
+        }
+        // Note: due to rights inheritance permissions may be duplicated
+        SortBatch(permissions, [](const auto& left, const auto& right) {
+            return left.first < right.first ||
+                left.first == right.first && left.second < right.second;
+        }, false);
+
+        TVector<TCell> cells(::Reserve(Columns.size()));
+
+        for (const auto& [sid, permission] : permissions) {
+            for (auto& column : Columns) {
+                switch (column.Tag) {
+                case Schema::AuthPermissions::Path::ColumnId:
+                    cells.push_back(TCell(entryPath.data(), entryPath.size()));
+                    break;
+                case Schema::AuthPermissions::Sid::ColumnId:
+                    if (sid) {
+                        cells.push_back(TCell(sid.data(), sid.size()));
+                    } else {
                         cells.emplace_back();
                     }
+                    break;
+                case Schema::AuthPermissions::Permission::ColumnId:
+                    cells.push_back(TCell(permission.data(), permission.size()));
+                    break;
+                default:
+                    cells.emplace_back();
                 }
-
-                TArrayRef<const TCell> ref(cells);
-                batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
-                cells.clear();
             }
+
+            TArrayRef<const TCell> ref(cells);
+            batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
+            cells.clear();
         }
 
         batch.Finished = false;

@@ -128,6 +128,26 @@ struct TTM64Storage {
         return ToDatetime64(builder) * 1000000ll + Microsecond;
     }
 
+    inline bool Validate(const NUdf::IDateBuilder& builder) {
+        i64 datetime;
+        if (!builder.MakeTzDatetime64(Year, Month, Day, Hour, Minute, Second, datetime, TimezoneId)) {
+            return false;
+        }
+
+        i32 year;
+        ui32 month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+        if (!builder.SplitTzDatetime64(datetime, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, TimezoneId)) {
+            ythrow yexception() << "Error in SplitTzDatetime64";
+        }
+
+        DayOfYear = dayOfYear;
+        WeekOfYear = weekOfYear;
+        WeekOfYearIso8601 = weekOfYearIso8601;
+        DayOfWeek = dayOfWeek;
+
+        return true;
+    }
+
 };
 
 }

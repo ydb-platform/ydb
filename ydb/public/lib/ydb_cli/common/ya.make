@@ -3,6 +3,7 @@ LIBRARY(common)
 SRCS(
     aws.cpp
     command.cpp
+    command_utils.cpp
     common.cpp
     csv_parser.cpp
     examples.cpp

@@ -258,7 +258,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
@@ -425,7 +425,7 @@ protected:
             HFunc(TEvColumnShard::TEvCheckPlannedTransaction, Handle);
             HFunc(TEvColumnShard::TEvCancelTransactionProposal, Handle);
             HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
-            HFunc(TEvColumnShard::TEvScan, Handle);
+            HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvColumnShard::TEvInternalScan, Handle);
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
             HFunc(TEvColumnShard::TEvWrite, Handle);
@@ -550,7 +550,7 @@ private:
     THashMap<TInsertWriteId, TLongTxWriteInfo> LongTxWrites;
     using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
     THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
-    TMultiMap<NOlap::TSnapshot, TEvColumnShard::TEvScan::TPtr> WaitingScans;
+    TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;

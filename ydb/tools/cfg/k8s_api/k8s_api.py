@@ -45,14 +45,11 @@ class K8sApiHostsInformationProvider(HostsInformationProvider):
 
         labels = self._cache.get(hostname)
         if labels and self._k8s_rack_label in labels:
-            logging.info(f"get_rack invoked on {hostname}, value {labels[self._k8s_rack_label]}")
             return labels[self._k8s_rack_label]
         logging.info(f"rack not found for hostname {hostname}")
         return ""
 
     def get_datacenter(self, hostname):
-        logging.info(f"get_datacenter invoked on {hostname}")
-
         if self._k8s_dc_label is None:
             return "defaultDC"
 

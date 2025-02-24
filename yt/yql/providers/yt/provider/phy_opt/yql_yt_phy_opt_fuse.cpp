@@ -145,7 +145,15 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
                                                             EYtSettingType::ReduceBy |
                                                             EYtSettingType::FirstAsPrimary |
                                                             EYtSettingType::NoDq |
-                                                            EYtSettingType::SortBy)) {
+                                                            EYtSettingType::SortBy |
+                                                            EYtSettingType::KeepSorted)) {
+        return node;
+    }
+
+    const auto outerReduceBy = NYql::GetSettingAsColumnList(outerReduce.Settings().Ref(), EYtSettingType::ReduceBy);
+    const auto innerReduceBy = NYql::GetSettingAsColumnList(innerReduce.Settings().Ref(), EYtSettingType::ReduceBy);
+
+    if (outerReduceBy.size() != innerReduceBy.size()) {
         return node;
     }
 
@@ -174,8 +182,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
     innerLambda = FallbackLambdaOutput(innerLambda, ctx);
     outerLambda = FallbackLambdaInput(outerLambda, ctx);
 
-
-    const auto outerReduceBy = NYql::GetSettingAsColumnList(outerReduce.Settings().Ref(), EYtSettingType::ReduceBy);
     auto reduceByList = [&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
         size_t index = 0;
         for (const auto& reduceByName: outerReduceBy) {
@@ -237,6 +243,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
     if (NYql::HasSetting(outerReduce.Settings().Ref(), EYtSettingType::KeepSorted) &&
        !NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::KeepSorted)) {
         newSettings = NYql::AddSetting(*newSettings, EYtSettingType::KeepSorted, {}, ctx);
+    }
+
+    if (!NYql::HasSetting(outerReduce.Settings().Ref(), EYtSettingType::KeepSorted) &&
+       NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::KeepSorted)) {
+        newSettings = NYql::RemoveSettings(*newSettings, EYtSettingType::KeepSorted, ctx);
     }
 
     return Build<TYtReduce>(ctx, node.Pos())

@@ -48,6 +48,8 @@ public:
         i64 sequenceNumberSourceId,
         TStringBuf capitalizedCreationReason);
 
+    void Initialize();
+
     // ITransaction implementation.
     NApi::IConnectionPtr GetConnection() override;
     NApi::IClientPtr GetClient() const override;
@@ -127,11 +129,11 @@ public:
         const TMultiLookupOptions& options) override;
 
     TFuture<NApi::TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const NApi::TSelectRowsOptions& options) override;
 
     TFuture<NYson::TYsonString> ExplainQuery(
-        const TString& query,
+        const std::string& query,
         const NApi::TExplainQueryOptions& options) override;
 
     TFuture<NApi::TPullRowsResult> PullRows(

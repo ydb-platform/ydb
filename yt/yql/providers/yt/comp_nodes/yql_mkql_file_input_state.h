@@ -35,7 +35,6 @@ public:
         OnNextBlockCallback_ = std::move(cb);
     }
 
-protected:
     virtual bool IsValid() const override {
         return Valid_;
     }
@@ -48,6 +47,9 @@ protected:
         Valid_ = NextValue();
     }
 
+    virtual TString DebugInfo() const override;
+
+protected:
     void Finish() {
         MkqlReader_.Finish();
     }

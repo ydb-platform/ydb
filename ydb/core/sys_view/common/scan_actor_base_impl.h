@@ -162,6 +162,55 @@ protected:
         SendBatch(std::move(batch));
     }
 
+    bool StringKeyIsInTableRange(const TVector<TString>& key) const {
+        {
+            bool equalPrefixes = true;
+            for (size_t index : xrange(Min(TableRange.From.GetCells().size(), key.size()))) {
+                if (auto cellFrom = TableRange.From.GetCells()[index]; !cellFrom.IsNull()) {
+                    int cmp = cellFrom.AsBuf().compare(key[index]);
+                    if (cmp < 0) {
+                        equalPrefixes = false;
+                        break;
+                    }
+                    if (cmp > 0) {
+                        return false;
+                    }
+                    // cmp == 0, prefixes are equal, go further
+                } else {
+                    equalPrefixes = false;
+                    break;
+                }
+            }
+            if (equalPrefixes && !TableRange.FromInclusive) {
+                return false;
+            }
+        }
+
+        if (TableRange.To.GetCells().size()) {
+            bool equalPrefixes = true;
+            for (size_t index : xrange(Min(TableRange.To.GetCells().size(), key.size()))) {
+                if (auto cellTo = TableRange.To.GetCells()[index]; !cellTo.IsNull()) {
+                    int cmp = cellTo.AsBuf().compare(key[index]);
+                    if (cmp > 0) {
+                        equalPrefixes = false;
+                        break;
+                    }
+                    if (cmp < 0) {
+                        return false;
+                    }
+                    // cmp == 0, prefixes are equal, go further
+                } else {
+                    break;
+                }
+            }
+            if (equalPrefixes && !TableRange.ToInclusive) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
 private:
     virtual void ProceedToScan() = 0;
 

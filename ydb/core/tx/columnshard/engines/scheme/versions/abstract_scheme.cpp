@@ -328,13 +328,15 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             saver.AddSerializerWithBorder(100000000, NArrow::NSerialization::TNativeSerializer::GetFast());
             const auto& columnFeatures = GetIndexInfo().GetColumnFeaturesVerified(columnId);
             auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(incomingBatch->column(incomingIndex));
-            std::shared_ptr<arrow::RecordBatch> rbToWrite =
+            TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrToWrite =
                 loader->GetAccessorConstructor()->Construct(accessor, loader->BuildAccessorContext(accessor->GetRecordsCount()));
-            std::shared_ptr<NArrow::NAccessor::IChunkedArray> arrToWrite =
-                loader->GetAccessorConstructor()->Construct(rbToWrite, loader->BuildAccessorContext(accessor->GetRecordsCount())).DetachResult();
+            if (arrToWrite.IsFail()) {
+                return arrToWrite;
+            }
 
             std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
-                saver.Apply(rbToWrite), arrToWrite, TChunkAddress(columnId, 0), columnFeatures) };
+                loader->GetAccessorConstructor()->SerializeToString(*arrToWrite, loader->BuildAccessorContext(accessor->GetRecordsCount())),
+                *arrToWrite, TChunkAddress(columnId, 0), columnFeatures) };
             AFL_VERIFY(chunks.emplace(columnId, std::move(columnChunks)).second);
             ++itIncoming;
         }

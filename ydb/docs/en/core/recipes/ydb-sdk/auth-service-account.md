@@ -85,12 +85,29 @@ Below are examples of the code for authentication using a service account file i
               .withAuthProvider(authProvider)
               .build());
 
-      TableClient tableClient = TableClient.newClient(transport).build();
+      QueryClient queryClient = QueryClient.newClient(transport).build();
 
-      doWork(tableClient);
+      doWork(queryClient);
 
-      tableClient.close();
+      queryClient.close();
       transport.close();
+  }
+  ```
+
+- JDBC
+
+  ```java
+  public void work() {
+      Properties props = new Properties();
+      props.setProperty("saKeyFile", "~/keys/sa_key.json");
+      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+        doWork(connection);
+      }
+
+      // Option saKeyFile can be added to a JDBC URL directly
+      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?saKeyFile=~/keys/sa_key.json")) {
+        doWork(connection);
+      }
   }
   ```
 

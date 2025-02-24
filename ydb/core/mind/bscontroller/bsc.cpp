@@ -4,6 +4,8 @@
 #include "sys_view.h"
 #include "console_interaction.h"
 
+#include <library/cpp/streams/zstd/zstd.h>
+
 namespace NKikimr {
 
 TString TGroupID::ToString() const {
@@ -170,7 +172,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
 
         ConsoleInteraction->Stop(); // distconf will handle the Console from now on
-    } else {
+    } else if (Loaded) {
         ConsoleInteraction->Start(); // we control the Console now
     }
 
@@ -431,14 +433,16 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
         hFunc(TEvBlobStorage::TEvControllerProposeConfigResponse, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerConsoleCommitResponse, ConsoleInteraction->Handle);
-        hFunc(TConsoleInteraction::TEvPrivate::TEvValidationTimeout, ConsoleInteraction->Handle);
+        fFunc(TConsoleInteraction::TEvPrivate::EvValidationTimeout, ConsoleInteraction->HandleValidationTimeout);
         hFunc(TEvBlobStorage::TEvControllerReplaceConfigRequest, ConsoleInteraction->Handle);
+        hFunc(TEvBlobStorage::TEvControllerFetchConfigRequest, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerValidateConfigResponse, ConsoleInteraction->Handle);
         hFunc(TEvTabletPipe::TEvClientConnected, ConsoleInteraction->Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvGetBlockResult, ConsoleInteraction->Handle);
         fFunc(TEvBlobStorage::EvControllerShredRequest, EnqueueIncomingEvent);
         cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
+        cFunc(TEvPrivate::EvCommitMetrics, CommitMetrics);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -592,6 +596,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kRestartPDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskReadOnly:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kStopPDisk:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

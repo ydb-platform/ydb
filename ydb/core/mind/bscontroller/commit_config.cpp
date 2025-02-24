@@ -1,5 +1,6 @@
 #include "impl.h"
 #include "console_interaction.h"
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
@@ -9,47 +10,105 @@ namespace NKikimr::NBsController {
     class TBlobStorageController::TTxCommitConfig
         : public TTransactionBase<TBlobStorageController>
     {
-        TString Config;
-        ui32 ConfigVersion;
-        NKikimrBlobStorage::TStorageConfig StorageConfig;
-        TConsoleInteraction::TCommitConfigResult Result;
-        NKikimrBlobStorage::TStorageConfig BSCStorageConfig;
+        std::optional<TYamlConfig> YamlConfig;
+        std::optional<std::optional<TString>> StorageYamlConfig;
+        std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
+
+        ui64 GenerationOnStart = 0;
+        TString FingerprintOnStart;
 
     public:
-        TTxCommitConfig(TBlobStorageController *controller, const TString& config, ui32 configVersion, NKikimrBlobStorage::TStorageConfig& storageConfig)
+        TTxCommitConfig(TBlobStorageController *controller, std::optional<TYamlConfig>&& yamlConfig,
+                std::optional<std::optional<TString>>&& storageYamlConfig,
+                std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig)
             : TTransactionBase(controller)
-            , Config(config)
-            , ConfigVersion(configVersion)
-            , StorageConfig(storageConfig)
+            , YamlConfig(std::move(yamlConfig))
+            , StorageYamlConfig(std::move(storageYamlConfig))
+            , StorageConfig(std::move(storageConfig))
         {}
 
         TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_COMMIT_CONFIG; }
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             NIceDb::TNiceDb db(txc.DB);
-            BSCStorageConfig = Self->StorageConfig;
-            db.Table<Schema::State>().Key(true).Update(
-                NIceDb::TUpdate<Schema::State::YamlConfig>(Config),
-                NIceDb::TUpdate<Schema::State::ConfigVersion>(ConfigVersion));
+            auto& conf = Self->StorageConfig;
+            GenerationOnStart = conf.GetGeneration();
+            FingerprintOnStart = conf.GetFingerprint();
+            auto row = db.Table<Schema::State>().Key(true);
+            if (YamlConfig) {
+                row.Update<Schema::State::YamlConfig>(CompressYamlConfig(*YamlConfig));
+            }
+            if (StorageYamlConfig) {
+                if (*StorageYamlConfig) {
+                    row.Update<Schema::State::StorageYamlConfig>(CompressStorageYamlConfig(**StorageYamlConfig));
+                } else {
+                    row.UpdateToNull<Schema::State::StorageYamlConfig>();
+                }
+            }
             return true;
         }
 
         void Complete(const TActorContext& ctx) override {
-            if (BSCStorageConfig.GetGeneration() != Self->StorageConfig.GetGeneration()) {
+            auto& conf = Self->StorageConfig;
+            if (conf.GetGeneration() != GenerationOnStart || conf.GetFingerprint() != FingerprintOnStart) {
                 LOG_ALERT_S(ctx, NKikimrServices::BS_CONTROLLER, "Storage config changed");
-                Y_VERIFY_DEBUG_S(false, "Storage config changed");
+                Y_DEBUG_ABORT("Storage config changed");
             }
-            Self->StorageConfig = StorageConfig;
-            Self->ApplyStorageConfig(true);
-            Self->YamlConfig = Config;
-            Self->ConfigVersion = ConfigVersion;
-            Result.Status = TConsoleInteraction::TCommitConfigResult::EStatus::Success;
-            Self->ConsoleInteraction->OnConfigCommit(Result);
+            if (StorageConfig) {
+                Self->StorageConfig = std::move(*StorageConfig);
+                Self->ApplyStorageConfig(true);
+            }
+
+            std::optional<NKikimrBlobStorage::TYamlConfig> update;
+
+            if (YamlConfig) {
+                Self->YamlConfig = std::move(YamlConfig);
+                Self->YamlConfigHash = GetSingleConfigHash(*Self->YamlConfig);
+
+                if (!update) {
+                    update.emplace();
+                }
+                update->SetCompressedMainConfig(CompressSingleConfig(*Self->YamlConfig));
+                update->SetMainConfigVersion(GetVersion(*Self->YamlConfig));
+            }
+            if (StorageYamlConfig) {
+                const bool hadStorageConfigBefore = Self->StorageYamlConfig.has_value();
+
+                Self->StorageYamlConfig = std::move(*StorageYamlConfig);
+                Self->StorageYamlConfigVersion = NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0);
+                Self->StorageYamlConfigHash = NYaml::GetConfigHash(*Self->StorageYamlConfig);
+
+                if (Self->StorageYamlConfig) {
+                    if (!update) {
+                        update.emplace();
+                    }
+                    update->SetCompressedStorageConfig(CompressStorageYamlConfig(*Self->StorageYamlConfig));
+                } else if (hadStorageConfigBefore && !update) {
+                    update.emplace(); // issue an update without storage yaml version meaning we are in single-config mode
+                }
+            }
+            if (update && Self->StorageYamlConfig) {
+                update->SetStorageConfigVersion(NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0));
+            }
+
+            Self->ConsoleInteraction->OnConfigCommit();
+
+            if (update) {
+                for (auto& node: Self->Nodes) {
+                    if (node.second.ConnectedServerId) {
+                        auto configPersistEv = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+                        configPersistEv->Record.MutableYamlConfig()->CopyFrom(*update);
+                        Self->SendToWarden(node.first, std::move(configPersistEv), 0);
+                    }
+                }
+            }
         }
     };
 
-    ITransaction* TBlobStorageController::CreateTxCommitConfig(TString& yamlConfig, ui64 configVersion, NKikimrBlobStorage::TStorageConfig& storageConfig) {
-        return new TTxCommitConfig(this, yamlConfig, configVersion, storageConfig);
+    ITransaction* TBlobStorageController::CreateTxCommitConfig(std::optional<TYamlConfig>&& yamlConfig,
+            std::optional<std::optional<TString>>&& storageYamlConfig,
+            std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig) {
+        return new TTxCommitConfig(this, std::move(yamlConfig), std::move(storageYamlConfig), std::move(storageConfig));
     }
 
 } // namespace NKikimr::NBsController

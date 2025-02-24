@@ -74,6 +74,13 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         self._start()
         return self
 
+    def cleanup_logs(self):
+        for inst_set in [self.nodes, self.slots]:
+            self._run_on(
+                inst_set,
+                lambda x: x.cleanup_logs()
+            )
+
     def _start(self):
         for inst_set in [self.nodes, self.slots]:
             self._run_on(inst_set, lambda x: x.start())

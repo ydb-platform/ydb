@@ -14,6 +14,7 @@ SRCS(
     api/delegating_client.cpp
     api/delegating_transaction.cpp
     api/distributed_table_session.cpp
+    api/distributed_table_client.cpp
     api/etc_client.cpp
     api/journal_client.cpp
     api/operation_client.cpp
@@ -95,6 +96,7 @@ SRCS(
 
     scheduler/operation_id_or_alias.cpp
     scheduler/operation_cache.cpp
+    scheduler/spec_patch.cpp
 
     security_client/acl.cpp
     security_client/access_control.cpp

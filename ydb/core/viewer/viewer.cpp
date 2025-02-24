@@ -11,6 +11,7 @@
 #include <util/stream/file.h>
 #include <util/system/fstat.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_types.h>
@@ -70,74 +71,80 @@ public:
             }
             mon->RegisterActorPage({
                 .RelPath = "viewer",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
+                .RelPath = "viewer/capabilities",
+                .ActorSystem = ctx.ActorSystem(),
+                .ActorId = ctx.SelfID,
+                .UseAuth = false,
+            });
+            mon->RegisterActorPage({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
             });
             mon->RegisterActorPage({
                 .Title = "Monitoring",
                 .RelPath = "monitoring",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "healthcheck",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "pdisk",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "operation",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "query",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "scheme",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "storage",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
@@ -210,16 +217,7 @@ public:
                 return true;
             }
         }
-        if (userTokenObject.empty()) {
-            return false;
-        }
-        auto token = std::make_unique<NACLib::TUserToken>(userTokenObject);
-        for (const auto& allowedSID : KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetAdministrationAllowedSIDs()) {
-            if (token->IsExist(allowedSID)) {
-                return true;
-            }
-        }
-        return false;
+        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
     }
 
     static bool IsStaticGroup(ui32 groupId) {

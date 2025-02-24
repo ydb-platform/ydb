@@ -109,6 +109,7 @@ class StaticConfigGenerator(object):
             "failure_injection.txt": None,
             "pdisk_key.txt": None,
             "immediate_controls_config.txt": None,
+            "cms_config.txt": None,
         }
         self.__optional_config_files = set(
             (
@@ -126,7 +127,6 @@ class StaticConfigGenerator(object):
             self.__tracing = tracing
         else:
             self.__tracing = None
-        self.__write_mbus_settings_to_kikimr_cfg = False
 
     @property
     def auth_txt(self):
@@ -223,10 +223,6 @@ class StaticConfigGenerator(object):
         return self.__proto_config("sqs.txt", config_pb2.TSqsConfig, self.__cluster_details.get_service("sqs"))
 
     @property
-    def cms_txt(self):
-        return self.__proto_config("cms.txt", cms_pb2.TCmsConfig, self.__cluster_details.get_service("cms"))
-
-    @property
     def rb_txt(self):
         return self.__proto_config(
             "rb.txt", resource_broker_pb2.TResourceBrokerConfig, self.__cluster_details.get_service("resource_broker")
@@ -275,6 +271,20 @@ class StaticConfigGenerator(object):
     @property
     def immediate_controls_config_txt_enabled(self):
         return self.__proto_config("immediate_controls_config.txt").ByteSize() > 0
+
+    # Old `template.yaml` CMS style
+    @property
+    def cms_txt(self):
+        return self.__proto_config("cms.txt", cms_pb2.TCmsConfig, self.__cluster_details.get_service("cms"))
+
+    # New `config.yaml` CMS style
+    @property
+    def cms_config_txt(self):
+        return self.__proto_config("cms_config.txt", cms_pb2.TCmsConfig, self.__cluster_details.cms_config)
+
+    @property
+    def cms_config_txt_enabled(self):
+        return self.__proto_config("cms_config.txt").ByteSize() > 0
 
     @property
     def mbus_enabled(self):
@@ -451,6 +461,9 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.memory_controller_config is not None:
             normalized_config["memory_controller_config"] = self.__cluster_details.memory_controller_config
 
+        if self.__cluster_details.s3_proxy_resolver_config is not None:
+            normalized_config["s3_proxy_resolver_config"] = self.__cluster_details.s3_proxy_resolver_config
+
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
         else:
@@ -555,7 +568,6 @@ class StaticConfigGenerator(object):
             if 'channel_profile_config' in normalized_config:
                 for profile in normalized_config['channel_profile_config']['profile']:
                     for channel in profile['channel']:
-                        print(channel)
                         channel['pdisk_category'] = int(channel['pdisk_category'])
         if 'system_tablets' in normalized_config:
             for tablets in normalized_config['system_tablets'].values():
@@ -656,6 +668,8 @@ class StaticConfigGenerator(object):
             app_config.PDiskKeyConfig.CopyFrom(self.pdisk_key_txt)
         if self.immediate_controls_config_txt_enabled:
             app_config.ImmediateControlsConfig.CopyFrom(self.immediate_controls_config_txt)
+        if self.cms_config_txt_enabled:
+            app_config.CmsConfig.CopyFrom(self.cms_config_txt)
         return app_config
 
     def __proto_config(self, config_file, config_class=None, cluster_details_for_field=None):
@@ -1001,24 +1015,37 @@ class StaticConfigGenerator(object):
 
         return min(5, n_to_select_candidate)
 
-    def __configure_security_settings(self, domains_config):
-        utils.apply_config_changes(
-            domains_config.SecurityConfig,
-            self.__cluster_details.security_settings,
-        )
+    def __configure_security_config(self, domains_config):
+        if self.__cluster_details.security_config != {}:  # consistent with `config.yaml`
+            utils.apply_config_changes(
+                domains_config.SecurityConfig,
+                self.__cluster_details.security_config,
+            )
+        else:
+            utils.apply_config_changes(  # backward compatibility for old templates
+                domains_config.SecurityConfig,
+                self.__cluster_details.security_settings,
+            )
 
     def __generate_domains_txt(self):
+        domains_config = self.__cluster_details.domains_config
+        if domains_config is None:
+            self.__generate_domains_from_old_domains_key()
+        else:
+            self.__generate_domains_from_proto(domains_config)
+
+    def __generate_domains_from_proto(self, domains_config):
+        self.__configure_security_config(domains_config)
+        self.__proto_configs["domains.txt"] = domains_config
+
+    def __generate_domains_from_old_domains_key(self):
         self.__proto_configs["domains.txt"] = config_pb2.TDomainsConfig()
 
         domains_config = self.__proto_configs["domains.txt"]
 
-        if self.__cluster_details.forbid_implicit_storage_pools:
-            domains_config.ForbidImplicitStoragePools = True
-
-        self.__configure_security_settings(domains_config)
+        self.__configure_security_config(domains_config)
 
         tablet_types = self.__tablet_types
-
         for domain_description in self.__cluster_details.domains:
             domain_id = domain_description.domain_id
             domain_name = domain_description.domain_name
@@ -1217,11 +1244,15 @@ class StaticConfigGenerator(object):
         state_storage_cfg.Ring.Node.extend(selected_ids)
 
     def __generate_log_txt(self):
-        self.__proto_configs["log.txt"] = config_pb2.TLogConfig()
-        utils.apply_config_changes(
-            self.__proto_configs["log.txt"],
-            self.__cluster_details.log_config,
-        )
+        log_config = self.__cluster_details.log_config
+        if isinstance(log_config, config_pb2.TLogConfig):
+            self.__proto_configs["log.txt"] = log_config
+        else:
+            self.__proto_configs["log.txt"] = config_pb2.TLogConfig()
+            utils.apply_config_changes(
+                self.__proto_configs["log.txt"],
+                self.__cluster_details.log_config,
+            )
 
     def __generate_names_txt(self):
         self.__proto_configs["names.txt"] = config_pb2.TStaticNameserviceConfig()

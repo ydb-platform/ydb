@@ -1,8 +1,8 @@
 --- contrib/python/pytest-localserver/py3/pytest_localserver/https.py	(index)
 +++ contrib/python/pytest-localserver/py3/pytest_localserver/https.py	(working tree)
 @@ -10,1 +10,1 @@ import os.path
--DEFAULT_CERTIFICATE = os.path.join(os.path.abspath(os.path.dirname(__file__)), "server.pem")
-+DEFAULT_CERTIFICATE = os.path.join(os.getcwd(), "server.pem")
+-_ROOT = os.path.abspath(os.path.dirname(__file__))
++_ROOT = os.getcwd()
 --- contrib/python/pytest-localserver/py3/pytest_localserver/plugin.py	(index)
 +++ contrib/python/pytest-localserver/py3/pytest_localserver/plugin.py	(working tree)
 @@ -4,6 +4,9 @@
@@ -15,7 +15,7 @@
  import pytest
  
  
-@@ -62,11 +65,15 @@ def httpsserver(request):
+@@ -62,11 +65,17 @@ def httpsserver(request):
      SSL encryption.
      """
      from pytest_localserver import https
@@ -25,8 +25,10 @@
 -    request.addfinalizer(server.stop)
 -    return server
 +    try:
++        with open(https.DEFAULT_KEY, 'wb') as f:
++            f.write(pkgutil.get_data('pytest_localserver', 'server.key'))
 +        with open(https.DEFAULT_CERTIFICATE, 'wb') as f:
-+            f.write(pkgutil.get_data('pytest_localserver', 'server.pem'))
++            f.write(pkgutil.get_data('pytest_localserver', 'cert.crt'))
 +        server = https.SecureContentServer()
 +        server.start()
 +        request.addfinalizer(server.stop)

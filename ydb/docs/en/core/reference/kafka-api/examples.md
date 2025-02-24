@@ -1,339 +1,183 @@
 # Kafka API usage examples
-
-This article provides examples of Kafka API usage to work with [{{ ydb-short-name }} topics](../../concepts/topic.md).
-
-Before executing the examples, [create a topic](../ydb-cli/topic-create.md) and [add a consumer](../ydb-cli/topic-consumer-add.md).
-
-## Examples of working with topics
-
-The examples use:
-
-* `ydb:9093` — host name and port.
-* `/Root/Database` — database name.
-* `/Root/Database/Topic-1` — topic name. It is allowed to specify either the full name (along with the database) or just the topic name.
-* `user@/Root/Database` — username. The username includes the database name, which is specified after `@`.
-* `*****` — user password.
-* `consumer-1` — consumer name.
-
-
-## Writing data to a topic
-
-### Writing via Kafka Java SDK
-
-This example includes a code snippet for writing data to a topic via [Kafka API](https://kafka.apache.org/documentation/).
-
-```java
-String HOST = "ydb:9093";
-String TOPIC = "/Root/Database/Topic-1";
-String USER = "user@/Root/Database";
-String PASS = "*****";
-
-Properties props = new Properties();
-props.put("bootstrap.servers", HOST);
-props.put("acks", "all");
-
-props.put("key.serializer", StringSerializer.class.getName());
-props.put("key.deserializer", StringDeserializer.class.getName());
-props.put("value.serializer", StringSerializer.class.getName());
-props.put("value.deserializer", StringDeserializer.class.getName());
-
-props.put("security.protocol", "SASL_SSL");
-props.put("sasl.mechanism", "PLAIN");
-props.put("sasl.jaas.config", PlainLoginModule.class.getName() + " required username=\"" + USER + "\" password=\"" + PASS + "\";");
-
-props.put("compression.type", "none");
-
-Producer<String, String> producer = new KafkaProducer<>(props);
-producer.send(new ProducerRecord<String, String>(TOPIC, "msg-key", "msg-body"));
-producer.flush();
-producer.close();
-```
-
-### Writing via Logstash
-
-To configure [Logstash](https://github.com/elastic/logstash), use the following parameters:
-
-```ruby
-output {
-  kafka {
-    codec => json
-    topic_id => "/Root/Database/Topic-1"
-    bootstrap_servers => "ydb:9093"
-    compression_type => none
-    security_protocol => SASL_SSL
-    sasl_mechanism => PLAIN
-    sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='user@/Root/Database' password='*****';"
-  }
-}
-  ```
-
-### Writing via Fluent Bit
-
-To configure [Fluent Bit](https://github.com/fluent/fluent-bit), use the following parameters:
-
-```ini
-[OUTPUT]
-  name                          kafka
-  match                         *
-  Brokers                       ydb:9093
-  Topics                        /Root/Database/Topic-1
-  rdkafka.client.id             Fluent-bit
-  rdkafka.request.required.acks 1
-  rdkafka.log_level             7
-  rdkafka.security.protocol     SASL_SSL
-  rdkafka.sasl.mechanism        PLAIN
-  rdkafka.sasl.username         user@/Root/Database
-  rdkafka.sasl.password         *****
-```
-
-## Reading data from a topic
-
-### Reading data from a topic via Kafka Java SDK
-
-This example includes a code snippet for reading data from a topic via Kafka Java SDK.
-
-```java
-String HOST = "ydb:9093";
-String TOPIC = "/Root/Database/Topic-1";
-String USER = "user@/Root/Database";
-String PASS = "*****";
-String CONSUMER = "consumer-1";
-
-Properties props = new Properties();
-
-props.put("bootstrap.servers", HOST);
-
-props.put("security.protocol", "SASL_SSL");
-props.put("sasl.mechanism", "PLAIN");
-props.put("sasl.jaas.config", PlainLoginModule.class.getName() + " required username=\"" + USER + "\" password=\"" + PASS + "\";");
-
-props.put("key.deserializer", StringDeserializer.class.getName());
-props.put("value.deserializer", StringDeserializer.class.getName());
-
-props.put("check.crcs", false);
-props.put("partition.assignment.strategy", RoundRobinAssignor.class.getName());
-
-props.put("group.id", CONSUMER);
-Consumer<String, String> consumer = new KafkaConsumer<>(props);
-consumer.subscribe(Arrays.asList(new String[] {TOPIC}));
-
-while (true) {
-    ConsumerRecords<String, String> records = consumer.poll(10000); // timeout 10 sec
-    for (ConsumerRecord<String, String> record : records) {
-        System.out.println(record.key() + ":" + record.value());
-    }
-}
-```
-
-### Reading data from a topic via Kafka Java SDK without a consumer group
+<!-- markdownlint-disable blanks-around-fences -->
 
 This example shows a code snippet for reading data from a topic via Kafka API without a consumer group (Manual Partition Assignment).
 You don't need to create a consumer for this reading mode.
 
-```java
-String HOST = "ydb:9093";
-String TOPIC = "/Root/Database/Topic-1";
-String USER = "user@/Root/Database";
-String PASS = "*****";
+Before proceeding with the examples:
 
-Properties props = new Properties();
+1. [Create a topic](../ydb-cli/topic-create.md).
+1. [Add a consumer](../ydb-cli/topic-consumer-add.md).
+1. If authentication is enabled, [create a user](../../security/authorization.md#user).
 
-props.put("bootstrap.servers", HOST);
+## How to try the Kafka API {#how-to-try-kafka-api}
 
-props.put("security.protocol", "SASL_SSL");
-props.put("sasl.mechanism", "PLAIN");
-props.put("sasl.jaas.config", PlainLoginModule.class.getName() + " required username=\"" + USER + "\" password=\"" + PASS + "\";");
+### In Docker {#how-to-try-kafka-api-in-docker}
 
-props.put("key.deserializer", StringDeserializer.class.getName());
-props.put("value.deserializer", StringDeserializer.class.getName());
+Run Docker following [the quickstart guide](../../quickstart.md#install), and the Kafka API will be available on port 9092.
 
-props.put("check.crcs", false);
-props.put("auto.offset.reset", "earliest"); // to read from start
+## Kafka API usage examples
 
-Consumer<String, String> consumer = new KafkaConsumer<>(props);
+### Reading
 
-List<PartitionInfo> partitionInfos = consumer.partitionsFor(TOPIC);
-List<TopicPartition> topicPartitions = new ArrayList<>();
+Consider the following limitations of using the Kafka API for reading:
 
-for (PartitionInfo partitionInfo : partitionInfos) {
-    topicPartitions.add(new TopicPartition(partitionInfo.topic(), partitionInfo.partition()));
-}
-consumer.assign(topicPartitions);
+- No support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option.
+- Only one partition assignment strategy - `roundrobin`.
+- No reading without a pre-created consumer group.
 
-while (true) {
-    ConsumerRecords<String, String> records = consumer.poll(10000); // timeout 10 sec
-    for (ConsumerRecord<String, String> record : records) {
-        System.out.println(record.key() + ":" + record.value());
-    }
-}
+Therefore, in the consumer configuration, you must always specify the **consumer group name** and the parameters:
 
+- `check.crc=false`
+- `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
+
+Below are examples of reading using the Kafka protocol for various applications, programming languages, and frameworks without authentication.
+For examples of how to set up authentication, see [Authentication examples](#authentication-examples).
+
+{% list tabs %}
+
+- Built-in Kafka CLI tools
+
+  {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
+
+  {% include [index.md](_includes/bash/kafka-api-console-read-no-auth.md) %}
+
+- kcat
+
+  {% include [index.md](_includes/bash/kafka-api-kcat-read-no-auth.md) %}
+
+- Java
+
+  {% include [index.md](_includes/java/kafka-api-java-read-no-auth.md) %}
+
+- Spark
+
+  {% include [index.md](_includes/spark-constraints.md) %}
+
+  {% include [index.md](_includes/java/kafka-api-spark-read-no-auth.md) %}
+
+  {% include [index.md](_includes/spark-version-notice.md) %}
+
+- Flink
+
+  {% include [index.md](_includes/flink-constraints.md) %}
+
+  {% include [index.md](_includes/java/kafka-api-flink-read-no-auth.md) %}
+
+  {% include [index.md](_includes/flink-version-notice.md) %}
+
+{% endlist %}
+
+#### Frequent problems and solutions
+
+##### Unexpected error in join group response
+
+Full text of an exception:
+
+```txt
+Unexpected error in join group response: This most likely occurs because of a request being malformed by the client library or the message was sent to an incompatible broker. See the broker logs for more details.
 ```
 
-## Using Kafka Connect
+Most likely it means that a consumer group is not specified or, if specified, it does not exist in the YDB cluster.
 
-The [Kafka Connect](https://kafka.apache.org/documentation/#connect) tool is designed to move data between Apache Kafka® and other data stores.
 
-The data in Kafka Connect is handled by worker processes.
+Solution: create a consumer group in {{ ydb-short-name }} using [CLI](../ydb-cli/topic-consumer-add.md) or [SDK](../ydb-sdk/topic.md#alter-topic).
 
-{% note warning %}
 
-Kafka Connect instances for working with {{ ydb-short-name }} should only be deployed in standalone mode. {{ ydb-short-name }} does not support Kafka Connect in distributed mode.
+
+### Writing
+
+{% note info %}
+
+Using Kafka transactions when writing via Kafka API is currently not supported. Transactions are only available when using the [YDB Topic API](../ydb-sdk/topic.md#write-tx).
+
+Otherwise, writing to Apache Kafka and {{ ydb-short-name }} Topics through Kafka API is no different.
+
 
 {% endnote %}
 
-The actual data movement is performed using connectors that run in separate threads of the executing process.
+{% list tabs %}
 
-For more information about Kafka Connect and its configuration, see the [Apache Kafka®](https://kafka.apache.org/documentation/#connect) documentation.
+- Built-in Kafka CLI tools
 
-### Setting up Kafka Connect
+  {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-1. [Create a consumer](../ydb-cli/topic-consumer-add.md) with the name `connect-<connector-name>`. The connector name is specified in the configuration file when you set it up in the `name` field.
+  {% include [index.md](_includes/bash/kafka-api-console-write-no-auth.md) %}
 
-1. [Download](https://downloads.apache.org/kafka/) and unzip the Apache Kafka® archive:
+- kcat
 
-    ```bash
-    wget https://downloads.apache.org/kafka/3.6.1/kafka_2.13-3.6.1.tgz && tar -xvf kafka_2.13-3.6.1.tgz --strip 1 --directory /opt/kafka/
-    ```
+  {% include [index.md](_includes/bash/kafka-api-kcat-write-no-auth.md) %}
 
-    This example uses Apache Kafka® version 3.6.1.
+- Java
+
+  {% include [index.md](_includes/java/kafka-api-java-write-no-auth.md) %}
+
+- Spark
+
+  {% include [index.md](_includes/spark-constraints.md) %}
+
+  {% include [index.md](_includes/java/kafka-api-spark-write-no-auth.md) %}
+
+  {% include [index.md](_includes/spark-version-notice.md) %}
+
+- Flink
+
+  {% include [index.md](_includes/flink-constraints.md) %}
+
+  {% include [index.md](_includes/java/kafka-api-flink-write-no-auth.md) %}
+
+  {% include [index.md](_includes/flink-version-notice.md) %}
+
+- Logstash
+
+  {% include [index.md](_includes/logs-to-kafka/kafka-api-logstash.md) %}
+
+- Fluent Bit
+
+  {% include [index.md](_includes/logs-to-kafka/kafka-api-fluent-bit.md) %}
+
+{% endlist %}
+
+### Authentication examples {#authentication-examples}
+
+For more details on authentication, see the [Authentication](./auth.md) section. Below are examples of authentication in a cloud database and a local database.
 
 
-1. Create a directory with the executor process settings:
+{% note info %}
 
-    ```bash
-    sudo mkdir --parents /etc/kafka-connect-worker
-    ```
+Currently, the only available authentication mechanism with Kafka API in {{ ydb-short-name }} Topics is `SASL_PLAIN`.
 
-1. Create the executor process settings file `/etc/kafka-connect-worker/worker.properties'
 
-    ```ini
-    # Main properties
-    bootstrap.servers=ydb:9093
+{% endnote %}
 
-    # AdminAPI properties
-    sasl.mechanism=PLAIN
-    security.protocol=SASL_SSL
-    sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db>" password="<user-pass>";
+#### Authentication examples in on-prem YDB
 
-    # Producer properties
-    producer.sasl.mechanism=PLAIN
-    producer.security.protocol=SASL_SSL
-    producer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db>" password="<user-pass>";
+To use authentication in a multinode self-deployed database:
 
-    # Consumer properties
-    consumer.sasl.mechanism=PLAIN
-    consumer.security.protocol=SASL_SSL
-    consumer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db>" password="<user-pass>";
+1. Create a user. [How to do this in YQL](../../yql/reference/syntax/create-user.md). [How to execute YQL from CLI](../ydb-cli/yql.md).
+2. Connect to the Kafka API as shown in the examples below. In all examples, it is assumed that:
 
-    consumer.partition.assignment.strategy=org.apache.kafka.kafka.clients.consumer.RoundRobinAssignor
-    consumer.check.crcs=false
+   - YDB is running locally with the environment variable `YDB_KAFKA_PROXY_PORT=9092`, meaning that the Kafka API is available at `localhost:9092`. For example, you can run YDB in Docker as described [here](../../quickstart.md#install).
 
-    # Converter properties
-    key.converter=org.apache.kafka.connect.storage.StringConverter
-    value.converter=org.apache.kafka.connect.storage.StringConverter
-    key.converter.schemas.enable=false
-    value.converter.schemas.enable=false
+   - <username> is the username you specified when creating the user.
+   - <password> is the user's password you specified when creating the user.
 
-    # Worker properties
-    plugin.path=/etc/kafka-connect-worker/plugins
-    offset.storage.file.filename=/etc/kafka-connect-worker/worker.offset
-    ```
+Examples are shown for reading, but the same configuration parameters work for writing to a topic as well.
 
-1. Create a FileSink connector settings file `/etc/kafka-connect-worker/file-sink.properties` to move data from {{ ydb-short-name }} topics to a file:
+{% list tabs %}
 
-    ```ini
-    name=local-file-sink
-    connector.class=FileStreamSink
-    tasks.max=1
-    file=/etc/kafka-connect-worker/file_to_write.json
-    topics=Topic-1
-    ```
+- Built-in Kafka CLI tools
 
-    Where:
+  {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-    * `file` - name of the file to which the connector will write data.
-    * `topics` - the name of the topics from which the connector will read data.
+  {% include [index.md](_includes/bash/kafka-api-console-read-with-sasl-creds-on-prem.md) %}
 
-1. Start Kafka Connect in Standalone mode:
+- kcat
 
-    ```bash
-    cd ~/opt/kafka/bin/ && \
-    sudo ./connect-standalone.sh \
-            /etc/kafka-connect-worker/worker.properties.
-            /etc/kafka-connect-worker/file-sink.properties
-    ```
+  {% include [index.md](_includes/bash/kafka-api-kcat-read-with-sasl-creds-on-prem.md) %}
 
-### Sample settings files for other connectors
+- Java
 
-#### From File to {{ ydb-short-name }}
+  {% include [index.md](_includes/java/kafka-api-java-read-with-sasl-creds-on-prem.md) %}
 
-Sample FileSource settings file of the connector `/etc/kafka-connect-worker/file-sink.properties` to move data from file to topic:
-
-```ini
-name=local-file-source
-connector.class=FileStreamSource
-tasks.max=1
-file=/etc/kafka-connect-worker/file_to_read.json
-topic=Topic-1
-```
-
-#### From {{ ydb-short-name }} to PostgreSQL
-
-Sample JDBCSink connector `/etc/kafka-connect-worker/jdbc-sink.properties` configuration file for moving data from a topic to a PostgreSQL table. The [Kafka Connect JDBC Connector](https://github.com/confluentinc/kafka-connect-jdbc) is used.
-
-```ini
-name=postgresql-sink
-connector.class=io.confluent.connect.jdbc.JdbcSinkConnector
-
-connection.url=jdbc:postgresql://<postgresql-host>:<postgresql-port>/<db>
-connection.user=<pg-user>
-connection.password=<pg-user-pass>
-
-topics=Topic-1
-batch.size=2000
-auto.commit.interval.ms=1000
-
-transforms=wrap
-transforms.wrap.type=org.apache.kafka.connect.transforms.HoistField$Value
-transforms.wrap.field=data
-
-auto.create=true
-insert.mode=insert
-pk.mode=none
-auto.evolve=true
-```
-
-#### From PostgreSQL to {{ ydb-short-name }}
-
-Sample JDBCSource Connector `/etc/kafka-connect-worker/jdbc-source.properties` settings file for moving data from PostgreSQL table to topic. The [Kafka Connect JDBC Connector](https://github.com/confluentinc/kafka-connect-jdbc) is used.
-
-```ini
-name=postgresql-source
-connector.class=io.confluent.connect.jdbc.JdbcSourceConnector
-
-connection.url=jdbc:postgresql://<postgresql-host>:<postgresql-port>/<db>
-connection.user=<pg-user>
-connection.password=<pg-user-pass>
-
-mode=bulk
-query=SELECT * FROM "Topic-1";
-topic.prefix=Topic-1
-poll.interval.ms=1000
-validate.non.null=false
-```
-
-#### From {{ ydb-short-name }} to S3
-
-Sample S3Sink connector `/etc/kafka-connect-worker/s3-sink.properties` settings file for moving data from a topic to S3. The [Aiven's S3 Sink Connector for Apache Kafka](https://github.com/Aiven-Open/s3-connector-for-apache-kafka) is used.
-
-```ini
-name=s3-sink
-connector.class=io.aiven.kafka.connect.s3.AivenKafkaConnectS3SinkConnector
-topics=Topic-1
-aws.access.key.id=<s3-access-key>
-aws.secret.access.key.key=<s3-secret>
-aws.s3.bucket.name=<bucket-name>
-aws.s3.endpoint=<s3-endpoint>
-format.output.type=json
-file.compression.type=none
-```
+{% endlist %}

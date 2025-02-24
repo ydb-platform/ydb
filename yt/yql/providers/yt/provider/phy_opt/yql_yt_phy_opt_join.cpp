@@ -223,6 +223,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
             if (NYql::HasSetting(sectionNode.Settings().Ref(), EYtSettingType::Sample)) {
                 auto scheme = list.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
 
+                if (!NPrivate::EnsurePersistableYsonTypes(sectionNode.Pos(), *scheme, ctx, State_)) {
+                    return {};
+                }
                 auto path = CopyOrTrivialMap(sectionNode.Pos(),
                     TExprBase(world ? world : ctx.NewWorld(sectionNode.Pos())),
                     dataSink.Cast(),

@@ -73,9 +73,12 @@ void TDqPqReadActorBase::LoadState(const TSourceState& state) {
         minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));
         ingressBytes += stateProto.GetIngressBytes();
     }
+    TStringStream str;
+    str << "SessionId: " << GetSessionId() << " Restoring offset: ";
     for (const auto& [key, value] : PartitionToOffset) {
-        SRC_LOG_D("SessionId: " << GetSessionId() << " Restoring offset: cluster " << key.first << ", partition id " << key.second << ", offset: " << value);
+        str << "{" << key.first << "," << key.second << "," << value << "},";
     }
+    SRC_LOG_D(str.Str());
     StartingMessageTimestamp = minStartingMessageTs;
     IngressStats.Bytes += ingressBytes;
     IngressStats.Chunks++;

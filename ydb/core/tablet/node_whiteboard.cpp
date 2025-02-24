@@ -74,6 +74,7 @@ protected:
     i64 MaxClockSkewWithPeerUs;
     ui32 MaxClockSkewPeerId;
     float MaxNetworkUtilization = 0.0;
+    ui64 SumNetworkWriteThroughput = 0;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
 
@@ -568,6 +569,7 @@ protected:
         }
         // TODO: need better way to calculate network utilization
         MaxNetworkUtilization = std::max(MaxNetworkUtilization, ev->Get()->Record.GetUtilization());
+        SumNetworkWriteThroughput += nodeStateInfo.GetWriteThroughput();
         nodeStateInfo.MergeFrom(ev->Get()->Record);
         nodeStateInfo.SetChangeTime(currentChangeTime);
     }
@@ -839,24 +841,36 @@ protected:
     void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx) {
         auto now = TMonotonic::Now();
         const auto& request = ev->Get()->Record;
+        auto matchesFilter = [
+            changedSince = request.has_changedsince() ? request.changedsince() : 0,
+            filterTenantId = request.has_filtertenantid() ? NKikimr::TSubDomainKey(request.filtertenantid()) : NKikimr::TSubDomainKey()
+        ](const NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo) {
+            return tabletStateInfo.changetime() >= changedSince
+                && (!filterTenantId || filterTenantId == NKikimr::TSubDomainKey(tabletStateInfo.tenantid()));
+        };
         std::unique_ptr<TEvWhiteboard::TEvTabletStateResponse> response = std::make_unique<TEvWhiteboard::TEvTabletStateResponse>();
         auto& record = response->Record;
         if (request.format() == "packed5") {
-            TEvWhiteboard::TEvTabletStateResponsePacked5* ptr = response->AllocatePackedResponse(TabletStateInfo.size());
+            std::vector<const NKikimrWhiteboard::TTabletStateInfo*> matchedTablets;
             for (const auto& [tabletId, tabletInfo] : TabletStateInfo) {
-                ptr->TabletId = tabletInfo.tabletid();
-                ptr->FollowerId = tabletInfo.followerid();
-                ptr->Generation = tabletInfo.generation();
-                ptr->Type = tabletInfo.type();
-                ptr->State = tabletInfo.state();
+                if (matchesFilter(tabletInfo)) {
+                    matchedTablets.push_back(&tabletInfo);
+                }
+            }
+            TEvWhiteboard::TEvTabletStateResponsePacked5* ptr = response->AllocatePackedResponse(matchedTablets.size());
+            for (auto tabletInfo : matchedTablets) {
+                ptr->TabletId = tabletInfo->tabletid();
+                ptr->FollowerId = tabletInfo->followerid();
+                ptr->Generation = tabletInfo->generation();
+                ptr->Type = tabletInfo->type();
+                ptr->State = tabletInfo->state();
                 ++ptr;
             }
         } else {
             if (request.groupby().empty()) {
-                ui64 changedSince = request.has_changedsince() ? request.changedsince() : 0;
                 if (request.filtertabletid_size() == 0) {
                     for (const auto& pr : TabletStateInfo) {
-                        if (pr.second.changetime() >= changedSince) {
+                        if (matchesFilter(pr.second)) {
                             NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
                             Copy(tabletStateInfo, pr.second, request);
                         }
@@ -865,7 +879,7 @@ protected:
                     for (auto tabletId : request.filtertabletid()) {
                         auto it = TabletStateInfo.find({tabletId, 0});
                         if (it != TabletStateInfo.end()) {
-                            if (it->second.changetime() >= changedSince) {
+                            if (matchesFilter(it->second)) {
                                 NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
                                 Copy(tabletStateInfo, it->second, request);
                             }
@@ -876,6 +890,9 @@ protected:
                 std::unordered_map<std::pair<NKikimrTabletBase::TTabletTypes::EType,
                     NKikimrWhiteboard::TTabletStateInfo::ETabletState>, NKikimrWhiteboard::TTabletStateInfo> stateGroupBy;
                 for (const auto& [id, stateInfo] : TabletStateInfo) {
+                    if (!matchesFilter(stateInfo)) {
+                        continue;
+                    }
                     NKikimrWhiteboard::TTabletStateInfo& state = stateGroupBy[{stateInfo.type(), stateInfo.state()}];
                     auto count = state.count();
                     if (count == 0) {
@@ -1080,6 +1097,7 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr &, const TActorContext &ctx) {
+        static constexpr TDuration UPDATE_PERIOD = TDuration::Seconds(15);
         {
             NKikimrWhiteboard::TSystemStateInfo systemStatsUpdate;
             TVector<double> loadAverage = GetLoadAverage();
@@ -1105,8 +1123,13 @@ protected:
             MaxNetworkUtilization = 0;
         }
 
+        {
+            SystemStateInfo.SetNetworkWriteThroughput(SumNetworkWriteThroughput / UPDATE_PERIOD.Seconds());
+            SumNetworkWriteThroughput = 0;
+        }
+
         UpdateSystemState(ctx);
-        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateRuntimeStats());
+        ctx.Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());
     }
 
     void Handle(TEvPrivate::TEvCleanupDeadTablets::TPtr &, const TActorContext &ctx) {

@@ -25,7 +25,6 @@ private:
     std::optional<TString> SerializedProgram;
     YDB_ACCESSOR(bool, Reverse, false);
     YDB_ACCESSOR(ui32, Limit, 0);
-    std::vector<TString> ReplyColumns;
     std::vector<TSerializedTableRange> Ranges;
 
     std::unique_ptr<TEvDataShard::TEvKqpScan> BuildStartEvent() const;
@@ -53,8 +52,6 @@ public:
         auto r = GetResult();
         return r ? r->num_rows() : 0;
     }
-
-    TShardReader& SetReplyColumns(const std::vector<TString>& replyColumns);
 
     TShardReader& SetReplyColumnIds(const std::vector<ui32>& replyColumnIds);
 
@@ -125,7 +122,7 @@ public:
         if (auto* evData = std::get<0>(event)) {
             auto b = evData->ArrowBatch;
             if (b) {
-                ResultBatches.push_back(NArrow::ToBatch(b, true));
+                ResultBatches.push_back(NArrow::ToBatch(b));
                 NArrow::TStatusValidator::Validate(ResultBatches.back()->ValidateFull());
             } else {
                 AFL_VERIFY(evData->Finished);

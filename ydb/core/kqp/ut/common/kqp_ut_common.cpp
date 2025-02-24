@@ -552,11 +552,11 @@ TString ReformatYson(const TString& yson) {
     return output.Str();
 }
 
-void CompareYson(const TString& expected, const TString& actual) {
-    UNIT_ASSERT_VALUES_EQUAL(ReformatYson(expected), ReformatYson(actual));
+void CompareYson(const TString& expected, const TString& actual, const TString& message) {
+    UNIT_ASSERT_VALUES_EQUAL_C(ReformatYson(expected), ReformatYson(actual), message);
 }
 
-void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual) {
+void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message) {
     TStringStream ysonStream;
     NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Text);
     NYql::IDataProvider::TFillSettings fillSettings;
@@ -564,7 +564,7 @@ void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual)
     KikimrResultToYson(ysonStream, writer, actual, {}, fillSettings, truncated);
     UNIT_ASSERT(!truncated);
 
-    CompareYson(expected, ysonStream.Str());
+    CompareYson(expected, ysonStream.Str(), message);
 }
 
 bool HasIssue(const NYql::TIssues& issues, ui32 code,

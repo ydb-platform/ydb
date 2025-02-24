@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/vdisk/common/align.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
@@ -231,8 +232,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             ctx.Send(NotifyID, new TEvHullHugeWritten(HugeSlot));
             ctx.Send(HugeKeeperCtx->SkeletonId, new TEvHullLogHugeBlob(WriteId, Item->LogoBlobId, Item->Ingress, DiskAddr,
-                Item->IgnoreBlock, Item->SenderId, Item->Cookie, std::move(Item->Result), &Item->ExtraBlockChecks), 0, 0,
-                Span.GetTraceId());
+                Item->IgnoreBlock, Item->SenderId, Item->Cookie, std::move(Item->Result), &Item->ExtraBlockChecks,
+                Item->RewriteBlob), 0, 0, Span.GetTraceId());
             LOG_DEBUG(ctx, BS_HULLHUGE,
                       VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                             "Writer: finish: id# %s diskAddr# %s",
@@ -310,6 +311,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             Y_ABORT_UNLESS(ev->Get()->ChunkIds.size() == 1);
             ChunkId = ev->Get()->ChunkIds.front();
             Lsn = HugeKeeperCtx->LsnMngr->AllocLsnForLocalUse().Point();
+            ctx.Send(HugeKeeperCtx->SkeletonId, new TEvNotifyChunksDeleted(Lsn, ev->Get()->ChunkIds));
 
             LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "ChunkAllocator: reserved:"
                 " chunkId# %" PRIu32 " Lsn# %" PRIu64, ChunkId, Lsn));
@@ -427,9 +429,10 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             Y_ABORT_UNLESS(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == Lsn);
 
-            LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "ChunkDestroyer: committed:"
+            LOG_INFO(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "ChunkDestroyer: committed:"
                 " chunks# %s Lsn# %" PRIu64, FormatList(ChunksToFree).data(), Lsn));
 
+            ctx.Send(HugeKeeperCtx->SkeletonId, new TEvNotifyChunksDeleted(Lsn, ChunksToFree));
             ctx.Send(NotifyID, new TEvHullHugeChunkFreed);
             Die(ctx);
         }
@@ -673,6 +676,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         THullHugeKeeperState State;
         TActiveActors ActiveActors;
         std::unordered_set<ui32> AllocatingChunkPerSlotSize;
+        std::multimap<ui64, std::unique_ptr<IEventHandle>> PendingLockResponses;
+        std::set<ui64> WritesInFlight;
 
         void CheckLsn(ui64 lsn, const char *action) {
             const ui64 firstLsnToKeep = State.FirstLsnToKeep();
@@ -699,6 +704,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 const ui64 lsnInfimum = HugeKeeperCtx->LsnMngr->GetLsn();
                 CheckLsn(lsnInfimum, "WriteHugeBlob");
                 const ui64 wId = State.LsnFifo.Push(lsnInfimum);
+                WritesInFlight.insert(wId);
                 auto aid = ctx.Register(new THullHugeBlobWriter(HugeKeeperCtx, ctx.SelfID, hugeSlot,
                     std::unique_ptr<TEvHullWriteHugeBlob>(ev->Release().Release()), wId, std::move(traceId)));
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
@@ -983,6 +989,10 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 // and remove chunk size record
                 State.Pers->DeleteChunkSize(hugeSlot);
             }
+
+            size_t numErased = WritesInFlight.erase(msg->WriteId);
+            Y_ABORT_UNLESS(numErased);
+            CheckPendingLockResponses();
         }
 
         void Handle(TEvHugePreCompact::TPtr ev, const TActorContext& ctx) {
@@ -1006,15 +1016,16 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             for (const auto &d : msg->Chunks) {
                 bool locked = State.Pers->Heap->LockChunkForAllocation(d.ChunkId, d.SlotSize);
                 if (locked) {
-                    lockedChunks.emplace_back(d.ChunkId, d.SlotSize);
+                    lockedChunks.push_back(d);
                 }
             }
-            ctx.Send(ev->Sender, new TEvHugeLockChunksResult(std::move(lockedChunks)));
-        }
 
-        void Handle(TEvHugeUnlockChunks::TPtr& ev, const TActorContext& /*ctx*/) {
-            for (const auto& d : ev->Get()->Chunks) {
-                State.Pers->Heap->UnlockChunk(d.ChunkId, d.SlotSize);
+            auto response = std::make_unique<TEvHugeLockChunksResult>(std::move(lockedChunks));
+            auto handle = std::make_unique<IEventHandle>(ev->Sender, SelfId(), response.release());
+            if (WritesInFlight.empty()) {
+                TActivationContext::Send(handle.release());
+            } else {
+                PendingLockResponses.emplace(*--WritesInFlight.end(), std::move(handle));
             }
         }
 
@@ -1027,6 +1038,31 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             res->Stat = State.Pers->Heap->GetStat();
             UpdateGlobalFragmentationStat(res->Stat);
             ctx.Send(ev->Sender, res.release());
+        }
+
+        void Handle(TEvHugeShredNotify::TPtr &ev, const TActorContext &ctx) {
+            auto *msg = ev->Get();
+            std::ranges::sort(msg->ChunksToShred);
+            State.Pers->Heap->ShredNotify(msg->ChunksToShred);
+            FreeChunks(ctx);
+
+            auto handle = std::make_unique<IEventHandle>(TEvBlobStorage::EvHugeShredNotifyResult, 0, ev->Sender, SelfId(),
+                nullptr, 0);
+            if (WritesInFlight.empty()) {
+                TActivationContext::Send(handle.release());
+            } else {
+                PendingLockResponses.emplace(*--WritesInFlight.end(), std::move(handle));
+            }
+        }
+
+        void Handle(TEvListChunks::TPtr ev, const TActorContext& ctx) {
+            auto response = std::make_unique<TEvListChunksResult>();
+            State.Pers->Heap->ListChunks(ev->Get()->ChunksOfInterest, response->ChunksHuge);
+            ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        }
+
+        void HandleQueryForbiddenChunks(TAutoPtr<IEventHandle> ev, const TActorContext& ctx) {
+            ctx.Send(ev->Sender, new TEvHugeForbiddenChunks(State.Pers->Heap->GetForbiddenChunks()), 0, ev->Cookie);
         }
 
         void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
@@ -1048,7 +1084,6 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::HugeKeeperId));
         }
 
-
         void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
             ActiveActors.KillAndClear(ctx);
@@ -1062,6 +1097,15 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             HugeKeeperCtx->DskOutOfSpaceGroup.HugeLockedChunks() = stat.LockedChunks.size();
             // update global stat
             HugeKeeperCtx->VCtx->GetHugeHeapFragmentation().Set(stat.CurrentlyUsedChunks, stat.CanBeFreedChunks);
+        }
+
+        void CheckPendingLockResponses() {
+            const ui64 writeId = WritesInFlight.empty() ? Max<ui64>() : *WritesInFlight.begin();
+            std::multimap<ui64, std::unique_ptr<IEventHandle>>::iterator it;
+            for (it = PendingLockResponses.begin(); it != PendingLockResponses.end() && it->first < writeId; ++it) {
+                TActivationContext::Send(it->second.release());
+            }
+            PendingLockResponses.erase(PendingLockResponses.begin(), it);
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1177,8 +1221,10 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 HFunc(TEvHugeDropAllocatedSlots, Handle)
                 HFunc(TEvHugePreCompact, Handle)
                 HFunc(TEvHugeLockChunks, Handle)
-                HFunc(TEvHugeUnlockChunks, Handle)
                 HFunc(TEvHugeStat, Handle)
+                HFunc(TEvHugeShredNotify, Handle)
+                HFunc(TEvListChunks, Handle)
+                FFunc(TEvBlobStorage::EvHugeQueryForbiddenChunks, HandleQueryForbiddenChunks)
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(NMon::TEvHttpInfo, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)

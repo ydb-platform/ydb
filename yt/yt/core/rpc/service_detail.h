@@ -437,7 +437,7 @@ protected:
             return ::NYT::NRpc::TServiceBase::TLiteHandler(); \
         } \
         return \
-            BIND([this, typedContext = std::move(typedContext)] ( \
+            BIND_NO_PROPAGATE([this, typedContext = std::move(typedContext)] ( \
                 const ::NYT::NRpc::IServiceContextPtr&, \
                 const ::NYT::NRpc::THandlerInvocationOptions&) \
             { \
@@ -766,7 +766,7 @@ protected:
         std::atomic<TDuration> LoggingSuppressionTimeout = {};
 
         using TNonowningPerformanceCountersKey = std::tuple<TStringBuf, TRequestQueue*>;
-        using TOwningPerformanceCountersKey = std::tuple<TString, TRequestQueue*>;
+        using TOwningPerformanceCountersKey = std::tuple<std::string, TRequestQueue*>;
         using TPerformanceCountersKeyHash = THash<TNonowningPerformanceCountersKey>;
 
         struct TPerformanceCountersKeyEquals
@@ -813,7 +813,7 @@ protected:
         const NProfiling::TProfiler Profiler_;
 
         //! Number of requests per user agent.
-        NConcurrency::TSyncMap<TString, NProfiling::TCounter> RequestsPerUserAgent_;
+        NConcurrency::TSyncMap<std::string, NProfiling::TCounter, THash<TStringBuf>, TEqualTo<TStringBuf>> RequestsPerUserAgent_;
     };
 
     using TPerformanceCountersPtr = TIntrusivePtr<TPerformanceCounters>;
@@ -930,7 +930,7 @@ private:
 
     std::atomic<bool> Active_ = false;
 
-    THashMap<TString, TRuntimeMethodInfoPtr> MethodMap_;
+    THashMap<std::string, TRuntimeMethodInfoPtr, THash<std::string>, TEqualTo<>> MethodMap_;
 
     THashSet<int> SupportedServerFeatureIds_;
 
@@ -987,10 +987,11 @@ private:
 
     std::atomic<bool> EnableErrorCodeCounter_ = false;
 
-    const NConcurrency::TPeriodicExecutorPtr ServiceLivenessChecker_;
+    std::atomic<bool> ServiceLivenessCheckerStarted_ = false;
+    TAtomicIntrusivePtr<NConcurrency::TPeriodicExecutor> ServiceLivenessChecker_;
 
     using TDiscoverRequestSet = TConcurrentHashMap<TCtxDiscoverPtr, int>;
-    THashMap<TString, TDiscoverRequestSet> DiscoverRequestsByPayload_;
+    THashMap<std::string, TDiscoverRequestSet> DiscoverRequestsByPayload_;
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, DiscoverRequestsByPayloadLock_);
 
     const TPerformanceCountersPtr PerformanceCounters_;
@@ -1075,6 +1076,7 @@ private:
     void IncrementActiveRequestCount();
     void DecrementActiveRequestCount();
 
+    void StartServiceLivenessChecker();
     void RegisterDiscoverRequest(const TCtxDiscoverPtr& context);
     void ReplyDiscoverRequest(const TCtxDiscoverPtr& context, bool isUp);
 

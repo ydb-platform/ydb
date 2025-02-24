@@ -764,7 +764,7 @@ TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TIns
 
 TString TViewerPipeClient::GetHTTPOKJSON(const google::protobuf::Message& response, TInstant lastModified) {
     TStringStream json;
-    NProtobufJson::Proto2Json(response, json, Proto2JsonConfig);
+    Proto2Json(response, json);
     return GetHTTPOKJSON(json.Str(), lastModified);
 }
 
@@ -825,13 +825,9 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
         if (ResourceNavigateResponse->IsOk()) {
             TSchemeCacheNavigate::TEntry& entry(ResourceNavigateResponse->Get()->Request->ResultSet.front());
             SharedDatabase = CanonizePath(entry.Path);
-            if (SharedDatabase == AppData()->TenantName) {
-                Direct = true;
-                Bootstrap(); // retry bootstrap without redirect this time
-            } else {
-                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
-                --Requests; // don't count this request
-            }
+            Direct |= (SharedDatabase == AppData()->TenantName);
+            DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
+            --Requests; // don't count this request
         } else {
             AddEvent("Failed to resolve database - shared database not found");
             Direct = true;
@@ -850,7 +846,8 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
                 --Requests; // don't count this request
                 Become(&TViewerPipeClient::StateResolveResource);
             } else {
-                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(CanonizePath(entry.Path));
+                Database = CanonizePath(entry.Path);
+                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(Database);
                 --Requests; // don't count this request
             }
         } else {
@@ -865,7 +862,11 @@ void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
     if (DatabaseBoardInfoResponse) {
         DatabaseBoardInfoResponse->Set(std::move(ev));
         if (DatabaseBoardInfoResponse->IsOk()) {
-            return ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
+            if (Direct) {
+                Bootstrap(); // retry bootstrap without redirect this time
+            } else {
+                ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
+            }
         } else {
             AddEvent("Failed to resolve database nodes");
             Direct = true;
@@ -902,10 +903,11 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
 
 bool TViewerPipeClient::NeedToRedirect() {
     auto request = GetRequest();
-    if (request) {
+    if (NeedRedirect && request) {
+        NeedRedirect = false;
         Direct |= !request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
-        if (Database && !Direct) {
+        if (Database) {
             RedirectToDatabase(Database); // to find some dynamic node and redirect query there
             return true;
         }

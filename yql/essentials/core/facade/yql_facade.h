@@ -380,7 +380,7 @@ private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
     void HandleSourceCode(TString& sourceCode);
     void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
-        const NSQLTranslation::TTranslationSettings*& currentSettings);
+        NSQLTranslation::TTranslationSettings*& currentSettings);
 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;

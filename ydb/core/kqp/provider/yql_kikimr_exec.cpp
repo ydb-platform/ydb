@@ -112,7 +112,10 @@ namespace {
             } else if (name == "nullPassword") {
                 // Default value
             } else if (name == "passwordEncrypted") {
-                createUserSettings.PasswordEncrypted = true;
+                // PasswordEncrypted is never used
+            } else if (name == "hash") {
+                createUserSettings.IsHashedPassword = true;
+                createUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "login") {
                 createUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
@@ -133,7 +136,10 @@ namespace {
             } else if (name == "nullPassword") {
                 alterUserSettings.Password = TString();
             } else if (name == "passwordEncrypted") {
-                alterUserSettings.PasswordEncrypted = true;
+                // PasswordEncrypted is never used
+            } else if (name == "hash") {
+                alterUserSettings.IsHashedPassword = true;
+                alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "login") {
                 alterUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
@@ -1841,7 +1847,7 @@ public:
                                         TStringBuilder() << "Unknown index name: " << indexName));
                                 return SyncError();
                             }
-                            auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexIter->Type, indexName);
+                            auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, *indexIter);
                             if (indexTablePaths.size() != 1) {
                                 ctx.AddError(
                                     TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
@@ -2636,7 +2642,7 @@ public:
         if (auto maybeAnalyze = TMaybeNode<TKiAnalyzeTable>(input)) {
             if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
                 ctx.AddError(TIssue("ANALYZE command is not supported because `EnableColumnStatistics` feature flag is off"));
-                return SyncError();            
+                return SyncError();
             }
 
             auto cluster = TString(maybeAnalyze.Cast().DataSink().Cluster());

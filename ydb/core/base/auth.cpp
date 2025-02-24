@@ -1,12 +1,26 @@
+#include <ydb/library/aclib/aclib.h>
+
 #include "auth.h"
 
 namespace NKikimr {
 
 namespace {
 
-bool HasToken(const TAppData* appData, const NACLib::TUserToken& userToken) {
-    for (const auto& sid : appData->AdministrationAllowedSIDs) {
-        if (userToken.IsExist(sid)) {
+template <class Iterable>
+bool IsTokenAllowedImpl(const NACLib::TUserToken* userToken, const Iterable& allowedSIDs) {
+    // empty set contains any element
+    if (allowedSIDs.empty()) {
+        return true;
+    }
+
+    // empty element does not belong to any non-empty set
+    if (!userToken || userToken->GetUserSID().empty()) {
+        return false;
+    }
+
+    // its enough to a single sid (user or group) from the token to be in the set
+    for (const auto& sid : allowedSIDs) {
+        if (userToken->IsExist(sid)) {
             return true;
         }
     }
@@ -14,35 +28,56 @@ bool HasToken(const TAppData* appData, const NACLib::TUserToken& userToken) {
     return false;
 }
 
+NACLib::TUserToken ParseUserToken(const TString& userTokenSerialized) {
+    NACLibProto::TUserToken tokenPb;
+    if (!tokenPb.ParseFromString(userTokenSerialized)) {
+        // we want to treat invalid token as empty,
+        // so then result object must be recreated (or cleared)
+        // because failed parsing makes result object dirty
+        tokenPb = NACLibProto::TUserToken();
+    }
+    return NACLib::TUserToken(tokenPb);
 }
 
-bool IsAdministrator(const TAppData* appData, const TString& userToken) {
-    if (appData->AdministrationAllowedSIDs.empty()) {
-        return true;
-    }
+}
 
-    if (!userToken) {
-        return false;
-    }
+bool IsTokenAllowed(const NACLib::TUserToken* userToken, const TVector<TString>& allowedSIDs) {
+    return IsTokenAllowedImpl(userToken, allowedSIDs);
+}
 
-    NACLibProto::TUserToken tokenPb;
-    if (!tokenPb.ParseFromString(userToken)) {
-        return false;
-    }
+bool IsTokenAllowed(const NACLib::TUserToken* userToken, const NProtoBuf::RepeatedPtrField<TString>& allowedSIDs) {
+    return IsTokenAllowedImpl(userToken, allowedSIDs);
+}
 
-    return HasToken(appData, NACLib::TUserToken(std::move(tokenPb)));
+bool IsTokenAllowed(const TString& userTokenSerialized, const TVector<TString>& allowedSIDs) {
+    NACLib::TUserToken userToken = ParseUserToken(userTokenSerialized);
+    return IsTokenAllowed(&userToken, allowedSIDs);
+}
+
+bool IsTokenAllowed(const TString& userTokenSerialized, const NProtoBuf::RepeatedPtrField<TString>& allowedSIDs) {
+    NACLib::TUserToken userToken = ParseUserToken(userTokenSerialized);
+    return IsTokenAllowed(&userToken, allowedSIDs);
+}
+
+bool IsAdministrator(const TAppData* appData, const TString& userTokenSerialized) {
+    return IsTokenAllowed(userTokenSerialized, appData->AdministrationAllowedSIDs);
 }
 
 bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToken) {
-    if (appData->AdministrationAllowedSIDs.empty()) {
-        return true;
-    }
+    return IsTokenAllowed(userToken, appData->AdministrationAllowedSIDs);
+}
 
-    if (!userToken || userToken->GetSerializedToken().empty()) {
+
+bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::TSID& databaseOwner) {
+    // no database, no access
+    if (databaseOwner.empty()) {
         return false;
     }
-
-    return HasToken(appData, *userToken);
+    // empty token can't have raised access level
+    if (!userToken || userToken->GetUserSID().empty()) {
+        return false;
+    }
+    return userToken->IsExist(databaseOwner);
 }
 
 }

@@ -423,24 +423,25 @@ TESTCASES = [
                             yb STRING,
                             yc Int32,
                             zd Int32,
+                            ll List<Int32>,
                         )
                     )            ;
 
-            $enriched1 = select a, b, c, d, e, f, za, yb, yc, zd
+            $enriched1 = select a, b, c, d, e, f, za, yb, yc, zd, ll
                 from
                     $input as e
                 left join {streamlookup} any ydb_conn_{table_name}.db as u
                 on(e.za = u.a AND e.yb = u.b)
             ;
 
-            $enriched2 = SELECT e.a AS a, e.b AS b, e.c AS c, e.d AS d, e.e AS e, e.f AS f, za, yb, yc, zd, u.c AS c2, u.d AS d2
+            $enriched2 = SELECT e.a AS a, e.b AS b, e.c AS c, e.d AS d, e.e AS e, e.f AS f, za, yb, yc, zd, u.c AS c2, u.d AS d2, ll
                 from
                     $enriched1 as e
                 left join {streamlookup} any ydb_conn_{table_name}.db as u
                 on(e.za = u.a AND e.yb = u.b)
             ;
 
-            $enriched = select a, b, c, d, e, f, za, yb, yc, zd, (c2 IS NOT DISTINCT FROM c) as eq1, (d2 IS NOT DISTINCT FROM d) as eq2
+            $enriched = select a, b, c, d, e, f, za, yb, yc, zd, (c2 IS NOT DISTINCT FROM c) as eq1, (d2 IS NOT DISTINCT FROM d) as eq2, ll
                 from
                     $enriched2 as e
             ;
@@ -451,20 +452,20 @@ TESTCASES = [
         ResequenceId(
             [
                 (
-                    '{"id":1,"za":1,"yb":"2","yc":100,"zd":101}',
-                    '{"a":1,"b":"2","c":3,"d":4,"e":5,"f":6,"za":1,"yb":"2","yc":100,"zd":101,"eq1":true,"eq2":true}',
+                    '{"id":1,"za":1,"yb":"2","yc":100,"zd":101,ll:[1,2,3]}',
+                    '{"a":1,"b":"2","c":3,"d":4,"e":5,"f":6,"za":1,"yb":"2","yc":100,"zd":101,"eq1":true,"eq2":true,ll:[1,2,3]}',
                 ),
                 (
-                    '{"id":2,"za":7,"yb":"8","yc":106,"zd":107}',
-                    '{"a":7,"b":"8","c":9,"d":10,"e":11,"f":12,"za":7,"yb":"8","yc":106,"zd":107,"eq1":true,"eq2":true}',
+                    '{"id":2,"za":7,"yb":"8","yc":106,"zd":107,ll:[1,2]}',
+                    '{"a":7,"b":"8","c":9,"d":10,"e":11,"f":12,"za":7,"yb":"8","yc":106,"zd":107,"eq1":true,"eq2":true,ll:[1,2]}',
                 ),
                 (
-                    '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
-                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true}',
+                    '{"id":3,"za":2,"yb":"1","yc":114,"zd":115,ll:[]}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true,ll:[]}',
                 ),
                 (
-                    '{"id":3,"za":null,"yb":"1","yc":114,"zd":115}',
-                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":null,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true}',
+                    '{"id":3,"za":null,"yb":"1","yc":114,"zd":115,ll:[1,2,3,4]}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":null,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true,ll:[1,2,3,4]}',
                 ),
             ]
         ),

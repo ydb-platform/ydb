@@ -84,7 +84,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [45:46]
+        README.md [48:49]
 
 KEEP     Apache-2.0 AND Apache-2.0 640d2de508aaacd65f56f04b562671d3
 BELONGS ya.make
@@ -351,3 +351,4 @@ BELONGS ya.make
     Files with this license:
         CONTRIBUTING.md [4:14]
         RELEASE_NOTES.md [4:14]
+        WASM_Support.md [4:14]

@@ -1366,7 +1366,7 @@ private:
             return;
         }
 
-        if (auto maybeStreamLookup = connection.Maybe<TKqpCnStreamLookup>()) {
+        if (auto maybeStreamLookup = connection.Maybe<TKqpCnStreamLookup>()) { // TODO: 3
             TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
             auto& streamLookupProto = *connectionProto.MutableStreamLookup();
             auto streamLookup = maybeStreamLookup.Cast();

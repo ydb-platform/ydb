@@ -148,6 +148,18 @@ struct TTM64Storage {
         return true;
     }
 
+    inline void FromTimeOfDay(ui64 value) {
+        Hour = value / 3600000000ull;
+        value -= Hour * 3600000000ull;
+        Minute = value / 60000000ull;
+        value -= Minute * 60000000ull;
+        Second = value / 1000000ull;
+        Microsecond = value - Second * 1000000ull;
+    }
+
+    inline ui64 ToTimeOfDay() const {
+        return ((Hour * 60ull + Minute) * 60ull + Second) * 1000000ull + Microsecond;
+    }
 };
 
 }

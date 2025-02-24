@@ -242,7 +242,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         config = self.read_node_config()
         return config.get('metadata', {}).get('version', 0)
 
-    def update_binary_path(self, binary_path: str):
+    def update_binary_path(self, binary_path):
         self.__binary_path = binary_path
         super(KiKiMRNode, self).update_command(self.command)
 
@@ -610,7 +610,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         assert bs_controller_started
 
-    def change_binary_and_restart(self, binary_path: str):
+    def change_binary_and_restart(self, binary_path):
         for node in self._nodes.values():
             node.stop()
             node.update_binary_path(binary_path)

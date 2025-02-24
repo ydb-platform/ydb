@@ -290,6 +290,7 @@ message TKqpPhyCnStreamLookup {
     bool KeepRowsOrder = 7;
     bool AllowNullKeys = 8;
     uint32 AllowNullKeysPrefixSize = 9;
+    TKqpPhyTableId Index = 10;
 }
 
 message TKqpPhyCnSequencer {

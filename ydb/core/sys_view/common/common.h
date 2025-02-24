@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log.h>
 
 #if defined SVLOG_T || \
@@ -29,6 +30,8 @@ enum class EProcessorMode {
 };
 
 constexpr size_t TOP_PARTITIONS_COUNT = 10;
+
+TVector<std::pair<TString, TString>> ConvertACLToString(const ::NACLibProto::TACL& acl, bool effective);
 
 } // NSysView
 } // NKikimr

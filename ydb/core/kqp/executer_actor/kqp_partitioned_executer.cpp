@@ -1,6 +1,7 @@
 #include "kqp_partitioned_executer.h"
-#include "kqp_executer_impl.h"
+#include "kqp_executer.h"
 
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/batch/params.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -76,6 +77,8 @@ public:
                 }
             }
         }
+
+        PE_LOG_I("Create " << ActorName << " with KeyColumnTypes.size() = " << KeyColumnTypes.size());
     }
 
     void Bootstrap() {
@@ -119,6 +122,7 @@ public:
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         auto* request = ev->Get()->Request.Get();
+        PE_LOG_I("Got TEvTxProxySchemeCache::TEvResolveKeySetResult from ActorId = " << ev->Sender);
 
         if (request->ErrorCount > 0) {
             RuntimeError(
@@ -136,7 +140,7 @@ public:
         auto& msg = ev->Get()->Record;
         auto issues = ev->Get()->GetIssues();
 
-        LOG_D("Got EvAbortExecution from ActorId = " << ev->Sender
+        PE_LOG_I("Got TEvKqp::EvAbortExecution from ActorId = " << ev->Sender
             << " , abort child executers, status: "
             << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
             << ", message: " << issues.ToOneLineString());
@@ -184,8 +188,8 @@ public:
         auto exId = RegisterWithSameMailbox(executerActor);
         Executers[partitionIdx] = exId;
 
-        LOG_D("Created new KQP executer from Partitioned: " << exId << ", isRetry = "
-            << isRetry << ", partitionIdx = " << partitionIdx);
+        PE_LOG_I("Create new KQP executer from Partitioned: ExId = " << exId << ", isRetry = "
+            << isRetry << ", PartitionIdx = " << partitionIdx);
 
         auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
         Send(MakeTxProxyID(), ev.release());
@@ -197,6 +201,8 @@ public:
     }
 
     void SendAbortToActors() {
+        PE_LOG_I("Send abort to executers");
+
         for (size_t i = 0; i < Executers.size(); ++i) {
             if (ExecutersResponses[i] == EExecuterResponse::SUCCESS) {
                 ExecutersResponses[i] = EExecuterResponse::NONE;
@@ -230,6 +236,9 @@ public:
 
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         auto* response = ev->Get()->Record.MutableResponse();
+
+        PE_LOG_I("Got TEvKqpExecuter::TEvTxResponse from ActorId = " << ev->Sender << ", Status = " << response->GetStatus());
+
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
                 OnSuccessResponse(GetExecuterIdx(ev->Sender));
@@ -247,12 +256,14 @@ public:
         }
     }
 
-    void OnSuccessResponse(size_t exId) {
-        if (exId == Executers.size()) {
+    void OnSuccessResponse(size_t exIdx) {
+        if (exIdx == Executers.size()) {
             return;
         }
 
-        ExecutersResponses[exId] = EExecuterResponse::SUCCESS;
+        PE_LOG_I("Got success response from ExId = " << Executers[exIdx]);
+
+        ExecutersResponses[exIdx] = EExecuterResponse::SUCCESS;
         if (!CheckExecutersAreSuccess()) {
             return;
         }
@@ -260,6 +271,8 @@ public:
         for (size_t i = 0; i < BufferActors.size(); ++i) {
             Send(BufferActors[i], new TEvKqpBuffer::TEvTerminate{});
         }
+
+        PE_LOG_I("All executers are success. Send success to SessionActor");
 
         auto& response = *ResponseEv->Record.MutableResponse();
         response.SetStatus(Ydb::StatusIds::SUCCESS);
@@ -270,7 +283,7 @@ public:
 
     void HandleExecute(TEvKqpBuffer::TEvError::TPtr& ev) {
         const auto& msg = *ev->Get();
-        LOG_D("Got TEvError from ActorId = " << ev->Sender << ", status = "
+        PE_LOG_I("Got TEvError from ActorId = " << ev->Sender << ", status = "
             << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode));
 
         switch (msg.StatusCode) {
@@ -290,6 +303,8 @@ public:
     }
 
     void RetryPartExecution(size_t partitionIdx, bool fromBuffer) {
+        PE_LOG_I("Got error for PartitionIdx = " << partitionIdx << ", retry execution");
+
         if (partitionIdx == Executers.size()) {
             return;
         }
@@ -310,7 +325,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleAbort);
             default:
-                LOG_D("Got unknown message from ActorId = " << ev->Sender << ", typeRewrite = " << ev->GetTypeRewrite());
+                PE_LOG_I("Got unknown message from ActorId = " << ev->Sender);
             }
         } catch (...) {
             RuntimeError(
@@ -323,7 +338,7 @@ public:
         const auto& response = ev->Get()->Record.MutableResponse();
         auto idx = GetExecuterIdx(ev->Sender);
 
-        LOG_D("Got EvTxResponse from ActorId = " << ev->Sender << ", status = " << response->GetStatus());
+        PE_LOG_I("Got TEvKqpExecuter::TEvTxResponse from ActorId = " << ev->Sender << ", status = " << response->GetStatus());
 
         if (idx == Executers.size()) {
             return;
@@ -332,18 +347,34 @@ public:
         ExecutersResponses[idx] = EExecuterResponse::ERROR;
 
         if (CheckExecutersAreFailed()) {
-            LOG_D("All executers are aborted. Abort partitioned executer.");
+            PE_LOG_I("All executers are aborted. Abort partitioned executer.");
             RuntimeError(
                 Ydb::StatusIds::ABORTED,
                 NYql::TIssues({NYql::TIssue("RuntimeError: Aborted.")}));
         }
     }
 
-    const TIntrusivePtr<TUserRequestContext>& GetUserRequestContext() const {
-        return UserRequestContext;
+    TString LogPrefix() const {
+        TStringBuilder result = TStringBuilder()
+            << "(PARTITIONED) ActorId: " << SelfId() << ", "
+            << "ActorState: " << CurrentStateFuncName() << ", ";
+        return result;
     }
 
 private:
+    TString CurrentStateFuncName() const {
+        const auto& func = CurrentStateFunc();
+        if (func == &TThis::PrepareState) {
+            return "PrepareState";
+        } else if (func == &TThis::ExecuteState) {
+            return "ExecuteState";
+        } else if (func == &TThis::AbortState) {
+            return "AbortState";
+        } else {
+            return "unknown state";
+        }
+    }
+
     size_t GetExecuterIdx(const TActorId exId) const {
         auto end = std::find(Executers.begin(), Executers.end(), exId);
         return std::distance(Executers.begin(), end);
@@ -401,7 +432,6 @@ private:
         FillNewRequest(newRequest, literal);
 
         auto& queryData = newRequest.Transactions.front().Params;
-
         YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsFirstQuery, partitionIdx == 0));
 
         auto partition = Partitioning->at(partitionIdx).Range;
@@ -432,7 +462,7 @@ private:
                 YQL_ENSURE(false);
             }
 
-            YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsInclusiveLeft, prevPartition->IsInclusive));
+            YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsInclusiveLeft, !prevPartition->IsInclusive));
 
             auto prevCells = prevPartition->EndKeyPrefix.GetCells();
             YQL_ENSURE(!prevCells.empty());
@@ -440,7 +470,7 @@ private:
             for (size_t i = 0; i < KeyColumnTypes.size(); ++i) {
                 auto beginParam = NBatchParams::Begin + ToString(i + 1);
 
-                if (i >= cells.size()) {
+                if (i >= prevCells.size()) {
                     YQL_ENSURE(FillParamValue(queryData, beginParam, false, /* setDefault */ true));
                     continue;
                 }
@@ -560,7 +590,7 @@ private:
             return;
         }
 
-        LOG_E(Ydb::StatusIds_StatusCode_Name(code) << ": " << issues.ToOneLineString());
+        PE_LOG_E(Ydb::StatusIds_StatusCode_Name(code) << ": " << issues.ToOneLineString());
         ReplyErrorAndDie(code, issues);
     }
 
@@ -600,8 +630,6 @@ private:
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
     TTableId TableId;
     TString TablePath;
-    TString LogPrefix;
-    ui64 TxId = 0;
 
     // Args for child executers and buffer write actors
     TString Database;

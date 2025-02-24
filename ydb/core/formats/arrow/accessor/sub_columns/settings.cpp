@@ -15,7 +15,7 @@ TSettings::TColumnsDistributor::EColumnType TSettings::TColumnsDistributor::Take
         CurrentColumnsSize += columnSize;
         ++SeparatedCount;
         return EColumnType::Separated;
-    } else if (!RecordsCount || Settings.GetSparsedDetectorKff() < 1.0 * columnValuesCount / RecordsCount) {
+    } else if (!RecordsCount || RecordsCount < Settings.GetSparsedDetectorKff() * columnValuesCount) {
         CurrentColumnsSize += columnSize;
         ++SeparatedCount;
         return EColumnType::Separated;

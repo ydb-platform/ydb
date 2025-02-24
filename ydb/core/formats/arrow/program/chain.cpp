@@ -153,7 +153,7 @@ TConclusionStatus TProgramChain::Apply(const std::shared_ptr<TAccessorsCollectio
         if (status.IsFail()) {
             return status;
         }
-        resources->Remove(i.GetColumnsToDrop());
+        resources->Remove(i.GetColumnsToDrop(), true);
         if (resources->IsEmptyFiltered()) {
             resources->Clear();
             break;

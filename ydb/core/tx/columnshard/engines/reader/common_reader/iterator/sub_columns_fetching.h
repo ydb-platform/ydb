@@ -75,8 +75,8 @@ public:
             std::vector<NArrow::NAccessor::TDeserializeChunkedArray::TChunk> chunks = { NArrow::NAccessor::TDeserializeChunkedArray::TChunk(
                 GetRecordsCount(), i.second.GetBlobDataVerified()) };
             const std::shared_ptr<NArrow::NAccessor::IChunkedArray> arrOriginal = deserialize
-                ? columnLoader->ApplyVerified(GetRecordsCount())
-                : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(GetRecordsCount(), columnLoader, std::move(chunks), true);
+                    ? columnLoader->ApplyVerified(i.second.GetBlobDataVerified(), GetRecordsCount())
+                    : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(GetRecordsCount(), columnLoader, std::move(chunks), true);
             if (applyFilter) {
                 PartialArray->AddColumn(i.first, applyFilter->Apply(arrOriginal));
             } else {

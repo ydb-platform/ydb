@@ -10,10 +10,10 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSignaturePtr ISignatureGenerator::Sign(TYsonString data)
+TSignaturePtr ISignatureGenerator::Sign(std::string payload)
 {
     auto signature = New<TSignature>();
-    signature->Payload_ = std::move(data);
+    signature->Payload_ = std::move(payload);
     Sign(signature);
     return signature;
 }

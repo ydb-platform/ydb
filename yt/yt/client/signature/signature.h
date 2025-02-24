@@ -20,11 +20,11 @@ public:
     //! Constructs an empty TSignature.
     TSignature() = default;
 
-    [[nodiscard]] const NYson::TYsonString& Payload() const;
+    [[nodiscard]] const std::string& Payload() const;
 
 private:
     NYson::TYsonString Header_;
-    NYson::TYsonString Payload_;
+    std::string Payload_;
     std::vector<std::byte> Signature_;
 
     friend struct ISignatureGenerator;

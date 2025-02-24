@@ -12,6 +12,7 @@ class TestYdbWorkload(object):
         cls.cluster = KiKiMR(KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             column_shard_config={
+                "disabled_on_scheme_shard": False,
                 "allow_nullable_columns_in_pk": True,
             }
         ))

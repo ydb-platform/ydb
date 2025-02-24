@@ -113,7 +113,10 @@ class BaseTestSet:
 
     @classmethod
     def _get_cluster_config(cls):
-        return KikimrConfigGenerator(extra_feature_flags=["enable_column_store"])
+        return KikimrConfigGenerator(
+            extra_feature_flags=["enable_column_store"],
+            column_shard_config={"disabled_on_scheme_shard": False}
+        )
 
 
 def pytest_generate_tests(metafunc):

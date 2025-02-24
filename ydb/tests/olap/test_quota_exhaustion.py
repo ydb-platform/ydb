@@ -13,7 +13,7 @@ class TestYdbWorkload(object):
     @classmethod
     def setup_class(cls):
         cls.cluster = KiKiMR(KikimrConfigGenerator(
-            column_shard_config={},
+            column_shard_config={"disabled_on_scheme_shard": False},
             static_pdisk_size=10 * 1024 * 1024,
             dynamic_pdisk_size=5 * 1024 * 1024
         ))

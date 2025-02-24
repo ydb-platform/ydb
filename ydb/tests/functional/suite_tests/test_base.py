@@ -280,6 +280,7 @@ class BaseSuiteRunner(object):
                 disable_iterator_lookups=True,
                 extra_feature_flags=["enable_resource_pools"],
                 column_shard_config={
+                    'disabled_on_scheme_shard': False,
                     'allow_nullable_columns_in_pk': True,
                 },
                 # additional_log_configs={'KQP_YQL': 7}

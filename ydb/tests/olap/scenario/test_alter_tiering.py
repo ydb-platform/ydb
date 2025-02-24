@@ -99,6 +99,7 @@ class TieringTestBase(BaseTestSet):
                 'enable_column_store',
             ],
             columnshard_config={
+                'disabled_on_scheme_shard': False,
                 'lag_for_compaction_before_tierings_ms': 0,
                 'compaction_actualization_lag_ms': 0,
                 'optimizer_freshness_check_duration_ms': 0,

@@ -13,7 +13,10 @@ from ydb.tests.library.common.types import Erasure
 class TestYdbKvWorkload(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
+            column_shard_config={"disabled_on_scheme_shard": False}
+        ))
         cls.cluster.start()
         cls.init_command_prefix = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),

@@ -2,7 +2,10 @@
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 
+#include <ydb/library/actors/core/log.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -87,6 +90,7 @@ TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(const
         return TChunkedArguments::Empty();
     }
     TChunkedArguments result;
+    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("ids", JoinSeq(",", columnIds));
     for (auto&& i : columnIds) {
         auto it = Accessors.find(i);
         if (it == Accessors.end()) {
@@ -242,13 +246,15 @@ void TAccessorsCollection::RemainOnly(const std::vector<ui32>& columns, const bo
     }
 }
 
-void TAccessorsCollection::AddBatch(const std::shared_ptr<TGeneralContainer>& container, const NSSA::IColumnResolver& resolver, const bool withFilter) {
+void TAccessorsCollection::AddBatch(
+    const std::shared_ptr<TGeneralContainer>& container, const NSSA::IColumnResolver& resolver, const bool withFilter) {
     for (ui32 i = 0; i < container->GetColumnsCount(); ++i) {
-        AddVerified(resolver.GetColumnIdVerified(container->GetSchema()->GetFieldVerified(i)->name()), container->GetColumnVerified(i), withFilter);
+        AddVerified(
+            resolver.GetColumnIdVerified(container->GetSchema()->GetFieldVerified(i)->name()), container->GetColumnVerified(i), withFilter);
     }
 }
 
- TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow::Datum& data)
+TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow::Datum& data)
     : ItWasScalar(data.is_scalar()) {
     if (data.is_array()) {
         Data = std::make_shared<TTrivialArray>(data.make_array());

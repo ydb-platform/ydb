@@ -200,7 +200,7 @@ private:
     }
 
 public:
-    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const;
+    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType, const std::shared_ptr<TAccessorsCollection>& resources) const;
 
     virtual bool IsAggregation() const = 0;
 

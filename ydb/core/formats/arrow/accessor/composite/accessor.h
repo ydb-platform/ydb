@@ -116,9 +116,12 @@ public:
             RecordsCount += arr->GetRecordsCount();
         }
 
-        std::shared_ptr<TCompositeChunkedArray> Finish() {
+        std::shared_ptr<IChunkedArray> Finish() {
             AFL_VERIFY(!Finished);
             Finished = true;
+            if (Chunks.size() == 1) {
+                return Chunks.front();
+            }
             return std::shared_ptr<TCompositeChunkedArray>(new TCompositeChunkedArray(std::move(Chunks), RecordsCount, Type));
         }
     };

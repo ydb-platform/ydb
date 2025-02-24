@@ -30,22 +30,18 @@ TConclusionStatus IResourceProcessor::Execute(const std::shared_ptr<TAccessorsCo
 }
 
 std::optional<TFetchingInfo> IResourceProcessor::BuildFetchTask(
-    const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const {
+    const ui32 columnId, const NAccessor::IChunkedArray::EType /*arrType*/, const std::shared_ptr<TAccessorsCollection>& resources) const {
     auto acc = resources->GetAccessorOptional(columnId);
     if (!acc) {
         return TFetchingInfo::BuildFullRestore(false);
     }
-    if (acc->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
-        return TFetchingInfo::BuildFullRestore(true);
-    } else if (acc->GetType() == NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
-        auto accComposite = std::static_pointer_cast<NAccessor::TCompositeChunkedArray>(acc);
-        for (auto it = NAccessor::TCompositeChunkedArray::BuildIterator(accComposite); it.IsValid(); it.Next()) {
-            if (it.GetArray()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
-                return TFetchingInfo::BuildFullRestore(true);
-            }
+    return NAccessor::TCompositeChunkedArray::VisitDataOwners<TFetchingInfo>(acc, [](const std::shared_ptr<NAccessor::IChunkedArray>& arr) {
+        if (arr->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
+            return std::optional<TFetchingInfo>(TFetchingInfo::BuildFullRestore(true));
+        } else {
+            return std::optional<TFetchingInfo>();
         }
-    }
-    return std::nullopt;
+    });
 }
 
 NJson::TJsonValue TResourceProcessorStep::DebugJson() const {

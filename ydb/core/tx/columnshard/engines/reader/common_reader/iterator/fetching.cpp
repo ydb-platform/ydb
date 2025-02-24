@@ -172,7 +172,8 @@ TConclusion<bool> TProgramStepPrepare::DoExecuteInplace(const std::shared_ptr<ID
     TReadActionsCollection readActions;
     THashMap<ui32, std::shared_ptr<IKernelFetchLogic>> fetchers;
     for (auto&& i : Step.GetOriginalColumnsToUse()) {
-        auto customFetchInfo = Step->BuildFetchTask(i.GetColumnId(), source->GetStageData().GetTable());
+        const auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(i.GetColumnId());
+        auto customFetchInfo = Step->BuildFetchTask(i.GetColumnId(), columnLoader->GetAccessorConstructor()->GetType(), source->GetStageData().GetTable());
         if (!customFetchInfo) {
             continue;
         }
@@ -217,7 +218,9 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
 TConclusion<bool> TProgramStepAssemble::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*cursor*/) const {
     for (auto&& i : Step.GetOriginalColumnsToUse()) {
-        auto customFetchInfo = Step->BuildFetchTask(i.GetColumnId(), source->GetStageData().GetTable());
+        const auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(i.GetColumnId());
+        auto customFetchInfo =
+            Step->BuildFetchTask(i.GetColumnId(), columnLoader->GetAccessorConstructor()->GetType(), source->GetStageData().GetTable());
         if (!customFetchInfo) {
             continue;
         }

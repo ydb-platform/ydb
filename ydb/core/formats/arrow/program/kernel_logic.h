@@ -18,8 +18,8 @@ public:
 
     virtual TString GetClassName() const = 0;
 
-    virtual std::optional<TFetchingInfo> BuildFetchTask(
-        const ui32 columnId, const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
+    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType,
+        const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
 
     TConclusion<bool> Execute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const {
@@ -84,8 +84,8 @@ private:
 
     static const inline TFactory::TRegistrator<TGetJsonPath> Registrator = TFactory::TRegistrator<TGetJsonPath>(GetClassNameStatic());
 
-    virtual std::optional<TFetchingInfo> BuildFetchTask(
-        const ui32 columnId, const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const override;
+    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType,
+        const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const override;
 
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const override;

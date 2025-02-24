@@ -323,6 +323,21 @@ protected:
 public:
     std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const;
 
+    template <class TResult, class TActor>
+    static std::optional<TResult> VisitDataOwners(const std::shared_ptr<IChunkedArray>& arr, const TActor& actor) {
+        AFL_VERIFY(arr);
+        std::optional<IChunkedArray::TFullChunkedArrayAddress> arrCurrent;
+        for (ui32 currentIndex = 0; currentIndex < arr->GetRecordsCount();) {
+            arrCurrent = arr->GetArray(arrCurrent, currentIndex, arr);
+            auto result = actor(arrCurrent->GetArray());
+            if (!!result) {
+                return result;
+            }
+            currentIndex = currentIndex + arrCurrent->GetArray()->GetRecordsCount();
+        }
+        return std::nullopt;
+    }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", ::ToString(Type));

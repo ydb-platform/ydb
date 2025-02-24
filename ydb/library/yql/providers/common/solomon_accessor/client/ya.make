@@ -5,9 +5,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/http/simple
-    library/cpp/retry
     library/cpp/protobuf/interop
+    ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/common/solomon_accessor/grpc
     ydb/library/yql/providers/solomon/proto
     ydb/public/sdk/cpp/src/library/grpc/client

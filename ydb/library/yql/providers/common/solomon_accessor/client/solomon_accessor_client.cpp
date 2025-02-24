@@ -1,8 +1,7 @@
 #include "solomon_accessor_client.h"
 
-#include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/protobuf/interop/cast.h>
-#include <library/cpp/threading/future/core/future.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <yql/essentials/utils/url_builder.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -73,9 +72,6 @@ MetricType ParseMetricType(const TString &type)
 class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable_shared_from_this<TSolomonAccessorClient>
 {
 public:
-    using THeaders = TKeepAliveHttpClient::THeaders;
-    using THttpCode = TKeepAliveHttpClient::THttpCode;
-
     TSolomonAccessorClient(
         NYql::NSo::NProto::TDqSolomonSource&& settings,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider
@@ -87,34 +83,46 @@ public:
     {}
 
 public:
-    TMaybe<TString> ListMetrics(
-        const TString &selectors,
-        int pageSize,
-        int page,
-        TVector<Metric> &result) override final
+    NThreading::TFuture<TListMetricsResult> ListMetrics(const TString &selectors, int pageSize, int page) override final
     {
         const auto request = BuildListMetricsRequest(selectors, pageSize, page);
+
+        IHTTPGateway::THeaders headers;
+        headers.Fields.emplace_back(TStringBuilder{} << "Authorization: " << GetAuthInfo());
+
+        auto resultPromise = NThreading::NewPromise<TListMetricsResult>();
         
-        THeaders headers;
-        headers["Authorization"] = GetAuthInfo();
+        const auto httpGateway = IHTTPGateway::Make();
 
-        TStringStream str;
-        const auto httpClient = std::make_unique<TKeepAliveHttpClient>(GetHttpSolomonEndpoint(), DefaultPort);
-        const auto retCode = httpClient->DoGet(request, &str, headers);
+        std::weak_ptr<const TSolomonAccessorClient> weakSelf = shared_from_this();
+        // hold context until reply
+        auto cb = [weakSelf, resultPromise](NYql::IHTTPGateway::TResult&& result) mutable
+        {
+            if (auto self = weakSelf.lock()) {
+                resultPromise.SetValue(self->ProcessHttpResponse(std::move(result)));
+            }
+            resultPromise.SetValue(TListMetricsResult("Client is being shutted down"));
+        };
 
-        return ProcessHttpResponse(retCode, str.Str(), result);
+        httpGateway->Download(
+            request,
+            headers,
+            0,
+            1ull << 30,
+            std::move(cb)
+        );
+
+        return resultPromise.GetFuture();
     }
 
-    TMaybe<TString> GetData(
-        const std::vector<TString> &selectors,
-        std::vector<Timeseries> &results) override final
+    NThreading::TFuture<TGetDataResult> GetData(const std::vector<TString> &selectors) override final
     {
         const auto request = BuildGetDataRequest(selectors);
 
         NYdbGrpc::TCallMeta callMeta;
         callMeta.Aux.emplace_back("authorization", GetAuthInfo());
 
-        auto resultPromise = NThreading::NewPromise<TMaybe<TString>>();
+        auto resultPromise = NThreading::NewPromise<TGetDataResult>();
 
         NYdbGrpc::TGRpcClientConfig grpcConf;
         grpcConf.Locator = GetGrpcSolomonEndpoint();
@@ -128,14 +136,14 @@ public:
         }
         std::weak_ptr<const TSolomonAccessorClient> weakSelf = shared_from_this();
         // hold context until reply
-        auto cb = [weakSelf, resultPromise, context, &results](
+        auto cb = [weakSelf, resultPromise, context](
             NYdbGrpc::TGrpcStatus&& status,
             ReadResponse&& result) mutable
         {
             if (auto self = weakSelf.lock()) {
-                resultPromise.SetValue(self->ProcessGrpcResponse(std::move(status), std::move(result), results));
+                resultPromise.SetValue(self->ProcessGrpcResponse(std::move(status), std::move(result)));
             }
-            resultPromise.SetValue({});
+            resultPromise.SetValue(TGetDataResult("Client is being shutted down"));
         };
 
         connection->DoRequest<ReadRequest, ReadResponse>(
@@ -146,8 +154,7 @@ public:
                     context.get()
                 );
 
-        resultPromise.GetFuture().Wait(TDuration::Seconds(10));
-        return resultPromise.GetValue();
+        return resultPromise.GetFuture();
     }
 
 private:
@@ -180,7 +187,7 @@ private:
         int pageSize,
         int page) const
     {
-        TUrlBuilder builder("");
+        TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
         builder.AddPathComponent("v2");
@@ -196,8 +203,7 @@ private:
         return builder.Build();
     }
 
-    ReadRequest BuildGetDataRequest(
-        const std::vector<TString> &selectors) const
+    ReadRequest BuildGetDataRequest(const std::vector<TString> &selectors) const
     {
         ReadRequest request;
 
@@ -225,24 +231,23 @@ private:
         return request;
     }
 
-    TMaybe<TString> ProcessHttpResponse(
-        THttpCode retCode,
-        TString response,
-        TVector<Metric> &result) const
+    TListMetricsResult ProcessHttpResponse(NYql::IHTTPGateway::TResult&& response) const
     {
-        if (retCode < 200 || retCode >= 300) {
-            return TStringBuilder{} << "Error while sending request to monitoring api: " << response;
+        std::vector<Metric> result;
+
+        if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
+            return TListMetricsResult(TStringBuilder{} << "Error while sending request to monitoring api: " << response.Content.data());
         }
 
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(response, &json, /*throwOnError*/ true);
+            NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
         } catch (const std::exception& e) {
             return TStringBuilder{} << "Failed to parse response from monitoring api: " << e.what();
         }
 
         if (!json.IsMap() || !json.Has("result")) {
-            return "Invalid result from monitoring api";
+            return TListMetricsResult{"Invalid result from monitoring api"};
         }
 
         for (const auto &metricObj : json["result"].GetArray()) {
@@ -253,14 +258,13 @@ private:
             }
         }
 
-        return {};
+        return std::move(result);
     }
 
-    TMaybe<TString> ProcessGrpcResponse(
-        NYdbGrpc::TGrpcStatus&& status,
-        ReadResponse &&response,
-        std::vector<Timeseries> &result) const
+    TGetDataResult ProcessGrpcResponse(NYdbGrpc::TGrpcStatus&& status, ReadResponse &&response) const
     {
+        std::vector<Timeseries> result;
+
         if (!status.Ok()) {
             return TStringBuilder{} << "Error while sending request to monitoring api: " << status.Msg;
         }
@@ -284,7 +288,7 @@ private:
             result.emplace_back(queryResponse.name(), queryResponse.type(), std::move(timestampValues), std::move(timeseriesValues));
         }
 
-        return {};
+        return std::move(result);
     }
 
 private:
@@ -321,6 +325,26 @@ Metric::Metric(const NJson::TJsonValue &value)
         CreatedAt = value["createdAt"].GetString();
     }
 }
+
+ISolomonAccessorClient::TListMetricsResult::TListMetricsResult(const TString &error)
+    : Success(false)
+    , ErrorMsg(error)
+{}
+
+ISolomonAccessorClient::TListMetricsResult::TListMetricsResult(std::vector<Metric> &&result)
+    : Success(true)
+    , Result(std::move(result))
+{}
+
+ISolomonAccessorClient::TGetDataResult::TGetDataResult(const TString &error)
+    : Success(false)
+    , ErrorMsg(error)
+{}
+
+ISolomonAccessorClient::TGetDataResult::TGetDataResult(std::vector<Timeseries> &&result)
+    : Success(true)
+    , Result(std::move(result))
+{}
 
 ISolomonAccessorClient::TPtr
 ISolomonAccessorClient::Make(

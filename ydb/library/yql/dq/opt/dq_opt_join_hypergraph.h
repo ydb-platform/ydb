@@ -514,7 +514,10 @@ private:
     TJoinHypergraph<TNodeSet>& Graph_;
 };
 
-
+/* 
+ * This class builds FSM which is used for the DPHypElimination algorithm. It fills edges with information of orderings and FD's
+ * which they have. Also, it converts orderings (vector of shuffles) into inner representation (just indexes) for faster enumeration.
+ */
 template <typename TNodeSet>
 class TOrderingsStateMachineConstructor {
 private:

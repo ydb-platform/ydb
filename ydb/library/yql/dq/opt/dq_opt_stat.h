@@ -50,6 +50,7 @@ public:
         TVector<TColumnStatisticsUsedMember> Data{};
     };
 
+    // this class exists to add functional dependencies later for Cost Based Optimizer
     struct TMemberEqualities {
         void Add(const NNodes::TCoMember& lhs, const NNodes::TCoMember& rhs) {
             Data.emplace_back(std::move(lhs), std::move(rhs));

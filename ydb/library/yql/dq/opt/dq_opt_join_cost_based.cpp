@@ -176,6 +176,7 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
     }
 
 
+    /* in this part we add shuffle information to the option of the equijoin option. Later we push these settings to dq join */
     enum EShuffleSide {
         ELeft = 0,
         ERight = 1
@@ -346,6 +347,7 @@ private:
         return resTree;
     }
 
+    // If enumeration algorithm doesn't support shuffle elimination (dphyp classic for ex.) - we do post eliminate with this function.
     template <typename TNodeSet>
     void EliminateShuffles(
         TJoinHypergraph<TNodeSet>& graph,

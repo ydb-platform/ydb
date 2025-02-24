@@ -110,10 +110,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     @property
     def binary_path(self):
         return self.__binary_path
-    
-    def update_binary_path(self, binary_path):
-        self.__binary_path = binary_path
-        super(KiKiMRNode, self).update_command(self.command)
 
     @property
     def command(self):
@@ -245,6 +241,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def get_config_version(self):
         config = self.read_node_config()
         return config.get('metadata', {}).get('version', 0)
+
+    def update_binary_path(self, binary_path):
+        self.__binary_path = binary_path
+        super(KiKiMRNode, self).update_command(self.command)
 
 
 class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
@@ -609,6 +609,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
         )
         assert bs_controller_started
+
+    def change_binary_and_restart(self, binary_path: str):
+        for node in self._nodes.values():
+            node.stop()
+            node.update_binary_path(binary_path)
+            node.start()
 
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):

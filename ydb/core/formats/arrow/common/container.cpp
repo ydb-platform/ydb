@@ -278,8 +278,8 @@ NAccessor::IChunkedArray::TRowRange TGeneralContainer::EqualRange(const arrow::R
         const auto column = GetColumnVerified(i);
         const NAccessor::IChunkedArray::TReader reader(column);
         range = range.Intersect(reader.EqualRange(NArrow::TStatusValidator::GetValid(border.column(i)->GetScalar(i))));
-        if (range.Size() <= 1) {
-            break;
+        if (range.Empty()) {
+            return range;
         }
     }
 

@@ -395,6 +395,10 @@ public:
             return End - Begin;
         }
 
+        bool Empty() const {
+            return Begin == End;
+        }
+
         static TRowRange Inf() {
             return TRowRange(0, std::numeric_limits<ui64>::max());
         }
@@ -423,7 +427,6 @@ public:
         void AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const;
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
         TString DebugString(const ui32 position) const;
-
         TRowRange EqualRange(const std::shared_ptr<arrow::Scalar>& value) const;
     };
 

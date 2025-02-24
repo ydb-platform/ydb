@@ -248,6 +248,15 @@ sudo chown -R ydb:ydb /opt/ydb/certs
 sudo chmod 700 /opt/ydb/certs
 ```
 
+## Подготовьте конфигурацию на статических узлах кластера
+
+Создайте на каждом статическом узле отдельную директорию для работы кластера с конфигурацией. В случае поднятия нескольких узлов на одной машине, используйте одну и ту же директорию. Выполнив специальную команду на каждом из узлов, инициализируйте директорию файлом конфигурации.
+
+```bash
+sudo mkdir -p /opt/ydb/config-store
+ydb admin node config init --config-store /opt/ydb/config-store --from-config /opt/ydb/cfg/config.yaml
+```
+
 ## Запустите статические узлы {#start-storage}
 
 {% list tabs group=manual-systemd %}
@@ -260,7 +269,7 @@ sudo chmod 700 /opt/ydb/certs
   sudo su - ydb
   cd /opt/ydb
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
+  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --config-store /opt/ydb/config-store \
       --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
   ```
 
@@ -288,7 +297,7 @@ sudo chmod 700 /opt/ydb/certs
   SyslogLevel=err
   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp \
-      --yaml-config  /opt/ydb/cfg/config.yaml \
+      --config-store /opt/ydb/config-store \
       --grpcs-port 2135 --ic-port 19001 --mon-port 8765 \
       --mon-cert /opt/ydb/certs/web.pem --node static
   LimitNOFILE=65536
@@ -400,6 +409,17 @@ sudo chmod 700 /opt/ydb/certs
 * `testdb` - имя создаваемой базы данных;
 * `ssd:1` - имя пула хранения и количество выделяемых групп хранения. Имя пула обычно означает тип устройств хранения данных и должно соответствовать настройке `storage_pool_types`.`kind` внутри элемента `domains_config`.`domain` файла конфигурации.
 
+## Подготовьте конфигурацию для динамических узлов
+
+Создайте на каждом динамическом узле отдельную директорию для работы кластера с конфигурацией. В случае поднятия нескольких узлов на одной машине, используйте одну и ту же директорию. Выполнив специальную команду на каждом из узлов, инициализируйте директорию файлом конфигурации, указав в качестве источника конфигурации произвольный статический узел кластера.
+
+```bash
+sudo mkdir -p /opt/ydb/config-store
+ydb admin node config init --config-store /opt/ydb/config-store --seed-node <grpcs://<node.ydb.tech>:2135>
+```
+
+В примере команды выше `<node.ydb.tech>` - FQDN статического узла кластера, с которого будет загружен файл конфигурации.
+
 ## Запустите динамические узлы {#start-dynnode}
 
 {% list tabs group=manual-systemd %}
@@ -415,7 +435,8 @@ sudo chmod 700 /opt/ydb/certs
   /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
-      --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
+      --config-store /opt/ydb/config-store \
+      --tenant /Root/testdb \
       --node-broker grpcs://<ydb1>:2135 \
       --node-broker grpcs://<ydb2>:2135 \
       --node-broker grpcs://<ydb3>:2135
@@ -450,7 +471,8 @@ sudo chmod 700 /opt/ydb/certs
       --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
-      --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
+      --config-store /opt/ydb/config-store \
+      --tenant /Root/testdb \
       --node-broker grpcs://<ydb1>:2135 \
       --node-broker grpcs://<ydb2>:2135 \
       --node-broker grpcs://<ydb3>:2135

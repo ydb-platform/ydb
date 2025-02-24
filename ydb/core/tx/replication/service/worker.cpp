@@ -13,17 +13,23 @@
 
 namespace NKikimr::NReplication::NService {
 
-TEvWorker::TEvData::TRecord::TRecord(ui64 offset, const TString& data, TInstant createTime)
+TEvWorker::TEvData::TRecord::TRecord(ui64 offset, const TString& data, TInstant createTime, const TString& messageGroupId, const TString& producerId, ui64 seqNo)
     : Offset(offset)
     , Data(data)
     , CreateTime(createTime)
+    , MessageGroupId(messageGroupId)
+    , ProducerId(producerId)
+    , SeqNo(seqNo)
 {
 }
 
-TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data, TInstant createTime)
+TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data, TInstant createTime, TString&& messageGroupId, TString&& producerId, ui64 seqNo)
     : Offset(offset)
     , Data(std::move(data))
     , CreateTime(createTime)
+    , MessageGroupId(std::move(messageGroupId))
+    , ProducerId(std::move(producerId))
+    , SeqNo(seqNo)
 {
 }
 

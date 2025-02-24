@@ -34,9 +34,12 @@ struct TEvWorker {
             ui64 Offset;
             TString Data;
             TInstant CreateTime;
+            TString MessageGroupId;
+            TString ProducerId;
+            ui64 SeqNo;
 
-            explicit TRecord(ui64 offset, const TString& data, TInstant createTime = TInstant::Zero());
-            explicit TRecord(ui64 offset, TString&& data, TInstant createTime = TInstant::Zero());
+            explicit TRecord(ui64 offset, const TString& data, TInstant createTime, const TString& messageGroupId, const TString& producerId, ui64 seqNo);
+            explicit TRecord(ui64 offset, TString&& data, TInstant createTime, TString&& messageGroupId, TString&& producerId, ui64 seqNo);
             void Out(IOutputStream& out) const;
         };
 

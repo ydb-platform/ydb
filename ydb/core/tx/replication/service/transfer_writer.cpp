@@ -602,9 +602,13 @@ private:
         TableState->EnshureDataBatch();
 
         for (auto& message : records) {
-            NYdb::NTopic::NPurecalc::TMessage input(message.Data);
-            input.WithPartition(partitionId);
-            input.WithOffset(message.Offset);
+            NYdb::NTopic::NPurecalc::TMessage input;
+            input.Data = std::move(message.Data);
+            input.MessageGroupId = std::move(message.MessageGroupId);
+            input.Partition = partitionId;
+            input.ProducerId = std::move(message.ProducerId);
+            input.Offset = message.Offset;
+            input.SeqNo = message.SeqNo;
 
             try {
                 auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));

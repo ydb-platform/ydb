@@ -76,9 +76,42 @@ std::pair<TString, std::shared_ptr<IChecker>> _C(TString&& name, T&& expected) {
 }
 
 struct TMessage {
-    const char* Message;
+    TString Message;
     std::optional<ui32> Partition = std::nullopt;
+    std::optional<TString> ProducerId = std::nullopt;
+    std::optional<TString> MessageGroupId = std::nullopt;
+    std::optional<ui64> SeqNo = std::nullopt;
 };
+
+TMessage _withSeqNo(ui64 seqNo) {
+    return {
+        .Message = TStringBuilder() << "Message-" << seqNo,
+        .Partition = 0,
+        .ProducerId = std::nullopt,
+        .MessageGroupId = std::nullopt,
+        .SeqNo = seqNo
+    };
+}
+
+TMessage _withProducerId(const TString& producerId) {
+    return {
+        .Message = TStringBuilder() << "Message-" << producerId,
+        .Partition = 0,
+        .ProducerId = producerId,
+        .MessageGroupId = std::nullopt,
+        .SeqNo = std::nullopt
+    };
+}
+
+TMessage _withMessageGroupId(const TString& messageGroupId) {
+    return {
+        .Message = TStringBuilder() << "Message-" << messageGroupId,
+        .Partition = 0,
+        .ProducerId = messageGroupId,
+        .MessageGroupId = messageGroupId,
+        .SeqNo = std::nullopt
+    };
+}
 
 struct TConfig {
     const char* TableDDL;
@@ -142,13 +175,19 @@ struct MainTestCase {
             for (const auto& m : Config.Messages) {
                 TWriteSessionSettings writeSettings;
                 writeSettings.Path(TopicName);
-                writeSettings.DeduplicationEnabled(false);
+                writeSettings.DeduplicationEnabled(m.SeqNo);
                 if (m.Partition) {
                     writeSettings.PartitionId(m.Partition);
                 }
+                if (m.ProducerId) {
+                    writeSettings.ProducerId(*m.ProducerId);
+                }
+                if (m.MessageGroupId) {
+                    writeSettings.MessageGroupId(*m.MessageGroupId);
+                }
                 auto writeSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
 
-                UNIT_ASSERT(writeSession->Write(m.Message));
+                UNIT_ASSERT(writeSession->Write(m.Message, m.SeqNo));
                 writeSession->Close(TDuration::Seconds(1));
             }
         }
@@ -526,6 +565,102 @@ Y_UNIT_TEST_SUITE(Transfer)
             .Expectations = {
                 _C("Partition", ui32(7)),
                 _C("Message", TString("Message-1")),
+            }
+        }).Run();
+    }
+
+    Y_UNIT_TEST(Main_MessageField_SeqNo)
+    {
+        MainTestCase({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    SeqNo Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (SeqNo)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            SeqNo:CAST($x._seq_no AS Uint32),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {_withSeqNo(13)},
+
+            .Expectations = {
+                _C("SeqNo", ui64(13)),
+            }
+        }).Run();
+    }
+
+    Y_UNIT_TEST(Main_MessageField_ProducerId)
+    {
+        MainTestCase({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    ProducerId Utf8,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            ProducerId:CAST($x._producer_id AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {_withProducerId("Producer-13")},
+
+            .Expectations = {
+                _C("ProducerId", TString("Producer-13")),
+            }
+        }).Run();
+    }
+
+    Y_UNIT_TEST(Main_MessageField_MessageGroupId)
+    {
+        MainTestCase({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    MessageGroupId Utf8,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            MessageGroupId:CAST($x._message_group_id AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {_withMessageGroupId("MessageGroupId-13")},
+
+            .Expectations = {
+                _C("MessageGroupId", TString("MessageGroupId-13")),
             }
         }).Run();
     }

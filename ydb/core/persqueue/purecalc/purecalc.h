@@ -7,23 +7,12 @@ namespace NYdb::NTopic::NPurecalc {
 using namespace NYql::NPureCalc;
 
 struct TMessage {
-    TMessage(const TString& data)
-        : Data(data) {
-    }
-
-    TMessage& WithPartition(ui64 partition) {
-        Partition = partition;
-        return *this;
-    }
-
-    TMessage& WithOffset(ui64 offset) {
-        Offset = offset;
-        return *this;
-    }
-
-    const TString& Data;
-    ui32 Partition = 0;
+    TString Data;
+    TString MessageGroupId;
     ui64 Offset = 0;
+    ui32 Partition = 0;
+    TString ProducerId;
+    ui64 SeqNo = 0;
 };
 
 class TMessageInputSpec: public TInputSpecBase {

@@ -163,11 +163,11 @@ private:
         MakeSimplePredicate(Key, RangeEnd, where, params);
 
         std::ostringstream sql;
-        sql << "select * from (select max_by(TableRow(), `modified`) from `verhaal` where " << revName << " > `modified` and " << where.str() << " group by `key`) flatten columns" << std::endl;
+        sql << "select * from (select max_by(TableRow(), `modified`) from `verhaal` where " << revName << " > `modified` and " << where.view() << " group by `key`) flatten columns" << std::endl;
         sql << "union all" << std::endl;
-        sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from `verhaal` where " << revName << " <= `modified` and " << where.str() << std::endl;
+        sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from `verhaal` where " << revName << " <= `modified` and " << where.view() << std::endl;
         sql << "order by `modified` asc;" << std::endl;
-        std::cout << std::endl << sql.str() << std::endl;
+        std::cout << std::endl << sql.view() << std::endl;
 
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;

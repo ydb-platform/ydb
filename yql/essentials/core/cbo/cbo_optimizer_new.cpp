@@ -75,14 +75,14 @@ void TRelOptimizerNode::Print(std::stringstream& stream, int ntabs) {
 }
 
 TJoinOptimizerNode::TJoinOptimizerNode(
-    const std::shared_ptr<IBaseOptimizerNode>& left, 
+    const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
     TVector<TJoinColumn> leftKeys,
     TVector<TJoinColumn> rightKeys,
-    const EJoinKind joinType, 
-    const EJoinAlgoType joinAlgo, 
+    const EJoinKind joinType,
+    const EJoinAlgoType joinAlgo,
     bool leftAny,
-    bool rightAny, 
+    bool rightAny,
     bool nonReorderable
 )   : IBaseOptimizerNode(JoinNodeType)
     , LeftArg(left)
@@ -129,7 +129,7 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
         stream << "    ";
     }
     stream << Stats << "\n";
-    
+
 
     LeftArg->Print(stream, ntabs+1);
     RightArg->Print(stream, ntabs+1);
@@ -141,7 +141,7 @@ bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TJoinColumn>& joi
     }
 
     for(size_t i = 0; i < stats.KeyColumns->Data.size(); i++){
-        if (std::find_if(joinKeys.begin(), joinKeys.end(), 
+        if (std::find_if(joinKeys.begin(), joinKeys.end(),
         [&] (const TJoinColumn& c) { return c.AttributeName == stats.KeyColumns->Data[i];}) == joinKeys.end()) {
             return false;
         }
@@ -169,6 +169,29 @@ double TBaseProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftSta
     Y_UNUSED(outputByteSize);
     Y_UNUSED(joinAlgo);
     return leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows;
+}
+
+
+TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV1(
+    const TOptimizerStatistics& leftStats,
+    const TOptimizerStatistics& rightStats,
+    const TVector<NDq::TJoinColumn>& leftJoinKeys,
+    const TVector<NDq::TJoinColumn>& rightJoinKeys,
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind,
+    TCardinalityHints::TCardinalityHint* maybeHint,
+    bool shuffleLeftSide,
+    bool shuffleRightSide
+) const {
+    auto stats = ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
+    if (shuffleLeftSide) {
+        stats.Cost += leftStats.Nrows;
+    }
+    if (shuffleRightSide) {
+        stats.Cost += rightStats.Nrows;
+    }
+
+    return stats;
 }
 
 /**
@@ -231,7 +254,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
                 newCard = leftStats.Selectivity * rightStats.Nrows;
             }
         }
-        
+
         selectivity = leftStats.Selectivity * rightStats.Selectivity;
         rightKeyColumns = true;
         if (rightStats.Type == EStatisticsType::BaseTable){
@@ -239,6 +262,9 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         } else {
             outputType = rightStats.Type;
         }
+    } else if (joinKind == EJoinKind::Cross) {
+        newCard = leftStats.Nrows * rightStats.Nrows;
+        outputType = EStatisticsType::ManyManyJoin;
     } else {
         std::optional<double> lhsUniqueVals;
         std::optional<double> rhsUniqueVals;

@@ -90,7 +90,8 @@ TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(const
         return TChunkedArguments::Empty();
     }
     TChunkedArguments result;
-    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("ids", JoinSeq(",", columnIds));
+//    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("ids", JoinSeq(",", columnIds))("records_count", RecordsCountActual)(
+//        "use_filter", UseFilter)("filter", Filter->DebugString());
     for (auto&& i : columnIds) {
         auto it = Accessors.find(i);
         if (it == Accessors.end()) {

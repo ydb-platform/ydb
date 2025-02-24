@@ -115,6 +115,8 @@ public:
         AFL_VERIFY(!PartialArray);
         HeaderRange = std::nullopt;
         PartialArray = NArrow::NAccessor::NSubColumns::TConstructor::BuildPartialReader(blob, ChunkExternalInfo).DetachResult();
+//        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("columns", PartialArray->GetHeader().GetColumnStats().DebugJson().GetStringRobust())(
+//            "others", PartialArray->GetHeader().GetOtherStats().DebugJson().GetStringRobust());
     }
 
     void InitPartialReader(
@@ -134,7 +136,8 @@ public:
 
     static TColumnChunkRestoreInfo BuildEmpty(const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo) {
         TColumnChunkRestoreInfo result(TBlobRange(), chunkExternalInfo);
-        result.PartialArray = NArrow::NAccessor::TSubColumnsPartialArray::BuildEmpty(chunkExternalInfo.GetColumnType(), chunkExternalInfo.GetRecordsCount());
+        result.PartialArray =
+            NArrow::NAccessor::TSubColumnsPartialArray::BuildEmpty(chunkExternalInfo.GetColumnType(), chunkExternalInfo.GetRecordsCount());
         return result;
     }
 
@@ -169,7 +172,7 @@ private:
                 i.Finish(nullptr);
                 compositeBuilder.AddChunk(i.GetPartialArray());
             }
-            Resources->AddVerified(GetColumnId(), compositeBuilder.Finish());
+            Resources->AddVerified(GetColumnId(), compositeBuilder.Finish(), true);
         } else {
             for (auto&& i : ColumnChunks) {
                 i.Finish(Resources->GetAppliedFilter());

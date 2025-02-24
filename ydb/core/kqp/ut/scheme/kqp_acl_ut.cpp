@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(appConfig);
 
         {
             auto driverConfig = TDriverConfig()

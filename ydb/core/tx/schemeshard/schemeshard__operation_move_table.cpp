@@ -837,7 +837,8 @@ public:
                 } else {
                     checks
                         .NotUnderTheSameOperation(OperationId.GetTxId())
-                        .FailOnExist(TPathElement::EPathType::EPathTypeTable, acceptExisted);
+                        // todo(avevad)
+                        .FailOnExist(TPathElement::EPathType::EPathTypeColumnTable, acceptExisted);
                 }
             } else {
                 checks

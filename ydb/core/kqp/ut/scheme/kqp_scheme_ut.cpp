@@ -1193,6 +1193,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto describeResult = session.DescribeTable("/Root/moved").GetValueSync();
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+            auto describeResultFail = session.DescribeTable("/Root/table").GetValueSync();
+            UNIT_ASSERT_C(!describeResultFail.IsSuccess(), describeResultFail.GetIssues().ToString());
         }
 
         {
@@ -1206,17 +1209,26 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+            auto describeResultFail = session.DescribeTable("/Root/moved").GetValueSync();
+            UNIT_ASSERT_C(!describeResultFail.IsSuccess(), describeResultFail.GetIssues().ToString());
         }
 
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLE `/Root/second` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value String,
                 PRIMARY KEY (Key)
-            );
-            )";
+            )
+            )" + TString(R"(
+            PARTITION BY HASH(Key)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1 --10
+            )
+            )");
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }

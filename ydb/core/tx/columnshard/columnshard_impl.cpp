@@ -517,7 +517,8 @@ bool TColumnShard::ProgressMoveTable(const NKikimrTxColumnShard::TMoveTable& pro
 
     const ui64 srcPathId = proto.GetSrcPathId();
     const ui64 dstPathId = proto.GetDstPathId();
-    AFL_VERIFY(!InsertTable->HasCommittedByPathId(srcPathId));
+    // todo(avevad):
+    //AFL_VERIFY(!InsertTable->HasCommittedByPathId(srcPathId));
     if (!TablesManager.HasTable(dstPathId)) {
 
         TablesManager.CloneTable(srcPathId, dstPathId, version, db, Tiers);

@@ -108,10 +108,10 @@ void TTxInit::Complete(const TActorContext& ctx) {
     AFL_VERIFY(!Self->IsTxInitFinished);
     Self->IsTxInitFinished = true;
     Self->TrySwitchToWork(ctx);
-    if (Self->SubDomainPathId) {
-        Self->StartWatchingSubDomainPathId();
+    if (Self->SpaceWatcher->SubDomainPathId) {
+        Self->SpaceWatcher->StartWatchingSubDomainPathId();
     } else {
-        Self->StartFindSubDomainPathId();
+        Self->SpaceWatcher->StartFindSubDomainPathId();
     }
 }
 

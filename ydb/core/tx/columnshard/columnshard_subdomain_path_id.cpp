@@ -14,9 +14,9 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
 
-        if (Self->SubDomainOutOfSpace != OutOfSpace) {
+        if (Self->SpaceWatcher->SubDomainOutOfSpace != OutOfSpace) {
             Schema::SaveSpecialValue(db, Schema::EValueIds::SubDomainOutOfSpace, ui64(OutOfSpace ? 1 : 0));
-            Self->SubDomainOutOfSpace = OutOfSpace;
+            Self->SpaceWatcher->SubDomainOutOfSpace = OutOfSpace;
         }
 
         return true;
@@ -40,9 +40,9 @@ public:
     TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_PATH_ID; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        if (!Self->SubDomainPathId) {
-            Self->PersistSubDomainPathId(LocalPathId, txc);
-            Self->StartWatchingSubDomainPathId();
+        if (!Self->SpaceWatcher->SubDomainPathId) {
+            Self->SpaceWatcher->PersistSubDomainPathId(LocalPathId, txc);
+            Self->SpaceWatcher->StartWatchingSubDomainPathId();
         }
         return true;
     }
@@ -55,68 +55,68 @@ private:
     const ui64 LocalPathId;
 };
 
-void TColumnShard::PersistSubDomainPathId(ui64 localPathId,
+void TSpaceWatcher::PersistSubDomainPathId(ui64 localPathId,
                                                NTabletFlatExecutor::TTransactionContext &txc) {
     SubDomainPathId = localPathId;
     NIceDb::TNiceDb db(txc.DB);
     Schema::SaveSpecialValue(db, Schema::EValueIds::SubDomainLocalPathId, localPathId);
 }
 
-void TColumnShard::StopWatchingSubDomainPathId() {
+void TSpaceWatcher::StopWatchingSubDomainPathId() {
     if (WatchingSubDomainPathId) {
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove());
         WatchingSubDomainPathId.reset();
     }
 }
 
-void TColumnShard::StartWatchingSubDomainPathId() {
+void TSpaceWatcher::StartWatchingSubDomainPathId() {
     if (!SubDomainPathId) {
         return;
     }
 
     if (!WatchingSubDomainPathId) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("started_watching_subdomain", *SubDomainPathId);
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(TPathId(CurrentSchemeShardId, *SubDomainPathId)));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(TPathId(Self->CurrentSchemeShardId, *SubDomainPathId)));
         WatchingSubDomainPathId = *SubDomainPathId;
     }
 }
 
-void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
+void TSpaceWatcher::Handle(NActors::TEvents::TEvPoison::TPtr& , const TActorContext& ctx) {
+    Die(ctx);
+}
+
+void TSpaceWatcher::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("notify_subdomain", msg->PathId);
-    if (msg->PathId.LocalPathId == *SubDomainPathId) {
+    if (msg->PathId.LocalPathId == SubDomainPathId) {
         const bool outOfSpace = msg->Result->GetPathDescription()
             .GetDomainDescription()
             .GetDomainState()
             .GetDiskQuotaExceeded();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COLUMNSHARD,
-            "Discovered subdomain " << msg->PathId << " state, outOfSpace = " << outOfSpace
-            << " at columnshard " << TabletID());
-
-        Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
+        Self->Execute(new TTxPersistSubDomainOutOfSpace(Self, outOfSpace), ctx);
     }
 }
 
 static constexpr TDuration MaxFindSubDomainPathIdDelay = TDuration::Minutes(10);
 
-void TColumnShard::StartFindSubDomainPathId(bool delayFirstRequest) {
+void TSpaceWatcher::StartFindSubDomainPathId(bool delayFirstRequest) {
     if (!FindSubDomainPathIdActor &&
-        CurrentSchemeShardId != 0 &&
+        Self->CurrentSchemeShardId != 0 &&
         (!SubDomainPathId))
     {
-        FindSubDomainPathIdActor = Register(CreateFindSubDomainPathIdActor(SelfId(), TabletID(), CurrentSchemeShardId, delayFirstRequest, MaxFindSubDomainPathIdDelay));
+        FindSubDomainPathIdActor = Register(CreateFindSubDomainPathIdActor(SelfId(), Self->TabletID(), Self->CurrentSchemeShardId, delayFirstRequest, MaxFindSubDomainPathIdDelay));
     }
 }
 
 
-void TColumnShard::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
+void TSpaceWatcher::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     if (FindSubDomainPathIdActor == ev->Sender) {
         FindSubDomainPathIdActor = { };
     }
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "subdomain_found")("scheme_shard_id", msg->SchemeShardId)("local_path_id", msg->LocalPathId);
-    Execute(new TTxPersistSubDomainPathId(this, msg->LocalPathId), ctx);
+    Self->Execute(new TTxPersistSubDomainPathId(Self, msg->LocalPathId), ctx);
 }
 
 }

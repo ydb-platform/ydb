@@ -2,6 +2,7 @@
 #include "background_controller.h"
 #include "columnshard.h"
 #include "columnshard_private_events.h"
+#include "columnshard_subdomain_path_id.h"
 #include "counters.h"
 #include "defs.h"
 #include "inflight_request_tracker.h"
@@ -185,6 +186,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TWaitEraseTablesTxSubscriber;
     friend class TTxPersistSubDomainOutOfSpace;
     friend class TTxPersistSubDomainPathId;
+    friend class TSpaceWatcher;
 
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;
@@ -299,8 +301,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
-    void Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext&);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
 
@@ -385,11 +385,6 @@ public:
         return true;
     }
 
-    void PersistSubDomainPathId(ui64 localPathId, NTabletFlatExecutor::TTransactionContext &txc);
-    void StopWatchingSubDomainPathId();
-    void StartWatchingSubDomainPathId();
-    void StartFindSubDomainPathId(bool delayFirstRequest = true);
-
 private:
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
@@ -472,8 +467,6 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
             HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -563,10 +556,8 @@ private:
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
-    TActorId FindSubDomainPathIdActor;
-    std::optional<TLocalPathId> SubDomainPathId;
-    std::optional<TLocalPathId> WatchingSubDomainPathId;
-    bool SubDomainOutOfSpace = false;
+    TSpaceWatcher* SpaceWatcher;
+    TActorId SpaceWatcherId;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

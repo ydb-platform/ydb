@@ -173,7 +173,7 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         return false;
     }
 
-    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainLocalPathId, Self->SubDomainPathId)) {
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainLocalPathId, Self->SpaceWatcher->SubDomainPathId)) {
         return false;
     }
 
@@ -181,7 +181,7 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainOutOfSpace, outOfSpace)) {
         return false;
     }
-    Self->SubDomainOutOfSpace = outOfSpace;
+    Self->SpaceWatcher->SubDomainOutOfSpace = outOfSpace;
 
     {
         ui64 lastCompletedStep = 0;

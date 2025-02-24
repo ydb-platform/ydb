@@ -58,8 +58,8 @@ public:
                 if (record.HasSubDomainPathId()) {
                     ui64 subDomainPathId = record.GetSubDomainPathId();
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "propose")("subdomain_id", subDomainPathId);
-                    Self->PersistSubDomainPathId(subDomainPathId, txc);
-                    Self->StartWatchingSubDomainPathId();
+                    Self->SpaceWatcher->PersistSubDomainPathId(subDomainPathId, txc);
+                    Self->SpaceWatcher->StartWatchingSubDomainPathId();
                 }
             }
         }

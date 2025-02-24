@@ -216,10 +216,10 @@ public:
                 return result;
             }
 
-            arrow::Datum GetDatum(const std::vector<std::shared_ptr<arrow::Array>>& arrays, const std::vector<arrow::Datum>& scalars) const {
+            arrow::Datum GetDatum(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<arrow::Datum>& scalars) const {
                 if (ArrayIndex) {
-                    AFL_VERIFY(*ArrayIndex < arrays.size());
-                    return arrays[*ArrayIndex];
+                    AFL_VERIFY(*ArrayIndex < (ui32)batch->num_columns());
+                    return batch->column_data(*ArrayIndex);
                 } else {
                     AFL_VERIFY(ScalarIndex);
                     AFL_VERIFY(*ScalarIndex < scalars.size());
@@ -297,7 +297,7 @@ public:
                 }
                 std::vector<arrow::Datum> columns;
                 for (auto&& i : Addresses) {
-                    columns.emplace_back(i.GetDatum(chunk->columns(), Scalars));
+                    columns.emplace_back(i.GetDatum(chunk, Scalars));
                 }
                 return columns;
             }

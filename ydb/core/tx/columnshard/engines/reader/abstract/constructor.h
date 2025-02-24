@@ -8,6 +8,10 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/program/program.h>
 
+namespace NKikimr::NColumnShard {
+class TTablesManager;
+}
+
 namespace NKikimr::NOlap::NReader {
 
 class TScannerConstructorContext {

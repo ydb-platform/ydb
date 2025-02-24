@@ -44,16 +44,18 @@ public:
     using TBase::TBase;
 };
 
-class TBuildFakeSpec: public IFetchingStep {
+class TBuildFakeColumns: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
+    arrow::FieldVector Fields;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
 public:
-    TBuildFakeSpec()
-        : TBase("FAKE_SPEC") {
+    TBuildFakeColumns(const arrow::FieldVector& fields)
+        : TBase("FAKE_COLUMNS")
+        , Fields(fields) {
     }
 };
 

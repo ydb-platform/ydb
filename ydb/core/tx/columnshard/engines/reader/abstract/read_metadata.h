@@ -38,12 +38,25 @@ public:
         DESC /* "descending" */,
     };
 
+    class TTtlBound {
+    private:
+        YDB_READONLY_DEF(ui32, ColumnId);
+        YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, LargestExpiredScalar);
+
+    public:
+        TTtlBound(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& bound)
+            : ColumnId(columnId)
+            , LargestExpiredScalar(bound) {
+        }
+    };
+
 private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
     std::optional<ui64> FilteredCountLimit;
     std::optional<ui64> RequestedLimit;
     const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
     std::shared_ptr<TPKRangesFilter> PKRangesFilter;
+    YDB_READONLY_DEF(std::optional<TTtlBound>, TtlBound);
     TProgramContainer Program;
     std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
@@ -168,14 +181,15 @@ public:
     }
 
     TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
-        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot, const std::shared_ptr<IScanCursor>& scanCursor)
+        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot, const std::shared_ptr<IScanCursor>& scanCursor,
+        const std::optional<TTtlBound>& ttlBound)
         : Sorting(sorting)
+        , TtlBound(ttlBound)
         , Program(ssaProgram)
         , IndexVersionsPointer(index)
         , RequestSnapshot(requestSnapshot)
         , ScanCursor(scanCursor)
-        , ResultIndexSchema(schema)
-    {
+        , ResultIndexSchema(schema) {
     }
     virtual ~TReadMetadataBase() = default;
 

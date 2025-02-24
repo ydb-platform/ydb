@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/reader/common_reader/iterator
     ydb/core/tx/conveyor/usage
     ydb/core/tx/limiter/grouped_memory/usage
+    yql/essentials/minikql
 )
 
 END()

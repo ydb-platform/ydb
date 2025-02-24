@@ -1,21 +1,21 @@
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
-
-#include "helpers/get_value.h"
-#include "helpers/query_executor.h"
-#include "helpers/local.h"
-#include "helpers/writer.h"
 #include "helpers/aggregation.h"
+#include "helpers/get_value.h"
+#include "helpers/local.h"
+#include "helpers/query_executor.h"
+#include "helpers/writer.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 
-#include <ydb/library/yql/dq/actors/dq_events_ids.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/dq_events_ids.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -3213,6 +3213,79 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(FilterByTtl) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        auto client = kikimr.GetTableClient();
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Cleanup);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 300, true);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, (TInstant::Now() + TDuration::Days(1000)).MicroSeconds(), 300, true);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, (TInstant::Now() - TDuration::Days(1)).MicroSeconds(), 10, false, TDuration::Days(2).MicroSeconds() / 10);
+        Sleep(TDuration::Seconds(5));
+
+        {
+            auto it = client
+                          .StreamExecuteScanQuery(R"(
+                SELECT COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )")
+                          .GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson("[[610u]]", result);
+        }
+
+        {
+            auto result =
+                kikimr.GetQueryClient()
+                    .ExecuteQuery(R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("PT0S") ON timestamp)", NQuery::TTxControl::NoTx())
+                    .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+        {
+            auto it = client
+                          .StreamExecuteScanQuery(R"(
+                SELECT COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )")
+                          .GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson("[[304u]]", result);
+        }
+
+        {
+            auto result = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(ALTER TABLE `/Root/olapStore/olapTable` RESET (TTL))", NQuery::TTxControl::NoTx())
+                              .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+        {
+            auto it = client
+                          .StreamExecuteScanQuery(R"(
+                SELECT COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )")
+                          .GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson("[[610u]]", result);
+        }
+    }
 }
 
 }

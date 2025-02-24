@@ -51,6 +51,7 @@ public:
     }
 
     std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar) const;
+    std::shared_ptr<arrow::Scalar> GetLargestExpiredScalar(const TInstant now, const arrow::Type::type resultType) const;
 
     static std::shared_ptr<TTierInfo> MakeTtl(const TDuration evictDuration, const TString& ttlColumn, ui32 unitsInSecond = 0) {
         return std::make_shared<TTierInfo>(std::nullopt, evictDuration, ttlColumn, unitsInSecond);

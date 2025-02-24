@@ -8,6 +8,7 @@
 
 namespace NKikimr::NColumnShard {
 class TLockSharingInfo;
+class TTtlVersions;
 }
 
 namespace NKikimr::NOlap::NReader::NCommon {
@@ -53,6 +54,9 @@ private:
 
     virtual TConclusionStatus DoInitCustom(
         const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) = 0;
+
+    static std::optional<TReadMetadataBase::TTtlBound> MakeTtlBound(
+        const std::shared_ptr<TVersionedIndex> schemaIndex, const NColumnShard::TTtlVersions& ttlVersions, const TReadDescription& read);
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
@@ -117,7 +121,8 @@ public:
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::shared_ptr<TReadStats> ReadStats;
 
-    TReadMetadata(const std::shared_ptr<TVersionedIndex>& schemaIndex, const TReadDescription& read);
+    TReadMetadata(
+        const std::shared_ptr<TVersionedIndex>& schemaIndex, const NColumnShard::TTtlVersions& ttlVersions, const TReadDescription& read);
 
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
         return GetResultSchema()->GetIndexInfo().GetPrimaryKeyColumns();

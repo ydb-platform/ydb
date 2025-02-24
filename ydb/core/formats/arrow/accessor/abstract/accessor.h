@@ -416,7 +416,10 @@ public:
     std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
     std::shared_ptr<IChunkedArray> ISlice(const ui32 offset, const ui32 count) const {
         AFL_VERIFY(offset + count <= GetRecordsCount())("offset", offset)("count", count)("records", GetRecordsCount());
-        return DoISlice(offset, count);
+        auto result = DoISlice(offset, count);
+        AFL_VERIFY(result);
+        AFL_VERIFY(result->GetRecordsCount() == count)("records", result->GetRecordsCount())("count", count);
+        return result;
     }
 
     bool IsDataOwner() const {

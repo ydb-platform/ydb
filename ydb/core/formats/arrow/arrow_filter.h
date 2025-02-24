@@ -121,6 +121,16 @@ public:
         return Filter.capacity() * sizeof(ui32) + RecordsCount * sizeof(bool);
     }
 
+    static TColumnFilter BuildConstFilter(const bool startValue, const std::initializer_list<ui32> list) {
+        TColumnFilter result = BuildAllowFilter();
+        bool value = startValue;
+        for (auto&& i : list) {
+            result.Add(value, i);
+            value = !value;
+        }
+        return result;
+    }
+
     static ui64 GetPredictedMemorySize(const ui32 recordsCount) {
         return 2 /* capacity */ * recordsCount * (sizeof(ui32) + sizeof(bool));
     }

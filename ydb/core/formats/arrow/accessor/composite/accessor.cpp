@@ -31,26 +31,23 @@ public:
 }   // namespace
 
 std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoISlice(const ui32 offset, const ui32 count) const {
-    ui32 slicedRecordsCount = 0;
-    ui32 currentIndex = offset;
+    ui32 currentIndex = 0;
     std::optional<IChunkedArray::TFullChunkedArrayAddress> arrAddress;
     std::vector<std::shared_ptr<IChunkedArray>> chunks;
-    while (slicedRecordsCount < count && currentIndex < GetRecordsCount()) {
+    while (currentIndex < offset + count) {
         arrAddress = GetArray(arrAddress, currentIndex, nullptr);
-        const ui32 localIndex = arrAddress->GetAddress().GetLocalIndex(currentIndex);
-        const ui32 localCount = (arrAddress->GetArray()->GetRecordsCount() + slicedRecordsCount < count)
-                                    ? arrAddress->GetArray()->GetRecordsCount()
-                                    : (count - slicedRecordsCount);
-
-        if (localIndex == 0 && localCount == arrAddress->GetArray()->GetRecordsCount()) {
-            chunks.emplace_back(arrAddress->GetArray());
+        const auto& arr = arrAddress->GetArray();
+        if (currentIndex + arr->GetRecordsCount() < offset) {
+        } else if (currentIndex >= offset && currentIndex + arr->GetRecordsCount() <= offset + count) {
+            chunks.emplace_back(arr);
         } else {
-            chunks.emplace_back(arrAddress->GetArray()->ISlice(localIndex, localCount));
+            const ui32 localStart = std::max<ui32>(offset, currentIndex);
+            const ui32 localFinish = std::min<ui32>(offset + count, currentIndex + arr->GetRecordsCount());
+            AFL_VERIFY(localStart < localFinish)("start", localStart)("finish", localFinish);
+            chunks.emplace_back(arrAddress->GetArray()->ISlice(localStart - currentIndex, localFinish - localStart));
         }
-        slicedRecordsCount += localCount;
-        currentIndex += localCount;
+        currentIndex += arr->GetRecordsCount();
     }
-    AFL_VERIFY(slicedRecordsCount == count)("sliced", slicedRecordsCount)("count", count);
     if (chunks.size() == 1) {
         return chunks.front();
     } else {

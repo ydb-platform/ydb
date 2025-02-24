@@ -14,6 +14,7 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/statistics/events.h>

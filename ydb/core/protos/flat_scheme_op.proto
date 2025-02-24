@@ -1252,11 +1252,13 @@ message TBackupTask {
         optional int32 Level = 2;
     }
 
-    optional TCompressionOptions Compression = 13; // currently available for s3
-
     optional uint64 SnapshotStep = 14;
     optional uint64 SnapshotTxId = 15;
-    optional bool EnableChecksums = 16; // currently available for s3
+
+    // currently available only for s3:
+    optional TCompressionOptions Compression = 13;
+    optional bool EnableChecksums = 16; 
+    optional bool EnablePermissions = 18;
 }
 
 message TRestoreTask {

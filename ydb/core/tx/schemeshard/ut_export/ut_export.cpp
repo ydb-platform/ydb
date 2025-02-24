@@ -316,8 +316,6 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
             UNIT_ASSERT(it != s3Mock.GetData().end());
             it = s3Mock.GetData().find(canonPath + "/scheme.pb");
             UNIT_ASSERT(it != s3Mock.GetData().end());
-            it = s3Mock.GetData().find(canonPath + "/permissions.pb");
-            UNIT_ASSERT(it != s3Mock.GetData().end());
         }
     }
 
@@ -2305,7 +2303,7 @@ partitioning_settings {
 
     Y_UNIT_TEST(TablePermissions) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnablePermissionsExport(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -2356,7 +2354,7 @@ partitioning_settings {
 
     Y_UNIT_TEST(Checksums) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnablePermissionsExport(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -2459,7 +2457,7 @@ partitioning_settings {
         env.TestWaitNotification(runtime, txId);
     
         // Verify checksums are created
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 6);
 
         const auto* dataChecksum = s3Mock.GetData().FindPtr("/data_00.csv.sha256");
         UNIT_ASSERT(dataChecksum);
@@ -2472,10 +2470,6 @@ partitioning_settings {
         const auto* schemeChecksum = s3Mock.GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
         UNIT_ASSERT_VALUES_EQUAL(*schemeChecksum, "cb1fb80965ae92e6369acda2b3b5921fd5518c97d6437f467ce00492907f9eb6 scheme.pb");
-
-        const auto* permissionsChecksum = s3Mock.GetData().FindPtr("/permissions.pb.sha256");
-        UNIT_ASSERT(permissionsChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*permissionsChecksum, "b41fd8921ff3a7314d9c702dc0e71aace6af8443e0102add0432895c5e50a326 permissions.pb");
     }
 
     Y_UNIT_TEST(ChecksumsWithCompression) {
@@ -2512,23 +2506,9 @@ partitioning_settings {
         )", port));
         env.TestWaitNotification(runtime, txId);
 
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
-
         const auto* dataChecksum = s3Mock.GetData().FindPtr("/data_00.csv.sha256");
         UNIT_ASSERT(dataChecksum);
         UNIT_ASSERT_VALUES_EQUAL(*dataChecksum, "19dcd641390a61063ee45f3e6e06b8f0d3acfc33f934b9bf1ba204668a98f21d data_00.csv");
-
-        const auto* metadataChecksum = s3Mock.GetData().FindPtr("/metadata.json.sha256");
-        UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "b72575244ae0cce8dffd45f3537d1e412bfe39de4268f4f85f529cb529870903 metadata.json");
-
-        const auto* schemeChecksum = s3Mock.GetData().FindPtr("/scheme.pb.sha256");
-        UNIT_ASSERT(schemeChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*schemeChecksum, "cb1fb80965ae92e6369acda2b3b5921fd5518c97d6437f467ce00492907f9eb6 scheme.pb");
-
-        const auto* permissionsChecksum = s3Mock.GetData().FindPtr("/permissions.pb.sha256");
-        UNIT_ASSERT(permissionsChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*permissionsChecksum, "b41fd8921ff3a7314d9c702dc0e71aace6af8443e0102add0432895c5e50a326 permissions.pb");
     }
 
     class ChangefeedGenerator {

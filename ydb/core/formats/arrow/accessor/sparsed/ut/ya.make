@@ -7,6 +7,7 @@ PEERDIR(
     ydb/core/formats/arrow/accessor/plain
     ydb/core/formats/arrow
     yql/essentials/public/udf/service/stub
+    ydb/core/formats/arrow
 )
 
 YQL_LAST_ABI_VERSION()

@@ -20,7 +20,7 @@ void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorColle
         AFL_VERIFY(!data.GetItWasScalar());
     }
     if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
-        auto filtered = data->ApplyFilter(*Filter);
+        auto filtered = Filter->Apply(data.GetData());
         RecordsCountActual = filtered->GetRecordsCount();
         AFL_VERIFY(Accessors.emplace(columnId, filtered).second);
     } else {

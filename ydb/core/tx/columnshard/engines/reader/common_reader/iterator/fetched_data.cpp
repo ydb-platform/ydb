@@ -2,7 +2,7 @@
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {

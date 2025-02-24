@@ -52,11 +52,6 @@ google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query,
             if (!res) {
                 return res;
             }
-        } else if (parsers.Antlr4Ansi) {
-            res = parsers.Antlr4Ansi->MakeParser()->Parse(query, queryName, err, arena);
-            if (!res) {
-                return res;
-            }
         } else {
             ReportError(err, "antlr3_ansi");
             return nullptr;
@@ -67,11 +62,6 @@ google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query,
         google::protobuf::Message* res = nullptr;
         if (parsers.Antlr3) {
             res = parsers.Antlr3->MakeParser()->Parse(query, queryName, err, arena);
-            if (!res) {
-                return res;
-            }
-        } else if (parsers.Antlr4) {
-            res = parsers.Antlr4->MakeParser()->Parse(query, queryName, err, arena);
             if (!res) {
                 return res;
             }

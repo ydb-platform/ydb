@@ -2,8 +2,7 @@
 #include "data_extractor.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
-
-#include <ydb/library/formats/arrow/accessor/common/const.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 

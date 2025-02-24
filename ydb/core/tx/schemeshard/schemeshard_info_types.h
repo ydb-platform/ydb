@@ -2736,6 +2736,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TInstant EndTime = TInstant::Zero();
 
     bool EnableChecksums = false;
+    bool EnablePermissions = false;
 
     explicit TExportInfo(
             const ui64 id,

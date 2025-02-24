@@ -5,10 +5,9 @@ on:
     - cron: '0 0 * * 0' # Every Sunday at 00:00
       branches:
         - main
-        - stable-*
   workflow_dispatch:
 env:
-  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
 
 jobs:
   gather-prs:
@@ -63,7 +62,7 @@ jobs:
       - name: Update Changelog
         uses: ./.github/actions/update_changelog 
         env:
-          UPDATE_REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          YDBOT_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         with:
           pr_data: "${{ needs.gather-prs.outputs.prs }}"
           changelog_path: "./CHANGELOG.md" # RODO: Use the correct path to your CHANGELOG.md file

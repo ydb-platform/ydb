@@ -13,6 +13,7 @@ RECURSE_FOR_TESTS(
     ut_column_build
     ut_compaction
     ut_continuous_backup
+    ut_data_erasure
     ut_export
     ut_export_reboots_s3
     ut_external_data_source
@@ -69,6 +70,7 @@ SRCS(
     schemeshard__borrowed_compaction.cpp
     schemeshard__clean_pathes.cpp
     schemeshard__conditional_erase.cpp
+    schemeshard__data_erasure_manager.cpp
     schemeshard__delete_tablet_reply.cpp
     schemeshard__describe_scheme.cpp
     schemeshard__find_subdomain_path_id.cpp
@@ -199,6 +201,8 @@ SRCS(
     schemeshard__unmark_restore_tables.cpp
     schemeshard__upgrade_access_database.cpp
     schemeshard__upgrade_schema.cpp
+    schemeshard__root_data_erasure_manager.cpp
+    schemeshard__tenant_data_erasure_manager.cpp
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp
@@ -276,6 +280,7 @@ PEERDIR(
     ydb/core/audit
     ydb/core/base
     ydb/core/blob_depot
+    ydb/core/blobstorage/base
     ydb/core/blockstore/core
     ydb/core/engine
     ydb/core/engine/minikql

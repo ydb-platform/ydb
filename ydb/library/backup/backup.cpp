@@ -808,7 +808,7 @@ Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TDriver 
 
 std::string ToString(std::string_view key, std::string_view value) {
     // indented to follow the default YQL formatting
-    return std::format(R"(    {} = "{}")", key, value);
+    return std::format(R"(  {} = '{}')", key, value);
 }
 
 namespace NExternalDataSource {

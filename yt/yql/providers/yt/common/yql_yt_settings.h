@@ -302,6 +302,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, false> JobBlockOutputSupportedDataTypes;
     NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
     NCommon::TConfSetting<bool, false> CompactForDistinct;
+    NCommon::TConfSetting<bool, false> DropUnusedKeysFromKeyFilter;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

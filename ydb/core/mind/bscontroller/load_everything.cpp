@@ -1,4 +1,5 @@
 #include "impl.h"
+#include "console_interaction.h"
 
 #include <ydb/library/yaml_config/yaml_config.h>
 
@@ -525,6 +526,9 @@ public:
     void Complete(const TActorContext&) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE03, "TTxLoadEverything Complete");
         Self->LoadFinished();
+        if (!Self->SelfManagementEnabled) {
+            Self->ConsoleInteraction->Start();
+        }
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE04, "TTxLoadEverything InitQueue processed");
     }
 };

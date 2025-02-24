@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/serializer/native.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 namespace NKikimr::NOlap {
 

@@ -1,5 +1,4 @@
 #pragma once
-#include "switch_type.h"
 #include <library/cpp/json/writer/json_value.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>

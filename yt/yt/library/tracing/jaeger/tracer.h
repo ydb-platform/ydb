@@ -24,10 +24,9 @@ namespace NYT::NTracing {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJaegerTracerDynamicConfig
+struct TJaegerTracerDynamicConfig
     : public NYTree::TYsonStruct
 {
-public:
     NRpc::NGrpc::TChannelConfigPtr CollectorChannel;
 
     std::optional<i64> MaxRequestSize;
@@ -47,10 +46,9 @@ DEFINE_REFCOUNTED_TYPE(TJaegerTracerDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJaegerTracerConfig
+struct TJaegerTracerConfig
     : public NYTree::TYsonStruct
 {
-public:
     NRpc::NGrpc::TChannelConfigPtr CollectorChannelConfig;
 
     TDuration FlushPeriod;

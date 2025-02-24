@@ -202,6 +202,29 @@ public:
         return locks;
     }
 
+    void Reattached(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        shardInfo.Reattaching = false;
+    }
+
+    void SetRestarting(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        shardInfo.Restarting = true;
+    }
+
+    bool ShouldReattach(ui64 shardId, TInstant now) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        if (!std::exchange(shardInfo.Restarting, false) && !shardInfo.Reattaching) {
+            return false;
+        }
+        return ::NKikimr::NKqp::ShouldReattach(now, shardInfo.ReattachState.ReattachInfo);;
+    }
+
+    TReattachState& GetReattachState(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        return shardInfo.ReattachState;
+    }
+
     bool IsTxPrepared() const override {
         for (const auto& [_, shardInfo] : ShardsInfo) {
             if (shardInfo.State != EShardState::PREPARED) {
@@ -454,6 +477,10 @@ private:
 
         bool IsOlap = false;
         THashSet<TStringBuf> Pathes;
+
+        bool Restarting = false;
+        bool Reattaching = false;
+        TReattachState ReattachState;
     };
 
     void MakeLocksIssue(const TShardInfo& shardInfo) {

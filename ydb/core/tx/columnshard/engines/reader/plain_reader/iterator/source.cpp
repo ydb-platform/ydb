@@ -23,7 +23,6 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
 
 void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr) {
     AFL_VERIFY(FetchingPlan);
-    AFL_VERIFY(!GetContext()->IsAborted());
     if (!IsReadyFlag) {
         AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);
     }

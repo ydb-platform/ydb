@@ -1,6 +1,8 @@
 #include "constructor_meta.h"
 #include "data_accessor.h"
 
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
@@ -10,8 +12,6 @@
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/library/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap {

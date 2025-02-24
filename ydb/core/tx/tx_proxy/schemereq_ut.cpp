@@ -2,6 +2,7 @@
 
 #include <ydb-cpp-sdk/client/query/client.h>
 #include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/discovery/discovery.h>
 #include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <ydb/core/base/path.h>
@@ -14,6 +15,10 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
+
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 
 namespace NKikimr::NTxProxyUT {
@@ -75,6 +80,7 @@ public:
         // default settings
         ServerSettings->AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
         ServerSettings->AppConfig->MutableDomainsConfig()->MutableSecurityConfig()->AddAdministrationAllowedSIDs(RootToken);
+        ServerSettings->AuthConfig = settings.AuthConfig;
         ServerSettings->AuthConfig.SetUseBuiltinDomain(true);
         ServerSettings->SetEnableMockOnSingleNode(false);
 
@@ -110,14 +116,14 @@ public:
         Tenants = MakeHolder<Tests::TTenants>(Server);
 
         // root database path
-        // it's imperative that RootPath was with leading '/' -- is a path
+        // it's imperative that RootPath has leading '/' -- is a path
         RootPath = CanonizePath(ServerSettings->DomainName);
 
         // test client
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
         Client->SetSecurityToken(RootToken);
         Client->InitRootScheme();
-        Client->GrantConnect(RootToken);
+        Client->TestGrant("/", ServerSettings->DomainName, RootToken, NACLib::EAccessRights::GenericFull );
 
         // driver for actual grpc clients
         Endpoint = "localhost:" + ToString(grpcPort);
@@ -144,22 +150,25 @@ public:
 };
 
 void CreateDatabase(TTestEnv& env, const TString& databaseName) {
-    NKikimrSubDomains::TSubDomainSettings subdomain;
-    subdomain.SetName(databaseName);
     {
+        NKikimrSubDomains::TSubDomainSettings subdomain;
+        subdomain.SetName(databaseName);
         auto status = env.GetTestClient().CreateExtSubdomain(env.RootPath, subdomain);
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
     }
     env.GetTestTenants().Run(JoinPath({env.RootPath, databaseName}), 1);
-    subdomain.SetExternalSchemeShard(true);
-    subdomain.SetPlanResolution(50);
-    subdomain.SetCoordinators(1);
-    subdomain.SetMediators(1);
-    subdomain.SetTimeCastBucketsPerMediator(2);
-    for (auto& pool : env.CreatePools(databaseName)) {
-        *subdomain.AddStoragePools() = pool;
-    }
     {
+        NKikimrSubDomains::TSubDomainSettings subdomain;
+        subdomain.SetName(databaseName);
+        subdomain.SetPlanResolution(50);
+        subdomain.SetCoordinators(1);
+        subdomain.SetMediators(1);
+        subdomain.SetTimeCastBucketsPerMediator(2);
+        subdomain.SetExternalSchemeShard(true);
+        subdomain.SetExternalHive(true);
+        for (auto& pool : env.CreatePools(databaseName)) {
+            *subdomain.AddStoragePools() = pool;
+        }
         auto status = env.GetTestClient().AlterExtSubdomain(env.RootPath, subdomain);
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
     }
@@ -184,6 +193,38 @@ TString LoginUser(TTestEnv& env, const TString& database, const TString& user, c
     return loginResult.token();
 }
 
+TString LoginUser2(TTestEnv& env, const TString& database, const TString& user, const TString& password) {
+    ui64 schemeshardId = 0;
+    auto runtime = env.GetTestServer().GetRuntime();
+    TActorId sender = runtime->AllocateEdgeActor();
+    {
+        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
+        request->Record.SetPath(database);
+        const ui64 rootSchemeshardId = Tests::ChangeStateStorage(Tests::SchemeRoot, env.GetSettings().Domain);
+        ForwardToTablet(*runtime, rootSchemeshardId, sender, request.Release(), 0);
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+        const auto& record = handle->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
+
+        schemeshardId = record.GetPathDescription().GetDomainDescription().GetProcessingParams().GetSchemeShard();
+    }
+    // schemeshardId could be equal to rootSchemeshardId if database is a root
+    {
+        auto evLogin = new NSchemeShard::TEvSchemeShard::TEvLogin();
+        evLogin->Record.SetUser(user);
+        evLogin->Record.SetPassword(password);
+
+        ForwardToTablet(*runtime, schemeshardId, sender, evLogin);
+
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(handle);
+
+        UNIT_ASSERT_C(event->Record.GetError().empty(), event->Record.GetError());
+        return event->Record.GetToken();
+    }
+}
+
 NYdb::NQuery::TQueryClient CreateQueryClient(const TTestEnv& env, const TString& token, const TString& database) {
     NYdb::NQuery::TClientSettings settings;
     settings.Database(database);
@@ -197,16 +238,135 @@ NYdb::NScheme::TSchemeClient CreateSchemeClient(const TTestEnv& env, const TStri
     return NYdb::NScheme::TSchemeClient(env.GetDriver(), settings);
 }
 
-void CreateLocalUser(const TTestEnv& env, const TString& database, const TString& user) {
+NYdb::NDiscovery::TDiscoveryClient CreateDiscoveryClient(const TTestEnv& env, const TString& database, const TString& token) {
+    NYdb::TCommonClientSettings settings;
+    settings.Database(database);
+    settings.AuthToken(token);
+    return NYdb::NDiscovery::TDiscoveryClient(env.GetDriver(), settings);
+}
+
+void CreateLocalUser(const TTestEnv& env, const TString& database, const TString& name, const TString& token) {
     auto query = Sprintf(
         R"(
             CREATE USER %s PASSWORD 'passwd'
         )",
-        user.c_str()
+        name.c_str()
     );
-    auto result = CreateQueryClient(env, env.RootToken, database).GetSession().GetValueSync().GetSession()
-        .ExecuteQuery(query,  NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    auto sessionResult = CreateQueryClient(env, token, database).GetSession().ExtractValueSync();
+    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+    auto result = sessionResult.GetSession().ExecuteQuery(query,  NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+void CreateLocalUser(const TTestEnv& env, const TString& database, const TString& user) {
+    CreateLocalUser(env, database, user, env.RootToken);
+}
+void CreateLocalGroup(const TTestEnv& env, const TString& database, const TString& name, const TString& token) {
+    auto query = Sprintf(
+        R"(
+            CREATE GROUP `%s`
+        )",
+        name.c_str()
+    );
+    auto sessionResult = CreateQueryClient(env, token, database).GetSession().ExtractValueSync();
+    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+    auto result = sessionResult.GetSession().ExecuteQuery(query,  NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+void CreateLocalGroup(const TTestEnv& env, const TString& database, const TString& name) {
+    CreateLocalGroup(env, database, name, env.RootToken);
+}
+void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& name, const TString& token) {
+    auto runtime = env.GetTestServer().GetRuntime();
+    const auto edge = runtime->AllocateEdgeActor(0);
+    TString userToken;
+    {
+        runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
+            .Database = database,
+            .Ticket = token,
+            .PeerName = "test",
+        })), 0);
+
+        Cerr << __FUNCTION__ << " call ticket_parser" << Endl;
+
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        Cerr << __FUNCTION__ << " grab ticket_parser result" << Endl;
+
+        UNIT_ASSERT_C(event->Error.empty(), event->Error);
+        UNIT_ASSERT(event->Token != nullptr);
+        userToken = event->Token->SerializeAsString();
+    }
+    {
+        TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> ev(new TEvTxUserProxy::TEvProposeTransaction());
+        auto& record = ev->Record;
+        record.SetDatabaseName(database);
+        record.SetUserToken(userToken);
+
+        auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme.SetWorkingDir(database);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+
+        auto& createUser = *modifyScheme.MutableAlterLogin()->MutableCreateUser();
+
+        createUser.SetUser(name);
+        createUser.SetPassword("passwd");
+
+        runtime->Send(new IEventHandle(MakeTxProxyID(), edge, ev.Release()), 0);
+        Cerr << __FUNCTION__ << " call tx-proxy" << Endl;
+
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime->GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransactionStatus>(handle);
+        Cerr << __FUNCTION__ << " grab tx-proxy result" << Endl;
+
+        UNIT_ASSERT_C(event->Status(), TEvTxUserProxy::TResultStatus::ExecComplete);
+        UNIT_ASSERT_VALUES_EQUAL(NKikimrScheme::EStatus(event->Record.GetSchemeShardStatus()), NKikimrScheme::EStatus::StatusSuccess);
+    }
+}
+void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& name, const TString& token) {
+    auto runtime = env.GetTestServer().GetRuntime();
+    const auto edge = runtime->AllocateEdgeActor(0);
+    TString userToken;
+    {
+        runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
+            .Database = database,
+            .Ticket = token,
+            .PeerName = "test",
+        })), 0);
+
+        Cerr << __FUNCTION__ << " call ticket_parser" << Endl;
+
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        Cerr << __FUNCTION__ << " grab ticket_parser result" << Endl;
+
+        UNIT_ASSERT_C(event->Error.empty(), event->Error);
+        UNIT_ASSERT(event->Token != nullptr);
+        userToken = event->Token->SerializeAsString();
+    }
+    {
+        TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> ev(new TEvTxUserProxy::TEvProposeTransaction());
+        auto& record = ev->Record;
+        record.SetDatabaseName(database);
+        record.SetUserToken(userToken);
+
+        auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme.SetWorkingDir(database);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+
+        auto& createGroup = *modifyScheme.MutableAlterLogin()->MutableCreateGroup();
+
+        createGroup.SetGroup(name);
+
+        runtime->Send(new IEventHandle(MakeTxProxyID(), edge, ev.Release()), 0);
+        Cerr << __FUNCTION__ << " call tx-proxy" << Endl;
+
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime->GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransactionStatus>(handle);
+        Cerr << __FUNCTION__ << " grab tx-proxy result" << Endl;
+
+        UNIT_ASSERT_C(event->Status(), TEvTxUserProxy::TResultStatus::ExecComplete);
+        UNIT_ASSERT_VALUES_EQUAL(NKikimrScheme::EStatus(event->Record.GetSchemeShardStatus()), NKikimrScheme::EStatus::StatusSuccess);
+    }
 }
 
 void SetPermissions(const TTestEnv& env, const TString& path, const TString& targetSid, const std::vector<std::string>& permissions) {
@@ -217,12 +377,44 @@ void SetPermissions(const TTestEnv& env, const TString& path, const TString& tar
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 }
 
-void ChangeOwner(const TTestEnv& env, const TString& path, const TString& targetSid) {
-    auto client = CreateSchemeClient(env, env.RootToken);
+void ChangeOwner(const TTestEnv& env, const TString& path, const TString& targetSid, const TString& token) {
+    auto client = CreateSchemeClient(env, token);
     auto modify = NYdb::NScheme::TModifyPermissionsSettings();
     auto status = client.ModifyPermissions(path, modify.AddChangeOwner(targetSid))
         .ExtractValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+}
+void ChangeOwner(const TTestEnv& env, const TString& path, const TString& targetSid) {
+    ChangeOwner(env, path, targetSid, env.RootToken);
+}
+
+NKikimrSchemeOp::TPathDescription DescribePath(const TTestEnv& env, const TString& path, const TString& token) {
+    auto client = Tests::TClient(env.GetSettings());
+    client.SetSecurityToken(token);
+    auto result = client.Ls(path);
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetSchemeStatus(), NKikimrScheme::StatusSuccess);
+    return result->Record.GetPathDescription();
+}
+
+NYdb::NScheme::TSchemeEntry DescribePath2(const TTestEnv& env, const TString& database, const TString& path, const TString& token) {
+    NYdb::TCommonClientSettings settings;
+    settings.Database(database);
+    settings.AuthToken(token);
+    auto client = NYdb::NScheme::TSchemeClient(env.GetDriver(), settings);
+
+    // auto client = CreateSchemeClient(env, token);
+    auto result = client.DescribePath(path).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return result.GetEntry();
+}
+
+NYdb::NDiscovery::TWhoAmIResult WhoAmI(const TTestEnv& env, const TString& database, const TString& token) {
+    auto client = CreateDiscoveryClient(env, database, token);
+    auto whoami = NYdb::NDiscovery::TWhoAmISettings().WithGroups(true);
+    auto result = client.WhoAmI(whoami).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return result;
 }
 
 
@@ -294,6 +486,30 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
         bool EnableDatabaseAdmin = false;
         bool ExpectedResult;
     };
+//     void AlterLoginProtect_TenantDB(NUnitTest::TTestContext&, const TAlterLoginTestCase params) {
+//         auto settings = Tests::TServerSettings()
+//             .SetNodeCount(1)
+//             .SetDynamicNodeCount(1)
+//             .SetEnableStrictUserManagement(params.EnableStrictUserManagement)
+//             .SetEnableDatabaseAdmin(params.EnableDatabaseAdmin)
+//             // .SetLoggerInitializer([](auto& runtime) {
+//             //     runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
+//             // })
+//         ;
+//         TTestEnv env(settings, /*rootToken*/ "root@builtin");
+//
+//         // Turn on mandatory authentication if requested
+//         env.GetTestServer().GetRuntime()->GetAppData().EnforceUserTokenRequirement = params.EnforceUserTokenRequirement;
+//
+//
+//
+//         env.GetTestServer()->GetRuntime().GetAppData().SetDomainLoginOnly(true);
+//
+//         // Create tenant database
+//         CreateDatabase(env, "tenant-db");
+//
+//
+//     }
     void AlterLoginProtect_RootDB(NUnitTest::TTestContext&, const TAlterLoginTestCase params) {
         auto settings = Tests::TServerSettings()
             .SetNodeCount(1)
@@ -304,7 +520,7 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
             //     runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
             // })
         ;
-        TTestEnv env(settings, /* rootToken*/ "root@builtin");
+        TTestEnv env(settings, /*rootToken*/ "root@builtin");
 
         // Test context preparations
 
@@ -714,6 +930,191 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
         }
     };
     static TTestRegistration_AlterLoginProtect_RootDB testRegistration_AlterLoginProtect_RootDB;
+
+}
+
+
+#define Y_UNIT_TEST_FLAGS(N, OPT1, OPT2)                                                                           \
+    template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                               \
+    struct TTestRegistration##N {                                                                                  \
+        TTestRegistration##N() {                                                                                   \
+            TCurrentTest::AddTest(#N, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false>), false);                   \
+            TCurrentTest::AddTest(#N "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true>), false);          \
+            TCurrentTest::AddTest(#N "-" #OPT1, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false>), false);          \
+            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true>), false); \
+        }                                                                                                          \
+    };                                                                                                             \
+    static TTestRegistration##N testRegistration##N;                                                               \
+    template<bool OPT1, bool OPT2>                                                                                 \
+    void N(NUnitTest::TTestContext&)
+
+Y_UNIT_TEST_SUITE(SchemeReqAdminAccessInTenant) {
+
+    Y_UNIT_TEST_FLAGS(ClusterAdminCanAdministerTenant, DomainLoginOnly, StrictAclCheck) {
+        auto settings = Tests::TServerSettings()
+            .SetNodeCount(1)
+            .SetDynamicNodeCount(1)
+            .SetEnableMetadataProvider(false)
+            .SetEnableStrictUserManagement(true)
+            // .SetEnableDatabaseAdmin(params.EnableDatabaseAdmin)
+            .SetLoggerInitializer([](auto& runtime) {
+                runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+                runtime.SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NActors::NLog::PRI_DEBUG);
+                // runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
+            })
+        ;
+        settings.AuthConfig.SetDomainLoginOnly(DomainLoginOnly);
+        settings.FeatureFlags.SetEnableStrictAclCheck(StrictAclCheck);
+        // settings.FeatureFlags.SetEnableGrpcAudit(true);
+        TTestEnv env(settings, /*rootToken*/ "root@builtin");
+
+        // Test context preparations
+
+        // Create tenant database
+        Cerr << "TEST create tenant" << Endl;
+        CreateDatabase(env, "tenant-db");
+        const TString tenantPath = JoinPath({env.RootPath, "tenant-db"});
+
+        // Create cluster user, make them cluster admin and give them connect rights on both databases
+        Cerr << "TEST create admin clusteradmin" << Endl;
+        CreateLocalUser(env, env.RootPath, "clusteradmin");
+        env.GetTestServer().GetRuntime()->GetAppData(0).AdministrationAllowedSIDs.push_back("clusteradmin");
+        env.GetTestServer().GetRuntime()->GetAppData(1).AdministrationAllowedSIDs.push_back("clusteradmin");
+
+        Cerr << "TEST login clusteradmin" << Endl;
+        auto subjectToken = LoginUser(env, env.RootPath, "clusteradmin", "passwd");
+        Cerr << "TEST sleep" << Endl;
+        // give system time to propagate keys for the logged users tokens
+        Sleep(TDuration::Seconds(1));
+
+        // Test body
+        Cerr << "TEST body start" << Endl;
+
+        Cerr << "TEST clusteradmin creates user dbadmin" << Endl;
+        CreateLocalUser2(env, tenantPath, "dbadmin", subjectToken);
+
+        Cerr << "TEST clusteradmin gives ownership to user dbadmin" << Endl;
+        ChangeOwner(env, tenantPath, "dbadmin", subjectToken);
+        UNIT_ASSERT_STRINGS_EQUAL(DescribePath(env, tenantPath, env.RootToken).GetSelf().GetOwner(), "dbadmin");
+
+        Cerr << "TEST clusteradmin creates group dbadmins" << Endl;
+        CreateLocalGroup2(env, tenantPath, "dbadmins", subjectToken);
+
+        Cerr << "TEST clusteradmin gives ownership to group dbadmins" << Endl;
+        ChangeOwner(env, tenantPath, "dbadmins", subjectToken);
+        UNIT_ASSERT_STRINGS_EQUAL(DescribePath(env, tenantPath, env.RootToken).GetSelf().GetOwner(), "dbadmins");
+    }
+
+    Y_UNIT_TEST_FLAGS(ClusterAdminCanAuthOnEmptyTenant, DomainLoginOnly, StrictAclCheck) {
+        auto settings = Tests::TServerSettings()
+            .SetNodeCount(1)
+            .SetDynamicNodeCount(1)
+            .SetEnableMetadataProvider(false)
+            .SetEnableStrictUserManagement(true)
+            // .SetEnableDatabaseAdmin(params.EnableDatabaseAdmin)
+            .SetLoggerInitializer([](auto& runtime) {
+                runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+                runtime.SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NActors::NLog::PRI_DEBUG);
+                // runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
+            })
+        ;
+        settings.AuthConfig.SetDomainLoginOnly(DomainLoginOnly);
+        settings.FeatureFlags.SetEnableStrictAclCheck(StrictAclCheck);
+        // settings.FeatureFlags.SetEnableGrpcAudit(true);
+        TTestEnv env(settings, /*rootToken*/ "root@builtin");
+
+        // Test context preparations
+
+        // Create tenant database
+        Cerr << "TEST create tenant" << Endl;
+        CreateDatabase(env, "tenant-db");
+        const TString tenantPath = JoinPath({env.RootPath, "tenant-db"});
+
+        // Create cluster user, make them cluster admin and give them connect rights on both databases
+        Cerr << "TEST create admin clusteradmin" << Endl;
+        CreateLocalUser(env, env.RootPath, "clusteradmin");
+        env.GetTestServer().GetRuntime()->GetAppData(0).AdministrationAllowedSIDs.push_back("clusteradmin");
+        env.GetTestServer().GetRuntime()->GetAppData(1).AdministrationAllowedSIDs.push_back("clusteradmin");
+
+        Cerr << "TEST login clusteradmin" << Endl;
+        auto subjectToken = LoginUser(env, env.RootPath, "clusteradmin", "passwd");
+        Cerr << "TEST sleep" << Endl;
+        // give system time to propagate keys for the logged users tokens
+        Sleep(TDuration::Seconds(1));
+
+        // Test body
+        Cerr << "TEST body start" << Endl;
+
+        // auto result = WhoAmI(env, tenantPath, subjectToken);
+        // UNIT_ASSERT_STRINGS_EQUAL(result.GetUserName(), "clusteradmin");
+
+        SetPermissions(env, tenantPath, "clusteradmin", {"ydb.granular.describe_schema"});
+
+        // Cerr << "TEST clusteradmin triggers auth on tenant" << Endl;
+        // auto result = DescribePath2(env, tenantPath, tenantPath, subjectToken);
+        // UNIT_ASSERT_STRINGS_EQUAL(result.Owner, env.RootToken);
+
+        Cerr << "TEST clusteradmin triggers auth on tenant" << Endl;
+        auto result = DescribePath(env, tenantPath, subjectToken);
+        UNIT_ASSERT_STRINGS_EQUAL(result.GetSelf().GetOwner(), env.RootToken);
+    }
+
+    Y_UNIT_TEST_FLAGS(ClusterAdminCanAuthOnNonEmptyTenant, DomainLoginOnly, StrictAclCheck) {
+        auto settings = Tests::TServerSettings()
+            .SetNodeCount(1)
+            .SetDynamicNodeCount(1)
+            .SetEnableMetadataProvider(false)
+            .SetEnableStrictUserManagement(true)
+            // .SetEnableDatabaseAdmin(params.EnableDatabaseAdmin)
+            .SetLoggerInitializer([](auto& runtime) {
+                runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+                runtime.SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NActors::NLog::PRI_DEBUG);
+                // runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
+            })
+        ;
+        settings.AuthConfig.SetDomainLoginOnly(DomainLoginOnly);
+        settings.FeatureFlags.SetEnableStrictAclCheck(StrictAclCheck);
+        // settings.FeatureFlags.SetEnableGrpcAudit(true);
+        TTestEnv env(settings, /*rootToken*/ "root@builtin");
+
+        // Test context preparations
+
+        // Create tenant database
+        Cerr << "TEST create tenant" << Endl;
+        CreateDatabase(env, "tenant-db");
+        const TString tenantPath = JoinPath({env.RootPath, "tenant-db"});
+
+        // Create cluster user, make them cluster admin and give them connect rights on both databases
+        Cerr << "TEST create admin clusteradmin" << Endl;
+        CreateLocalUser(env, env.RootPath, "clusteradmin");
+        env.GetTestServer().GetRuntime()->GetAppData(0).AdministrationAllowedSIDs.push_back("clusteradmin");
+        env.GetTestServer().GetRuntime()->GetAppData(1).AdministrationAllowedSIDs.push_back("clusteradmin");
+
+        Cerr << "TEST login clusteradmin" << Endl;
+        auto subjectToken = LoginUser(env, env.RootPath, "clusteradmin", "passwd");
+        Cerr << "TEST sleep" << Endl;
+        // give system time to propagate keys for the logged users tokens
+        Sleep(TDuration::Seconds(1));
+
+        // Test body
+        Cerr << "TEST body start" << Endl;
+
+        Cerr << "TEST clusteradmin creates user in tenant -- make tenant's login provider non empty" << Endl;
+        CreateLocalUser2(env, tenantPath, "tenantuser", subjectToken);
+
+        // auto result = WhoAmI(env, tenantPath, subjectToken);
+        // UNIT_ASSERT_STRINGS_EQUAL(result.GetUserName(), "clusteradmin");
+
+        SetPermissions(env, tenantPath, "clusteradmin", {"ydb.granular.describe_schema"});
+
+        // Cerr << "TEST clusteradmin triggers auth on tenant" << Endl;
+        // auto result = DescribePath2(env, tenantPath, tenantPath, subjectToken);
+        // UNIT_ASSERT_STRINGS_EQUAL(result.Owner, env.RootToken);
+
+        Cerr << "TEST clusteradmin triggers auth on tenant" << Endl;
+        auto result = DescribePath(env, tenantPath, subjectToken);
+        UNIT_ASSERT_STRINGS_EQUAL(result.GetSelf().GetOwner(), env.RootToken);
+    }
 
 }
 

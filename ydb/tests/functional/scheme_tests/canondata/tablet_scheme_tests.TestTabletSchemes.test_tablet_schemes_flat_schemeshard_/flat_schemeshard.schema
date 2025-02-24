@@ -1174,6 +1174,11 @@
                 "ColumnId": 11,
                 "ColumnName": "EnableChecksums",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "EnablePermissions",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1190,7 +1195,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3044,11 +3050,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 17,
-                "ColumnName": "EnableChecksums",
-                "ColumnType": "Bool"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "Id",
                 "ColumnType": "Uint64"
@@ -3127,13 +3128,22 @@
                 "ColumnId": 16,
                 "ColumnName": "PeerName",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "EnableChecksums",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "EnablePermissions",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    17,
                     1,
                     2,
                     3,
@@ -3149,7 +3159,9 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    18
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4560,6 +4572,11 @@
                 "ColumnId": 12,
                 "ColumnName": "EnableChecksums",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "EnablePermissions",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -4577,7 +4594,8 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8128,6 +8146,202 @@
                     2,
                     3,
                     4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 115,
+        "TableName": "DataErasureGenerations",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Generation",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Status",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "StartTime",
+                "ColumnType": "Timestamp"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 116,
+        "TableName": "WaitingDataErasureTenants",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OwnerPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "LocalPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Status",
+                "ColumnType": "Uint32"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 117,
+        "TableName": "TenantDataErasureGenerations",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Generation",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Status",
+                "ColumnType": "Uint32"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 118,
+        "TableName": "WaitingDataErasureShards",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OwnerShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "LocalShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Status",
+                "ColumnType": "Uint32"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
                 ],
                 "RoomID": 0,
                 "Codec": 0,

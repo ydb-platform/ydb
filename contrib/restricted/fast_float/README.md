@@ -1,7 +1,6 @@
 
 ## fast_float number parsing library: 4x faster than strtod
 
-[![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/fast_float.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:fast_float)
 [![Ubuntu 22.04 CI (GCC 11)](https://github.com/fastfloat/fast_float/actions/workflows/ubuntu22.yml/badge.svg)](https://github.com/fastfloat/fast_float/actions/workflows/ubuntu22.yml)
 
 The fast_float library provides fast header-only implementations for the C++
@@ -16,22 +15,22 @@ floating-point numbers with a C++17-like syntax (the library itself only
 requires C++11):
 
 ```C++
-from_chars_result from_chars(const char* first, const char* last, float& value, ...);
-from_chars_result from_chars(const char* first, const char* last, double& value, ...);
+from_chars_result from_chars(char const *first, char const *last, float &value, ...);
+from_chars_result from_chars(char const *first, char const *last, double &value, ...);
 ```
 
 You can also parse integer types:
 
 ```C++
-from_chars_result from_chars(const char* first, const char* last, int& value, ...);
-from_chars_result from_chars(const char* first, const char* last, unsigned& value, ...);
+from_chars_result from_chars(char const *first, char const *last, int &value, ...);
+from_chars_result from_chars(char const *first, char const *last, unsigned &value, ...);
 ```
 
 The return type (`from_chars_result`) is defined as the struct:
 
 ```C++
 struct from_chars_result {
-  const char* ptr;
+  char const *ptr;
   std::errc ec;
 };
 ```
@@ -60,7 +59,7 @@ Example:
 #include <iostream>
 
 int main() {
-  const std::string input = "3.1416 xyz ";
+  std::string input = "3.1416 xyz ";
   double result;
   auto answer = fast_float::from_chars(input.data(), input.data() + input.size(), result);
   if (answer.ec != std::errc()) { std::cerr << "parsing failure\n"; return EXIT_FAILURE; }
@@ -72,7 +71,7 @@ int main() {
 You can parse delimited numbers:
 
 ```C++
-  const std::string input = "234532.3426362,7869234.9823,324562.645";
+  std::string input = "234532.3426362,7869234.9823,324562.645";
   double result;
   auto answer = fast_float::from_chars(input.data(), input.data() + input.size(), result);
   if (answer.ec != std::errc()) {
@@ -108,9 +107,9 @@ The library seeks to follow the C++17 (see
 [28.2.3.(6.1)](https://eel.is/c++draft/charconv.from.chars#6.1)) specification.
 
 * The `from_chars` function does not skip leading white-space characters (unless
-  `fast_float::chars_format::chars_format` is set).
+  `fast_float::chars_format::skip_white_space` is set).
 * [A leading `+` sign](https://en.cppreference.com/w/cpp/utility/from_chars) is
-  forbidden (unless `fast_float::chars_format::skip_white_space` is set).
+  forbidden (unless `fast_float::chars_format::allow_leading_plus` is set).
 * It is generally impossible to represent a decimal value exactly as binary
   floating-point number (`float` and `double` types). We seek the nearest value.
   We round to an even mantissa when we are in-between two binary floating-point
@@ -119,8 +118,8 @@ The library seeks to follow the C++17 (see
 Furthermore, we have the following restrictions:
 
 * We support `float` and `double`, but not `long double`. We also support
-  fixed-width floating-point types such as `std::float32_t` and
-  `std::float64_t`.
+  fixed-width floating-point types such as `std::float64_t`, `std::float32_t`,
+  `std::float16_t`, and `std::bfloat16_t`.
 * We only support the decimal format: we do not support hexadecimal strings.
 * For values that are either very large or very small (e.g., `1e9999`), we
   represent it using the infinity or negative infinity value and the returned
@@ -143,31 +142,31 @@ following code will print the number 22250738585072012 three times:
 
 int main() {
   uint64_t i;
-  const char str[] = "22250738585072012";
-  auto answer = fast_float::from_chars(str, str + strlen(str), i);
+  std::string str = "22250738585072012";
+  auto answer = fast_float::from_chars(str.data(), str.data() + str.size(), i);
   if (answer.ec != std::errc()) {
     std::cerr << "parsing failure\n";
     return EXIT_FAILURE;
   }
-  std::cout << "parsed the number "<< i << std::endl;
+  std::cout << "parsed the number " << i << std::endl;
 
-  const char binstr[] = "1001111000011001110110111001001010110100111000110001100";
+  std::string binstr = "1001111000011001110110111001001010110100111000110001100";
 
-  answer = fast_float::from_chars(binstr, binstr + strlen(binstr), i, 2);
+  answer = fast_float::from_chars(binstr.data(), binstr.data() + binstr.size(), i, 2);
   if (answer.ec != std::errc()) {
     std::cerr << "parsing failure\n";
     return EXIT_FAILURE;
   }
-  std::cout << "parsed the number "<< i << std::endl;
+  std::cout << "parsed the number " << i << std::endl;
 
-  const char hexstr[] = "4f0cedc95a718c";
+  std::string hexstr = "4f0cedc95a718c";
 
-  answer = fast_float::from_chars(hexstr, hexstr + strlen(hexstr), i, 16);
+  answer = fast_float::from_chars(hexstr.data(), hexstr.data() + hexstr.size(), i, 16);
   if (answer.ec != std::errc()) {
     std::cerr << "parsing failure\n";
     return EXIT_FAILURE;
   }
-  std::cout << "parsed the number "<< i << std::endl;
+  std::cout << "parsed the number " << i << std::endl;
   return EXIT_SUCCESS;
 }
 ```
@@ -242,7 +241,8 @@ constexpr double constexptest() {
 ## C++23: Fixed width floating-point types
 
 The library also supports fixed-width floating-point types such as
-`std::float32_t` and `std::float64_t`. E.g., you can write:
+`std::float64_t`, `std::float32_t`, `std::float16_t`, and `std::bfloat16_t`.
+E.g., you can write:
 
 ```C++
 std::float32_t result;
@@ -259,7 +259,7 @@ following example:
 #include <iostream>
 
 int main() {
-  const std::u16string input = u"3.1416 xyz ";
+  std::u16string input = u"3.1416 xyz ";
   double result;
   auto answer = fast_float::from_chars(input.data(), input.data() + input.size(), result);
   if (answer.ec != std::errc()) { std::cerr << "parsing failure\n"; return EXIT_FAILURE; }
@@ -282,7 +282,7 @@ separator (e.g., the comma). You may use it as follows.
 #include <iostream>
 
 int main() {
-  const std::string input = "3,1416 xyz ";
+  std::string input = "3,1416 xyz ";
   double result;
   fast_float::parse_options options{fast_float::chars_format::general, ','};
   auto answer = fast_float::from_chars_advanced(input.data(), input.data() + input.size(), result, options);
@@ -299,9 +299,9 @@ int main() {
 #include <iostream>
 
 int main() {
-  const std::string input = "1d+4";
+  std::string input = "1d+4";
   double result;
-  fast_float::parse_options options{ fast_float::chars_format::fortran };
+  fast_float::parse_options options{fast_float::chars_format::fortran};
   auto answer = fast_float::from_chars_advanced(input.data(), input.data() + input.size(), result, options);
   if ((answer.ec != std::errc()) || ((result != 10000))) { std::cerr << "parsing failure\n"; return EXIT_FAILURE; }
   std::cout << "parsed the number " << result << std::endl;
@@ -316,9 +316,9 @@ int main() {
 #include <iostream>
 
 int main() {
-  const std::string input = "+.1"; // not valid
+  std::string input = "+.1"; // not valid
   double result;
-  fast_float::parse_options options{ fast_float::chars_format::json };
+  fast_float::parse_options options{fast_float::chars_format::json};
   auto answer = fast_float::from_chars_advanced(input.data(), input.data() + input.size(), result, options);
   if (answer.ec == std::errc()) { std::cerr << "should have failed\n"; return EXIT_FAILURE; }
   return EXIT_SUCCESS;
@@ -332,9 +332,9 @@ By default the JSON format does not allow `inf`:
 #include <iostream>
 
 int main() {
-  const std::string input = "inf"; // not valid in JSON
+  std::string input = "inf"; // not valid in JSON
   double result;
-  fast_float::parse_options options{ fast_float::chars_format::json };
+  fast_float::parse_options options{fast_float::chars_format::json};
   auto answer = fast_float::from_chars_advanced(input.data(), input.data() + input.size(), result, options);
   if (answer.ec == std::errc()) { std::cerr << "should have failed\n"; return EXIT_FAILURE; }
   return EXIT_SUCCESS;
@@ -348,9 +348,9 @@ You can allow it with a non-standard `json_or_infnan` variant:
 #include <iostream>
 
 int main() {
-  const std::string input = "inf"; // not valid in JSON but we allow it with json_or_infnan
+  std::string input = "inf"; // not valid in JSON but we allow it with json_or_infnan
   double result;
-  fast_float::parse_options options{ fast_float::chars_format::json_or_infnan };
+  fast_float::parse_options options{fast_float::chars_format::json_or_infnan};
   auto answer = fast_float::from_chars_advanced(input.data(), input.data() + input.size(), result, options);
   if (answer.ec != std::errc() || (!std::isinf(result))) { std::cerr << "should have parsed infinity\n"; return EXIT_FAILURE; }
   return EXIT_SUCCESS;
@@ -367,7 +367,7 @@ The fast_float library is part of:
 * [WebKit](https://github.com/WebKit/WebKit), the engine behind Safari (Apple's
   web browser),
 * [DuckDB](https://duckdb.org),
-* [Redis](https://github.com/redis/redis),
+* [Redis](https://github.com/redis/redis) and [Valkey](https://github.com/valkey-io/valkey),
 * [Apache Arrow](https://github.com/apache/arrow/pull/8494) where it multiplied
   the number parsing speed by two or three times,
 * [Google Jsonnet](https://github.com/google/jsonnet),
@@ -429,8 +429,7 @@ abseil                                  :   430.45 MB/s (+/- 2.2 %)    20.52 Mfl
 fastfloat                               :  1042.38 MB/s (+/- 9.9 %)    49.68 Mfloat/s
 ```
 
-See <https://github.com/lemire/simple_fastfloat_benchmark> for our benchmarking
-code.
+See the [Benchmarking](#benchmarking) Section for instructions on how to run our benchmarks.
 
 ## Video
 
@@ -456,7 +455,7 @@ sufficiently recent version of CMake (3.11 or better at least):
 FetchContent_Declare(
   fast_float
   GIT_REPOSITORY https://github.com/fastfloat/fast_float.git
-  GIT_TAG tags/v6.1.6
+  GIT_TAG tags/v8.0.0
   GIT_SHALLOW TRUE)
 
 FetchContent_MakeAvailable(fast_float)
@@ -472,7 +471,7 @@ You may also use [CPM](https://github.com/cpm-cmake/CPM.cmake), like so:
 CPMAddPackage(
   NAME fast_float
   GITHUB_REPOSITORY "fastfloat/fast_float"
-  GIT_TAG v6.1.6)
+  GIT_TAG v8.0.0)
 ```
 
 ## Using as single header
@@ -484,7 +483,30 @@ if desired as described in the command line help.
 
 You may directly download automatically generated single-header files:
 
-<https://github.com/fastfloat/fast_float/releases/download/v7.0.0/fast_float.h>
+<https://github.com/fastfloat/fast_float/releases/download/v8.0.0/fast_float.h>
+
+## Benchmarking
+
+The project has its own benchmarks with realistic data inputs. Under Linux or macOS,
+you can use it as follows if your system supports C++17:
+
+```
+cmake -B build -D FASTFLOAT_BENCHMARKS=ON
+cmake --build build
+./build/benchmarks/realbenchmark
+```
+
+Importantly, by default, the benchmark is built in Release mode.
+
+The instructions are similar under Windows.
+
+Under Linux and macOS, it is recommended to run the benchmarks in a privileged manner to get access
+to hardware performance counters. You may be able to do so with the `sudo` command
+in some cases:
+
+```
+sudo ./build/benchmarks/realbenchmark
+```
 
 ## Packages
 
@@ -513,6 +535,8 @@ Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
 2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a
 href="LICENSE-BOOST">BOOST license</a>.
 </sup>
+
+<br/>
 
 <sub>
 Unless you explicitly state otherwise, any contribution intentionally submitted

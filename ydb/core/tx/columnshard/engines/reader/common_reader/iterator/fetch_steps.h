@@ -126,7 +126,7 @@ public:
 class TColumnBlobsFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
-    TColumnsSetIds Columns;
+    YDB_READONLY_DEF(TColumnsSetIds, Columns);
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;

@@ -211,7 +211,7 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
     if (result.IsFail()) {
         return result;
     }
-    source->GetStageData().GetTable()->Remove(Step.GetColumnsToDrop());
+    source->GetStageData().GetTable()->Remove(Step.GetColumnsToDrop(), true);
     return true;
 }
 

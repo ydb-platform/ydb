@@ -8,6 +8,7 @@ import "ydb/core/protos/follower_group.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/protos/pqconfig.proto";
 import "ydb/core/protos/replication.proto";
+import "ydb/core/protos/s3_settings.proto";
 import "ydb/core/protos/schemeshard/operations.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/table_stats.proto";
@@ -21,7 +22,6 @@ import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/formats/arrow/protos/accessor.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
-import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/public/api/protos/ydb_value.proto";
@@ -476,7 +476,7 @@ enum EOlapProgramType {
 
 message TStorageTierConfig {
     optional string Name = 1;
-    optional TS3Settings ObjectStorage = 2;
+    optional NKikimrSchemeOp.TS3Settings ObjectStorage = 2;
     optional TCompressionOptions Compression = 3;
 }
 
@@ -1162,62 +1162,9 @@ message TYTSettings {
     optional bool UseTypeV3 = 8;
 };
 
-message TSecretId {
-    optional string Id = 1;
-    optional string OwnerId = 2;
-}
-
-message TSecretValue {
-    optional string Data = 1;
-}
-
-message TSecretableVariable {
-    oneof Data {
-        TSecretId SecretId = 1;
-        TSecretValue Value = 2;
-    }
-}
-
-message TS3Settings {
-    enum EScheme {
-        HTTP = 0;
-        HTTPS = 1;
-    }
-
-    optional string Endpoint = 1;
-    optional EScheme Scheme = 2 [default = HTTPS];
-    optional string Bucket = 3;
-    optional string ObjectKeyPattern = 4; // dst for backup, src for restore
-    optional string AccessKey = 5;
-    optional string SecretKey = 6;
-    optional Ydb.Export.ExportToS3Settings.StorageClass StorageClass = 7 [default = STANDARD];
-    optional bool VerifySSL = 8;
-    optional string ProxyHost = 9;
-    optional uint32 ProxyPort = 10;
-    optional EScheme ProxyScheme = 11;
-    optional string Region = 12;
-    optional TSecretableVariable SecretableAccessKey = 13;
-    optional TSecretableVariable SecretableSecretKey = 14;
-    optional bool UseVirtualAddressing = 15 [default = true];
-
-    message TLimits {
-        optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB
-        optional uint32 MinWriteBatchSize = 2 [default = 5242880]; // 5 MB
-        reserved 3; // ReadBufferSizeLimit
-    };
-
-    optional TLimits Limits = 100;
-    optional uint32 RequestTimeoutMs = 101;
-    optional uint32 HttpRequestTimeoutMs = 102;
-    optional uint32 ConnectionTimeoutMs = 103;
-
-    optional uint32 ExecutorThreadsCount = 104 [default = 32];
-    optional uint32 MaxConnectionsCount = 105 [default = 32];
-};
-
 message TTaskCleaner {
     optional uint64 PathId = 1;
-    optional TS3Settings StorageSettings = 2;
+    optional NKikimrSchemeOp.TS3Settings StorageSettings = 2;
     optional string TieringId = 3;
 }
 
@@ -1233,7 +1180,7 @@ message TBackupTask {
 
     oneof Settings {
         TYTSettings YTSettings = 4;
-        TS3Settings S3Settings = 9;
+        NKikimrSchemeOp.TS3Settings S3Settings = 9;
     }
 
     optional TPathDescription Table = 10; // for further restore
@@ -1269,7 +1216,7 @@ message TRestoreTask {
     optional uint32 NumberOfRetries = 5;
 
     oneof Settings {
-        TS3Settings S3Settings = 6;
+        NKikimrSchemeOp.TS3Settings S3Settings = 6;
     }
 
     optional bool ValidateChecksums = 7; // currently available for s3

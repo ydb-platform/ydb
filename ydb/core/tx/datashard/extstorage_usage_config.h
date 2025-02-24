@@ -6,6 +6,7 @@
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/StorageClass.h>

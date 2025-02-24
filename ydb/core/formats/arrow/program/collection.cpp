@@ -66,6 +66,12 @@ std::shared_ptr<arrow::Table> TAccessorsCollection::GetTable(const std::vector<u
     return arrow::Table::Make(std::make_shared<arrow::Schema>(std::move(fields)), std::move(arrays), *recordsCount);
 }
 
+std::vector<std::shared_ptr<IChunkedArray>> TAccessorsCollection::ExtractAccessors(const std::vector<ui32>& columnIds) {
+    auto result = GetAccessors(columnIds);
+    Remove(columnIds);
+    return result;
+}
+
 std::vector<std::shared_ptr<IChunkedArray>> TAccessorsCollection::GetAccessors(const std::vector<ui32>& columnIds) const {
     if (columnIds.empty()) {
         return {};
@@ -90,8 +96,8 @@ TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(const
         return TChunkedArguments::Empty();
     }
     TChunkedArguments result;
-//    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("ids", JoinSeq(",", columnIds))("records_count", RecordsCountActual)(
-//        "use_filter", UseFilter)("filter", Filter->DebugString());
+    //    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("ids", JoinSeq(",", columnIds))("records_count", RecordsCountActual)(
+    //        "use_filter", UseFilter)("filter", Filter->DebugString());
     for (auto&& i : columnIds) {
         auto it = Accessors.find(i);
         if (it == Accessors.end()) {

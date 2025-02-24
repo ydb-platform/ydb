@@ -308,30 +308,37 @@ public:
 
     TChunkedArguments GetArguments(const std::vector<ui32>& columnIds, const bool concatenate) const;
     std::vector<std::shared_ptr<IChunkedArray>> GetAccessors(const std::vector<ui32>& columnIds) const;
+    std::vector<std::shared_ptr<IChunkedArray>> ExtractAccessors(const std::vector<ui32>& columnIds);
 
     std::shared_ptr<arrow::Table> GetTable(const std::vector<ui32>& columnIds) const;
 
-    void Remove(const std::vector<ui32>& columnIds) {
+    void Remove(const std::vector<ui32>& columnIds, const bool optional = false) {
         for (auto&& i : columnIds) {
-            Remove(i);
+            Remove(i, optional);
         }
     }
 
-    void Remove(const ui32 columnId) {
+    void Remove(const ui32 columnId, const bool optional = false) {
         auto it = Accessors.find(columnId);
         if (it != Accessors.end()) {
             Accessors.erase(it);
         } else {
             auto itConst = Constants.find(columnId);
-            AFL_VERIFY(itConst != Constants.end());
+            if (!optional) {
+                AFL_VERIFY(itConst != Constants.end());
+            } else {
+                if (itConst == Constants.end()) {
+                    return;
+                }
+            }
             Constants.erase(itConst);
         }
     }
 
     template <class TColumnIdOwner>
-    void Remove(const std::vector<TColumnIdOwner>& columns) {
+    void Remove(const std::vector<TColumnIdOwner>& columns, const bool optional = false) {
         for (auto&& i : columns) {
-            Remove({ i.GetColumnId() });
+            Remove(i.GetColumnId(), optional);
         }
     }
 

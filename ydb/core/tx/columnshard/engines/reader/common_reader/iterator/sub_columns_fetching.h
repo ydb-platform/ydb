@@ -134,7 +134,7 @@ public:
 
     static TColumnChunkRestoreInfo BuildEmpty(const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo) {
         TColumnChunkRestoreInfo result(TBlobRange(), chunkExternalInfo);
-        result.PartialArray = NArrow::NAccessor::TSubColumnsPartialArray::BuildEmpty(chunkExternalInfo.GetColumnType());
+        result.PartialArray = NArrow::NAccessor::TSubColumnsPartialArray::BuildEmpty(chunkExternalInfo.GetColumnType(), chunkExternalInfo.GetRecordsCount());
         return result;
     }
 
@@ -242,7 +242,7 @@ private:
                 }
                 ColumnChunks.back().InitReading(reading, SubColumns);
             } else {
-                ColumnChunks.emplace_back(TColumnChunkRestoreInfo::BuildEmpty(ChunkExternalInfo));
+                ColumnChunks.emplace_back(TColumnChunkRestoreInfo::BuildEmpty(ChunkExternalInfo.GetSubset(c->GetMeta().GetRecordsCount())));
             }
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
             posCurrent += c->GetMeta().GetRecordsCount();

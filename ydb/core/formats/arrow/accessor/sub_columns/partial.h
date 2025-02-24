@@ -97,8 +97,8 @@ public:
         , Header(std::move(header)) {
     }
 
-    static std::shared_ptr<TSubColumnsPartialArray> BuildEmpty(const std::shared_ptr<arrow::DataType>& dataType) {
-        return std::make_shared<TSubColumnsPartialArray>(TSubColumnsHeader::BuildEmpty(), 0, dataType);
+    static std::shared_ptr<TSubColumnsPartialArray> BuildEmpty(const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount) {
+        return std::make_shared<TSubColumnsPartialArray>(TSubColumnsHeader::BuildEmpty(), recordsCount, dataType);
     }
 
     const TSubColumnsHeader& GetHeader() const {

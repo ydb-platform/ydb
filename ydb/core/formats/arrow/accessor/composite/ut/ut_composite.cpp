@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(CompositeArrayAccessor) {
         return std::regex_replace(str, std::regex(" |\\n"), "");
     }
 
-    static std::shared_ptr<TCompositeChunkedArray> BuildCompositeArray() {
+    static std::shared_ptr<IChunkedArray> BuildCompositeArray() {
         TCompositeChunkedArray::TBuilder builder(arrow::utf8());
         {
             TTrivialArray::TPlainBuilder arrBuilder;

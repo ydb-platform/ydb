@@ -406,6 +406,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             CREATE TABLE `/Root/ColumnTable` (
                 Col1 Uint64 NOT NULL,
                 Col2 JsonDocument,
+                Col3 UTF8,
                 PRIMARY KEY (Col1)
             )
             PARTITION BY HASH(Col1)
@@ -419,11 +420,11 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                       `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
-            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "value_a", "b" : "b1", "c" : "c1"}')), (2u, JsonDocument('{"a" : "value_a"}')),
-                                                                    (3u, JsonDocument('{"a" : "value_a", "b" : "value_b"}')), (4u, JsonDocument('{"b" : "value_b", "a" : "a4"}'))
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3) VALUES(1u, JsonDocument('{"a" : "value_a", "b" : "b1", "c" : "c1"}'), "value1"), (2u, JsonDocument('{"a" : "value_a"}'), "value1"),
+                                                                    (3u, JsonDocument('{"a" : "value_a", "b" : "value_b"}'), "value2"), (4u, JsonDocument('{"b" : "value_b", "a" : "a4"}'), "value4")
             ------
-            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "value_a" AND JSON_VALUE(Col2, "$.b") = "value_b" ORDER BY Col1;
-            EXPECTED: [[3u;["{\"a\":\"value_a\",\"b\":\"value_b\"}"]]]
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "value_a" AND Col3 = "value2" ORDER BY Col1;
+            EXPECTED: [[3u;["{\"a\":\"value_a\",\"b\":\"value_b\"}",\"value2\"]]]
             
         )";
         TScriptVariator(script).Execute();

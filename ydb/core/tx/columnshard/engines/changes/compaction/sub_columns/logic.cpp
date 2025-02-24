@@ -26,6 +26,7 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
     auto commonStats = TDictStats::Merge(stats, GetSettings(), inputRecordsCount);
     auto splitted = commonStats.SplitByVolume(GetSettings(), inputRecordsCount);
     ResultColumnStats = splitted.ExtractColumns();
+    AFL_VERIFY(ResultColumnStats->GetColumnsCount());
     RemapKeyIndex.RegisterColumnStats(*ResultColumnStats);
     for (auto&& i : OrderedIterators) {
         i.Start();

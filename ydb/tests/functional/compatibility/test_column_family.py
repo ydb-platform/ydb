@@ -39,7 +39,7 @@ class TestColumnFamily(object):
             cls.cluster.stop(kill=True)
 
     def change_binary(self, binary_path: str):
-        self.cluster.change_binary_and_restart(binary_path())
+        self.cluster.change_binary_and_restart(binary_path)
         self.driver.stop()
         endpoint = "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port)
         self.driver = ydb.Driver(endpoint=endpoint, database=self.database, oauth=None)

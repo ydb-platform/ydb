@@ -242,7 +242,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         config = self.read_node_config()
         return config.get('metadata', {}).get('version', 0)
 
-    def update_binary_path(self, binary_path):
+    def update_binary_path(self, binary_path: str):
         self.__binary_path = binary_path
         super(KiKiMRNode, self).update_command(self.command)
 

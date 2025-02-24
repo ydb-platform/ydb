@@ -266,13 +266,16 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
     }
     join->Stats = TOptimizerStatistics(
-        ctx.ComputeJoinStats(
+        ctx.ComputeJoinStatsV1(
             join->LeftArg->Stats, 
             join->RightArg->Stats,
             join->LeftJoinKeys, 
             join->RightJoinKeys, 
             EJoinAlgoType::GraceJoin,
-            join->JoinType
+            join->JoinType,
+            nullptr,
+            false,
+            false
         )
     );
 }
@@ -395,7 +398,6 @@ private:
                 joinNode->LogicalOrderings = left->LogicalOrderings;
                 break;
             }
-            case EJoinAlgoType::MapJoinReversed:
             case EJoinAlgoType::LookupJoinReverse: {
                 joinNode->LogicalOrderings = right->LogicalOrderings;
                 break;

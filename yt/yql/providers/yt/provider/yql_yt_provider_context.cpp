@@ -144,7 +144,7 @@ bool TYtProviderContext::IsJoinApplicable(
     return joinAlgo == EJoinAlgoType::MergeJoin;
 }
 
-TOptimizerStatistics TYtProviderContext::ComputeJoinStats(
+TOptimizerStatistics TYtProviderContext::ComputeJoinStatsV1(
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
     const TVector<NDq::TJoinColumn>& leftJoinKeys,

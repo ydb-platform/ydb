@@ -60,9 +60,7 @@ struct TDqCBOProviderContext : public NYql::TBaseProviderContext {
         const NYql::TOptimizerStatistics& rightStats, 
         const double outputRows, 
         const double outputByteSize, 
-        NYql::EJoinAlgoType joinAlgo,
-        bool shuffleLeftSide = false,
-        bool shuffleRightSide = false
+        NYql::EJoinAlgoType joinAlgo
     ) const override;
 
     TDqConfiguration::TPtr Config;
@@ -104,11 +102,9 @@ double TDqCBOProviderContext::ComputeJoinCost(
     const TOptimizerStatistics& rightStats, 
     const double outputRows, 
     const double outputByteSize, 
-    EJoinAlgoType joinAlgo,
-    bool shuffleLeftSide,
-    bool shuffleRightSide
+    EJoinAlgoType joinAlgo
 ) const  {
-    Y_UNUSED(outputByteSize, shuffleLeftSide, shuffleRightSide);
+    Y_UNUSED(outputByteSize);
 
     switch(joinAlgo) {
         case EJoinAlgoType::MapJoin:

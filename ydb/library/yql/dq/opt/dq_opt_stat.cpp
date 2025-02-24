@@ -287,15 +287,18 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
 
     auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
     auto resStats = std::make_shared<TOptimizerStatistics>(           
-        ctx.ComputeJoinStats(
+        ctx.ComputeJoinStatsV1(
             *leftStats, 
             *rightStats, 
             leftJoinKeys, 
             rightJoinKeys, 
             EJoinAlgoType::MapJoin, 
             ConvertToJoinKind(join.JoinKind().StringValue()),
-            FindCardHint(unionOfLabels, hints))
-        );
+            FindCardHint(unionOfLabels, hints),
+            false,
+            false
+        )
+    );
     resStats->Labels = std::make_shared<TVector<TString>>();
     resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
     typeCtx->SetStats(join.Raw(), resStats);
@@ -351,14 +354,16 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     }
 
     auto resStats = std::make_shared<TOptimizerStatistics>(
-            ctx.ComputeJoinStats(
+            ctx.ComputeJoinStatsV1(
                 *leftStats,
                 *rightStats,
                 leftJoinKeys,
                 rightJoinKeys, 
                 joinAlgo,
                 ConvertToJoinKind(join.JoinKind().StringValue()),
-                FindCardHint(unionOfLabels, hints)
+                FindCardHint(unionOfLabels, hints),
+                false,
+                false
             )
         );
 
@@ -414,14 +419,16 @@ void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationConte
     auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
 
     auto resStats = std::make_shared<TOptimizerStatistics>(
-            ctx.ComputeJoinStats(
+            ctx.ComputeJoinStatsV1(
                 *leftStats,
                 *rightStats,
                 leftJoinKeys,
                 rightJoinKeys, 
                 joinAlgo,
                 ConvertToJoinKind(join.JoinType().StringValue()),
-                FindCardHint(unionOfLabels, hints)
+                FindCardHint(unionOfLabels, hints),
+                false,
+                false
             )
         );
 

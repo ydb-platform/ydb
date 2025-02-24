@@ -176,11 +176,9 @@ double TKqpProviderContext::ComputeJoinCost(
     const TOptimizerStatistics& rightStats, 
     const double outputRows, 
     const double outputByteSize, 
-    EJoinAlgoType joinAlgo,
-    bool shuffleLeftSide,
-    bool shuffleRightSide
+    EJoinAlgoType joinAlgo
 ) const  {
-    Y_UNUSED(outputByteSize, shuffleLeftSide, shuffleRightSide);
+    Y_UNUSED(outputByteSize);
     
     switch(joinAlgo) {
         case EJoinAlgoType::LookupJoin:
@@ -200,7 +198,7 @@ double TKqpProviderContext::ComputeJoinCost(
         case EJoinAlgoType::GraceJoin:
             return 1.5 * (leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows);
         default:
-            return TBaseProviderContext::ComputeJoinCost(leftStats, rightStats, outputRows, outputByteSize, joinAlgo, shuffleLeftSide, shuffleRightSide);
+            return TBaseProviderContext::ComputeJoinCost(leftStats, rightStats, outputRows, outputByteSize, joinAlgo);
     }
 }
 

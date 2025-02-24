@@ -41,7 +41,7 @@ public:
 
     TYtProviderContext(TJoinAlgoLimits limits, TVector<TYtProviderRelInfo> relInfo);
 
-    virtual TOptimizerStatistics ComputeJoinStats(
+    virtual TOptimizerStatistics ComputeJoinStatsV1(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
         const TVector<NDq::TJoinColumn>& leftJoinKeys,

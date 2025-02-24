@@ -37,9 +37,7 @@ struct TKqpProviderContext : public NYql::TBaseProviderContext {
         const NYql::TOptimizerStatistics& rightStats, 
         const double outputRows, 
         const double outputByteSize, 
-        NYql::EJoinAlgoType joinAlgo,
-        bool shuffleLeftSide = false,
-        bool shuffleRightSide = false
+        NYql::EJoinAlgoType joinAlgo
     ) const override;
 
     const TKqpOptimizeContext& KqpCtx;

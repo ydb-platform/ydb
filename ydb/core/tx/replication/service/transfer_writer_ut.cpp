@@ -1,6 +1,6 @@
 #include "service.h"
 #include "transfer_writer.h"
-#include "worker.h"
+#include "common_ut.h"
 
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
@@ -17,7 +17,6 @@ namespace NKikimr::NReplication::NService {
 
 Y_UNIT_TEST_SUITE(TransferWriter) {
     using namespace NTestHelpers;
-    using TRecord = TEvWorker::TEvData::TRecord;
 
     Y_UNIT_TEST(Write_ColumnTable) {
         TEnv env;
@@ -51,7 +50,7 @@ Y_UNIT_TEST_SUITE(TransferWriter) {
         auto writer = env.GetRuntime().Register(CreateTransferWriter(lambda, tablePathId, compiler));
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
-        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData("TestSource", {
+        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "TestSource", {
             TRecord(1, R"({"key":[1], "update":{"value":"10"}})"),
             TRecord(2, R"({"key":[2], "update":{"value":"20"}})"),
             TRecord(3, R"({"key":[3], "update":{"value":"30"}})"),

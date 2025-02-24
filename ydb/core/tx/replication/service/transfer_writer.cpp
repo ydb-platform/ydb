@@ -551,7 +551,7 @@ private:
         }
 
         if (PendingRecords) {
-            ProcessData(*PendingRecords);
+            ProcessData(PendingPartitionId, *PendingRecords);
             PendingRecords.reset();
         }
     }
@@ -584,15 +584,16 @@ private:
 
     void HoldHandle(TEvWorker::TEvData::TPtr& ev) {
         Y_ABORT_UNLESS(!PendingRecords);
+        PendingPartitionId = ev->Get()->PartitionId;
         PendingRecords = std::move(ev->Get()->Records);
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
         LOG_D("Handle TEvData " << ev->Get()->ToString());
-        ProcessData(ev->Get()->Records);
+        ProcessData(ev->Get()->PartitionId, ev->Get()->Records);
     }
 
-    void ProcessData(const TVector<TEvWorker::TEvData::TRecord>& records) {
+    void ProcessData(const ui32 partitionId, const TVector<TEvWorker::TEvData::TRecord>& records) {
         if (!records) {
             Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
             return;
@@ -601,17 +602,29 @@ private:
         TableState->EnshureDataBatch();
 
         for (auto& message : records) {
-            NYdb::NTopic::NPurecalc::TMessage input(message.Data);
-            input.WithOffset(message.Offset);
+            NYdb::NTopic::NPurecalc::TMessage input;
+            input.Data = std::move(message.Data);
+            input.MessageGroupId = std::move(message.MessageGroupId);
+            input.Partition = partitionId;
+            input.ProducerId = std::move(message.ProducerId);
+            input.Offset = message.Offset;
+            input.SeqNo = message.SeqNo;
 
-            auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
-            while (auto* m = result->Fetch()) {
-                TableState->AddData(m->Data);
+            try {
+                auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
+                while (auto* m = result->Fetch()) {
+                    TableState->AddData(m->Data);
+                }
+            } catch (const yexception& e) {
+                ProcessingError = TStringBuilder() << "Error transform message: '" << message.Data << "': " << e.what();
+                break;
             }
         }
 
         if (TableState->Flush()) {
             Become(&TThis::StateWrite);
+        } else if (ProcessingError) {
+            LogCritAndLeave(*ProcessingError);
         }
     }
 
@@ -634,6 +647,10 @@ private:
         auto error = TableState->Handle(ev);
         if (error) {
             return LogCritAndLeave(error);
+        }
+
+        if (ProcessingError) {
+            return LogCritAndLeave(*ProcessingError);
         }
 
         Send(Worker, new TEvWorker::TEvPoll());
@@ -709,8 +726,10 @@ private:
     TProgramHolder::TPtr ProgramHolder;
 
     mutable TMaybe<TString> LogPrefix;
+    mutable TMaybe<TString> ProcessingError;
 
     std::optional<TActorId> PendingWorker;
+    ui32 PendingPartitionId = 0;
     std::optional<TVector<TEvWorker::TEvData::TRecord>> PendingRecords;
 
     ui32 Attempt = 0;

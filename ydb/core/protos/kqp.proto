@@ -761,6 +761,9 @@ message TKqpStreamLookupSettings {
     optional bool AllowNullKeys = 12;
     optional uint32 AllowNullKeysPrefixSize = 13;
     optional NKikimrDataEvents.ELockMode LockMode = 14;
+    optional NKqpProto.TKqpPhyTableId Index = 15;
+    repeated TKqpColumnMetadataProto IndexKeyColumns = 16;
+    repeated TKqpColumnMetadataProto IndexColumns = 17;
 }
 
 message TKqpSequencerSettings {

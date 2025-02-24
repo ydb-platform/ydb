@@ -33,17 +33,15 @@ std::optional<TFetchingInfo> IResourceProcessor::BuildFetchTask(
     const ui32 columnId, const std::shared_ptr<TAccessorsCollection>& resources) const {
     auto acc = resources->GetAccessorOptional(columnId);
     if (!acc) {
-        return TFetchingInfo::BuildFullRestore();
+        return TFetchingInfo::BuildFullRestore(false);
     }
     if (acc->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
-        resources->Remove({ columnId });
-        return TFetchingInfo::BuildFullRestore();
+        return TFetchingInfo::BuildFullRestore(true);
     } else if (acc->GetType() == NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
         auto accComposite = std::static_pointer_cast<NAccessor::TCompositeChunkedArray>(acc);
         for (auto it = NAccessor::TCompositeChunkedArray::BuildIterator(accComposite); it.IsValid(); it.Next()) {
             if (it.GetArray()->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
-                resources->Remove({ columnId });
-                return TFetchingInfo::BuildFullRestore();
+                return TFetchingInfo::BuildFullRestore(true);
             }
         }
     }

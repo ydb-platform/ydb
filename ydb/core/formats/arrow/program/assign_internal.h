@@ -23,10 +23,6 @@ private:
         , Function(function) {
     }
 
-    virtual TString GetKernelClassNameDef(const TString& defaultValue) const override {
-        return KernelLogic ? KernelLogic->GetClassName() : defaultValue;
-    }
-
     virtual bool IsAggregation() const override {
         return Function->IsAggregation();
     }

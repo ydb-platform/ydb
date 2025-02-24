@@ -719,26 +719,30 @@ TColumnFilter TColumnFilter::Slice(const ui32 offset, const ui32 count) const {
     std::vector<ui32> chunks;
     ui32 index = 0;
     bool currentValue = GetStartValue();
+
+    const auto buildResult = [](std::vector<ui32>&& chunks, const bool currentValue, const ui32 count) {
+        TColumnFilter result = TColumnFilter::BuildAllowFilter();
+        result.LastValue = !currentValue;
+        result.Filter = std::move(chunks);
+        result.RecordsCount = count;
+        return result;
+    };
+    ui32 countFilter = 0;
     for (auto&& i : Filter) {
         const ui32 nextIndex = index + i;
         if (index >= offset + count) {
-            TColumnFilter result = TColumnFilter::BuildAllowFilter();
-            result.LastValue = !currentValue;
-            result.Filter = std::move(chunks);
-            result.RecordsCount = count;
-            return result;
+            AFL_VERIFY(countFilter == count);
+            return buildResult(std::move(chunks), currentValue, count);
         } else if (nextIndex > offset) {
             chunks.emplace_back(std::min(nextIndex, offset + count) - std::max(index, offset));
+            countFilter += chunks.back();
         }
         currentValue = !currentValue;
         index = nextIndex;
     }
+    AFL_VERIFY(countFilter == count);
     AFL_VERIFY(offset + count <= index)("index", index)("offset", offset)("count", count);
-    TColumnFilter result = TColumnFilter::BuildAllowFilter();
-    result.LastValue = !currentValue;
-    result.Filter = std::move(chunks);
-    result.RecordsCount = count;
-    return result;
+    return buildResult(std::move(chunks), currentValue, count);
 }
 
 bool TColumnFilter::CheckSlice(const ui32 offset, const ui32 count) const {

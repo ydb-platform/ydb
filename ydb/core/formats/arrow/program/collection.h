@@ -239,7 +239,8 @@ public:
             AFL_VERIFY(!Started);
             if (Arrays.size()) {
                 AFL_VERIFY(ArraysOriginal.back()->GetRecordsCount() == arr->GetRecordsCount())("last", ArraysOriginal.back()->GetRecordsCount())(
-                                                                         "new", arr->GetRecordsCount());
+                                                                         "new", arr->GetRecordsCount())("last_type",
+                                                                         ArraysOriginal.back()->GetType())("current_type", arr->GetType());
             }
             ArraysOriginal.emplace_back(arr);
             Arrays.emplace_back(arr->GetChunkedArray());
@@ -312,14 +313,18 @@ public:
 
     void Remove(const std::vector<ui32>& columnIds) {
         for (auto&& i : columnIds) {
-            auto it = Accessors.find(i);
-            if (it != Accessors.end()) {
-                Accessors.erase(it);
-            } else {
-                auto itConst = Constants.find(i);
-                AFL_VERIFY(itConst != Constants.end());
-                Constants.erase(itConst);
-            }
+            Remove(i);
+        }
+    }
+
+    void Remove(const ui32 columnId) {
+        auto it = Accessors.find(columnId);
+        if (it != Accessors.end()) {
+            Accessors.erase(it);
+        } else {
+            auto itConst = Constants.find(columnId);
+            AFL_VERIFY(itConst != Constants.end());
+            Constants.erase(itConst);
         }
     }
 

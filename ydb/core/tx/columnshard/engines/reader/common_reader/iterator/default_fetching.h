@@ -67,11 +67,6 @@ private:
     }
 
     virtual void DoStart(TReadActionsCollection& nextRead) override {
-        auto existsAccessor = Resources->GetAccessorOptional(GetColumnId());
-        if (!!existsAccessor) {
-            AFL_VERIFY(existsAccessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
-            Resources->Remove({ GetColumnId() });
-        }
         auto columnChunks = Source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(GetColumnId());
         if (columnChunks.empty()) {
             ColumnChunks.emplace_back(Source->GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(Source->GetRecordsCount(),

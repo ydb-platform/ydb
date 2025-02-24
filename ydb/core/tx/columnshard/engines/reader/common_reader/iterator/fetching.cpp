@@ -172,20 +172,22 @@ TConclusion<bool> TProgramStepPrepare::DoExecuteInplace(const std::shared_ptr<ID
     TReadActionsCollection readActions;
     THashMap<ui32, std::shared_ptr<IKernelFetchLogic>> fetchers;
     for (auto&& i : Step.GetOriginalColumnsToUse()) {
-        auto customFetchInfo = Step->BuildFetchTask(i, source->GetStageData().GetTable());
+        auto customFetchInfo = Step->BuildFetchTask(i.GetColumnId(), source->GetStageData().GetTable());
         if (!customFetchInfo) {
             continue;
         }
+        if (customFetchInfo->GetRemoveCurrent()) {
+            source->GetStageData().GetTable()->Remove(i.GetColumnId());
+        }
         std::shared_ptr<IKernelFetchLogic> logic;
-        if (customFetchInfo->GetFullRestore() || source->GetSourceSchema()->GetColumnLoaderVerified(i)->GetAccessorConstructor()->GetType() !=
-                                                     NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
-            logic = std::make_shared<TDefaultFetchLogic>(i, source);
+        if (customFetchInfo->GetFullRestore()) {
+            logic = std::make_shared<TDefaultFetchLogic>(i.GetColumnId(), source);
         } else {
             AFL_VERIFY(customFetchInfo->GetSubColumns().size());
-            logic = std::make_shared<TSubColumnsFetchLogic>(i, source, customFetchInfo->GetSubColumns());
+            logic = std::make_shared<TSubColumnsFetchLogic>(i.GetColumnId(), source, customFetchInfo->GetSubColumns());
         }
         logic->Start(readActions);
-        AFL_VERIFY(fetchers.emplace(i, logic).second)("column_id", i);
+        AFL_VERIFY(fetchers.emplace(i.GetColumnId(), logic).second)("column_id", i.GetColumnId());
     }
     if (readActions.IsEmpty()) {
         NBlobOperations::NRead::TCompositeReadBlobs blobs;
@@ -202,6 +204,8 @@ TConclusion<bool> TProgramStepPrepare::DoExecuteInplace(const std::shared_ptr<ID
 }
 
 TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*cursor*/) const {
+    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()(
+        "program", source->GetContext()->GetCommonContext()->GetReadMetadata()->GetProgram().ProtoDebugString());
     auto result = Step->Execute(source->GetStageData().GetTable());
     if (result.IsFail()) {
         return result;
@@ -213,11 +217,11 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
 TConclusion<bool> TProgramStepAssemble::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*cursor*/) const {
     for (auto&& i : Step.GetOriginalColumnsToUse()) {
-        auto customFetchInfo = Step->BuildFetchTask(i, source->GetStageData().GetTable());
+        auto customFetchInfo = Step->BuildFetchTask(i.GetColumnId(), source->GetStageData().GetTable());
         if (!customFetchInfo) {
             continue;
         }
-        auto fetcher = source->MutableStageData().ExtractFetcherVerified(i);
+        auto fetcher = source->MutableStageData().ExtractFetcherVerified(i.GetColumnId());
         fetcher->OnDataCollected();
     }
     return true;

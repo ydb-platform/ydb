@@ -119,6 +119,10 @@ private:
     YDB_READONLY(ui32, ColumnId, 0);
 
 public:
+    TString DebugString() const {
+        return ::ToString(ColumnId);
+    }
+
     template <class TContainer>
     static std::vector<ui32> ExtractColumnIds(const TContainer& container) {
         std::vector<ui32> result;
@@ -149,10 +153,6 @@ public:
         : ColumnId(columnId) {
     }
 
-    operator size_t() const {
-        return ColumnId;
-    }
-
     bool operator==(const TColumnChainInfo& item) const {
         return ColumnId == item.ColumnId;
     }
@@ -169,12 +169,15 @@ enum class EProcessorType {
 
 class TFetchingInfo {
 private:
+    YDB_READONLY(bool, RemoveCurrent, false);
     YDB_READONLY(bool, FullRestore, true);
     YDB_READONLY_DEF(std::vector<TString>, SubColumns);
 
 public:
-    static TFetchingInfo BuildFullRestore() {
-        return TFetchingInfo();
+    static TFetchingInfo BuildFullRestore(const bool replace) {
+        TFetchingInfo result;
+        result.RemoveCurrent = replace;
+        return result;
     }
     static TFetchingInfo BuildSubColumnsRestore(const std::vector<TString>& subColumns) {
         TFetchingInfo result;
@@ -202,10 +205,6 @@ public:
     virtual bool IsAggregation() const = 0;
 
     virtual ~IResourceProcessor() = default;
-
-    virtual TString GetKernelClassNameDef(const TString& defaultValue) const {
-        return defaultValue;
-    }
 
     NJson::TJsonValue DebugJson() const;
 

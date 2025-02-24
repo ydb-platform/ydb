@@ -104,9 +104,9 @@ TConclusionStatus TWithKeysAggregationProcessor::DoExecute(const std::shared_ptr
 
         funcOpts.assigns.emplace_back(gbAssign);
         for (auto&& i : aggr.GetInputs()) {
-            if (fieldsUsage.emplace(i).second) {
-                batch.emplace_back(resources->GetArrayVerified(i));
-                fields.emplace_back(resources->GetFieldVerified(i));
+            if (fieldsUsage.emplace(i.GetColumnId()).second) {
+                batch.emplace_back(resources->GetArrayVerified(i.GetColumnId()));
+                fields.emplace_back(resources->GetFieldVerified(i.GetColumnId()));
             }
         }
     }

@@ -40,9 +40,9 @@ public:
 }   // namespace
 
 TConclusion<TProgramChain> TProgramChain::Build(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver) {
-    THashMap<TColumnChainInfo, TColumnUsage> contextUsage;
+    THashMap<ui32, TColumnUsage> contextUsage;
     ui32 stepIdx = 0;
-    THashSet<TColumnChainInfo> sourceColumns;
+    THashSet<ui32> sourceColumns;
     std::optional<ui32> lastFilter;
     std::optional<ui32> firstAggregation;
     std::vector<std::vector<TColumnChainInfo>> originalsToUse;
@@ -55,25 +55,25 @@ TConclusion<TProgramChain> TProgramChain::Build(std::vector<std::shared_ptr<IRes
             lastFilter = stepIdx;
         }
         for (auto&& c : i->GetOutput()) {
-            auto it = contextUsage.find(c);
+            auto it = contextUsage.find(c.GetColumnId());
             if (it != contextUsage.end()) {
                 AFL_VERIFY(false);
             } else {
-                contextUsage.emplace(c, TColumnUsage::Construct(stepIdx, i));
+                contextUsage.emplace(c.GetColumnId(), TColumnUsage::Construct(stepIdx, i));
             }
         }
         for (auto&& c : i->GetInput()) {
-            auto it = contextUsage.find(c);
-            const bool isOriginalColumn = resolver.HasColumn(c);
+            auto it = contextUsage.find(c.GetColumnId());
+            const bool isOriginalColumn = resolver.HasColumn(c.GetColumnId());
             if (isOriginalColumn) {
                 originalsToUse[stepIdx].emplace_back(c);
             }
             if (it == contextUsage.end()) {
                 if (!isOriginalColumn) {
-                    return TConclusionStatus::Fail("incorrect input column: " + ::ToString(c));
+                    return TConclusionStatus::Fail("incorrect input column: " + c.DebugString());
                 }
-                it = contextUsage.emplace(c, TColumnUsage::Fetch(stepIdx, i)).first;
-                sourceColumns.emplace(c);
+                it = contextUsage.emplace(c.GetColumnId(), TColumnUsage::Fetch(stepIdx, i)).first;
+                sourceColumns.emplace(c.GetColumnId());
             } else {
                 it->second.SetLastUsage(stepIdx);
             }

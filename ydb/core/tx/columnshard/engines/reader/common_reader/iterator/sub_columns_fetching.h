@@ -177,8 +177,7 @@ private:
         }
     }
 
-    virtual void DoOnDataReceived(
-        TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
+    virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
         AFL_VERIFY(ColumnChunks.size());
         AFL_VERIFY(!!StorageId);
         TBlobsAction blobsAction(Source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
@@ -258,8 +257,10 @@ public:
     TSubColumnsFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source, const std::vector<TString>& subColumns)
         : TBase(columnId, source)
         , ChunkExternalInfo(Source->GetSourceSchema()->GetColumnLoaderVerified(GetColumnId())->BuildAccessorContext(Source->GetRecordsCount()))
-        , SubColumns(subColumns)
-    {
+        , SubColumns(subColumns) {
+        const auto loader = Source->GetSourceSchema()->GetColumnLoaderVerified(GetColumnId());
+        AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)
+        ("type", loader->GetAccessorConstructor()->GetType());
     }
 };
 

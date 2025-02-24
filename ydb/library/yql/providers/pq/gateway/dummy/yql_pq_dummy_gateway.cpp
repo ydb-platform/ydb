@@ -80,6 +80,10 @@ void TDummyPqGateway::UpdateClusterConfigs(
     Y_UNUSED(secure);
 }
 
+void TDummyPqGateway::UpdateClusterConfigs(const TPqGatewayConfigPtr& config) {
+     Y_UNUSED(config);
+}
+
 NYdb::NTopic::TTopicClientSettings TDummyPqGateway::GetTopicClientSettings() const {
     return NYdb::NTopic::TTopicClientSettings();
 }
@@ -89,7 +93,7 @@ public:
     TPqFileGatewayFactory(const TDummyPqGateway::TPtr pqFileGateway)
         : PqFileGateway(pqFileGateway) {}
 
-    IPqGateway::TPtr CreatePqGateway(const NYql::TPqGatewayServices& /*services*/) override {
+    IPqGateway::TPtr CreatePqGateway() override {
         return PqFileGateway;
     }
 private:

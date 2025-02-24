@@ -220,7 +220,7 @@ void Init(
             credentialsFactory,
             tenant,
             yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
-            defaultPqGatewayFactory ? defaultPqGatewayFactory->CreatePqGateway(pqServices) : CreatePqNativeGateway(pqServices),
+            defaultPqGatewayFactory ? defaultPqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
             appData->Mon,
             appData->Counters);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
@@ -243,7 +243,7 @@ void Init(
             nullptr,
             commonTopicClientSettings
         );
-        auto pqGateway = defaultPqGatewayFactory ? defaultPqGatewayFactory->CreatePqGateway(pqServices) : NYql::CreatePqNativeGateway(std::move(pqServices));
+        auto pqGateway = defaultPqGatewayFactory ? defaultPqGatewayFactory->CreatePqGateway() : NYql::CreatePqNativeGateway(std::move(pqServices));
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, 
             yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), protoConfig.GetCommon().GetPqReconnectPeriod());
 
@@ -373,7 +373,7 @@ void Init(
             tenant,
             appData->Mon,
             s3ActorsFactory,
-            defaultPqGatewayFactory ? defaultPqGatewayFactory : NYql::CreatePqNativeGatewayFactory()
+            defaultPqGatewayFactory ? defaultPqGatewayFactory : NYql::CreatePqNativeGatewayFactory(pqServices)
             );
 
         actorRegistrator(MakePendingFetcherId(nodeId), fetcher);

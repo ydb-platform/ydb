@@ -18,7 +18,7 @@ PEERDIR(
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/lwtrace_probes
-    ydb/core/control
+    ydb/core/control/lib
     ydb/core/driver_lib/version
     ydb/core/protos
     ydb/core/util

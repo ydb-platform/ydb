@@ -169,7 +169,7 @@ std::unordered_map<ui32, TActorId> InitializeRuntime(TTestActorRuntime& runtime,
         runtime.AddLocalService(nameserviceActor, TActorSetupCmd(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0), i);
     }
 
-    TTestActorRuntime::TEgg egg{ new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr, {} };
+    TTestActorRuntime::TEgg egg{ new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr, {}, {} };
     runtime.Initialize(egg);
 
     return indexToActor;

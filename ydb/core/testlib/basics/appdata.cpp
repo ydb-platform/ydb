@@ -213,4 +213,10 @@ namespace NKikimr {
             Icb.emplace_back(new TControlBoard);
         }
     }
+
+    void TAppPrepare::InitStaticControlBoard(ui32 numNodes) {
+        for (ui32 i = 0; i < numNodes; ++i) {
+            StaticControlBoard.emplace_back(new TStaticControlBoard());
+        }
+    }
 }

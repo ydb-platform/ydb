@@ -17,6 +17,7 @@ public:
     }
 
     TImmediateControlsConfigurator(TIntrusivePtr<TControlBoard> board,
+                                   TIntrusivePtr<TStaticControlBoard> staticControlBoard,
                                    const NKikimrConfig::TImmediateControlsConfig &cfg,
                                    bool allowExistingControls);
 
@@ -38,20 +39,26 @@ public:
     }
 
 private:
-    void CreateControls(TIntrusivePtr<TControlBoard> board, bool allowExisting);
     void CreateControls(TIntrusivePtr<TControlBoard> board,
+                        TIntrusivePtr<TStaticControlBoard> staticControlBoard,
+                        bool allowExisting);
+    void CreateControls(TIntrusivePtr<TControlBoard> board,
+                        TIntrusivePtr<TStaticControlBoard> staticControlBoard,
                         const google::protobuf::Descriptor *desc,
                         const TString &prefix,
                         bool allowExisting);
     void AddControl(TIntrusivePtr<TControlBoard> board,
+                    TIntrusivePtr<TStaticControlBoard> staticControlBoard,
                     const google::protobuf::FieldDescriptor *desc,
                     const TString &prefix,
                     bool allowExisting);
     void ApplyConfig(const NKikimrConfig::TImmediateControlsConfig &cfg,
-                     TIntrusivePtr<TControlBoard> board);
+                     TIntrusivePtr<TControlBoard> board,
+                     TIntrusivePtr<TStaticControlBoard> staticControlBoard);
     void ApplyConfig(const ::google::protobuf::Message &cfg,
                      const TString &prefix,
-                     TIntrusivePtr<TControlBoard> board);
+                     TIntrusivePtr<TControlBoard> board,
+                     TIntrusivePtr<TStaticControlBoard> staticControlBoard);
     TString MakePrefix(const TString &prefix,
                        const TString &name);
 
@@ -59,11 +66,12 @@ private:
 };
 
 TImmediateControlsConfigurator::TImmediateControlsConfigurator(TIntrusivePtr<TControlBoard> board,
+                                                               TIntrusivePtr<TStaticControlBoard> staticControlBoard,
                                                                const NKikimrConfig::TImmediateControlsConfig &cfg,
                                                                bool allowExistingControls)
 {
-    CreateControls(board, allowExistingControls);
-    ApplyConfig(cfg, board);
+    CreateControls(board, staticControlBoard, allowExistingControls);
+    ApplyConfig(cfg, board, staticControlBoard);
 }
 
 void TImmediateControlsConfigurator::Bootstrap(const TActorContext &ctx)
@@ -90,7 +98,7 @@ void TImmediateControlsConfigurator::Handle(TEvConsole::TEvConfigNotificationReq
                "TImmediateControlsConfigurator: got new config: "
                << rec.GetConfig().ShortDebugString());
 
-    ApplyConfig(rec.GetConfig().GetImmediateControlsConfig(), AppData(ctx)->Icb);
+    ApplyConfig(rec.GetConfig().GetImmediateControlsConfig(), AppData(ctx)->Icb, AppData(ctx)->StaticControlBoard);
 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
@@ -101,13 +109,16 @@ void TImmediateControlsConfigurator::Handle(TEvConsole::TEvConfigNotificationReq
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
 
-void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard> board, bool allowExisting)
+void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard> board,
+                                                    TIntrusivePtr<TStaticControlBoard> staticControlBoard,
+                                                    bool allowExisting)
 {
     auto *desc = NKikimrConfig::TImmediateControlsConfig::descriptor();
-    CreateControls(board, desc, "", allowExisting);
+    CreateControls(board, staticControlBoard, desc, "", allowExisting);
 }
 
 void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard> board,
+                                                    TIntrusivePtr<TStaticControlBoard> staticControlBoard,
                                                     const google::protobuf::Descriptor *desc,
                                                     const TString &prefix,
                                                     bool allowExisting)
@@ -121,12 +132,12 @@ void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard>
         auto fieldType = fieldDesc->type();
         if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64
             || fieldType == google::protobuf::FieldDescriptor::TYPE_INT64)
-            AddControl(board, fieldDesc, prefix, allowExisting);
+            AddControl(board, staticControlBoard, fieldDesc, prefix, allowExisting);
         else {
             Y_ABORT_UNLESS(fieldType == google::protobuf::FieldDescriptor::TYPE_MESSAGE,
                      "Only [u]int64 and message fields are allowed in Immediate Controls Config");
 
-            CreateControls(board, fieldDesc->message_type(),
+            CreateControls(board, staticControlBoard, fieldDesc->message_type(),
                            MakePrefix(prefix, fieldDesc->name()),
                            allowExisting);
         }
@@ -134,6 +145,7 @@ void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard>
 }
 
 void TImmediateControlsConfigurator::AddControl(TIntrusivePtr<TControlBoard> board,
+                                                TIntrusivePtr<TStaticControlBoard> staticControlBoard,
                                                 const google::protobuf::FieldDescriptor *desc,
                                                 const TString &prefix,
                                                 bool allowExisting)
@@ -151,7 +163,12 @@ void TImmediateControlsConfigurator::AddControl(TIntrusivePtr<TControlBoard> boa
     // is properly configured. It can currently only happen in configurator
     // tests, where it is created very late after some tablets have already
     // started.
-    auto res = board->RegisterSharedControl(Controls[name], name);
+    bool res = false;
+    if (auto controlId = staticControlBoard->GetStaticControlId(name)) {
+        res = staticControlBoard->RegisterSharedControl(Controls[name], *controlId);
+    } else {
+        res = board->RegisterSharedControl(Controls[name], name);
+    }
     Y_VERIFY_S(res || allowExisting,
             "Immediate Control " << name << " was registered before "
             << "TImmediateControlsConfigurator creation");
@@ -164,14 +181,16 @@ void TImmediateControlsConfigurator::AddControl(TIntrusivePtr<TControlBoard> boa
 }
 
 void TImmediateControlsConfigurator::ApplyConfig(const NKikimrConfig::TImmediateControlsConfig &cfg,
-                                                 TIntrusivePtr<TControlBoard> board)
+                                                 TIntrusivePtr<TControlBoard> board,
+                                                 TIntrusivePtr<TStaticControlBoard> staticControlBoard)
 {
-    ApplyConfig(cfg, "", board);
+    ApplyConfig(cfg, "", board, staticControlBoard);
 }
 
 void TImmediateControlsConfigurator::ApplyConfig(const ::google::protobuf::Message &cfg,
                                                  const TString &prefix,
-                                                 TIntrusivePtr<TControlBoard> board)
+                                                 TIntrusivePtr<TControlBoard> board,
+                                                 TIntrusivePtr<TStaticControlBoard> staticControlBoard)
 {
     auto *desc = cfg.GetDescriptor();
     auto *reflection = cfg.GetReflection();
@@ -182,19 +201,31 @@ void TImmediateControlsConfigurator::ApplyConfig(const ::google::protobuf::Messa
         if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64
             || fieldType == google::protobuf::FieldDescriptor::TYPE_INT64) {
             Y_ABORT_UNLESS(Controls.contains(name));
+            auto controlId = staticControlBoard->GetStaticControlId(name);
             if (reflection->HasField(cfg, fieldDesc)) {
-                TAtomicBase prev;
-                if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64)
-                    board->SetValue(name, reflection->GetUInt64(cfg, fieldDesc), prev);
-                else
-                    board->SetValue(name, reflection->GetInt64(cfg, fieldDesc), prev);
+                auto applyControl = [&reflection, &fieldDesc, &cfg, &fieldType]<typename TControlBoard, typename TControlId>(TControlBoard& controlBoard, const TControlId& id) {
+                    TAtomicBase prev;
+                    if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64)
+                        controlBoard.SetValue(id, reflection->GetUInt64(cfg, fieldDesc), prev);
+                    else
+                        controlBoard.SetValue(id, reflection->GetInt64(cfg, fieldDesc), prev);
+                };
+                if (controlId) { // is static
+                    applyControl(*staticControlBoard,  *controlId);
+                } else {
+                    applyControl(*board, name);
+                }
             } else {
-                board->RestoreDefault(name);
+                if (controlId) {
+                   staticControlBoard->RestoreDefault(*controlId);
+                } else {
+                    board->RestoreDefault(name);
+                }
             }
         } else {
             Y_ABORT_UNLESS(fieldType == google::protobuf::FieldDescriptor::TYPE_MESSAGE,
                      "Only [u]int64 and message fields are allowed in Immediate Controls Config");
-            ApplyConfig(reflection->GetMessage(cfg, fieldDesc), name, board);
+            ApplyConfig(reflection->GetMessage(cfg, fieldDesc), name, board, staticControlBoard);
         }
     }
 }
@@ -209,10 +240,11 @@ TString TImmediateControlsConfigurator::MakePrefix(const TString &prefix,
 }
 
 IActor *CreateImmediateControlsConfigurator(TIntrusivePtr<TControlBoard> board,
+                                            TIntrusivePtr<TStaticControlBoard> staticControlBoard,
                                             const NKikimrConfig::TImmediateControlsConfig &cfg,
                                             bool allowExistingControls)
 {
-    return new TImmediateControlsConfigurator(board, cfg, allowExistingControls);
+    return new TImmediateControlsConfigurator(board, staticControlBoard, cfg, allowExistingControls);
 }
 
 } // namespace NKikimr::NConsole

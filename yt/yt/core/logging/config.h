@@ -12,10 +12,9 @@ namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TLogWriterConfig
+struct TLogWriterConfig
     : public NYTree::TYsonStruct
 {
-public:
     TString Type;
 
     ELogFormat Format;
@@ -51,10 +50,9 @@ DEFINE_REFCOUNTED_TYPE(TLogWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRotationPolicyConfig
+struct TRotationPolicyConfig
     : public NYTree::TYsonStruct
 {
-public:
     //! Upper limit on the total size of rotated log files.
     i64 MaxTotalSizeToKeep;
     //! Upper limit on the number of rotated log files.
@@ -73,10 +71,9 @@ DEFINE_REFCOUNTED_TYPE(TRotationPolicyConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFileLogWriterConfig
+struct TFileLogWriterConfig
     : public TLogWriterConfig
 {
-public:
     static constexpr const TStringBuf WriterType = "file";
 
     TString FileName;
@@ -100,10 +97,9 @@ DEFINE_REFCOUNTED_TYPE(TFileLogWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TStderrLogWriterConfig
+struct TStderrLogWriterConfig
     : public TLogWriterConfig
 {
-public:
     static constexpr TStringBuf WriterType = "stderr";
 
     REGISTER_YSON_STRUCT(TStderrLogWriterConfig);
@@ -115,10 +111,9 @@ DEFINE_REFCOUNTED_TYPE(TStderrLogWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRuleConfig
+struct TRuleConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<THashSet<TString>> IncludeCategories;
     THashSet<TString> ExcludeCategories;
 
@@ -141,10 +136,9 @@ DEFINE_REFCOUNTED_TYPE(TRuleConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TLogManagerConfig
+struct TLogManagerConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<TDuration> FlushPeriod;
     std::optional<TDuration> WatchPeriod;
     std::optional<TDuration> CheckSpacePeriod;
@@ -212,10 +206,9 @@ DEFINE_REFCOUNTED_TYPE(TLogManagerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TLogManagerDynamicConfig
+struct TLogManagerDynamicConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<i64> MinDiskSpace;
 
     std::optional<int> HighBacklogWatermark;

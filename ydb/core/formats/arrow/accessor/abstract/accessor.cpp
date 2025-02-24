@@ -23,38 +23,39 @@ std::shared_ptr<arrow::Array> IChunkedArray::TReader::CopyRecord(const ui64 reco
 }
 
 IChunkedArray::TRowRange IChunkedArray::TReader::EqualRange(const std::shared_ptr<arrow::Scalar>& value) const {
-    std::optional<ui64> begin;
-    std::optional<ui64> end;
+    const auto localIndexes = std::ranges::iota_view((ui64)0, GetRecordsCount());
+    const auto getScalar = [this](const ui64 index) {
+        const auto chunk = GetReadChunk(index);
+        return *chunk.GetArray()->GetScalar(index - chunk.GetPosition());
+    };
 
-    ui64 position = 0;
-    while (position < GetRecordsCount() && !end) {
-        std::shared_ptr<arrow::Array> chunk = GetReadChunk(position).GetArray();
-
-        if (!begin && NArrow::ScalarCompare(value, *chunk->GetScalar(chunk->length() - 1)) <= 0) {
-            const auto localIndexes = std::ranges::iota_view((decltype(chunk->length()))0, chunk->length());
-            const auto localBound = std::lower_bound(
-                localIndexes.begin(), localIndexes.end(), value, [&chunk](const ui64 index, const std::shared_ptr<arrow::Scalar>& bound) {
-                    return NArrow::ScalarLess(*chunk->GetScalar(index), bound);
-                });
-            AFL_VERIFY(localBound != localIndexes.end());
-            begin.emplace(position + *localBound);
+    ui64 begin;
+    {
+        const auto findBound = std::lower_bound(
+            localIndexes.begin(), localIndexes.end(), value, [&getScalar](const ui64 index, const std::shared_ptr<arrow::Scalar>& bound) {
+                return NArrow::ScalarLess(getScalar(index), bound);
+            });
+        if (findBound == localIndexes.end()) {
+            begin = GetRecordsCount();
+        } else {
+            begin = *findBound;
         }
-
-        if (NArrow::ScalarCompare(value, *chunk->GetScalar(chunk->length() - 1)) < 0) {
-            const auto localIndexes = std::ranges::iota_view((decltype(chunk->length()))0, chunk->length());
-            const auto localBound = std::upper_bound(
-                localIndexes.begin(), localIndexes.end(), value, [&chunk](const std::shared_ptr<arrow::Scalar>& bound, const ui64 index) {
-                    return NArrow::ScalarLess(bound, *chunk->GetScalar(index));
-                });
-            AFL_VERIFY(localBound != localIndexes.end());
-            end.emplace(position + *localBound);
-        }
-
-        position += chunk->length();
-        AFL_VERIFY(position <= GetRecordsCount())("position", position)("size", GetRecordsCount());
     }
 
-    return { begin.value_or(GetRecordsCount()), GetRecordsCount() };
+    ui64 end;
+    {
+        const auto findBound = std::upper_bound(
+            localIndexes.begin(), localIndexes.end(), value, [&getScalar](const std::shared_ptr<arrow::Scalar>& bound, const ui64 index) {
+                return NArrow::ScalarLess(bound, getScalar(index));
+            });
+        if (findBound == localIndexes.end()) {
+            end = GetRecordsCount();
+        } else {
+            end = *findBound;
+        }
+    }
+
+    return { begin, end };
 }
 
 std::shared_ptr<arrow::ChunkedArray> IChunkedArray::Slice(const ui32 offset, const ui32 count) const {

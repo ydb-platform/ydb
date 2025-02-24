@@ -965,6 +965,7 @@ void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t co
 
 TStringBuilder TWriteSessionImpl::LogPrefix() const {
     TStringBuilder ret;
+    ret << " TraceId [" << Settings.TraceId_ << "] ";
     ret << " SessionId [" << SessionId << "] ";
 
     if (Settings.PartitionId_.Defined() || DirectWriteToPartitionId.Defined()) {

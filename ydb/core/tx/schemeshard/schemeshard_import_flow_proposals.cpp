@@ -4,7 +4,6 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/services/lib/actors/pq_schema_actor.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -332,13 +331,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
 
     auto* tabletConfig = pqGroup.MutablePQTabletConfig();
     const auto& pqConfig = AppData()->PQConfig;
-    auto serviceTypes = NGRpcProxy::V1::GetSupportedClientServiceTypes(pqConfig);
-
+    
     for (const auto& consumer : topic.consumers()) {
-        auto rule = ::Ydb::PersQueue::V1::TopicSettings_ReadRule();
-        rule.set_consumer_name(consumer.name());
-        rule.set_important(consumer.important());
-        AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig);
+        auto& addedConsumer = *tabletConfig->AddConsumers();
+        auto consumerName = NPersQueue::ConvertNewConsumerName(consumer.name(), pqConfig);
+        addedConsumer.SetName(consumerName);
+        if (consumer.important()) {
+            addedConsumer.SetImportant(true);
+        }
     }
     
     return propose;

@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_topic)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(1200)
     SIZE(LARGE)
     TAG(ya:fat)

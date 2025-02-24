@@ -3,24 +3,25 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/core/future.h>
 #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/library/yql/providers/common/solomon_accessor/grpc/solomon_accessor_pb.pb.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
 
 namespace NYql::NSo {
 
-class Metric {
+class TMetric {
 public:
-    Metric(const NJson::TJsonValue &value);
+    TMetric(const NJson::TJsonValue& value);
 
 public:
     std::map<TString, TString> Labels;
-    int Type;
+    yandex::monitoring::api::v3::MetricType Type;
     TString CreatedAt;
 };
 
-class Timeseries {
+class TTimeseries {
 public:
     TString Name;
-    int Type;
+    yandex::monitoring::api::v3::MetricType Type;
     std::vector<int64_t> Timestamps;
     std::vector<double> Values;
 };
@@ -38,29 +39,29 @@ public:
     
     class TListMetricsResult {
     public:
-        TListMetricsResult(const TString &);
-        TListMetricsResult(std::vector<Metric> &&);
+        TListMetricsResult(const TString&);
+        TListMetricsResult(std::vector<TMetric>&&);
 
     public:
         bool Success;
         TString ErrorMsg;
-        std::vector<Metric> Result;
+        std::vector<TMetric> Result;
     };
 
     class TGetDataResult {
     public:
-    TGetDataResult(const TString &);
-    TGetDataResult(std::vector<Timeseries> &&);
+        TGetDataResult(const TString&);
+        TGetDataResult(std::vector<TTimeseries>&&);
 
     public:
         bool Success;
         TString ErrorMsg;
-        std::vector<Timeseries> Result;
+        std::vector<TTimeseries> Result;
     };
 
 public:
-    virtual NThreading::TFuture<TListMetricsResult> ListMetrics(const TString &selectors, int pageSize, int page) = 0;
-    virtual NThreading::TFuture<TGetDataResult> GetData(const std::vector<TString> &selectors) = 0;
+    virtual NThreading::TFuture<TListMetricsResult> ListMetrics(const TString& selectors, int pageSize, int page) = 0;
+    virtual NThreading::TFuture<TGetDataResult> GetData(const std::vector<TString>& selectors) = 0;
 };
 
-} // namespace NYql
+} // namespace NYql::NSo

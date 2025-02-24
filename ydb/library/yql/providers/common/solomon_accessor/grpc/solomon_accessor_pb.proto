@@ -134,12 +134,11 @@ message ResponsePerQuery {
         repeated TimeseriesValue values = 1;
     }
 
-    //Name of the query.
+    // Name of the query.
     string query_name = 1;
 
-    //Result values for the query.
+    // Result values for the query.
     oneof result_values {
-
         // Timeseries vector.
         TimeseriesVector timeseries_vector = 2;
     }

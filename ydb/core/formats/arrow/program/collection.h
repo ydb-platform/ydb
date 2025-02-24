@@ -132,9 +132,9 @@ public:
         return Accessors.contains(id) || Constants.contains(id);
     }
 
-    void AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter = false);
-    void AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter = false);
-    void AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter = false);
+    void AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter);
+    void AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter);
+    void AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter);
 
     void AddConstantVerified(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& scalar) {
         AFL_VERIFY(columnId);

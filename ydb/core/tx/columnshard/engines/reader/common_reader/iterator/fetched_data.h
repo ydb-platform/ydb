@@ -160,10 +160,6 @@ public:
     void AddFilter(const NArrow::TColumnFilter& filter) {
         Table->AddFilter(filter);
     }
-
-    void AddColumn(const ui32 columnId, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column) {
-        Table->AddVerified(columnId, column);
-    }
 };
 
 class TFetchedResult {

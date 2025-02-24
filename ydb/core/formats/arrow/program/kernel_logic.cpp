@@ -31,7 +31,7 @@ TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& i
     if (applied && !*applied) {
         return false;
     }
-    resources->AddVerified(output.front().GetColumnId(), builder.Finish());
+    resources->AddVerified(output.front().GetColumnId(), builder.Finish(), false);
     return true;
 }
 

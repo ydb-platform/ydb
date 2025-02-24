@@ -193,7 +193,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
 TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
         source->MutableStageData().GetTable()->AddVerified(source->GetContext()->GetCommonContext()->GetResolver()->GetColumnIdVerified(f->name()),
-            NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount()));
+            NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount()), true);
     }
     source->SetUsedRawBytes(0);
     source->Finalize({});

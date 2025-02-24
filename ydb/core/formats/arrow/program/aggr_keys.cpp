@@ -127,7 +127,7 @@ TConclusionStatus TWithKeysAggregationProcessor::DoExecute(const std::shared_ptr
             return TConclusionStatus::Fail("No expected column in GROUP BY result.");
         }
         if (auto columnId = TryFromString<ui32>(assign.result_column)) {
-            resources->AddVerified(*columnId, column);
+            resources->AddVerified(*columnId, column, false);
         } else {
             return TConclusionStatus::Fail("Incorrect column id from name: " + assign.result_column);
         }

@@ -46,7 +46,7 @@ size_t FilterTest(const std::vector<std::shared_ptr<arrow::Array>>& args, const 
     auto chain = builder.Finish().DetachResult();
     auto resources = std::make_shared<NAccessor::TAccessorsCollection>();
     for (ui32 i = 0; i < args.size(); ++i) {
-        resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(args[i]));
+        resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(args[i]), false);
     }
     chain->Apply(resources).Validate();
     AFL_VERIFY(resources->GetColumnsCount() == 2)("count", resources->GetColumnsCount());
@@ -66,7 +66,7 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, const EO
     auto chain = builder.Finish().DetachResult();
     auto resources = std::make_shared<NAccessor::TAccessorsCollection>();
     for (ui32 i = 0; i < args.size(); ++i) {
-        resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(args[i]));
+        resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(args[i]), false);
     }
     chain->Apply(resources).Validate();
     UNIT_ASSERT_VALUES_EQUAL(resources->GetColumnsCount(), 2);
@@ -97,7 +97,7 @@ std::vector<bool> LikeTest(const std::vector<std::string>& data, EOperation op, 
     auto chain = builder.Finish().DetachResult();
     auto resources = std::make_shared<NAccessor::TAccessorsCollection>();
     for (ui32 i = 0; i < (ui32)batch->num_columns(); ++i) {
-        resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)));
+        resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)), false);
     }
 
     chain->Apply(resources).Validate();
@@ -276,7 +276,7 @@ void GroupByXY(bool nullable, ui32 numKeys, ETest test = ETest::DEFAULT, EAggreg
     auto chain = builder.Finish().DetachResult();
     auto resources = std::make_shared<NAccessor::TAccessorsCollection>();
     for (ui32 i = 0; i < (ui32)batch->num_columns(); ++i) {
-        resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)));
+        resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)), false);
     }
     chain->Apply(resources).Validate();
 
@@ -493,7 +493,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         auto chain = builder.Finish().DetachResult();
         auto resources = std::make_shared<NAccessor::TAccessorsCollection>();
         for (ui32 i = 0; i < (ui32)batch->num_columns(); ++i) {
-            resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)));
+            resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)), false);
         }
         chain->Apply(resources).Validate();
 
@@ -514,7 +514,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         auto chain = builder.Finish().DetachResult();
         auto resources = std::make_shared<NAccessor::TAccessorsCollection>();
         for (ui32 i = 0; i < (ui32)batch->num_columns(); ++i) {
-            resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)));
+            resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)), false);
         }
         chain->Apply(resources).Validate();
 
@@ -540,7 +540,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         auto chain = builder.Finish().DetachResult();
         auto resources = std::make_shared<NAccessor::TAccessorsCollection>();
         for (ui32 i = 0; i < (ui32)batch->num_columns(); ++i) {
-            resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)));
+            resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)), false);
         }
         chain->Apply(resources).Validate();
         UNIT_ASSERT_VALUES_EQUAL(resources->GetColumnsCount(), 2);
@@ -567,7 +567,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         auto chain = builder.Finish().DetachResult();
         auto resources = std::make_shared<NAccessor::TAccessorsCollection>();
         for (ui32 i = 0; i < (ui32)batch->num_columns(); ++i) {
-            resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)));
+            resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)), false);
         }
         chain->Apply(resources).Validate();
 

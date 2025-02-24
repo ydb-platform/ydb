@@ -21,6 +21,11 @@
 #include <util/generic/serialized_enum.h>
 #include <util/string/printf.h>
 
+#include <ydb/core/statistics/ut_common/ut_common.h>
+
+#include <ydb/library/actors/testlib/test_runtime.h>
+
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -3792,7 +3797,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token \'someNonExistentOption\'");
         }
     }
-
     struct ExpectedPermissions {
         TString Path;
         THashMap<TString, TVector<TString>> Permissions;
@@ -3821,6 +3825,66 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 sort(describedPermissionNames.begin(), describedPermissionNames.end());
                 UNIT_ASSERT_VALUES_EQUAL_C(expectedPermissionNames, describedPermissionNames, "Permissions are not equal on path: " + value.Path);
             }
+        }
+    }
+
+    Y_UNIT_TEST(AlterDatabaseChangeOwner) {
+        using namespace NStat;
+
+        TTestEnv env(1, 1, true);
+
+        CreateDatabase(env, "Test");
+
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto createUserSql = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE USER superuser;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(createUserSql).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto createUserSql = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/Test/table` (
+                    k Uint64,
+                    v Uint64,
+                    PRIMARY KEY(k)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(createUserSql).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto alterDatabaseSql = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER DATABASE `/Root/Test/table` OWNER TO superuser;
+            )";
+
+            std::cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
+            auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
+            std::cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+
+            std::cerr << "??????????????????????????" << std::endl;
+            std::cerr << result.GetIssues().ToString() << std::endl;
+            std::cerr << "??????????????????????????" << std::endl;
+            // UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token 'ROW'");
+        }
+        {
+            auto alterDatabaseSql = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER DATABASE `/Root/Test` OWNER TO superuser;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 

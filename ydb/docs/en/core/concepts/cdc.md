@@ -40,17 +40,17 @@ By default, virtual timestamps are not uploaded to the changefeed. To enable the
 
 ## Getting virtual timstamps during query execution
 
-As was writen above virtual timestamp represents coordination time. There is a possibility to return a virtual timestamp during query execution. It can be used to check whether data read or written in a transaction is present in the CDC async replica.
+As was written above virtual timestamp represents Global coordinator time. There is a possibility to return a virtual timestamp during query execution. It can be used to check whether data read or written in a transaction is present in the CDC async replica.
 
-The public API has two field to represent transaction reletaed virtual timestamp.
+The YDB API has two fields to get virtual timestamp from transaction.
 
-1. 'snapshot_timestamp' – Represents the moment in time when YDB takes an MVCC or persistent snapshot. It is empty if the request is executed without a snapshot. This is mostly relevant for read-only transactions and is returned during the first part of the result set. The practical purpose is to implement synchronization between readers in transactions and readers from replicas.
+1. 'snapshot_timestamp' – Represents the moment in time when YDB takes an MVCC or persistent snapshot. It is empty if the request is executed without a snapshot. This is mostly relevant for read-only transactions and is returned with the first part of the stream result. The practical purpose is to implement synchronization between readers in transactions and readers from replicas.
 
-1. 'commit_timestamp' – Represents the moment in time when YDB commits data into persistent storage. This is mostly relevant for read-write and write-only transactions and is returned in the last part of the result set. The practical purpose is to implement synchronization between transactional writers and readers from replicas.
+1. 'commit_timestamp' – Represents the moment in time when YDB commits data into persistent storage. This is mostly relevant for read-write and write-only transactions and is returned with the last part of the stream result. The practical purpose is to implement synchronization between transactional writers and readers from replicas.
 
 Returning these timestamps for each query may cause noticeable overhead in case of tiny result. To use them, the 'with_tx_timestamp' flag must be set in the 'TransactionControl' message.
 
-For explicitly created transactions, these timestamps are always returned and do not require the flag.
+For explicitly created transactions (transactions created via BeginTransactionRequest rpc call), these timestamps are always returned and do not require the flag.
 
 ## Initial table scan {#initial-scan}
 

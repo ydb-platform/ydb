@@ -1,6 +1,6 @@
 Metadata-Version: 2.2
 Name: pip
-Version: 25.0
+Version: 25.0.1
 Summary: The PyPA recommended tool for installing Python packages.
 Author-email: The pip developers <distutils-sig@python.org>
 License: MIT

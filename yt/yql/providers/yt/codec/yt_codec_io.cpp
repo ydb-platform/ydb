@@ -1752,6 +1752,9 @@ void TMkqlReaderImpl::Next() {
         } catch (const TYqlPanic& e) {
             ythrow TYqlPanic() << "Failed to read row, table index: " << Decoder_->TableIndex_ << ", row index: " <<
                 (Decoder_->RowIndex_.Defined() ? ToString(*Decoder_->RowIndex_) : "?") << "\n" << e.what();
+        } catch (const TMemoryLimitExceededException&) {
+            ythrow TYqlPanic() << "Failed to read row, table index: " << Decoder_->TableIndex_ << ", row index: " <<
+                (Decoder_->RowIndex_.Defined() ? ToString(*Decoder_->RowIndex_) : "?") << ". Memory limit exceeded in MKQL runtime";
         } catch (const TTimeoutException&) {
             throw;
         } catch (const yexception& e) {

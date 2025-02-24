@@ -117,7 +117,7 @@ NApi::ITableWriterPtr TWriteTableFragmentCommand::CreateTableWriter(
         .ValueOrThrow();
 
     if (!validationSuccessful) {
-        auto concreteCookie = ConvertTo<TWriteFragmentCookie>(signedCookie.Underlying()->Payload());
+        auto concreteCookie = ConvertTo<TWriteFragmentCookie>(TYsonStringBuf(signedCookie.Underlying()->Payload()));
 
         THROW_ERROR_EXCEPTION(
             "Signature validation failed for write table fragment")

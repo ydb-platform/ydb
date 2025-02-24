@@ -285,7 +285,7 @@ message TTableServiceConfig {
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 
-    optional bool EnableOlapSink = 55 [default = true];
+    optional bool EnableOlapSink = 55 [default = false];
 
     optional bool EnablePerStatementQueryExecution = 56 [default = false];
     optional bool EnableCreateTableAs = 57 [default = true];

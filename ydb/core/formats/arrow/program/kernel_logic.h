@@ -2,6 +2,8 @@
 #include "abstract.h"
 #include "collection.h"
 
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
+
 #include <library/cpp/object_factory/object_factory.h>
 
 namespace NKikimr::NArrow::NSSA {
@@ -35,17 +37,17 @@ public:
     static TString GetClassNameStatic() {
         return "JsonValue";
     }
+
 private:
     class TDescription {
     private:
         std::shared_ptr<NAccessor::IChunkedArray> InputAccessor;
         std::string_view JsonPath;
+
     public:
         TDescription(const std::shared_ptr<NAccessor::IChunkedArray>& inputAccessor, const std::string_view jsonPath)
             : InputAccessor(inputAccessor)
-            , JsonPath(jsonPath)
-        {
-
+            , JsonPath(jsonPath) {
         }
 
         const std::shared_ptr<NAccessor::IChunkedArray>& GetInputAccessor() const {
@@ -90,7 +92,31 @@ private:
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const override;
 
-    std::shared_ptr<IChunkedArray> ExtractArray(const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const;
+protected:
+    virtual NAccessor::TCompositeChunkedArray::TBuilder MakeCompositeBuilder() const;
+    virtual std::shared_ptr<IChunkedArray> ExtractArray(const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const;
+
+public:
+};
+
+class TExistsJsonPath: public TGetJsonPath {
+private:
+    using TBase = TGetJsonPath;
+
+public:
+    static TString GetClassNameStatic() {
+        return "JsonExists";
+    }
+
+private:
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
+
+    static const inline TFactory::TRegistrator<TExistsJsonPath> Registrator = TFactory::TRegistrator<TExistsJsonPath>(GetClassNameStatic());
+    virtual std::shared_ptr<IChunkedArray> ExtractArray(
+        const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const override;
+    virtual NAccessor::TCompositeChunkedArray::TBuilder MakeCompositeBuilder() const override;
 
 public:
 };

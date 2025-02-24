@@ -1,6 +1,7 @@
 #include "kernel_logic.h"
 
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/partial.h>
 
@@ -19,7 +20,7 @@ TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& i
     if (!accJson) {
         return TConclusionStatus::Fail("incorrect accessor for first json path argument (" + ::ToString(input.front().GetColumnId()) + ")");
     }
-    NAccessor::TCompositeChunkedArray::TBuilder builder(arrow::utf8());
+    NAccessor::TCompositeChunkedArray::TBuilder builder = MakeCompositeBuilder();
     const std::optional<bool> applied =
         NAccessor::TCompositeChunkedArray::VisitDataOwners<bool>(accJson, [&](const std::shared_ptr<NAccessor::IChunkedArray>& arr) {
             if (arr->GetType() != IChunkedArray::EType::SubColumnsArray && arr->GetType() != IChunkedArray::EType::SubColumnsPartialArray) {
@@ -80,6 +81,27 @@ std::optional<TFetchingInfo> TGetJsonPath::BuildFetchTask(const ui32 columnId, c
             }
             return std::optional<TFetchingInfo>();
         });
+}
+
+NAccessor::TCompositeChunkedArray::TBuilder TGetJsonPath::MakeCompositeBuilder() const {
+    return NAccessor::TCompositeChunkedArray::TBuilder(arrow::utf8());
+}
+
+std::shared_ptr<IChunkedArray> TExistsJsonPath::ExtractArray(
+    const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
+    auto arr = TBase::ExtractArray(jsonAcc, svPath);
+    auto chunkedArray = arr->GetChunkedArray();
+    auto builder = NArrow::MakeBuilder(arrow::boolean(), arr->GetRecordsCount());
+    for (auto&& i : chunkedArray->chunks()) {
+        for (ui32 idx = 0; idx < i->length(); ++idx) {
+            NArrow::Append<arrow::BooleanType>(*builder, !i->IsNull(idx));
+        }
+    }
+    return std::make_shared<NAccessor::TTrivialArray>(FinishBuilder(std::move(builder)));
+}
+
+NAccessor::TCompositeChunkedArray::TBuilder TExistsJsonPath::MakeCompositeBuilder() const {
+    return NAccessor::TCompositeChunkedArray::TBuilder(arrow::boolean());
 }
 
 }   // namespace NKikimr::NArrow::NSSA

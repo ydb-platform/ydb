@@ -24,12 +24,19 @@ namespace NMiniKQL {
 // 1. Bump this version every time incompatible runtime nodes are introduced.
 // 2. Make sure you provide runtime node generation for previous runtime versions.
 #ifndef MKQL_RUNTIME_VERSION
-#define MKQL_RUNTIME_VERSION 59U
+#define MKQL_RUNTIME_VERSION 50U
 #endif
 
 // History:
 // v4  is the version supported by kikimr-19-6
 // v14 is the version supported by kikimr-20-2
+// v32 is the version supported by ydb-23-1
+// v39 is the version supported by ydb-23-3
+// v47 is the version supported by ydb-24-1
+// v47 is the version supported by ydb-24-2
+// v50 is the version supported by ydb-24-3
+// v50 is the version supported by ydb-24-4
+// v57 is the version supported by ydb-25-1
 constexpr ui32 RuntimeVersion = MKQL_RUNTIME_VERSION;
 
 }

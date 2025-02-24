@@ -1,0 +1,7 @@
+package NRetroProto;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TSpanId {
+    optional uint64 TraceId = 1;
+    optional uint64 SpanId = 2;
+}

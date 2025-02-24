@@ -227,6 +227,7 @@ void TBlobStorageQueue::ReplyWithError(TItem& item, NKikimrProto::EReplyStatus s
         << " processingTime# " << processingTime);
 
     item.Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);
+    item.RetroSpan.Drop();
     item.Span = {};
 
     ctx.Send(item.Event.GetSender(), item.Event.MakeErrorReply(status, errorReason, QueueDeserializedItems,
@@ -261,6 +262,7 @@ bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TAc
     InFlightLookup.erase(lookupIt);
     auto span = std::exchange(it->Span, {});
     span.EndOk();
+    it->RetroSpan.Drop();
     EraseItem(Queues.InFlight, it);
 
     // unpause execution when InFlight queue gets empty
@@ -338,6 +340,7 @@ void TBlobStorageQueue::OnConnect() {
 TBlobStorageQueue::TItemList::iterator TBlobStorageQueue::EraseItem(TItemList& queue, TItemList::iterator it) {
     SetItemQueue(*it, EItemQueue::NotSet);
     it->Span.EndError("EraseItem called");
+    it->RetroSpan.Drop();
     TItemList::iterator nextIter = std::next(it);
     if (Queues.Unused.size() < MaxUnusedItems) {
         Queues.Unused.splice(Queues.Unused.end(), queue, it);

@@ -1731,6 +1731,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 #endif
 
+    if (serviceMask.EnableRetroUploader) {
+        sil->AddServiceInitializer(new TRetroUploaderInitializer(runConfig));
+    }
+
     return sil;
 }
 

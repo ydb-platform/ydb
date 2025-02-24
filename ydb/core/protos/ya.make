@@ -169,6 +169,7 @@ PEERDIR(
     ydb/library/formats/arrow/protos
     ydb/library/login/protos
     ydb/library/mkql_proto/protos
+    ydb/library/retro_tracing/protos
     ydb/library/services
     ydb/library/ydb_issue/proto
     ydb/library/yql/dq/actors/protos

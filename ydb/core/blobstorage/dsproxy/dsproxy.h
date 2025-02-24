@@ -18,7 +18,9 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/retro_guard.h>
 #include <ydb/core/base/group_stat.h>
+#include <ydb/library/retro_tracing/retro_tracing.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash_set.h>
@@ -229,6 +231,7 @@ public:
             Span.Attribute("RestartCounter", RestartCounter);
             params.Common.Event->ToSpan(Span);
         }
+        RetroSpan.Emplace(TActivationContext::Now(), Info->GroupID.GetRawId());
 
         Y_ABORT_UNLESS(CostModel);
     }
@@ -303,6 +306,7 @@ protected:
     const ui32 RestartCounter = 0;
     std::shared_ptr<const TCostModel> CostModel;
     const TMonotonic RequestStartTime;
+    TRetroGuard<NRetro::TRetroSpanDSProxyRequest> RetroSpan;
 
 private:
     const TActorId Source;

@@ -229,6 +229,7 @@
 #include <ydb/library/actors/interconnect/poller_tcp.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
+#include <ydb/library/actors/retro_uploader/retro_uploader.h>
 
 #include <ydb/core/graph/api/service.h>
 #include <ydb/core/graph/api/shard.h>
@@ -2824,6 +2825,17 @@ void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, c
     GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
 }
 #endif
+
+TRetroUploaderInitializer::TRetroUploaderInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TRetroUploaderInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = GetServiceCounters(appData->Counters, "retro_tracing");
+    setup->LocalServices.emplace_back(NRetro::MakeRetroUploaderId(),
+            TActorSetupCmd(NRetro::CreateRetroUploader(countersGroup), TMailboxType::HTSwap, appData->BatchPoolId));
+}
 
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

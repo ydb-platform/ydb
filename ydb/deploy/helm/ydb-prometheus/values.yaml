@@ -103,6 +103,7 @@ ydb:
         tenant: "{{ .target.path }}"
       skipNameRelabeling: true
     - counter: dsproxy_mon
+    - counter: retro_tracing
 
   # Cluster which will be monitored
   clusters: []

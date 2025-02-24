@@ -78,4 +78,19 @@ namespace NWilson {
 
     const TSpan TSpan::Empty;
 
+    TSpan::TSpan(TString name, TTraceId&& traceId, TInstant start, TInstant end, TFlags flags)
+        : Data(std::make_unique<TData>(start, 0, std::forward<TTraceId>(traceId), flags, nullptr)) {
+        Name(name);
+        Data->Terminated = true;
+        Data->Span.set_start_time_unix_nano(start.NanoSeconds());
+        Data->Span.set_end_time_unix_nano(end.NanoSeconds());
+        Data->Span.set_trace_id(Data->TraceId.GetTraceIdPtr(), Data->TraceId.GetTraceIdSize());
+        Data->Span.set_span_id(Data->TraceId.GetSpanIdPtr(), Data->TraceId.GetSpanIdSize());
+        Data->Span.set_kind(opentelemetry::proto::trace::v1::Span::SPAN_KIND_INTERNAL);
+    }
+
+    void TSpan::SetParentId(const TTraceId& parentId) {
+        Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
+    }
+
 } // NWilson

@@ -81,6 +81,8 @@ union TBasicKikimrServicesMask {
         bool EnableGroupedMemoryLimiter:1;
         bool EnableAwsService:1;
         bool EnableCompPriorities : 1;
+
+        bool EnableRetroUploader:1;
     };
 
     struct {

@@ -850,6 +850,9 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
             stage->Tasks = tasksNode->GetIntegerSafe();
             Tasks += stage->Tasks;
         }
+        if (auto* finishedTasksNode = stage->StatsNode->GetValueByPath("FinishedTasks")) {
+            stage->FinishedTasks = finishedTasksNode->GetIntegerSafe();
+        }
 
         if (auto* physicalStageIdNode = stage->StatsNode->GetValueByPath("PhysicalStageId")) {
             stage->PhysicalStageId = physicalStageIdNode->GetIntegerSafe();
@@ -1554,11 +1557,20 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2 << "'>" << s->Tasks << "</text>" << Endl
             << "</g>" << Endl;
         } else {
-        canvas
-            << "<g><title>Stage " << s->PhysicalStageId << ", tasks: " << taskCount << "</title>" << Endl
+            canvas
+            << "<g><title>Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
+            if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
+                auto finishedHeight = s->Height * s->FinishedTasks / s->Tasks;
+                auto xx = Config.TaskLeft + Config.TaskWidth - Config.TaskWidth / 8;
+                canvas
+                << "<line x1='" << xx << "' y1='" << s->OffsetY + offsetY + s->Height - finishedHeight
+                << "' x2='" << xx << "' y2='" << s->OffsetY + offsetY + s->Height
+                << "' stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageClone << "' stroke-dasharray='1,1' />" << Endl;
+            }
+            canvas
             << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
             << "' x='" << Config.TaskLeft + Config.TaskWidth - 2
-            << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2 << "'>" << taskCount << "</text>" << Endl
+            << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2 << "'>" << s->Tasks << "</text>" << Endl
             << "</g>" << Endl;
         }
 

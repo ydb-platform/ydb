@@ -2889,6 +2889,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
                 stats["PhysicalStageId"] = (*stat)->GetStageId();
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
+                stats["FinishedTasks"] = (*stat)->GetFinishedTasksCount();
 
                 stats["StageDurationUs"] = (*stat)->GetStageDurationUs();
 

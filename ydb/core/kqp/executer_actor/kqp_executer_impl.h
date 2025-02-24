@@ -432,7 +432,7 @@ protected:
         if (state.HasStats()) {
             ui64 cycleCount = GetCycleCountFast();
 
-            Stats->UpdateTaskStats(taskId, state.GetStats());
+            Stats->UpdateTaskStats(taskId, state.GetStats(), (NYql::NDqProto::EComputeState) state.GetState());
             if (Request.ProgressStatsPeriod) {
                 auto now = TInstant::Now();
                 if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
@@ -475,6 +475,7 @@ protected:
                     Stats->AddComputeActorStats(
                         computeActor.NodeId(),
                         std::move(*state.MutableStats()),
+                        (NYql::NDqProto::EComputeState) state.GetState(),
                         TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
                     );
 

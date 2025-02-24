@@ -3,6 +3,7 @@
 #include "kqp_tasks_graph.h"
 #include <util/generic/vector.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_counters.h>
 
@@ -189,6 +190,8 @@ struct TStageExecutionStats {
 
     ui32 HistorySampleCount = 0;
     ui32 TaskCount = 0;
+    std::vector<bool> Finished;
+    ui32 FinishedCount = 0;
 
     void Resize(ui32 taskCount);
     ui32 EstimateMem() {
@@ -201,7 +204,7 @@ struct TStageExecutionStats {
     void SetHistorySampleCount(ui32 historySampleCount);
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStageStats& stageStats);
     ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
-    ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage, ui64 durationUs);
+    ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 maxMemoryUsage, ui64 durationUs);
 };
 
 struct TExternalPartitionStat {
@@ -277,6 +280,7 @@ public:
     void AddComputeActorStats(
         ui32 nodeId,
         NYql::NDqProto::TDqComputeActorStats&& stats,
+        NYql::NDqProto::EComputeState state,
         TDuration collectLongTaskStatsTimeout = TDuration::Max()
     );
     void AddNodeShardsCount(const ui32 stageId, const ui32 nodeId, const ui32 shardsCount) {
@@ -295,7 +299,7 @@ public:
     void AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats);
     void AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskStats);
 
-    void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats);
+    void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
     ui64 EstimateCollectMem();
@@ -305,7 +309,8 @@ public:
 private:
     void AddComputeActorFullStatsByTask(
         const NYql::NDqProto::TDqTaskStats& task,
-        const NYql::NDqProto::TDqComputeActorStats& stats);
+        const NYql::NDqProto::TDqComputeActorStats& stats,
+        NYql::NDqProto::EComputeState state);
     void AddComputeActorProfileStatsByTask(
         const NYql::NDqProto::TDqTaskStats& task,
         const NYql::NDqProto::TDqComputeActorStats& stats,

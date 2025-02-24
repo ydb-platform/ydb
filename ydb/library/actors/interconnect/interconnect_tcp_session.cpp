@@ -9,6 +9,9 @@
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <linux/errqueue.h>
+#include <linux/netlink.h>
+
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
@@ -24,6 +27,20 @@ namespace NActors {
         } else {
             return Coalesce(std::forward<T2>(mid), std::forward<TRest>(rest)...);
         }
+    }
+
+    // Whether the cmsg received from error queue is of the IPv4 or IPv6 levels.
+    bool CmsgIsIpLevel(const cmsghdr& cmsg) {
+        return (cmsg.cmsg_level == SOL_IPV6 && cmsg.cmsg_type == IPV6_RECVERR) ||
+           (cmsg.cmsg_level == SOL_IP && cmsg.cmsg_type == IP_RECVERR);
+    }
+  
+    bool CmsgIsZeroCopy(const cmsghdr& cmsg) {
+        if (!CmsgIsIpLevel(cmsg)) {
+            return false;
+        }
+        auto serr = reinterpret_cast<const sock_extended_err*> CMSG_DATA(&cmsg);
+        return serr->ee_errno == 0 && serr->ee_origin == SO_EE_ORIGIN_ZEROCOPY;
     }
 
     TInterconnectSessionTCP::TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params)
@@ -603,6 +620,10 @@ namespace NActors {
                 const TPollerToken::TPtr& token, bool *writeBlocked, size_t maxBytes) {
             size_t totalWritten = 0;
 
+            if (socket) {
+                ProcessErrQueue(*socket);
+            }
+
             if (stream && socket && !*writeBlocked) {
                 for (;;) {
                     if (const ssize_t r = Write(stream, *socket, maxBytes); r > 0) {
@@ -693,6 +714,61 @@ namespace NActors {
             WriteBlockedTotal += TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - WriteBlockedCycles));
         }
         WriteBlockedByFullSendBuffer = writeBlockedByFullSendBuffer;
+    }
+
+    // copy paste from grpc
+    void TInterconnectSessionTCP::ProcessErrQueue(NInterconnect::TStreamSocket& socket) {
+        struct iovec iov;
+        iov.iov_base = nullptr;
+        iov.iov_len = 0;
+        struct msghdr msg;
+        msg.msg_name = nullptr;
+        msg.msg_namelen = 0;
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 0;
+        msg.msg_flags = 0;
+        // Allocate enough space so we don't need to keep increasing this as size of
+        // OPT_STATS increase.
+        constexpr size_t cmsg_alloc_space =
+            CMSG_SPACE(sizeof(scm_timestamping)) +
+            CMSG_SPACE(sizeof(sock_extended_err) + sizeof(sockaddr_in)) +
+            CMSG_SPACE(32 * NLA_ALIGN(NLA_HDRLEN + sizeof(uint64_t)));
+        // Allocate aligned space for cmsgs received along with timestamps.
+        union {
+            char rbuf[cmsg_alloc_space];
+            struct cmsghdr align;
+        } aligned_buf;
+        msg.msg_control = aligned_buf.rbuf;
+        ssize_t r;
+        while (true) {
+            msg.msg_controllen = sizeof(aligned_buf.rbuf);
+
+            do {
+                r = socket.RecvErrQueue(&msg);
+            } while (r == -EINTR);
+      
+            if (r < 0) {
+                return;
+            }
+            if ((msg.msg_flags & MSG_CTRUNC) != 0) {
+                LOG_ERROR_IC_SESSION("ICS03", "Error message was truncated");
+            }
+      
+            if (msg.msg_controllen == 0) {
+                // There was no control message found. It was probably spurious.
+                return;
+            }
+            for (auto cmsg = CMSG_FIRSTHDR(&msg); cmsg && cmsg->cmsg_len;
+                cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+                if (CmsgIsZeroCopy(*cmsg)) {
+                    auto serr = reinterpret_cast<struct sock_extended_err*>(CMSG_DATA(cmsg));
+                    //fprintf(stderr, "ZC completed: %u..%u\n", serr->ee_info, serr->ee_data);
+                    LOG_DEBUG_IC_SESSION("ICS03", "ZC completed: %u, %u",
+                        serr->ee_info, serr->ee_data);
+
+                }
+            }
+        }
     }
 
     ssize_t TInterconnectSessionTCP::Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket,

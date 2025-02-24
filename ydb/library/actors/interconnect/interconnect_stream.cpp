@@ -145,6 +145,15 @@ namespace NInterconnect {
     }
 
     ssize_t
+    TStreamSocket::RecvErrQueue(struct msghdr* msg) const {
+        const auto ret = ::recvmsg(Descriptor, msg, MSG_ERRQUEUE);
+        if (ret < 0)
+            return -LastSocketError();
+
+        return ret;
+    }
+
+    ssize_t
     TStreamSocket::WriteV(const struct iovec* iov, int iovcnt) const {
 #ifndef _win_
         const auto ret = ::writev(Descriptor, iov, iovcnt);

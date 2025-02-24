@@ -56,6 +56,8 @@ namespace NInterconnect {
         virtual ssize_t Send(const void* msg, size_t len, TString *err = nullptr) const;
         virtual ssize_t Recv(void* buf, size_t len, TString *err = nullptr) const;
 
+        ssize_t RecvErrQueue(struct msghdr* msg) const;
+
         virtual ssize_t WriteV(const struct iovec* iov, int iovcnt) const;
         virtual ssize_t ReadV(const struct iovec* iov, int iovcnt) const;
 

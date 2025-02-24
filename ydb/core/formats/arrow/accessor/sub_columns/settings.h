@@ -24,20 +24,19 @@ public:
         ui64 CurrentColumnsSize = 0;
         ui32 SeparatedCount = 0;
         std::optional<ui64> PredSize;
+
     public:
         TColumnsDistributor(const TSettings& settings, const ui64 size, const ui32 recordsCount)
             : Settings(settings)
             , SumSize(size)
-            , RecordsCount(recordsCount)
-        {
-
+            , RecordsCount(recordsCount) {
         }
 
         enum class EColumnType {
             Separated,
             Other
         };
-        
+
         EColumnType TakeAndDetect(const ui64 columnSize, const ui32 columnValuesCount);
     };
 

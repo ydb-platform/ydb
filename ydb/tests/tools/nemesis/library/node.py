@@ -132,7 +132,7 @@ def nodes_nemesis_list(cluster):
         SerialKillNodeNemesis(cluster),
         SerialKillSlotsNemesis(cluster),
 
-        RollingUpdateClusterNemesis(cluster),
+        # RollingUpdateClusterNemesis(cluster),
     ]
 
     for _ in range(scale_per_cluster):

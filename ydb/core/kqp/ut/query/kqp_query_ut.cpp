@@ -2144,7 +2144,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST(ReadActorOverloaded) {
+    Y_UNIT_TEST_TWIN(ReadOverloaded, StreamLookup) {
         NKikimrConfig::TAppConfig appConfig;
         auto setting = NKikimrKqp::TKqpSetting();
         TKikimrSettings settings;
@@ -2160,9 +2160,13 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         kikimr.RunCall([&]{ CreateSampleTablesWithIndex(session, false /* no need in table data */); return true; });
 
         {
-            const TString query(Q1_(R"(
-                SELECT COUNT(a.Key) FROM `/Root/SecondaryKeys` as a;
-            )"));
+            const TString query(StreamLookup
+                ? Q1_(R"(
+                        SELECT Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = 1
+                    )")
+                : Q1_(R"(
+                        SELECT COUNT(a.Key) FROM `/Root/SecondaryKeys` as a;
+                    )"));
 
             auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
                 if (ev->GetTypeRewrite() == TEvDataShard::TEvReadResult::EventType) {

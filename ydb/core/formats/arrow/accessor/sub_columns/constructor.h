@@ -44,7 +44,7 @@ public:
     }
 
     static TConclusion<std::shared_ptr<TGeneralContainer>> BuildOthersContainer(
-        const TStringBuf data, const NKikimrArrowAccessorProto::TSubColumnsAccessor& proto, const TChunkConstructionData& externalInfo);
+        const TStringBuf data, const NKikimrArrowAccessorProto::TSubColumnsAccessor& proto, const TChunkConstructionData& externalInfo, const bool deserialize);
 
     static TConclusion<std::shared_ptr<TSubColumnsPartialArray>> BuildPartialReader(
         const TString& originalData, const TChunkConstructionData& externalInfo);

@@ -132,7 +132,7 @@ TAccessorsCollection::TAccessorsCollection(const std::shared_ptr<arrow::RecordBa
     for (auto&& i : data->columns()) {
         const std::string arrName = data->schema()->field(idx)->name();
         TString name(arrName.data(), arrName.size());
-        AddVerified(resolver.GetColumnIdVerified(name), std::make_shared<TTrivialArray>(i));
+        AddVerified(resolver.GetColumnIdVerified(name), std::make_shared<TTrivialArray>(i), false);
         ++idx;
     }
 }
@@ -142,7 +142,7 @@ TAccessorsCollection::TAccessorsCollection(const std::shared_ptr<arrow::Table>& 
     for (auto&& i : data->columns()) {
         const std::string arrName = data->schema()->field(idx)->name();
         TString name(arrName.data(), arrName.size());
-        AddVerified(resolver.GetColumnIdVerified(name), std::make_shared<TTrivialChunkedArray>(i));
+        AddVerified(resolver.GetColumnIdVerified(name), std::make_shared<TTrivialChunkedArray>(i), false);
         ++idx;
     }
 }
@@ -208,12 +208,12 @@ std::optional<TAccessorsCollection> TAccessorsCollection::SelectOptional(const s
                 result.AddConstantVerified(i, itConst->second);
             }
         } else {
-            result.AddVerified(i, it->second);
+            result.AddVerified(i, it->second, false);
         }
     }
     if (withFilters) {
         result.UseFilter = UseFilter;
-        result.Filter = std::make_shared<TColumnFilter>(*Filter);
+        result.AddFilter(*Filter);
     }
     return result;
 }

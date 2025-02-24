@@ -7,9 +7,9 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstructionData& externalInfo) {
+void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstructionData& externalInfo, const bool deserialize) {
     AFL_VERIFY(!OthersData);
-    auto container = NSubColumns::TConstructor::BuildOthersContainer(blob, Header.GetAddressesProto(), externalInfo);
+    auto container = NSubColumns::TConstructor::BuildOthersContainer(blob, Header.GetAddressesProto(), externalInfo, deserialize);
     OthersData = NSubColumns::TOthersData(Header.GetOtherStats(), container.DetachResult());
     StoreOthersString = blob;
 }

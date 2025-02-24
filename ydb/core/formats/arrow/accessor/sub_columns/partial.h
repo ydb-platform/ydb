@@ -124,7 +124,7 @@ public:
         return !!OthersData;
     }
 
-    void InitOthers(const TString& blob, const TChunkConstructionData& externalInfo);
+    void InitOthers(const TString& blob, const TChunkConstructionData& externalInfo, const bool deserialize);
 
     bool IsOtherColumn(const TString& colName) const {
         return !!Header.GetOtherStats().GetKeyIndexOptional(std::string_view(colName.data(), colName.size()));

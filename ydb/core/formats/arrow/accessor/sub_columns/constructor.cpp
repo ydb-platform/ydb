@@ -41,8 +41,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     TOthersData otherData = TOthersData::BuildEmpty();
     if (proto.GetOtherColumns().size() && proto.GetOtherRecordsCount()) {
         AFL_VERIFY(currentIndex < originalData.size());
-        std::shared_ptr<TGeneralContainer> otherKeysContainer = BuildOthersContainer(
-            TStringBuf(originalData.data() + currentIndex, originalData.size() - currentIndex), proto, externalInfo).DetachResult();
+        std::shared_ptr<TGeneralContainer> otherKeysContainer =
+            BuildOthersContainer(TStringBuf(originalData.data() + currentIndex, headerConclusion->GetOthersSize()), proto, externalInfo, false)
+                .DetachResult();
         currentIndex += headerConclusion->GetOthersSize();
         otherData = TOthersData(headerConclusion->GetOtherStats(), otherKeysContainer);
     }
@@ -74,8 +75,8 @@ TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& 
     return arr->SerializeToString(externalInfo);
 }
 
-TConclusion<std::shared_ptr<TGeneralContainer>> TConstructor::BuildOthersContainer(
-    const TStringBuf data, const NKikimrArrowAccessorProto::TSubColumnsAccessor& proto, const TChunkConstructionData& externalInfo) {
+TConclusion<std::shared_ptr<TGeneralContainer>> TConstructor::BuildOthersContainer(const TStringBuf data,
+    const NKikimrArrowAccessorProto::TSubColumnsAccessor& proto, const TChunkConstructionData& externalInfo, const bool deserialize) {
     std::vector<std::shared_ptr<IChunkedArray>> columns;
     AFL_VERIFY(TOthersData::GetSchema()->num_fields() == proto.GetOtherColumns().size())("proto", proto.GetOtherColumns().size())(
                                                            "schema", TOthersData::GetSchema()->num_fields());
@@ -84,9 +85,15 @@ TConclusion<std::shared_ptr<TGeneralContainer>> TConstructor::BuildOthersContain
     for (ui32 i = 0; i < (ui32)proto.GetOtherColumns().size(); ++i) {
         std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(
             externalInfo.GetDefaultSerializer(), std::make_shared<NPlain::TConstructor>(), schema->field(i), nullptr, 0);
-        std::vector<TDeserializeChunkedArray::TChunk> chunks = { TDeserializeChunkedArray::TChunk(
-            proto.GetOtherRecordsCount(), TStringBuf(data.data() + currentIndex, proto.GetOtherColumns(i).GetSize())) };
-        columns.emplace_back(std::make_shared<TDeserializeChunkedArray>(proto.GetOtherRecordsCount(), columnLoader, std::move(chunks), true));
+        if (deserialize) {
+            columns.emplace_back(columnLoader->ApplyVerified(
+                TString(data.data() + currentIndex, proto.GetOtherColumns(i).GetSize()), proto.GetOtherRecordsCount()));
+        } else {
+            std::vector<TDeserializeChunkedArray::TChunk> chunks = { TDeserializeChunkedArray::TChunk(
+                proto.GetOtherRecordsCount(), TStringBuf(data.data() + currentIndex, proto.GetOtherColumns(i).GetSize())) };
+            columns.emplace_back(
+                std::make_shared<TDeserializeChunkedArray>(proto.GetOtherRecordsCount(), columnLoader, std::move(chunks), true));
+        }
         currentIndex += proto.GetOtherColumns(i).GetSize();
     }
     return std::make_shared<TGeneralContainer>(schema, std::move(columns));

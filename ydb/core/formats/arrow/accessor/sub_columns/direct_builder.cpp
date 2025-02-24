@@ -32,20 +32,18 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
         elementsBySize[i.second.GetDataSize()].emplace_back(&i.second);
         sumSize += i.second.GetDataSize();
     }
-    ui32 columnAccessorsCount = 0;
     std::vector<TColumnElements*> columnElements;
     std::vector<TColumnElements*> otherElements;
-    ui64 columnsSize = 0;
+    TSettings::TColumnsDistributor distributor = Settings.BuildDistributor(sumSize, CurrentRecordIndex);
     for (auto rIt = elementsBySize.rbegin(); rIt != elementsBySize.rend(); ++rIt) {
         for (auto&& i : rIt->second) {
-            AFL_VERIFY(sumSize >= columnsSize)("sum", sumSize)("columns", columnsSize);
-            if (columnAccessorsCount < Settings.GetColumnsLimit() &&
-                (!sumSize || 1.0 * (sumSize - columnsSize) / sumSize > Settings.GetOthersAllowedFraction())) {
-                columnsSize += rIt->first;
-                columnElements.emplace_back(i);
-                ++columnAccessorsCount;
-            } else {
-                otherElements.emplace_back(i);
+            switch (distributor.TakeAndDetect(rIt->first, i->GetRecordIndexes().size())) { 
+                case TSettings::TColumnsDistributor::EColumnType::Separated:
+                    columnElements.emplace_back(i);
+                    break;
+                case TSettings::TColumnsDistributor::EColumnType::Other:
+                    otherElements.emplace_back(i);
+                    break;
             }
         }
     }

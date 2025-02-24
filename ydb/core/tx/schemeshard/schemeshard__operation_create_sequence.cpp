@@ -499,7 +499,7 @@ public:
             txState.Shards.emplace_back(sequenceShard, ETabletType::SequenceShard, TTxState::CreateParts);
             txState.State = TTxState::CreateParts;
             context.SS->PathsById.at(domainPathId)->IncShardsInside();
-            domainInfo->AddInternalShard(sequenceShard);
+            domainInfo->AddInternalShard(sequenceShard, context.SS);
             domainInfo->AddSequenceShard(sequenceShard);
         } else {
             txState.Shards.emplace_back(sequenceShard, ETabletType::SequenceShard, TTxState::ConfigureParts);
@@ -551,7 +551,7 @@ public:
         context.SS->ClearDescribePathCaches(dstPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath->PathId);
 
-        domainInfo->IncPathsInside();
+        domainInfo->IncPathsInside(context.SS);
         parentPath->IncAliveChildren();
 
         SetState(NextState());

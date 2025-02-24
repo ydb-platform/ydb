@@ -1420,6 +1420,10 @@ public:
     void ChangeDiskSpaceHardQuotaBytes(i64 delta) override;
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
     void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) override;
+    void ChangePathCount(i64 delta) override;
+    void SetPathsQuota(ui64 value) override;
+    void ChangeShardCount(i64 delta) override;
+    void SetShardsQuota(ui64 value) override;
 
     NLogin::TLoginProvider LoginProvider;
 

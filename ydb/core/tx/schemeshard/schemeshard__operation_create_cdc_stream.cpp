@@ -314,7 +314,7 @@ public:
         context.SS->CdcStreams[pathId] = stream;
         context.SS->IncrementPathDbRefCount(pathId);
 
-        streamPath.DomainInfo()->IncPathsInside();
+        streamPath.DomainInfo()->IncPathsInside(context.SS);
         tablePath.Base()->IncAliveChildren();
 
         context.OnComplete.ActivateTx(OperationId);

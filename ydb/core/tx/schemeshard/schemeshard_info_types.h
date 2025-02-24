@@ -1365,6 +1365,10 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
     virtual void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) = 0;
+    virtual void ChangePathCount(i64 delta) = 0;
+    virtual void SetPathsQuota(ui64 value) = 0;
+    virtual void ChangeShardCount(i64 delta) = 0;
+    virtual void SetShardsQuota(ui64 value) = 0;
 };
 
 struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
@@ -1446,8 +1450,12 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         }
     }
 
-    void SetSchemeLimits(const TSchemeLimits& limits) {
+    void SetSchemeLimits(const TSchemeLimits& limits, IQuotaCounters* counters = nullptr) {
         SchemeLimits = limits;
+        if (counters) {
+            counters->SetPathsQuota(limits.MaxPaths);
+            counters->SetShardsQuota(limits.MaxShards);
+        }
     }
 
     const TSchemeLimits& GetSchemeLimits() const {
@@ -1565,23 +1573,27 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return BackupPathsCount;
     }
 
-    void IncPathsInside(ui64 delta = 1, bool isBackup = false) {
+    void IncPathsInside(IQuotaCounters* counters, ui64 delta = 1, bool isBackup = false) {
         Y_ABORT_UNLESS(Max<ui64>() - PathsInsideCount >= delta);
         PathsInsideCount += delta;
 
         if (isBackup) {
             Y_ABORT_UNLESS(Max<ui64>() - BackupPathsCount >= delta);
             BackupPathsCount += delta;
+        } else {
+            counters->ChangePathCount(delta);
         }
     }
 
-    void DecPathsInside(ui64 delta = 1, bool isBackup = false) {
+    void DecPathsInside(IQuotaCounters* counters, ui64 delta = 1, bool isBackup = false) {
         Y_VERIFY_S(PathsInsideCount >= delta, "PathsInsideCount: " << PathsInsideCount << " delta: " << delta);
         PathsInsideCount -= delta;
 
         if (isBackup) {
             Y_VERIFY_S(BackupPathsCount >= delta, "BackupPathsCount: " << BackupPathsCount << " delta: " << delta);
             BackupPathsCount -= delta;
+        } else {
+            counters->ChangePathCount(-delta);
         }
     }
 
@@ -1764,10 +1776,12 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return PrivateShards;
     }
 
-    void AddInternalShard(TShardIdx shardId, bool isBackup = false) {
+    void AddInternalShard(TShardIdx shardId, IQuotaCounters* counters, bool isBackup = false) {
         InternalShards.insert(shardId);
         if (isBackup) {
             BackupShards.insert(shardId);
+        } else {
+            counters->ChangeShardCount(1);
         }
     }
 
@@ -1775,20 +1789,25 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return InternalShards;
     }
 
-    void AddInternalShards(const TTxState& txState, bool isBackup = false) {
+    void AddInternalShards(const TTxState& txState, IQuotaCounters* counters, bool isBackup = false) {
         for (auto txShard: txState.Shards) {
             if (txShard.Operation != TTxState::CreateParts) {
                 continue;
             }
-            AddInternalShard(txShard.Idx, isBackup);
+            AddInternalShard(txShard.Idx, counters, isBackup);
         }
     }
 
-    void RemoveInternalShard(TShardIdx shardIdx) {
+    void RemoveInternalShard(TShardIdx shardIdx, IQuotaCounters* counters) {
         auto it = InternalShards.find(shardIdx);
         Y_VERIFY_S(it != InternalShards.end(), "shardIdx: " << shardIdx);
         InternalShards.erase(it);
-        BackupShards.erase(shardIdx);
+
+        if (BackupShards.contains(shardIdx)) {
+            BackupShards.erase(shardIdx);
+        } else {
+            counters->ChangeShardCount(-1);
+        }
     }
 
     const THashSet<TShardIdx>& GetSequenceShards() const {

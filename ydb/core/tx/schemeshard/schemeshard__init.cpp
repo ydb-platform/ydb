@@ -1508,7 +1508,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 TSubDomainInfo::TPtr rootDomainInfo = new TSubDomainInfo(version, Self->RootPathId());
-                rootDomainInfo->SetSchemeLimits(rootLimits);
+                rootDomainInfo->SetSchemeLimits(rootLimits, Self);
                 rootDomainInfo->SetSecurityStateVersion(row.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>());
 
                 rootDomainInfo->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
@@ -1548,7 +1548,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TTabletId sharedHiveId = rowset.GetValue<Schema::SubDomains::SharedHiveId>();
                     domainInfo->SetSharedHive(sharedHiveId);
 
-                    domainInfo->SetSchemeLimits(LoadSchemeLimits(rootLimits, rowset));
+                    domainInfo->SetSchemeLimits(LoadSchemeLimits(rootLimits, rowset), !Self->IsDomainSchemeShard ? Self : nullptr);
 
                     if (rowset.HaveValue<Schema::SubDomains::DeclaredSchemeQuotas>()) {
                         NKikimrSubDomains::TSchemeQuotas declaredSchemeQuotas;
@@ -3965,7 +3965,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->IncShardsInside();
 
             auto domainInfo = Self->ResolveDomainInfo(pathId); //domain should't be dropped?
-            domainInfo->AddInternalShard(shardIdx, Self->IsBackupTable(pathId));
+            domainInfo->AddInternalShard(shardIdx, Self, Self->IsBackupTable(pathId));
 
             switch (si.second.TabletType) {
             case ETabletType::DataShard:
@@ -4073,7 +4073,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!path->IsRoot()) {
                 const bool isBackupTable = Self->IsBackupTable(item.first);
                 parent->IncAliveChildren(1, isBackupTable);
-                inclusiveDomainInfo->IncPathsInside(1, isBackupTable);
+                inclusiveDomainInfo->IncPathsInside(Self, 1, isBackupTable);
             }
 
             Self->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Add(path->UserAttrs->Size());

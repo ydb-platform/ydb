@@ -118,7 +118,7 @@ TRunActorParams::TRunActorParams(
     , QueryParameters(std::move(queryParameters))
     , S3ActorsFactory(std::move(s3ActorsFactory))
     , WorkloadManager(workloadManager)
-    , PqGatewayFactory(pqGatewayFactory)
+    , PqGatewayFactory(std::move(pqGatewayFactory))
     {
     }
 

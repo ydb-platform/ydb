@@ -181,7 +181,7 @@ public:
         , Monitoring(monitoring)
         , ComputeConfig(config.GetCompute())
         , S3ActorsFactory(std::move(s3ActorsFactory))
-        , PqGatewayFactory(pqGatewayFactory)
+        , PqGatewayFactory(std::move(pqGatewayFactory))
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -591,7 +591,7 @@ NActors::IActor* CreatePendingFetcher(
         tenantName,
         monitoring,
         std::move(s3ActorsFactory),
-        pqGatewayFactory);
+        std::move(pqGatewayFactory));
 }
 
 TActorId MakePendingFetcherId(ui32 nodeId) {

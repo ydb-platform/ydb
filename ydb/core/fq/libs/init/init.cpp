@@ -78,7 +78,7 @@ void Init(
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
     ui32 icPort,
     const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories,
-    NYql::IPqGatewayFactory::TPtr defaultPqGatewayFactory
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory
     )
 {
     Y_ABORT_UNLESS(iyqSharedResources, "No YQ shared resources created");
@@ -220,7 +220,7 @@ void Init(
             credentialsFactory,
             tenant,
             yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
-            defaultPqGatewayFactory ? defaultPqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
+            pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
             appData->Mon,
             appData->Counters);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
@@ -243,7 +243,7 @@ void Init(
             nullptr,
             commonTopicClientSettings
         );
-        auto pqGateway = defaultPqGatewayFactory ? defaultPqGatewayFactory->CreatePqGateway() : NYql::CreatePqNativeGateway(std::move(pqServices));
+        auto pqGateway = pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : NYql::CreatePqNativeGateway(std::move(pqServices));
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, 
             yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), protoConfig.GetCommon().GetPqReconnectPeriod());
 
@@ -373,7 +373,7 @@ void Init(
             tenant,
             appData->Mon,
             s3ActorsFactory,
-            defaultPqGatewayFactory ? defaultPqGatewayFactory : NYql::CreatePqNativeGatewayFactory(pqServices)
+            pqGatewayFactory ? pqGatewayFactory : NYql::CreatePqNativeGatewayFactory(pqServices)
             );
 
         actorRegistrator(MakePendingFetcherId(nodeId), fetcher);

@@ -38,7 +38,7 @@ void Init(
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
     ui32 icPort,
     const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories,
-    NYql::IPqGatewayFactory::TPtr defaultPqGatewayFactory = nullptr
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory = nullptr
 );
 
 } // NFq

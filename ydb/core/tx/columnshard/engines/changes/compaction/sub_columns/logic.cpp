@@ -10,21 +10,22 @@ const TSubColumnsMerger::TSettings& TSubColumnsMerger::GetSettings() const {
 }
 
 void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& /*mergeContext*/) {
-    ui32 inputRecordsCount = 0;
     for (auto&& i : input) {
         OrderedIterators.emplace_back(NSubColumns::TChunksIterator(i, Context.GetLoader(), RemapKeyIndex, OrderedIterators.size()));
-        inputRecordsCount += i ? i->GetRecordsCount() : 0;
     }
     std::vector<const TDictStats*> stats;
+    ui32 statRecordsCount = 0;
     for (auto&& i : OrderedIterators) {
         if (i.GetCurrentSubColumnsArray()) {
             stats.emplace_back(&i.GetCurrentSubColumnsArray()->GetColumnsData().GetStats());
             stats.emplace_back(&i.GetCurrentSubColumnsArray()->GetOthersData().GetStats());
+            statRecordsCount += i.GetCurrentSubColumnsArray()->GetRecordsCount();
         }
     }
     AFL_VERIFY(stats.size());
-    auto commonStats = TDictStats::Merge(stats, GetSettings(), inputRecordsCount);
-    auto splitted = commonStats.SplitByVolume(GetSettings(), inputRecordsCount);
+    AFL_VERIFY(statRecordsCount);
+    auto commonStats = TDictStats::Merge(stats, GetSettings(), statRecordsCount);
+    auto splitted = commonStats.SplitByVolume(GetSettings(), statRecordsCount);
     ResultColumnStats = splitted.ExtractColumns();
     AFL_VERIFY(ResultColumnStats->GetColumnsCount());
     RemapKeyIndex.RegisterColumnStats(*ResultColumnStats);

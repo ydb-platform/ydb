@@ -1,6 +1,6 @@
 #include "service.h"
 #include "transfer_writer.h"
-#include "worker.h"
+#include "common_ut.h"
 
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
@@ -17,10 +17,6 @@ namespace NKikimr::NReplication::NService {
 
 Y_UNIT_TEST_SUITE(TransferWriter) {
     using namespace NTestHelpers;
-
-    TEvWorker::TEvData::TRecord TRecord(ui64 offset, const TString& data) {
-        return TEvWorker::TEvData::TRecord(offset, data, TInstant::Zero(), "MessageGroupId", "ProducerId", 13 /* seqNo */);
-    }
 
     Y_UNIT_TEST(Write_ColumnTable) {
         TEnv env;

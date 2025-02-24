@@ -19,6 +19,11 @@
             "uri": "file://test.test_Get_/results.txt"
         }
     ],
+    "test.test[Parse64]": [
+        {
+            "uri": "file://test.test_Parse64_/results.txt"
+        }
+    ],
     "test.test[Shift]": [
         {
             "uri": "file://test.test_Shift_/results.txt"

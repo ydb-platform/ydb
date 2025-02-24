@@ -1,0 +1,10 @@
+(
+#comment
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+(let stream (ToFlow (AsList (Int32 '1) (Int32 '2) (Int32 '3))))
+(let data (Collect (SqueezeToList stream)))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

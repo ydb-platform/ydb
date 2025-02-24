@@ -1,1 +1,0 @@
-{% include [commit](./_includes/select/commit.md) %}

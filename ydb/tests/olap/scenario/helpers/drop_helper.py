@@ -68,3 +68,18 @@ class DropTableStore(DropObject):
     @override
     def _type(self) -> str:
         return 'tablestore'
+
+
+class DropExternalDataSource(DropObject):
+    """Class of requests to delete an external data source.
+
+    See {ScenarioTestHelper.execute_scheme_query}.
+
+    Example:
+        sth = ScenarioTestHelper(ctx)
+        sth.execute_scheme_query(DropExternalDataSource('eds'))
+    """
+
+    @override
+    def _type(self) -> str:
+        return 'external data source'

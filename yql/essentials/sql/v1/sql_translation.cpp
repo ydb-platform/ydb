@@ -64,8 +64,9 @@ bool RecreateContext(
     const TString queryName = "context recreation query";
 
     const auto* ast = NSQLTranslationV1::SqlAST(
+        ctx.Parsers,
         recreationQuery, queryName, ctx.Issues,
-        settings.MaxErrors, settings.AnsiLexer,  settings.Antlr4Parser, settings.TestAntlr4, settings.Arena
+        settings.MaxErrors, settings.AnsiLexer,  settings.Antlr4Parser, settings.Arena
     );
     if (!ast) {
         return false;
@@ -83,7 +84,7 @@ TNodePtr BuildViewSelect(
     const TString& contextRecreationQuery
 ) {
     TIssues issues;
-    TContext context(parentContext.Settings, {}, issues, parentContext.Query);
+    TContext context(parentContext.Lexers, parentContext.Parsers, parentContext.Settings, {}, issues, parentContext.Query);
     if (!RecreateContext(context, context.Settings, contextRecreationQuery)) {
         parentContext.Issues.AddIssues(issues);
         return nullptr;
@@ -3818,64 +3819,113 @@ bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom&
     return true;
 }
 
-bool TSqlTranslation::RoleParameters(const std::vector<TRule_create_user_option>& optionsList, TRoleParameters& result) {
-    enum class ECreateUserOption {
+bool TSqlTranslation::PasswordParameter(const TRule_password_option& passwordOption, TUserParameters& result) {
+    // password_option: ENCRYPTED? PASSWORD expr;
+    TSqlExpression expr(Ctx, Mode);
+    TNodePtr password = expr.Build(passwordOption.GetRule_expr3());
+    if (!password) {
+        Error() << "Couldn't parse the password";
+        return false;
+    }
+
+    result.IsPasswordEncrypted = passwordOption.HasBlock1();
+    if (!password->IsNull()) {
+        result.Password = MakeAtomFromExpression(Ctx.Pos(), Ctx, password);
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::HashParameter(const TRule_hash_option& hashOption, TUserParameters& result) {
+    // hash_option: HASH expr;
+    TSqlExpression expr(Ctx, Mode);
+    TNodePtr hash = expr.Build(hashOption.GetRule_expr2());
+
+    if (!hash) {
+        Error() << "Couldn't parse the hash of password";
+        return false;
+    }
+
+    if (!hash->IsNull()) {
+        result.Hash = MakeAtomFromExpression(Ctx.Pos(), Ctx, hash);
+    }
+
+    return true;
+}
+
+void TSqlTranslation::LoginParameter(const TRule_login_option& loginOption, std::optional<bool>& canLogin) {
+    // login_option: LOGIN | NOLOGIN;
+
+    auto token = loginOption.GetToken1().GetId();
+    if (IS_TOKEN(token, LOGIN)) {
+        canLogin = true;
+    } else if (IS_TOKEN(token, NOLOGIN)) {
+        canLogin = false;
+    } else {
+        Y_ABORT("You should change implementation according to grammar changes");
+    }
+}
+
+bool TSqlTranslation::UserParameters(const std::vector<TRule_user_option>& optionsList, TUserParameters& result, bool isCreateUser) {
+    enum class EUserOption {
         Login,
-        Password
+        Authentication
     };
 
-    std::set<ECreateUserOption> used = {};
+    std::set<EUserOption> used;
 
-    auto ParseCreateUserOption = [&used, this](const TRule_create_user_option& option, TRoleParameters& result) -> bool {
-        // create_user_option: password_option | login_option;
-        // password_option: ENCRYPTED? PASSWORD expr;
-        // login_option: LOGIN | NOLOGIN;
+    auto ParseUserOption = [&used, this](const TRule_user_option& option, TUserParameters& result) -> bool {
+        // user_option: authentication_option | login_option;
+        //      authentication_option: password_option | hash_option;
 
         switch (option.Alt_case()) {
-            case TRule_create_user_option::kAltCreateUserOption1:
+            case TRule_user_option::kAltUserOption1:
             {
-                TSqlExpression expr(Ctx, Mode);
-                TNodePtr password = expr.Build(option.GetAlt_create_user_option1().GetRule_password_option1().GetRule_expr3());
-                if (!password) {
-                    Error() << "Couldn't parse the password";
-                    return false;
-                }
-
-                result.IsPasswordEncrypted = option.GetAlt_create_user_option1().GetRule_password_option1().HasBlock1();
-                if (!password->IsNull()) {
-                    result.Password = MakeAtomFromExpression(Ctx.Pos(), Ctx, password);
-                }
-
-                if (used.contains(ECreateUserOption::Password)) {
+                if (used.contains(EUserOption::Authentication)) {
                     Error() << "Conflicting or redundant options";
                     return false;
                 }
 
-                used.insert(ECreateUserOption::Password);
+                used.insert(EUserOption::Authentication);
+
+                const auto& authenticationOption = option.GetAlt_user_option1().GetRule_authentication_option1();
+
+                switch (authenticationOption.Alt_case()) {
+                    case TRule_authentication_option::kAltAuthenticationOption1: {
+                        if (!PasswordParameter(authenticationOption.GetAlt_authentication_option1().GetRule_password_option1(), result)){
+                            return false;
+                        }
+
+                        break;
+                    }
+                    case TRule_authentication_option::kAltAuthenticationOption2: {
+                        if (!HashParameter(authenticationOption.GetAlt_authentication_option2().GetRule_hash_option1(), result)){
+                            return false;
+                        }
+
+                        break;
+                    }
+                    case TRule_authentication_option::ALT_NOT_SET: {
+                        Y_ABORT("You should change implementation according to grammar changes");
+                    }
+                }
 
                 break;
             }
-            case TRule_create_user_option::kAltCreateUserOption2:
+            case TRule_user_option::kAltUserOption2:
             {
-                if (used.contains(ECreateUserOption::Login)) {
+                if (used.contains(EUserOption::Login)) {
                     Error() << "Conflicting or redundant options";
                     return false;
                 }
 
-                used.insert(ECreateUserOption::Login);
+                used.insert(EUserOption::Login);
 
-                const auto token = option.GetAlt_create_user_option2().GetRule_login_option1().GetToken1().GetId();
-                if (IS_TOKEN(token, LOGIN)) {
-                    result.CanLogin = TRoleParameters::ETypeOfLogin::Login;
-                } else if (IS_TOKEN(token, NOLOGIN)) {
-                    result.CanLogin = TRoleParameters::ETypeOfLogin::NoLogin;
-                } else {
-                    Y_ABORT("You should change implementation according to grammar changes");
-                }
+                LoginParameter(option.GetAlt_user_option2().GetRule_login_option1(), result.CanLogin);
 
                 break;
             }
-            case TRule_create_user_option::ALT_NOT_SET:
+            case TRule_user_option::ALT_NOT_SET:
             {
                 Y_ABORT("You should change implementation according to grammar changes");
             }
@@ -3884,10 +3934,12 @@ bool TSqlTranslation::RoleParameters(const std::vector<TRule_create_user_option>
         return true;
     };
 
-    result = TRoleParameters{};
+    if (isCreateUser) {
+        result.CanLogin = true;
+    }
 
     for (const auto& option : optionsList) {
-        if (!ParseCreateUserOption(option, result)) {
+        if (!ParseUserOption(option, result)) {
             return false;
         }
     }
@@ -5126,7 +5178,7 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
 
     TVector<TString> statements;
     NYql::TIssues issues;
-    if (!SplitQueryToStatements(Ctx.Query, statements, issues, Ctx.Settings)) {
+    if (!SplitQueryToStatements(Ctx.Lexers, Ctx.Parsers, Ctx.Query, statements, issues, Ctx.Settings)) {
         return {};
     }
 

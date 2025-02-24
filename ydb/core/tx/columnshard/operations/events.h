@@ -25,7 +25,7 @@ public:
 
 class TWriteResult {
 private:
-    NEvWrite::TWriteMeta WriteMeta;
+    std::shared_ptr<NEvWrite::TWriteMeta> WriteMeta;
     YDB_READONLY(ui64, DataSize, 0);
     YDB_READONLY(bool, NoDataToWrite, false);
     std::shared_ptr<arrow::RecordBatch> PKBatch;
@@ -42,18 +42,19 @@ public:
     }
 
     const NEvWrite::TWriteMeta& GetWriteMeta() const {
+        return *WriteMeta;
+    }
+
+    NEvWrite::TWriteMeta& MutableWriteMeta() const {
+        return *WriteMeta;
+    }
+
+    const std::shared_ptr<NEvWrite::TWriteMeta>& GetWriteMetaPtr() const {
         return WriteMeta;
     }
 
-    TWriteResult(const NEvWrite::TWriteMeta& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow::RecordBatch>& pkBatch,
-        const bool noDataToWrite, const ui32 recordsCount)
-        : WriteMeta(writeMeta)
-        , DataSize(dataSize)
-        , NoDataToWrite(noDataToWrite)
-        , PKBatch(pkBatch)
-        , RecordsCount(recordsCount)
-    {
-    }
+    TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow::RecordBatch>& pkBatch,
+        const bool noDataToWrite, const ui32 recordsCount);
 };
 
 class TInsertedPortions {
@@ -69,6 +70,7 @@ public:
         AFL_VERIFY(WriteResults.size());
         std::optional<ui64> pathId;
         for (auto&& i : WriteResults) {
+            i.GetWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
             AFL_VERIFY(!i.GetWriteMeta().HasLongTxId());
             if (!pathId) {
                 pathId = i.GetWriteMeta().GetTableId();
@@ -100,11 +102,7 @@ public:
     }
 
     TEvWritePortionResult(const NKikimrProto::EReplyStatus writeStatus, const std::shared_ptr<NOlap::IBlobsWritingAction>& writeAction,
-        TInsertedPortions&& insertedData)
-        : WriteStatus(writeStatus)
-        , WriteAction(writeAction)
-        , InsertedData(std::move(insertedData)) {
-    }
+        TInsertedPortions&& insertedData);
 };
 
 }   // namespace NKikimr::NColumnShard::NPrivateEvents::NWrite

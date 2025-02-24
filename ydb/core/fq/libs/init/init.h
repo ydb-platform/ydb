@@ -12,6 +12,7 @@
 #include <ydb/core/fq/libs/config/protos/audit.pb.h>
 
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -36,7 +37,8 @@ void Init(
     const IYqSharedResources::TPtr& yqSharedResources,
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
     ui32 icPort,
-    const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories
+    const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories,
+    NYql::IPqGateway::TPtr defaultPqGateway = nullptr
 );
 
 } // NFq

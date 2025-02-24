@@ -389,7 +389,12 @@ void TPushQueueProducerCommand::Register(TRegistrar registrar)
     registrar.Parameter("queue_path", &TThis::QueuePath);
     registrar.Parameter("session_id", &TThis::SessionId);
     registrar.Parameter("epoch", &TThis::Epoch);
-
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "require_sync_replica",
+        [] (TThis* command) -> auto& {
+            return command->Options.RequireSyncReplica;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TPushQueueProducerCommand::DoExecute(ICommandContextPtr context)

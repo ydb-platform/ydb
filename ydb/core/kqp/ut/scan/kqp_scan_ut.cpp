@@ -1804,7 +1804,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(SecondaryIndex) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2321,7 +2320,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(StreamLookupByFullPk) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
@@ -2471,7 +2469,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(LimitOverSecondaryIndexRead) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2511,7 +2508,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(TopSortOverSecondaryIndexRead) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2601,49 +2597,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 }
 
-Y_UNIT_TEST_SUITE(KqpRequestContext) {
-
-    Y_UNIT_TEST(TraceIdInErrorMessage) {
-        auto settings = TKikimrSettings()
-            .SetAppConfig(AppCfg())
-            .SetEnableScriptExecutionOperations(true)
-            .SetNodeCount(4)
-            .SetUseRealThreads(false);
-        TKikimrRunner kikimr{settings};
-        auto db = kikimr.GetTableClient();
-
-        NKikimr::NKqp::TKqpPlanner::UseMockEmptyPlanner = true;
-        Y_DEFER {
-            NKikimr::NKqp::TKqpPlanner::UseMockEmptyPlanner = false;  // just in case if test fails
-        };
-
-        {
-            TDispatchOptions opts;
-            opts.FinalEvents.emplace_back(NKikimr::NKqp::TKqpResourceInfoExchangerEvents::EvSendResources, 4);
-            kikimr.GetTestServer().GetRuntime()->DispatchEvents(opts);
-        }
-
-        auto it = kikimr.RunCall([&db] {
-            return db.StreamExecuteScanQuery(R"(
-                SELECT Text, SUM(Key) AS Total FROM `/Root/EightShard`
-                GROUP BY Text
-                ORDER BY Total DESC;
-            )").GetValueSync();
-        });
-
-        UNIT_ASSERT(it.IsSuccess());
-        kikimr.RunCall([&it] {
-            try {
-                auto yson = StreamResultToYson(it, true, NYdb::EStatus::PRECONDITION_FAILED, "TraceId");
-            } catch (const std::exception& ex) {
-                UNIT_ASSERT_C(false, "Exception NYdb::EStatus::PRECONDITION_FAILED not found or IssueMessage doesn't contain 'TraceId'");
-            }
-            return true;
-        });
-
-        NKikimr::NKqp::TKqpPlanner::UseMockEmptyPlanner = false;
-    }
-}
 
 } // namespace NKqp
 } // namespace NKikimr

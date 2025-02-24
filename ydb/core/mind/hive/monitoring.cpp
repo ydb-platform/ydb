@@ -485,6 +485,7 @@ public:
         out << "<th>TabletsAliveInTenantDomain</th>";
         out << "<th>TabletsAliveInOtherDomains</th>";
         out << "<th>TabletsTotal</th>";
+        out << "<th></th>";
         out << "</tr>";
         out << "</thead>";
         out << "<tbody>";
@@ -520,6 +521,11 @@ public:
                 out << "<td>-</td>";
             }
             out << "<td>" << domainInfo.TabletsTotal << "</td>";
+            if (domainInfo.Stopped) {
+                out << "<td><a href=app?TabletID=" << Self->HiveId << "&page=StopDomain&ss=" << domainKey.first << "&path=" << domainKey.second << "&stop=0>Resume</a></td>";
+            } else {
+                out << "<td><a href=app?TabletID=" << Self->HiveId << "&page=StopDomain&ss=" << domainKey.first << "&path=" << domainKey.second << "&stop=1>Stop</a></td>";
+            }
             out << "</tr>";
         }
         out << "</tbody>";
@@ -842,6 +848,7 @@ public:
         UpdateConfig(db, "ScaleInWindowSize", configUpdates);
         UpdateConfig(db, "TargetTrackingCPUMargin", configUpdates);
         UpdateConfig(db, "DryRunTargetTrackingCPU", configUpdates);
+        UpdateConfig(db, "NodeRestartsForPenalty", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1195,6 +1202,7 @@ public:
         ShowConfig(out, "ScaleInWindowSize");
         ShowConfig(out, "TargetTrackingCPUMargin");
         ShowConfig(out, "DryRunTargetTrackingCPU");
+        ShowConfig(out, "NodeRestartsForPenalty");
 
         out << "<div class='row' style='margin-top:40px'>";
         out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'>AllowedMetrics:</label></div>";
@@ -3257,7 +3265,7 @@ public:
     }
 };
 
-class TTxMonEvent_StopTablet : public TTransactionBase<THive> {
+class TTxMonEvent_StopTablet : public TTransactionBase<THive>, TLoggedMonTransaction {
 public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
@@ -3266,6 +3274,7 @@ public:
 
     TTxMonEvent_StopTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
+        , TLoggedMonTransaction(ev, hive)
         , Event(ev->Release())
         , Source(source)
     {
@@ -3275,7 +3284,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_STOP_TABLET; }
 
-    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             TActorId waitActorId;
@@ -3286,6 +3295,11 @@ public:
                 Self->SubActors.emplace_back(waitActor);
             }
             Self->Execute(Self->CreateStopTablet(TabletId, waitActorId));
+            NIceDb::TNiceDb db(txc.DB);
+            NJson::TJsonValue jsonOperation;
+            jsonOperation["Tablet"] = TabletId;
+            jsonOperation["Stop"] = true;
+            WriteOperation(db, jsonOperation);
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
@@ -3296,6 +3310,62 @@ public:
     }
 
     void Complete(const TActorContext&) override {}
+};
+
+class TTxMonEvent_StopDomain : public TTransactionBase<THive>, TLoggedMonTransaction {
+public:
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+    const TActorId Source;
+    TSubDomainKey DomainId;
+    bool Stop = true;
+
+    TTxMonEvent_StopDomain(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , TLoggedMonTransaction(ev, hive)
+        , Event(ev->Release())
+        , Source(source)
+    {
+        ui64 ssId = FromStringWithDefault<ui64>(Event->Cgi().Get("ss"), 0);
+        ui64 pathId = FromStringWithDefault<ui64>(Event->Cgi().Get("path"), 0);
+        DomainId = {ssId, pathId};
+        Stop = FromStringWithDefault(Event->Cgi().Get("stop"), Stop);
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_STOP_TABLET; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        TDomainInfo* domain = Self->FindDomain(DomainId);
+        if (domain != nullptr) {
+            NIceDb::TNiceDb db(txc.DB);
+            db.Table<Schema::SubDomain>().Key(DomainId).Update<Schema::SubDomain::Stopped>(Stop);
+            domain->Stopped = Stop;
+            for (const auto& [tabletId, tablet] : Self->Tablets) {
+                if (tablet.NodeFilter.ObjectDomain == DomainId) {
+                    if (Stop) {
+                        Self->StopTenantTabletsQueue.push(tabletId);
+                    } else {
+                        Self->ResumeTenantTabletsQueue.push(tabletId);
+                    }
+                }
+            }
+            NJson::TJsonValue jsonOperation;
+            jsonOperation["SubDomain"] = TStringBuilder() << DomainId;
+            jsonOperation["Stop"] = Stop;
+            WriteOperation(db, jsonOperation);
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"OK\"}"));
+        } else {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Domain not found\"}"));
+        }
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        if (Stop) {
+            Self->ProcessPendingStopTablet();
+        } else {
+            Self->ProcessPendingResumeTablet();
+        }
+    }
 };
 
 class TResumeTabletWaitActor : public TActor<TResumeTabletWaitActor>, public ISubActor {
@@ -3340,7 +3410,7 @@ public:
 };
 
 
-class TTxMonEvent_ResumeTablet : public TTransactionBase<THive> {
+class TTxMonEvent_ResumeTablet : public TTransactionBase<THive>, TLoggedMonTransaction {
 public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
@@ -3349,6 +3419,7 @@ public:
 
     TTxMonEvent_ResumeTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
+        , TLoggedMonTransaction(ev, hive)
         , Event(ev->Release())
         , Source(source)
     {
@@ -3358,7 +3429,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_STOP_TABLET; }
 
-    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             TActorId waitActorId;
@@ -3369,6 +3440,11 @@ public:
                 Self->SubActors.emplace_back(waitActor);
             }
             Self->Execute(Self->CreateResumeTablet(TabletId, waitActorId));
+            NIceDb::TNiceDb db(txc.DB);
+            NJson::TJsonValue jsonOperation;
+            jsonOperation["Tablet"] = TabletId;
+            jsonOperation["Stop"] = false;
+            WriteOperation(db, jsonOperation);
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
@@ -4431,6 +4507,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "StopTablet") {
         return Execute(new TTxMonEvent_StopTablet(ev->Sender, ev, this), ctx);
+    }
+    if (page == "StopDomain") {
+        return Execute(new TTxMonEvent_StopDomain(ev->Sender, ev, this), ctx);
     }
     if (page == "ResumeTablet") {
         return Execute(new TTxMonEvent_ResumeTablet(ev->Sender, ev, this), ctx);

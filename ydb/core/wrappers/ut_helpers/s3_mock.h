@@ -47,6 +47,7 @@ private:
         bool HttpNotImplemented(const TReplyParams& params);
         void MaybeContinue(const TReplyParams& params);
         bool HttpServeRead(const TReplyParams& params, EMethod method, const TStringBuf path);
+        bool HttpServeList(const TReplyParams& params, TStringBuf bucketName, const TString& prefix);
         bool HttpServeWrite(const TReplyParams& params, TStringBuf path, const TCgiParameters& queryParams);
         bool HttpServeAction(const TReplyParams& params, EMethod method, TStringBuf path, const TCgiParameters& queryParams);
 

@@ -79,13 +79,12 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
             case grpc::StatusCode::OK:
                 StartAsyncRead(ptr, client, holder);
                 break;
-            case grpc::StatusCode::OUT_OF_RANGE: {
+            default: {
                 auto impl = holder->TrySharedOwning();
                 if (impl) {
                     impl->CloseFromServer(client);
                     holder->Release();
                 }
-                break;
             }
         }
     });
@@ -96,14 +95,21 @@ TSession::TImpl::TImpl(TStreamProcessorPtr ptr, const TString& sessionId, const 
     , StreamProcessor_(ptr)
     , SessionHolder(std::make_shared<TSafeTSessionImplHolder>(this))
 {
-    MarkActive();
-    SetNeedUpdateActiveCounter(true);
-    StartAsyncRead(StreamProcessor_, client, SessionHolder);
+    if (ptr) {
+        MarkActive();
+        SetNeedUpdateActiveCounter(true);
+        StartAsyncRead(StreamProcessor_, client, SessionHolder);
+    } else {
+        MarkBroken();
+        SetNeedUpdateActiveCounter(true);
+    }
 }
 
 TSession::TImpl::~TImpl()
 {
-    StreamProcessor_->Cancel();
+    if (StreamProcessor_) {
+        StreamProcessor_->Cancel();
+    }
     SessionHolder->WaitAndLock();
 }
 
@@ -114,7 +120,7 @@ void TSession::TImpl::MakeImplAsync(TStreamProcessorPtr ptr,
     ptr->Read(resp.get(), [args, resp, ptr](NYdbGrpc::TGrpcStatus grpcStatus) mutable {
         if (grpcStatus.GRpcStatusCode != grpc::StatusCode::OK) {
             TStatus st(TPlainStatus(grpcStatus, args->Endpoint));
-            args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession()));
+            args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession(args->Client)));
 
         } else {
             if (resp->status() == Ydb::StatusIds::SUCCESS) {
@@ -125,7 +131,7 @@ void TSession::TImpl::MakeImplAsync(TStreamProcessorPtr ptr,
                 NYql::TIssues opIssues;
                 NYql::IssuesFromMessage(resp->issues(), opIssues);
                 TStatus st(static_cast<EStatus>(resp->status()), std::move(opIssues));
-                args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession()));
+                args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession(args->Client)));
             }
         }
     });

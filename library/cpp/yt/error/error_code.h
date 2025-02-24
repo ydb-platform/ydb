@@ -19,9 +19,9 @@ public:
 
     struct TErrorCodeInfo
     {
-        TString Namespace;
+        std::string Namespace;
         //! Human-readable error code name.
-        TString Name;
+        std::string Name;
 
         bool operator==(const TErrorCodeInfo& rhs) const;
     };
@@ -30,8 +30,8 @@ public:
     {
         int From;
         int To;
-        TString Namespace;
-        std::function<TString(int code)> Formatter;
+        std::string Namespace;
+        std::function<std::string(int code)> Formatter;
 
         TErrorCodeInfo Get(int code) const;
         bool Intersects(const TErrorCodeRangeInfo& other) const;
@@ -51,9 +51,9 @@ public:
     void RegisterErrorCode(int code, const TErrorCodeInfo& errorCodeInfo);
 
     //! Registers a range of error codes given a human-readable code to name formatter.
-    void RegisterErrorCodeRange(int from, int to, TString namespaceName, std::function<TString(int code)> formatter);
+    void RegisterErrorCodeRange(int from, int to, std::string namespaceName, std::function<std::string(int code)> formatter);
 
-    static TString ParseNamespace(const std::type_info& errorCodeEnumTypeInfo);
+    static std::string ParseNamespace(const std::type_info& errorCodeEnumTypeInfo);
 
 private:
     THashMap<int, TErrorCodeInfo> CodeToInfo_;

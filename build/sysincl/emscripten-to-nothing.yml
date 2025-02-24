@@ -1,0 +1,4 @@
+- includes:
+    - emscripten.h
+    - emscripten/console.h
+    - emscripten/version.h

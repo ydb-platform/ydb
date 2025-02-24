@@ -335,7 +335,8 @@ public:
     void OnCompactionFailed(const TString& reason);
     void OnCompactionFinished();
 
-    void AppendPortion(const TPortionDataAccessor& info, const bool addAsAccessor = true);
+    void AppendPortion(const TPortionDataAccessor& info);
+    void AppendPortion(const std::shared_ptr<TPortionInfo>& info);
 
     TString DebugString() const {
         return TStringBuilder() << "(granule:" << GetPathId() << ";"

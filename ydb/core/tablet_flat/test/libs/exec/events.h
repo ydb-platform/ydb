@@ -21,6 +21,10 @@ namespace NFake {
         EvCompacted = Base_ + 14,
         EvCompact   = Base_ + 15,
         EvCall      = Base_ + 16,
+        EvDataCleaned = Base_ + 17,
+        EvBlobStorageContainsRequest = Base_ + 18,
+        EvBlobStorageContainsResponse = Base_ + 19,
+        EvBlobStorageDeferGC = Base_ + 20,
     };
 
     struct TEvTerm : public TEventLocal<TEvTerm, EvTerm> { };
@@ -76,6 +80,12 @@ namespace NFake {
         ui64 Table;
     };
 
+    struct TEvDataCleaned : public TEventLocal<TEvDataCleaned, EvDataCleaned> {
+        TEvDataCleaned(ui64 dataCleanupGeneration) : DataCleanupGeneration(dataCleanupGeneration) { }
+
+        ui64 DataCleanupGeneration;
+    };
+
     struct TEvCompact : public TEventLocal<TEvCompact, EvCompact> {
         TEvCompact(ui32 table, bool memOnly = false)
             : Table(table)
@@ -93,6 +103,36 @@ namespace NFake {
         TEvCall(TCallback callback) : Callback(std::move(callback)) { }
 
         TCallback Callback;
+    };
+
+    struct TEvBlobStorageContainsRequest :  public TEventLocal<TEvBlobStorageContainsRequest, EvBlobStorageContainsRequest> {
+        TEvBlobStorageContainsRequest(TString value)
+            : Value(value)
+        { }
+
+        const TString Value;
+    };
+
+    struct TEvBlobStorageContainsResponse :  public TEventLocal<TEvBlobStorageContainsResponse, EvBlobStorageContainsResponse> {
+        struct TBlobInfo {
+            TLogoBlobID BlobId;
+            bool Keep;
+            bool DoNotKeep;
+        };
+
+        TEvBlobStorageContainsResponse(TVector<TBlobInfo> contains)
+            : Contains(std::move(contains))
+        { }
+
+        const TVector<TBlobInfo> Contains;
+    };
+
+    struct TEvBlobStorageDeferGc : public TEventLocal<TEvBlobStorageDeferGc, EvBlobStorageDeferGC> {
+        TEvBlobStorageDeferGc(bool defer)
+            : Defer(defer)
+        { }
+
+        bool Defer;
     };
 
 }

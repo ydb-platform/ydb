@@ -506,6 +506,10 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     return columnType;
 }
 
+void FillColumnDescription(Ydb::Table::ColumnMeta& out, const NKikimrSchemeOp::TColumnDescription& in) {
+    AddColumn(&out, in);
+}
+
 template <typename TYdbProto>
 void FillColumnDescriptionImpl(TYdbProto& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
@@ -1138,7 +1142,7 @@ void FillAttributesImpl(TOutProto& out, const TInProto& in) {
 }
 void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
     const NKikimrSchemeOp::TCdcStreamDescription& in) {
-    
+
     out.set_name(in.GetName());
     out.set_virtual_timestamps(in.GetVirtualTimestamps());
     out.set_aws_region(in.GetAwsRegion());
@@ -1200,8 +1204,9 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
     }
 }
 
-bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
-        const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+template <typename T>
+bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const T& in, Ydb::StatusIds::StatusCode& status, TString& error) {
 
     out.SetName(in.name());
     out.SetVirtualTimestamps(in.virtual_timestamps());
@@ -1241,6 +1246,17 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
         return false;
     }
 
+    for (const auto& [key, value] : in.attributes()) {
+        auto& attr = *out.AddUserAttributes();
+        attr.SetKey(key);
+        attr.SetValue(value);
+    }
+
+    return true;
+}
+
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error) {
     if (in.initial_scan()) {
         if (!AppData()->FeatureFlags.GetEnableChangefeedInitialScan()) {
             status = Ydb::StatusIds::UNSUPPORTED;
@@ -1249,14 +1265,12 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
         }
         out.SetState(NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan);
     }
+    return FillChangefeedDescriptionCommon(out, in, status, error);
+}
 
-    for (const auto& [key, value] : in.attributes()) {
-        auto& attr = *out.AddUserAttributes();
-        attr.SetKey(key);
-        attr.SetValue(value);
-    }
-
-    return true;
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const Ydb::Table::ChangefeedDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillChangefeedDescriptionCommon(out, in, status, error);
 }
 
 void FillTableStats(Ydb::Table::DescribeTableResult& out,

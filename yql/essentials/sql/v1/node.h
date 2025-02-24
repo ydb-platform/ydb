@@ -194,6 +194,7 @@ namespace NSQLTranslationV1 {
         virtual bool HasSelectResult() const;
         virtual const TString* FuncName() const;
         virtual const TString* ModuleName() const;
+        virtual bool IsScript() const;
         virtual bool HasSkip() const;
 
         virtual TColumnNode* GetColumnNode();
@@ -325,6 +326,7 @@ namespace NSQLTranslationV1 {
         virtual bool HasSelectResult() const override;
         virtual const TString* FuncName() const override;
         virtual const TString* ModuleName() const override;
+        virtual bool IsScript() const override;
         virtual bool HasSkip() const override;
 
         virtual TColumnNode* GetColumnNode() override;
@@ -950,6 +952,9 @@ namespace NSQLTranslationV1 {
         const TDeferredAtom& GetTypeConfig() const;
         TUdfNode* GetUdfNode() override;
         const TUdfNode* GetUdfNode() const override;
+        bool IsScript() const override;
+        const TVector<TNodePtr>& GetScriptArgs() const;
+        TNodePtr BuildOptions() const;
     private:
         TVector<TNodePtr> Args;
         const TString* FunctionName;
@@ -957,6 +962,10 @@ namespace NSQLTranslationV1 {
         TNodePtr ExternalTypesTuple = nullptr;
         TNodePtr RunConfig;
         TDeferredAtom TypeConfig;
+        TDeferredAtom Cpu;
+        TDeferredAtom ExtraMem;
+        bool ScriptUdf = false;
+        TVector<TNodePtr> ScriptArgs;
     };
 
     class IAggregation: public INode {
@@ -1268,6 +1277,11 @@ namespace NSQLTranslationV1 {
         bool Temporary = false;
     };
 
+    struct TAlterDatabaseParameters {
+        TDeferredAtom DbPath;
+        std::optional<TDeferredAtom> Owner;
+    };
+
     struct TTableRef;
     struct TAnalyzeParams {
         std::shared_ptr<TTableRef> Table;
@@ -1302,18 +1316,20 @@ namespace NSQLTranslationV1 {
     };
 
     struct TRoleParameters {
+    protected:
+        TRoleParameters() {}
+    public:
+        TVector<TDeferredAtom> Roles;
+    };
+
+    struct TUserParameters : TRoleParameters {
         TMaybe<TDeferredAtom> Password;
         bool IsPasswordEncrypted = false;
-        TVector<TDeferredAtom> Roles;
-
-        enum class ETypeOfLogin {
-            Undefined,
-            Login,
-            NoLogin
-        };
-
-        ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
+        std::optional<bool> CanLogin;
+        TMaybe<TDeferredAtom> Hash;
     };
+
+    struct TCreateGroupParameters : TRoleParameters {};
 
     struct TSequenceParameters {
         bool MissingOk = false;
@@ -1435,6 +1451,8 @@ namespace NSQLTranslationV1 {
 
     TString TypeByAlias(const TString& alias, bool normalize = true);
 
+    TNodePtr BuildList(TPosition pos, TVector<TNodePtr> nodes = {});
+    TNodePtr BuildQuote(TPosition pos, TNodePtr expr);
     TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent,
         bool isOptionalArg = false);
     TNodePtr BuildQuotedAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent);
@@ -1469,7 +1487,6 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildColumn(TPosition pos, const TDeferredAtom& column, const TString& source = TString());
     TNodePtr BuildColumnOrType(TPosition pos, const TString& column = TString());
     TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup);
-    TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, const TString& var, const TString& column, bool theSameVar);
     TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, const TVector<TNodePtr>& bodies);
@@ -1508,6 +1525,12 @@ namespace NSQLTranslationV1 {
 
 
     // Implemented in builtin.cpp
+    TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
+        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig,
+        TNodePtr options);
+    TNodePtr BuildScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args,
+        TNodePtr options);
+
     TNodePtr BuildCallable(TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args, bool forReduce = false);
     TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args);
     TNodePtr BuildBuiltinFunc(
@@ -1522,9 +1545,9 @@ namespace NSQLTranslationV1 {
     );
 
     // Implemented in query.cpp
-    TNodePtr BuildCreateUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped);
-    TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped);
-    TNodePtr BuildAlterUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TRoleParameters& params, TScopedStatePtr scoped);
+    TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TCreateGroupParameters>& params, TScopedStatePtr scoped);
+    TNodePtr BuildControlUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name,
+                                const TMaybe<TUserParameters>& params, TScopedStatePtr scoped, bool isCreateUser);
     TNodePtr BuildRenameUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
     TNodePtr BuildAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TVector<TDeferredAtom>& toChange, bool isDrop,
         TScopedStatePtr scoped);

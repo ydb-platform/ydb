@@ -1,2 +1,0 @@
-add_subdirectory(basic_example_it)
-add_subdirectory(bulk_upsert_simple_it)

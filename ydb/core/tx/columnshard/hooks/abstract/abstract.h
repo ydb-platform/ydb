@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/tx/tiering/tier/identifier.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -26,12 +27,20 @@ class TColumnEngineChanges;
 class IBlobsGCAction;
 class TPortionInfo;
 class TDataAccessorsResult;
+class IBlobsStorageOperator;
 namespace NIndexes {
 class TIndexMetaContainer;
+}
+namespace NDataLocks {
+class ILock;
 }
 }   // namespace NKikimr::NOlap
 namespace arrow {
 class RecordBatch;
+}
+
+namespace NKikimr::NWrappers::NExternalStorage {
+class IExternalStorageOperator;
 }
 
 namespace NKikimr::NYDBTest {
@@ -61,6 +70,7 @@ public:
         Cleanup,
         GC
     };
+    YDB_ACCESSOR(bool, InterruptionOnLockedTransactions, false);
 
 protected:
     virtual std::optional<TDuration> DoGetStalenessLivetimePing() const {
@@ -88,6 +98,8 @@ protected:
     virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
+    }
+    virtual void DoOnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& /*result*/) {
     }
 
     virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
@@ -145,6 +157,7 @@ protected:
 private:
     inline static const NKikimrConfig::TColumnShardConfig DefaultConfig = {};
 
+public:
     static const NKikimrConfig::TColumnShardConfig& GetConfig() {
         if (HasAppData()) {
             return AppDataVerified().ColumnShardConfig;
@@ -152,12 +165,11 @@ private:
         return DefaultConfig;
     }
 
-public:
     const NOlap::NSplitter::TSplitSettings& GetBlobSplitSettings(
         const NOlap::NSplitter::TSplitSettings& defaultValue = Default<NOlap::NSplitter::TSplitSettings>()) {
         return DoGetBlobSplitSettings(defaultValue);
     }
-
+    virtual bool CheckPortionsToMergeOnCompaction(const ui64 memoryAfterAdd, const ui32 currentSubsetsCount);
     virtual void OnRequestTracingChanges(
         const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
     }
@@ -208,6 +220,11 @@ public:
     virtual NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(
         const NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& /*actions*/) const {
         return original;
+    }
+
+    virtual std::shared_ptr<NWrappers::NExternalStorage::IExternalStorageOperator> GetStorageOperatorOverride(
+        const NColumnShard::NTiers::TExternalStorageId& /*storageId*/) const {
+        return nullptr;
     }
 
     TDuration GetActualizationTasksLag() const {
@@ -265,6 +282,10 @@ public:
 
     void OnAfterGCAction(const NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) {
         DoOnAfterGCAction(shard, action);
+    }
+
+    void OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& result) {
+        DoOnCollectGarbageResult(result);
     }
 
     bool OnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
@@ -329,6 +350,9 @@ public:
         Y_UNUSED(txInfo);
     }
 
+    virtual THashMap<TString, std::shared_ptr<NKikimr::NOlap::NDataLocks::ILock>> GetExternalDataLocks() const {
+        return {};
+    }
 };
 
 class TControllers {
@@ -337,7 +361,7 @@ private:
 
 public:
     template <class TController>
-    class TGuard: TNonCopyable {
+    class TGuard: TMoveOnly {
     private:
         std::shared_ptr<TController> Controller;
 
@@ -347,12 +371,22 @@ public:
             Y_ABORT_UNLESS(Controller);
         }
 
+        TGuard(TGuard&& other)
+            : TGuard(other.Controller) {
+            other.Controller = nullptr;
+        }
+        TGuard& operator=(TGuard&& other) {
+            std::swap(Controller, other.Controller);
+        }
+
         TController* operator->() {
             return Controller.get();
         }
 
         ~TGuard() {
-            Singleton<TControllers>()->CSController = std::make_shared<ICSController>();
+            if (Controller) {
+                Singleton<TControllers>()->CSController = std::make_shared<ICSController>();
+            }
         }
     };
 

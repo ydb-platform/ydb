@@ -81,6 +81,12 @@ struct TValueBoundSerializer;
 template <class T, class C, class = void>
 struct TSerializerTraits;
 
+DEFINE_ENUM(ESerializationDumpMode,
+    (None)
+    (Content)
+    (Checksum)
+);
+
 template <class TKey, class TComparer>
 class TSkipList;
 
@@ -92,17 +98,17 @@ class TStringBuilder;
 DECLARE_REFCOUNTED_STRUCT(IDigest)
 DECLARE_REFCOUNTED_STRUCT(IPersistentDigest)
 
-DECLARE_REFCOUNTED_CLASS(TSlruCacheDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TSlruCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TSlruCacheDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TSlruCacheConfig)
 
-DECLARE_REFCOUNTED_CLASS(TAsyncExpiringCacheDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TAsyncExpiringCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TAsyncExpiringCacheDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TAsyncExpiringCacheConfig)
 
-DECLARE_REFCOUNTED_CLASS(TLogDigestConfig)
-DECLARE_REFCOUNTED_CLASS(THistogramDigestConfig)
+DECLARE_REFCOUNTED_STRUCT(TLogDigestConfig)
+DECLARE_REFCOUNTED_STRUCT(THistogramDigestConfig)
 
-DECLARE_REFCOUNTED_CLASS(TSingletonsConfig)
-DECLARE_REFCOUNTED_CLASS(TSingletonsDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TSingletonsConfig)
+DECLARE_REFCOUNTED_STRUCT(TSingletonsDynamicConfig)
 
 class TSignalRegistry;
 
@@ -115,9 +121,6 @@ constexpr TChecksum NullChecksum = 0;
 
 template <class T, size_t N>
 class TCompactVector;
-
-class TRef;
-class TMutableRef;
 
 template <class TProto>
 class TRefCountedProto;
@@ -159,7 +162,7 @@ struct IFairScheduler;
 template <class TTask>
 using IFairSchedulerPtr = TIntrusivePtr<IFairScheduler<TTask>>;
 
-DECLARE_REFCOUNTED_CLASS(TAdaptiveHedgingManagerConfig)
+DECLARE_REFCOUNTED_STRUCT(TAdaptiveHedgingManagerConfig)
 DECLARE_REFCOUNTED_STRUCT(IHedgingManager)
 
 ////////////////////////////////////////////////////////////////////////////////

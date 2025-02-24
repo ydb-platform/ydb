@@ -23,6 +23,8 @@ struct TExponentialBackoffOptions
     TDuration MaxBackoff = DefaultMaxBackoff;
     double BackoffMultiplier = DefaultBackoffMultiplier;
     double BackoffJitter = DefaultBackoffJitter;
+
+    bool operator==(const TExponentialBackoffOptions& other) const = default;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -44,10 +46,9 @@ struct TConstantBackoffOptions
 
 //! TODO(arkady-e1ppa): Make configs below pairs of POD-structs and TExternalizedYsonStruct.
 
-class TLogDigestConfig
+struct TLogDigestConfig
     : public NYTree::TYsonStruct
 {
-public:
     // We will round each sample x to the range from [(1 - RelativePrecision)*x, (1 + RelativePrecision)*x].
     // This parameter affects the memory usage of the digest, it is proportional to
     // log(UpperBound / LowerBound) / log(1 + RelativePrecision).
@@ -69,10 +70,9 @@ DEFINE_REFCOUNTED_TYPE(TLogDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THistogramDigestConfig
+struct THistogramDigestConfig
     : public NYTree::TYsonStruct
 {
-public:
     // We will round each sample x to a value from [x - AbsolutePrecision / 2, x + AbsolutePrecision / 2].
     // More precisely, size of each bucket in the histogram will be equal to AbsolutePrecision.
     // This parameter affects the memory usage of the digest, it is proportional to ((UpperBound - LowerBound) / AbsolutePrecision).
@@ -94,10 +94,9 @@ DEFINE_REFCOUNTED_TYPE(THistogramDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAdaptiveHedgingManagerConfig
+struct TAdaptiveHedgingManagerConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Percentage of primary requests that should have a hedging counterpart.
     //! Null is for disabled hedging.
     std::optional<double> MaxBackupRequestRatio;

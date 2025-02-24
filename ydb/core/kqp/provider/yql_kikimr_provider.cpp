@@ -52,6 +52,9 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateReplication::CallableName());
         DataSinkNames.insert(TKiAlterReplication::CallableName());
         DataSinkNames.insert(TKiDropReplication::CallableName());
+        DataSinkNames.insert(TKiCreateTransfer::CallableName());
+        DataSinkNames.insert(TKiAlterTransfer::CallableName());
+        DataSinkNames.insert(TKiDropTransfer::CallableName());
         DataSinkNames.insert(TKiCreateUser::CallableName());
         DataSinkNames.insert(TKiModifyPermissions::CallableName());
         DataSinkNames.insert(TKiAlterUser::CallableName());
@@ -119,6 +122,9 @@ struct TKikimrData {
             TYdbOperation::CreateReplication |
             TYdbOperation::AlterReplication |
             TYdbOperation::DropReplication |
+            TYdbOperation::CreateTransfer |
+            TYdbOperation::AlterTransfer |
+            TYdbOperation::DropTransfer |
             TYdbOperation::CreateUser |
             TYdbOperation::AlterUser |
             TYdbOperation::DropUser |
@@ -434,6 +440,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         const TExprNode* nameNode = key.Child(0)->Child(1);
         if (!nameNode->IsCallable("String")) {
             Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as replication key."));
+            return false;
+        }
+        Target = nameNode->Child(0)->Content();
+    } else if (tagName == "transfer") {
+        KeyType = Type::Transfer;
+        const TExprNode* nameNode = key.Child(0)->Child(1);
+        if (!nameNode->IsCallable("String")) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as transfer key."));
             return false;
         }
         Target = nameNode->Child(0)->Content();

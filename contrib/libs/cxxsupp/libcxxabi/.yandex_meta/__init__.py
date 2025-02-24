@@ -1,5 +1,6 @@
 from devtools.yamaker import fileutil
 from devtools.yamaker import pathutil
+from devtools.yamaker.platform_macros import make_llvm_nixattr
 from devtools.yamaker.modules import Library
 from devtools.yamaker.project import NixSourceProject
 
@@ -63,13 +64,13 @@ def post_install(self):
                 CFLAGS(
                     -D_LIBCPP_SAFE_STATIC=
                     -D_LIBCXXABI_DTOR_FUNC=
-                    -D__USING_WASM_EXCEPTIONS__
+                    -D__WASM_EXCEPTIONS__
                 )
             ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32)
                 CFLAGS(
                     -D_LIBCPP_SAFE_STATIC=
                     -D_LIBCXXABI_DTOR_FUNC=
-                    -D__USING_WASM_EXCEPTIONS__
+                    -D__WASM_EXCEPTIONS__
                 )
             ENDIF()
             """,
@@ -81,7 +82,9 @@ def post_install(self):
 libcxxabi = NixSourceProject(
     owners=["g:cpp-committee", "g:cpp-contrib"],
     arcdir="contrib/libs/cxxsupp/libcxxabi",
-    nixattr="llvmPackages_16.libcxxabi",
+    # nixos-24.05 merged libcxx and libcxxabi.
+    # Use the primer and override sourceRoot in override.nix as aworkaround.
+    nixattr=make_llvm_nixattr("libcxx"),
     copy_sources=[
         "include/__cxxabi_config.h",
         "include/cxxabi.h",
@@ -97,6 +100,7 @@ libcxxabi = NixSourceProject(
     ],
     disable_includes=[
         "aix_state_tab_eh.inc",
+        "ptrauth.h",
         "sys/futex.h",
     ],
     post_install=post_install,

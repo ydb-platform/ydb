@@ -5,6 +5,7 @@ import sys
 import ydb
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.test_meta import link_test_case
 
 ROWS_CHUNK_SIZE = 3000000
 ROWS_CHUNKS_COUNT = 100000
@@ -57,6 +58,7 @@ class TestYdbWorkload(object):
         except ydb.issues.Overloaded:
             print('upsert: got overload issue', file=sys.stderr)
 
+    @link_test_case("#13529")
     def test(self):
         """As per https://github.com/ydb-platform/ydb/issues/13529"""
         session = self.make_session()

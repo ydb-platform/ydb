@@ -732,9 +732,34 @@ SELECT Way($vrs); -- "a"
 
 ```
 
+## DynamicVariant {#dynamic_variant}
+
+Создает экзмепляр гомогенного варианта (т.е. содержащего поля/элементы одного типа), причем индекс или поле варианта можно задавать динамически. При несуществующем индексе или имени поля будет возвращен `NULL`.
+Обратная функция - [VariantItem](#variantitem).
+
+### Сигнатура
+
+```yql
+DynamicVariant(item:T,index:Uint32?,Variant<T, T, ...>)->Optional<Variant<T, T, ...>>
+DynamicVariant(item:T,index:Utf8?,Variant<key1: T, key2: T, ...>)->Optional<Variant<key1: T, key2: T, ...>>
+```
+
+### Пример
+
+```yql
+$dt = Int32;
+$tvt = Variant<$dt,$dt>;
+SELECT ListMap([(10,0u),(20,2u),(30,NULL)],($x)->(DynamicVariant($x.0,$x.1,$tvt))); -- [0: 10,NULL,NULL]
+
+$dt = Int32;
+$svt = Variant<x:$dt,y:$dt>;
+SELECT ListMap([(10,'x'u),(20,'z'u),(30,NULL)],($x)->(DynamicVariant($x.0,$x.1,$svt))); -- [x: 10,NULL,NULL]
+
+```
+
 ## Enum {#enum}
 
-`Enum()` cоздает значение перечисления.
+`Enum()` создает значение перечисления.
 
 ### Сигнатура
 

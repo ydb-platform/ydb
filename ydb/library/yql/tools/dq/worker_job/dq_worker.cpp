@@ -33,6 +33,7 @@
 #include <util/system/env.h>
 #include <util/system/shellcommand.h>
 #include <util/string/type.h>
+#include <util/system/execpath.h>
 
 using namespace NYql::NDqs;
 

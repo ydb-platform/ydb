@@ -51,6 +51,12 @@ TVector<TString> TestSchemaKey() {
     return {"timestamp", "resource_type", "resource_id", "uid"};
 }
 
+NKikimrConfig::TAppConfig GetAppConfig() {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableFeatureFlags()->SetEnableColumnStore(true);
+    return appConfig;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(YdbLogStore) {
@@ -69,8 +75,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     void CreateDropStore(EPrimitiveType pkField) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -128,8 +133,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     Y_UNIT_TEST(LogStoreNegative) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -192,8 +196,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     Y_UNIT_TEST(Dirs) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -249,8 +252,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     void CreateDropTable(EPrimitiveType pkField) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -402,8 +404,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     Y_UNIT_TEST(AlterLogStore) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);

@@ -1,7 +1,7 @@
 LIBRARY(commands)
 
 SRCS(
-    ydb_cloud_root.cpp
+    ydb_root.cpp
     ydb_update.cpp
     ydb_version.cpp
 )

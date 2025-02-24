@@ -1819,7 +1819,7 @@ class TSyncRunActor : public TActor<TSyncRunActor> {
     std::shared_ptr<TSyncRunner::TReturnValue> ReturnValue;
 
     void Handle(TEvRunActor::TPtr &ev, const TActorContext &ctx) {
-        ctx.ExecutorThread.RegisterActor(ev->Get()->Actor.Release());
+        ctx.Register(ev->Get()->Actor.Release());
     }
 
     void HandleDone(TEvents::TEvCompleted::TPtr &ev, const TActorContext &ctx) {
@@ -1885,7 +1885,7 @@ TSyncTestBase::TSyncTestBase(TConfiguration *conf)
 {}
 
 void TSyncTestBase::Bootstrap(const TActorContext &ctx) {
-    SyncRunner.Reset(new TSyncRunner(ctx.ExecutorThread.ActorSystem, Conf));
+    SyncRunner.Reset(new TSyncRunner(ctx.ActorSystem(), Conf));
     Scenario(ctx);
     AtomicIncrement(Conf->SuccessCount);
     Conf->SignalDoneEvent();

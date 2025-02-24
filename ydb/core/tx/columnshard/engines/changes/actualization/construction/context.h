@@ -41,6 +41,13 @@ public:
 };
 
 class TTieringProcessContext {
+public:
+    enum class EAddPortionResult {
+        SUCCESS = 0,
+        TASK_LIMIT_EXCEEDED,
+        PORTION_LOCKED,
+    };
+
 private:
     const TVersionedIndex& VersionedIndex;
     THashSet<TPortionAddress> UsedPortions;
@@ -79,7 +86,7 @@ public:
         return result;
     }
 
-    bool AddPortion(const std::shared_ptr<const TPortionInfo>& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait);
+    EAddPortionResult AddPortion(const std::shared_ptr<const TPortionInfo>& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait);
 
     bool IsRWAddressAvailable(const TRWAddress& address) const {
         auto it = Tasks.find(address);

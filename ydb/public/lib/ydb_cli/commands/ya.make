@@ -17,6 +17,7 @@ SRCS(
     ydb_debug.cpp
     ydb_dynamic_config.cpp
     ydb_latency.cpp
+    ydb_node_config.cpp
     ydb_ping.cpp
     ydb_profile.cpp
     ydb_root_common.cpp
@@ -47,24 +48,22 @@ PEERDIR(
     ydb/library/formats/arrow/csv/table
     ydb/library/workload
     ydb/library/yaml_config/public
-    yql/essentials/public/decimal
-    ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/lib/stat_visualization
-    ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/commands/command_base
     ydb/public/lib/ydb_cli/commands/interactive
+    ydb/public/lib/ydb_cli/commands/sdk_core_access
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
     ydb/public/lib/ydb_cli/commands/ydb_discovery
-    ydb/public/lib/ydb_cli/commands/sdk_core_access
+    ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump
     ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/import
     ydb/public/lib/ydb_cli/topic
-    ydb/public/sdk/cpp/src/client/draft
-    ydb/public/sdk/cpp/src/client/bsconfig
+    ydb/public/sdk/cpp/src/client/config
     ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/debug
+    ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/export
     ydb/public/sdk/cpp/src/client/import
     ydb/public/sdk/cpp/src/client/monitoring
@@ -75,8 +74,11 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types/credentials/login
+    ydb/public/sdk/cpp/src/library/operation_id
+    yql/essentials/public/decimal
 )
 
+GENERATE_ENUM_SERIALIZATION(ydb_benchmark.h)
 GENERATE_ENUM_SERIALIZATION(ydb_ping.h)
 GENERATE_ENUM_SERIALIZATION(ydb_latency.h)
 

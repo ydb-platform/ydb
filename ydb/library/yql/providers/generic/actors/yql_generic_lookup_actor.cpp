@@ -16,7 +16,6 @@
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
-#include <ydb/library/yql/providers/generic/proto/range.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/utils/log/log.h>
@@ -69,7 +68,7 @@ namespace NYql::NDq {
             ::NMonitoring::TDynamicCounterPtr taskCounters,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
             std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
-            NYql::Generic::TLookupSource&& lookupSource,
+            NYql::NGeneric::TLookupSource&& lookupSource,
             const NKikimr::NMiniKQL::TStructType* keyType,
             const NKikimr::NMiniKQL::TStructType* payloadType,
             const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -400,7 +399,7 @@ namespace NYql::NDq {
                 if (retriesRemaining) {
                     const auto retry = RequestRetriesLimit - retriesRemaining;
                     const auto delay = TDuration::MilliSeconds(1u << retry); // Exponential delay from 1ms to ~0.5s
-                    // <<< TODO tune/tweak
+                    // << TODO tune/tweak
                     YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry " << (retry + 1) << " of " << RequestRetriesLimit << ", scheduled in " << delay;
                     --retriesRemaining;
                     if (status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED) {
@@ -450,6 +449,19 @@ namespace NYql::NDq {
             return result;
         }
 
+        void AddClause(NConnector::NApi::TPredicate::TDisjunction &disjunction, 
+                       ui32 columnsCount, const NUdf::TUnboxedValue& keys) {
+            NConnector::NApi::TPredicate::TConjunction& conjunction = *disjunction.mutable_operands()->Add()->mutable_conjunction();
+            for (ui32 c = 0; c != columnsCount; ++c) {
+                NConnector::NApi::TPredicate::TComparison& eq = *conjunction.mutable_operands()->Add()->mutable_comparison();
+                eq.set_operation(NConnector::NApi::TPredicate::TComparison::EOperation::TPredicate_TComparison_EOperation_EQ);
+                eq.mutable_left_value()->set_column(TString(KeyType->GetMemberName(c)));
+                auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
+                ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
+                ExportValueToProto(KeyType->GetMemberType(c), keys.GetElement(c), *rightTypedValue->mutable_value());
+            }
+        }
+
         TString FillSelect(NConnector::NApi::TSelect& select) {
             auto dsi = LookupSource.data_source_instance();
             auto error = TokenProvider->MaybeFillToken(dsi);
@@ -466,21 +478,16 @@ namespace NYql::NDq {
 
             select.mutable_from()->Settable(LookupSource.table());
 
-            NConnector::NApi::TPredicate_TDisjunction disjunction;
-            for (const auto& [k, _] : *Request) {
+            NConnector::NApi::TPredicate::TDisjunction disjunction;
+            for (const auto& [keys, _] : *Request) {
                 // TODO consider skipping already retrieved keys
                 // ... but careful, can we end up with zero? TODO
-                NConnector::NApi::TPredicate_TConjunction conjunction;
-                for (ui32 c = 0; c != KeyType->GetMembersCount(); ++c) {
-                    NConnector::NApi::TPredicate_TComparison eq;
-                    eq.Setoperation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
-                    eq.mutable_left_value()->Setcolumn(TString(KeyType->GetMemberName(c)));
-                    auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
-                    ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
-                    ExportValueToProto(KeyType->GetMemberType(c), k.GetElement(c), *rightTypedValue->mutable_value());
-                    *conjunction.mutable_operands()->Add()->mutable_comparison() = eq;
-                }
-                *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
+                AddClause(disjunction, KeyType->GetMembersCount(), keys);
+            }
+            auto& keys = Request->begin()->first; // Request is never empty
+            // Pad query with dummy clauses to improve caching
+            for (ui32 nRequests = Request->size(); !IsPowerOf2(nRequests) && nRequests < MaxKeysInRequest; ++nRequests) {
+                AddClause(disjunction, KeyType->GetMembersCount(), keys);
             }
             *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
             return {};
@@ -492,7 +499,7 @@ namespace NYql::NDq {
         const NActors::TActorId ParentId;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         std::shared_ptr<TKeyTypeHelper> KeyTypeHelper;
-        const NYql::Generic::TLookupSource LookupSource;
+        const NYql::NGeneric::TLookupSource LookupSource;
         const NKikimr::NMiniKQL::TStructType* const KeyType;
         const NKikimr::NMiniKQL::TStructType* const PayloadType;
         const NKikimr::NMiniKQL::TStructType* const SelectResultType; // columns from KeyType + PayloadType
@@ -521,7 +528,7 @@ namespace NYql::NDq {
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
-        NYql::Generic::TLookupSource&& lookupSource,
+        NYql::NGeneric::TLookupSource&& lookupSource,
         const NKikimr::NMiniKQL::TStructType* keyType,
         const NKikimr::NMiniKQL::TStructType* payloadType,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,

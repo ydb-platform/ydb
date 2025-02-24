@@ -151,6 +151,7 @@ public:
     class TImpl;
 private:
     TSession();
+    TSession(std::shared_ptr<TQueryClient::TImpl> client); // Create broken session
     TSession(std::shared_ptr<TQueryClient::TImpl> client, TSession::TImpl* sessionImpl);
 
     std::shared_ptr<TQueryClient::TImpl> Client_;
@@ -210,7 +211,10 @@ public:
     const TResultSet& GetResultSet() const { return *ResultSet_; }
     TResultSet ExtractResultSet() { return std::move(*ResultSet_); }
 
+    bool HasStats() const { return Stats_.has_value(); }
     const std::optional<TExecStats>& GetStats() const { return Stats_; }
+    TExecStats ExtractStats() const { return std::move(*Stats_); }
+    
     const std::optional<TTransaction>& GetTransaction() const { return Transaction_; }
 
     TExecuteQueryPart(TStatus&& status, std::optional<TExecStats>&& queryStats, std::optional<TTransaction>&& tx)

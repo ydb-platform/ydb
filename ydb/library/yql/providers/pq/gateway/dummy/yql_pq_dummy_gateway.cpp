@@ -11,7 +11,7 @@ namespace NYql {
 NThreading::TFuture<void> TDummyPqGateway::OpenSession(const TString& sessionId, const TString& username) {
     with_lock (Mutex) {
         Y_ENSURE(sessionId);
-        Y_ENSURE(username);
+        Y_UNUSED(username);
 
         Y_ENSURE(!IsIn(OpenedSessions, sessionId), "Session " << sessionId << " is already opened in pq gateway");
         OpenedSessions.insert(sessionId);
@@ -53,8 +53,8 @@ NThreading::TFuture<IPqGateway::TListStreams> TDummyPqGateway::ListStreams(const
 TDummyPqGateway& TDummyPqGateway::AddDummyTopic(const TDummyTopic& topic) {
     with_lock (Mutex) {
         Y_ENSURE(topic.Cluster);
-        Y_ENSURE(topic.Path);
-        const auto key = std::make_pair(topic.Cluster, topic.Path);
+        Y_ENSURE(topic.TopicName);
+        const auto key = std::make_pair(topic.Cluster, topic.TopicName);
         Y_ENSURE(Topics.emplace(key, topic).second, "Already inserted dummy topic {" << topic.Cluster << ", " << topic.Path << "}");
         return *this;
     }

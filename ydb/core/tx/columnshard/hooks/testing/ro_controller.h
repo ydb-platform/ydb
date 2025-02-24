@@ -115,6 +115,19 @@ public:
         }
     }
 
+    void WaitTtl(const TDuration d) const {
+        TInstant start = TInstant::Now();
+        ui32 countStart = GetTTLStartedCounter().Val();
+        while (Now() - start < d) {
+            if (countStart != GetTTLStartedCounter().Val()) {
+                countStart = GetTTLStartedCounter().Val();
+                start = TInstant::Now();
+            }
+            Cerr << "WAIT_TTL: " << GetTTLStartedCounter().Val() << Endl;
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
     template <class TTester>
     void WaitCondition(const TDuration d, const TTester& test) const {
         const TInstant start = TInstant::Now();

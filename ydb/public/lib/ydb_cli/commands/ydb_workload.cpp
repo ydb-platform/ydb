@@ -221,11 +221,15 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
             Cerr << "Task ID: " << taskId << ". No queries to run." << Endl;
             return;
         }
+        std::vector<NYdbWorkload::TQueryInfo> shuffledQueries(queryInfoList.cbegin(), queryInfoList.cend());
+        std::random_shuffle(shuffledQueries.begin(), shuffledQueries.end());
 
-        auto opStartTime = Now();
-        NYdbWorkload::TQueryInfoList::iterator it;
-        for (it = queryInfoList.begin(); it != queryInfoList.end(); ) {
-
+        for (const auto& q: shuffledQueries) {
+            queryInfo = q;
+            auto opStartTime = Now();
+            if (opStartTime >= StopTime) {
+                break;
+            }
             if (Rate != 0)
             {
                 const ui64 expectedQueries = (Now() - StartTime).SecondsFloat() * Rate;
@@ -235,34 +239,27 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
                 }
             }
 
-            queryInfo = *it;
             auto status = queryInfo.TableOperation ? TableClient->RetryOperationSync(runTableClient) : runQuery();
             if (status.IsSuccess()) {
+                ui64 latency = (Now() - opStartTime).MilliSeconds();
+                with_lock(HdrLock) {
+                    WindowHist.RecordValue(latency);
+                    TotalHist.RecordValue(latency);
+                }
                 TotalQueries++;
             } else {
                 TotalErrors++;
                 WindowErrors++;
                 if (Verbose && status.GetStatus() != EStatus::ABORTED) {
-                    Cerr << "Task ID: " << taskId << " Status: " << status.GetStatus() << " " << status.GetIssues().ToString() << Endl;
+                    Cerr << "Task ID: " << taskId << " Status: " << status.GetStatus() << " " << status.GetIssues().ToString() << Endl
+                    << " Query text: " << queryInfo.Query << Endl;
                 }
-                break;
             }
             if (retryCount > 0) {
                 TotalRetries += retryCount;
                 WindowRetryCount += retryCount;
             }
             retryCount = -1;
-
-            ++it;
-        }
-        if (it != queryInfoList.end()) {
-            continue;
-        }
-
-        ui64 latency = (Now() - opStartTime).MilliSeconds();
-        with_lock(HdrLock) {
-            WindowHist.RecordValue(latency);
-            TotalHist.RecordValue(latency);
         }
     }
     TotalRetries += std::max(retryCount, 0);

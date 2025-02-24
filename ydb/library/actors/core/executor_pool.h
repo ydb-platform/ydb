@@ -8,7 +8,7 @@ namespace NActors {
     class TActorSystem;
     class TMailbox;
     class TMailboxCache;
-    struct TWorkerContext;
+    class TMailboxTable;
     struct TExecutorPoolStats;
     struct TExecutorPoolState;
     struct TExecutorThreadStats;
@@ -59,11 +59,16 @@ namespace NActors {
         }
 
         // for workers
-        virtual void Initialize(TWorkerContext& wctx) {
-            Y_UNUSED(wctx);
+        virtual void Initialize() {
         }
-        virtual TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) = 0;
+        virtual TMailbox* GetReadyActivation(ui64 revolvingCounter) = 0;
         virtual TMailbox* ResolveMailbox(ui32 hint) = 0;
+        virtual TMailboxTable* GetMailboxTable() const {
+            return nullptr;
+        }
+
+        virtual ui64 TimePerMailboxTs() const = 0;
+        virtual ui32 EventsPerMailbox() const = 0;
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -178,16 +183,6 @@ namespace NActors {
 
         virtual i16 GetMaxFullThreadCount() const {
             return 1;
-        }
-
-        virtual TSharedExecutorThreadCtx* ReleaseSharedThread() {
-            return nullptr;
-        }
-        virtual void AddSharedThread(TSharedExecutorThreadCtx*) {
-        }
-
-        virtual bool IsSharedThreadEnabled() const {
-            return false;
         }
 
         virtual TCpuConsumption GetThreadCpuConsumption(i16 threadIdx) {

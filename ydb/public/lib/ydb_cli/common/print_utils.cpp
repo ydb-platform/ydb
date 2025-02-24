@@ -4,6 +4,7 @@
 #include <google/protobuf/port_def.inc>
 
 #include <util/string/printf.h>
+#include <util/stream/format.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -51,23 +52,14 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
     o << entry.Name << colors.OldColor();
 }
 
-TString PrettySize(size_t size) {
+TString PrettySize(ui64 size) {
     double sizeFormat = size;
-    TString mod = "b";
-    const char* mods[] = { "Kb", "Mb", "Gb", "Tb", "Pb", "Eb" };
-    TString numFormat = "%.0f";
+    return ToString(HumanReadableSize(sizeFormat, ESizeFormat::SF_QUANTITY)) + " B";
+}
 
-    for (const char* nextMod : mods) {
-        if (sizeFormat > 1024) {
-            sizeFormat /= 1024;
-            mod = nextMod;
-            numFormat = "%.02f";
-        } else {
-            break;
-        }
-    }
-
-    return Sprintf((numFormat + " %s").data(), sizeFormat, mod.data());
+TString PrettyNumber(ui64 number) {
+    double numberFormat = number;
+    return ToString(HumanReadableSize(numberFormat, ESizeFormat::SF_QUANTITY));
 }
 
 TString FormatTime(TInstant time) {

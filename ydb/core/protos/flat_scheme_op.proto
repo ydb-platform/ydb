@@ -23,6 +23,7 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_table.proto";
+import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 
 import "google/protobuf/empty.proto";
@@ -317,6 +318,7 @@ message TTableDescription {
 
     optional bool OmitFollowers = 36 [default = false]; // used with CopyFromTable
     optional bool IsBackup = 37 [default = false];
+    optional bool IsRestore = 45 [default = false];
 
     repeated TCdcStreamDescription CdcStreams = 38;
     repeated TSequenceDescription Sequences = 39;
@@ -849,12 +851,14 @@ message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2;
     optional bool CanLogin = 3 [default = true];
+    optional bool IsHashedPassword = 4 [default = false];
 }
 
 message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2;
     optional bool CanLogin = 3;
+    optional bool IsHashedPassword = 4 [default = false];
 }
 
 message TLoginRemoveUser {
@@ -1248,11 +1252,13 @@ message TBackupTask {
         optional int32 Level = 2;
     }
 
-    optional TCompressionOptions Compression = 13; // currently available for s3
-
     optional uint64 SnapshotStep = 14;
     optional uint64 SnapshotTxId = 15;
-    optional bool EnableChecksums = 16; // currently available for s3
+
+    // currently available only for s3:
+    optional TCompressionOptions Compression = 13;
+    optional bool EnableChecksums = 16; 
+    optional bool EnablePermissions = 18;
 }
 
 message TRestoreTask {
@@ -1520,6 +1526,7 @@ message TReplicationDescription {
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
     optional NKikimrReplication.TReplicationState State = 6;
+    optional string TransferTransformLambda = 7;
 }
 
 message TBlobDepotDescription {
@@ -2119,4 +2126,12 @@ message TBackupBackupCollection {
     optional string Name = 1;
     optional NKikimrProto.TPathID PathId = 2;
     optional string TargetDir = 3; // must be set on Rewrite
+}
+
+message TImportTableChangefeeds {
+    message TImportChangefeedTopic {
+        optional Ydb.Table.ChangefeedDescription Changefeed = 1;
+        optional Ydb.Topic.DescribeTopicResult Topic = 2;
+    }
+    repeated TImportChangefeedTopic Changefeeds = 1;
 }

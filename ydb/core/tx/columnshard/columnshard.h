@@ -98,31 +98,27 @@ namespace TEvColumnShard {
     struct TEvInternalScan: public TEventLocal<TEvInternalScan, EvInternalScan> {
     private:
         YDB_READONLY(ui64, PathId, 0);
+        YDB_READONLY(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
         YDB_READONLY_DEF(std::optional<ui64>, LockId);
         YDB_ACCESSOR(bool, Reverse, false);
         YDB_ACCESSOR(ui32, ItemsLimit, 0);
         YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
-        YDB_READONLY_DEF(std::vector<TString>, ColumnNames);
         std::set<ui32> ColumnIdsSet;
-        std::set<TString> ColumnNamesSet;
     public:
-        std::optional<NOlap::TSnapshot> ReadFromSnapshot;
-        std::optional<NOlap::TSnapshot> ReadToSnapshot;
         TString TaskIdentifier;
         std::shared_ptr<NOlap::TPKRangesFilter> RangesFilter;
     public:
-        void AddColumn(const ui32 id, const TString& columnName) {
+        void AddColumn(const ui32 id) {
             AFL_VERIFY(ColumnIdsSet.emplace(id).second);
             ColumnIds.emplace_back(id);
-            AFL_VERIFY(ColumnNamesSet.emplace(columnName).second);
-            ColumnNames.emplace_back(columnName);
         }
 
-        TEvInternalScan(const ui64 pathId, const std::optional<ui64> lockId)
+        TEvInternalScan(const ui64 pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
             : PathId(pathId)
+            , Snapshot(snapshot)
             , LockId(lockId)
         {
-
+            AFL_VERIFY(Snapshot.Valid());
         }
     };
 
@@ -289,8 +285,6 @@ namespace TEvColumnShard {
             return NColumnShard::ConvertToYdbStatus(status);
         }
     };
-
-    using TEvScan = TEvDataShard::TEvKqpScan;
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

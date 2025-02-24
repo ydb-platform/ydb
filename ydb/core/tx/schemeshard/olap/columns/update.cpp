@@ -180,7 +180,7 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
         columnSchema.SetColumnFamilyId(ColumnFamilyId.value());
     }
     if (Serializer) {
-        Serializer->SerializeToProto(*columnSchema.MutableSerializer());
+        Serializer.SerializeToProto(*columnSchema.MutableSerializer());
     }
     if (AccessorConstructor) {
         *columnSchema.MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();

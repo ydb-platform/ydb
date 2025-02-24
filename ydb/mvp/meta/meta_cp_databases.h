@@ -54,7 +54,7 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
 
         {
@@ -72,7 +72,7 @@ public:
         if (result.IsSuccess()) {
             Session = result.GetSession();
             TString query = TStringBuilder() << "DECLARE $name AS Utf8; SELECT * FROM `" + Location.RootDomain + "/ydb/MasterClusterExt.db` WHERE name=$name";
-            NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+            NActors::TActorSystem* actorSystem = ctx.ActorSystem();
             NActors::TActorId actorId = ctx.SelfID;
             NHttp::TUrlParameters parameters(Request.Request->URL);
             TString name(parameters["cluster_name"]);
@@ -98,7 +98,7 @@ public:
     }
 
     void SendDatabaseRequest(const NActors::TActorContext& ctx) {
-        NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
         yandex::cloud::priv::ydb::v1::ListAllDatabasesRequest cpRequest;
         //cpRequest.set_page_size(1000);

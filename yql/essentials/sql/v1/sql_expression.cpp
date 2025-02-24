@@ -860,24 +860,7 @@ TNodePtr TSqlExpression::JsonApiExpr(const TRule_json_api_expr& node) {
     return result;
 }
 
-TNodePtr MatchRecognizeVarAccess(TTranslation& ctx, const TString& var, const TRule_an_id_or_type& suffix, bool theSameVar) {
-    switch (suffix.GetAltCase()) {
-        case TRule_an_id_or_type::kAltAnIdOrType1:
-            break;
-        case TRule_an_id_or_type::kAltAnIdOrType2:
-            break;
-        case TRule_an_id_or_type::ALT_NOT_SET:
-            break;
-    }
-    const auto& column = Id(
-            suffix.GetAlt_an_id_or_type1()
-                .GetRule_id_or_type1().GetAlt_id_or_type1().GetRule_id1(),
-            ctx
-    );
-    return BuildMatchRecognizeVarAccess(TPosition{}, var, column, theSameVar);
-}
-
-TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2 block) {
+TNodePtr TSqlExpression::RowPatternVarAccess(TString var, const TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2 block) {
     switch (block.GetAltCase()) {
         case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt1:
             break;
@@ -888,13 +871,10 @@ TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_u
                 case TRule_an_id_or_type::kAltAnIdOrType1: {
                     const auto &idOrType = block.GetAlt3().GetRule_an_id_or_type1().GetAlt_an_id_or_type1().GetRule_id_or_type1();
                     switch(idOrType.GetAltCase()) {
-                        case TRule_id_or_type::kAltIdOrType1:
-                            return BuildMatchRecognizeVarAccess(
-                                    Ctx.Pos(),
-                                    alias,
-                                    Id(idOrType.GetAlt_id_or_type1().GetRule_id1(), *this),
-                                    Ctx.GetMatchRecognizeDefineVar() == alias
-                            );
+                        case TRule_id_or_type::kAltIdOrType1: {
+                            const auto column = Id(idOrType.GetAlt_id_or_type1().GetRule_id1(), *this);
+                            return BuildMatchRecognizeColumnAccess(Ctx.Pos(), std::move(var), std::move(column));
+                        }
                         case TRule_id_or_type::kAltIdOrType2:
                             break;
                         case TRule_id_or_type::ALT_NOT_SET:
@@ -911,7 +891,7 @@ TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_u
         case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
-    return TNodePtr{};
+    return {};
 }
 
 template<typename TUnaryCasualExprRule>
@@ -991,13 +971,16 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
         case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
             // In case of MATCH_RECOGNIZE lambdas
             // X.Y is treated as Var.Column access
-            if (isColumnRef && EColumnRefState::MatchRecognize == Ctx.GetColumnReferenceState()) {
-                if (auto rowPatternVarAccess = RowPatternVarAccess(
-                    name,
-                    b.GetAlt3().GetBlock2())
-                ) {
-                    return rowPatternVarAccess;
+            if (isColumnRef && (
+                EColumnRefState::MatchRecognizeMeasures == Ctx.GetColumnReferenceState() ||
+                EColumnRefState::MatchRecognizeDefine == Ctx.GetColumnReferenceState() ||
+                EColumnRefState::MatchRecognizeDefineAggregate == Ctx.GetColumnReferenceState()
+            )) {
+                if (suffix.GetBlock1().size() != 1) {
+                    Ctx.Error() << "Expected Var.Column, but got chain of " << suffix.GetBlock1().size() << " column accesses";
+                    return nullptr;
                 }
+                return RowPatternVarAccess(std::move(name), b.GetAlt3().GetBlock2());
             }
             break;
         }
@@ -1308,7 +1291,8 @@ TNodePtr TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
         return nullptr;
     }
     const bool checkExist = true;
-    return BuildBuiltinFunc(Ctx, Ctx.Pos(), "ListHasItems", {BuildSourceNode(pos, std::move(source), checkExist)});
+    auto select = BuildSourceNode(Ctx.Pos(), source, checkExist, Ctx.Settings.EmitReadsForExists);
+    return BuildBuiltinFunc(Ctx, Ctx.Pos(), "ListHasItems", {select});
 }
 
 TNodePtr TSqlExpression::CaseRule(const TRule_case_expr& rule) {

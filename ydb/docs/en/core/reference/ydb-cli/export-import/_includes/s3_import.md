@@ -29,8 +29,9 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 
 ### Additional parameters {#aux}
 
-`--description STRING`: A text description of the operation saved in the operation history
+`--description STRING`: A text description of the operation saved in the operation history.
 `--retries NUM`: The number of import retries to be made by the server. The default value is 10.
+`--skip-checksum-validation`: Skip the validating imported objects' checksums step.
 `--format STRING`: The format of the results.
 
 - `pretty`: Human-readable format (default).

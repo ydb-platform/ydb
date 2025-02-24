@@ -58,40 +58,32 @@ void THandlerSessionCreate::Bootstrap() {
 
 }
 
-void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
+void THandlerSessionCreate::ReplyBadRequestAndPassAway(TString errorMessage) {
+    NHttp::THeadersBuilder responseHeaders;
+    SetCORS(Request, &responseHeaders);
+    responseHeaders.Set("Content-Type", "text/plain");
+    return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage));
+}
+
+void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     if (event->Get()->Error.empty() && event->Get()->Response) {
         NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
         BLOG_D("Incoming response from authorization server: " << response->Status);
         if (response->Status == "200") {
-            TStringBuf errorMessage;
             NJson::TJsonValue jsonValue;
             NJson::TJsonReaderConfig jsonConfig;
             if (NJson::ReadJsonTree(response->Body, &jsonConfig, &jsonValue)) {
-                const NJson::TJsonValue* jsonAccessToken;
-                if (jsonValue.GetValuePointer("access_token", &jsonAccessToken)) {
-                    TString sessionToken = jsonAccessToken->GetStringRobust();
-                    return ProcessSessionToken(sessionToken, ctx);
-                } else {
-                    errorMessage = "Wrong OIDC provider response: access_token not found";
-                }
-            } else {
-                errorMessage =  "Wrong OIDC response";
+                return ProcessSessionToken(jsonValue);
             }
-            NHttp::THeadersBuilder responseHeaders;
-            SetCORS(Request, &responseHeaders);
-            responseHeaders.Set("Content-Type", "text/plain");
-            return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage));
+            return ReplyBadRequestAndPassAway("Wrong OIDC response");
         } else {
             NHttp::THeadersBuilder responseHeaders;
             responseHeaders.Parse(response->Headers);
             return ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
         }
-    } else {
-        NHttp::THeadersBuilder responseHeaders;
-        SetCORS(Request, &responseHeaders);
-        responseHeaders.Set("Content-Type", "text/plain");
-        return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error));
     }
+
+    return ReplyBadRequestAndPassAway(event->Get()->Error);
 }
 
 TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString& cookie) {

@@ -99,8 +99,9 @@ public:
 };
 
 TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
-    const NActors::TLogContextGuard g = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)("parent_id",
-        Context.GetTabletActorId())("write_id", WriteData.GetWriteMeta().GetWriteId())("table_id", WriteData.GetWriteMeta().GetTableId());
+    const NActors::TLogContextGuard g = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)(
+        "parent_id", Context.GetTabletActorId())("write_id", WriteData.GetWriteMeta().GetWriteId())(
+        "table_id", WriteData.GetWriteMeta().GetTableId());
     if (!Context.IsActive()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_execution");
         ReplyError("execution aborted", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
@@ -113,7 +114,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     }
     if (WriteData.GetWritePortions()) {
         if (OriginalBatch->num_rows() == 0) {
-            NColumnShard::TWriteResult wResult(WriteData.GetWriteMeta(), WriteData.GetSize(), nullptr, true, 0);
+            NColumnShard::TWriteResult wResult(WriteData.GetWriteMetaPtr(), WriteData.GetSize(), nullptr, true, 0);
             NColumnShard::TInsertedPortions pack({ wResult }, {});
             auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
                 NKikimrProto::EReplyStatus::OK, nullptr, std::move(pack));
@@ -123,7 +124,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
                 NArrow::TColumnOperator().Extract(OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
             auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(OriginalBatch,
                 Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), WriteData.GetData()->GetSeparationPoints());
-            NColumnShard::TWriteResult wResult(WriteData.GetWriteMeta(), WriteData.GetSize(), pkBatch, false, OriginalBatch->num_rows());
+            NColumnShard::TWriteResult wResult(WriteData.GetWriteMetaPtr(), WriteData.GetSize(), pkBatch, false, OriginalBatch->num_rows());
             std::vector<TPortionWriteController::TInsertPortion> portions;
             for (auto&& batch : batches) {
                 if (!batch) {
@@ -171,12 +172,10 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
                     Context.GetActualSchema()
                         ->NormalizeBatch(*Context.GetActualSchema(), std::make_shared<NArrow::TGeneralContainer>(OriginalBatch), columnIdsSet)
                         .DetachResult();
-                OriginalBatch = NArrow::ToBatch(normalized->BuildTableVerified(), true);
+                OriginalBatch = NArrow::ToBatch(normalized->BuildTableVerified());
             }
         }
-        WriteData.MutableWriteMeta().SetWriteMiddle2StartInstant(TMonotonic::Now());
         auto batches = BuildSlices();
-        WriteData.MutableWriteMeta().SetWriteMiddle3StartInstant(TMonotonic::Now());
         if (batches) {
             auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
             writeDataPtr->SetSchemaSubset(std::move(subset));

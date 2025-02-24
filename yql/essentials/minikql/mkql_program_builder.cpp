@@ -321,6 +321,11 @@ void EnsureDataOrOptionalOfData(TRuntimeNode node) {
         ->GetItemType()->IsData(), "Expected data or optional of data");
 }
 
+std::vector<TType*> ValidateBlockType(const TType* type, bool unwrap) {
+    const auto wideComponents = AS_TYPE(TMultiType, type)->GetElements();
+    return ValidateBlockItems(wideComponents, unwrap);
+}
+
 std::vector<TType*> ValidateBlockStreamType(const TType* streamType, bool unwrap) {
     const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
     return ValidateBlockItems(wideComponents, unwrap);
@@ -1476,21 +1481,36 @@ TRuntimeNode TProgramBuilder::ToBlocks(TRuntimeNode flow) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode flow) {
-    TType* outputItemType;
-    {
-        const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
-        std::vector<TType*> outputItems;
-        outputItems.reserve(wideComponents.size());
-        for (size_t i = 0; i < wideComponents.size(); ++i) {
-            outputItems.push_back(NewBlockType(wideComponents[i], TBlockType::EShape::Many));
-        }
-        outputItems.push_back(NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
-        outputItemType = NewMultiType(outputItems);
+TType* TProgramBuilder::BuildWideBlockType(const TArrayRef<TType* const>& wideComponents) {
+    std::vector<TType*> blockItems;
+    blockItems.reserve(wideComponents.size());
+    for (size_t i = 0; i < wideComponents.size(); i++) {
+        blockItems.push_back(NewBlockType(wideComponents[i], TBlockType::EShape::Many));
     }
+    blockItems.push_back(NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
+    return NewMultiType(blockItems);
+}
 
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputItemType));
-    callableBuilder.Add(flow);
+TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode stream) {
+    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected WideStream as input type");
+    if constexpr (RuntimeVersion < 58U) {
+        // Preserve the old behaviour for ABI compatibility.
+        // Emit (FromFlow (WideToBlocks (ToFlow (<stream>)))) to
+        // process the flow in favor to the given stream following
+        // the older MKQL ABI.
+        // FIXME: Drop the branch below, when the time comes.
+        const auto inputFlow = ToFlow(stream);
+        const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, inputFlow.GetStaticType()));
+        TType* outputMultiType = BuildWideBlockType(wideComponents);
+        TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputMultiType));
+        callableBuilder.Add(inputFlow);
+        const auto outputFlow = TRuntimeNode(callableBuilder.Build(), false);
+        return FromFlow(outputFlow);
+    }
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, stream.GetStaticType()));
+    TType* outputMultiType = BuildWideBlockType(wideComponents);
+    TCallableBuilder callableBuilder(Env, __func__, NewStreamType(outputMultiType));
+    callableBuilder.Add(stream);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -3444,6 +3464,26 @@ TRuntimeNode TProgramBuilder::VariantItem(TRuntimeNode variant) {
 
     TCallableBuilder callableBuilder(Env, __func__, resType);
     callableBuilder.Add(variant);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::DynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType) {
+    if constexpr (RuntimeVersion < 56U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    auto type = AS_TYPE(TVariantType, variantType);
+    auto expectedIndexSlot = type->GetUnderlyingType()->IsTuple() ? NUdf::EDataSlot::Uint32 : NUdf::EDataSlot::Utf8;
+    bool isOptional;
+    auto indexType = UnpackOptionalData(index.GetStaticType(), isOptional);
+    MKQL_ENSURE(indexType->GetDataSlot() == expectedIndexSlot, "Mismatch type of index");
+
+    auto resType = TOptionalType::Create(type, Env);
+
+    TCallableBuilder callableBuilder(Env, __func__, resType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(index);
+    callableBuilder.Add(TRuntimeNode(variantType, true));
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -5736,17 +5776,6 @@ TRuntimeNode TProgramBuilder::BlockFunc(const std::string_view& funcName, TType*
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockBitCast(TRuntimeNode value, TType* targetType) {
-    MKQL_ENSURE(value.GetStaticType()->IsBlock(), "Expected Block type");
-
-    auto returnType = TBlockType::Create(targetType, AS_TYPE(TBlockType, value.GetStaticType())->GetShape(), Env);
-    TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(value);
-    builder.Add(TRuntimeNode(targetType, true));
-
-    return TRuntimeNode(builder.Build(), false);
-}
-
 TRuntimeNode TProgramBuilder::BuildBlockCombineAll(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
         const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     const auto inputType = input.GetStaticType();
@@ -5985,21 +6014,82 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
-    const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
-    const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, bool rightAny, TType* returnType
-) {
-    if constexpr (RuntimeVersion < 53U) {
+TRuntimeNode TProgramBuilder::BlockStorage(TRuntimeNode stream, TType* returnType) {
+    if constexpr (RuntimeVersion < 59U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
+
+    ValidateBlockStreamType(stream.GetStaticType());
+
+    MKQL_ENSURE(returnType->IsResource(), "Expected Resource as a result type");
+    auto returnResourceType = AS_TYPE(TResourceType, returnType);
+    MKQL_ENSURE(returnResourceType->GetTag().StartsWith(BlockStorageResourcePrefix), "Expected block storage resource");
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(stream);
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockMapJoinIndex(TRuntimeNode blockStorage, TType* streamItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType) {
+    if constexpr (RuntimeVersion < 59U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(blockStorage.GetStaticType()->IsResource(), "Expected Resource as an input type");
+    auto blockStorageType = AS_TYPE(TResourceType, blockStorage.GetStaticType());
+    MKQL_ENSURE(blockStorageType->GetTag().StartsWith(BlockStorageResourcePrefix), "Expected block storage resource");
+
+    ValidateBlockType(streamItemType);
+
+    MKQL_ENSURE(returnType->IsResource(), "Expected Resource as a result type");
+    auto returnResourceType = AS_TYPE(TResourceType, returnType);
+    MKQL_ENSURE(returnResourceType->GetTag().StartsWith(BlockMapJoinIndexResourcePrefix), "Expected block map join index resource");
+
+    TRuntimeNode::TList keyColumnsNodes;
+    keyColumnsNodes.reserve(keyColumns.size());
+    std::transform(keyColumns.cbegin(), keyColumns.cend(),
+        std::back_inserter(keyColumnsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(blockStorage);
+    callableBuilder.Add(TRuntimeNode(streamItemType, true));
+    callableBuilder.Add(NewTuple(keyColumnsNodes));
+    callableBuilder.Add(NewDataLiteral((bool)any));
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightStreamItemType, EJoinKind joinKind,
+    const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
+    const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, TType* returnType
+) {
+    if constexpr (RuntimeVersion < 59U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(rightBlockStorage.GetStaticType()->IsResource(), "Expected Resource as an input type");
+    auto rightBlockStorageType = AS_TYPE(TResourceType, rightBlockStorage.GetStaticType());
+    if (joinKind != EJoinKind::Cross) {
+        MKQL_ENSURE(rightBlockStorageType->GetTag().StartsWith(BlockMapJoinIndexResourcePrefix), "Expected block map join index resource");
+    } else {
+        MKQL_ENSURE(rightBlockStorageType->GetTag().StartsWith(BlockStorageResourcePrefix), "Expected block storage resource");
+    }
+
     MKQL_ENSURE(joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left ||
-                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
+                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly || joinKind == EJoinKind::Cross,
                 "Unsupported join kind");
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
+    if (joinKind != EJoinKind::Cross) {
+        MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    } else {
+        MKQL_ENSURE(leftKeyColumns.empty(), "Specifying key columns is not allowed for cross join");
+    }
 
     ValidateBlockStreamType(leftStream.GetStaticType());
-    ValidateBlockStreamType(rightStream.GetStaticType());
+    ValidateBlockType(rightStreamItemType);
     ValidateBlockStreamType(returnType);
 
     TRuntimeNode::TList leftKeyColumnsNodes;
@@ -6032,13 +6122,13 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntime
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftStream);
-    callableBuilder.Add(rightStream);
+    callableBuilder.Add(rightBlockStorage);
+    callableBuilder.Add(TRuntimeNode(rightStreamItemType, true));
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
     callableBuilder.Add(NewTuple(leftKeyDropsNodes));
     callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
     callableBuilder.Add(NewTuple(rightKeyDropsNodes));
-    callableBuilder.Add(NewDataLiteral((bool)rightAny));
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

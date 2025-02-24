@@ -26,6 +26,11 @@ void PrintValue(IOutputStream& out, const NYdb::TValue& v) {
             out << value.GetUint32();
             break;
         }
+        case NYdb::EPrimitiveType::Int32:
+        {
+            out << value.GetInt32();
+            break;
+        }
         case NYdb::EPrimitiveType::Uint64:
         {
             out << value.GetUint64();
@@ -69,6 +74,15 @@ ui64 GetUint32(const NYdb::TValue& v) {
         return *value.GetOptionalUint32();
     } else {
         return value.GetUint32();
+    }
+}
+
+i64 GetInt32(const NYdb::TValue& v) {
+    NYdb::TValueParser value(v);
+    if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+        return *value.GetOptionalInt32();
+    } else {
+        return value.GetInt32();
     }
 }
 

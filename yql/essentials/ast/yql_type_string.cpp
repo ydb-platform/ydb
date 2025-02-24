@@ -84,6 +84,14 @@ enum EToken
     TOKEN_DYNUMBER = -49,
     TOKEN_SCALAR = -50,
     TOKEN_BLOCK = -51,
+    TOKEN_DATE32 = -52,
+    TOKEN_DATETIME64 = -53,
+    TOKEN_TIMESTAMP64 = -54,
+    TOKEN_INTERVAL64 = -55,
+    TOKEN_TZDATE32 = -56,
+    TOKEN_TZDATETIME64 = -57,
+    TOKEN_TZTIMESTAMP64 = -58,
+    TOKEN_MULTI = -59,
 
     // identifiers
     TOKEN_IDENTIFIER = -100,
@@ -114,6 +122,7 @@ EToken TokenTypeFromStr(TStringBuf str)
         { TStringBuf("Dict"), TOKEN_DICT },
         { TStringBuf("Tuple"), TOKEN_TUPLE },
         { TStringBuf("Struct"), TOKEN_STRUCT },
+        { TStringBuf("Multi"), TOKEN_MULTI },
         { TStringBuf("Resource"), TOKEN_RESOURCE },
         { TStringBuf("Void"), TOKEN_VOID },
         { TStringBuf("Callable"), TOKEN_CALLABLE },
@@ -148,6 +157,13 @@ EToken TokenTypeFromStr(TStringBuf str)
         { TStringBuf("DyNumber"), TOKEN_DYNUMBER },
         { TStringBuf("Block"), TOKEN_BLOCK},
         { TStringBuf("Scalar"), TOKEN_SCALAR},
+        { TStringBuf("Date32"), TOKEN_DATE32 },
+        { TStringBuf("Datetime64"), TOKEN_DATETIME64},
+        { TStringBuf("Timestamp64"), TOKEN_TIMESTAMP64 },
+        { TStringBuf("Interval64"), TOKEN_INTERVAL64 },
+        { TStringBuf("TzDate32"), TOKEN_TZDATE32 },
+        { TStringBuf("TzDatetime64"), TOKEN_TZDATETIME64},
+        { TStringBuf("TzTimestamp64"), TOKEN_TZTIMESTAMP64 },
     };
 
     auto it = map.find(str);
@@ -218,6 +234,13 @@ private:
         case TOKEN_UUID:
         case TOKEN_JSON_DOCUMENT:
         case TOKEN_DYNUMBER:
+        case TOKEN_DATE32:
+        case TOKEN_DATETIME64:
+        case TOKEN_TIMESTAMP64:
+        case TOKEN_INTERVAL64:
+        case TOKEN_TZDATE32:
+        case TOKEN_TZDATETIME64:
+        case TOKEN_TZTIMESTAMP64:
             type = MakeDataType(Identifier);
             GetNextToken();
             break;
@@ -244,6 +267,10 @@ private:
 
         case TOKEN_STRUCT:
             type = ParseStructType();
+            break;
+
+        case TOKEN_MULTI:
+            type = ParseMultiType();
             break;
 
         case TOKEN_RESOURCE:
@@ -731,9 +758,9 @@ private:
         return MakeDictType(keyType, MakeVoidType());
     }
 
-    TAstNode* ParseTupleTypeImpl() {
+    TAstNode* ParseTupleTypeImpl(TAstNode* (TTypeParser::*typeCreator)(TSmallVec<TAstNode*>&)) {
         TSmallVec<TAstNode*> items;
-        items.push_back(nullptr);  // reserve for TupleType
+        items.push_back(nullptr);  // reserve for type callable
 
         if (Token != '>') {
             for (;;) {
@@ -752,13 +779,13 @@ private:
             }
         }
 
-        return MakeTupleType(items);
+        return (this->*typeCreator)(items);
     }
 
     TAstNode* ParseTupleType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
-        TAstNode* tupleType = ParseTupleTypeImpl();
+        TAstNode* tupleType = ParseTupleTypeImpl(&TTypeParser::MakeTupleType);
         if (tupleType) {
             EXPECT_AND_SKIP_TOKEN('>', nullptr);
         }
@@ -815,6 +842,16 @@ private:
         return structType;
     }
 
+    TAstNode* ParseMultiType() {
+        GetNextToken(); // eat keyword
+        EXPECT_AND_SKIP_TOKEN('<', nullptr);
+        TAstNode* tupleType = ParseTupleTypeImpl(&TTypeParser::MakeMultiType);
+        if (tupleType) {
+            EXPECT_AND_SKIP_TOKEN('>', nullptr);
+        }
+        return tupleType;
+    }
+
     TAstNode* ParseVariantType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
@@ -823,7 +860,7 @@ private:
         if (Token == TOKEN_IDENTIFIER || Token == TOKEN_ESCAPED_IDENTIFIER) {
             underlyingType = ParseStructTypeImpl();
         } else if (IsTypeKeyword(Token) || Token == '(') {
-            underlyingType = ParseTupleTypeImpl();
+            underlyingType = ParseTupleTypeImpl(&TTypeParser::MakeTupleType);
         } else {
             return AddError("Expected type");
         }
@@ -971,6 +1008,11 @@ private:
             items.push_back(MakeQuote(MakeList(memberType, Y_ARRAY_SIZE(memberType))));
         }
 
+        return MakeList(items.data(), items.size());
+    }
+
+    TAstNode* MakeMultiType(TSmallVec<TAstNode*>& items) {
+        items[0] = MakeLiteralAtom(TStringBuf("MultiType"));
         return MakeList(items.data(), items.size());
     }
 

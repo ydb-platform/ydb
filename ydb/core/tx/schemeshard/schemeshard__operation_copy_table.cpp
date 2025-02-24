@@ -712,8 +712,8 @@ public:
         const ui32 shardsToCreate = tableInfo->GetPartitions().size();
         Y_VERIFY_S(shardsToCreate <= maxShardsToCreate, "shardsToCreate: " << shardsToCreate << " maxShardsToCreate: " << maxShardsToCreate);
 
-        dstPath.DomainInfo()->IncPathsInside(1, isBackup);
-        dstPath.DomainInfo()->AddInternalShards(txState, isBackup);
+        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, isBackup);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS, isBackup);
         dstPath.Base()->IncShardsInside(shardsToCreate);
         IncAliveChildrenSafeWithUndo(OperationId, parent, context, isBackup);
 
@@ -866,7 +866,6 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         }
 
         Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
-        Y_VERIFY_S(childPath.Base()->GetChildren().size() == 1, childPath.PathString() << " has children " << childPath.Base()->GetChildren().size());
 
         TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
         {
@@ -876,25 +875,27 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             auto operation = schema.MutableCreateTableIndex();
             operation->SetName(name);
             operation->SetType(indexInfo->Type);
-            if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
-                                     "Copy table doesn't support table with vector index")};
-            }
             for (const auto& keyName: indexInfo->IndexKeys) {
                 *operation->MutableKeyColumnNames()->Add() = keyName;
             }
             for (const auto& dataColumn: indexInfo->IndexDataColumns) {
                 *operation->MutableDataColumnNames()->Add() = dataColumn;
             }
+            if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+                *operation->MutableVectorIndexKmeansTreeDescription() =
+                    std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+            } else if (!std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription)) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                                     TStringBuilder{} << "Copy table doesn't support table with index type " << indexInfo->Type)};
+            }
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
         }
 
-        TString implTableName = childPath.Base()->GetChildren().begin()->first;
-        TPath implTable = childPath.Child(implTableName);
-        Y_ABORT_UNLESS(implTable.Base()->PathId == childPath.Base()->GetChildren().begin()->second);
+        for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+            TPath implTable = childPath.Child(implTableName);
+            Y_ABORT_UNLESS(implTable.Base()->PathId == implTablePathId);
 
-        {
             NKikimrSchemeOp::TModifyScheme schema;
             schema.SetFailOnExist(tx.GetFailOnExist());
             schema.SetWorkingDir(JoinPath({dstPath.PathString(), name}));

@@ -180,7 +180,7 @@ namespace NFake {
                 return new NFake::TDummy(tablet, info, SelfId());
             };
 
-            auto *actor = TStarter().Do(SelfId(), 1, MyId, std::move(make));
+            auto *actor = TStarter().Do(SelfId(), 1, MyId, std::move(make), 4);
             auto *event = new TEvFire{ 7, { }, { actor, EMail::Simple, 0 } };
 
             Send(TWorld::Where(EPath::Root), event);

@@ -199,8 +199,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, ScriptCpu).Lower(1.0).GlobalOnly();
     REGISTER_SETTING(*this, PythonCpu).Lower(1.0).GlobalOnly();
     REGISTER_SETTING(*this, JavascriptCpu).Lower(1.0).GlobalOnly();
-    REGISTER_SETTING(*this, ErasureCodecCpu).Lower(1.0);
-    REGISTER_SETTING(*this, ErasureCodecCpuForDq).Lower(1.0);
+    REGISTER_SETTING(*this, ErasureCodecCpu).Lower(0.1);
+    REGISTER_SETTING(*this, ErasureCodecCpuForDq).Lower(0.1);
 
     REGISTER_SETTING(*this, Owners)
         .NonEmpty()
@@ -317,6 +317,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
     REGISTER_SETTING(*this, MaxInputTablesForSortedMerge).Lower(2).Upper(1000); // https://st.yandex-team.ru/YTADMINREQ-16742
     REGISTER_SETTING(*this, DisableFuseOperations);
+    REGISTER_SETTING(*this, EnableFuseMapToMapReduce);
     REGISTER_SETTING(*this, MaxExtraJobMemoryToFuseOperations);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseOperations).Lower(1.0);
     REGISTER_SETTING(*this, MaxOperationFiles).Lower(2).Upper(1000);
@@ -523,9 +524,11 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MaxColumnGroups);
     REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
     REGISTER_SETTING(*this, JobBlockInput);
+    REGISTER_SETTING(*this, JobBlockTableContent);
     REGISTER_SETTING(*this, JobBlockOutput).Parser([](const TString& v) { return FromString<EBlockOutputMode>(v); });
     REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
     REGISTER_SETTING(*this, CompactForDistinct);
+    REGISTER_SETTING(*this, DropUnusedKeysFromKeyFilter);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

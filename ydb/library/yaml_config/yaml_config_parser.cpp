@@ -210,8 +210,12 @@ namespace NKikimr::NYaml {
             ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, DISABLE_BUILTIN_SECURITY_PATH).value_or(false);
         }
         EraseByPath(json, DISABLE_BUILTIN_SECURITY_PATH);
-        ctx.ExplicitEmptyDefaultGroups = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_GROUPS_PATH).value_or(false);
-        ctx.ExplicitEmptyDefaultAccess = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_ACCESS_PATH).value_or(false);
+        if (!ctx.DisableBuiltinGroups) {
+            ctx.DisableBuiltinGroups = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_GROUPS_PATH).value_or(false);
+        }
+        if (!ctx.DisableBuiltinAccess) {
+            ctx.DisableBuiltinAccess = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_ACCESS_PATH).value_or(false);
+        }
     }
 
     ui32 GetDefaultTabletCount(TString& type) {
@@ -427,6 +431,8 @@ namespace NKikimr::NYaml {
         auto* domainsConfig = config.MutableDomainsConfig();
 
         bool disabledDefaultSecurity = ctx.DisableBuiltinSecurity ? *ctx.DisableBuiltinSecurity : false;
+        bool disableBuiltinGroups = ctx.DisableBuiltinGroups ? *ctx.DisableBuiltinGroups : false;
+        bool disableBuiltinAccess = ctx.DisableBuiltinAccess ? *ctx.DisableBuiltinAccess : false;
 
         NKikimrConfig::TDomainsConfig::TSecurityConfig* securityConfig = nullptr;
         if (domainsConfig->HasSecurityConfig()) {
@@ -445,7 +451,7 @@ namespace NKikimr::NYaml {
             user->SetPassword("");
         }
 
-        if (!ctx.ExplicitEmptyDefaultGroups && !(securityConfig && securityConfig->DefaultGroupsSize()) && !disabledDefaultSecurity) {
+        if (!disableBuiltinGroups && !(securityConfig && securityConfig->DefaultGroupsSize()) && !disabledDefaultSecurity) {
             securityConfig = domainsConfig->MutableSecurityConfig();
             {
                 auto* defaultGroupAdmins = securityConfig->AddDefaultGroups();
@@ -509,7 +515,7 @@ namespace NKikimr::NYaml {
             securityConfig->SetAllUsersGroup("USERS");
         }
 
-        if (!ctx.ExplicitEmptyDefaultAccess && !(securityConfig && securityConfig->DefaultAccessSize()) && !disabledDefaultSecurity) {
+        if (!disableBuiltinAccess && !(securityConfig && securityConfig->DefaultAccessSize()) && !disabledDefaultSecurity) {
             securityConfig = domainsConfig->MutableSecurityConfig();
             securityConfig->AddDefaultAccess("+(ConnDB):USERS"); // ConnectDatabase
             securityConfig->AddDefaultAccess("+(DS|RA):METADATA-READERS"); // DescribeSchema | ReadAttributes
@@ -538,6 +544,7 @@ namespace NKikimr::NYaml {
 
         ui64 nextHostConfigID = 1;
 
+        // TODO: validate all host_configs exists (or better just drop this legacy and use yaml anchors)
         // Find the next available host_config_id
         if (ephemeralConfig.HostConfigsSize()) {
             for(const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
@@ -693,8 +700,10 @@ namespace NKikimr::NYaml {
             auto& vdiskLoc = ctx.CombinedDiskInfo[TCombinedDiskInfoKey{}];
 
             vdiskLoc.SetNodeID("1");
-            vdiskLoc.SetPath(drivePath.value());
-            vdiskLoc.SetPDiskCategory(diskType.value());
+            if (drivePath && diskType) {
+                vdiskLoc.SetPath(drivePath.value());
+                vdiskLoc.SetPDiskCategory(diskType.value());
+            }
         }
 
         if (!config.HasChannelProfileConfig()) {
@@ -704,7 +713,9 @@ namespace NKikimr::NYaml {
                 auto& channel = *channelProfile.AddChannel();
                 channel.SetErasureSpecies(erasureName);
                 channel.SetPDiskCategory(1);
-                channel.SetStoragePoolKind(diskTypeLower.value());
+                if (diskTypeLower) {
+                    channel.SetStoragePoolKind(diskTypeLower.value());
+                }
             };
         }
     }
@@ -1110,7 +1121,6 @@ namespace NKikimr::NYaml {
         if (config.HasSelfManagementConfig()) {
             auto *smConfig = config.MutableSelfManagementConfig();
             Y_ENSURE_BT(smConfig->HasEnabled(), "Enabled field is mandatory");
-            Y_ENSURE_BT(!smConfig->HasInitialConfigYaml(), "InitialConfigYaml is not intended to be filled by user");
             if (smConfig->GetEnabled()) {
                 if (!smConfig->HasErasureSpecies()) {
                     smConfig->SetErasureSpecies(ephemeralConfig.GetStaticErasure());
@@ -1395,10 +1405,16 @@ namespace NKikimr::NYaml {
     void MoveFields(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
         if (ephemeralConfig.HasSecurityConfig()) {
             config.MutableDomainsConfig()->MutableSecurityConfig()->CopyFrom(ephemeralConfig.GetSecurityConfig());
-        }
-
-        if (ephemeralConfig.HasDisableBuiltinSecurity()) {
-            ctx.DisableBuiltinSecurity = ephemeralConfig.GetDisableBuiltinSecurity();
+            auto securityConfig = ephemeralConfig.GetSecurityConfig();
+            if (securityConfig.HasDisableBuiltinSecurity()) {
+                ctx.DisableBuiltinSecurity = securityConfig.GetDisableBuiltinSecurity();
+            }
+            if (securityConfig.HasDisableBuiltinGroups()) {
+                ctx.DisableBuiltinGroups = securityConfig.GetDisableBuiltinGroups();
+            }
+            if (securityConfig.HasDisableBuiltinAccess()) {
+                ctx.DisableBuiltinAccess = securityConfig.GetDisableBuiltinAccess();
+            }
         }
     }
 
@@ -1466,9 +1482,9 @@ namespace NKikimr::NYaml {
         return result;
     }
 
-    Ydb::BSConfig::ReplaceStorageConfigRequest BuildReplaceDistributedStorageCommand(const TString& data) {
-        Ydb::BSConfig::ReplaceStorageConfigRequest replaceRequest;
-        replaceRequest.set_yaml_config(data);
+    Ydb::Config::ReplaceConfigRequest BuildReplaceDistributedStorageCommand(const TString& data) {
+        Ydb::Config::ReplaceConfigRequest replaceRequest;
+        replaceRequest.set_replace(data);
         return replaceRequest;
     }
 

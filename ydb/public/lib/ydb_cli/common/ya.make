@@ -3,6 +3,7 @@ LIBRARY(common)
 SRCS(
     aws.cpp
     command.cpp
+    command_utils.cpp
     common.cpp
     csv_parser.cpp
     examples.cpp
@@ -19,6 +20,7 @@ SRCS(
     print_utils.cpp
     profile_manager.cpp
     progress_bar.cpp
+    progress_indication.cpp
     query_stats.cpp
     recursive_list.cpp
     recursive_remove.cpp

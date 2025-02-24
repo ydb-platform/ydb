@@ -55,6 +55,7 @@ public:
     virtual bool HasClients() const = 0;
 
     virtual TFormatHandlerStatistic GetStatistics() = 0;
+    virtual void ForceRefresh() = 0;
 
 protected:
     virtual NActors::TActorId GetSelfId() const = 0;

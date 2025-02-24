@@ -324,7 +324,7 @@ public:
         context.SS->CdcStreams[pathId] = stream;
         context.SS->IncrementPathDbRefCount(pathId);
 
-        streamPath.DomainInfo()->IncPathsInside();
+        streamPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, tablePath, context); // for correct discard of ChildrenExist prop
 
         context.OnComplete.ActivateTx(OperationId);

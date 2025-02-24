@@ -5,6 +5,11 @@
 #include <yql/essentials/parser/lexer_common/hints.h>
 
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 
@@ -86,6 +91,7 @@ static void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node)
 }
 
 bool TestFormat(
+    const NSQLTranslation::TTranslators& translators,
     const TString& query,
     const NSQLTranslation::TTranslationSettings& settings,
     const TString& queryFile,
@@ -98,12 +104,18 @@ bool TestFormat(
 
     TString frmQuery;
     NYql::TIssues issues;
-    auto formatter = NSQLFormat::MakeSqlFormatter(settings);
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
     if (!formatter->Format(query, frmQuery, issues)) {
         Cerr << "Failed to format query: " << issues.ToString() << Endl;
         return false;
     }
-    NYql::TAstParseResult frmParseRes = NSQLTranslation::SqlToYql(frmQuery, settings);
+    NYql::TAstParseResult frmParseRes = NSQLTranslation::SqlToYql(translators, frmQuery, settings);
     if (!frmParseRes.Issues.Empty()) {
         frmParseRes.Issues.PrintWithProgramTo(Cerr, queryFile, frmQuery);
         if (AnyOf(frmParseRes.Issues, [](const auto& issue) { return issue.GetSeverity() == NYql::TSeverityIds::S_ERROR;})) {
@@ -217,6 +229,19 @@ int BuildAST(int argc, char* argv[]) {
         opts.PrintUsage(argv[0], Cerr);
     }
 
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
     TVector<TString> queries;
     int errors = 0;
     for (ui32 i = 0; i <= queryFiles.size(); ++i) {
@@ -272,10 +297,11 @@ int BuildAST(int argc, char* argv[]) {
             settings.V0ForceDisable = false;
             settings.AssumeYdbOnClusterWithSlash = res.Has("assume-ydb-on-slash");
             settings.TestAntlr4 = res.Has("test-antlr4");
+            settings.EmitReadsForExists = true;
 
             if (res.Has("lexer")) {
                 NYql::TIssues issues;
-                auto lexer = NSQLTranslation::SqlLexer(query, issues, settings);
+                auto lexer = NSQLTranslation::SqlLexer(translators, query, issues, settings);
                 NSQLTranslation::TParsedTokenList tokens;
                 if (lexer && NSQLTranslation::Tokenize(*lexer, query, queryFile, tokens, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
                     for (auto& token : tokens) {
@@ -298,7 +324,7 @@ int BuildAST(int argc, char* argv[]) {
                 parseRes = NSQLTranslationPG::PGToYql(query, settings);
             } else {
                 if (res.Has("tree") || res.Has("diff") || res.Has("dump")) {
-                    google::protobuf::Message* ast(NSQLTranslation::SqlAST(query, queryFile, parseRes.Issues,
+                    google::protobuf::Message* ast(NSQLTranslation::SqlAST(translators, query, queryFile, parseRes.Issues,
                         NSQLTranslation::SQL_MAX_PARSER_ERRORS, settings));
                     if (ast) {
                         if (res.Has("tree")) {
@@ -314,14 +340,14 @@ int BuildAST(int argc, char* argv[]) {
                         }
 
                         NSQLTranslation::TSQLHints hints;
-                        auto lexer = SqlLexer(query, parseRes.Issues, settings);
+                        auto lexer = SqlLexer(translators, query, parseRes.Issues, settings);
                         if (lexer && CollectSqlHints(*lexer, query, queryFile, settings.File, hints, parseRes.Issues,
                             settings.MaxErrors, settings.Antlr4Parser)) {
-                            parseRes = NSQLTranslation::SqlASTToYql(query, *ast, hints, settings);
+                            parseRes = NSQLTranslation::SqlASTToYql(translators, query, *ast, hints, settings);
                         }
                    }
                 } else {
-                   parseRes = NSQLTranslation::SqlToYql(query, settings);
+                   parseRes = NSQLTranslation::SqlToYql(translators, query, settings);
                 }
             }
 
@@ -349,7 +375,7 @@ int BuildAST(int argc, char* argv[]) {
             }
 
             if (res.Has("test-format") && syntaxVersion == 1 && !hasError && parseRes.Root) {
-                hasError = !TestFormat(query, settings, queryFile, parseRes, outFileNameFormat, res.Has("test-double-format"));
+                hasError = !TestFormat(translators, query, settings, queryFile, parseRes, outFileNameFormat, res.Has("test-double-format"));
             }
 
             if (hasError) {

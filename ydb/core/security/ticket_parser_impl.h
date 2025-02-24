@@ -28,6 +28,8 @@
 #include <util/stream/file.h>
 #include <util/string/vector.h>
 
+#include <util/string/join.h>
+
 namespace NKikimr {
 
 inline bool IsRetryableGrpcError(const NYdbGrpc::TGrpcStatus& status) {
@@ -723,9 +725,42 @@ private:
     }
 
     template <typename TTokenRecord>
+    const TVector<TString> GetLookupDatabases(const TTokenRecord& record) {
+        TVector<TString> result;
+        result.push_back(DomainName);
+        if (!Config.GetDomainLoginOnly() && !record.Database.empty() && record.Database != DomainName) {
+            result.push_back(record.Database);
+        }
+        std::reverse(result.begin(), result.end());
+        return result;
+    }
+
+    template <typename TTokenRecord>
     bool CanInitLoginToken(const TString& key, TTokenRecord& record) {
         if (UseLoginProvider && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Login)) {
-            TString database = Config.GetDomainLoginOnly() ? DomainName : record.Database;
+            // Lookup the token in the login provider for the target database, with the possible fallback to the root (domain) database.
+            //
+            // Target database could be unspecified (some anonymous or backward-compatible mode).
+            // Target database may be the same as the root database.
+            //
+            // In a special case, when DomainLoginOnly = false and a user from the root database attempts to
+            // access a tenant database, target database must be selected between the two candidates: tenant and the root,
+            // based on the database (or audience) embedded in the token itself.
+            auto database = NLogin::TLoginProvider::GetTokenAudience(record.Ticket);
+            BLOG_TRACE("CanInitLoginToken, domain db " << DomainName << ", request db " << record.Database
+                << ", token db " << database << ", DomainLoginOnly " << Config.GetDomainLoginOnly()
+            );
+            if (database.empty()) {
+                database = DomainName;
+            }
+            const auto& lookupDatabases = GetLookupDatabases(record);
+            BLOG_TRACE("CanInitLoginToken, target database candidates(" << lookupDatabases.size() << "): " << JoinSeq(", ", lookupDatabases));
+            if (std::find(lookupDatabases.begin(), lookupDatabases.end(), database) == lookupDatabases.end()) {
+                SetError(key, record, {.Message = "Wrong audience"});
+                CounterTicketsLogin->Inc();
+                BLOG_TRACE("CanInitLoginToken, A1 error Wrong audience");
+                return true;
+            }
             auto itLoginProvider = LoginProviders.find(database);
             if (itLoginProvider != LoginProviders.end()) {
                 NLogin::TLoginProvider& loginProvider(itLoginProvider->second);
@@ -735,8 +770,10 @@ private:
                         record.TokenType = TDerived::ETokenType::Login;
                         SetError(key, record, {.Message = response.Error, .Retryable = response.ErrorRetryable});
                         CounterTicketsLogin->Inc();
+                        BLOG_TRACE("CanInitLoginToken, database " << database << ", A2 error " << response.Error);
                         return true;
                     }
+                    BLOG_TRACE("CanInitLoginToken, database " << database << ", A3 error");
                 } else {
                     record.TokenType = TDerived::ETokenType::Login;
                     record.ExpireTime = ToInstant(response.ExpiresAt);
@@ -760,14 +797,17 @@ private:
                         .GroupSIDs = groups,
                         .AuthType = record.GetAuthType()
                     }));
+                    BLOG_TRACE("CanInitLoginToken, database " << database << ", A4 success");
                     return true;
                 }
             } else {
                 if (record.TokenType == TDerived::ETokenType::Login) {
                     SetError(key, record, {.Message = "Login state is not available yet", .Retryable = false});
                     CounterTicketsLogin->Inc();
+                    BLOG_TRACE("CanInitLoginToken, database " << database << ", A5 error");
                     return true;
                 }
+                BLOG_TRACE("CanInitLoginToken, database " << database << ", A6 error");
             }
         }
         return false;
@@ -1870,7 +1910,14 @@ protected:
         if (record.IsExternalAuthEnabled()) {
             return RefreshTicketViaExternalAuthProvider(key, record);
         }
-        const TString& database = Config.GetDomainLoginOnly() ? DomainName : record.Database;
+        auto database = NLogin::TLoginProvider::GetTokenAudience(record.Ticket);
+        if (database.empty()) {
+            database = DomainName;
+        }
+        const auto& lookupDatabases = GetLookupDatabases(record);
+        if (std::find(lookupDatabases.begin(), lookupDatabases.end(), database) == lookupDatabases.end()) {
+            return false;
+        }
         auto itLoginProvider = LoginProviders.find(database);
         if (itLoginProvider == LoginProviders.end()) {
             return false;

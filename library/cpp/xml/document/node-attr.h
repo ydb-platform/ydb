@@ -45,6 +45,18 @@ namespace NXml {
     }
 
     template <class T>
+    TMaybe<T> TNode::TryAttr(TZtStringBuf name) const {
+        TCharPtr value(xmlGetProp(NodePointer, XMLCHAR(name.c_str())));
+        if (!value) {
+            return Nothing();
+        }
+
+        T t;
+        AttrInternal(value, t, name);
+        return t;
+    }
+
+    template <class T>
     T TNode::Attr(TZtStringBuf name, const T& defvalue) const {
         TCharPtr attr(xmlGetProp(NodePointer, XMLCHAR(name.c_str())));
         if (!attr) {

@@ -163,17 +163,15 @@ struct TEvRowDispatcher {
         TTopicSessionStatistic Stat;
     };
 
-// Network events (without seqNo checks)
-
+    // two purposes: confirm seqNo and check the availability of the recipient actor (wait TEvUndelivered)
     struct TEvHeartbeat : public NActors::TEventPB<TEvHeartbeat, NFq::NRowDispatcherProto::TEvHeartbeat, EEv::EvHeartbeat> {
         TEvHeartbeat() = default;
     };
 
+// Network events (without seqNo checks)
+
     struct TEvNoSession : public NActors::TEventPB<TEvNoSession, NFq::NRowDispatcherProto::TEvNoSession, EEv::EvNoSession> {
         TEvNoSession() = default;
-        TEvNoSession(ui32 partitionId) {
-            Record.SetPartitionId(partitionId);
-        }
     };
 
     struct TEvGetInternalStateRequest : public NActors::TEventPB<TEvGetInternalStateRequest,

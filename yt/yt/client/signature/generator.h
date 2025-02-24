@@ -8,31 +8,23 @@ namespace NYT::NSignature {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSignatureGeneratorBase
+struct ISignatureGenerator
     : public TRefCounted
 {
-public:
     //! Fills out the Signature_ and Header_ fields in a given TSignature
     //! based on its payload.
     virtual void Sign(const TSignaturePtr& signature) = 0;
 
     [[nodiscard]] TSignaturePtr Sign(NYson::TYsonString data);
-
-    virtual ~TSignatureGeneratorBase() = default;
-
-protected:
-    NYson::TYsonString& GetHeader(const TSignaturePtr& signature);
-
-    std::vector<std::byte>& GetSignature(const TSignaturePtr& signature);
 };
 
-DEFINE_REFCOUNTED_TYPE(TSignatureGeneratorBase)
+DEFINE_REFCOUNTED_TYPE(ISignatureGenerator)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSignatureGeneratorBasePtr CreateDummySignatureGenerator();
+ISignatureGeneratorPtr CreateDummySignatureGenerator();
 
-TSignatureGeneratorBasePtr CreateAlwaysThrowingSignatureGenerator();
+ISignatureGeneratorPtr CreateAlwaysThrowingSignatureGenerator();
 
 ////////////////////////////////////////////////////////////////////////////////
 

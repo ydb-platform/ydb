@@ -27,10 +27,6 @@
                         "Fk2",
                         "Value"
                     ],
-                    "lookup_by": [
-                        "Key1",
-                        "Key2"
-                    ],
                     "type": "Lookup"
                 }
             ]
@@ -43,10 +39,7 @@
                         "Key1",
                         "Key2"
                     ],
-                    "lookup_by": [
-                        "Fk2"
-                    ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(75.7.0)
+VERSION(75.8.0)
 
 LICENSE(MIT)
 
@@ -93,6 +93,7 @@ PY_SRCS(
     setuptools/_path.py
     setuptools/_reqs.py
     setuptools/_shutil.py
+    setuptools/_static.py
     setuptools/archive_util.py
     setuptools/build_meta.py
     setuptools/command/__init__.py

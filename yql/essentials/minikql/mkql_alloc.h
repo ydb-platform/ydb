@@ -60,10 +60,23 @@ struct TAllocState : public TAlignedPagePool
     bool SupportsSizedAllocators = false;
 
     void* LargeAlloc(size_t size) {
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+        if (Y_UNLIKELY(IsDefaultAllocatorUsed())) {
+            return malloc(size);
+        }
+#endif
+
         return Alloc(size);
     }
 
     void LargeFree(void* ptr, size_t size) noexcept {
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+        if (Y_UNLIKELY(IsDefaultAllocatorUsed())) {
+            free(ptr);
+            return;
+        }
+#endif
+
         Free(ptr, size);
     }
 
@@ -288,17 +301,20 @@ private:
 };
 
 void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool);
+
 inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
     Y_DEBUG_ABORT_UNLESS(state);
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
-    if (!ret) {
-        throw TMemoryLimitExceededException();
-    }
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
+        auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
+        if (!ret) {
+            throw TMemoryLimitExceededException();
+        }
 
-    ret->Link(&state->OffloadedBlocksRoot);
-    return ret + 1;
+        ret->Link(&state->OffloadedBlocksRoot);
+        return ret + 1;
+    }
 #endif
 
     auto currPage = state->CurrentPages[(TMemorySubPoolIdx)mPool];
@@ -315,13 +331,12 @@ inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemor
 inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
     Y_DEBUG_ABORT_UNLESS(state);
 
-    bool useMemalloc = state->SupportsSizedAllocators && sz > MaxPageUserData;
-
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    useMemalloc = true;
+    bool useMalloc = state->SupportsSizedAllocators && sz > MaxPageUserData;
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    useMalloc = useMalloc || TAllocState::IsDefaultAllocatorUsed();
 #endif
 
-    if (useMemalloc) {
+    if (Y_UNLIKELY(useMalloc)) {
         state->OffloadAlloc(sizeof(TAllocState::TListEntry) + sz);
         auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
         if (!ret) {
@@ -350,14 +365,16 @@ inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool) noex
         return;
     }
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    TAllocState *state = TlsAllocState;
-    Y_DEBUG_ABORT_UNLESS(state);
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
+        TAllocState *state = TlsAllocState;
+        Y_DEBUG_ABORT_UNLESS(state);
 
-    auto entry = (TAllocState::TListEntry*)(mem) - 1;
-    entry->Unlink();
-    free(entry);
-    return;
+        auto entry = (TAllocState::TListEntry*)(mem) - 1;
+        entry->Unlink();
+        free(entry);
+        return;
+    }
 #endif
 
     TAllocPageHeader* header = (TAllocPageHeader*)TAllocState::GetPageStart(mem);
@@ -378,12 +395,11 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state,
     Y_DEBUG_ABORT_UNLESS(state);
 
     bool useFree = state->SupportsSizedAllocators && sz > MaxPageUserData;
-
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    useFree = true;
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    useFree = useFree || TAllocState::IsDefaultAllocatorUsed();
 #endif
 
-    if (useFree) {
+    if (Y_UNLIKELY(useFree)) {
         auto entry = (TAllocState::TListEntry*)(mem) - 1;
         entry->Unlink();
         free(entry);

@@ -529,4 +529,6 @@ enum ETxTypes {
     TXTYPE_WRITE = 82                                     [(TxTypeOpts) = {Name: "TxWrite"}];
     TXTYPE_REMOVE_SCHEMA_SNAPSHOTS = 83                   [(TxTypeOpts) = {Name: "TxRemoveSchemaSnapshots"}];
     TXTYPE_INIT_RESTORED = 84                             [(TxTypeOpts) = {Name: "TxInitRestored"}];
+    TXTYPE_DATA_CLEANUP = 85                              [(TxTypeOpts) = {Name: "TxDataCleanup"}];
+    TXTYPE_COMPLETE_DATA_CLEANUP = 86                     [(TxTypeOpts) = {Name: "TxCompleteDataCleanup"}];
 }

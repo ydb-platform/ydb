@@ -53,7 +53,7 @@ T Deserialize(const TString& buffer, int version = 0)
     TStringInput input(buffer);
     TLoadContext context(&input);
     context.SetVersion(version);
-    context.Dumper().SetEnabled(true);
+    context.Dumper().SetMode(ESerializationDumpMode::Content);
     Load(context, value);
     return value;
 }
@@ -64,7 +64,7 @@ void InplaceDeserialize(const TIntrusivePtr<T>& value, const TString& buffer, in
     TStringInput input(buffer);
     TLoadContext context(&input);
     context.SetVersion(version);
-    context.Dumper().SetEnabled(true);
+    context.Dumper().SetMode(ESerializationDumpMode::Content);
     NPhoenix::NDetail::TSerializer::InplaceLoad(context, value);
 }
 

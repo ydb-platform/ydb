@@ -6,6 +6,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -35,6 +36,11 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendDropChangefeeds(StreamName)));
             break;
+        case TReplication::ETargetKind::Transfer:
+            // TODO drop consumer
+            Send(Parent, new TEvPrivate::TEvDropStreamResult(ReplicationId, TargetId, NYdb::TStatus{NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues{}}));
+            PassAway();
+            return;
         }
 
         Become(&TThis::StateWork);

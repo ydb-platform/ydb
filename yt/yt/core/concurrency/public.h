@@ -106,7 +106,7 @@ DEFINE_ENUM(EFiberState,
     (Finished)
 );
 
-using TFairShareThreadPoolTag = TString;
+using TFairShareThreadPoolTag = std::string;
 
 DECLARE_REFCOUNTED_STRUCT(IPoolWeightProvider)
 

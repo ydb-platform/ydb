@@ -7,10 +7,12 @@
 #include <ydb/core/tx/tiering/tier/identifier.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
-#include <ydb-cpp-sdk/client/types/s3_settings.h>
 #include <ydb/library/accessor/positive_integer.h>
+#include <ydb/library/accessor/validator.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
+
+#include <ydb-cpp-sdk/client/types/s3_settings.h>
 
 #include <functional>
 
@@ -45,29 +47,48 @@ public:
 }
 
 class TTiersManager: public ITiersManager {
-private:
-    friend class TTierRef;
-    class TTierRefGuard: public TMoveOnly {
+public:
+    class TTierGuard : NNonCopyable::TMoveOnly {
     private:
-        NTiers::TExternalStorageId TierId;
+        NTiers::TExternalStorageId StorageId;
+        std::optional<NTiers::TTierConfig> Config;
         TTiersManager* Owner;
 
     public:
-        const NTiers::TExternalStorageId& GetTierId() const {
-            return TierId;
+        bool HasConfig() const {
+            return !!Config;
         }
 
-        TTierRefGuard(const NTiers::TExternalStorageId& tierId, TTiersManager& owner);
-        ~TTierRefGuard();
+        const NTiers::TTierConfig& GetConfigVerified() const {
+            return *TValidator::CheckNotNull(Config);
+        }
 
-        TTierRefGuard(TTierRefGuard&& other)
-            : TierId(other.TierId)
-            , Owner(other.Owner) {
+        void UpsertConfig(NTiers::TTierConfig config) {
+            Config = std::move(config);
+        }
+
+        const NTiers::TExternalStorageId& GetStorageId() const {
+            return StorageId;
+        }
+
+        TTierGuard(const NTiers::TExternalStorageId& storageId, TTiersManager* owner) : StorageId(storageId), Owner(owner) {
+            AFL_VERIFY(owner);
+            Owner->RegisterTierManager(StorageId, std::nullopt);
+        }
+
+        ~TTierGuard() {
+            if (Owner) {
+                Owner->UnregisterTierManager(StorageId);
+            }
+        }
+
+        TTierGuard(TTierGuard&& other) : StorageId(other.StorageId), Config(other.Config), Owner(other.Owner) {
             other.Owner = nullptr;
         }
-        TTierRefGuard& operator=(TTierRefGuard&& other) {
+        TTierGuard& operator=(TTierGuard&& other) {
+            std::swap(StorageId, other.StorageId);
+            std::swap(Config, other.Config);
             std::swap(Owner, other.Owner);
-            std::swap(TierId, other.TierId);
             return *this;
         }
     };
@@ -83,19 +104,14 @@ private:
     IActor* Actor = nullptr;
     TManagers Managers;
 
-    using TTierRefCount = THashMap<NTiers::TExternalStorageId, TPositiveControlInteger>;
-    using TTierRefsByPathId = THashMap<ui64, std::vector<TTierRefGuard>>;
-    YDB_READONLY_DEF(TTierRefCount, TierRefCount);
-    YDB_READONLY_DEF(TTierRefsByPathId, UsedTiers);
-
-    using TTierById = THashMap<NTiers::TExternalStorageId, NTiers::TTierConfig>;
-    YDB_READONLY_DEF(TTierById, TierConfigs);
+    using TTierById = THashMap<NTiers::TExternalStorageId, TTierGuard>;
+    YDB_READONLY_DEF(TTierById, Tiers);
     YDB_READONLY_DEF(std::shared_ptr<NMetadata::NSecret::TSnapshot>, Secrets);
 
 private:
     void OnConfigsUpdated(bool notifyShard = true);
-    void RegisterTier(const NTiers::TExternalStorageId& name);
-    void UnregisterTier(const NTiers::TExternalStorageId& name);
+    void RegisterTierManager(const NTiers::TExternalStorageId& name, std::optional<NTiers::TTierConfig> config);
+    void UnregisterTierManager(const NTiers::TExternalStorageId& name);
 
 public:
     TTiersManager(const ui64 tabletId, const TActorId& tabletActorId, std::function<void(const TActorContext& ctx)> shardCallback = {})
@@ -105,12 +121,11 @@ public:
         , Secrets(std::make_shared<NMetadata::NSecret::TSnapshot>(TInstant::Zero())) {
     }
     TActorId GetActorId() const;
-    void EnablePathId(const ui64 pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers);
-    void DisablePathId(const ui64 pathId);
+    void ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers);
 
     void UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
-    void UpdateTierConfig(const NTiers::TTierConfig& config, const NTiers::TExternalStorageId& tierId, const bool notifyShard = true);
-    bool AreConfigsComplete() const;
+    void UpdateTierConfig(std::optional<NTiers::TTierConfig> config, const NTiers::TExternalStorageId& tierId, const bool notifyShard = true);
+    ui64 GetAwaitedConfigsCount() const;
 
     TString DebugString();
 

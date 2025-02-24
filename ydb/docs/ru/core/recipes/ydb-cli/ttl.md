@@ -20,7 +20,7 @@ $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl set --column modified_at -
 
 {% include [OLTP_not_allow_note](../../_includes/not_allow_for_oltp_note.md) %}
 
-Для включения вытеснения требуется объект [external data source](../../concepts/datamodel/external_data_source.md), описывающий подключение к внешнему хранилищу. Пример создания объекта можно найти в [рецептах YQL](../yql/ttl.md#enable-tiering-on-existing-tables).
+Для включения вытеснения требуется объект [external data source](../../concepts/datamodel/external_data_source.md), описывающий подключение к внешнему хранилищу. Пример создания объекта можно найти в [рецептах YQL](../../yql/reference/recipes/ttl.md#enable-tiering-on-existing-tables).
 
 Следующий пример демонстрирует включение вытеснения данных через вызов YQL-запроса из {{ ydb-short-name }} CLI. Строки таблицы `mytable` будут переноситься в бакет, описанный во внешнем источнике данных `/Root/s3_cold_data`, спустя час после наступления времени, записанного в колонке `created_at`, а спустя 24 часа будут удаляться.
 

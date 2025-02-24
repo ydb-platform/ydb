@@ -1094,6 +1094,18 @@ public:
         return NotImplemented<TGenericResult>();
     }
 
+    TFuture<TGenericResult> CreateTransfer(const TString&, const NYql::TCreateTransferSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> AlterTransfer(const TString&, const NYql::TAlterTransferSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> DropTransfer(const TString&, const NYql::TDropTransferSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
     TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) override {
         Y_UNUSED(cluster);
         Y_UNUSED(req);
@@ -1369,6 +1381,7 @@ public:
             createUser.SetUser(settings.UserName);
             if (settings.Password) {
                 createUser.SetPassword(settings.Password);
+                createUser.SetIsHashedPassword(settings.IsHashedPassword);
             }
 
             createUser.SetCanLogin(settings.CanLogin);
@@ -1415,6 +1428,7 @@ public:
 
             if (settings.Password.has_value()) {
                 alterUser.SetPassword(settings.Password.value());
+                alterUser.SetIsHashedPassword(settings.IsHashedPassword);
             }
 
             if (settings.CanLogin.has_value()) {

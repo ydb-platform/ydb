@@ -46,7 +46,7 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
 
         {
@@ -69,7 +69,7 @@ public:
                 << "SELECT resource_manager, mvp_token FROM `" + Location.RootDomain + "/ydb/Endpoints.db` WHERE "
                 << "location=$location";
 
-            NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+            NActors::TActorSystem* actorSystem = ctx.ActorSystem();
             NActors::TActorId actorId = ctx.SelfID;
             NYdb::TParamsBuilder params;
             params.AddParam("$location", NYdb::TValueBuilder().Utf8(location).Build());
@@ -101,7 +101,7 @@ public:
                 TString resource_manager = ColumnValueToString(rsParser.GetValue("resource_manager"));
                 TString token = ColumnValueToString(rsParser.GetValue("mvp_token"));
                 if (resource_manager) {
-                    NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+                    NActors::TActorSystem* actorSystem = ctx.ActorSystem();
                     NActors::TActorId actorId = ctx.SelfID;
                     yandex::cloud::priv::resourcemanager::v1::GetCloudRequest request;
 

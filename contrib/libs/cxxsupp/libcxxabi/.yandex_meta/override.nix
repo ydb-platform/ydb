@@ -1,14 +1,15 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "18.1.8";
+  version = "19.1.7";
 
   src = fetchFromGitHub {
     owner = "llvm";
     repo = "llvm-project";
     rev = "llvmorg-${version}";
-    hash = "sha256-iiZKMRo/WxJaBXct9GdAcAT3cz9d9pnAcO1mmR6oPNE=";
+    hash = "sha256-cZAB5vZjeTsXt9QHbP5xluWNQnAHByHtHnAhVDV0E6I=";
   };
 
   patches = [];
+  postPatch = "";
 
   sourceRoot = "source/libcxxabi";
 }

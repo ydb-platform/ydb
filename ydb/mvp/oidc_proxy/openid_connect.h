@@ -45,7 +45,7 @@ TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state);
 TString CreateNameSessionCookie(TStringBuf key);
 TString CreateNameImpersonatedCookie(TStringBuf key);
 const TString& GetAuthCallbackUrl();
-TString CreateSecureCookie(const TString& name, const TString& value);
+TString CreateSecureCookie(const TString& name, const TString& value, const ui32 expiredSeconds);
 TString ClearSecureCookie(const TString& name);
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
 TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key);

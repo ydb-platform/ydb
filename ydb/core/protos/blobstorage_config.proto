@@ -516,6 +516,9 @@ message TSetVDiskReadOnly {
     bool Value = 3;
 }
 
+message TGetInterfaceVersion
+{}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -562,6 +565,7 @@ message TConfigRequest {
             TRestartPDisk RestartPDisk = 48;
             TSetPDiskReadOnly SetPDiskReadOnly = 49;
             TStopPDisk StopPDisk = 50;
+            TGetInterfaceVersion GetInterfaceVersion = 51;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -796,6 +800,7 @@ message TConfigResponse {
         TDeclareIntent Intent = 15;
         bool Already = 16;
         TUpdateSettings Settings = 18;
+        uint32 InterfaceVersion = 19;
     }
 
     repeated TStatus Status = 1;

@@ -1018,6 +1018,36 @@ public:
     }
 };
 
+//
+// TChunkShredResult
+//
+class TChunkShredResult : public TRequestBase {
+public:
+    TChunkIdx Chunk;
+    ui32 SectorIdx;
+    ui64 ShredSize;
+
+    TChunkShredResult(TChunkIdx chunk, ui32 sectorIdx, ui64 shredSize, TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::ChunkShredResult, reqIdx), OwnerSystem, 0, NPriInternal::Other, {})
+        , Chunk(chunk)
+        , SectorIdx(sectorIdx)
+        , ShredSize(shredSize)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkShredResult;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TChunkShredResult { Chunk# " << Chunk
+        << " SectorIdx# " << SectorIdx
+        << " ShredSize# " << ShredSize << "}";
+        return str.Str();
+    }
+};
+
+
 class TStopDevice : public TRequestBase {
 public:
     TStopDevice(TAtomicBase reqIdx)
@@ -1144,6 +1174,7 @@ public:
 class TShredPDisk : public TRequestBase {
 public:
     ui64 ShredGeneration;
+    ui64 Cookie;
 
     TShredPDisk(NPDisk::TEvShredPDisk& ev, TActorId sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ShredPDisk, reqIdx), OwnerSystem, 0, NPriInternal::Other)
@@ -1225,26 +1256,21 @@ public:
     }
 };
 
-class TMarkDirty : public TRequestBase {
+class TContinueShred : public TRequestBase {
 public:
-    TStackVec<TChunkIdx, 1> ChunksToMarkDirty;
-
-    TMarkDirty(NPDisk::TEvMarkDirty& ev, TActorId sender, TAtomicBase reqIdx)
-        : TRequestBase(sender, TReqId(TReqId::MarkDirty, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
-        , ChunksToMarkDirty(ev.ChunksToMarkDirty)
-    {}
+    TContinueShred(NPDisk::TEvContinueShred& ev, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ContinueShred, reqIdx), OwnerUnallocated, 0, NPriInternal::Other)
+    {
+        Y_UNUSED(ev);
+    }
 
     ERequestType GetType() const override {
-        return ERequestType::RequestMarkDirty;
+        return ERequestType::RequestContinueShred;
     }
 
     TString ToString() const {
         TStringStream str;
-        str << "TMarkDirty {";
-        str << " Owner# " << Owner;
-        str << " OwnerRound# " << OwnerRound;
-        str << " ChunksToMarkDirty# ";
-        FormatList(str, ChunksToMarkDirty);
+        str << "TContinueShred {";
         str << "}";
         return str.Str();
     }

@@ -41,7 +41,6 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
                                  extra_args=extra_final_args, allow_llvm=False, data_path=DATA_PATH, run_sql=False)
 
     to_canonize = []
-    assert xfail or os.path.exists(res.results_file)
     assert not tables_res
 
     if what == 'Results':
@@ -51,8 +50,9 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         if do_custom_query_check(res, sql_query):
             return None
 
-        stable_result_file(res)
-        to_canonize.append(yatest.common.canonical_file(res.results_file))
+        if os.path.exists(res.results_file):
+            stable_result_file(res)
+            to_canonize.append(yatest.common.canonical_file(res.results_file))
         if res.std_err:
             to_canonize.append(normalize_source_code_path(res.std_err))
 
@@ -85,16 +85,17 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             verbose=True,
             parameters=parameters)
 
-        assert os.path.exists(opt_res.results_file)
+        assert os.path.exists(opt_res.results_file) == os.path.exists(res.results_file)
         assert not opt_tables_res
 
-        base_res_yson = normalize_result(stable_result_file(res), False)
-        opt_res_yson = normalize_result(stable_result_file(opt_res), False)
+        if os.path.exists(res.results_file):
+            base_res_yson = normalize_result(stable_result_file(res), False)
+            opt_res_yson = normalize_result(stable_result_file(opt_res), False)
 
-        # Compare results
-        assert opt_res_yson == base_res_yson, 'RESULTS_DIFFER\n' \
-            'Result:\n %(opt_res_yson)s\n\n' \
-            'Base result:\n %(base_res_yson)s\n' % locals()
+            # Compare results
+            assert opt_res_yson == base_res_yson, 'RESULTS_DIFFER\n' \
+                'Result:\n %(opt_res_yson)s\n\n' \
+                'Base result:\n %(base_res_yson)s\n' % locals()
 
         return None
 

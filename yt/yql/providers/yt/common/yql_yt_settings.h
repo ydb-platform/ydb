@@ -236,6 +236,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, false> MaxOutputTables;
     NCommon::TConfSetting<bool, false> DisableFuseOperations;
+    NCommon::TConfSetting<bool, false> EnableFuseMapToMapReduce;
     NCommon::TConfSetting<NSize::TSize, false> MaxExtraJobMemoryToFuseOperations;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseOperations;
     NCommon::TConfSetting<ui32, false> MaxOperationFiles;
@@ -293,6 +294,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
     NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
     NCommon::TConfSetting<bool, false> JobBlockInput;
+    NCommon::TConfSetting<bool, false> JobBlockTableContent;
     NCommon::TConfSetting<TSet<TString>, false> JobBlockInputSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, false> JobBlockInputSupportedDataTypes;
     NCommon::TConfSetting<EBlockOutputMode, false> JobBlockOutput;
@@ -300,6 +302,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, false> JobBlockOutputSupportedDataTypes;
     NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
     NCommon::TConfSetting<bool, false> CompactForDistinct;
+    NCommon::TConfSetting<bool, false> DropUnusedKeysFromKeyFilter;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

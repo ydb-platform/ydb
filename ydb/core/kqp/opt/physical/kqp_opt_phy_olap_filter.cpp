@@ -165,6 +165,17 @@ TMaybeNode<TExprBase> YqlIfPushdown(const TCoIf& ifOp, const TExprNode& argument
 }
 
 TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& argument, TExprContext& ctx) {
+    const auto parameters = FindNodes(apply.Ptr(), [] (const TExprNode::TPtr& node) {
+        if (const auto maybeParam = TMaybeNode<TCoParameter>(node))
+            return true;
+        return false;
+    });
+
+    // Temporary fix for https://st.yandex-team.ru/KIKIMR-22216
+    if (parameters.size()!=0) {
+        return nullptr;
+    }
+
     const auto members = FindNodes(apply.Ptr(), [&argument] (const TExprNode::TPtr& node) {
         if (const auto maybeMember = TMaybeNode<TCoMember>(node))
             return maybeMember.Cast().Struct().Raw() == &argument;
@@ -179,6 +190,11 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         columns.emplace_back(member->TailPtr());
         arguments.emplace_back(ctx.NewArgument(member->Pos(), columns.back()->Content()));
         replacements.emplace(member.Get(), arguments.back());
+    }
+
+    // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
+    if (!columns.size()) {
+        return nullptr;
     }
 
     return Build<TKqpOlapApply>(ctx, apply.Pos())
@@ -789,10 +805,15 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     YQL_ENSURE(remainingPredicates.IsValid(), "Remaining predicates is invalid");
 
     const auto pushedFilters = PredicatePushdown(TExprBase(predicatesToPush.ExprNode), lambdaArg, ctx, node.Pos());
-    YQL_ENSURE(pushedFilters.IsValid(), "Pushed predicate should be always valid!");
+    // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
+    // YQL_ENSURE(pushedFilters.IsValid(), "Pushed predicate should be always valid!");
+
+    if (!pushedFilters.IsValid()) {
+        return node;
+    }
 
     TMaybeNode<TExprBase> olapFilter;
-    if (pushedFilters.FirstLevelOps.IsValid()) {
+    if (pushedFilters.FirstLevelOps.IsValid()) {    
         olapFilter = Build<TKqpOlapFilter>(ctx, node.Pos())
             .Input(read.Process().Body())
             .Condition(pushedFilters.FirstLevelOps.Cast())

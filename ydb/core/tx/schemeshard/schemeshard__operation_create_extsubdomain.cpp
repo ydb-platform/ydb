@@ -261,7 +261,7 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, newNode->PathId);
 
         Y_ABORT_UNLESS(0 == txState.Shards.size());
-        parentPath.DomainInfo()->IncPathsInside();
+        parentPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());

@@ -8,31 +8,30 @@ TPositiveControlInteger::TPositiveControlInteger(const i64 value)
     AFL_VERIFY(0 <= value);
 }
 
+TPositiveControlInteger::TPositiveControlInteger(const ui64 value): Value(value) {
+    AFL_VERIFY(Value.Val() >= 0)("value", Value.Val())("init", value);
+}
+
 ui64 TPositiveControlInteger::Add(const ui64 value) {
-    Value += value;
-    return Value;
+    const i64 result = Value.Add(value);
+    AFL_VERIFY(result >= 0)("base", Value.Val())("delta", value)("result", result);
+    return result;
 }
 
 ui64 TPositiveControlInteger::Sub(const ui64 value) {
-    if (value <= Value) {
-        Value -= value;
-    } else {
-        AFL_VERIFY(false)("base", Value)("delta", value);
-    }
-    return Value;
+    i64 valDelta = Value.Sub(value);
+    AFL_VERIFY(valDelta >= 0)("base", Value.Val())("delta", value)("sub", valDelta);
+    return valDelta;
 }
 
 ui64 TPositiveControlInteger::GetDec() const {
-    if (Value) {
-        return Value - 1;
-    } else {
-        AFL_VERIFY(false);
-    }
-    return 0;
+    const i64 result = Value.Val() - 1;
+    AFL_VERIFY(result >= 0);
+    return result;
 }
 
 ui64 TPositiveControlInteger::Val() const {
-    return Value;
+    return Value.Val();
 }
 
 }

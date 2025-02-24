@@ -335,7 +335,7 @@ TExprNode::TPtr DqMarkBlockStage(const TDqStatePtr& state, const TPublicIds::TPt
             return false;
         }
 
-        if (node->IsCallable("WideToBlocks") && node->Head().IsCallable("ToFlow") && node->Head().Head().IsArgument()) {
+        if (node->IsCallable("WideToBlocks") && node->Head().IsArgument()) {
             // scalar channel as input
             return false;
         }

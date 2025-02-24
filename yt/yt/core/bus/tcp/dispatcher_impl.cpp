@@ -268,9 +268,11 @@ void TTcpDispatcher::TImpl::CollectSensors(ISensorWriter* writer)
 
 std::vector<TTcpConnectionPtr> TTcpDispatcher::TImpl::GetConnections()
 {
+    auto connectionList = ConnectionList_.Load();
+
     std::vector<TTcpConnectionPtr> result;
-    result.reserve(ConnectionList_.size());
-    for (const auto& weakConnection : ConnectionList_) {
+    result.reserve(connectionList.size());
+    for (const auto& weakConnection : connectionList) {
         if (auto connection = weakConnection.Lock()) {
             result.push_back(connection);
         }
@@ -318,28 +320,30 @@ IYPathServicePtr TTcpDispatcher::TImpl::GetOrchidService()
 
 void TTcpDispatcher::TImpl::OnPeriodicCheck()
 {
-    for (auto&& connection : ConnectionsToRegister_.DequeueAll()) {
-        ConnectionList_.push_back(std::move(connection));
-    }
+    ConnectionList_.Transform([&] (auto& connectionList) {
+        for (auto&& connection : ConnectionsToRegister_.DequeueAll()) {
+            connectionList.push_back(std::move(connection));
+        }
 
-    i64 connectionsToCheck = std::max(
-        std::ssize(ConnectionList_) *
-        static_cast<i64>(PeriodicCheckPeriod.GetValue()) /
-        static_cast<i64>(PerConnectionPeriodicCheckPeriod.GetValue()),
-        static_cast<i64>(1));
-    for (i64 index = 0; index < connectionsToCheck && !ConnectionList_.empty(); ++index) {
-        auto& weakConnection = ConnectionList_[CurrentConnectionListIndex_];
-        if (auto connection = weakConnection.Lock()) {
-            connection->RunPeriodicCheck();
-            ++CurrentConnectionListIndex_;
-        } else {
-            std::swap(weakConnection, ConnectionList_.back());
-            ConnectionList_.pop_back();
+        i64 connectionsToCheck = std::max(
+            std::ssize(connectionList) *
+            static_cast<i64>(PeriodicCheckPeriod.GetValue()) /
+            static_cast<i64>(PerConnectionPeriodicCheckPeriod.GetValue()),
+            static_cast<i64>(1));
+        for (i64 index = 0; index < connectionsToCheck && !connectionList.empty(); ++index) {
+            auto& weakConnection = connectionList[CurrentConnectionListIndex_];
+            if (auto connection = weakConnection.Lock()) {
+                connection->RunPeriodicCheck();
+                ++CurrentConnectionListIndex_;
+            } else {
+                std::swap(weakConnection, connectionList.back());
+                connectionList.pop_back();
+            }
+            if (CurrentConnectionListIndex_ >= std::ssize(connectionList)) {
+                CurrentConnectionListIndex_ = 0;
+            }
         }
-        if (CurrentConnectionListIndex_ >= std::ssize(ConnectionList_)) {
-            CurrentConnectionListIndex_ = 0;
-        }
-    }
+    });
 }
 
 std::optional<TString> TTcpDispatcher::TImpl::GetBusCertsDirectoryPath() const
@@ -379,7 +383,6 @@ ILocalMessageHandlerPtr TTcpDispatcher::TImpl::FindLocalBypassMessageHandler(con
     }
 
     if (!Config_.Acquire()->EnableLocalBypass) {
-        YT_LOG_INFO("XXX disabled %v", address);
         return nullptr;
     }
 

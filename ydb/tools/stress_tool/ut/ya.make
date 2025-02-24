@@ -5,7 +5,7 @@ ELSE()
 UNITTEST_FOR(ydb/tools/stress_tool/lib)
 
 SIZE(LARGE)
-TAG(ya:fat)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 SRC(
     ../device_test_tool_ut.cpp

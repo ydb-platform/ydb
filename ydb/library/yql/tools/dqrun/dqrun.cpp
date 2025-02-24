@@ -72,6 +72,12 @@
 #include <yql/essentials/core/url_lister/url_lister_manager.h>
 #include <yql/essentials/core/yql_library_compiler.h>
 #include <yql/essentials/core/pg_ext/yql_pg_ext.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/log/tls_backend.h>
 #include <yql/essentials/utils/log/log.h>
@@ -559,6 +565,7 @@ int RunMain(int argc, const char* argv[])
     clusterMapping["information_schema"] = PgProviderName;
 
     TString pgExtConfig;
+    TString gwPatch;
     TString mountConfig;
     TString mestricsPusherConfig;
     TString udfResolver;
@@ -765,6 +772,7 @@ int RunMain(int argc, const char* argv[])
         .StoreResult(&tokenAccessorEndpoint);
     opts.AddLongOption("yson-attrs", "Provide operation yson attribues").StoreResult(&ysonAttrs);
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
+    opts.AddLongOption("gateways-patch", "patch for gateways conf").StoreResult(&gwPatch);
     opts.AddLongOption("with-final-issues").NoArgument();
     opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument();
     opts.AddHelpOption('h');
@@ -1122,6 +1130,19 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));
     }
 
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
     TExprContext ctx;
     ctx.NextUniqueId = NYql::NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
@@ -1131,13 +1152,13 @@ int RunMain(int argc, const char* argv[])
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(mountConfig, &mount));
         FillUserDataTableFromFileSystem(mount, dataTable);
 
-        if (!CompileLibraries(dataTable, ctx, modules)) {
+        if (!CompileLibraries(translators, dataTable, ctx, modules)) {
             *runOptions.ErrStream << "Errors on compile libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*runOptions.ErrStream);
             return -1;
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(std::move(modules), ctx.NextUniqueId, clusterMapping, sqlFlags, hasValidate);
+        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId, clusterMapping, sqlFlags, hasValidate);
     } else {
         if (GetYqlModuleResolver(ctx, moduleResolver, {}, clusters, sqlFlags).empty()) {
             *runOptions.ErrStream << "Errors loading default YQL libraries:" << Endl;
@@ -1193,8 +1214,17 @@ int RunMain(int argc, const char* argv[])
         return 1;
     }
 
+    TMaybe<TString> gatewaysPatch;
+    if (res.Has("gateways-patch")) {
+        if (!res.Has("replay")) {
+            YQL_LOG(ERROR) << "gateways-patch only can be used with replay option";
+            return 1;
+        }
+        gatewaysPatch = TFileInput(gwPatch).ReadAll();
+    }
+
     if (res.Has("replay")) {
-        program = progFactory.Create("-replay-", "", opId, EHiddenMode::Disable, qContext);
+        program = progFactory.Create("-replay-", "", opId, EHiddenMode::Disable, qContext, gatewaysPatch);
     } else if (progFile == TStringBuf("-")) {
         program = progFactory.Create("-stdin-", Cin.ReadAll(), opId, EHiddenMode::Disable, qContext);
     } else {

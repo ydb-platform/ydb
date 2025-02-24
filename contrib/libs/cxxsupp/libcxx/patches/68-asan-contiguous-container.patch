@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index 5eeb235..255b858 100644
+index 1bb99ee..465d784 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -1035,10 +1035,12 @@ typedef __char32_t char32_t;
+@@ -1081,10 +1081,12 @@ typedef __char32_t char32_t;
  #  ifndef _LIBCPP_HAS_NO_ASAN
  extern "C" _LIBCPP_EXPORTED_FROM_ABI void
  __sanitizer_annotate_contiguous_container(const void*, const void*, const void*, const void*);
@@ -16,10 +16,10 @@ index 5eeb235..255b858 100644
  
  // Try to find out if RTTI is disabled.
 diff --git a/include/deque b/include/deque
-index 2c6773a..26bacb7 100644
+index 154926d..9559235 100644
 --- a/include/deque
 +++ b/include/deque
-@@ -888,7 +888,7 @@ private:
+@@ -886,7 +886,7 @@ private:
      (void)__old_con_end;
      (void)__new_con_beg;
      (void)__new_con_end;
@@ -28,7 +28,7 @@ index 2c6773a..26bacb7 100644
      if (__beg != nullptr && __asan_annotate_container_with_allocator<_Allocator>::value)
        __sanitizer_annotate_double_ended_contiguous_container(
            __beg, __end, __old_con_beg, __old_con_end, __new_con_beg, __new_con_end);
-@@ -1079,7 +1079,7 @@ private:
+@@ -1077,7 +1077,7 @@ private:
      }
  #endif
    }
@@ -38,7 +38,7 @@ index 2c6773a..26bacb7 100644
  public:
    _LIBCPP_HIDE_FROM_ABI bool __verify_asan_annotations() const _NOEXCEPT {
 diff --git a/include/vector b/include/vector
-index 3aeb250..cc80875 100644
+index b989a3c..61e3263 100644
 --- a/include/vector
 +++ b/include/vector
 @@ -848,7 +848,7 @@ private:

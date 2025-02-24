@@ -9,7 +9,7 @@
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
+#include <yt/cpp/mapreduce/http_client/raw_client.h>
 
 #include <util/generic/size_literals.h>
 

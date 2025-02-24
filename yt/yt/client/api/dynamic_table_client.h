@@ -20,6 +20,7 @@ struct TLookupRequestOptions
     TDetailedProfilingInfoPtr DetailedProfilingInfo;
     //! Add |$timestamp:columnName| to result if readMode is latest_timestamp.
     NTableClient::TVersionedReadOptions VersionedReadOptions;
+    std::optional<std::string> ExecutionPool;
 };
 
 struct TLookupRowsOptionsBase
@@ -107,11 +108,11 @@ struct IDynamicTableClientBase
         const TMultiLookupOptions& options = {}) = 0;
 
     virtual TFuture<TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options = {}) = 0;
 
     virtual TFuture<NYson::TYsonString> ExplainQuery(
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options = {}) = 0;
 };
 

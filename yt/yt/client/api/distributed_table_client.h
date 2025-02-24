@@ -6,16 +6,23 @@
 
 #include <yt/yt/client/table_client/config.h>
 
+#include <yt/yt/core/ytree/yson_struct.h>
+
 namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TDistributedWriteSessionWithCookies
+    : public NYTree::TYsonStructLite
 {
     // TDistributedWriteSession.
     TSignedDistributedWriteSessionPtr Session;
     // std::vector<TWriteFragmentCookie>.
     std::vector<TSignedWriteFragmentCookiePtr> Cookies;
+
+    REGISTER_YSON_STRUCT_LITE(TDistributedWriteSessionWithCookies)
+
+    static void Register(TRegistrar registrar);
 };
 
 struct TDistributedWriteSessionWithResults

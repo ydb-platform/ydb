@@ -218,6 +218,91 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
     }
 
+    Y_UNIT_TEST(AlterObjectDisabled) {
+        auto settings = TKikimrSettings()
+             .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();
+
+        {
+            //1. QueryService
+            //1.1 Check that ALTER OBJECT is not working for column tables
+            auto client = kikimr.GetQueryClient();
+            const auto result = client.ExecuteQuery(
+                "ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`)",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Error: ALTER OBJECT is disabled for column tables", result.GetIssues().ToString());
+
+            //1.2 Check that ALTER TABLE is still working for column tables
+            {
+                const auto result = client.ExecuteQuery(
+                    "ALTER TABLE `/Root/olapTable` DROP COLUMN message",
+                    NYdb::NQuery::TTxControl::NoTx()
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            {
+                const auto result = client.ExecuteQuery(
+                    "ALTER TABLE `/Root/olapTable` ADD COLUMN message Text",
+                    NYdb::NQuery::TTxControl::NoTx()
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            {
+                const auto result = client.ExecuteQuery(
+                    "ALTER TABLE `/Root/olapTable` ALTER FAMILY default SET compression 'LZ4';",
+                    NYdb::NQuery::TTxControl::NoTx()
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            {
+                const auto result = client.ExecuteQuery(
+                    "ALTER TABLE `/Root/olapTable` set TTL Interval('P1D') on timestamp;",
+                    NYdb::NQuery::TTxControl::NoTx()
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+        {
+            //2. TableService
+            //2.1 Check that ALTER OBJECT is not working for column tables
+            auto client = kikimr.GetTableClient();
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto result = session.ExecuteSchemeQuery(
+                "ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`)"
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Error: ALTER OBJECT is disabled for column tables", result.GetIssues().ToString());
+            //2.2 Check that ALTER TABLE is still working for column tables
+            {
+                const auto result = session.ExecuteSchemeQuery(
+                "ALTER TABLE `/Root/olapTable` DROP COLUMN message"
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            {
+                const auto result = session.ExecuteSchemeQuery(
+                    "ALTER TABLE `/Root/olapTable` ADD COLUMN message Text"
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+        {
+            //3. YqlScript
+            //3.1 Check that ALTER OBJECT is not working for column tables
+            NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+            auto result = client.ExecuteYqlScript(
+                "ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`)"
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Error: ALTER OBJECT is disabled for column tables", result.GetIssues().ToString());
+            //3.2 YqlScript is deprecated, not woth bothering about positive checks
+            //skipped
+        }
+    }
+
     Y_UNIT_TEST(SimpleQueryOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -295,7 +380,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(SimpleQueryOlapDiagnostics) {
+    Y_UNIT_TEST(SimpleQueryOlapMeta) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -308,7 +393,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             TStreamExecScanQuerySettings settings;
-            settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+            settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
             auto it = client.StreamExecuteScanQuery(R"(
                 --!syntax_v1
                 SELECT `resource_id`, `timestamp`
@@ -317,15 +402,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )", settings).GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            NJson::TJsonValue jsonDiagnostics;
-            CollectRows(it, nullptr, &jsonDiagnostics);
-            UNIT_ASSERT_C(!jsonDiagnostics.IsDefined(), "Query result diagnostics should be empty, but it's not");
+            NJson::TJsonValue jsonMeta;
+            CollectRows(it, nullptr, &jsonMeta);
+            UNIT_ASSERT_C(!jsonMeta.IsDefined(), "Query result meta should be empty, but it's not");
         }
 
         {
             TStreamExecScanQuerySettings settings;
             settings.CollectQueryStats(ECollectQueryStatsMode::Full);
-            settings.CollectFullDiagnostics(true);
+
             auto it = client.StreamExecuteScanQuery(R"(
                 --!syntax_v1
                 SELECT `resource_id`, `timestamp`
@@ -334,22 +419,22 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )", settings).GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            NJson::TJsonValue jsonDiagnostics;
-            CollectRows(it, nullptr, &jsonDiagnostics);
-            UNIT_ASSERT(!jsonDiagnostics.IsNull());
+            NJson::TJsonValue jsonMeta;
+            CollectRows(it, nullptr, &jsonMeta);
+            UNIT_ASSERT(!jsonMeta.IsNull());
 
-            UNIT_ASSERT_C(jsonDiagnostics.IsMap(), "Incorrect Diagnostics");
-            UNIT_ASSERT_C(jsonDiagnostics.Has("query_id"), "Incorrect Diagnostics");
-            UNIT_ASSERT_C(jsonDiagnostics.Has("version"), "Incorrect Diagnostics");
-            UNIT_ASSERT_C(jsonDiagnostics.Has("query_text"), "Incorrect Diagnostics");
-            UNIT_ASSERT_C(jsonDiagnostics.Has("query_parameter_types"), "Incorrect Diagnostics");
-            UNIT_ASSERT_C(jsonDiagnostics.Has("table_metadata"), "Incorrect Diagnostics");
-            UNIT_ASSERT_C(jsonDiagnostics.Has("created_at"), "Incorrect Diagnostics");
-            UNIT_ASSERT_C(jsonDiagnostics.Has("query_syntax"), "Incorrect Diagnostics");
-            UNIT_ASSERT_C(jsonDiagnostics.Has("query_database"), "Incorrect Diagnostics");
-            UNIT_ASSERT_C(jsonDiagnostics.Has("query_cluster"), "Incorrect Diagnostics");
-            UNIT_ASSERT_C(jsonDiagnostics.Has("query_plan"), "Incorrect Diagnostics");
-            UNIT_ASSERT_C(jsonDiagnostics.Has("query_type"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonMeta.IsMap(), "Incorrect Meta");
+            UNIT_ASSERT_C(jsonMeta.Has("query_id"), "Incorrect Meta");
+            UNIT_ASSERT_C(jsonMeta.Has("version"), "Incorrect Meta");
+            UNIT_ASSERT_C(!jsonMeta.Has("query_text"), "Incorrect Meta");
+            UNIT_ASSERT_C(jsonMeta.Has("query_parameter_types"), "Incorrect Meta");
+            UNIT_ASSERT_C(jsonMeta.Has("table_metadata"), "Incorrect Meta");
+            UNIT_ASSERT_C(jsonMeta.Has("created_at"), "Incorrect Meta");
+            UNIT_ASSERT_C(jsonMeta.Has("query_syntax"), "Incorrect Meta");
+            UNIT_ASSERT_C(jsonMeta.Has("query_database"), "Incorrect Meta");
+            UNIT_ASSERT_C(jsonMeta.Has("query_cluster"), "Incorrect Meta");
+            UNIT_ASSERT_C(!jsonMeta.Has("query_plan"), "Incorrect Meta");
+            UNIT_ASSERT_C(jsonMeta.Has("query_type"), "Incorrect Meta");
         }
     }
 
@@ -822,9 +907,51 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(rows.size() == 0);
     }
 
-    Y_UNIT_TEST(ExtractRanges) {
+    Y_UNIT_TEST(ExtractRangesSimple) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideMemoryLimitForPortionReading(10000000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
+
+        auto tableClient = kikimr.GetTableClient();
+        {
+            auto alterQuery = TStringBuilder() <<
+                              R"(
+                ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        auto selectQuery = TString(R"(
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable`
+                WHERE
+                    (`timestamp` < CAST(1000100 AS Timestamp) AND `timestamp` > CAST(1000095 AS Timestamp))
+                    AND (`uid` != 'uuu')
+                ORDER BY `timestamp`
+                LIMIT 1000;
+        )");
+
+        auto rows = ExecuteScanQuery(tableClient, selectQuery);
+
+        TInstant tsPrev = TInstant::MicroSeconds(1000000);
+
+        std::set<ui64> results = { 1000096, 1000097, 1000098, 1000099, 1000999, 1001000 };
+        for (const auto& r : rows) {
+            TInstant ts = GetTimestamp(r.at("timestamp"));
+            UNIT_ASSERT_GE_C(ts, tsPrev, "result is not sorted in ASC order");
+            UNIT_ASSERT(results.erase(ts.GetValue()));
+            tsPrev = ts;
+        }
+        UNIT_ASSERT(rows.size() == 4);
+    }
+
+    Y_UNIT_TEST(ExtractRanges) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -2640,7 +2767,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(CompactionPlanner) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -2698,7 +2827,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto alterQuery =
                 TStringBuilder() <<
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                  {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "180s", "expected_blobs_size" : 2048000}, 
+                  {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "180s", "expected_blobs_size" : 2048000},
                                {"class_name" : "Zero", "expected_blobs_size" : 2048000}, {"class_name" : "Zero"}]}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -2723,8 +2852,38 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     }
 
-    Y_UNIT_TEST(MetadataMemoryManager) {
+    Y_UNIT_TEST(CompactionPlannerQueryService) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
         auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+        {
+            auto alterQuery =
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                  {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 1, "portions_count_available" : 3},
+                               {"class_name" : "Zero"}]}`);
+                )";
+            auto result = session.ExecuteQuery(alterQuery, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 300000000, 1000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 300100000, 1000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(csController->GetCompactionStartedCounter().Val(), 0);
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 300200000, 1000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        UNIT_ASSERT_GT(csController->GetCompactionStartedCounter().Val(), 0);
+    }
+
+    Y_UNIT_TEST(MetadataMemoryManager) {
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -2781,7 +2940,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(NormalizeAbsentColumn) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         TLocalHelper testHelper(kikimr);
 
@@ -2942,34 +3103,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(TableSinkWithOlapStore) {
-       NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr)
-            .SetComponents({ NKikimrServices::TX_COLUMNSHARD_WRITE, NKikimrServices::TX_COLUMNSHARD }, "CS")
-            .SetPriority(NActors::NLog::PRI_DEBUG)
-            .Initialize();
-
-        TLocalHelper(kikimr).CreateTestOlapTables();
-
-        WriteTestData(kikimr, "/Root/olapStore/olapTable0", 0, 1000000, 3, true);
-
-        auto client = kikimr.GetQueryClient();
-        {
-            auto result = client.ExecuteQuery(R"(
-                SELECT * FROM `/Root/olapStore/olapTable0` ORDER BY timestamp;
-                INSERT INTO `/Root/olapStore/olapTable1` SELECT * FROM `/Root/olapStore/olapTable0`;
-                REPLACE INTO `/Root/olapStore/olapTable0` SELECT * FROM `/Root/olapStore/olapTable1`;
-                SELECT * FROM `/Root/olapStore/olapTable1` ORDER BY timestamp;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-    }
-
     Y_UNIT_TEST(ScanFailedSnapshotTooOld) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
@@ -2995,91 +3128,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
 
-    void TestDeleteAbsent(const size_t shardCount, bool reboot) {
-        //This test tries to DELETE from a table when there is no rows to delete at some shard
-        //It corresponds to a SCAN, then NO write then COMMIT on that shard
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-
-        NKikimrConfig::TAppConfig appConfig;
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
-        TTestHelper testHelper(settings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Int32).SetNullable(true),
-        };
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ttt").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema).SetMinPartitionsCount(shardCount);
-        testHelper.CreateTable(testTable);
-        auto client = testHelper.GetKikimr().GetQueryClient();
-        //1. Insert exactlly one row into a table, so the only shard will contain a row
-        const auto result = client
-            .ExecuteQuery(
-                R"(
-                 INSERT INTO `/Root/ttt` (id, value) VALUES
-                 (1, 11)
-                )",
-                NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-            .GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        //2. Ensure that there is actually 1 row in the table
-        {
-            const auto resultSelect = client
-                .ExecuteQuery(
-                    "SELECT * FROM `/Root/ttt`",
-                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-                .GetValueSync();
-
-            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
-            const auto resultSets = resultSelect.GetResultSets();
-            UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
-            const auto resultSet = resultSets[0];
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
-        }
-        if (reboot) {
-            csController->SetRestartOnLocalTxCommitted("TProposeWriteTransaction");
-        }
-        //DELETE 1 row from one shard and 0 rows from others
-        const auto resultDelete =
-            client
-                .ExecuteQuery(
-                    "DELETE from `/Root/ttt` ",
-                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-                .GetValueSync();
-        UNIT_ASSERT_C(resultDelete.IsSuccess() != reboot, resultDelete.GetIssues().ToString());
-        {
-            const auto resultSelect = client
-                .ExecuteQuery(
-                    "SELECT * FROM `/Root/ttt`",
-                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-                .GetValueSync();
-
-            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
-            const auto resultSets = resultSelect.GetResultSets();
-            UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
-            const auto resultSet = resultSets[0];
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), reboot ? 1 : 0);
-            
-        }
-        //DELETE 0 rows from every shard
-        const auto resultDelete2 =
-            client
-                .ExecuteQuery(
-                    "DELETE from `/Root/ttt` WHERE id < 100",
-                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-                .GetValueSync();
-        UNIT_ASSERT_C(resultDelete2.IsSuccess() != reboot, result.GetIssues().ToString());
-    }
-    Y_UNIT_TEST_TWIN(DeleteAbsentSingleShard, Reboot) {
-        TestDeleteAbsent(1, Reboot);
-    }
-
-    Y_UNIT_TEST_TWIN(DeleteAbsentMultipleShards, Reboot) {
-        TestDeleteAbsent(2, Reboot);
-    }
-
     Y_UNIT_TEST(InsertIntoNullablePK) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
         auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
         TTestHelper testHelper(settings);
@@ -3128,6 +3179,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(InsertEmptyString) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
         auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
         TTestHelper testHelper(settings);

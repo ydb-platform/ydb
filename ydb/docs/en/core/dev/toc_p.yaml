@@ -18,11 +18,6 @@ items:
     path: primary-key/toc_p.yaml
 - name: Secondary indexes
   href: secondary-indexes.md
-- name: Troubleshooting
-  href: troubleshooting/index.md
-  include:
-    mode: link
-    path: troubleshooting/toc_p.yaml
 - name: Query plans optimization
   href: query-plans-optimization.md
 - name: Batch upload

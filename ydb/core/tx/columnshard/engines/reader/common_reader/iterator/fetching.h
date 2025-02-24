@@ -68,7 +68,7 @@ class IFetchingStep: public TNonCopyable {
 private:
     YDB_READONLY_DEF(TString, Name);
     TAtomicCounter SumDuration;
-    YDB_READONLY(ui64, SumSize, 0);
+    TAtomicCounter SumSize;
     TFetchingStepSignals Signals;
 
 protected:
@@ -82,12 +82,16 @@ public:
         return TDuration::MicroSeconds(SumDuration.Val());
     }
 
+    ui64 GetSumSize() const {
+        return SumSize.Val();
+    }
+
     void AddDuration(const TDuration d) {
         SumDuration.Add(d.MicroSeconds());
         Signals.AddDuration(d);
     }
     void AddDataSize(const ui64 size) {
-        SumSize += size;
+        SumSize.Add(size);
         Signals.AddBytes(size);
     }
 
@@ -167,6 +171,64 @@ public:
     }
 
     ui32 Execute(const ui32 startStepIdx, const std::shared_ptr<IDataSource>& source) const;
+};
+
+class TFetchingScriptOwner: TNonCopyable {
+private:
+    TAtomic InitializationDetector = 0;
+    std::shared_ptr<TFetchingScript> Script;
+
+    void FinishInitialization(std::shared_ptr<TFetchingScript>&& script) {
+        Script = std::move(script);
+        AFL_VERIFY(AtomicCas(&InitializationDetector, 1, 2));
+    }
+
+public:
+    const std::shared_ptr<TFetchingScript>& GetScriptVerified() const {
+        AFL_VERIFY(Script);
+        return Script;
+    }
+
+    TString DebugString() const {
+        if (Script) {
+            return TStringBuilder() << Script->DebugString() << Endl;
+        } else {
+            return TStringBuilder() << "NO_SCRIPT" << Endl;
+        }
+    }
+
+    bool HasScript() const {
+        return !!Script;
+    }
+
+    bool NeedInitialization() const {
+        return AtomicGet(InitializationDetector) != 1;
+    }
+
+    class TInitializationGuard: TNonCopyable {
+    private:
+        TFetchingScriptOwner& Owner;
+
+    public:
+        TInitializationGuard(TFetchingScriptOwner& owner)
+            : Owner(owner) {
+            Owner.StartInitialization();
+        }
+        void InitializationFinished(std::shared_ptr<TFetchingScript>&& script) {
+            Owner.FinishInitialization(std::move(script));
+        }
+        ~TInitializationGuard() {
+            AFL_VERIFY(!Owner.NeedInitialization());
+        }
+    };
+
+    std::optional<TInitializationGuard> StartInitialization() {
+        if (AtomicCas(&InitializationDetector, 2, 0)) {
+            return std::optional<TInitializationGuard>(*this);
+        } else {
+            return std::nullopt;
+        }
+    }
 };
 
 class TColumnsAccumulator {
@@ -251,6 +313,19 @@ public:
         : TStepAction(std::static_pointer_cast<IDataSource>(source), std::move(cursor), ownerActorId) {
     }
     TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId);
+};
+
+class TProgramStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    const NArrow::NSSA::TResourceProcessorStep Step;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TProgramStep(const NArrow::NSSA::TResourceProcessorStep& step)
+        : TBase("EARLY_FILTER_STEP")
+        , Step(step) {
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

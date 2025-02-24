@@ -13,6 +13,7 @@ RECURSE_FOR_TESTS(
     ut_column_build
     ut_compaction
     ut_continuous_backup
+    ut_data_erasure
     ut_export
     ut_export_reboots_s3
     ut_external_data_source
@@ -69,6 +70,7 @@ SRCS(
     schemeshard__borrowed_compaction.cpp
     schemeshard__clean_pathes.cpp
     schemeshard__conditional_erase.cpp
+    schemeshard__data_erasure_manager.cpp
     schemeshard__delete_tablet_reply.cpp
     schemeshard__describe_scheme.cpp
     schemeshard__find_subdomain_path_id.cpp
@@ -196,8 +198,11 @@ SRCS(
     schemeshard__sync_update_tenants.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
+    schemeshard__unmark_restore_tables.cpp
     schemeshard__upgrade_access_database.cpp
     schemeshard__upgrade_schema.cpp
+    schemeshard__root_data_erasure_manager.cpp
+    schemeshard__tenant_data_erasure_manager.cpp
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp
@@ -234,6 +239,7 @@ SRCS(
     schemeshard_import__get.cpp
     schemeshard_import__list.cpp
     schemeshard_import_flow_proposals.cpp
+    schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
     schemeshard_path.cpp
@@ -274,6 +280,7 @@ PEERDIR(
     ydb/core/audit
     ydb/core/base
     ydb/core/blob_depot
+    ydb/core/blobstorage/base
     ydb/core/blockstore/core
     ydb/core/engine
     ydb/core/engine/minikql
@@ -308,6 +315,8 @@ PEERDIR(
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer
+    ydb/public/lib/ydb_cli/dump/files
+    ydb/public/lib/ydb_cli/dump/util
     yql/essentials/minikql
     yql/essentials/providers/common/proto
     ydb/services/bg_tasks
@@ -319,10 +328,12 @@ YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     SRCS(
+        schemeshard_export_scheme_uploader_fallback.cpp
         schemeshard_import_scheme_getter_fallback.cpp
     )
 ELSE()
     SRCS(
+        schemeshard_export_scheme_uploader.cpp
         schemeshard_import_scheme_getter.cpp
     )
 ENDIF()

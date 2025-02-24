@@ -594,6 +594,7 @@ enum EGenericDataSourceKind {
     GREENPLUM = 7;
     ORACLE = 8;
     LOGGING = 9;
+    MONGO_DB = 10;
 }
 
 // EGenericProtocol generalizes various kinds of network protocols supported by different databases.
@@ -640,6 +641,33 @@ message TLoggingDataSourceOptions {
     optional string folder_id = 1;
 }
 
+// TMongoDbDataSourceOptions represents settings specific to MongoDB
+message TMongoDbDataSourceOptions {
+    enum EReadingMode {
+        READING_MODE_UNSPECIFIED = 0;
+        // Returns each top level field of the document deserialized into the corresponding YQL type; if the type of some field is ambiguous / inconsistent across several documents it is returned serialized as an YQL Utf8 value
+        TABLE = 1;
+    };
+      
+    // Ways of dealing with values read in ReadSplit whose types are inconsistent with types that were deduced in DescribeTable
+    enum EUnexpectedTypeDisplayMode {
+        UNEXPECTED_UNSPECIFIED = 0;
+        UNEXPECTED_AS_NULL = 1;
+        UNEXPECTED_AS_STRING = 2;
+    };
+
+    // Ways of dealing with unsupported data types
+    enum EUnsupportedTypeDisplayMode {
+        UNSUPPORTED_UNSPECIFIED = 0;
+        UNSUPPORTED_OMIT = 1;
+        UNSUPPORTED_AS_STRING = 2;
+    };
+    
+    optional EReadingMode reading_mode = 1;
+    optional EUnexpectedTypeDisplayMode unexpected_type_display_mode = 2;
+    optional EUnsupportedTypeDisplayMode unsupported_type_display_mode = 3;
+}
+
 // TGenericDataSourceInstance helps to identify the instance of a data source to redirect request to.
 message TGenericDataSourceInstance {
     // Data source kind
@@ -664,6 +692,7 @@ message TGenericDataSourceInstance {
         TGreenplumDataSourceOptions gp_options = 10;
         TOracleDataSourceOptions oracle_options = 11;
         TLoggingDataSourceOptions logging_options = 12;
+        TMongoDbDataSourceOptions mongodb_options = 13;
     }
 }
 
@@ -770,6 +799,13 @@ message TRevisionFilterConfig {
     repeated TRevisionException RevisionException = 1;
 }
 
+///////////////////////////// Ytflow /////////////////////////////
+
+message TYtflowGatewayConfig {
+    optional uint32 GatewayThreads = 1 [default = 1]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
+}
+
+
 /////////////////////////////// Root ///////////////////////////////
 
 message TGatewaysConfig {
@@ -796,4 +832,5 @@ message TGatewaysConfig {
     optional TGenericGatewayConfig Generic = 21;
     optional TRevisionFilterConfig RevisionFilter = 22;
     optional TDbResolverConfig DbResolver = 23;
+    optional TYtflowGatewayConfig Ytflow = 24;
 }

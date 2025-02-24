@@ -451,25 +451,23 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             SendReply(std::move(result), blobIdx);
         }
 
-        if (AllowToReport(HandleClass)) {
-            if (TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) {
-                STLOG(PRI_WARN, BS_PROXY_PUT, BPP71, "Long TEvPut request detected",        \
-                        (LongRequestThreshold, LongRequestThreshold),                           \
-                        (GroupId, Info->GroupID),                                               \
-                        (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),   \
-                        (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),                   \
-                        (RestartCounter, RestartCounter),                                       \
-                        (History, PutImpl.PrintHistory()));
-            }
+        if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(HandleClass)) {
+            STLOG(PRI_WARN, BS_PROXY_PUT, BPP71, "Long TEvPut request detected",
+                    (LongRequestThreshold, LongRequestThreshold),
+                    (GroupId, Info->GroupID),
+                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
+                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
+                    (RestartCounter, RestartCounter),
+                    (History, PutImpl.PrintHistory()));
+        }
 
-            if (ResponsesSent == PutImpl.Blobs.size()) {
-                STLOG(PutImpl.WasNotOkResponses() ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_PUT, BPP72,
-                        "Query history",                                                            \
-                        (GroupId, Info->GroupID),                                                   \
-                        (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),       \
-                        (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),                       \
-                        (History, PutImpl.PrintHistory()));
-            }
+        if (ResponsesSent == PutImpl.Blobs.size()) {
+            STLOG(PutImpl.WasNotOkResponses() && PopAllowToken(HandleClass) ? PRI_NOTICE : PRI_DEBUG,
+                    BS_PROXY_PUT, BPP72, "Query history",
+                    (GroupId, Info->GroupID),
+                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
+                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
+                    (History, PutImpl.PrintHistory()));
         }
 
         if (ResponsesSent == PutImpl.Blobs.size()) {

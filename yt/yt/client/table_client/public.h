@@ -165,6 +165,11 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, int,
     ((Scan)    (1))
 );
 
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(ETabletTransactionSerializationType, i8,
+    ((Coarse)  (0))
+    ((PerRow)  (1))
+);
+
 YT_DEFINE_ERROR_ENUM(
     ((SortOrderViolation)                (301))
     ((InvalidDoubleValue)                (302))
@@ -356,38 +361,38 @@ using TSchemalessWriterFactory = std::function<IUnversionedRowsetWriterPtr(
 DECLARE_REFCOUNTED_STRUCT(IVersionedReader)
 DECLARE_REFCOUNTED_STRUCT(IVersionedWriter)
 
-DECLARE_REFCOUNTED_CLASS(THashTableChunkIndexWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TChunkIndexesWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TSlimVersionedWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(THashTableChunkIndexWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TChunkIndexesWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TSlimVersionedWriterConfig)
 
 DECLARE_REFCOUNTED_CLASS(TChunkWriterTestingOptions)
 
-DECLARE_REFCOUNTED_CLASS(TChunkReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TChunkWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TChunkReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TChunkWriterConfig)
 
-DECLARE_REFCOUNTED_CLASS(TKeyFilterWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TKeyPrefixFilterWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TKeyFilterWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TKeyPrefixFilterWriterConfig)
 
-DECLARE_REFCOUNTED_CLASS(TDictionaryCompressionConfig)
+DECLARE_REFCOUNTED_STRUCT(TDictionaryCompressionConfig)
 
-DECLARE_REFCOUNTED_CLASS(TBatchHunkReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TBatchHunkReaderConfig)
 
-DECLARE_REFCOUNTED_CLASS(TDictionaryCompressionSessionConfig)
+DECLARE_REFCOUNTED_STRUCT(TDictionaryCompressionSessionConfig)
 
-DECLARE_REFCOUNTED_CLASS(TTableReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TTableWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TTableReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TTableWriterConfig)
 
-DECLARE_REFCOUNTED_CLASS(TRetentionConfig)
+DECLARE_REFCOUNTED_STRUCT(TRetentionConfig)
 
-DECLARE_REFCOUNTED_CLASS(TTypeConversionConfig)
-DECLARE_REFCOUNTED_CLASS(TInsertRowsFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TTypeConversionConfig)
+DECLARE_REFCOUNTED_STRUCT(TInsertRowsFormatConfig)
 
 DECLARE_REFCOUNTED_CLASS(TChunkReaderOptions)
 DECLARE_REFCOUNTED_CLASS(TChunkWriterOptions)
 
-DECLARE_REFCOUNTED_CLASS(TVersionedRowDigestConfig)
+DECLARE_REFCOUNTED_STRUCT(TVersionedRowDigestConfig)
 
-DECLARE_REFCOUNTED_CLASS(TSchemalessBufferedDynamicTableWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TSchemalessBufferedDynamicTableWriterConfig)
 
 DECLARE_REFCOUNTED_CLASS(TSchemafulPipe)
 

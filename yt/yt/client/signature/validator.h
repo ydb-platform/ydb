@@ -2,34 +2,27 @@
 
 #include "public.h"
 
-#include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/actions/public.h>
+
+#include <yt/yt/core/yson/public.h>
 
 namespace NYT::NSignature {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSignatureValidatorBase
+struct ISignatureValidator
     : public TRefCounted
 {
-public:
     virtual TFuture<bool> Validate(const TSignaturePtr& signature) = 0;
-
-    virtual ~TSignatureValidatorBase() = default;
-
-protected:
-    const NYson::TYsonString& GetHeader(const TSignaturePtr& signature);
-
-    const std::vector<std::byte>& GetSignature(const TSignaturePtr& signature);
 };
 
-DEFINE_REFCOUNTED_TYPE(TSignatureValidatorBase)
+DEFINE_REFCOUNTED_TYPE(ISignatureValidator)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSignatureValidatorBasePtr CreateDummySignatureValidator();
+ISignatureValidatorPtr CreateDummySignatureValidator();
 
-TSignatureValidatorBasePtr CreateAlwaysThrowingSignatureValidator();
+ISignatureValidatorPtr CreateAlwaysThrowingSignatureValidator();
 
 ////////////////////////////////////////////////////////////////////////////////
 

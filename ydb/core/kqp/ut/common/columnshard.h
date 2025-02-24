@@ -20,7 +20,7 @@ class TTestHelper {
 public:
     class TCompression {
         YDB_ACCESSOR(TString, SerializerClassName, "ARROW_SERIALIZER");
-        YDB_ACCESSOR_DEF(NKikimrSchemeOp::EColumnCodec, CompressionType);
+        YDB_OPT(NKikimrSchemeOp::EColumnCodec, CompressionType);
         YDB_ACCESSOR_DEF(std::optional<i32>, CompressionLevel);
 
     public:

@@ -30,8 +30,13 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
             }
             auto user = Result->Record.AddUsers();
             user->SetName(sid.Name);
+            user->SetIsEnabled(sid.IsEnabled);
+            user->SetIsLockedOut(Self->LoginProvider.IsLockedOut(sid));
+            user->SetCreatedAt(ToInstant(sid.CreatedAt).MilliSeconds());
+            user->SetLastSuccessfulAttemptAt(ToInstant(sid.LastSuccessfulLogin).MilliSeconds());
+            user->SetLastFailedAttemptAt(ToInstant(sid.LastFailedLogin).MilliSeconds());
+            user->SetFailedAttemptCount(sid.FailedLoginAttemptCount);
             user->SetPasswordHash(sid.PasswordHash);
-            // TODO: fill the rest user fields
         }
 
         return true;

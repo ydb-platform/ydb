@@ -91,13 +91,16 @@ struct TStageInfoMeta {
 struct TGraphMeta {
     IKqpGateway::TKqpSnapshot Snapshot;
     TMaybe<ui64> LockTxId;
-    ui32 LockNodeId;
+    ui32 LockNodeId = 0;
     TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
     bool UseFollowers = false;
     bool AllowInconsistentReads = false;
     bool AllowWithSpilling = false;
+    bool SinglePartitionOptAllowed = false;
+    bool LocalComputeTasks = false;
+    bool MayRunTasksLocally = false;
     TIntrusivePtr<TProtoArenaHolder> Arena;
     TString Database;
     NKikimrConfig::TTableServiceConfig::EChannelTransportVersion ChannelTransportVersion;
@@ -156,6 +159,8 @@ struct TShardKeyRanges {
     void MakeFullPoint(TSerializedCellVec&& range);
     void MakeFull(TSerializedPointOrRange&& pointOrRange);
 
+    bool HasRanges() const;
+
     bool IsFullRange() const { return FullRange.has_value(); }
     TVector<TSerializedPointOrRange>& GetRanges() { return Ranges; }
 
@@ -164,7 +169,7 @@ struct TShardKeyRanges {
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
     void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange* proto) const;
     void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta_TReadOpMeta* proto) const;
-    void SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto) const;
+    void SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto, bool allowPoints = true) const;
 
     std::pair<const TSerializedCellVec*, bool> GetRightBorder() const;
 };

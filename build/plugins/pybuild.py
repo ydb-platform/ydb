@@ -672,7 +672,11 @@ def _check_test_srcs(*args):
 def ontest_srcs(unit, *args):
     _check_test_srcs(*args)
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
-        unit.onpy_srcs(["NAMESPACE", "__tests__"] + list(args))
+        namespace = "__tests__"
+        # Avoid collision on test modules in venv mode
+        if unit.get('YA_IDE_VENV'):
+            namespace += "." + unit.path()[3:].replace('/', '.')
+        unit.onpy_srcs(["NAMESPACE", namespace] + list(args))
 
 
 def onpy_doctests(unit, *args):

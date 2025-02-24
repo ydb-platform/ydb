@@ -861,6 +861,279 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         WaitForSuccess(ydb, settings.GroupSIDs({firstSID, secondSID}));
     }
+
+    Y_UNIT_TEST(TestResourcePoolClassifiersSysViewOnServerless) {
+        auto ydb = TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePoolsOnServerless(true)
+            .Create();
+
+        const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
+        const auto& sharedTenant = ydb->GetSettings().GetSharedTenantName();
+
+        auto settings = TQueryRunnerSettings()
+            .PoolId("")
+            .NodeIndex(1);
+
+        const TString& poolId = "my_pool";
+        ydb->ExecuteQueryRetry("Wait TestResourcePoolClassifiersSysViewOnServerless", TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << poolId << R"( WITH (
+                CONCURRENT_QUERY_LIMIT=1,
+                QUEUE_SIZE=0
+            );
+            CREATE RESOURCE POOL CLASSIFIER a_first_classifier WITH (
+                RESOURCE_POOL=")" << poolId << R"(",
+                MEMBER_NAME="staff@builtin",
+                RANK=1
+            );
+            CREATE RESOURCE POOL CLASSIFIER b_second_classifier WITH (
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
+                MEMBER_NAME="boss@builtin",
+                RANK=2
+            );
+        )", settings.Database(serverlessTenant));
+
+        ydb->ExecuteQueryRetry("Wait TestResourcePoolClassifiersSysViewOnServerless", TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << poolId << R"( WITH (
+                CONCURRENT_QUERY_LIMIT=1,
+                QUEUE_SIZE=0
+            );
+            CREATE RESOURCE POOL CLASSIFIER a_first_classifier_shared WITH (
+                RESOURCE_POOL=")" << poolId << R"(",
+                MEMBER_NAME="staff@builtin",
+                RANK=1
+            );
+            CREATE RESOURCE POOL CLASSIFIER b_second_classifier_shared WITH (
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
+                MEMBER_NAME="boss@builtin",
+                RANK=2
+            );
+        )", settings.Database(sharedTenant));
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pool_classifiers` ORDER BY Name ASC
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(serverlessTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a_first_classifier");
+            auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 1);
+            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b_second_classifier");
+            rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 2);
+            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pool_classifiers` ORDER BY Name ASC
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(sharedTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a_first_classifier_shared");
+            auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 1);
+            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b_second_classifier_shared");
+            rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 2);
+            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+    }
+
+    Y_UNIT_TEST(TestResourcePoolClassifiersSysViewFilters) {
+        auto ydb = TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePoolsOnServerless(true)
+            .Create();
+
+        const auto& dedicatedTenant = ydb->GetSettings().GetDedicatedTenantName();
+
+        auto settings = TQueryRunnerSettings()
+            .PoolId("")
+            .NodeIndex(1);
+
+        const TString& poolId = "my_pool";
+        ydb->ExecuteQueryRetry("Wait TestResourcePoolClassifiersSysViewOnServerless", TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << poolId << R"( WITH (
+                CONCURRENT_QUERY_LIMIT=1,
+                QUEUE_SIZE=0
+            );
+            CREATE RESOURCE POOL CLASSIFIER a WITH (
+                RESOURCE_POOL=")" << poolId << R"(",
+                MEMBER_NAME="staff@builtin",
+                RANK=1
+            );
+            CREATE RESOURCE POOL CLASSIFIER b WITH (
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
+                MEMBER_NAME="boss@builtin",
+                RANK=2
+            );
+            CREATE RESOURCE POOL CLASSIFIER c WITH (
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
+                MEMBER_NAME="super_boss@builtin",
+                RANK=3
+            );
+        )", settings.Database(dedicatedTenant));
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pool_classifiers` ORDER BY Name ASC
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dedicatedTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a");
+            auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 1);
+            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b");
+            rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 2);
+            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "c");
+            rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 3);
+            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"super_boss@builtin","resource_pool":"default"})");
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pool_classifiers` ORDER BY Name DESC
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dedicatedTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "c");
+            auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 3);
+            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"super_boss@builtin","resource_pool":"default"})");
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b");
+            rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 2);
+            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
+
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a");
+            rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 1);
+            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pool_classifiers` WHERE Name <= "a"
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dedicatedTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a");
+            auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 1);
+            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pool_classifiers` WHERE "a" < Name AND Name < "c"
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dedicatedTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b");
+            auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 2);
+            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pool_classifiers` WHERE Name >= "c"
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dedicatedTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "c");
+            auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 3);
+            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"super_boss@builtin","resource_pool":"default"})");
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+    }
 }
 
 }  // namespace NKikimr::NKqp

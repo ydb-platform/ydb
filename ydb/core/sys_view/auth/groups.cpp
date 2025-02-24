@@ -20,8 +20,9 @@ public:
     using TAuthBase = TAuthScanBase<TGroupsScan>;
 
     TGroupsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns)
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), true, false)
     {
     }
 
@@ -29,16 +30,24 @@ protected:
     void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TEntry& entry) override {
         Y_ABORT_UNLESS(entry.Status == TNavigate::EStatus::Ok);
         Y_ABORT_UNLESS(CanonizePath(entry.Path) == TBase::TenantName);
+
+        TVector<const TDomainInfo::TGroup*> groups(::Reserve(entry.DomainInfo->Groups.size()));
+        for (const auto& group : entry.DomainInfo->Groups) {
+            if (StringKeyIsInTableRange({group.Sid})) {
+                groups.push_back(&group);
+            }
+        }
+        SortBatch(groups, [](const auto* left, const auto* right) {
+            return left->Sid < right->Sid;
+        });
         
         TVector<TCell> cells(::Reserve(Columns.size()));
 
-        // TODO: add rows according to request's sender user rights
-
-        for (const auto& group : entry.DomainInfo->Groups) {
+        for (const auto* group : groups) {
             for (auto& column : Columns) {
                 switch (column.Tag) {
                 case Schema::AuthGroups::Sid::ColumnId:
-                    cells.push_back(TCell(group.Sid.data(), group.Sid.size()));
+                    cells.push_back(TCell(group->Sid.data(), group->Sid.size()));
                     break;
                 default:
                     cells.emplace_back();
@@ -55,9 +64,10 @@ protected:
 };
 
 THolder<NActors::IActor> CreateGroupsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TGroupsScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TGroupsScan>(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
 }
 
 }

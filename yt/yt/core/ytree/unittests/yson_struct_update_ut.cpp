@@ -38,6 +38,7 @@ struct TSpecWithPool
 public:
     std::string Pool;
     int NonUpdatable;
+    IMapNodePtr MapNode;
 
     REGISTER_YSON_STRUCT(TSpecWithPool);
 
@@ -46,6 +47,8 @@ public:
         registrar.Parameter("pool", &TThis::Pool);
         registrar.Parameter("non_updatable", &TThis::NonUpdatable)
             .Default(10);
+        registrar.Parameter("map_node", &TThis::MapNode)
+            .Default();
     }
 };
 

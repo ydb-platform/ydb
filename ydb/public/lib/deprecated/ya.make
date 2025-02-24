@@ -1,6 +1,11 @@
 RECURSE(
     client
-    json_value
     kicli
-    yson_value
 )
+
+IF (NOT OPENSOURCE)
+    RECURSE(
+        json_value
+        yson_value
+    )
+ENDIF()

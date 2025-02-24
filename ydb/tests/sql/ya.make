@@ -1,5 +1,6 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
 TEST_SRCS(
     test_kv.py
@@ -7,7 +8,7 @@ TEST_SRCS(
     test_inserts.py
 )
 
-SIZE(SMALL)
+SIZE(MEDIUM)
 
 DEPENDS(
     ydb/apps/ydb

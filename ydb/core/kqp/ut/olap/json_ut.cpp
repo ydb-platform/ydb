@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                                                                     (3u, JsonDocument('{"a" : "value_a", "b" : "value_b"}'), "value2"), (4u, JsonDocument('{"b" : "value_b", "a" : "a4"}'), "value4")
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "value_a" AND Col3 = "value2" ORDER BY Col1;
-            EXPECTED: [[3u;["{\"a\":\"value_a\",\"b\":\"value_b\"}",\"value2\"]]]
+            EXPECTED: [[3u;["{\"a\":\"value_a\",\"b\":\"value_b\"}"];["value2"]]]
             
         )";
         TScriptVariator(script).Execute();

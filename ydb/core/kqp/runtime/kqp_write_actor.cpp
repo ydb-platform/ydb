@@ -1056,7 +1056,7 @@ public:
                     << "': attach transaction failed.");
         } else {
             RuntimeError(
-                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::NDqProto::StatusIds::UNDETERMINED,
                 NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
                 TStringBuilder()
                     << "ShardId=" << shardId
@@ -2229,11 +2229,19 @@ public:
             return;
         }
 
-        ReplyErrorAndDie(
-            NYql::NDqProto::StatusIds::UNAVAILABLE,
-            NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-            TStringBuilder() << "Failed to deviler message.",
-            {});
+        if (State == EState::COMMITTING) {
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::UNDETERMINED,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder() << "Failed to deviler message.",
+                {});
+        } else {
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder() << "Failed to deviler message.",
+                {});
+        }
     }
 
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {

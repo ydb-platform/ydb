@@ -19,6 +19,10 @@ Y_UNIT_TEST_SUITE(TransferWriter) {
     using namespace NTestHelpers;
     using TRecord = TEvWorker::TEvData::TRecord;
 
+    TRecord Record(ui64 offset, const TString& data) {
+        return TRecord(offset, data, TInstant::Zero(), "MessageGroupId", "ProducerId", 13 /* seqNo */);
+    }
+
     Y_UNIT_TEST(Write_ColumnTable) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
@@ -52,9 +56,9 @@ Y_UNIT_TEST_SUITE(TransferWriter) {
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "TestSource", {
-            TRecord(1, R"({"key":[1], "update":{"value":"10"}})"),
-            TRecord(2, R"({"key":[2], "update":{"value":"20"}})"),
-            TRecord(3, R"({"key":[3], "update":{"value":"30"}})"),
+            Record(1, R"({"key":[1], "update":{"value":"10"}})"),
+            Record(2, R"({"key":[2], "update":{"value":"20"}})"),
+            Record(3, R"({"key":[3], "update":{"value":"30"}})"),
         }));
     }
 

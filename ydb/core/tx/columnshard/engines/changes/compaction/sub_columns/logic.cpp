@@ -22,6 +22,7 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
             stats.emplace_back(&i.GetCurrentSubColumnsArray()->GetOthersData().GetStats());
         }
     }
+    AFL_VERIFY(stats.size());
     auto commonStats = TDictStats::Merge(stats, GetSettings(), inputRecordsCount);
     auto splitted = commonStats.SplitByVolume(GetSettings(), inputRecordsCount);
     ResultColumnStats = splitted.ExtractColumns();

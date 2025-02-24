@@ -693,6 +693,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
             border = arrow::RecordBatch::Make(table->schema(), 1, columns);
         }
 
+        // TODO: rewrite test (functions removed)
         const NArrow::TColumnFilter lt = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::LESS);
         const NArrow::TColumnFilter le = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::LESS_OR_EQUAL);
         const NArrow::TColumnFilter gt = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::GREATER);

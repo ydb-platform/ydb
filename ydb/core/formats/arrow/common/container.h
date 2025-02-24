@@ -6,6 +6,7 @@
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/formats/arrow/modifier/schema.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
@@ -133,6 +134,8 @@ public:
 
     std::shared_ptr<NAccessor::IChunkedArray> GetAccessorByNameOptional(const std::string& fieldId) const;
     std::shared_ptr<NAccessor::IChunkedArray> GetAccessorByNameVerified(const std::string& fieldId) const;
+
+    NAccessor::IChunkedArray::TRowRange EqualRange(const arrow::RecordBatch& border) const;
 };
 
 }   // namespace NKikimr::NArrow

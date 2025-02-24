@@ -7,11 +7,11 @@ PY_SRCS(
     helpers.py
     test_query.py
     test_s3.py
-    conftest.py
 )
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/test_meta
     library/python/testing/recipe
     library/recipes/common
     contrib/python/moto

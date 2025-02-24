@@ -1,8 +1,7 @@
 #include "kernel_logic.h"
 
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
-
-#include <ydb/library/formats/arrow/accessor/composite/accessor.h>
 
 namespace NKikimr::NArrow::NSSA {
 
@@ -44,7 +43,7 @@ TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& i
         resources->AddVerified(output.front().GetColumnId(), builder.Finish());
         return true;
     }
-    if (accJson->GetType() == IChunkedArray::EType::SubColumnsArray) {
+    if (accJson->GetType() != IChunkedArray::EType::SubColumnsArray) {
         return false;
     }
     resources->AddVerified(output.front().GetColumnId(), ExtractArray(accJson, svPath));

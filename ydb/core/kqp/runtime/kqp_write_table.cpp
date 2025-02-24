@@ -44,6 +44,10 @@ public:
         return result;
     }
 
+    std::shared_ptr<void> ExtractBatch() override {
+        return std::dynamic_pointer_cast<void>(Extract());
+    }
+
     explicit TColumnBatch(const TRecordBatchPtr& data)
         : Data(data)
         , Memory(NArrow::GetBatchDataSize(Data)) {
@@ -73,6 +77,11 @@ public:
         Size = 0;
         Rows = 0;
         return {std::move(Cells), std::move(Data)};
+    }
+
+    std::shared_ptr<void> ExtractBatch() override {
+        auto r = std::make_shared<std::pair<std::vector<TCell>, std::vector<TCharVectorPtr>>>(std::move(Extract()));
+        return std::reinterpret_pointer_cast<void>(r);
     }
 
     TRowBatch(std::vector<TCell>&& cells, std::vector<TCharVectorPtr>&& data, i64 size, ui32 rows, ui16 columns)

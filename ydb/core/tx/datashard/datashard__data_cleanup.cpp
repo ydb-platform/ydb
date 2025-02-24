@@ -97,7 +97,7 @@ public:
             waiterIt = Self->DataCleanupWaiters.erase(waiterIt);
         }
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Updated last DataCleanupof tablet# "<< Self->TabletID()
+            "Updated last DataCleanup of tablet# "<< Self->TabletID()
             << ", last persisted DataCleanup generation: " << DataCleanupGeneration);
     }
 };

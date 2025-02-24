@@ -98,6 +98,16 @@ namespace TEvSchemeShard {
         EvListUsers,
         EvListUsersResult,
 
+        EvTenantDataErasureRequest,
+        EvTenantDataErasureResponse,
+        EvWakeupToRunDataErasure,
+        EvMeasureDataErasureBSC,
+        EvWakeupToRunDataErasureBSC,
+        EvCompleteDataErasure,
+        EvDataErasureInfoRequest,
+        EvDataErasureInfoResponse,
+        EvDataErasureManualStartupRequest,
+
         EvEnd
     };
 
@@ -400,6 +410,12 @@ namespace TEvSchemeShard {
     struct TEvWakeupToMeasureSelfResponseTime : public TEventLocal<TEvWakeupToMeasureSelfResponseTime, EvWakeupToMeasureSelfResponseTime> {
     };
 
+    struct TEvWakeupToRunDataErasure : public TEventLocal<TEvWakeupToRunDataErasure, EvWakeupToRunDataErasure> {
+    };
+
+    struct TEvWakeupToRunDataErasureBSC : public TEventLocal<TEvWakeupToRunDataErasureBSC, EvWakeupToRunDataErasureBSC> {
+    };
+
     struct TEvInitTenantSchemeShard: public TEventPB<TEvInitTenantSchemeShard,
                                                             NKikimrScheme::TEvInitTenantSchemeShard,
                                                             EvInitTenantSchemeShard> {
@@ -672,6 +688,78 @@ namespace TEvSchemeShard {
     struct TEvListUsersResult : TEventPB<TEvListUsersResult, NKikimrScheme::TEvListUsersResult, EvListUsersResult> {
         TEvListUsersResult() = default;
     };
+
+    struct TEvTenantDataErasureRequest : TEventPB<TEvTenantDataErasureRequest, NKikimrScheme::TEvTenantDataErasureRequest, EvTenantDataErasureRequest> {
+        TEvTenantDataErasureRequest() = default;
+
+        TEvTenantDataErasureRequest(ui64 generation) {
+            Record.SetGeneration(generation);
+        }
+    };
+
+    struct TEvTenantDataErasureResponse : TEventPB<TEvTenantDataErasureResponse, NKikimrScheme::TEvTenantDataErasureResponse, EvTenantDataErasureResponse> {
+        enum class EStatus {
+            UNSPECIFIED,
+            COMPLETED,
+            IN_PROGRESS,
+        };
+
+        TEvTenantDataErasureResponse() = default;
+
+        TEvTenantDataErasureResponse(const TPathId& pathId, ui64 generation, const EStatus& status) {
+            Record.MutablePathId()->SetOwnerId(pathId.OwnerId);
+            Record.MutablePathId()->SetLocalId(pathId.LocalPathId);
+            Record.SetGeneration(generation);
+            Record.SetStatus(ConvertStatus(status));
+        }
+
+        TEvTenantDataErasureResponse(ui64 ownerId, ui64 localPathId, ui64 generation, const EStatus& status)
+            : TEvTenantDataErasureResponse(TPathId(ownerId, localPathId), generation, status)
+        {}
+
+        NKikimrScheme::TEvTenantDataErasureResponse::EStatus ConvertStatus(const EStatus& status) {
+            switch (status) {
+            case EStatus::UNSPECIFIED:
+                return NKikimrScheme::TEvTenantDataErasureResponse::UNSPECIFIED;
+            case EStatus::COMPLETED:
+                return NKikimrScheme::TEvTenantDataErasureResponse::COMPLETED;
+            case EStatus::IN_PROGRESS:
+                return NKikimrScheme::TEvTenantDataErasureResponse::IN_PROGRESS;
+            }
+        }
+    };
+
+    struct TEvDataErasureInfoRequest : TEventPB<TEvDataErasureInfoRequest, NKikimrScheme::TEvDataErasureInfoRequest, EvDataErasureInfoRequest> {};
+
+    struct TEvDataErasureInfoResponse : TEventPB<TEvDataErasureInfoResponse, NKikimrScheme::TEvDataErasureInfoResponse, EvDataErasureInfoResponse> {
+        enum class EStatus {
+            UNSPECIFIED,
+            COMPLETED,
+            IN_PROGRESS_TENANT,
+            IN_PROGRESS_BSC,
+        };
+
+        TEvDataErasureInfoResponse() = default;
+        TEvDataErasureInfoResponse(ui64 generation, const EStatus& status) {
+            Record.SetGeneration(generation);
+            Record.SetStatus(ConvertStatus(status));
+        }
+
+        NKikimrScheme::TEvDataErasureInfoResponse::EStatus ConvertStatus(const EStatus& status) {
+            switch (status) {
+                case EStatus::UNSPECIFIED:
+                    return NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
+                case EStatus::COMPLETED:
+                    return NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED;
+                case EStatus::IN_PROGRESS_TENANT:
+                    return NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_TENANT;
+                case EStatus::IN_PROGRESS_BSC:
+                return NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_BSC;
+            }
+        }
+    };
+
+    struct TEvDataErasureManualStartupRequest : TEventPB<TEvDataErasureManualStartupRequest, NKikimrScheme::TEvDataErasureManualStartupRequest, EvDataErasureManualStartupRequest> {};
 };
 
 }

@@ -1,22 +1,23 @@
 #pragma once
 
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/formats/arrow/modifier/schema.h>
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
-
-#include <util/system/types.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <util/string/builder.h>
+#include <util/system/types.h>
 
 namespace NKikimr::NArrow {
 
 class IFieldsConstructor {
 private:
     virtual std::shared_ptr<arrow::Scalar> DoGetDefaultColumnElementValue(const std::string& fieldName) const = 0;
+
 public:
     TConclusion<std::shared_ptr<arrow::Scalar>> GetDefaultColumnElementValue(const std::shared_ptr<arrow::Field>& field, const bool force) const;
 };
@@ -27,6 +28,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NModifier::TSchema>, Schema);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NAccessor::IChunkedArray>>, Columns);
     void Initialize();
+
 public:
     TGeneralContainer(const ui32 recordsCount);
 
@@ -57,8 +59,8 @@ public:
         return DebugJson(withData).GetStringRobust();
     }
 
-    [[nodiscard]] TConclusionStatus SyncSchemaTo(const std::shared_ptr<arrow::Schema>& schema,
-        const IFieldsConstructor* defaultFieldsConstructor, const bool forceDefaults);
+    [[nodiscard]] TConclusionStatus SyncSchemaTo(
+        const std::shared_ptr<arrow::Schema>& schema, const IFieldsConstructor* defaultFieldsConstructor, const bool forceDefaults);
 
     bool HasColumn(const std::string& name) {
         return Schema->HasField(name);
@@ -120,7 +122,8 @@ public:
     TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table);
     TGeneralContainer(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);
     TGeneralContainer(const std::shared_ptr<NModifier::TSchema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);
-    TGeneralContainer(const std::vector<std::shared_ptr<arrow::Field>>& fields, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);
+    TGeneralContainer(
+        const std::vector<std::shared_ptr<arrow::Field>>& fields, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);
 
     arrow::Status ValidateFull() const {
         return arrow::Status::OK();
@@ -130,4 +133,4 @@ public:
     std::shared_ptr<NAccessor::IChunkedArray> GetAccessorByNameVerified(const std::string& fieldId) const;
 };
 
-}
+}   // namespace NKikimr::NArrow

@@ -1,26 +1,11 @@
 #include "sql.h"
 
 #include <yql/essentials/core/issue/yql_issue.h>
-#include <yql/essentials/sql/v0/sql.h>
-#include <yql/essentials/sql/v0/lexer/lexer.h>
-#include <yql/essentials/sql/v1/sql.h>
-#include <yql/essentials/sql/v1/lexer/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
-#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
-
 #include <google/protobuf/arena.h>
 
 #include <util/string/builder.h>
 
 namespace NSQLTranslation {
-
-    TTranslators MakeAllTranslators() {
-        return TTranslators(
-            NSQLTranslationV0::MakeTranslator(),
-            NSQLTranslationV1::MakeTranslator(),
-            NSQLTranslationPG::MakeTranslator()
-        );
-    }
 
     NYql::TAstParseResult SqlToYql(const TTranslators& translators, const TString& query, const TTranslationSettings& settings,
         NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo, TTranslationSettings* effectiveSettings)
@@ -80,11 +65,6 @@ namespace NSQLTranslation {
         }
     }
 
-    NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo, TTranslationSettings* effectiveSettings) {
-        return SqlToYql(MakeAllTranslators(), query, settings, warningRules, stmtParseInfo, effectiveSettings);
-    }
-
     google::protobuf::Message* SqlAST(const TTranslators& translators, const TString& query, const TString& queryName, NYql::TIssues& issues,
         size_t maxErrors, const TTranslationSettings& settings, ui16* actualSyntaxVersion)
     {
@@ -119,11 +99,6 @@ namespace NSQLTranslation {
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
                 return nullptr;
         }
-    }
-
-    google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, NYql::TIssues& issues,
-        size_t maxErrors, const TTranslationSettings& settings, ui16* actualSyntaxVersion) {
-        return SqlAST(MakeAllTranslators(), query, queryName, issues, maxErrors, settings, actualSyntaxVersion);
     }
 
     ILexer::TPtr SqlLexer(const TTranslators& translators, const TString& query, NYql::TIssues& issues, const TTranslationSettings& settings, ui16* actualSyntaxVersion)
@@ -161,10 +136,6 @@ namespace NSQLTranslation {
         }
     }
 
-    ILexer::TPtr SqlLexer(const TString& query, NYql::TIssues& issues, const TTranslationSettings& settings, ui16* actualSyntaxVersion) {
-        return SqlLexer(MakeAllTranslators(), query, issues, settings, actualSyntaxVersion);
-    }
-
     NYql::TAstParseResult SqlASTToYql(const TTranslators& translators, const TString& query,
         const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings) {
         NYql::TAstParseResult result;
@@ -190,11 +161,6 @@ namespace NSQLTranslation {
                     TStringBuilder() << "Unknown SQL syntax version: " << settings.SyntaxVersion));
                 return result;
         }
-    }
-
-    NYql::TAstParseResult SqlASTToYql(const TString& query, const google::protobuf::Message& protoAst,
-        const TSQLHints& hints, const TTranslationSettings& settings) {
-        return SqlASTToYql(MakeAllTranslators(), query, protoAst, hints, settings);
     }
 
     TVector<NYql::TAstParseResult> SqlToAstStatements(const TTranslators& translators, const TString& query,
@@ -245,11 +211,6 @@ namespace NSQLTranslation {
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
                 return {};
         }
-    }
-
-    TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion, TVector<NYql::TStmtParseInfo>* stmtParseInfo) {
-        return SqlToAstStatements(MakeAllTranslators(), query, settings, warningRules, actualSyntaxVersion, stmtParseInfo);
     }
 
     TTranslators::TTranslators(TTranslatorPtr v0, TTranslatorPtr v1, TTranslatorPtr pg)

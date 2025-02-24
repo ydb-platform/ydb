@@ -28,6 +28,26 @@ struct TTimeSeriesStats {
     void Pack();
 };
 
+struct TMetricInfo {
+
+    TMetricInfo(ui32 sc = 0, ui32 ts = 0) : ScalarCount(sc), TimeSeriesCount(ts) {}
+
+    TMetricInfo operator+(TMetricInfo other) {
+        return TMetricInfo(ScalarCount + other.ScalarCount, TimeSeriesCount + other.TimeSeriesCount);
+    }
+    TMetricInfo& operator+=(TMetricInfo other) {
+        ScalarCount += other.ScalarCount;
+        TimeSeriesCount += other.TimeSeriesCount;
+        return *this;
+    }
+    TMetricInfo operator*(ui32 m) {
+        return TMetricInfo(ScalarCount * m, TimeSeriesCount * m);
+    }
+
+    ui32 ScalarCount;
+    ui32 TimeSeriesCount;
+};
+
 struct TAsyncStats {
     // Data
     TTimeSeriesStats Bytes;
@@ -45,6 +65,9 @@ struct TAsyncStats {
     std::vector<ui64> ActiveTimeUs;
 
     void Resize(ui32 taskCount);
+    static TMetricInfo EstimateMem() {
+        return TMetricInfo(10, 2);
+    }
     void SetHistorySampleCount(ui32 historySampleCount);
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqAsyncStatsAggr& stats);
 };
@@ -62,6 +85,9 @@ struct TAsyncBufferStats {
     TAsyncStats Egress;
 
     void Resize(ui32 taskCount);
+    static TMetricInfo EstimateMem() {
+        return TAsyncStats::EstimateMem() * 4;
+    }
     void SetHistorySampleCount(ui32 historySampleCount);
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
 };
@@ -93,6 +119,9 @@ struct TTableStats {
     std::vector<ui64> AffectedPartitions;
 
     void Resize(ui32 taskCount);
+    static TMetricInfo EstimateMem() {
+        return TMetricInfo(7);
+    }
 };
 
 struct TOperatorStats {
@@ -109,6 +138,9 @@ struct TOperatorStats {
     NYql::NDq::TOperatorType OperatorType;
 
     void Resize(ui32 taskCount);
+    static TMetricInfo EstimateMem() {
+        return TMetricInfo(2);
+    }
 };
 
 struct TStageExecutionStats {
@@ -154,9 +186,18 @@ struct TStageExecutionStats {
     std::map<TString, TOperatorStats> Aggregations;
 
     TTimeSeriesStats MaxMemoryUsage;
-    ui32 HistorySampleCount;
+
+    ui32 HistorySampleCount = 0;
+    ui32 TaskCount = 0;
 
     void Resize(ui32 taskCount);
+    ui32 EstimateMem() {
+        TMetricInfo info(15, 8);
+        info += TAsyncBufferStats::EstimateMem() * (Ingress.size() + Egress.size() + Input.size() + Output.size());
+        info += TTableStats::EstimateMem() * Tables.size();
+        info += TOperatorStats::EstimateMem() * (Joins.size() + Filters.size() + Aggregations.size());
+        return (info.ScalarCount * TaskCount + info.TimeSeriesCount * HistorySampleCount * 2) * sizeof(ui64);
+    }
     void SetHistorySampleCount(ui32 historySampleCount);
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStageStats& stageStats);
     ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
@@ -188,6 +229,7 @@ private:
     std::map<ui32, TStageExecutionStats> StageStats;
     std::map<ui32, TIngressExternalPartitionStat> ExternalPartitionStats; // FIXME: several ingresses
     ui64 BaseTimeMs = 0;
+    std::map<ui32, TDuration> LongestTaskDurations;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
     void AdjustExternalAggr(NYql::NDqProto::TDqExternalAggrStats& stats);
@@ -256,7 +298,8 @@ public:
     void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
-
+    ui64 EstimateCollectMem();
+    ui64 EstimateFinishMem();
     void Finish();
 
 private:
@@ -265,7 +308,8 @@ private:
         const NYql::NDqProto::TDqComputeActorStats& stats);
     void AddComputeActorProfileStatsByTask(
         const NYql::NDqProto::TDqTaskStats& task,
-        const NYql::NDqProto::TDqComputeActorStats& stats);
+        const NYql::NDqProto::TDqComputeActorStats& stats,
+        bool keepOnlyLastTask);
     void AddDatashardFullStatsByTask(
         const NYql::NDqProto::TDqTaskStats& task,
         ui64 datashardCpuTimeUs);

@@ -248,6 +248,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             }
 
             task.SetEnableChecksums(exportInfo->EnableChecksums);
+            task.SetEnablePermissions(exportInfo->EnablePermissions);
         }
         break;
     }

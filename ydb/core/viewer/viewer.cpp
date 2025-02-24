@@ -77,6 +77,12 @@ public:
                 .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
+                .RelPath = "viewer/capabilities",
+                .ActorSystem = ctx.ActorSystem(),
+                .ActorId = ctx.SelfID,
+                .UseAuth = false,
+            });
+            mon->RegisterActorPage({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
                 .ActorSystem = ctx.ActorSystem(),

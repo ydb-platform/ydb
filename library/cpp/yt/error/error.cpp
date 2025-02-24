@@ -46,14 +46,14 @@ public:
         , InnerErrors_(other.InnerErrors_)
     { }
 
-    explicit TImpl(TString message)
+    explicit TImpl(std::string message)
         : Code_(NYT::EErrorCode::Generic)
         , Message_(std::move(message))
     {
         OriginAttributes_.Capture();
     }
 
-    TImpl(TErrorCode code, TString message)
+    TImpl(TErrorCode code, std::string message)
         : Code_(code)
         , Message_(std::move(message))
     {
@@ -77,12 +77,12 @@ public:
         Code_ = code;
     }
 
-    const TString& GetMessage() const noexcept
+    const std::string& GetMessage() const noexcept
     {
         return Message_;
     }
 
-    TString* MutableMessage() noexcept
+    std::string* MutableMessage() noexcept
     {
         return &Message_;
     }
@@ -164,7 +164,7 @@ public:
 
 private:
     TErrorCode Code_;
-    TString Message_;
+    std::string Message_;
 
     TOriginAttributes OriginAttributes_{
         .Pid = 0,
@@ -277,11 +277,11 @@ TError::TErrorOr(const std::exception& ex)
     YT_VERIFY(!IsOK());
 }
 
-TError::TErrorOr(TString message, TDisableFormat)
+TError::TErrorOr(std::string message, TDisableFormat)
     : Impl_(std::make_unique<TImpl>(std::move(message)))
 { }
 
-TError::TErrorOr(TErrorCode code, TString message, TDisableFormat)
+TError::TErrorOr(TErrorCode code, std::string message, TDisableFormat)
     : Impl_(std::make_unique<TImpl>(code, std::move(message)))
 { }
 
@@ -363,16 +363,16 @@ THashSet<TErrorCode> TError::GetDistinctNonTrivialErrorCodes() const
     return result;
 }
 
-const TString& TError::GetMessage() const
+const std::string& TError::GetMessage() const
 {
     if (!Impl_) {
-        static const TString Result;
+        static const std::string Result;
         return Result;
     }
     return Impl_->GetMessage();
 }
 
-TError& TError::SetMessage(TString message)
+TError& TError::SetMessage(std::string message)
 {
     MakeMutable();
     *Impl_->MutableMessage() = std::move(message);
@@ -422,7 +422,7 @@ NThreading::TThreadId TError::GetTid() const
 TStringBuf TError::GetThreadName() const
 {
     if (!Impl_) {
-        static TString empty;
+        static std::string empty;
         return empty;
     }
     return Impl_->GetThreadName();
@@ -482,7 +482,7 @@ void TError::UpdateOriginAttributes()
     Impl_->UpdateOriginAttributes();
 }
 
-const TString InnerErrorsTruncatedKey("inner_errors_truncated");
+const std::string InnerErrorsTruncatedKey("inner_errors_truncated");
 
 TError TError::Truncate(
     int maxInnerErrorCount,
@@ -513,8 +513,7 @@ TError TError::Truncate(
 
     auto result = std::make_unique<TImpl>();
     result->SetCode(GetCode());
-    *result->MutableMessage()
-        = std::move(TruncateString(GetMessage(), stringLimit, ErrorMessageTruncatedSuffix));
+    *result->MutableMessage() = TruncateString(GetMessage(), stringLimit, ErrorMessageTruncatedSuffix);
     if (Impl_->HasAttributes()) {
         truncateAttributes(Impl_->Attributes(), result->MutableAttributes());
     }
@@ -608,13 +607,13 @@ TError TError::Wrap() &&
     return std::move(*this);
 }
 
-Y_WEAK TString GetErrorSkeleton(const TError& /*error*/)
+Y_WEAK std::string GetErrorSkeleton(const TError& /*error*/)
 {
     // Proper implementation resides in yt/yt/library/error_skeleton/skeleton.cpp.
     THROW_ERROR_EXCEPTION("Error skeleton implementation library is not linked; consider PEERDIR'ing yt/yt/library/error_skeleton");
 }
 
-TString TError::GetSkeleton() const
+std::string TError::GetSkeleton() const
 {
     return GetErrorSkeleton(*this);
 }
@@ -775,7 +774,7 @@ void AppendError(TStringBuilderBase* builder, const TError& error, int indent)
         AppendAttribute(
             builder,
             "host",
-            TString{originAttributes->Host},
+            std::string{originAttributes->Host},
             indent);
     }
 

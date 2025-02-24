@@ -7,6 +7,8 @@
 #include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 #include <ydb/tests/tools/kqprun/runlib/settings.h>
 
+#include <yql/essentials/minikql/mkql_function_registry.h>
+
 namespace NFqRun {
 
 constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
@@ -27,8 +29,10 @@ struct TFqSetupSettings : public NKikimrRun::TServerSettings {
 
     TString YqlToken;
     NYql::IPqGateway::TPtr PqGateway;
+    TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     NFq::NConfig::TConfig FqConfig;
     NKikimrConfig::TLogConfig LogConfig;
+    std::optional<NKikimrConfig::TActorSystemConfig> ActorSystemConfig;
 };
 
 struct TRunnerOptions {

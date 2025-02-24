@@ -441,6 +441,16 @@ void TColumnFilter::Apply(const ui32 expectedRecordsCount, std::vector<arrow::Da
     }
 }
 
+std::shared_ptr<NAccessor::IChunkedArray> TColumnFilter::Apply(
+    const std::shared_ptr<NAccessor::IChunkedArray>& source, const TApplyContext& context /*= Default<TApplyContext>()*/) const {
+    if (context.HasSlice()) {
+        auto sliceArray = source->ISlice(*context.GetStartPos(), *context.GetCount());
+        return sliceArray->ApplyFilter(*this, sliceArray);
+    } else {
+        return source->ApplyFilter(*this, source);
+    }
+}
+
 const std::vector<bool>& TColumnFilter::BuildSimpleFilter() const {
     if (!FilterPlain) {
         Y_ABORT_UNLESS(RecordsCount);
@@ -639,8 +649,7 @@ TColumnFilter::TIterator TColumnFilter::GetIterator(const bool reverse, const ui
     } else if (IsTotalDenyFilter()) {
         return TIterator(reverse, expectedSize, false);
     } else {
-        AFL_VERIFY(expectedSize == GetRecordsCountVerified())("expected", expectedSize)("count", GetRecordsCountVerified())(
-            "reverse", reverse);
+        AFL_VERIFY(expectedSize == GetRecordsCountVerified())("expected", expectedSize)("count", GetRecordsCountVerified())("reverse", reverse);
         return TIterator(reverse, Filter, GetStartValue(reverse));
     }
 }

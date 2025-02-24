@@ -8,10 +8,9 @@ namespace NYT::NAuth {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTvmServiceConfig
+struct TTvmServiceConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     bool UseTvmTool;
 
     // TvmClient settings

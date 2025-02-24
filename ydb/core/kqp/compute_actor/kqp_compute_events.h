@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/data_events.pb.h>

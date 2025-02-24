@@ -441,6 +441,7 @@ public:
         std::shared_ptr<TPatternCacheEntry> entry;
         bool canBeCached;
         if (UseSeparatePatternAlloc(task) && Context.PatternCache) {
+#if !defined(NEW_PATTERN_CACHE_IN_MKQL)
             auto& cache = Context.PatternCache;
             auto ticket = cache->FindOrSubscribe(program.GetRaw());
             if (!ticket.HasFuture()) {
@@ -454,6 +455,27 @@ public:
             } else {
                 entry = ticket.GetValueSync();
             }
+#else
+            auto& cache = Context.PatternCache;
+            auto future = cache->FindOrSubscribe(program.GetRaw());
+            if (!future.HasValue()) {
+                try {
+                    entry = CreateComputationPattern(task, program.GetRaw(), true, canBeCached);
+                    if (canBeCached && entry->Pattern->GetSuitableForCache()) {
+                        cache->EmplacePattern(task.GetProgram().GetRaw(), entry);
+                    } else {
+                        cache->IncNotSuitablePattern();
+                        cache->NotifyPatternMissing(program.GetRaw());
+                    }
+                } catch (...) {
+                    // TODO: not sure if there may be exceptions in the first place.
+                    cache->NotifyPatternMissing(program.GetRaw());
+                    throw;
+                }
+            } else {
+                entry = future.GetValueSync();
+            }
+#endif
         }
 
         if (!entry) {

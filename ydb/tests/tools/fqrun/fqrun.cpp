@@ -3,10 +3,15 @@
 
 #include <util/datetime/base.h>
 
+#include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/tests/tools/fqrun/src/fq_runner.h>
 #include <ydb/tests/tools/kqprun/runlib/application.h>
 #include <ydb/tests/tools/kqprun/runlib/utils.h>
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+#include <library/cpp/lfalloc/alloc_profiler/profiler.h>
+#endif
 
 using namespace NKikimrRun;
 
@@ -156,6 +161,21 @@ protected:
                 }
             });
 
+        options.AddLongOption("as-cfg", "File with actor system config (TActorSystemConfig), use '-' for default")
+            .RequiredArgument("file")
+            .DefaultValue("./configuration/as_config.conf")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                const TString file(option->CurValOrDef());
+                if (file == "-") {
+                    return;
+                }
+
+                RunnerOptions.FqSettings.ActorSystemConfig = NKikimrConfig::TActorSystemConfig();
+                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &(*RunnerOptions.FqSettings.ActorSystemConfig))) {
+                    ythrow yexception() << "Bad format of actor system configuration";
+                }
+            });
+
         options.AddLongOption("emulate-s3", "Enable readings by s3 provider from files, `bucket` value in connection - path to folder with files")
             .NoArgument()
             .SetFlag(&RunnerOptions.FqSettings.EmulateS3);
@@ -163,15 +183,27 @@ protected:
         options.AddLongOption("emulate-pq", "Emulate YDS with local file, accepts list of tables to emulate with following format: topic@file (can be used in query from cluster `pq`)")
             .RequiredArgument("topic@file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                TStringBuf topicName;
-                TStringBuf filePath;
-                TStringBuf(option->CurVal()).Split('@', topicName, filePath);
-                if (topicName.empty() || filePath.empty()) {
-                    ythrow yexception() << "Incorrect PQ file mapping, expected form topic@file";
+                TStringBuf topicName, others;
+                TStringBuf(option->CurVal()).Split('@', topicName, others);
+
+                TStringBuf path, partitionCountStr;
+                TStringBuf(others).Split(':', path, partitionCountStr);
+                size_t partitionCount = !partitionCountStr.empty() ? FromString<size_t>(partitionCountStr) : 1;
+                if (!partitionCount) {
+                    ythrow yexception() << "Topic partition count should be at least one";
                 }
-                if (!PqFilesMapping.emplace(topicName, filePath).second) {
+                if (topicName.empty() || path.empty()) {
+                    ythrow yexception() << "Incorrect PQ file mapping, expected form topic@path[:partitions_count]";
+                }
+                if (!PqFilesMapping.emplace(topicName, NYql::TDummyTopic("pq", TString(topicName), TString(path), partitionCount)).second) {
                     ythrow yexception() << "Got duplicated topic name: " << topicName;
                 }
+            });
+
+        options.AddLongOption("cancel-on-file-finish", "Cancel emulate YDS topics when topic file finished")
+            .RequiredArgument("topic")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                TopicsSettings[option->CurVal()].CancelOnFileFinish = true;
             });
 
         // Outputs
@@ -208,6 +240,7 @@ protected:
         ExecutionOptions.Validate(RunnerOptions);
 
         RunnerOptions.FqSettings.YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
+        RunnerOptions.FqSettings.FunctionRegistry = CreateFunctionRegistry().Get();
 
         auto& gatewayConfig = *RunnerOptions.FqSettings.FqConfig.mutable_gateways();
         FillTokens(gatewayConfig.mutable_pq());
@@ -222,13 +255,38 @@ protected:
 
         if (!PqFilesMapping.empty()) {
             auto fileGateway = MakeIntrusive<NYql::TDummyPqGateway>();
-            for (const auto& [topic, file] : PqFilesMapping) {
-                fileGateway->AddDummyTopic(NYql::TDummyTopic("pq", TString(topic), TString(file)));
+            for (auto [_, topic] : PqFilesMapping) {
+                if (const auto it = TopicsSettings.find(topic.TopicName); it != TopicsSettings.end()) {
+                    topic.CancelOnFileFinish = it->second.CancelOnFileFinish;
+                    TopicsSettings.erase(it);
+                }
+                fileGateway->AddDummyTopic(topic);
             }
             RunnerOptions.FqSettings.PqGateway = std::move(fileGateway);
         }
+        if (!TopicsSettings.empty()) {
+            ythrow yexception() << "Found topic settings for not existing topic: '" << TopicsSettings.begin()->first << "'";
+        }
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        if (RunnerOptions.FqSettings.VerboseLevel >= EVerbose::Info) {
+            Cout << CoutColors.Cyan() << "Starting profile memory allocations" << CoutColors.Default() << Endl;
+        }
+        NAllocProfiler::StartAllocationSampling(true);
+#else
+        if (ProfileAllocationsOutput) {
+            ythrow yexception() << "Profile memory allocations disabled, please rebuild fqrun with flag `-D PROFILE_MEMORY_ALLOCATIONS`";
+        }
+#endif
 
         RunScript(ExecutionOptions, RunnerOptions);
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        if (RunnerOptions.FqSettings.VerboseLevel >= EVerbose::Info) {
+            Cout << CoutColors.Cyan() << "Finishing profile memory allocations" << CoutColors.Default() << Endl;
+        }
+        FinishProfileMemoryAllocations();
+#endif
 
         return 0;
     }
@@ -246,7 +304,12 @@ private:
 private:
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
-    std::unordered_map<TString, TString> PqFilesMapping;
+    std::unordered_map<TString, NYql::TDummyTopic> PqFilesMapping;
+
+    struct TTopicSettings {
+        bool CancelOnFileFinish = false;
+    };
+    std::unordered_map<TString, TTopicSettings> TopicsSettings;
 };
 
 }  // anonymous namespace

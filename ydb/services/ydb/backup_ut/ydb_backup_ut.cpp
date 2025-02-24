@@ -979,6 +979,20 @@ void TestCoordinationNodeResourcesArePreserved(
     }
 }
 
+void WaitReplicationInit(NReplication::TReplicationClient& client, const TString& path) {
+    int retry = 0;
+    do {
+        auto result = client.DescribeReplication(path).ExtractValueSync();
+        const auto& desc = result.GetReplicationDescription();
+        if (desc.GetItems().empty()) {
+            Sleep(TDuration::Seconds(1));
+        } else {
+            break;
+        }
+    } while (++retry < 10);
+    UNIT_ASSERT(retry < 10);
+}
+
 void TestReplicationSettingsArePreserved(
         const TString& endpoint,
         NQuery::TSession& session,
@@ -997,20 +1011,6 @@ void TestReplicationSettingsArePreserved(
         );)", endpoint.c_str()), true
     );
 
-    auto waitReplicationInit = [&client]() {
-        int retry = 0;
-        do {
-            auto result = client.DescribeReplication("/Root/replication").ExtractValueSync();
-            const auto& desc = result.GetReplicationDescription();
-            if (desc.GetItems().empty()) {
-                Sleep(TDuration::Seconds(1));
-            } else {
-                break;
-            }
-        } while (++retry < 10);
-        UNIT_ASSERT(retry < 10);
-    };
-
     auto checkDescription = [&client, &endpoint]() {
         auto result = client.DescribeReplication("/Root/replication").ExtractValueSync();
         const auto& desc = result.GetReplicationDescription();
@@ -1026,12 +1026,12 @@ void TestReplicationSettingsArePreserved(
         UNIT_ASSERT_VALUES_EQUAL(items.at(0).DstPath, "/Root/replica");
     };
 
-    waitReplicationInit();
+    WaitReplicationInit(client, "/Root/replication");
     checkDescription();
     backup();
     ExecuteQuery(session, "DROP ASYNC REPLICATION `/Root/replication` CASCADE;", true);
     restore();
-    waitReplicationInit();
+    WaitReplicationInit(client, "/Root/replication");
     checkDescription();
 }
 
@@ -1545,6 +1545,44 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(RestoreReplicationWithoutSecret) {
+        TKikimrWithGrpcAndRootSchema server;
+
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        NReplication::TReplicationClient replicationClient(driver);
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+        ExecuteQuery(session, "CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k));", true);
+        ExecuteQuery(session, Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/replication` FOR
+                `/Root/table` AS `/Root/replica`
+            WITH (
+                CONNECTION_STRING = 'grpc://%s/?database=/Root',
+                TOKEN_SECRET_NAME = 'secret'
+            );)", endpoint.c_str()), true
+        );
+        WaitReplicationInit(replicationClient, "/Root/replication");
+
+        NDump::TClient backupClient(driver);
+        {
+            const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        ExecuteQuery(session, "DROP OBJECT `secret` (TYPE SECRET);", true);
+        ExecuteQuery(session, "DROP ASYNC REPLICATION `/Root/replication` CASCADE;", true);
+        {
+            const auto result = backupClient.Restore(pathToBackup, "/Root");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+    }
+
     void TestExternalDataSourceBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
@@ -1565,6 +1603,45 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
+    }
+
+    Y_UNIT_TEST(RestoreExternalDataSourceWithoutSecret) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        ExecuteQuery(querySession, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'secret');", true);
+        ExecuteQuery(querySession, R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/externalDataSource` WITH (
+                SOURCE_TYPE = "PostgreSQL",
+                DATABASE_NAME = "db",
+                LOCATION = "192.168.1.1:8123",
+                AUTH_METHOD = "BASIC",
+                LOGIN = "user",
+                PASSWORD_SECRET_NAME = "secret"
+            );
+        )", true);
+
+        NDump::TClient backupClient(driver);
+        {
+            const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        ExecuteQuery(querySession, "DROP OBJECT `secret` (TYPE SECRET);", true);
+        ExecuteQuery(querySession, "DROP EXTERNAL DATA SOURCE `/Root/externalDataSource`;", true);
+        {
+            const auto result = backupClient.Restore(pathToBackup, "/Root");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
     }
 
     void TestExternalTableBackupRestore() {

@@ -75,6 +75,7 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnableStrictAclCheck, false);
         OPTION(std::optional<bool>, EnableStrictUserManagement, std::nullopt);
         OPTION(std::optional<bool>, EnableDatabaseAdmin, std::nullopt);
+        OPTION(std::optional<bool>, EnablePermissionsExport, std::nullopt);
 
         #undef OPTION
     };

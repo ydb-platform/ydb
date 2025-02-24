@@ -296,6 +296,12 @@ A **[user](../security/authorization.md#user)** is an individual utilizing {{ yd
 
 A **[group](../security/authorization.md#group)** or **access group** is a named collection of [users](#access-user) with identical [access rights](#access-right) to certain [access objects](#access-object).
 
+### Role {#access-role}
+
+A **role** is a named collection of [access rights](#access-right) that can be granted to [users](#access-user) or [groups](#access-group).
+
+Roles in {{ ydb-short-name }} are implemented as [groups](#access-group) that are created during the initial cluster deployment and granted a set of [access rights](#access-right) on the root of the cluster scheme.
+
 ### SID {#access-sid}
 
 **SID** (**Security Identifier**) is a string in the format `<login>[@<subsystem>]`, identifying an [access subject](../concepts/glossary.md#access-subject) in [access control lists](#access-control-list).
@@ -459,7 +465,7 @@ The **Mediator** is a system tablet that distributes the transactions planned by
 
 #### Hive {#hive}
 
-A **Hive** is a system tablet responsible for launching and managing other tablets. Its responsibilities include moving tablets between nodes in case of [node](#node) failure or overload.
+A **Hive** is a system tablet responsible for launching and managing other tablets. It also moves tablets between nodes in case of [node](#node) failures or overload. You can learn more about Hive in a [dedicated article](../contributor/hive.md).
 
 #### Cluster management system {#cms}
 

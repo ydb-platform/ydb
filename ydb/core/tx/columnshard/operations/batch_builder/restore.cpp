@@ -8,9 +8,8 @@
 namespace NKikimr::NOlap {
 
 std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBuildRequestInitiator() const {
-    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId, WriteData.GetWriteMeta().GetLockIdOptional());
+    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId, Snapshot, WriteData.GetWriteMeta().GetLockIdOptional());
     request->TaskIdentifier = GetTaskId();
-    request->ReadToSnapshot = Snapshot;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")("count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0)(
         "task_id", WriteData.GetWriteMeta().GetId());
     auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData.GetContainer(), Context.GetActualSchema()->GetPKColumnNames());
@@ -70,6 +69,7 @@ TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeD
     , Snapshot(actualSnapshot)
     , IncomingData(incomingData)
     , Context(context) {
+        AFL_VERIFY(actualSnapshot.Valid());
 }
 
 void TModificationRestoreTask::SendErrorMessage(

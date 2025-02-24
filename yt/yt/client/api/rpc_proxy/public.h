@@ -11,7 +11,7 @@ struct TConnectionOptions;
 DECLARE_REFCOUNTED_STRUCT(IRowStreamEncoder)
 DECLARE_REFCOUNTED_STRUCT(IRowStreamDecoder)
 
-DECLARE_REFCOUNTED_CLASS(TConnectionConfig)
+DECLARE_REFCOUNTED_STRUCT(TConnectionConfig)
 
 extern const TString ApiServiceName;
 extern const TString DiscoveryServiceName;

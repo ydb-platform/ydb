@@ -160,7 +160,7 @@ public:
     bool IsAllowedToRunTablet(TTabletDebugState* debugState = nullptr) const;
     bool IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;
     bool IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;
-    i32 GetPriorityForTablet(const TTabletInfo& tablet) const;
+    i32 GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriority& dcPriority) const;
     ui64 GetMaxTabletsScheduled() const;
     ui64 GetMaxCountForTabletType(TTabletTypes::EType tabletType) const;
 
@@ -272,7 +272,7 @@ public:
 
     void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics);
     void ActualizeNodeStatistics(TInstant now);
-    ui64 GetRestartsPerPeriod(TInstant barrier) const;
+    ui64 GetRestartsPerPeriod(TInstant barrier = {}) const;
 
     TDataCenterId GetDataCenter() const {
         return Location.GetDataCenterId();

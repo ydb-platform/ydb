@@ -324,7 +324,9 @@ TServiceBase::TPerformanceCounters::TPerformanceCounters(const NProfiling::TProf
 NProfiling::TCounter* TServiceBase::TPerformanceCounters::GetRequestsPerUserAgentCounter(TStringBuf userAgent)
 {
     return RequestsPerUserAgent_.FindOrInsert(userAgent, [&] {
-        return Profiler_.WithRequiredTag("user_agent", TString(userAgent)).Counter("/user_agent");
+        return Profiler_
+            .WithRequiredTag("user_agent", std::string(userAgent))
+            .Counter("/user_agent");
     }).first;
 }
 
@@ -2318,7 +2320,6 @@ TServiceBase::TMethodPerformanceCountersPtr TServiceBase::CreateMethodPerformanc
 
     auto profiler = runtimeInfo->Profiler.WithSparse();
     if (userTag) {
-        // TODO(babenko): migrate to std::string
         profiler = profiler.WithTag("user", std::string(userTag));
     }
     if (runtimeInfo->Descriptor.RequestQueueProvider) {
@@ -2517,7 +2518,7 @@ void TServiceBase::OnServiceLivenessCheck()
     {
         auto writerGuard = WriterGuard(DiscoverRequestsByPayloadLock_);
 
-        std::vector<TString> payloadsToReply;
+        std::vector<std::string> payloadsToReply;
         for (const auto& [payload, requests] : DiscoverRequestsByPayload_) {
             auto empty = true;
             auto isUp = false;

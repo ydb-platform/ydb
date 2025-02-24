@@ -98,14 +98,13 @@ namespace TEvColumnShard {
     struct TEvInternalScan: public TEventLocal<TEvInternalScan, EvInternalScan> {
     private:
         YDB_READONLY(ui64, PathId, 0);
+        YDB_READONLY(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
         YDB_READONLY_DEF(std::optional<ui64>, LockId);
         YDB_ACCESSOR(bool, Reverse, false);
         YDB_ACCESSOR(ui32, ItemsLimit, 0);
         YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
         std::set<ui32> ColumnIdsSet;
     public:
-        std::optional<NOlap::TSnapshot> ReadFromSnapshot;
-        std::optional<NOlap::TSnapshot> ReadToSnapshot;
         TString TaskIdentifier;
         std::shared_ptr<NOlap::TPKRangesFilter> RangesFilter;
     public:
@@ -114,11 +113,12 @@ namespace TEvColumnShard {
             ColumnIds.emplace_back(id);
         }
 
-        TEvInternalScan(const ui64 pathId, const std::optional<ui64> lockId)
+        TEvInternalScan(const ui64 pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
             : PathId(pathId)
+            , Snapshot(snapshot)
             , LockId(lockId)
         {
-
+            AFL_VERIFY(Snapshot.Valid());
         }
     };
 

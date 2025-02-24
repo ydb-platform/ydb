@@ -1,8 +1,12 @@
 #include "scalar.h"
+
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+
 #include <ydb/library/actors/core/log.h>
-#include <util/string/cast.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
+
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 namespace NKikimr::NOlap {
 
@@ -47,8 +51,7 @@ NKikimrColumnShardColumnDefaults::TColumnDefault TColumnDefaultScalarValue::Seri
         case arrow::Type::FLOAT:
             resultScalar.SetFloat(static_cast<const arrow::FloatScalar&>(scalar).value);
             break;
-        case arrow::Type::TIMESTAMP:
-        {
+        case arrow::Type::TIMESTAMP: {
             auto* ts = resultScalar.MutableTimestamp();
             ts->SetValue(static_cast<const arrow::TimestampScalar&>(scalar).value);
             ts->SetUnit(static_cast<const arrow::TimestampType&>(*scalar.type).unit());
@@ -142,4 +145,4 @@ TString TColumnDefaultScalarValue::DebugString() const {
     return TStringBuilder() << Value->ToString();
 }
 
-}
+}   // namespace NKikimr::NOlap

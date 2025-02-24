@@ -5,6 +5,14 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
+#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr3/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr3_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/protobuf/util/simple_reflection.h>
@@ -190,7 +198,7 @@ struct TTableRefValidator {
     NYql::TIssues& Issues;
 };
 
-TString GetOpt(TStringInput query, TStringBuf pattern) {
+TString GetToken(TStringInput query, TStringBuf pattern) {
     TString line;
     while (query.ReadLine(line)) {
         StripInPlace(line);
@@ -205,11 +213,26 @@ TString GetOpt(TStringInput query, TStringBuf pattern) {
 } // anonymous
 
 TString GetBackupRoot(const TString& query) {
-    return GetOpt(query, R"(-- backup root: ")");
+    return GetToken(query, R"(-- backup root: ")");
 }
 
 TString GetDatabase(const TString& query) {
-    return GetOpt(query, R"(-- database: ")");
+    return GetToken(query, R"(-- database: ")");
+}
+
+TString GetSecretName(const TString& query) {
+    TString secretName;
+    if (auto pwd = GetToken(query, R"(PASSWORD_SECRET_NAME = ')")) {
+        secretName = std::move(pwd);
+    } else if (auto token = GetToken(query, R"(TOKEN_SECRET_NAME = ')")) {
+        secretName = std::move(token);
+    }
+
+    if (secretName.EndsWith("'")) {
+        secretName.resize(secretName.size() - 1);
+    }
+
+    return secretName;
 }
 
 bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::TIssues& issues) {
@@ -222,9 +245,15 @@ bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::T
         return false;
     }
 
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
+    parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
     google::protobuf::Arena arena;
     const auto* parserProto = NSQLTranslationV1::SqlAST(
-        queryStr, "query", issues, 0, settings.AnsiLexer, settings.Antlr4Parser, settings.TestAntlr4, &arena
+        parsers, queryStr, "query", issues, 0, settings.AnsiLexer, settings.Antlr4Parser, &arena
     );
     if (!parserProto) {
         return false;
@@ -239,7 +268,18 @@ bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues
     NSQLTranslation::TTranslationSettings settings;
     settings.Arena = &arena;
 
-    auto formatter = NSQLFormat::MakeSqlFormatter(settings);
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+    lexers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiLexerFactory();
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
+    parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
+    auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
     return formatter->Format(query, formattedQuery, issues);
 }
 

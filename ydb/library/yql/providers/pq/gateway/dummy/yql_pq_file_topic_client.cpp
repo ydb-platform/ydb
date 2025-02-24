@@ -5,6 +5,7 @@
 
 #include <library/cpp/threading/future/async.h>
 
+#include <util/folder/path.h>
 #include <util/system/file.h>
 #include "yql_pq_blocking_queue.h"
 
@@ -15,7 +16,7 @@ class TFileTopicReadSession : public NYdb::NTopic::IReadSession {
 constexpr static auto FILE_POLL_PERIOD = TDuration::MilliSeconds(5);
 
 public:
-    TFileTopicReadSession(TFile file, NYdb::NTopic::TPartitionSession::TPtr session, const TString& producerId = "")
+    TFileTopicReadSession(TFile file, NYdb::NTopic::TPartitionSession::TPtr session, const TString& producerId = "", bool cancelOnFileFinish = false)
         : File_(std::move(file))
         , Session_(std::move(session))
         , ProducerId_(producerId)
@@ -23,6 +24,7 @@ public:
                 PollFileForChanges();
             })
         , Counters_()
+        , CancelOnFileFinish_(cancelOnFileFinish)
     {
         Pool_.Start(1);
     }
@@ -122,7 +124,7 @@ private:
             size_t size = 0;
             ui64 maxBatchRowSize = 100;
 
-            while (size_t read = fi.ReadLine(rawMsg)) {
+            while (fi.ReadLine(rawMsg)) {
                 msgs.emplace_back(MakeNextMessage(rawMsg));
                 MsgOffset_++;
                 if (!maxBatchRowSize--) {
@@ -132,6 +134,8 @@ private:
             }
             if (!msgs.empty()) {
                 EventsQ_.Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, Session_), size);
+            } else if (CancelOnFileFinish_) {
+                EventsQ_.Push(NYdb::NTopic::TSessionClosedEvent(NYdb::EStatus::CANCELLED, {NYdb::NIssue::TIssue("PQ file topic was finished")}), size);
             }
 
             Sleep(FILE_POLL_PERIOD);
@@ -144,6 +148,7 @@ private:
     TString ProducerId_;
     std::thread FilePoller_;
     NYdb::NTopic::TReaderCounters::TPtr Counters_;
+    bool CancelOnFileFinish_ = false;
 
     TThreadPool Pool_;
     size_t MsgOffset_ = 0;
@@ -335,22 +340,34 @@ struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
     }
 };
 
+TFileTopicClient::TFileTopicClient(THashMap<TDummyPqGateway::TClusterNPath, TDummyTopic> topics)
+    : Topics_(std::move(topics))
+{}
+
 std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) {
     Y_ENSURE(!settings.Topics_.empty());
-    auto topicPath = settings.Topics_.front().Path_;
-
+    const auto& topic = settings.Topics_.front();
+    auto topicPath = topic.Path_;
+    Y_ENSURE(topic.PartitionIds_.size() >= 1);
+    ui64 partitionId = topic.PartitionIds_.front();
     auto topicsIt = Topics_.find(make_pair("pq", topicPath));
     Y_ENSURE(topicsIt != Topics_.end());
-    auto filePath = topicsIt->second.FilePath;
+    auto filePath = topicsIt->second.Path;
     Y_ENSURE(filePath);
+
+    TFsPath fsPath(*filePath);
+    if (fsPath.IsDirectory()) {
+        filePath = TStringBuilder() << *filePath << "/" << ToString(partitionId);
+    } else if (!fsPath.Exists()) {
+        filePath = TStringBuilder() << *filePath << "_" << partitionId;
+    }
 
     // TODO
     ui64 sessionId = 0;
-    ui64 partitionId = 0;
-
     return std::make_shared<TFileTopicReadSession>(
         TFile(*filePath, EOpenMode::TEnum::RdOnly),
-        MakeIntrusive<TDummyPartitionSession>(sessionId, TString{topicPath}, partitionId)
+        MakeIntrusive<TDummyPartitionSession>(sessionId, TString{topicPath}, partitionId),
+        "", topicsIt->second.CancelOnFileFinish
     );
 }
 
@@ -411,7 +428,7 @@ std::shared_ptr<NYdb::NTopic::IWriteSession> TFileTopicClient::CreateWriteSessio
     auto topicPath = TString{settings.Path_};
     auto topicsIt = Topics_.find(make_pair("pq", topicPath));
     Y_ENSURE(topicsIt != Topics_.end());
-    auto filePath = topicsIt->second.FilePath;
+    auto filePath = topicsIt->second.Path;
     Y_ENSURE(filePath);
 
     return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::RdWr));

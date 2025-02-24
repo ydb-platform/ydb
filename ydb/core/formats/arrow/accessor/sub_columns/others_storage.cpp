@@ -76,6 +76,97 @@ TOthersData TOthersData::TBuilderWithStats::Finish(const TFinishContext& finishC
     return TOthersData(*resultStats, std::make_shared<TGeneralContainer>(arrow::RecordBatch::Make(GetSchema(), RecordsCount, arrays)));
 }
 
+class TUsedKeysCollection {
+private:
+    std::map<ui32, TDictStats::TRTStats> UsedKeys;
+    const TDictStats& Stats;
+    std::vector<ui32> OriginalKeys;
+
+public:
+    TUsedKeysCollection(const TDictStats& stats)
+        : Stats(stats) {
+    }
+
+    std::vector<ui32> BuildDecoder() const {
+        std::vector<ui32> keyIndexDecoder;
+        if (!UsedKeys.size()) {
+            return keyIndexDecoder;
+        }
+        keyIndexDecoder.resize(UsedKeys.rbegin()->first + 1, Max<ui32>());
+        ui32 idx = 0;
+        for (auto&& i : UsedKeys) {
+            keyIndexDecoder[i.first] = idx++;
+        }
+        return keyIndexDecoder;
+    }
+
+    void AddKeyInfo(const ui32 keyIndex, const std::string_view value) {
+        auto itUsedKey = UsedKeys.find(keyIndex);
+        if (itUsedKey == UsedKeys.end()) {
+            itUsedKey = UsedKeys.emplace(keyIndex, Stats.GetColumnName(keyIndex)).first;
+        }
+        itUsedKey->second.AddValue(value);
+    }
+
+    TDictStats BuildStats(const TSettings& settings, const ui32 recordsCount) const {
+        TDictStats::TBuilder statBuilder;
+        for (auto&& i : UsedKeys) {
+            statBuilder.Add(
+                i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(), i.second.GetAccessorType(settings, recordsCount));
+        }
+        return statBuilder.Finish();
+    }
+};
+
+TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSettings& settings) const {
+    TOthersData::TIterator itOthersData = BuildIterator();
+    bool currentAcceptance = filter.GetStartValue();
+    ui32 filterIntervalStart = 0;
+    ui32 shiftSkippedCount = 0;
+    TColumnFilter newFilter = TColumnFilter::BuildAllowFilter();
+    auto recordIndexBuilder = NArrow::MakeBuilder(arrow::uint32());
+    auto valuesBuilder = NArrow::MakeBuilder(arrow::utf8());
+    TUsedKeysCollection usedKeys(Stats);
+    std::vector<ui32> originalKeys;
+    for (auto it = filter.GetFilter().begin(); itOthersData.IsValid() && it != filter.GetFilter().end(); ++it) {
+        for (; itOthersData.IsValid(); itOthersData.Next()) {
+            if (itOthersData.GetRecordIndex() < filterIntervalStart) {
+                AFL_VERIFY(false);
+            } else if (itOthersData.GetRecordIndex() < filterIntervalStart + *it) {
+                if (currentAcceptance) {
+                    AFL_VERIFY(shiftSkippedCount <= itOthersData.GetRecordIndex());
+                    const ui32 filteredRecordIndex = itOthersData.GetRecordIndex() - shiftSkippedCount;
+                    NArrow::Append<arrow::UInt32Type>(*recordIndexBuilder, filteredRecordIndex);
+                    NArrow::Append<arrow::StringType>(*valuesBuilder, arrow::util::string_view(itOthersData.GetValue().data(), itOthersData.GetValue().size()));
+                    originalKeys.emplace_back(itOthersData.GetKeyIndex());
+                    usedKeys.AddKeyInfo(itOthersData.GetKeyIndex(), itOthersData.GetValue());
+                }
+            } else {
+                break;
+            }
+        }
+        if (!currentAcceptance) {
+            shiftSkippedCount += *it;
+        }
+        currentAcceptance = !currentAcceptance;
+        filterIntervalStart += *it;
+    }
+    auto stats = usedKeys.BuildStats(settings, filter.GetFilteredCountVerified());
+    const std::vector<ui32> decoder = usedKeys.BuildDecoder();
+    auto keyIndexBuilder = NArrow::MakeBuilder(arrow::uint32());
+    for (auto&& i : originalKeys) {
+        NArrow::Append<arrow::UInt32Type>(*keyIndexBuilder, decoder[i]);
+    }
+    auto recordIndexes = NArrow::FinishBuilder(std::move(recordIndexBuilder));
+    auto keyIndexes = NArrow::FinishBuilder(std::move(keyIndexBuilder));
+    auto values = NArrow::FinishBuilder(std::move(valuesBuilder));
+
+    std::vector<std::shared_ptr<IChunkedArray>> arrays = { std::make_shared<TTrivialArray>(recordIndexes),
+        std::make_shared<TTrivialArray>(keyIndexes), std::make_shared<TTrivialArray>(values) };
+    auto records = std::make_shared<TGeneralContainer>(GetSchema(), std::move(arrays));
+    return TOthersData(stats, records);
+}
+
 TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSettings& settings) const {
     AFL_VERIFY(Records->GetColumnsCount() == 3);
     if (!count) {
@@ -87,30 +178,15 @@ TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSetti
     if (!startPosition || startPosition == finishPosition) {
         return TOthersData(TDictStats::BuildEmpty(), std::make_shared<TGeneralContainer>(0));
     }
-    std::map<ui32, TDictStats::TRTStats> usedKeys;
+    TUsedKeysCollection usedKeys(Stats);
     {
         itOthersData.MoveToPosition(*startPosition);
         for (; itOthersData.IsValid() && itOthersData.GetRecordIndex() < offset + count; itOthersData.Next()) {
-            auto itUsedKey = usedKeys.find(itOthersData.GetKeyIndex());
-            if (itUsedKey == usedKeys.end()) {
-                itUsedKey = usedKeys.emplace(itOthersData.GetKeyIndex(), Stats.GetColumnName(itOthersData.GetKeyIndex())).first;
-            }
-            itUsedKey->second.AddValue(itOthersData.GetValue());
+            usedKeys.AddKeyInfo(itOthersData.GetKeyIndex(), itOthersData.GetValue());
         }
     }
-    std::vector<ui32> keyIndexDecoder;
-    if (usedKeys.size()) {
-        keyIndexDecoder.resize(usedKeys.rbegin()->first + 1, Max<ui32>());
-        ui32 idx = 0;
-        for (auto&& i : usedKeys) {
-            keyIndexDecoder[i.first] = idx++;
-        }
-    }
-    TDictStats::TBuilder statBuilder;
-    for (auto&& i : usedKeys) {
-        statBuilder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(), i.second.GetAccessorType(settings, count));
-    }
-    TDictStats sliceStats = statBuilder.Finish();
+    const std::vector<ui32> keyIndexDecoder = usedKeys.BuildDecoder();
+    const TDictStats sliceStats = usedKeys.BuildStats(settings, count);
 
     {
         auto recordIndexBuilder = NArrow::MakeBuilder(arrow::uint32());

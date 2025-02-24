@@ -1,6 +1,5 @@
 #include <library/cpp/threading/future/wait/wait.h>
 #include <thread>
-#include <ranges>
 #include <util/system/mutex.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include "yql_yt_worker_impl.h"
@@ -12,7 +11,6 @@ namespace {
 struct TFmrWorkerState {
     TMutex Mutex;
     std::unordered_map<TString, TTaskResult::TPtr> TaskStatuses;
-    std::unordered_map<TString, NThreading::TFuture<TTaskResult::TPtr>> TaskFutures;
 };
 
 class TFmrWorker: public IFmrWorker {
@@ -20,7 +18,7 @@ public:
     TFmrWorker(IFmrCoordinator::TPtr coordinator, IFmrJobFactory::TPtr jobFactory, const TFmrWorkerSettings& settings)
         : Coordinator_(coordinator),
         JobFactory_(jobFactory),
-        WorkerState_(std::make_shared<TFmrWorkerState>(TMutex(), std::unordered_map<TString, TTaskResult::TPtr>{}, std::unordered_map<TString, NThreading::TFuture<TTaskResult::TPtr>>{})),
+        WorkerState_(std::make_shared<TFmrWorkerState>(TMutex(), std::unordered_map<TString, TTaskResult::TPtr>{})),
         StopWorker_(false),
         RandomProvider_(settings.RandomProvider),
         WorkerId_(settings.WorkerId),
@@ -86,12 +84,9 @@ public:
                                 with_lock(state->Mutex) {
                                     YQL_ENSURE(state->TaskStatuses.contains(task->TaskId));
                                     state->TaskStatuses[task->TaskId] = finalTaskStatus;
-                                    state->TaskFutures.erase(task->TaskId);
                                 }
                             }
                         });
-                        YQL_ENSURE(!WorkerState_->TaskFutures.contains(taskId));
-                        WorkerState_->TaskFutures[taskId] = future;
                     }
                 }
                 Sleep(TimeToSleepBetweenRequests_);
@@ -107,10 +102,8 @@ public:
                 taskInfo.second->store(true);
             }
             StopWorker_ = true;
-            auto futuresView = std::views::values(WorkerState_->TaskFutures);
-            taskFutures = std::vector<NThreading::TFuture<TTaskResult::TPtr>>{futuresView.begin(), futuresView.end()};
         }
-        NThreading::WaitAll(taskFutures).GetValueSync();
+        JobFactory_->Stop();
         if (MainThread_.joinable()) {
             MainThread_.join();
         }
@@ -133,7 +126,7 @@ private:
 } // namespace
 
 IFmrWorker::TPtr MakeFmrWorker(IFmrCoordinator::TPtr coordinator, IFmrJobFactory::TPtr jobFactory, const TFmrWorkerSettings& settings) {
-    return MakeIntrusive<TFmrWorker>(coordinator, jobFactory, settings);
+    return MakeHolder<TFmrWorker>(coordinator, jobFactory, settings);
 }
 
 } // namespace NYql::NFmr

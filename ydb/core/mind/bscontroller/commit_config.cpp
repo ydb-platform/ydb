@@ -58,24 +58,50 @@ namespace NKikimr::NBsController {
                 Self->StorageConfig = std::move(*StorageConfig);
                 Self->ApplyStorageConfig(true);
             }
+
+            std::optional<NKikimrBlobStorage::TYamlConfig> update;
+
             if (YamlConfig) {
                 Self->YamlConfig = std::move(YamlConfig);
-                const auto& configVersion = GetVersion(*Self->YamlConfig);
-                const auto& compressedConfig = CompressSingleConfig(*Self->YamlConfig);
+                Self->YamlConfigHash = GetSingleConfigHash(*Self->YamlConfig);
+
+                if (!update) {
+                    update.emplace();
+                }
+                update->SetCompressedMainConfig(CompressSingleConfig(*Self->YamlConfig));
+                update->SetMainConfigVersion(GetVersion(*Self->YamlConfig));
+            }
+            if (StorageYamlConfig) {
+                const bool hadStorageConfigBefore = Self->StorageYamlConfig.has_value();
+
+                Self->StorageYamlConfig = std::move(*StorageYamlConfig);
+                Self->StorageYamlConfigVersion = NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0);
+                Self->StorageYamlConfigHash = NYaml::GetConfigHash(*Self->StorageYamlConfig);
+
+                if (Self->StorageYamlConfig) {
+                    if (!update) {
+                        update.emplace();
+                    }
+                    update->SetCompressedStorageConfig(CompressStorageYamlConfig(*Self->StorageYamlConfig));
+                } else if (hadStorageConfigBefore && !update) {
+                    update.emplace(); // issue an update without storage yaml version meaning we are in single-config mode
+                }
+            }
+            if (update && Self->StorageYamlConfig) {
+                update->SetStorageConfigVersion(NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0));
+            }
+
+            Self->ConsoleInteraction->OnConfigCommit();
+
+            if (update) {
                 for (auto& node: Self->Nodes) {
                     if (node.second.ConnectedServerId) {
                         auto configPersistEv = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
-                        auto* yamlConfig = configPersistEv->Record.MutableYamlConfig();
-                        yamlConfig->SetYAML(compressedConfig);
-                        yamlConfig->SetConfigVersion(configVersion);
+                        configPersistEv->Record.MutableYamlConfig()->CopyFrom(*update);
                         Self->SendToWarden(node.first, std::move(configPersistEv), 0);
                     }
                 }
             }
-            if (StorageYamlConfig) {
-                Self->StorageYamlConfig = std::move(*StorageYamlConfig);
-            }
-            Self->ConsoleInteraction->OnConfigCommit();
         }
     };
 

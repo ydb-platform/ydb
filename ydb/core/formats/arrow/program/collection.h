@@ -2,10 +2,10 @@
 
 #include "abstract.h"
 
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/common/container.h>
 
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
@@ -417,7 +417,7 @@ public:
         } else {
             *Filter = Filter->CombineSequentialAnd(filter);
             for (auto&& i : Accessors) {
-                i.second = TAccessorCollectedContainer(i.second.GetData()->ApplyFilter(filter));
+                i.second = TAccessorCollectedContainer(i.second.GetData()->ApplyFilter(filter, i.second.GetData()));
             }
         }
         RecordsCountActual = Filter->GetFilteredCount();

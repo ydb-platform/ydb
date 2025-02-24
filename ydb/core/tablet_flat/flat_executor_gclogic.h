@@ -91,7 +91,6 @@ protected:
         ui32 GcWaitFor;
 
         inline TChannelInfo();
-        void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
         void SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& executor);
         void SendCollectGarbageEntry(const TActorContext &ctx, TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&notKeep, ui64 tabletid, ui32 channel, ui32 bsgroup, ui32 generation);
         void OnCollectGarbageSuccess();

@@ -2358,7 +2358,7 @@ TFuture<TQueryResult> TClient::GetQueryResult(
             .Schema = rsp->has_schema() ? FromProto<NTableClient::TTableSchemaPtr>(rsp->schema()) : nullptr,
             .DataStatistics = FromProto<NChunkClient::NProto::TDataStatistics>(rsp->data_statistics()),
             .IsTruncated = rsp->is_truncated(),
-            .FullResult = rsp->has_full_result() ? std::make_optional(TYsonString(rsp->full_result())) : std::nullopt,
+            .FullResult = rsp->has_full_result() ? TYsonString(rsp->full_result()) : TYsonString(),
         };
     }));
 }
@@ -2518,6 +2518,7 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
             .ClusterName = FromProto<TString>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
+            .Clusters = FromProto<std::vector<TString>>(rsp->clusters())
         };
     }));
 }

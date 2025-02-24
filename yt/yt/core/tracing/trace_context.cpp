@@ -254,7 +254,7 @@ TTraceContext::TTraceContext(
     NDetail::InitializeTraceContexts();
 }
 
-void TTraceContext::SetTargetEndpoint(const std::optional<TString>& targetEndpoint)
+void TTraceContext::SetTargetEndpoint(const std::optional<std::string>& targetEndpoint)
 {
     TargetEndpoint_ = targetEndpoint;
 }
@@ -492,7 +492,7 @@ void TTraceContext::AddErrorTag()
     AddTag(ErrorAnnotationName, ErrorAnnotationValue);
 }
 
-void TTraceContext::AddLogEntry(TCpuInstant at, TString message)
+void TTraceContext::AddLogEntry(TCpuInstant at, std::string message)
 {
     if (!IsRecorded()) {
         return;
@@ -638,7 +638,7 @@ TTraceContextPtr TTraceContext::NewRoot(const std::string& spanName, TTraceId tr
 TTraceContextPtr TTraceContext::NewChildFromSpan(
     TSpanContext parentSpanContext,
     const std::string& spanName,
-    std::optional<TString> endpoint,
+    std::optional<std::string> endpoint,
     TYsonString baggage)
 {
     auto result = New<TTraceContext>(

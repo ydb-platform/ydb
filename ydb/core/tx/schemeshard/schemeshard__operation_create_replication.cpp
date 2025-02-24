@@ -345,7 +345,7 @@ public:
                 checks
                     .IsResolved()
                     .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeReplication, acceptExisted);
+                    .FailOnExist(Strategy->GetPathType(), acceptExisted);
             } else {
                 checks
                     .NotEmpty()

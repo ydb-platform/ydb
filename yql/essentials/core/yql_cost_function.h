@@ -1,7 +1,5 @@
 #pragma once
 
-#include "yql_statistics.h"
-
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
@@ -42,7 +40,7 @@ struct TJoinColumn {
     std::optional<ui32> EquivalenceClass{};
     bool IsConstant = false;
 
-    TJoinColumn(TString relName, TString attributeName) : 
+    TJoinColumn(TString relName, TString attributeName) :
         RelName(relName),
         AttributeName(attributeName),
         AttributeNameWithAliases(attributeName) {}

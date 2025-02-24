@@ -662,8 +662,7 @@ std::optional<std::string> TRichYPath::GetCluster() const
 
 void TRichYPath::SetCluster(const std::string& value)
 {
-    // TODO(babenko): switch to std::string
-    Attributes().Set("cluster", TString(value));
+    Attributes().Set("cluster", value);
 }
 
 std::optional<std::vector<TString>> TRichYPath::GetClusters() const

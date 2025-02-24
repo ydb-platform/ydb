@@ -73,7 +73,7 @@ TMaybeNode<TYtSection> MaterializeSectionIfRequired(TExprBase world, TYtSection 
                 .Paths()
                     .Add(path)
                 .Build()
-                .Settings(NYql::RemoveSetting(section.Settings().Ref(), EYtSettingType::Sample, ctx))
+                .Settings(NYql::RemoveSettings(section.Settings().Ref(), EYtSettingType::Sample | EYtSettingType::SysColumns, ctx))
                 .Done();
     }
 
@@ -89,7 +89,7 @@ TMaybeNode<TYtSection> UpdateSectionWithRange(TExprBase world, TYtSection sectio
     TVector<TYtPath> skippedPaths;
     if (auto limiter = TTableLimiter(range)) {
         if (auto materialized = MaterializeSectionIfRequired(world, section, dataSink, outRowSpec, keepSortness,
-            {NYql::KeepOnlySettings(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::SysColumns, ctx)}, state, ctx))
+            {NYql::KeepOnlySettings(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip, ctx)}, state, ctx))
         {
             if (!allowMaterialize || state->Types->EvaluationInProgress) {
                 // Keep section as is

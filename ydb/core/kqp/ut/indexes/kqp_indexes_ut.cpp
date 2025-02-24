@@ -2698,7 +2698,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_C(value.IsMap(), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("version"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_text"), "Incorrect Diagnostics");
+                UNIT_ASSERT_C(!value.Has("query_text"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Diagnostics: table_metadata type should be an array");
@@ -2706,7 +2706,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_plan"), "Incorrect Diagnostics");
+                UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Diagnostics");
             }
 
@@ -4446,8 +4446,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                  query,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                           .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
         {
@@ -4459,8 +4459,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                  query,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                           .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
         {
@@ -4472,8 +4472,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
         {
@@ -4485,8 +4485,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
     }

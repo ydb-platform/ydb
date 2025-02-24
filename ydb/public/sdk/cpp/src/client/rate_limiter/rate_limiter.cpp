@@ -204,6 +204,9 @@ template struct THierarchicalDrrSettings<TDescribeResourceResult::THierarchicalD
 TCreateResourceSettings::TCreateResourceSettings(const Ydb::RateLimiter::CreateResourceRequest& proto)
     : THierarchicalDrrSettings(proto.resource().hierarchical_drr())
 {
+    if (proto.resource().has_metering_config()) {
+        MeteringConfig_ = proto.resource().metering_config();
+    }
 }
 
 TListResourcesResult::TListResourcesResult(TStatus status, std::vector<std::string> paths)

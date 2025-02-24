@@ -34,6 +34,8 @@ protected:
     bool KeepTemp_ = false;
     TString DefYtServer_;
     NFmr::IFmrWorker::TPtr FmrWorker_;
+    TString FmrCoordinatorServerUrl_;
+    bool DisableLocalFmrWorker_ = false;
 };
 
 } // NYql

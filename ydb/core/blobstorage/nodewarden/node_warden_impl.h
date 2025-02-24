@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/incrhuge/incrhuge.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+#include <ydb/core/util/backoff.h>
 
 namespace NKikimr {
     struct TNodeWardenConfig;
@@ -25,6 +26,8 @@ namespace NKikimr::NStorage {
     constexpr TDuration BackoffMin = TDuration::MilliSeconds(20);
     constexpr TDuration BackoffMax = TDuration::Seconds(5);
     constexpr const char *MockDevicesPath = "/Berkanavt/kikimr/testing/mock_devices.txt";
+    constexpr const char *YamlConfigFileName = "config.yaml";
+    constexpr const char *StorageConfigFileName = "storage.yaml";
 
     template<typename T, typename TPred>
     T *FindOrCreateProtoItem(google::protobuf::RepeatedPtrField<T> *collection, TPred&& pred) {
@@ -84,7 +87,7 @@ namespace NKikimr::NStorage {
 
         std::optional<ui64> ShredGenerationIssued;
         std::variant<std::monostate, ui64, TString> ShredState; // not issued, finished with generation, aborted
-        THashSet<ui64> ShredCookies;
+        THashMap<ui64, ui64> ShredCookies;
 
         TPDiskRecord(NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk record)
             : Record(std::move(record))
@@ -140,6 +143,10 @@ namespace NKikimr::NStorage {
         ui64 NextConfigCookie = 1;
         std::unordered_map<ui64, std::function<void(TEvBlobStorage::TEvControllerConfigResponse*)>> ConfigInFlight;
 
+        TBackoffTimer ConfigSaveTimer{BackoffMin.MilliSeconds(), BackoffMax.MilliSeconds()};
+        std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
+        ui64 ExpectedSaveConfigCookie = 0;
+
         TVector<NPDisk::TDriveData> WorkingLocalDrives;
 
         NPDisk::TOwnerRound LocalPDiskInitOwnerRound = 1;
@@ -157,6 +164,8 @@ namespace NKikimr::NStorage {
                 EvGetGroup,
                 EvGroupPendingQueueTick,
                 EvDereferencePDisk,
+                EvSaveConfigResult,
+                EvRetrySaveConfig,
             };
 
             struct TEvSendDiskMetrics : TEventLocal<TEvSendDiskMetrics, EvSendDiskMetrics> {};
@@ -165,6 +174,21 @@ namespace NKikimr::NStorage {
             struct TEvDereferencePDisk : TEventLocal<TEvDereferencePDisk, EvDereferencePDisk> {
                 TPDiskKey PDiskKey;
                 TEvDereferencePDisk(TPDiskKey pdiskKey) : PDiskKey(pdiskKey) {}
+            };
+
+            struct TEvRetrySaveConfig : TEventLocal<TEvRetrySaveConfig, EvRetrySaveConfig> {
+                std::optional<TString> MainYaml;
+                ui64 MainYamlVersion;
+                std::optional<TString> StorageYaml;
+                std::optional<ui64> StorageYamlVersion;
+
+                TEvRetrySaveConfig(std::optional<TString> mainYaml, ui64 mainYamlVersion, std::optional<TString> storageYaml,
+                        std::optional<ui64> storageYamlVersion)
+                    : MainYaml(std::move(mainYaml))
+                    , MainYamlVersion(mainYamlVersion)
+                    , StorageYaml(std::move(storageYaml))
+                    , StorageYamlVersion(storageYamlVersion)
+                {}
             };
         };
 
@@ -550,6 +574,11 @@ namespace NKikimr::NStorage {
         void Handle(NPDisk::TEvShredPDiskResult::TPtr ev);
         void Handle(NPDisk::TEvShredPDisk::TPtr ev);
         void ProcessShredStatus(ui64 cookie, ui64 generation, std::optional<TString> error);
+
+        void PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVersion, std::optional<TString> storageYaml,
+            std::optional<ui64> storageYamlVersion);
+        void LoadConfigVersion();
+
         void Handle(TEvRegisterPDiskLoadActor::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev);
 
@@ -565,6 +594,8 @@ namespace NKikimr::NStorage {
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
         void Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&);
         void Handle(TEvPrivate::TEvUpdateNodeDrives ::TPtr&);
+        void Handle(TEvPrivate::TEvRetrySaveConfig::TPtr&);
+
         void Handle(NMon::TEvHttpInfo::TPtr&);
         void RenderJsonGroupInfo(IOutputStream& out, const std::set<ui32>& groupIds);
         void RenderWholePage(IOutputStream&);
@@ -652,6 +683,9 @@ namespace NKikimr::NStorage {
 
     bool DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig, NKikimrBlobStorage::TStorageConfig *config,
         TString *errorReason);
+
+    void EscapeHtmlString(IOutputStream& out, const TString& s);
+    void OutputPrettyMessage(IOutputStream& out, const NProtoBuf::Message& message);
 
 }
 

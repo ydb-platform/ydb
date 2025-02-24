@@ -14,6 +14,8 @@ PEERDIR(
     yql/essentials/parser/lexer_common
     yql/essentials/parser/proto_ast/gen/v1_antlr4
     yql/essentials/sql/v1/lexer
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/settings
     yql/essentials/utils
     ydb/public/lib/ydb_cli/commands/interactive/complete

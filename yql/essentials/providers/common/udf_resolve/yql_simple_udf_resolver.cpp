@@ -178,12 +178,14 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
         try {
             TType* mkqlUserType = nullptr;
             if (udf.UserType) {
-                // scan for error types
-                TErrorTypeVisitor errorVisitor(ctx);
-                udf.UserType->Accept(errorVisitor);
-                if (errorVisitor.HasErrors()) {
-                    hasErrors = true;
-                    continue;
+                if (udf.UserType->HasErrors()) {
+                    // scan for error types
+                    TErrorTypeVisitor errorVisitor(ctx);
+                    udf.UserType->Accept(errorVisitor);
+                    if (errorVisitor.HasErrors()) {
+                        hasErrors = true;
+                        continue;
+                    }
                 }
 
                 TStringStream err;

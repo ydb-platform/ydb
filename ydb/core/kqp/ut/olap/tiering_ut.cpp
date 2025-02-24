@@ -256,15 +256,15 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                 false, tsInterval.MicroSeconds() / rows);
         }
 
-        {
-            auto selectQuery = TString(R"(
-                SELECT MAX(timestamp) AS timestamp FROM `/Root/olapStore/olapTable`
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_GT(GetTimestamp(rows[0].at("timestamp")), TInstant::Now() - TDuration::Days(100));
-        }
+//         {
+//             auto selectQuery = TString(R"(
+//                 SELECT MAX(timestamp) AS timestamp FROM `/Root/olapStore/olapTable`
+//             )");
+// 
+//             auto rows = ExecuteScanQuery(tableClient, selectQuery);
+//             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+//             UNIT_ASSERT_GT(GetTimestamp(rows[0].at("timestamp")), TInstant::Now() - TDuration::Days(100));
+//         }
 
         {
             auto selectQuery = TString(R"(

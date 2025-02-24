@@ -5,6 +5,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
 #include <util/generic/map.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -18,7 +19,9 @@ using namespace NSQLTranslation;
 namespace {
 
 TParsedTokenList Tokenize(const TString& query) {
-    auto lexer = NSQLTranslationV1::MakeLexer(true, false);
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, false, false);
     TParsedTokenList tokens;
     NYql::TIssues issues;
     UNIT_ASSERT_C(Tokenize(*lexer, query, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS),
@@ -2996,7 +2999,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(WithNonStructSchemaS3) {
         NSQLTranslation::TTranslationSettings settings;
         settings.ClusterMapping["s3bucket"] = NYql::S3ProviderName;
-        UNIT_ASSERT(SqlToYql("select * from s3bucket.`foo` with schema (col1 Int32, String as col2, Int64 as col3);", settings).IsOk());
+        UNIT_ASSERT(SqlToYqlWithSettings("select * from s3bucket.`foo` with schema (col1 Int32, String as col2, Int64 as col3);", settings).IsOk());
     }
 
     Y_UNIT_TEST(AllowNestedTuplesInGroupBy) {
@@ -5201,7 +5204,7 @@ select FormatType($f());
     Y_UNIT_TEST(WarnForDeprecatedSchema) {
         NSQLTranslation::TTranslationSettings settings;
         settings.ClusterMapping["s3bucket"] = NYql::S3ProviderName;
-        NYql::TAstParseResult res = SqlToYql("select * from s3bucket.`foo` with schema (col1 Int32, String as col2, Int64 as col3);", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("select * from s3bucket.`foo` with schema (col1 Int32, String as col2, Int64 as col3);", settings);
         UNIT_ASSERT(res.Root);
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Warning: Deprecated syntax for positional schema: please use 'column type' instead of 'type AS column', code: 4535\n");
     }
@@ -8175,13 +8178,18 @@ Y_UNIT_TEST_SUITE(QuerySplit) {
 
         NSQLTranslation::TTranslationSettings settings;
         settings.AnsiLexer = false;
-        settings.Antlr4Parser = true;
+        settings.Antlr4Parser = false;
         settings.Arena = &Arena;
 
         TVector<TString> statements;
         NYql::TIssues issues;
 
-        UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(query, statements, issues, settings));
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+        NSQLTranslationV1::TParsers parsers;
+        parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
+
+        UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(lexers, parsers, query, statements, issues, settings));
 
         UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
 

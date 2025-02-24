@@ -8,10 +8,9 @@ namespace NYT::NSignature {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDummySignatureValidator
-    : public TSignatureValidatorBase
+struct TDummySignatureValidator
+    : public ISignatureValidator
 {
-public:
     TFuture<bool> Validate(const TSignaturePtr& signature) override
     {
         YT_VERIFY(signature->Header_.ToString() == "DummySignature");
@@ -19,24 +18,23 @@ public:
     }
 };
 
-TSignatureValidatorBasePtr CreateDummySignatureValidator()
+ISignatureValidatorPtr CreateDummySignatureValidator()
 {
     return New<TDummySignatureValidator>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAlwaysThrowingSignatureValidator
-    : public TSignatureValidatorBase
+struct TAlwaysThrowingSignatureValidator
+    : public ISignatureValidator
 {
-public:
     TFuture<bool> Validate(const TSignaturePtr& /*signature*/) override
     {
         THROW_ERROR_EXCEPTION("Signature validation is unsupported");
     }
 };
 
-TSignatureValidatorBasePtr CreateAlwaysThrowingSignatureValidator()
+ISignatureValidatorPtr CreateAlwaysThrowingSignatureValidator()
 {
     return New<TAlwaysThrowingSignatureValidator>();
 }

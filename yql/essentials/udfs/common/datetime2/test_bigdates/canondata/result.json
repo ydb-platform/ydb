@@ -19,6 +19,11 @@
             "uri": "file://test.test_Get_/results.txt"
         }
     ],
+    "test.test[Shift]": [
+        {
+            "uri": "file://test.test_Shift_/results.txt"
+        }
+    ],
     "test.test[SplitMake]": [
         {
             "uri": "file://test.test_SplitMake_/results.txt"
@@ -27,6 +32,16 @@
     "test.test[StartOf]": [
         {
             "uri": "file://test.test_StartOf_/results.txt"
+        }
+    ],
+    "test.test[UpdateTz]": [
+        {
+            "uri": "file://test.test_UpdateTz_/results.txt"
+        }
+    ],
+    "test.test[Update]": [
+        {
+            "uri": "file://test.test_Update_/results.txt"
         }
     ]
 }

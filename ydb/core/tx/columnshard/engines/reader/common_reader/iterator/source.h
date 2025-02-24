@@ -170,7 +170,7 @@ public:
             return false;
         }
         if (DoAddTxConflict()) {
-            StageData->Clear();
+            StageData->Abort();
             return true;
         }
         return false;

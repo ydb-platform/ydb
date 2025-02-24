@@ -542,6 +542,12 @@ struct TOperationSpecBase
 
     /// How many jobs can fail before operation is failed.
     FLUENT_FIELD_OPTION(ui64, MaxFailedJobCount);
+
+    // Arbitrary structured information related to the operation.
+    FLUENT_FIELD_OPTION(TNode, Annotations);
+
+    // Similar to Annotations, shown on the operation page. Recommends concise, human-readable entries to prevent clutter.
+    FLUENT_FIELD_OPTION(TNode, Description);
 };
 
 ///
@@ -2743,6 +2749,10 @@ enum class EJobType : int
     RemoveChunk       /* "remove_chunk" */,
     RepairChunk       /* "repair_chunk" */,
     SealChunk         /* "seal_chunk" */,
+    ShallowMerge      /* "shallow_merge" */,
+    MergeChunks       /* "merge_chunks" */,
+    AutotomizeChunk   /* "autotomize_chunk" */,
+    ReincarnateChunk  /* "reincarnate_chunk" */,
 };
 
 ///

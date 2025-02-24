@@ -40,6 +40,12 @@
 #include <yql/essentials/protos/pg_ext.pb.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/yson/node/node_io.h>
@@ -557,6 +563,19 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
     FuncRegistry_ = NKikimr::NMiniKQL::CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace,
         NKikimr::NMiniKQL::CreateBuiltinRegistry(), true, RunOptions_.UdfsPaths);
 
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
     TExprContext ctx;
     if (RunOptions_.PgSupport) {
         ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
@@ -566,13 +585,13 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
         TModulesTable modules;
         FillUserDataTableFromFileSystem(*RunOptions_.MountConfig, RunOptions_.DataTable);
 
-        if (!CompileLibraries(RunOptions_.DataTable, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
+        if (!CompileLibraries(translators, RunOptions_.DataTable, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
             *RunOptions_.ErrStream << "Errors on compile libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(std::move(modules), ctx.NextUniqueId, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate);
+        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate);
     } else {
         if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
             *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
@@ -698,7 +717,13 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         if (!fail && RunOptions_.TestSqlFormat && 1 == RunOptions_.SyntaxVersion) {
             TString formattedProgramText;
             NYql::TIssues issues;
-            auto formatter = NSQLFormat::MakeSqlFormatter(settings);
+            NSQLTranslationV1::TLexers lexers;
+            lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+            lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+            NSQLTranslationV1::TParsers parsers;
+            parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+            parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+            auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
             if (!formatter->Format(RunOptions_.ProgramText, formattedProgramText, issues)) {
                 *RunOptions_.ErrStream << "Format failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);

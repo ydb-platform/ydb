@@ -1,5 +1,6 @@
 #include "init_impl.h"
 #include "mock.h"
+#include <ydb/library/yaml_json/yaml_to_json.h>
 
 namespace NKikimr::NConfig {
 
@@ -67,7 +68,7 @@ public:
 
     TString GetProtoFromFile(const TString& path, IErrorCollector& errorCollector) const override {
         fs::path filePath(path.c_str());
-        if (!IsFileExists(filePath)) {
+        if (!fs::is_regular_file(filePath)) {
             errorCollector.Fatal(Sprintf("File %s doesn't exists", path.c_str()));
             return {};
         }
@@ -581,7 +582,8 @@ void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErr
     }
 }
 
-void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location) {
+void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, const TString& storageYamlConfigFile,
+        bool loadedFromStore, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location) {
     if (!mainYamlConfigFile) {
         return;
     }
@@ -590,17 +592,45 @@ void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, NKi
     IErrorCollector& errorCollector = refs.ErrorCollector;
     IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
-    const TString mainYamlConfigString = protoConfigFileProvider.GetProtoFromFile(mainYamlConfigFile, errorCollector);
+    std::optional<TString> storageYamlConfigString;
+    if (storageYamlConfigFile) {
+        storageYamlConfigString.emplace(protoConfigFileProvider.GetProtoFromFile(storageYamlConfigFile, errorCollector));
+    }
 
-    if (appConfig.GetSelfManagementConfig().GetEnabled()) {
-        // fill in InitialConfigYaml only when self-management through distconf is enabled
-        appConfig.MutableSelfManagementConfig()->SetInitialConfigYaml(mainYamlConfigString);
+    const TString mainYamlConfigString = protoConfigFileProvider.GetProtoFromFile(mainYamlConfigFile, errorCollector);
+    appConfig.SetStartupConfigYaml(mainYamlConfigString);
+    if (storageYamlConfigString) {
+        appConfig.SetStartupStorageYaml(*storageYamlConfigString);
+    }
+
+    if (loadedFromStore) {
+        auto *yamlConfig = appConfig.MutableStoredConfigYaml();
+        yamlConfig->SetMainConfig(mainYamlConfigString);
+        yamlConfig->SetMainConfigVersion(NYamlConfig::GetVersion(mainYamlConfigString));
+        if (storageYamlConfigString) {
+            yamlConfig->SetStorageConfig(*storageYamlConfigString);
+            yamlConfig->SetStorageConfigVersion(NYamlConfig::GetVersion(*storageYamlConfigString));
+        }
     }
 
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
      */
-    NKikimrConfig::TAppConfig parsedConfig = NKikimr::NYaml::Parse(mainYamlConfigString); // FIXME
+
+    NKikimrConfig::TAppConfig parsedConfig;
+
+    if (storageYamlConfigString) {
+        auto storage = NKikimr::NYaml::Yaml2Json(YAML::Load(*storageYamlConfigString), true);
+        auto main = NKikimr::NYaml::Yaml2Json(YAML::Load(mainYamlConfigString), true);
+        auto& target = main["config"].GetMapSafe();
+        for (auto&& [key, value] : std::move(storage["config"].GetMapSafe())) {
+            target.emplace(std::move(key), std::move(value));
+        }
+        NKikimr::NYaml::Parse(main, NKikimr::NYaml::GetJsonToProtoConfig(), parsedConfig, true);
+    } else {
+        parsedConfig = NKikimr::NYaml::Parse(mainYamlConfigString); // FIXME
+    }
+
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
      */

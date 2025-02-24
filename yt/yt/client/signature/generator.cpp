@@ -10,7 +10,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSignaturePtr TSignatureGeneratorBase::Sign(TYsonString data)
+TSignaturePtr ISignatureGenerator::Sign(TYsonString data)
 {
     auto signature = New<TSignature>();
     signature->Payload_ = std::move(data);
@@ -20,34 +20,32 @@ TSignaturePtr TSignatureGeneratorBase::Sign(TYsonString data)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDummySignatureGenerator
-    : public TSignatureGeneratorBase
+struct TDummySignatureGenerator
+    : public ISignatureGenerator
 {
-public:
     void Sign(const TSignaturePtr& signature) override
     {
         signature->Header_ = NYson::TYsonString("DummySignature"_sb);
     }
 };
 
-TSignatureGeneratorBasePtr CreateDummySignatureGenerator()
+ISignatureGeneratorPtr CreateDummySignatureGenerator()
 {
     return New<TDummySignatureGenerator>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAlwaysThrowingSignatureGenerator
-    : public TSignatureGeneratorBase
+struct TAlwaysThrowingSignatureGenerator
+    : public ISignatureGenerator
 {
-public:
     void Sign(const TSignaturePtr& /*signature*/) override
     {
         THROW_ERROR_EXCEPTION("Signature generation is unsupported");
     }
 };
 
-TSignatureGeneratorBasePtr CreateAlwaysThrowingSignatureGenerator()
+ISignatureGeneratorPtr CreateAlwaysThrowingSignatureGenerator()
 {
     return New<TAlwaysThrowingSignatureGenerator>();
 }

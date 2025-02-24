@@ -4,7 +4,20 @@
 
 namespace NSQLTranslationV1 {
 
+struct TLexers {
+    NSQLTranslation::TLexerFactoryPtr Antlr3;
+    NSQLTranslation::TLexerFactoryPtr Antlr3Ansi;
+    NSQLTranslation::TLexerFactoryPtr Antlr4;
+    NSQLTranslation::TLexerFactoryPtr Antlr4Ansi;
+};
+
+//FIXME remove
+TLexers MakeAllLexers();
+
+//FIXME remove
 NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi, bool antlr4);
+
+NSQLTranslation::ILexer::TPtr MakeLexer(const TLexers& lexers, bool ansi, bool antlr4);
 
 // "Probably" because YQL keyword can be an identifier
 // depending on a query context. For example

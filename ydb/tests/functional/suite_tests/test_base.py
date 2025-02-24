@@ -11,7 +11,7 @@ import enum
 from functools import cmp_to_key
 from concurrent import futures
 
-from hamcrest import assert_that, equal_to, raises
+from hamcrest import assert_that, equal_to, is_not, raises
 import yatest
 from yatest.common import source_path, test_source_path
 
@@ -357,11 +357,9 @@ class BaseSuiteRunner(object):
         assert_method(statement)
 
     def assert_statement_ok(self, statement):
-        actual = safe_execute(lambda: self.execute_query(statement))
         assert_that(
-            len(actual),
-            1,
-            str(statement),
+            lambda: self.execute_query(statement),
+            is_not(raises(ydb.Error)),
         )
 
     def assert_statement_error(self, statement):

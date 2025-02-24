@@ -3018,6 +3018,7 @@ message TReqGetFlowView
 {
     required bytes pipeline_path = 1; // YPath
     optional bytes view_path = 2; // YPath
+    optional bool cache = 3 [default = true];
 }
 
 message TRspGetFlowView
@@ -3448,6 +3449,7 @@ message TRspGetQueryTrackerInfo
     required bytes supported_features = 2; // YSON
     repeated string access_control_objects = 3;
     optional string query_tracker_stage = 4;
+    repeated string clusters = 5;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

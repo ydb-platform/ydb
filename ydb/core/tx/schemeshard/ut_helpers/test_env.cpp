@@ -608,6 +608,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableBackupService(opts.EnableBackupService_);
     app.SetEnableExportChecksums(true);
     app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
+    app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

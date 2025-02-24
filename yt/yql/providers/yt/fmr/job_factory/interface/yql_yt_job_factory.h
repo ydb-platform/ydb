@@ -2,10 +2,11 @@
 
 #include <library/cpp/threading/future/core/future.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
+#include <yql/essentials/utils/runnable.h>
 
 namespace NYql::NFmr {
 
-class IFmrJobFactory: public TThrRefBase {
+class IFmrJobFactory: public IRunnable {
 public:
     using TPtr = TIntrusivePtr<IFmrJobFactory>;
 

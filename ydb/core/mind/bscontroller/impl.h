@@ -1510,14 +1510,6 @@ public:
     using THostRecordMap = std::shared_ptr<THostRecordMapImpl>;
 
 private:
-    using TYamlConfig = std::tuple<TString, ui64, TString>; // yaml, configVersion, yamlReturnedByFetch; this tuple must not change
-
-    static TString CompressYamlConfig(const TYamlConfig& configYaml);
-    static TString CompressStorageYamlConfig(const TString& storageConfigYaml);
-    static TYamlConfig DecompressYamlConfig(const TString& buffer);
-    static TString DecompressStorageYamlConfig(const TString& buffer);
-
-private:
     TString InstanceId;
     std::shared_ptr<std::atomic_uint64_t> SelfHealUnreassignableGroups = std::make_shared<std::atomic_uint64_t>();
     TMaybe<TActorId> MigrationId;
@@ -1555,7 +1547,10 @@ private:
     NKikimrBlobStorage::TStorageConfig StorageConfig;
     bool SelfManagementEnabled = false;
     std::optional<TYamlConfig> YamlConfig;
+    ui64 YamlConfigHash = 0;
     std::optional<TString> StorageYamlConfig; // if separate config is in effect
+    ui64 StorageYamlConfigVersion = 0;
+    ui64 StorageYamlConfigHash = 0;
     TBackoffTimer GetBlockBackoff{1, 1000};
 
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;

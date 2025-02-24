@@ -114,17 +114,20 @@ bool SwitchCompare(const arrow::Datum& column, const std::shared_ptr<arrow::Arra
 
 template <typename T>
 void CompositeCompare(std::shared_ptr<T> some, std::shared_ptr<arrow::RecordBatch> borderBatch, std::vector<NArrow::ECompareResult>& rowsCmp) {
+    AFL_VERIFY(some);
+    AFL_VERIFY(borderBatch);
     auto key = borderBatch->schema()->fields();
-    Y_ABORT_UNLESS(key.size());
+    AFL_VERIFY(key.size());
 
     for (size_t i = 0; i < key.size(); ++i) {
         auto& field = key[i];
         auto typeId = field->type()->id();
         auto column = some->GetColumnByName(field->name());
         std::shared_ptr<arrow::Array> border = borderBatch->GetColumnByName(field->name());
-        Y_ABORT_UNLESS(column);
-        Y_ABORT_UNLESS(border);
-        Y_ABORT_UNLESS(some->schema()->GetFieldByName(field->name())->type()->id() == typeId);
+        AFL_VERIFY(column)("schema1", some->schema()->ToString())("schema2", borderBatch->schema()->ToString())("f", field->name());
+        AFL_VERIFY(border)("schema1", some->schema()->ToString())("schema2", borderBatch->schema()->ToString())("f", field->name());
+        AFL_VERIFY(some->schema()->GetFieldByName(field->name())->type()->id() == typeId)("schema1", some->schema()->ToString())(
+            "schema2", borderBatch->schema()->ToString())("f", field->name());
 
         if (SwitchCompare(column, border, rowsCmp)) {
             break;   // early exit in case we have all rows compared: no borders, can omit key tail
@@ -438,6 +441,16 @@ void TColumnFilter::Apply(const ui32 expectedRecordsCount, std::vector<arrow::Da
     }
 }
 
+std::shared_ptr<NAccessor::IChunkedArray> TColumnFilter::Apply(
+    const std::shared_ptr<NAccessor::IChunkedArray>& source, const TApplyContext& context /*= Default<TApplyContext>()*/) const {
+    if (context.HasSlice()) {
+        auto sliceArray = source->ISlice(*context.GetStartPos(), *context.GetCount());
+        return sliceArray->ApplyFilter(*this, sliceArray);
+    } else {
+        return source->ApplyFilter(*this, source);
+    }
+}
+
 const std::vector<bool>& TColumnFilter::BuildSimpleFilter() const {
     if (!FilterPlain) {
         Y_ABORT_UNLESS(RecordsCount);
@@ -636,8 +649,7 @@ TColumnFilter::TIterator TColumnFilter::GetIterator(const bool reverse, const ui
     } else if (IsTotalDenyFilter()) {
         return TIterator(reverse, expectedSize, false);
     } else {
-        AFL_VERIFY(expectedSize == GetRecordsCountVerified())("expected", expectedSize)("count", GetRecordsCountVerified())(
-            "reverse", reverse);
+        AFL_VERIFY(expectedSize == GetRecordsCountVerified())("expected", expectedSize)("count", GetRecordsCountVerified())("reverse", reverse);
         return TIterator(reverse, Filter, GetStartValue(reverse));
     }
 }

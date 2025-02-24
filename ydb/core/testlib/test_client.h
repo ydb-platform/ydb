@@ -19,6 +19,8 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -107,6 +109,7 @@ namespace Tests {
         using TControls = NKikimrConfig::TImmediateControlsConfig;
         using TLoggerInitializer = std::function<void (TTestActorRuntime&)>;
         using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds;
+        using TProxyDSPtr = TIntrusivePtr<NFake::TProxyDS>;
 
         ui16 Port;
         ui16 GrpcPort = 0;
@@ -167,6 +170,7 @@ namespace Tests {
         TString ServerCertFilePath;
         bool Verbose = true;
         bool UseSectorMap = false;
+        TVector<TProxyDSPtr> ProxyDSMocks;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
@@ -257,6 +261,11 @@ namespace Tests {
             return *this;
         }
 
+        TServerSettings& SetProxyDSMocks(const TVector<TProxyDSPtr>& proxyDSMocks) {
+            ProxyDSMocks = proxyDSMocks;
+            return *this;
+        }
+
         template <typename TService, typename...TParams>
         TServerSettings& RegisterGrpcService(
             const TString& name,
@@ -291,6 +300,7 @@ namespace Tests {
             FeatureFlags.SetEnableColumnStore(true);
         }
 
+        TServerSettings() = default;
         TServerSettings(const TServerSettings& settings) = default;
         TServerSettings& operator=(const TServerSettings& settings) = default;
     private:
@@ -518,6 +528,7 @@ namespace Tests {
             return CreateColumnTable(parent, table);
         }
 #endif
+        NMsgBusProxy::EResponseStatus CreateTopic(const TString& parent, const NKikimrSchemeOp::TPersQueueGroupDescription& topic);
         NMsgBusProxy::EResponseStatus CreateSolomon(const TString& parent, const TString& name, ui32 parts = 4, ui32 channelProfile = 0);
         NMsgBusProxy::EResponseStatus StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task);
         NMsgBusProxy::EResponseStatus DeleteTopic(const TString& parent, const TString& name);

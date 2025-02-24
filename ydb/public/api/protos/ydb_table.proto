@@ -543,8 +543,7 @@ message ColumnFamily {
         COMPRESSION_ZSTD = 3;
     }
 
-    // Name of the column family, the name "default" must be used for the
-    // primary column family that contains at least primary key columns
+    // Name of the column family
     string name = 1;
 
     // This specifies data storage settings for column family
@@ -557,8 +556,9 @@ message ColumnFamily {
     // WARNING: DO NOT USE
     Ydb.FeatureFlag.Status keep_in_memory = 4;
 
-    // Not all compression algorithms support
-    // Set if want to change default value
+    // Set the compression level for selected compression type. If no value is specified, default value will be chosen.
+    // For ZSTD compression level must be in range [-131072:22]
+    // For other compression types compression level must be empty
     optional int32 compression_level = 5;
 }
 
@@ -1274,7 +1274,7 @@ message ExecuteScanQueryRequest {
     QueryStatsCollection.Mode collect_stats = 8;
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
-    bool collect_full_diagnostics = 9;
+    bool collect_full_diagnostics = 9 [deprecated=true];
 }
 
 message ExecuteScanQueryPartialResponse {
@@ -1292,7 +1292,7 @@ message ExecuteScanQueryPartialResult {
     Ydb.TableStats.QueryStats query_stats = 6;
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
-    string query_full_diagnostics = 7;
+    string query_full_diagnostics = 7 [deprecated = true];
 }
 
 // Returns information about an external data source with a given path.

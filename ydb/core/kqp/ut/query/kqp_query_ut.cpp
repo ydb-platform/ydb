@@ -179,6 +179,78 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(counters.RecompileRequestGet()->Val(), 1);
     }
 
+    Y_UNIT_TEST(ExecuteDataQueryCollectMeta) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync().IsSuccess());
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT * FROM `/Root/TestTable`;
+            )"));
+
+            {
+                auto settings = TExecDataQuerySettings();
+                settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
+
+                auto stats = result.GetStats();
+                UNIT_ASSERT(stats.has_value());
+
+                UNIT_ASSERT_C(stats->GetMeta().has_value(), "Query result meta is empty");
+
+                TStringStream in;
+                in << stats->GetMeta().value();
+                NJson::TJsonValue value;
+                ReadJsonTree(&in, &value);
+
+                UNIT_ASSERT_C(value.IsMap(), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("version"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Meta");
+                UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Meta: table_metadata type should be an array");
+                UNIT_ASSERT_C(value.Has("created_at"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Meta");
+                UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Meta");
+            }
+
+            {
+                auto settings = TExecDataQuerySettings();
+                settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
+
+                auto stats = result.GetStats();
+                UNIT_ASSERT(stats.has_value());
+
+                UNIT_ASSERT_C(!stats->GetMeta().has_value(),  "Query result meta should be empty, but it's not");
+            }
+        }
+    }
+
     Y_UNIT_TEST(QueryCachePermissionsLoss) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1862,7 +1934,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 SELECT * FROM `/Root/RowSrc`;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unexpected token", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "no viable alternative at input 'CREATE IF'", result.GetIssues().ToString());
         }
 
         {
@@ -1875,7 +1947,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 SELECT * FROM `/Root/RowSrc`;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unexpected token", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "extraneous input", result.GetIssues().ToString());
         }
 
         {

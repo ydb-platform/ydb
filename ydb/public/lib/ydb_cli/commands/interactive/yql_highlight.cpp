@@ -5,6 +5,8 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 
 #include <util/charset/utf8.h>
 #include <util/string/strip.h>
@@ -25,6 +27,13 @@ namespace NYdb {
 
         using std::regex_constants::ECMAScript;
         using std::regex_constants::icase;
+
+        NSQLTranslationV1::TLexers MakeLexers() {
+            NSQLTranslationV1::TLexers lexers;
+            lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+            lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+            return lexers;
+        }
 
         constexpr const char* builtinFunctionPattern = ( //
             "^("
@@ -132,8 +141,8 @@ namespace NYdb {
             : Coloring(color)
             , BuiltinFunctionRegex(builtinFunctionPattern, ECMAScript | icase)
             , TypeRegex(typePattern, ECMAScript | icase)
-            , CppLexer(MakeLexer(/* ansi = */ false, /* antlr4 = */ true))
-            , ANSILexer(MakeLexer(/* ansi = */ true, /* antlr4 = */ true))
+            , CppLexer(MakeLexer(MakeLexers(), /* ansi = */ false, /* antlr4 = */ true))
+            , ANSILexer(MakeLexer(MakeLexers(), /* ansi = */ true, /* antlr4 = */ true))
         {
         }
 

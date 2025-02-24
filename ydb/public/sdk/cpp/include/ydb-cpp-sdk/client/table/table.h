@@ -1164,6 +1164,7 @@ struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQue
     // Collect runtime statistics with a given detalization mode
     FLUENT_SETTING_DEFAULT(ECollectQueryStatsMode, CollectQueryStats, ECollectQueryStatsMode::None);
 
+    // Deprecated. Use CollectQueryStats >= ECollectQueryStatsMode::Full to get QueryMeta in QueryStats
     // Collect full query compilation diagnostics
     FLUENT_SETTING_DEFAULT(bool, CollectFullDiagnostics, false);
 };
@@ -2109,6 +2110,7 @@ public:
     const TQueryStats& GetQueryStats() const { return *QueryStats_; }
     TQueryStats ExtractQueryStats() { return std::move(*QueryStats_); }
 
+    // Deprecated. Use GetMeta() of TQueryStats
     bool HasDiagnostics() const { return Diagnostics_.has_value(); }
     const std::string& GetDiagnostics() const { return *Diagnostics_; }
     std::string&& ExtractDiagnostics() { return std::move(*Diagnostics_); }

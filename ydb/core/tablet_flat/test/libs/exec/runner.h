@@ -56,6 +56,11 @@ namespace NFake {
             SetupModelServices();
         }
 
+        TTestActorRuntime& operator*() noexcept
+        {
+            return Env;
+        }
+
         TTestActorRuntime* operator->() noexcept
         {
             return &Env;

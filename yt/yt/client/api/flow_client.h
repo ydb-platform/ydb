@@ -75,7 +75,9 @@ struct TSetPipelineDynamicSpecResult
 
 struct TGetFlowViewOptions
     : public TTimeoutOptions
-{ };
+{
+    bool Cache = true;
+};
 
 struct TGetFlowViewResult
 {

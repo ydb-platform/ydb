@@ -1,6 +1,7 @@
 #include "ydb_admin.h"
 
 #include "ydb_dynamic_config.h"
+#include "ydb_node_config.h"
 #include "ydb_storage_config.h"
 #include "ydb_cluster.h"
 
@@ -20,7 +21,9 @@ class TCommandNode : public TClientCommandTree {
 public:
     TCommandNode()
         : TClientCommandTree("node", {}, "Node-wide administration")
-    {}
+    {
+        AddCommand(std::make_unique<NNodeConfig::TCommandNodeConfig>());
+    }
 };
 
 class TCommandDatabase : public TClientCommandTree {
@@ -30,11 +33,12 @@ public:
     {
         AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>());
         AddCommand(std::make_unique<TCommandDatabaseDump>());
+        AddCommand(std::make_unique<TCommandDatabaseRestore>());
     }
 };
 
 TCommandDatabaseDump::TCommandDatabaseDump() 
-    : TYdbCommand("dump", {}, "Dump database into local directory") 
+    : TYdbReadOnlyCommand("dump", {}, "Dump database into local directory") 
 {}
 
 void TCommandDatabaseDump::Config(TConfig& config) {
@@ -53,11 +57,47 @@ void TCommandDatabaseDump::Parse(TConfig& config) {
 }
 
 int TCommandDatabaseDump::Run(TConfig& config) {
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.DumpDatabase(config.Database, FilePath));
+
+    return EXIT_SUCCESS;
+}
+
+TCommandDatabaseRestore::TCommandDatabaseRestore() 
+    : TYdbCommand("restore", {}, "Restore database from local dump") 
+{}
+
+void TCommandDatabaseRestore::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.SetFreeArgsNum(0);
+
+    config.Opts->AddLongOption('i', "input", "Path in a local filesystem to a directory with dump.")
+        .RequiredArgument("PATH")
+        .StoreResult(&FilePath);
+
+    config.Opts->AddLongOption('w', "wait-nodes-duration", "Wait for available database nodes for specified duration. Example: 10s, 5m, 1h.")
+        .DefaultValue(TDuration::Minutes(1))
+        .RequiredArgument("DURATION")
+        .StoreResult(&WaitNodesDuration);
+}
+
+void TCommandDatabaseRestore::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+}
+
+int TCommandDatabaseRestore::Run(TConfig& config) {
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
+    log->SetFormatter(GetPrefixLogFormatter(""));
+
+    auto settings = NDump::TRestoreDatabaseSettings()
+        .WaitNodesDuration(WaitNodesDuration)
+        .Database(config.Database);
+
+    NDump::TClient client(CreateDriver(config), std::move(log));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.RestoreDatabase(FilePath, settings));
 
     return EXIT_SUCCESS;
 }

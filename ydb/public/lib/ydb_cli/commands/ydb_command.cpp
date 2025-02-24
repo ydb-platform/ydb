@@ -9,7 +9,7 @@ namespace NConsoleClient {
 bool TLeafCommand::Prompt(TConfig& config) {
     Y_UNUSED(config);
     if (Dangerous && !config.AssumeYes) {
-        return AskPrompt("This command may damage your cluster, do you want to conitnue?", false);
+        return AskPrompt("This command may damage your cluster, do you want to continue?", false);
     }
 
     return true;

@@ -88,7 +88,10 @@ void TKeyValueState::Clear() {
     NextLogoBlobCookie = 1;
     Index.clear();
     RefCounts.clear();
+    CompletedCleanupGeneration = 0;
+    CompletedCleanupTrashGeneration = 0;
     Trash.clear();
+    TrashForCleanup.clear();
     InFlightForStep.clear();
     CollectOperation.Reset(nullptr);
     IsCollectEventSent = false;
@@ -483,7 +486,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             Y_ABORT_UNLESS(value.size() == 0);
             Y_ABORT_UNLESS(arbitraryPart.size() == sizeof(TTrashKeyArbitrary));
             const TTrashKeyArbitrary *trashKey = (const TTrashKeyArbitrary *) arbitraryPart.data();
-            Trash.insert(trashKey->LogoBlobId);
+            GetCurrentTrashBin().insert(trashKey->LogoBlobId);
             TotalTrashSize += trashKey->LogoBlobId.BlobSize();
             CountInitialTrashRecord(trashKey->LogoBlobId);
             break;
@@ -502,6 +505,12 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             Y_ABORT_UNLESS(data->CheckChecksum());
             Y_ABORT_UNLESS(data->DataHeader.ItemType == EIT_STATE);
             StoredState = *data;
+            break;
+        }
+        case EIT_CLEAN_UP_GENERATION: {
+            Y_ABORT_UNLESS(value.size() == sizeof(ui64));
+            CompletedCleanupGeneration = *(const ui64 *) value.data();
+            CompletedCleanupTrashGeneration = CompletedCleanupGeneration;
             break;
         }
         default: {
@@ -716,6 +725,11 @@ void TKeyValueState::SendCutHistory(const TActorContext &ctx, const TTabletStora
     }
     for (const TLogoBlobID& id : Trash) {
         usedBlob(id);
+    }
+    for (const auto& [_, bin] : TrashForCleanup) {
+        for (const TLogoBlobID& id : bin) {
+            usedBlob(id);
+        }
     }
 
     for (const auto& [channel, fromGeneration] : uselessItems) {
@@ -1389,16 +1403,27 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
             auto it = RefCounts.find(id);
             if (it != RefCounts.end()) {
                 Y_ABORT_UNLESS(it->second != 0);
-            } else if (!Trash.count(id)) { // we found a candidate for trash
-                if (numItems < intermediate->TrimLeakedBlobs->MaxItemsToTrim) {
-                    ALOG_WARN(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " trimming " << id);
-                    Trash.insert(id);
-                    TotalTrashSize += id.BlobSize();
-                    CountUncommittedTrashRecord(id);
-                    THelpers::DbUpdateTrash(id, db);
-                    ++numItems;
-                } else {
-                    ++numUntrimmed;
+            } else {
+                bool found = Trash.count(id);
+                if (!found) {
+                    for (const auto& [_, bin] : TrashForCleanup) {
+                        if (bin.count(id)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (!found) { // we found a candidate for trash
+                    if (numItems < intermediate->TrimLeakedBlobs->MaxItemsToTrim) {
+                        ALOG_WARN(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " trimming " << id);
+                        GetCurrentTrashBin().insert(id);
+                        TotalTrashSize += id.BlobSize();
+                        CountUncommittedTrashRecord(id);
+                        THelpers::DbUpdateTrash(id, db);
+                        ++numItems;
+                    } else {
+                        ++numUntrimmed;
+                    }
                 }
             }
         }
@@ -1748,7 +1773,7 @@ void TKeyValueState::Dereference(const TLogoBlobID& id, ISimpleDb& db, bool init
 }
 
 void TKeyValueState::PushTrashBeingCommitted(TVector<TLogoBlobID>& trashBeingCommitted, const TActorContext& ctx) {
-    Trash.insert(trashBeingCommitted.begin(), trashBeingCommitted.end());
+    GetCurrentTrashBin().insert(trashBeingCommitted.begin(), trashBeingCommitted.end());
     for (const TLogoBlobID& id : trashBeingCommitted) {
         CountTrashCommitted(id);
     }
@@ -3612,13 +3637,31 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                         }
                     }
                     TABLEBODY() {
+                        bool first = true;
                         ui64 idx = 1;
-                        for (auto it = Trash.begin(); it != Trash.end(); ++it) {
-                            TABLER() {
-                                TABLED() {out << idx;}
-                                ++idx;
-                                TABLED() {out << *it;}
+                        auto printTrashBin = [&](const auto& bin) {
+                            if (first) {
+                                first = false;
+                            } else {
+                                TABLER() {
+                                    TABLED() {out << "---";}
+                                    TABLED() {out << "---";}
+                                }
                             }
+
+                            for (auto it = bin.begin(); it != bin.end(); ++it) {
+                                TABLER() {
+                                    TABLED() {out << idx;}
+                                    ++idx;
+                                    TABLED() {out << *it;}
+                                }
+                            }
+                        };
+                        for (const auto& [generation, bin] : TrashForCleanup) {
+                            printTrashBin(bin);
+                        }
+                        if (!Trash.empty()) {
+                            printTrashBin(Trash);
                         }
                     }
                 }

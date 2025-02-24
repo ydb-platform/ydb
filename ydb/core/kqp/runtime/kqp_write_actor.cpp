@@ -175,6 +175,7 @@ class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
         enum EEv {
             EvShardRequestTimeout = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
             EvResolveRequestPlanned,
+            EvReattachToShard,
         };
 
         struct TEvShardRequestTimeout : public TEventLocal<TEvShardRequestTimeout, EvShardRequestTimeout> {
@@ -186,6 +187,13 @@ class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
         };
 
         struct TEvResolveRequestPlanned : public TEventLocal<TEvResolveRequestPlanned, EvResolveRequestPlanned> {
+        };
+
+        struct TEvReattachToShard : public TEventLocal<TEvReattachToShard, EvReattachToShard> {
+            const ui64 TabletId;
+
+            explicit TEvReattachToShard(ui64 tabletId)
+                : TabletId(tabletId) {}
         };
     };
 
@@ -370,6 +378,9 @@ public:
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
+                hFunc(TEvDataShard::TEvProposeTransactionAttachResult, Handle);
+                hFunc(TEvPrivate::TEvReattachToShard, Handle);
+                hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 hFunc(TEvPrivate::TEvShardRequestTimeout, Handle);
                 hFunc(TEvPrivate::TEvResolveRequestPlanned, Handle);
@@ -975,11 +986,20 @@ public:
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         if (InconsistentTx) {
             RetryShard(ev->Get()->TabletId, std::nullopt);
+        } else if ((TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::PREPARED
+                    || TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::EXECUTING)
+                && TxManager->ShouldReattach(ev->Get()->TabletId, TlsActivationContext->Now())) {
+            // Disconnected while waiting for other shards to prepare
+            auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
+            CA_LOG_N("Shard " << ev->Get()->TabletId << " delivery problem (reattaching in "
+                        << reattachState.ReattachInfo.Delay << ")");
+
+            Schedule(reattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(ev->Get()->TabletId));
         } else {
             TxManager->SetError(ev->Get()->TabletId);
-            if (Mode == EMode::IMMEDIATE_COMMIT) {
+            if (Mode == EMode::IMMEDIATE_COMMIT || Mode == EMode::COMMIT) {
                 RuntimeError(
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::NDqProto::StatusIds::UNDETERMINED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
                     TStringBuilder()
                         << "Error writing to table `" << TableId.PathId.ToString() << "`"
@@ -993,6 +1013,91 @@ public:
                         << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
             }
         }
+    }
+
+    void Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletId();
+
+        auto& reattachState = TxManager->GetReattachState(shardId);
+        if (reattachState.Cookie != ev->Cookie) {
+            return;
+        }
+
+        const auto shardState = TxManager->GetState(shardId);
+        switch (shardState) {
+            case IKqpTransactionManager::EXECUTING:
+                YQL_ENSURE(Mode == EMode::COMMIT || Mode == EMode::IMMEDIATE_COMMIT);
+                break;
+            case IKqpTransactionManager::PREPARED:
+                YQL_ENSURE(Mode == EMode::PREPARE);
+                break;
+            case IKqpTransactionManager::PREPARING:
+            case IKqpTransactionManager::FINISHED:
+            case IKqpTransactionManager::ERROR:
+            case IKqpTransactionManager::PROCESSING:
+                YQL_ENSURE(false);
+        }
+
+        if (record.GetStatus() == NKikimrProto::OK) {
+            // Transaction still exists at this shard
+            CA_LOG_D("Reattached to shard " << shardId);
+            TxManager->Reattached(shardId);
+            return;
+        }
+
+        if (Mode == EMode::PREPARE) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder()
+                    << "ShardId=" << shardId
+                    << " for table '" << TablePath
+                    << "': attach transaction failed.");
+        } else {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNDETERMINED,
+                NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
+                TStringBuilder()
+                    << "ShardId=" << shardId
+                    << " for table '" << TablePath
+                    << "': attach transaction failed.");
+        }
+    }
+
+    void Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletId();
+
+        CA_LOG_D("Got transaction restart event from tabletId: " << shardId);
+
+        switch (TxManager->GetState(shardId)) {
+            case IKqpTransactionManager::EXECUTING: {
+                TxManager->SetRestarting(shardId);
+                return;
+            }
+            case IKqpTransactionManager::FINISHED:
+            case IKqpTransactionManager::ERROR: {
+                return;
+            }
+            case IKqpTransactionManager::PREPARING:
+            case IKqpTransactionManager::PREPARED:
+            case IKqpTransactionManager::PROCESSING: {
+                YQL_ENSURE(false);
+            }
+        }
+    }
+
+    void Handle(TEvPrivate::TEvReattachToShard::TPtr& ev) {
+        const ui64 tabletId = ev->Get()->TabletId;
+        auto& state = TxManager->GetReattachState(tabletId);
+
+        CA_LOG_D("Reattach to shard " << tabletId);
+
+        YQL_ENSURE(TxId);
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
+            new TEvDataShard::TEvProposeTransactionAttach(tabletId, *TxId),
+            tabletId, /* subscribe */ true), 0, ++state.Cookie);
     }
 
     void Prepare() {
@@ -1649,14 +1754,11 @@ public:
                     writeInfo.WriteTableActor->Close(message.Token.Cookie);
                 }
 
-                if (!message.Close) {
-                    YQL_ENSURE(false);
-                    AckQueue.push(TAckMessage{
-                        .ForwardActorId = message.From,
-                        .Token = message.Token,
-                        .DataSize = 0,
-                    });
-                }
+                AckQueue.push(TAckMessage{
+                    .ForwardActorId = message.From,
+                    .Token = message.Token,
+                    .DataSize = 0,
+                });
 
                 queue.pop();
             }
@@ -2120,19 +2222,26 @@ public:
             }
 
             ReplyErrorAndDie(
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::NDqProto::StatusIds::UNDETERMINED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
                     TStringBuilder() << "Failed to deviler message to coordinator.",
                     {});
             return;
         }
 
-
-        ReplyErrorAndDie(
-            NYql::NDqProto::StatusIds::UNAVAILABLE,
-            NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-            TStringBuilder() << "Failed to deviler message.",
-            {});
+        if (State == EState::COMMITTING) {
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::UNDETERMINED,
+                NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
+                TStringBuilder() << "Failed to deviler message.",
+                {});
+        } else {
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder() << "Failed to deviler message.",
+                {});
+        }
     }
 
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
@@ -2493,6 +2602,7 @@ public:
         }
         Y_UNUSED(dataSize);
         if (TxManager->ConsumeCommitResult(shardId)) {
+            CA_LOG_D("Committed TxId=" << TxId.value_or(0));
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
             State = EState::FINISHED;
             Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
@@ -2710,15 +2820,29 @@ private:
 
     void Handle(TEvBufferWriteResult::TPtr& result) {
         CA_LOG_D("TKqpForwardWriteActor recieve EvBufferWriteResult from " << BufferActorId);
+        InFlight = false;
+
+        EgressStats.Bytes += DataSize;
+        EgressStats.Chunks++;
+        EgressStats.Splits++;
+        EgressStats.Resume();
+
+        Counters->ForwardActorWritesSizeHistogram->Collect(DataSize);
 
         WriteToken = result->Get()->Token;
         DataSize = 0;
 
-        CA_LOG_D("Resume with freeSpace=" << GetFreeSpace());
-        Callbacks->ResumeExecution();
+        if (Closed) {
+            CA_LOG_D("Finished");
+            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
+        } else {
+            CA_LOG_D("Resume with freeSpace=" << GetFreeSpace());
+            Callbacks->ResumeExecution();
+        }
     }
 
     void WriteToBuffer() {
+        InFlight = true;
         auto ev = std::make_unique<TEvBufferWrite>();
 
         ev->Data = Batcher->Build();
@@ -2762,18 +2886,6 @@ private:
 
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));
-
-        EgressStats.Bytes += DataSize;
-        EgressStats.Chunks++;
-        EgressStats.Splits++;
-        EgressStats.Resume();
-
-        Counters->ForwardActorWritesSizeHistogram->Collect(DataSize);
-
-        if (Closed) {
-            CA_LOG_D("Finished");
-            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
-        }
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};
@@ -2788,7 +2900,9 @@ private:
     }
 
     i64 GetFreeSpace() const final {
-        return MessageSettings.MaxForwardedSize - DataSize;
+        return InFlight
+            ? std::numeric_limits<i64>::min()
+            : MessageSettings.MaxForwardedSize - DataSize;
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
@@ -2840,6 +2954,7 @@ private:
 
     i64 DataSize = 0;
     bool Closed = false;
+    bool InFlight = false;
 
     const ui64 TxId;
     const TTableId TableId;

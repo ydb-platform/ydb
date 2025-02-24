@@ -33,7 +33,7 @@ TProgramFactoryOptions::TProgramFactoryOptions()
     , NativeYtTypeFlags(0)
     , UseSystemColumns(false)
     , UseWorkerPool(true)
-    , UseAntlr4(false)
+    , UseAntlr4(true)
 {
 }
 

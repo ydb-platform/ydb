@@ -332,9 +332,11 @@ bool IsSchemaType(EObjectType type)
     return (static_cast<ui32>(type) & SchemaObjectTypeMask) != 0;
 }
 
-TString FormatObjectType(EObjectType type)
+std::string FormatObjectType(EObjectType type)
 {
-    return IsSchemaType(type) ? Format("schema:%v", TypeFromSchemaType(type)) : FormatEnum(type);
+    return IsSchemaType(type)
+        ? std::string(Format("schema:%v", TypeFromSchemaType(type)))
+        : FormatEnum(type);
 }
 
 bool IsGlobalCellId(TCellId cellId)

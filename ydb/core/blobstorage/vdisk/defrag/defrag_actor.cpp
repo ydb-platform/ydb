@@ -331,6 +331,16 @@ namespace NKikimr {
             RunDefragIfAny(ctx);
         }
 
+        void Handle(TEvNotifyChunksDeleted::TPtr ev, const TActorContext& /*ctx*/) {
+            for (TTask& task : WaitQueue) {
+                if (auto *ptr = std::get_if<TEvHullShredDefrag::TPtr>(&task.Request)) {
+                    for (const TChunkIdx chunkId : ev->Get()->Chunks) {
+                        (*ptr)->Get()->ChunksToShred.erase(chunkId);
+                    }
+                }
+            }
+        }
+
         void Die(const TActorContext& ctx) override {
             ActiveActors.KillAndClear(ctx);
             TActorBootstrapped::Die(ctx);
@@ -447,6 +457,7 @@ namespace NKikimr {
             HFunc(TEvSublogLine, Handle)
             HFunc(TEvDefragStartQuantum, Handle)
             HFunc(TEvDefragQuantumResult, Handle)
+            HFunc(TEvNotifyChunksDeleted, Handle)
         );
 
     public:

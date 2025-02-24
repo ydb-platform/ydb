@@ -391,6 +391,7 @@ void TGetQueryTrackerInfoCommand::DoExecute(ICommandContextPtr context)
             .Item("cluster_name").Value(result.ClusterName)
             .Item("supported_features").Value(result.SupportedFeatures)
             .Item("access_control_objects").Value(result.AccessControlObjects)
+            .Item("clusters").Value(result.Clusters)
         .EndMap());
 }
 

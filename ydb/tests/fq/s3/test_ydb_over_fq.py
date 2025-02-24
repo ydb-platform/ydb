@@ -292,7 +292,7 @@ class TestYdbOverFq(TestYdsBase):
         with session.transaction() as tx:
             assert_that(
                 calling(tx.execute).with_args("BAD QUERY"),
-                raises(ydb.issues.InternalError, "Unexpected token .* : cannot match to any predicted input"),
+                raises(ydb.issues.InternalError, "(Unexpected token .* : cannot match to any predicted input)|(mismatched input .* expecting)"),
             )
         with session.transaction() as tx:
             query = "select * from {}{}".format("bindings." if yq_version == "v1" else "", "WRONG_BIND")

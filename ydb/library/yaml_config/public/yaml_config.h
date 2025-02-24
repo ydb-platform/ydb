@@ -186,6 +186,14 @@ struct TMainMetadata {
 };
 
 /**
+ * Represents config metadata
+ */
+struct TStorageMetadata {
+    std::optional<ui64> Version;
+    std::optional<TString> Cluster;
+};
+
+/**
  * Represents volatile config metadata
  */
 struct TVolatileMetadata {
@@ -223,6 +231,11 @@ TMainMetadata GetMainMetadata(const TString& config);
 TDatabaseMetadata GetDatabaseMetadata(const TString& config);
 
 /**
+ * Parses storage config metadata
+ */
+TStorageMetadata GetStorageMetadata(const TString& config);
+
+/**
  * Parses volatile config metadata
  */
 TVolatileMetadata GetVolatileMetadata(const TString& config);
@@ -236,6 +249,11 @@ TString ReplaceMetadata(const TString& config, const TMainMetadata& metadata);
  * Replaces metadata in database config
  */
 TString ReplaceMetadata(const TString& config, const TDatabaseMetadata& metadata);
+
+/**
+ * Replaces metadata in storage config
+ */
+TString ReplaceMetadata(const TString& config, const TStorageMetadata& metadata);
 
 /**
  * Replaces volatile metadata in config
@@ -261,6 +279,11 @@ bool IsStorageConfig(const TString& config);
  * Checks whether string is main config or not
  */
 bool IsDatabaseConfig(const TString& config);
+
+/**
+ * Checks whether string is static config or not
+ */
+bool IsStaticConfig(const TString& config);
 
 /**
  * Strips metadata from config

@@ -385,7 +385,7 @@ bool TLoginProvider::ShouldUnlockAccount(const TSidRecord& sid) const {
 
 bool TLoginProvider::IsLockedOut(const TSidRecord& user) const {
     Y_ABORT_UNLESS(user.Type == NLoginProto::ESidType::USER);
-    
+
     if (AccountLockout.AttemptThreshold == 0) {
         return false;
     }
@@ -533,6 +533,7 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
             // we check audience manually because we want an explicit error instead of wrong key id in case of databases mismatch
             auto audience = decoded_token.get_audience();
             if (audience.empty() || TString(*audience.begin()) != Audience) {
+                response.WrongAudience = true;
                 response.Error = "Wrong audience";
                 return response;
             }

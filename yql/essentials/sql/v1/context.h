@@ -92,10 +92,18 @@ namespace NSQLTranslationV1 {
 
     class TContext {
     public:
+        //FIXME remove
         TContext(const NSQLTranslation::TTranslationSettings& settings,
-                 const NSQLTranslation::TSQLHints& hints,
-                 NYql::TIssues& issues,
-                 const TString& query = {});
+            const NSQLTranslation::TSQLHints& hints,
+            NYql::TIssues& issues,
+            const TString& query = {});
+
+        TContext(const TLexers& lexers,
+                const TParsers& parsers,
+                const NSQLTranslation::TTranslationSettings& settings,
+                const NSQLTranslation::TSQLHints& hints,
+                NYql::TIssues& issues,
+                const TString& query = {});
 
         virtual ~TContext();
 
@@ -236,11 +244,23 @@ namespace NSQLTranslationV1 {
             return true;
         }
 
+        [[nodiscard]] auto& GetMatchRecognizeAggregations() {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+            return MatchRecognizeAggregations;
+        }
+
         TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
         void WarnUnusedHints();
 
     private:
         IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
+
+    public:
+        const TLexers Lexers;
+        const TParsers Parsers;
 
     private:
         NYql::TPosition Position;
@@ -258,6 +278,11 @@ namespace NSQLTranslationV1 {
         EColumnRefState TopLevelColumnReferenceState = EColumnRefState::Deny;
         TString MatchRecognizeDefineVar;
         TString MatchRecognizeAggrVar;
+        struct TMatchRecognizeAggregation {
+            TString Var;
+            TAggregationPtr Aggr;
+        };
+        TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations;
         TString NoColumnErrorContext = "in current scope";
         TVector<TBlocks*> CurrentBlocks;
 

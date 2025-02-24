@@ -85,6 +85,9 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
         yaml_dict["log_config"]["entry"].append({"component": log, "level": int(level)})
     if os.getenv("YDB_ENABLE_COLUMN_TABLES", "") == "true":
         yaml_dict |= {"column_shard_config": {"disabled_on_scheme_shard": False}}
+        yaml_dict["table_service_config"]["enable_htap_tx"] = True
+        yaml_dict["table_service_config"]["enable_olap_sink"] = True
+        yaml_dict["table_service_config"]["enable_create_table_as"] = True
     return yaml_dict
 
 

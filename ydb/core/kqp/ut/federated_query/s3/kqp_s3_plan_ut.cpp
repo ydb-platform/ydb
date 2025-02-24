@@ -167,7 +167,10 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
             UploadObject("test_ctas_read", "test_ctas_read2", TEST_CONTENT, s3Client);
         }
 
-        auto kikimr = NTestUtils::MakeKikimrRunner();
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();

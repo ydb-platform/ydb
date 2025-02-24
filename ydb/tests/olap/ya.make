@@ -1,6 +1,7 @@
 PY3TEST()
     ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
     ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+    ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
     TEST_SRCS(
         test_quota_exhaustion.py

@@ -22,11 +22,13 @@
 
     The `ydbops` executable will be available in the repository root folder.
 
-- **Automated build.** Invoke this command in the repository root folder:
+- **Automated build.** [^docker] Invoke this command in the repository root folder:
 
   ```bash
   make build-in-docker
   ```
+
+  [^docker]: We are using official docker image for Golang v1.22. It gurantiees successful build. Description Docker container works in the Dockerfile in the repository. The assembly in Docker also performs additional manipulations: linter checks, the version for the ydbops assembly is substituted so that it is registered in the ydbops executable file.
 
   The `ydbops` executables will be available in the `bin` folder. Binary files are generated for Linux and MacOS (arm64, amd64).
 

@@ -10,7 +10,7 @@ constexpr const char* STORAGE_CONFIG_FILE_NAME = "storage.yaml";
 
 TCommandNodeConfig::TCommandNodeConfig()
     : TClientCommandTree("config", {}, "Node-wide configuration")
-    {
+{
     AddCommand(std::make_unique<TCommandNodeConfigInit>());
 }
 
@@ -97,8 +97,9 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
                 return EXIT_SUCCESS;
             }
             Cerr << "Failed to save configs: " 
-                 << (clusterSaved ? "" : "main config ") 
-                 << (storageSaved ? "and " : "storage config") 
+                 << (clusterSaved ? "" : "main config")
+                 << (clusterSaved && storageSaved ? ", " : "") 
+                 << (storageSaved ? "" : "storage config") 
                  << Endl;
             return EXIT_FAILURE;
         }

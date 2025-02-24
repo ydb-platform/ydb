@@ -452,20 +452,20 @@ TESTCASES = [
         ResequenceId(
             [
                 (
-                    '{"id":1,"za":1,"yb":"2","yc":100,"zd":101,ll:[1,2,3]}',
-                    '{"a":1,"b":"2","c":3,"d":4,"e":5,"f":6,"za":1,"yb":"2","yc":100,"zd":101,"eq1":true,"eq2":true,ll:[1,2,3]}',
+                    '{"id":1,"za":1,"yb":"2","yc":100,"zd":101,"ll":[1,2,3]}',
+                    '{"a":1,"b":"2","c":3,"d":4,"e":5,"f":6,"za":1,"yb":"2","yc":100,"zd":101,"eq1":true,"eq2":true,"ll":[1,2,3]}',
                 ),
                 (
-                    '{"id":2,"za":7,"yb":"8","yc":106,"zd":107,ll:[1,2]}',
-                    '{"a":7,"b":"8","c":9,"d":10,"e":11,"f":12,"za":7,"yb":"8","yc":106,"zd":107,"eq1":true,"eq2":true,ll:[1,2]}',
+                    '{"id":2,"za":7,"yb":"8","yc":106,"zd":107,"ll":[1,2]}',
+                    '{"a":7,"b":"8","c":9,"d":10,"e":11,"f":12,"za":7,"yb":"8","yc":106,"zd":107,"eq1":true,"eq2":true,"ll":[1,2]}',
                 ),
                 (
-                    '{"id":3,"za":2,"yb":"1","yc":114,"zd":115,ll:[]}',
-                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true,ll:[]}',
+                    '{"id":3,"za":2,"yb":"1","yc":114,"zd":115,"ll":[]}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true,"ll":[]}',
                 ),
                 (
-                    '{"id":3,"za":null,"yb":"1","yc":114,"zd":115,ll:[1,2,3,4]}',
-                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":null,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true,ll:[1,2,3,4]}',
+                    '{"id":3,"za":null,"yb":"1","yc":114,"zd":115,"ll":[1,2,3,4]}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":null,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true,"ll":[1,2,3,4]}',
                 ),
             ]
         ),

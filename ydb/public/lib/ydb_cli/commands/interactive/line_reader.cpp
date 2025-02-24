@@ -1,8 +1,8 @@
 #include "line_reader.h"
 
-#include "yql_complete.h"
 #include "yql_highlight.h"
 
+#include <ydb/public/lib/ydb_cli/commands/interactive/complete/sql_complete.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/string_util.h>
 
 #include <util/generic/string.h>
@@ -38,7 +38,7 @@ std::optional<FileHandlerLockGuard> LockFile(TFileHandle & fileHandle) {
     return FileHandlerLockGuard(&fileHandle);
 }
 
-replxx::Replxx::Color ReplxxColorOf(ECandidateKind /* kind */) {
+replxx::Replxx::Color ReplxxColorOf(NSQLComplete::ECandidateKind /* kind */) {
     return replxx::Replxx::Color::DEFAULT;
 }
 
@@ -55,7 +55,7 @@ private:
     std::string Prompt;
     std::string HistoryFilePath;
     TFileHandle HistoryFileHandle;
-    TYqlCompletionEngine CompletionEngine;
+    NSQLComplete::ISqlCompletionEngine::TPtr CompletionEngine;
     replxx::Replxx Rx;
 };
 
@@ -63,12 +63,12 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
     : Prompt(std::move(prompt))
     , HistoryFilePath(std::move(historyFilePath))
     , HistoryFileHandle(HistoryFilePath.c_str(), EOpenModeFlag::OpenAlways | EOpenModeFlag::RdWr | EOpenModeFlag::AW | EOpenModeFlag::ARUser | EOpenModeFlag::ARGroup)
-    , CompletionEngine()
+    , CompletionEngine(NSQLComplete::MakeSqlCompletionEngine())
 {
     Rx.install_window_change_handler();
 
     auto completion_callback = [this](const std::string & prefix, size_t contextLen) {
-        auto completion = CompletionEngine.Complete({
+        auto completion = CompletionEngine->Complete({
             .Text = prefix,
             .CursorPosition = prefix.length(),
         });

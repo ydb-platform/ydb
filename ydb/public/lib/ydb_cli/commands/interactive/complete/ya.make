@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     sql_antlr4.cpp
     sql_complete.cpp
+    sql_context.cpp
     sql_syntax.cpp
     string_util.cpp
 )

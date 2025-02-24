@@ -1,118 +1,71 @@
 #include "sql_complete.h"
 
-#include "c3_engine.h"
-#include "sql_syntax.h"
-
-#include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Parser.h>
+#include "sql_context.h"
+#include "string_util.h"
 
 #include <util/generic/algorithm.h>
-#include <util/stream/output.h>
+#include <util/charset/utf8.h>
 
 namespace NSQLComplete {
 
-    template <bool IsAnsiLexer>
-    class TSpecializedSqlCompletionEngine: public ISqlCompletionEngine {
-    private:
-        using TDefaultYQLGrammar = TAntlrGrammar<
-            NALPDefaultAntlr4::SQLv1Antlr4Lexer,
-            NALPDefaultAntlr4::SQLv1Antlr4Parser>;
-
-        using TAnsiYQLGrammar = TAntlrGrammar<
-            NALPAnsiAntlr4::SQLv1Antlr4Lexer,
-            NALPAnsiAntlr4::SQLv1Antlr4Parser>;
-
-        using G = std::conditional_t<
-            IsAnsiLexer,
-            TAnsiYQLGrammar,
-            TDefaultYQLGrammar>;
-
+    class TSqlCompletionEngine: public ISqlCompletionEngine {
     public:
-        TSpecializedSqlCompletionEngine()
-            : Grammar(&GetSqlGrammar(IsAnsiLexer))
-            , C3(ComputeC3Config())
+        TSqlCompletionEngine()
+            : ContextInference(MakeSqlContextInference())
         {
         }
 
-        TCompletionContext Complete(TCompletionInput input) override {
+        TCompletion Complete(TCompletionInput input) {
             auto prefix = input.Text.Head(input.CursorPosition);
-            auto tokens = C3.Complete(prefix);
-            FilterIdKeywords(tokens);
+            auto completedToken = GetCompletedToken(prefix);
+
+            auto context = ContextInference->Analyze(input);
+
+            TVector<TCandidate> candidates;
+            EnrichWithKeywords(candidates, context.Keywords);
+
+            FilterByContent(candidates, completedToken.Content);
+
+            RankingSort(candidates);
+
             return {
-                .Keywords = SiftedKeywords(tokens),
+                .CompletedToken = std::move(completedToken),
+                .Candidates = std::move(candidates),
             };
         }
 
     private:
-        IC3Engine::TConfig ComputeC3Config() {
+        TCompletedToken GetCompletedToken(TStringBuf prefix) {
             return {
-                .IgnoredTokens = ComputeIgnoredTokens(),
-                .PreferredRules = ComputePreferredRules(),
+                .Content = LastWord(prefix),
+                .SourcePosition = LastWordIndex(prefix),
             };
         }
 
-        std::unordered_set<TTokenId> ComputeIgnoredTokens() {
-            auto ignoredTokens = Grammar->GetAllTokens();
-            for (auto keywordToken : Grammar->GetKeywordTokens()) {
-                ignoredTokens.erase(keywordToken);
-            }
-            return ignoredTokens;
-        }
-
-        std::unordered_set<TRuleId> ComputePreferredRules() {
-            const auto& keywordRules = Grammar->GetKeywordRules();
-
-            std::unordered_set<TRuleId> preferredRules;
-            preferredRules.insert(std::begin(keywordRules), std::end(keywordRules));
-            return preferredRules;
-        }
-
-        void FilterIdKeywords(TVector<TSuggestedToken>& tokens) {
-            const auto& keywordRules = Grammar->GetKeywordRules();
-            std::ranges::remove_if(tokens, [&](const TSuggestedToken& token) {
-                return AnyOf(token.ParserCallStack, [&](TRuleId rule) {
-                    return Find(keywordRules, rule) != std::end(keywordRules);
+        void EnrichWithKeywords(TVector<TCandidate>& candidates, TVector<TString> keywords) {
+            for (auto keyword : keywords) {
+                candidates.push_back({
+                    .Kind = ECandidateKind::Keyword,
+                    .Content = std::move(keyword),
                 });
+            }
+        }
+
+        void FilterByContent(TVector<TCandidate>& candidates, TStringBuf prefix) {
+            const auto lowerPrefix = ToLowerUTF8(prefix);
+            auto removed = std::ranges::remove_if(candidates, [&](const auto& candidate) {
+                return !ToLowerUTF8(candidate.Content).StartsWith(lowerPrefix);
+            });
+            candidates.erase(std::begin(removed), std::end(removed));
+        }
+
+        void RankingSort(TVector<TCandidate>& candidates) {
+            Sort(candidates, [](const TCandidate& lhs, const TCandidate& rhs) {
+                return std::tie(lhs.Content, lhs.Kind) < std::tie(rhs.Content, rhs.Kind);
             });
         }
 
-        TVector<std::string> SiftedKeywords(const TVector<TSuggestedToken>& tokens) {
-            const auto& vocabulary = Grammar->GetVocabulary();
-            const auto& keywordTokens = Grammar->GetKeywordTokens();
-
-            TVector<std::string> keywords;
-            for (const auto& token : tokens) {
-                if (keywordTokens.contains(token.Number)) {
-                    keywords.emplace_back(vocabulary.getDisplayName(token.Number));
-                }
-            }
-            return keywords;
-        }
-
-        const ISqlGrammar* Grammar;
-        TC3Engine<G> C3;
-    };
-
-    class TSqlCompletionEngine: public ISqlCompletionEngine {
-    public:
-        TCompletionContext Complete(TCompletionInput input) override {
-            auto isAnsiLexer = IsAnsiQuery(TString(input.Text));
-            auto& engine = GetSpecializedEngine(isAnsiLexer);
-            return engine.Complete(std::move(input));
-        }
-
-    private:
-        ISqlCompletionEngine& GetSpecializedEngine(bool isAnsiLexer) {
-            if (isAnsiLexer) {
-                return AnsiEngine;
-            }
-            return DefaultEngine;
-        }
-
-        TSpecializedSqlCompletionEngine</* IsAnsiLexer = */ false> DefaultEngine;
-        TSpecializedSqlCompletionEngine</* IsAnsiLexer = */ true> AnsiEngine;
+        ISqlContextInference::TPtr ContextInference;
     };
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine() {
@@ -120,3 +73,17 @@ namespace NSQLComplete {
     }
 
 } // namespace NSQLComplete
+
+template <>
+void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandidateKind kind) {
+    switch (kind) {
+        case NSQLComplete::ECandidateKind::Keyword:
+            out << "Keyword";
+            break;
+    }
+}
+
+template <>
+void Out<NSQLComplete::TCandidate>(IOutputStream& out, const NSQLComplete::TCandidate& candidate) {
+    out << "(" << candidate.Kind << ": " << candidate.Content << ")";
+}

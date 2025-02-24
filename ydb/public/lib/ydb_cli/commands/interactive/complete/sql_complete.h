@@ -10,16 +10,32 @@ namespace NSQLComplete {
         size_t CursorPosition = Text.length();
     };
 
-    // std::string is used to prevent copying into replxx api
-    struct TCompletionContext {
-        TVector<std::string> Keywords;
+    struct TCompletedToken {
+        TStringBuf Content;
+        size_t SourcePosition;
+    };
+
+    enum class ECandidateKind {
+        Keyword,
+    };
+
+    struct TCandidate {
+        ECandidateKind Kind;
+        TString Content;
+
+        friend bool operator==(const TCandidate& lhs, const TCandidate& rhs) = default;
+    };
+
+    struct TCompletion {
+        TCompletedToken CompletedToken;
+        TVector<TCandidate> Candidates;
     };
 
     class ISqlCompletionEngine {
     public:
         using TPtr = THolder<ISqlCompletionEngine>;
 
-        virtual TCompletionContext Complete(TCompletionInput input) = 0;
+        virtual TCompletion Complete(TCompletionInput input) = 0;
         virtual ~ISqlCompletionEngine() = default;
     };
 

@@ -18,4 +18,4 @@ Y_UNIT_TEST_SUITE(StringUtilTest) {
         UNIT_ASSERT_VALUES_EQUAL(LastWord("two"), "two");
         UNIT_ASSERT_VALUES_EQUAL(LastWord("one two"), "two");
     }
-}
+} // Y_UNIT_TEST_SUITE(StringUtilTest)

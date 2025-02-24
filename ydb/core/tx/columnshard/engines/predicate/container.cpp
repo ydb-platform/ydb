@@ -173,4 +173,4 @@ TConclusion<TPredicateContainer> TPredicateContainer::BuildPredicateTo(
     }
 }
 
-}
+}   // namespace NKikimr::NOlap

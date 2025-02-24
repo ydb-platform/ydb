@@ -22,6 +22,41 @@ std::shared_ptr<arrow::Array> IChunkedArray::TReader::CopyRecord(const ui64 reco
     return NArrow::CopyRecords(address.GetArray(), { address.GetPosition() });
 }
 
+IChunkedArray::TRowRange IChunkedArray::TReader::EqualRange(const std::shared_ptr<arrow::Scalar>& value) const {
+    std::optional<ui64> begin;
+    std::optional<ui64> end;
+
+    ui64 position = 0;
+    while (position < GetRecordsCount() && !end) {
+        std::shared_ptr<arrow::Array> chunk = GetReadChunk(position).GetArray();
+
+        if (!begin && NArrow::ScalarCompare(value, *chunk->GetScalar(chunk->length() - 1)) <= 0) {
+            const auto localIndexes = std::ranges::iota_view((decltype(chunk->length()))0, chunk->length());
+            const auto localBound = std::lower_bound(
+                localIndexes.begin(), localIndexes.end(), value, [&chunk](const ui64 index, const std::shared_ptr<arrow::Scalar>& bound) {
+                    return NArrow::ScalarLess(*chunk->GetScalar(index), bound);
+                });
+            AFL_VERIFY(localBound != localIndexes.end());
+            begin.emplace(position + *localBound);
+        }
+
+        if (NArrow::ScalarCompare(value, *chunk->GetScalar(chunk->length() - 1)) < 0) {
+            const auto localIndexes = std::ranges::iota_view((decltype(chunk->length()))0, chunk->length());
+            const auto localBound = std::upper_bound(
+                localIndexes.begin(), localIndexes.end(), value, [&chunk](const std::shared_ptr<arrow::Scalar>& bound, const ui64 index) {
+                    return NArrow::ScalarLess(bound, *chunk->GetScalar(index));
+                });
+            AFL_VERIFY(localBound != localIndexes.end());
+            end.emplace(position + *localBound);
+        }
+
+        position += chunk->length();
+        AFL_VERIFY(position <= GetRecordsCount())("position", position)("size", GetRecordsCount());
+    }
+
+    return { begin.value_or(GetRecordsCount()), GetRecordsCount() };
+}
+
 std::shared_ptr<arrow::ChunkedArray> IChunkedArray::Slice(const ui32 offset, const ui32 count) const {
     AFL_VERIFY(offset + count <= (ui64)GetRecordsCount())("offset", offset)("count", count)("length", GetRecordsCount());
     ui32 currentOffset = offset;
@@ -127,6 +162,15 @@ std::shared_ptr<IChunkedArray> IChunkedArray::ApplyFilter(const TColumnFilter& f
         return TTrivialArray::BuildEmpty(GetDataType());
     }
     return DoApplyFilter(filter);
+}
+
+TColumnFilter IChunkedArray::TRowRange::MakeFilter(const ui64 recordsCount) const {
+    TColumnFilter result = TColumnFilter::BuildAllowFilter();
+    TRowRange clipped = Intersect({ 0, recordsCount });
+    result.Add(false, clipped.GetBegin());
+    result.Add(true, clipped.Size());
+    result.Add(false, recordsCount - clipped.GetEnd());
+    return result;
 }
 
 TString IChunkedArray::TReader::DebugString(const ui32 position) const {

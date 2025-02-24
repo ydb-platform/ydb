@@ -271,13 +271,13 @@ NAccessor::IChunkedArray::TRowRange TGeneralContainer::EqualRange(const arrow::R
     AFL_VERIFY(border.num_columns() <= (i64)Columns.size())("expected", Columns.size())("actual", border.num_columns());
     AFL_VERIFY(border.num_rows() == 1)("rows", border.num_rows());
 
-    NAccessor::IChunkedArray::TRowRange range = NAccessor::IChunkedArray::TRowRange::Inf();
-    for (i64 i = 0; i < border.num_columns(); ++i) {
+    NAccessor::IChunkedArray::TRowRange range(GetRecordsCount());
+    for (ui64 i = 0; (i64)i < border.num_columns(); ++i) {
         AFL_VERIFY(border.schema()->field(i)->Equals(Schema->field(i)))("expected", Schema->field(i)->ToString())(
             "actual", border.schema()->field(i)->ToString());
         const auto column = GetColumnVerified(i);
         const NAccessor::IChunkedArray::TReader reader(column);
-        range = range.Intersect(reader.EqualRange(NArrow::TStatusValidator::GetValid(border.column(i)->GetScalar(i))));
+        range = reader.EqualRange(NArrow::TStatusValidator::GetValid(border.column(i)->GetScalar(0)), range);
         if (range.Empty()) {
             return range;
         }

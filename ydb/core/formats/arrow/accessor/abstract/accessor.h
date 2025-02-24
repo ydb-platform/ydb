@@ -378,17 +378,13 @@ public:
         YDB_READONLY_DEF(ui64, End);
 
     public:
-        TRowRange(const ui64 begin, const ui64 end)
-            : Begin(begin)
-            , End(end) {
-            if (begin > end) {
-                Begin = 0;
-                End = 0;
-            }
-        }
-
         TRowRange Intersect(const TRowRange& other) const {
-            return TRowRange(Max(Begin, other.Begin), Min(End, other.End));
+            const ui64 begin = Max(Begin, other.Begin);
+            const ui64 end = Min(End, other.End);
+            if (begin > end) { 
+                return {0, 0};
+            }
+            return {begin, end};
         }
 
         ui64 Size() const {
@@ -399,11 +395,18 @@ public:
             return Begin == End;
         }
 
-        static TRowRange Inf() {
-            return TRowRange(0, std::numeric_limits<ui64>::max());
+        TColumnFilter MakeFilter(const ui64 recordsCount) const;
+
+        TRowRange(const ui64 begin, const ui64 end)
+            : Begin(begin)
+            , End(end) {
+            AFL_VERIFY(Begin <= End)("begin", Begin)("end", End);
         }
 
-        TColumnFilter MakeFilter(const ui64 recordsCount) const;
+        TRowRange(const ui64 end)
+            : Begin(0)
+            , End(end) {
+        }
     };
 
     class TReader {
@@ -427,7 +430,7 @@ public:
         void AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const;
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
         TString DebugString(const ui32 position) const;
-        TRowRange EqualRange(const std::shared_ptr<arrow::Scalar>& value) const;
+        TRowRange EqualRange(const std::shared_ptr<arrow::Scalar>& value, const TRowRange& range) const;
     };
 
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 index) const {

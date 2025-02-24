@@ -119,7 +119,7 @@ public:
 
     NArrow::NAccessor::IChunkedArray::TRowRange BuildFilterRange(const NArrow::TGeneralContainer& data) const {
         if (!Object) {
-            return NArrow::NAccessor::IChunkedArray::TRowRange::Inf();
+            return NArrow::NAccessor::IChunkedArray::TRowRange(data.GetRecordsCount());
         }
         const auto range = data.EqualRange(*Object->Batch);
         switch (CompareType) {

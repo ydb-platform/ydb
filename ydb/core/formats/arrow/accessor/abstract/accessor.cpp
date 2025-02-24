@@ -23,8 +23,9 @@ std::shared_ptr<arrow::Array> IChunkedArray::TReader::CopyRecord(const ui64 reco
     return NArrow::CopyRecords(address.GetArray(), { address.GetPosition() });
 }
 
-IChunkedArray::TRowRange IChunkedArray::TReader::EqualRange(const std::shared_ptr<arrow::Scalar>& value) const {
-    const auto localIndexes = std::ranges::iota_view((ui64)0, GetRecordsCount());
+IChunkedArray::TRowRange IChunkedArray::TReader::EqualRange(const std::shared_ptr<arrow::Scalar>& value, const TRowRange& range) const {
+    const TRowRange clippedRange = range.Intersect({0, GetRecordsCount()});
+    const auto localIndexes = std::ranges::iota_view(clippedRange.GetBegin(), clippedRange.GetEnd());
     const auto getScalar = [this](const ui64 index) {
         const auto chunk = GetReadChunk(index);
         return *chunk.GetArray()->GetScalar(index - chunk.GetPosition());
@@ -37,7 +38,7 @@ IChunkedArray::TRowRange IChunkedArray::TReader::EqualRange(const std::shared_pt
                 return NArrow::ScalarLess(getScalar(index), bound);
             });
         if (findBound == localIndexes.end()) {
-            begin = GetRecordsCount();
+            begin = clippedRange.GetEnd();
         } else {
             begin = *findBound;
         }
@@ -50,7 +51,7 @@ IChunkedArray::TRowRange IChunkedArray::TReader::EqualRange(const std::shared_pt
                 return NArrow::ScalarLess(bound, getScalar(index));
             });
         if (findBound == localIndexes.end()) {
-            end = GetRecordsCount();
+            end = clippedRange.GetEnd();
         } else {
             end = *findBound;
         }
@@ -182,11 +183,11 @@ std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArray() const {
 }
 
 TColumnFilter IChunkedArray::TRowRange::MakeFilter(const ui64 recordsCount) const {
+    AFL_VERIFY(End < recordsCount);
     TColumnFilter result = TColumnFilter::BuildAllowFilter();
-    TRowRange clipped = Intersect({ 0, recordsCount });
-    result.Add(false, clipped.GetBegin());
-    result.Add(true, clipped.Size());
-    result.Add(false, recordsCount - clipped.GetEnd());
+    result.Add(false, Begin);
+    result.Add(true, Size());
+    result.Add(false, recordsCount - End);
     return result;
 }
 

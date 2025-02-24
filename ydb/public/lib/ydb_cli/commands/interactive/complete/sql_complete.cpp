@@ -61,7 +61,7 @@ namespace NSQLComplete {
 
         void RankingSort(TVector<TCandidate>& candidates) {
             Sort(candidates, [](const TCandidate& lhs, const TCandidate& rhs) {
-                return std::tie(lhs.Content, lhs.Kind) < std::tie(rhs.Content, rhs.Kind);
+                return std::tie(lhs.Kind, lhs.Content) < std::tie(rhs.Kind, rhs.Content);
             });
         }
 

@@ -59,8 +59,10 @@ public:
         return ChunkExternalInfo.GetRecordsCount();
     }
 
-    void Finish(const std::shared_ptr<NArrow::TColumnFilter>& applyFilter, const bool deserialize) {
+    void Finish(const std::shared_ptr<NArrow::TColumnFilter>& applyFilter, const std::shared_ptr<IDataSource>& source) {
+        const bool deserialize = source->IsSourceInMemory();
         if (!!OthersBlobs) {
+            source->GetContext()->GetCommonContext()->GetCounters().GetSubColumns()->GetOtherCounters().OnRead(OthersBlobs->size());
             PartialArray->InitOthers(*OthersBlobs, ChunkExternalInfo, deserialize);
             OthersBlobs.reset();
         }
@@ -72,6 +74,8 @@ public:
             std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(ChunkExternalInfo.GetDefaultSerializer(),
                 PartialArray->GetHeader().GetAccessorConstructor(i.second.GetColumnIdx()),
                 PartialArray->GetHeader().GetField(i.second.GetColumnIdx()), nullptr, 0);
+            source->GetContext()->GetCommonContext()->GetCounters().GetSubColumns()->GetColumnCounters().OnRead(
+                i.second.GetBlobDataVerified().size());
             std::vector<NArrow::NAccessor::TDeserializeChunkedArray::TChunk> chunks = { NArrow::NAccessor::TDeserializeChunkedArray::TChunk(
                 GetRecordsCount(), i.second.GetBlobDataVerified()) };
             const std::shared_ptr<NArrow::NAccessor::IChunkedArray> arrOriginal = deserialize
@@ -170,13 +174,13 @@ private:
         if (NeedToAddResource) {
             NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
             for (auto&& i : ColumnChunks) {
-                i.Finish(nullptr, Source->IsSourceInMemory());
+                i.Finish(nullptr, Source);
                 compositeBuilder.AddChunk(i.GetPartialArray());
             }
             Resources->AddVerified(GetColumnId(), compositeBuilder.Finish(), true);
         } else {
             for (auto&& i : ColumnChunks) {
-                i.Finish(Resources->GetAppliedFilter(), Source->IsSourceInMemory());
+                i.Finish(Resources->GetAppliedFilter(), Source);
             }
         }
     }

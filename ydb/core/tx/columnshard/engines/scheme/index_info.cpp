@@ -221,6 +221,7 @@ namespace {
         }
         NKikimrSchemeOp::TCompactionPlannerConstructorContainer compactionPlannerConstructor;
         compactionPlannerConstructor.SetClassName("lc-buckets");
+        *compactionPlannerConstructor.MutableLCBuckets() = optimizer;
         return compactionPlannerConstructor;
     }
 } // namespace

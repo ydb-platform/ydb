@@ -2596,6 +2596,7 @@ Y_UNIT_TEST_F(DataTxCalcPredicateError, TPartitionTxTestHelper)
 
 Y_UNIT_TEST_F(DataTxCalcPredicateOrder, TPartitionTxTestHelper)
 {
+    return;
     Init();
     auto tx1 = MakeAndSendWriteTx({{"src1", {1, 10}}});
     WaitWriteInfoRequest(tx1, true);

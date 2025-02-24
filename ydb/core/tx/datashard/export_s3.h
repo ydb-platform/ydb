@@ -7,6 +7,8 @@
 #include "export_iface.h"
 #include "export_s3_buffer.h"
 
+#include <ydb/core/protos/s3_settings.pb.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -29,15 +31,28 @@ public:
         const ui64 maxBytes = scanSettings.GetBytesBatchSize();
         const ui64 minBytes = Task.GetS3Settings().GetLimits().GetMinWriteBatchSize();
 
+        TS3ExportBufferSettings bufferSettings;
+        bufferSettings
+            .WithColumns(Columns)
+            .WithMaxRows(maxRows)
+            .WithMaxBytes(maxBytes);
+        if (Task.GetEnableChecksums()) {
+            bufferSettings.WithChecksum(TS3ExportBufferSettings::Sha256Checksum());
+        }
+
         switch (CodecFromTask(Task)) {
         case ECompressionCodec::None:
-            return CreateS3ExportBufferRaw(Columns, maxRows, maxBytes, Task.GetEnableChecksums());
+            break;
         case ECompressionCodec::Zstd:
-            return CreateS3ExportBufferZstd(Task.GetCompression().GetLevel(), Columns, maxRows,
-                maxBytes, minBytes, Task.GetEnableChecksums());
+            bufferSettings
+                .WithMinBytes(minBytes)
+                .WithCompression(TS3ExportBufferSettings::ZstdCompression(Task.GetCompression().GetLevel()));
+            break;
         case ECompressionCodec::Invalid:
             Y_ABORT("unreachable");
         }
+
+        return CreateS3ExportBuffer(std::move(bufferSettings));
     }
 
     void Shutdown() const override {}

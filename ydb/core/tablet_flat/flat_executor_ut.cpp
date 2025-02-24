@@ -4806,6 +4806,155 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         }
     }
 
+    Y_UNIT_TEST(MergeSkewedCommitted) {
+        TMyEnvBase env;
+
+        //env->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_DEBUG);
+
+        Cerr << "... starting the first tablet" << Endl;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "abc", 123) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "def", 123) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set abc value2 = Set def\n");
+        }
+
+        Cerr << "... making a snapshot" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxMakeSnapshot });
+        Cerr << "... waiting for snapshot to complete" << Endl;
+        auto evSnapshot1 = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+        Cerr << "... borrowing snapshot" << Endl;
+        TString snapBody1;
+        env.SendSync(new NFake::TEvExecute{ new TTxBorrowSnapshot(snapBody1, evSnapshot1->Get()->SnapContext, env.Tablet + 2) });
+
+        // Stop the first tablet
+        Cerr << "... stopping the first tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        // Start the second tablet
+        ++env.Tablet;
+        Cerr << "... starting the second tablet" << Endl;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(11, "ghi", 123) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(11, "jkl", 123) });
+
+        // Force a mem table compaction
+        Cerr << "... compacting" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        Cerr << "... waiting until compacted" << Endl;
+        env.WaitFor<NFake::TEvCompacted>();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 11 = Upsert value = Set ghi value2 = Set jkl\n");
+        }
+
+        Cerr << "... making a snapshot" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxMakeSnapshot });
+        Cerr << "... waiting for snapshot to complete" << Endl;
+        auto evSnapshot2 = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+        Cerr << "... borrowing snapshot" << Endl;
+        TString snapBody2;
+        env.SendSync(new NFake::TEvExecute{ new TTxBorrowSnapshot(snapBody2, evSnapshot2->Get()->SnapContext, env.Tablet + 1) });
+
+        // Stop the second tablet
+        Cerr << "... stopping the second tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        // Start the destination tablet
+        ++env.Tablet;
+        Cerr << "... starting the destination tablet" << Endl;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        Cerr << "... initializing destination schema" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+
+        // Loan source tables
+        Cerr << "... loaning snapshot 1" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxLoanSnapshot(snapBody1) });
+        Cerr << "... loaning snapshot 2" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxLoanSnapshot(snapBody2) });
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set abc value2 = Set def\n"
+                "Key 11 = Upsert value = Set ghi value2 = Set jkl\n");
+        }
+
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(21, "uvw", 234) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(21, "xyz", 234) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(234) });
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set abc value2 = Set def\n"
+                "Key 11 = Upsert value = Set ghi value2 = Set jkl\n"
+                "Key 21 = Upsert value = Set uvw value2 = Set xyz\n");
+        }
+
+        // Force a mem table compaction
+        Cerr << "... compacting" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        Cerr << "... waiting until compacted" << Endl;
+        env.WaitFor<NFake::TEvCompacted>();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set abc value2 = Set def\n"
+                "Key 11 = Upsert value = Set ghi value2 = Set jkl\n"
+                "Key 21 = Upsert value = Set uvw value2 = Set xyz\n");
+        }
+
+        Cerr << "... restarting destination tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set abc value2 = Set def\n"
+                "Key 11 = Upsert value = Set ghi value2 = Set jkl\n"
+                "Key 21 = Upsert value = Set uvw value2 = Set xyz\n");
+        }
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTxAndBlobs) {
@@ -6667,6 +6816,73 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reboot) {
             }
             timeToStop = wasGc;
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_Gc) {
+    Y_UNIT_TEST(TestFailedGcAfterReboot) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        //env->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
+        //env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
+
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+        env.SendSync(rows.MakeRows(1));
+
+        std::vector<std::pair<ui32, ui32>> gcBarriers;
+        auto gcRequestObserver = env->AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](auto & ev) {
+            auto* msg = ev->Get();
+            if (msg->Channel == 1) {
+                Cerr << "... observed " << msg->ToString() << Endl;
+                gcBarriers.emplace_back(msg->CollectGeneration, msg->CollectStep);
+            }
+        });
+
+        std::deque<TEvBlobStorage::TEvCollectGarbageResult::TPtr> gcResults;
+        auto gcResultObserver = env->AddObserver<TEvBlobStorage::TEvCollectGarbageResult>([&](auto& ev) {
+            auto* msg = ev->Get();
+            if (msg->Channel == 1 && msg->PerGenerationCounter == 1) {
+                Cerr << "... intercepted " << msg->ToString() << Endl;
+                gcResults.push_back(std::move(ev));
+            }
+        });
+
+        Cerr << "... restarting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env->SimulateSleep(TDuration::MilliSeconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(gcBarriers.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(gcResults.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(gcBarriers[0].second, 0u);
+
+        // Replace gc result with an error
+        Cerr << "... faking a gc error" << Endl;
+        {
+            gcResultObserver.Remove();
+            gcResults.front()->Get()->Status = NKikimrProto::ERROR;
+            env->Send(gcResults.front().Release(), 0, true);
+            gcResults.pop_front();
+        }
+
+        // This write will incidentally cause a new gc attempt
+        env.SendSync(rows.MakeRows(1), /* retry */ true);
+
+        env->SimulateSleep(TDuration::MilliSeconds(10));
+        UNIT_ASSERT_C(gcBarriers.size() >= 2, gcBarriers.size());
+        UNIT_ASSERT_C(gcBarriers[0] <= gcBarriers[1], "unexpected barrier decrease");
     }
 }
 

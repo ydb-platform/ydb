@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "application.h"
 
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/json/json_reader.h>
@@ -48,6 +49,17 @@ void FloatingPointExceptionHandler(int) {
 
     abort();
 }
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+void InterruptHandler(int) {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+
+    Cout << colors.Red() << "Execution interrupted, finishing profile memory allocations..." << colors.Default() << Endl;
+    TMainBase::FinishProfileMemoryAllocations();
+
+    abort();
+}
+#endif
 
 }  // nonymous namespace
 
@@ -233,10 +245,28 @@ void InitLogSettings(const NKikimrConfig::TLogConfig& logConfig, NActors::TTestA
     }
 }
 
+TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName) {
+    return TChoices<NActors::NLog::EPriority>({
+        {"emerg", NActors::NLog::EPriority::PRI_EMERG},
+        {"alert", NActors::NLog::EPriority::PRI_ALERT},
+        {"crit", NActors::NLog::EPriority::PRI_CRIT},
+        {"error", NActors::NLog::EPriority::PRI_ERROR},
+        {"warn", NActors::NLog::EPriority::PRI_WARN},
+        {"notice", NActors::NLog::EPriority::PRI_NOTICE},
+        {"info", NActors::NLog::EPriority::PRI_INFO},
+        {"debug", NActors::NLog::EPriority::PRI_DEBUG},
+        {"trace", NActors::NLog::EPriority::PRI_TRACE},
+    }, optionName, false);
+}
+
 void SetupSignalActions() {
     std::set_terminate(&TerminateHandler);
     signal(SIGSEGV, &SegmentationFaultHandler);
     signal(SIGFPE, &FloatingPointExceptionHandler);
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    signal(SIGINT, &InterruptHandler);
+#endif
 }
 
 void PrintResultSet(EResultOutputFormat format, IOutputStream& output, const Ydb::ResultSet& resultSet) {

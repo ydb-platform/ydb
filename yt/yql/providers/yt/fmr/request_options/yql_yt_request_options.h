@@ -21,8 +21,7 @@ enum class ETaskStatus {
     Accepted,
     InProgress,
     Failed,
-    Completed,
-    Aborted
+    Completed
 };
 
 enum class ETaskType {
@@ -47,6 +46,10 @@ struct TFmrError {
     TMaybe<TString> OperationId;
 };
 
+struct TError {
+    TString ErrorMessage;
+};
+
 struct TStatistics {
 };
 
@@ -60,9 +63,7 @@ struct TFmrTableRef {
     TString TableId;
 };
 
-struct TTableRef {
-    std::variant<TYtTableRef, TFmrTableRef> TableRef;
-};
+using TTableRef = std::variant<TYtTableRef, TFmrTableRef>;
 
 struct TUploadTaskParams {
     TFmrTableRef Input;

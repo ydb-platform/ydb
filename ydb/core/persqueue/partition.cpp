@@ -1234,6 +1234,10 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
     }
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
         TxAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
+
+        // A temporary solution. This line should be deleted when we fix the error with the SeqNo promotion.
+        WriteAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
+
         tx.WriteInfoApplied = true;
         WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();
         WriteKeysSizeEstimate += tx.WriteInfo->SrcIdInfo.size();
@@ -2333,7 +2337,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            NewHead.Offset,
                                            "", // SourceId
                                            0,  // SeqNo
-                                           1,  // TotalParts
+                                           0,  // TotalParts
                                            0,  // TotalSize
                                            Head,
                                            NewHead,
@@ -2362,6 +2366,8 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                               PersistRequest.Get(),
                               ctx);
         }
+
+        PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
 
         NewHead.Clear();
         NewHead.Offset = Parameters->CurOffset;

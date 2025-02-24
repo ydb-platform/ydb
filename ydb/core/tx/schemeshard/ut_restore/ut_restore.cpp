@@ -139,12 +139,18 @@ namespace {
         }
     };
 
+    struct TImportChangefeed {
+        TString Changefeed;
+        TString Topic;
+    };
+
     struct TTestDataWithScheme {
         TString Metadata;
         EPathType Type = EPathTypeTable;
         TString Scheme;
         TString CreationQuery;
         TString Permissions;
+        TImportChangefeed Changefeed;
         TVector<TTestData> Data;
 
         TTestDataWithScheme() = default;
@@ -268,6 +274,9 @@ namespace {
         case EPathTypeView:
             result.CreationQuery = typedScheme.Scheme;
             break;
+        case EPathTypeCdcStream:
+            result.Changefeed = {typedScheme.Scheme, typedScheme.Attributes.GetTopicDescription()};
+            break;
         default:
             UNIT_FAIL("cannot create sample test data for the scheme object type: " << typedScheme.Type);
             return {};
@@ -287,6 +296,10 @@ namespace {
             case EPathTypeView:
                 result.emplace(prefix + "/create_view.sql", item.CreationQuery);
                 break;
+            case EPathTypeCdcStream:
+                result.emplace(prefix +  "/changefeed_description.pb", item.Changefeed.Changefeed);
+                result.emplace(prefix +  "/topic_description.pb", item.Changefeed.Topic);
+                break;
             default:
                 UNIT_FAIL("cannot determine key for the scheme object type: " << item.Type);
                 return {};
@@ -301,6 +314,7 @@ namespace {
             if (item.Permissions) {
                 result.emplace(prefix + "/permissions.pb", item.Permissions);
             }
+
             for (ui32 i = 0; i < item.Data.size(); ++i) {
                 const auto& data = item.Data.at(i);
                 result.emplace(Sprintf("%s/data_%02d%s", prefix.data(), i, data.Ext().c_str()), data.Data);
@@ -4810,6 +4824,323 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::IsView
         });
     }
+
+    struct TGeneratedChangefeed {
+        std::pair<TString, TTestDataWithScheme> Changefeed;
+        std::function<void(TTestBasicRuntime&)> Checker;
+    };
+
+    TGeneratedChangefeed GenChangefeed(ui64 num = 1) {
+        const TString changefeedName = TStringBuilder() << "updates_feed" << num;
+        const auto changefeedPath = TStringBuilder() << "/" << changefeedName;
+
+        const auto changefeedDesc = Sprintf(R"(
+            name: "%s"
+            mode: MODE_UPDATES
+            format: FORMAT_JSON
+            state: STATE_ENABLED
+        )", changefeedName.c_str());
+
+        const auto topicDesc = R"(
+            partitioning_settings {
+                min_active_partitions: 1
+                max_active_partitions: 1
+                auto_partitioning_settings {
+                    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+                    partition_write_speed {
+                        stabilization_window {
+                            seconds: 300
+                        }
+                        up_utilization_percent: 80
+                        down_utilization_percent: 20
+                    }
+                }
+            }
+            partitions {
+                active: true
+            }
+            retention_period {
+                seconds: 86400
+            }
+            partition_write_speed_bytes_per_second: 1048576
+            partition_write_burst_bytes: 1048576
+            attributes {
+                key: "__max_partition_message_groups_seqno_stored"
+                value: "6000000"
+            }
+            attributes {
+                key: "_allow_unauthenticated_read"
+                value: "true"
+            }
+            attributes {
+                key: "_allow_unauthenticated_write"
+                value: "true"
+            }
+            attributes {
+                key: "_message_group_seqno_retention_period_ms"
+                value: "1382400000"
+            }
+            consumers {
+                name: "my_consumer"
+                read_from {
+                }
+                attributes {
+                    key: "_service_type"
+                    value: "data-streams"
+                }
+            }
+        )";
+
+        NAttr::TAttributes attr;
+        attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
+        return {
+            {changefeedPath, GenerateTestData({EPathTypeCdcStream, changefeedDesc, std::move(attr)})},
+            [changefeedPath = TString(changefeedPath)](TTestBasicRuntime& runtime) {
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath, false, false, true), {
+                    NLs::PathExist
+                });
+            }
+        };
+    }
+
+    TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(THashMap<TString, TTestDataWithScheme>& bucketContent, ui64 count = 1) {
+        TVector<std::function<void(TTestBasicRuntime&)>> checkers;
+        checkers.reserve(count);
+        for (ui64 i = 1; i <= count; ++i) {
+            auto genChangefeed = GenChangefeed(i);
+            bucketContent.emplace(genChangefeed.Changefeed);
+            checkers.push_back(genChangefeed.Checker);
+        }
+        return checkers;
+    }
+
+    std::function<void(TTestBasicRuntime&)> AddedSchemeCommon(THashMap<TString, TTestDataWithScheme>& bucketContent, const TString& permissions) {
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}}, permissions);
+
+        bucketContent.emplace("", data);
+        return [](TTestBasicRuntime& runtime) {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+                NLs::PathExist
+            });
+        };
+    }
+
+    std::function<void(TTestBasicRuntime&)> AddedScheme(THashMap<TString, TTestDataWithScheme>& bucketContent) {
+        return AddedSchemeCommon(bucketContent, "");
+    }
+
+    std::function<void(TTestBasicRuntime&)> AddedSchemeWithPermissions(THashMap<TString, TTestDataWithScheme>& bucketContent) {
+        const auto permissions = R"(
+            actions {
+              change_owner: "eve"
+            }
+            actions {
+              grant {
+                subject: "alice"
+                permission_names: "ydb.generic.read"
+              }
+            }
+            actions {
+              grant {
+                subject: "alice"
+                permission_names: "ydb.generic.write"
+              }
+            }
+            actions {
+              grant {
+                subject: "bob"
+                permission_names: "ydb.generic.read"
+              }
+            }
+        )";
+        return AddedSchemeCommon(bucketContent, permissions);
+    }
+
+    using SchemeFunction = std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&)>;
+
+    void TestImportChangefeeds(ui64 countChangefeed, SchemeFunction addedScheme) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )");
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(countChangefeed + 1);
+
+        auto checkerTable = addedScheme(bucketContent);
+        auto checkersChangefeeds = GenChangefeeds(bucketContent, countChangefeed);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        checkerTable(runtime);
+        for (const auto& checker : checkersChangefeeds) {
+            checker(runtime);
+        }
+    }
+
+    Y_UNIT_TEST(Changefeed) {
+        TestImportChangefeeds(1, AddedScheme);
+    }
+
+    Y_UNIT_TEST(Changefeeds) {
+        TestImportChangefeeds(3, AddedScheme);
+    }
+
+    Y_UNIT_TEST(ChangefeedWithTablePermissions) {
+        TestImportChangefeeds(1, AddedSchemeWithPermissions);
+    }
+
+    Y_UNIT_TEST(ChangefeedsWithTablePermissions) {
+        TestImportChangefeeds(3, AddedSchemeWithPermissions);
+    }
+
+    Y_UNIT_TEST(IgnoreBasicSchemeLimits) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Alice"
+        )");
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Alice"
+            ExternalSchemeShard: true
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            StoragePools {
+                Name: "Alice:hdd"
+                Kind: "hdd"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Alice"), {
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)
+        });
+        UNIT_ASSERT_UNEQUAL(tenantSchemeShard, 0);
+
+        TSchemeLimits basicLimits;
+        basicLimits.MaxShards = 4;
+        basicLimits.MaxShardsInPath = 2;
+        SetSchemeshardSchemaLimits(runtime, basicLimits, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Alice"), {
+            NLs::DomainLimitsIs(basicLimits.MaxPaths, basicLimits.MaxShards),
+            NLs::PathsInsideDomain(0),
+            NLs::ShardsInsideDomain(3)
+        });
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Alice", R"(
+            Name: "table1"
+            Columns { Name: "Key" Type: "Uint64" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["Key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Alice", R"(
+                Name: "table2"
+                Columns { Name: "Key" Type: "Uint64" }
+                Columns { Name: "Value" Type: "Utf8" }
+                KeyColumnNames: ["Key"]
+            )",
+            { NKikimrScheme::StatusResourceExhausted }
+        );
+
+        const auto data = GenerateTestData(R"(
+                columns {
+                    name: "key"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                primary_key: "key"
+                partition_at_keys {
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "b" } }
+                    }
+                }
+                indexes {
+                    name: "ByValue"
+                    index_columns: "value"
+                    global_index {}
+                }
+            )",
+            {{"a", 1}, {"b", 1}}
+        );
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const auto importId = ++txId;
+        TestImport(runtime, tenantSchemeShard, importId, "/MyRoot/Alice", Sprintf(R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: ""
+                        destination_path: "/MyRoot/Alice/ImportDir/Table"
+                    }
+                }
+            )",
+            port
+        ));
+        env.TestWaitNotification(runtime, importId, tenantSchemeShard);
+        TestGetImport(runtime, tenantSchemeShard, importId, "/MyRoot/Alice");
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Alice"), {
+            NLs::DomainLimitsIs(basicLimits.MaxPaths, basicLimits.MaxShards),
+            NLs::PathsInsideDomain(5),
+            NLs::ShardsInsideDomain(7)
+        });
+    }
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
@@ -4850,6 +5181,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
 
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
                 if (createsViews) {
                     runtime.GetAppData().FeatureFlags.SetEnableViews(true);
                 }
@@ -5150,6 +5482,101 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             )"
         );
+    }
+
+    THashMap<TString, TTypedScheme> GetSchemeWithChangefeed() {
+        THashMap<TString, TTypedScheme> schemes;
+
+        const auto changefeedName = "update_changefeed";
+
+        schemes.emplace("", R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )");
+
+        const auto changefeedDesc = Sprintf(R"(
+            name: "%s"
+            mode: MODE_UPDATES
+            format: FORMAT_JSON
+            state: STATE_ENABLED
+        )", changefeedName);
+
+        const auto topicDesc = R"(
+            partitioning_settings {
+                min_active_partitions: 1
+                max_active_partitions: 1
+                auto_partitioning_settings {
+                    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+                    partition_write_speed {
+                        stabilization_window {
+                            seconds: 300
+                        }
+                        up_utilization_percent: 80
+                        down_utilization_percent: 20
+                    }
+                }
+            }
+            partitions {
+                active: true
+            }
+            retention_period {
+                seconds: 86400
+            }
+            partition_write_speed_bytes_per_second: 1048576
+            partition_write_burst_bytes: 1048576
+            attributes {
+                key: "__max_partition_message_groups_seqno_stored"
+                value: "6000000"
+            }
+            attributes {
+                key: "_allow_unauthenticated_read"
+                value: "true"
+            }
+            attributes {
+                key: "_allow_unauthenticated_write"
+                value: "true"
+            }
+            attributes {
+                key: "_message_group_seqno_retention_period_ms"
+                value: "1382400000"
+            }
+            consumers {
+                name: "my_consumer"
+                read_from {
+                }
+                attributes {
+                    key: "_service_type"
+                    value: "data-streams"
+                }
+            }
+        )";
+
+        NAttr::TAttributes attr;
+        attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
+
+        schemes.emplace("/update_feed",
+            TTypedScheme {
+                EPathTypeCdcStream,
+                changefeedDesc,
+                std::move(attr)
+            }
+        );
+        return schemes;
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleChangefeed) {
+        ShouldSucceed(GetSchemeWithChangefeed());
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleChangefeed) {
+        CancelShouldSucceed(GetSchemeWithChangefeed());
     }
 
     Y_UNIT_TEST(CancelShouldSucceedOnDependentView) {

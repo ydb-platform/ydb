@@ -67,12 +67,8 @@ TString NormalizeFullPath(const TString& fullPath) {
     }
 }
 
-TString GetFullTopicPath(const NActors::TActorContext& ctx, const TMaybe<TString>& database, const TString& topicPath) {
-    if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        return FullPath(database, topicPath);
-    } else {
-        return topicPath;
-    }
+TString GetFullTopicPath(const TMaybe<TString>& database, const TString& topicPath) {
+    return FullPath(database, topicPath);
 }
 
 TString ConvertNewConsumerName(const TString& consumer, const NKikimrPQ::TPQConfig& pqConfig) {

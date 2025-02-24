@@ -75,35 +75,44 @@ void SqlASTsToYqlsImpl(NYql::TAstParseResult& res, const std::vector<::NSQLv1Gen
     }
 }
 
-NYql::TAstParseResult SqlASTToYql(const TString& query,
+NYql::TAstParseResult SqlASTToYql(const TLexers& lexers, const TParsers& parsers,
+    const TString& query,
     const google::protobuf::Message& protoAst,
     const NSQLTranslation::TSQLHints& hints,
     const NSQLTranslation::TTranslationSettings& settings)
 {
     YQL_ENSURE(IsQueryMode(settings.Mode));
     TAstParseResult res;
-    TContext ctx(settings, hints, res.Issues, query);
+    TContext ctx(lexers, parsers, settings, hints, res.Issues, query);
     SqlASTToYqlImpl(res, protoAst, ctx);
     res.ActualSyntaxType = NYql::ESyntaxType::YQLv1;
     return res;
 }
 
-NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules)
+NYql::TAstParseResult SqlASTToYql(const TString& query,
+    const google::protobuf::Message& protoAst,
+    const NSQLTranslation::TSQLHints& hints,
+    const NSQLTranslation::TTranslationSettings& settings)
+{
+    return SqlASTToYql(MakeAllLexers(), MakeAllParsers(), query, protoAst, hints, settings);
+}
+
+NYql::TAstParseResult SqlToYql(const TLexers& lexers, const TParsers& parsers, const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules)
 {
     TAstParseResult res;
     const TString queryName = settings.File;
 
     NSQLTranslation::TSQLHints hints;
-    auto lexer = MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
+    auto lexer = MakeLexer(lexers, settings.AnsiLexer, settings.Antlr4Parser);
     YQL_ENSURE(lexer);
     if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, res.Issues, settings.MaxErrors, settings.Antlr4Parser)) {
         return res;
     }
 
-    TContext ctx(settings, hints, res.Issues, query);
+    TContext ctx(lexers, parsers, settings, hints, res.Issues, query);
     NSQLTranslation::TErrorCollectorOverIssues collector(res.Issues, settings.MaxErrors, settings.File);
 
-    google::protobuf::Message* ast(SqlAST(query, queryName, collector, settings.AnsiLexer,  settings.Antlr4Parser, settings.TestAntlr4, settings.Arena));
+    google::protobuf::Message* ast(SqlAST(parsers, query, queryName, collector, settings.AnsiLexer,  settings.Antlr4Parser, settings.Arena));
     if (ast) {
         SqlASTToYqlImpl(res, *ast, ctx);
     } else {
@@ -115,6 +124,10 @@ NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTra
     }
     res.ActualSyntaxType = NYql::ESyntaxType::YQLv1;
     return res;
+}
+
+NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules) {
+    return SqlToYql(MakeAllLexers(), MakeAllParsers(), query, settings, warningRules);
 }
 
 bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
@@ -187,7 +200,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
     }
 }
 
-TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& queryText, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules,
+TVector<NYql::TAstParseResult> SqlToAstStatements(const TLexers& lexers, const TParsers& parsers, const TString& queryText, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules,
     TVector<NYql::TStmtParseInfo>* stmtParseInfo)
 {
     TVector<TAstParseResult> result;
@@ -195,16 +208,16 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& queryText, cons
     TIssues issues;
 
     NSQLTranslation::TSQLHints hints;
-    auto lexer = MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
+    auto lexer = MakeLexer(lexers, settings.AnsiLexer, settings.Antlr4Parser);
     YQL_ENSURE(lexer);
     if (!CollectSqlHints(*lexer, queryText, queryName, settings.File, hints, issues, settings.MaxErrors, settings.Antlr4Parser)) {
         return result;
     }
 
-    TContext ctx(settings, hints, issues, queryText);
+    TContext ctx(lexers, parsers, settings, hints, issues, queryText);
     NSQLTranslation::TErrorCollectorOverIssues collector(issues, settings.MaxErrors, settings.File);
 
-    google::protobuf::Message* astProto(SqlAST(queryText, queryName, collector, settings.AnsiLexer, settings.Antlr4Parser, settings.TestAntlr4, settings.Arena));
+    google::protobuf::Message* astProto(SqlAST(parsers, queryText, queryName, collector, settings.AnsiLexer, settings.Antlr4Parser, settings.Arena));
     if (astProto) {
         auto ast = static_cast<const TSQLv1ParserAST&>(*astProto);
         const auto& query = ast.GetRule_sql_query();
@@ -215,7 +228,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& queryText, cons
             if (NeedUseForAllStatements(statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2().Alt_case())) {
                 commonStates.push_back(statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
             } else {
-                TContext ctx(settings, hints, issues, queryText);
+                TContext ctx(lexers, parsers, settings, hints, issues, queryText);
                 result.emplace_back();
                 if (stmtParseInfo) {
                     stmtParseInfo->push_back({});
@@ -229,7 +242,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& queryText, cons
                     commonStates.push_back(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
                     continue;
                 }
-                TContext ctx(settings, hints, issues, queryText);
+                TContext ctx(lexers, parsers, settings, hints, issues, queryText);
                 result.emplace_back();
                 if (stmtParseInfo) {
                     stmtParseInfo->push_back({});
@@ -251,9 +264,13 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& queryText, cons
     return result;
 }
 
-bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, NYql::TIssues& issues,
+TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo) {
+    return SqlToAstStatements(MakeAllLexers(), MakeAllParsers(), query, settings, warningRules, stmtParseInfo);
+}
+
+bool SplitQueryToStatements(const TLexers& lexers, const TParsers& parsers, const TString& query, TVector<TString>& statements, NYql::TIssues& issues,
     const NSQLTranslation::TTranslationSettings& settings) {
-    auto lexer = NSQLTranslationV1::MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, settings.Antlr4Parser);
 
     TVector<TString> parts;
     if (!SplitQueryToStatements(query, lexer, parts, issues)) {
@@ -262,8 +279,8 @@ bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, 
 
     for (auto& currentQuery : parts) {
         NYql::TIssues parserIssues;
-        auto message = NSQLTranslationV1::SqlAST(currentQuery, settings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS,
-            settings.AnsiLexer, settings.Antlr4Parser, settings.TestAntlr4, settings.Arena);
+        auto message = NSQLTranslationV1::SqlAST(parsers, currentQuery, settings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS,
+            settings.AnsiLexer, settings.Antlr4Parser, settings.Arena);
         if (!message) {
             // Skip empty statements
             continue;
@@ -275,37 +292,55 @@ bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, 
     return true;
 }
 
+bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, NYql::TIssues& issues,
+    const NSQLTranslation::TTranslationSettings& settings) {
+    return SplitQueryToStatements(MakeAllLexers(), MakeAllParsers(), query, statements, issues, settings);
+}
+
 class TTranslator : public NSQLTranslation::ITranslator {
 public:
+    TTranslator(const TLexers& lexers, const TParsers& parsers)
+        : Lexers_(lexers)
+        , Parsers_(parsers)
+    {
+    }
+
     NSQLTranslation::ILexer::TPtr MakeLexer(const NSQLTranslation::TTranslationSettings& settings) final {
-        return NSQLTranslationV1::MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
+        return NSQLTranslationV1::MakeLexer(Lexers_, settings.AnsiLexer, settings.Antlr4Parser);
     }
 
     NYql::TAstParseResult TextToAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
         NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo) final {
         Y_UNUSED(stmtParseInfo);
-        return SqlToYql(query, settings, warningRules);
+        return SqlToYql(Lexers_, Parsers_, query, settings, warningRules);
     }
 
     google::protobuf::Message* TextToMessage(const TString& query, const TString& queryName,
         NYql::TIssues& issues, size_t maxErrors, const NSQLTranslation::TTranslationSettings& settings) final {
-        return SqlAST(query, queryName, issues, maxErrors, settings.AnsiLexer, settings.Antlr4Parser,
-            settings.TestAntlr4, settings.Arena);
+        return SqlAST(Parsers_, query, queryName, issues, maxErrors, settings.AnsiLexer, settings.Antlr4Parser, settings.Arena);
     }
 
     NYql::TAstParseResult TextAndMessageToAst(const TString& query, const google::protobuf::Message& protoAst,
         const NSQLTranslation::TSQLHints& hints, const NSQLTranslation::TTranslationSettings& settings) final {
-        return SqlASTToYql(query, protoAst, hints, settings);
+        return SqlASTToYql(Lexers_, Parsers_, query, protoAst, hints, settings);
     }
 
     TVector<NYql::TAstParseResult> TextToManyAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
         NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo) final {
-        return SqlToAstStatements(query, settings, warningRules, stmtParseInfo);
+        return SqlToAstStatements(Lexers_, Parsers_, query, settings, warningRules, stmtParseInfo);
     }
+
+private:
+    const TLexers Lexers_;
+    const TParsers Parsers_;
 };
 
 NSQLTranslation::TTranslatorPtr MakeTranslator() {
-    return MakeIntrusive<TTranslator>();
+    return MakeIntrusive<TTranslator>(MakeAllLexers(), MakeAllParsers());
+}
+
+NSQLTranslation::TTranslatorPtr MakeTranslator(const TLexers& lexers, const TParsers& parsers) {
+    return MakeIntrusive<TTranslator>(lexers, parsers);
 }
 
 } // namespace NSQLTranslationV1

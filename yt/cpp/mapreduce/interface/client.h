@@ -165,8 +165,15 @@ public:
     /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#execute_batch)
     virtual TBatchRequestPtr CreateBatchRequest() = 0;
 
-    /// @brief Get root client outside of all transactions.
-    virtual IClientPtr GetParentClient() = 0;
+    ///
+    /// @brief Get root client.
+    ///
+    /// @param ignoreGlobalTx root client could be created already attached to some global transaction, @ref NYT::TConfig::GlobalTx.
+    ///     when ignoreGlobalTx = false original client (attached to GlobalTx) is returned
+    ///     when ignoreGlobalTx = true, returned client is not attached to any transaction.
+    ///
+    /// TODO: rename to GetRootClient()
+    virtual IClientPtr GetParentClient(bool ignoreGlobalTx = false) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -571,6 +578,11 @@ public:
     ///
     virtual void Shutdown() = 0;
 };
+
+/// Create a rpc client for particular cluster.
+IClientPtr CreateRpcClient(
+    const TString& serverName,
+    const TCreateClientOptions& options = {});
 
 /// Create a client for particular MapReduce cluster.
 IClientPtr CreateClient(

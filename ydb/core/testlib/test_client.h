@@ -528,6 +528,7 @@ namespace Tests {
             return CreateColumnTable(parent, table);
         }
 #endif
+        NMsgBusProxy::EResponseStatus CreateTopic(const TString& parent, const NKikimrSchemeOp::TPersQueueGroupDescription& topic);
         NMsgBusProxy::EResponseStatus CreateSolomon(const TString& parent, const TString& name, ui32 parts = 4, ui32 channelProfile = 0);
         NMsgBusProxy::EResponseStatus StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task);
         NMsgBusProxy::EResponseStatus DeleteTopic(const TString& parent, const TString& name);

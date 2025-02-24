@@ -7,7 +7,7 @@ PEERDIR(
     ydb/core/formats/arrow/save_load
     ydb/core/formats/arrow/serializer
     ydb/core/formats/arrow/splitter
-    ydb/library/formats/arrow/accessor/common
+    ydb/core/formats/arrow/accessor/common
 )
 
 SRCS(

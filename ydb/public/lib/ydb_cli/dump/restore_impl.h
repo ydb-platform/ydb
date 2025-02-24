@@ -219,6 +219,8 @@ class TRestoreClient {
         const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc,
         ui32 dataFilesCount);
 
+    TRestoreResult CheckSecretExistence(const TString& secretName);
+
 public:
     explicit TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log);
 

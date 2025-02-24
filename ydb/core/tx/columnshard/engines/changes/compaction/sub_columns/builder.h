@@ -8,9 +8,6 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/library/formats/arrow/accessor/common/const.h>
-
 namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
 class TMergedBuilder {

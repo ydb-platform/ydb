@@ -165,7 +165,7 @@ class TGrpcMetadataArray
 public:
     TStringBuf Find(const char* key) const;
 
-    THashMap<TString, TString> ToMap() const;
+    THashMap<std::string, TString> ToMap() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -217,7 +217,7 @@ private:
 class TGrpcChannelArgs
 {
 public:
-    explicit TGrpcChannelArgs(const THashMap<TString, NYTree::INodePtr>& args);
+    explicit TGrpcChannelArgs(const THashMap<std::string, NYTree::INodePtr>& args);
 
     grpc_channel_args* Unwrap();
 

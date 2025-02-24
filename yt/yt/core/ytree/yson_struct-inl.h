@@ -337,8 +337,7 @@ THashMap<TKey, TIntrusivePtr<TValue>> CloneYsonStructs(const THashMap<TKey, TInt
     THashMap<TKey, TIntrusivePtr<TValue>> clonedObjs;
     clonedObjs.reserve(objs.size());
     for (const auto& [key, obj] : objs) {
-        // TODO(babenko): switch to std::string
-        clonedObjs.emplace(std::string(key), CloneYsonStruct(obj));
+        clonedObjs.emplace(key, CloneYsonStruct(obj));
     }
     return clonedObjs;
 }

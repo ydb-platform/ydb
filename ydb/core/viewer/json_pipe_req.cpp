@@ -764,7 +764,7 @@ TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TIns
 
 TString TViewerPipeClient::GetHTTPOKJSON(const google::protobuf::Message& response, TInstant lastModified) {
     TStringStream json;
-    NProtobufJson::Proto2Json(response, json, Proto2JsonConfig);
+    Proto2Json(response, json);
     return GetHTTPOKJSON(json.Str(), lastModified);
 }
 

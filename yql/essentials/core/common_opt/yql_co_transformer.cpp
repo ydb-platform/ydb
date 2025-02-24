@@ -34,10 +34,14 @@ private:
     IGraphTransformer::TStatus DoTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
         const TFinalizingOptimizerMap& callables);
 
+    bool ScanErrors(const TExprNode& node, TExprContext& ctx);
+
 private:
     TProcessedNodesSet SimpleProcessedNodes[TCoCallableRules::SIMPLE_STEPS];
     TProcessedNodesSet FlowProcessedNodes[TCoCallableRules::FLOW_STEPS];
     TProcessedNodesSet FinalProcessedNodes;
+    TProcessedNodesSet ErrorProcessedNodes;
+    THashSet<TIssue> AddedErrors;
     TTypeAnnotationContext* TypeCtx;
     const bool Final;
 };
@@ -79,10 +83,16 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr in
         return status;
     }
 
-    return status;
+    if (!ScanErrors(*output, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    return IGraphTransformer::TStatus::Ok;
 }
 
 void TCommonOptTransformer::Rewind() {
+    AddedErrors.clear();
+    ErrorProcessedNodes.clear();
     FinalProcessedNodes.clear();
 
     for (auto& set : FlowProcessedNodes) {
@@ -92,6 +102,30 @@ void TCommonOptTransformer::Rewind() {
     for (auto& set : SimpleProcessedNodes) {
         set.clear();
     }
+}
+
+bool TCommonOptTransformer::ScanErrors(const TExprNode& node, TExprContext& ctx) {
+    auto [it, inserted] = ErrorProcessedNodes.emplace(node.UniqueId());
+    if (!inserted) {
+        return true;
+    }
+
+    for (const auto& child : node.Children()) {
+        if (!ScanErrors(*child, ctx)) {
+            return false;
+        }
+    }
+
+    if (!node.IsCallable("ErrorType")) {
+        return true;
+    }
+
+    auto issue = node.GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TErrorExprType>()->GetError();
+    if (AddedErrors.insert(issue).second) {
+        ctx.AddError(issue);
+    }
+
+    return false;
 }
 
 IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(

@@ -621,6 +621,13 @@ protected:
         Ydb::KeyValue::DescribeVolumeResult result;
         result.set_path(this->GetProtoRequest()->path());
         result.set_partition_count(desc.PartitionsSize());
+        if (desc.PartitionsSize() > 0) {
+            auto *storageConfig = result.mutable_storage_config();
+            for (auto &channel : desc.GetPartitions(0).GetBoundChannels()) {
+                auto *channelBind = storageConfig->add_channel();
+                channelBind->set_media(channel.GetStoragePoolName());
+            }
+        }
         this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, TActivationContext::AsActorContext());
     }
 

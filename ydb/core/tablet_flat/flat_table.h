@@ -122,7 +122,6 @@ public:
     void Merge(TIntrusiveConstPtr<TColdPart> part) noexcept;
     void Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept;
     void MergeDone() noexcept;
-    void ProcessCheckTransactions() noexcept;
 
     /**
      * Returns constructed levels for slices
@@ -341,6 +340,7 @@ private:
 
 private:
     void AddTxDataRef(ui64 txId);
+    void RemoveTxDataRef(ui64 txId);
     void AddTxStatusRef(ui64 txId);
     void RemoveTxStatusRef(ui64 txId);
 
@@ -379,9 +379,6 @@ private:
     // specified TxId and that have not been committed or removed yet.
     absl::flat_hash_set<ui64> OpenTxs;
 
-    // A set of transactions that need to be re-checked after a merge.
-    absl::flat_hash_set<ui64> CheckTransactions;
-
     TTransactionMap CommittedTransactions;
     TTransactionSet RemovedTransactions;
     TTransactionSet DecidedTransactions;
@@ -416,23 +413,13 @@ private:
         ui64 TxId;
     };
 
-    struct TRollbackAddOpenTx {
-        ui64 TxId;
-    };
-
-    struct TRollbackRemoveOpenTx {
-        ui64 TxId;
-    };
-
     using TRollbackOp = std::variant<
         TRollbackRemoveTxDataRef,
         TRollbackRemoveTxStatusRef,
         TRollbackAddCommittedTx,
         TRollbackRemoveCommittedTx,
         TRollbackAddRemovedTx,
-        TRollbackRemoveRemovedTx,
-        TRollbackAddOpenTx,
-        TRollbackRemoveOpenTx>;
+        TRollbackRemoveRemovedTx>;
 
     struct TCommitAddDecidedTx {
         ui64 TxId;

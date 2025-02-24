@@ -1,6 +1,8 @@
 #pragma once
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+
 #include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 
 namespace NKikimr::NArrow::NAccessor {
@@ -33,6 +35,8 @@ public:
     const std::shared_ptr<arrow::Array>& GetArray() const {
         return Array;
     }
+
+    static std::shared_ptr<TTrivialArray> BuildEmpty(const std::shared_ptr<arrow::DataType>& type);
 
     TTrivialArray(const std::shared_ptr<arrow::Array>& data)
         : TBase(data->length(), EType::Array, data->type())

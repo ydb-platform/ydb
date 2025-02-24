@@ -193,6 +193,8 @@ message TEvNodeConfigInvokeOnRoot {
 
     message TFetchStorageConfig {
         bool Manual = 1; // when set to true, distconf returns conventional configuration
+        bool MainConfig = 2;
+        bool StorageConfig = 3;
     }
 
     message TReplaceStorageConfig {
@@ -241,7 +243,8 @@ message TEvNodeConfigInvokeOnRootResult {
     }
 
     message TFetchStorageConfig {
-        string YAML = 1;
+        optional string YAML = 1;
+        optional string StorageYAML = 2;
     }
 
     EStatus Status = 1;

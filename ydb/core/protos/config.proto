@@ -86,6 +86,8 @@ message TActorSystemConfig {
         optional int32 MaxAvgPingDeviation = 17;
 
         optional bool HasSharedThread = 18;
+        optional uint32 MaxLocalQueueSize = 20;
+        optional uint32 MinLocalQueueSize = 21;
     }
 
     message TScheduler {
@@ -125,6 +127,9 @@ message TActorSystemConfig {
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
+
+    optional uint32 MinLocalQueueSize = 20;
+    optional uint32 MaxLocalQueueSize = 21;
 }
 
 message TStaticNameserviceConfig {
@@ -326,9 +331,6 @@ message TSelfManagementConfig {
 
     // generation of the config; when set, one can automatically apply in-filesystem config
     optional uint64 Generation = 2;
-
-    // internally-used field with initial config.yaml loaded on the start (for the bootstrap process); not filled by the user
-    optional bytes InitialConfigYaml = 3;
 
     // subset of DefineStoragePool command
     optional string ErasureSpecies = 11;
@@ -1949,6 +1951,26 @@ message TBackgroundCleaningConfig {
     optional TRetrySettings RetrySettings = 5;
 }
 
+
+message TDataErasureConfig {
+    message TTenantDataErasureConfig {
+        optional double MaxRate = 1 [default = 1]; // unlimited
+        optional uint64 InflightLimit = 2 [default = 10];
+        // After this interval started data erasure in shard is considered as finished
+        optional uint64 TimeoutSeconds = 3 [default = 15];
+    }
+
+    optional double MaxRate = 1 [default = 0]; // unlimited
+    optional uint64 InflightLimit = 2 [default = 10];
+    // After this interval started data erasure in tenant is considered as finished
+    optional uint64 TimeoutSeconds = 3 [default = 600];
+    // Run data erasure every week
+    optional uint64 DataErasureIntervalSeconds = 4 [default = 604800];
+    // Every 10 m do request to BSC
+    optional uint64 BlobStorageControllerRequestIntervalSeconds = 5 [default = 600];
+    optional TTenantDataErasureConfig TenantDataErasureConfig = 6;
+}
+
 message TGraphConfig {
     message TAggregationSettings {
         optional uint64 PeriodToStartSeconds = 1;
@@ -2173,7 +2195,7 @@ message TAppConfig {
     //optional TLocalConfig LocalConfig = 23; DEPRECATED
     optional TDynamicNodeConfig DynamicNodeConfig = 24;
     optional NKikimrCms.TCmsConfig CmsConfig = 25;
-    optional TFeatureFlags FeatureFlags = 26;
+    optional TFeatureFlags FeatureFlags = 26 [(NMarkers.AllowInDatabaseConfig) = true];
     optional TSqsConfig SqsConfig = 27;
     optional NKikimrPQ.TPQConfig PQConfig = 28;
     optional NKikimrTenantPool.TTenantPoolConfig TenantPoolConfig = 29;
@@ -2184,7 +2206,7 @@ message TAppConfig {
     optional NKikimrProto.TKeyConfig KeyConfig = 35;
     optional NKikimrProto.TKeyConfig PDiskKeyConfig = 51;
     optional NKikimrNodeBroker.TConfig NodeBrokerConfig = 36;
-    optional TTableServiceConfig TableServiceConfig = 37;
+    optional TTableServiceConfig TableServiceConfig = 37 [(NMarkers.AllowInDatabaseConfig) = true];
     optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 38; // dynamic configuration via cms
     optional TImmediateControlsConfig ImmediateControlsConfig = 39;
     optional TAllocatorConfig AllocatorConfig = 40;
@@ -2230,6 +2252,7 @@ message TAppConfig {
     optional TPrioritiesQueueConfig CompPrioritiesConfig = 85;
     optional TSelfManagementConfig SelfManagementConfig = 86;
     optional NKikimrProto.TDataIntegrityTrailsConfig DataIntegrityTrailsConfig = 87;
+    optional TDataErasureConfig DataErasureConfig = 88;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;
@@ -2239,8 +2262,8 @@ message TAppConfig {
 
     optional string ConfigStorePath = 104;
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
-    optional bool ConfigLoadedFromStore = 106;
     optional string StartupConfigYaml = 107;
+    optional string StartupStorageYaml = 108;
 }
 
 message TYdbVersion {

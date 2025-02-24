@@ -46,12 +46,15 @@ public:
             if (Settings.GetColumnsLimit() <= SeparatedCount) {
                 return EColumnType::Other;
             } else if (!SumSize) {
+                CurrentColumnsSize += columnSize;
                 return EColumnType::Separated;
             }
             AFL_VERIFY(SumSize >= CurrentColumnsSize)("sum", SumSize)("columns", CurrentColumnsSize);
             if (1.0 * CurrentColumnsSize / SumSize < 1 - Settings.GetOthersAllowedFraction()) {
+                CurrentColumnsSize += columnSize;
                 return EColumnType::Separated;
             } else if (Settings.GetSparsedDetectorKff() < 1.0 * columnValuesCount / RecordsCount) {
+                CurrentColumnsSize += columnSize;
                 return EColumnType::Separated;
             }
             return EColumnType::Other;

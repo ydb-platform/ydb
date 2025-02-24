@@ -39,8 +39,8 @@ public:
     
     class TListMetricsResult {
     public:
-        TListMetricsResult(const TString&);
-        TListMetricsResult(std::vector<TMetric>&&);
+        TListMetricsResult(const TString& errorMsg);
+        TListMetricsResult(std::vector<TMetric>&& result);
 
     public:
         bool Success;
@@ -50,8 +50,8 @@ public:
 
     class TGetDataResult {
     public:
-        TGetDataResult(const TString&);
-        TGetDataResult(std::vector<TTimeseries>&&);
+        TGetDataResult(const TString& errorMsg);
+        TGetDataResult(std::vector<TTimeseries>&& result);
 
     public:
         bool Success;

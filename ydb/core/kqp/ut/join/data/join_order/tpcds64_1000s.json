@@ -45,9 +45,17 @@
                                             "args":
                                               [
                                                 {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"test\/ds\/customer_address"
+                                                },
+                                                {
                                                   "op_name":"InnerJoin (Grace)",
                                                   "args":
                                                     [
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/customer_demographics"
+                                                      },
                                                       {
                                                         "op_name":"InnerJoin (MapJoin)",
                                                         "args":
@@ -69,9 +77,17 @@
                                                                           "args":
                                                                             [
                                                                               {
+                                                                                "op_name":"TableFullScan",
+                                                                                "table":"test\/ds\/customer_demographics"
+                                                                              },
+                                                                              {
                                                                                 "op_name":"InnerJoin (Grace)",
                                                                                 "args":
                                                                                   [
+                                                                                    {
+                                                                                      "op_name":"TableFullScan",
+                                                                                      "table":"test\/ds\/customer_address"
+                                                                                    },
                                                                                     {
                                                                                       "op_name":"InnerJoin (Grace)",
                                                                                       "args":
@@ -85,7 +101,7 @@
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"TableFullScan",
+                                                                                                  "op_name":"TableLookup",
                                                                                                   "table":"test\/ds\/store_sales"
                                                                                                 },
                                                                                                 {
@@ -95,16 +111,8 @@
                                                                                               ]
                                                                                           }
                                                                                         ]
-                                                                                    },
-                                                                                    {
-                                                                                      "op_name":"TableFullScan",
-                                                                                      "table":"test\/ds\/customer_address"
                                                                                     }
                                                                                   ]
-                                                                              },
-                                                                              {
-                                                                                "op_name":"TableFullScan",
-                                                                                "table":"test\/ds\/customer_demographics"
                                                                               }
                                                                             ]
                                                                         }
@@ -121,16 +129,8 @@
                                                               "table":"test\/ds\/store"
                                                             }
                                                           ]
-                                                      },
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"test\/ds\/customer_demographics"
                                                       }
                                                     ]
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/customer_address"
                                                 }
                                               ]
                                           },
@@ -229,9 +229,17 @@
                                             "args":
                                               [
                                                 {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"test\/ds\/customer_address"
+                                                },
+                                                {
                                                   "op_name":"InnerJoin (Grace)",
                                                   "args":
                                                     [
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/customer_demographics"
+                                                      },
                                                       {
                                                         "op_name":"InnerJoin (MapJoin)",
                                                         "args":
@@ -253,9 +261,17 @@
                                                                           "args":
                                                                             [
                                                                               {
+                                                                                "op_name":"TableFullScan",
+                                                                                "table":"test\/ds\/customer_demographics"
+                                                                              },
+                                                                              {
                                                                                 "op_name":"InnerJoin (Grace)",
                                                                                 "args":
                                                                                   [
+                                                                                    {
+                                                                                      "op_name":"TableFullScan",
+                                                                                      "table":"test\/ds\/customer_address"
+                                                                                    },
                                                                                     {
                                                                                       "op_name":"InnerJoin (Grace)",
                                                                                       "args":
@@ -269,7 +285,7 @@
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"TableFullScan",
+                                                                                                  "op_name":"TableLookup",
                                                                                                   "table":"test\/ds\/store_sales"
                                                                                                 },
                                                                                                 {
@@ -279,16 +295,8 @@
                                                                                               ]
                                                                                           }
                                                                                         ]
-                                                                                    },
-                                                                                    {
-                                                                                      "op_name":"TableFullScan",
-                                                                                      "table":"test\/ds\/customer_address"
                                                                                     }
                                                                                   ]
-                                                                              },
-                                                                              {
-                                                                                "op_name":"TableFullScan",
-                                                                                "table":"test\/ds\/customer_demographics"
                                                                               }
                                                                             ]
                                                                         }
@@ -305,16 +313,8 @@
                                                               "table":"test\/ds\/store"
                                                             }
                                                           ]
-                                                      },
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"test\/ds\/customer_demographics"
                                                       }
                                                     ]
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/customer_address"
                                                 }
                                               ]
                                           },

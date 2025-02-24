@@ -640,6 +640,9 @@ TExprBase DqRewriteRightJoinToLeft(const TExprBase node, TExprContext& ctx) {
         .LeftJoinKeyNames(dqJoin.LeftJoinKeyNames())
         .RightJoinKeyNames(dqJoin.RightJoinKeyNames())
         .JoinAlgo(dqJoin.JoinAlgo())
+        .ShuffleLeftSideBy(dqJoin.ShuffleLeftSideBy())
+        .ShuffleRightSideBy(dqJoin.ShuffleRightSideBy())
+        .JoinAlgoOptions(dqJoin.JoinAlgoOptions())
         .Flags(newFlags)
         .Done();
 }

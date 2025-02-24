@@ -321,20 +321,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             raise
 
     def __call_ydb_cli(self, cmd):
-        logger.debug(f"Config: {yaml.safe_dump(self.__configurator.yaml_config)}")
-        server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
-        binary_path = self.__configurator.get_ydb_cli_path()
-        full_command = [binary_path]
-        full_command += ["--endpoint", server]
-        full_command += cmd
-
+        endpoint = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
+        full_command = [self.__configurator.get_ydb_cli_path(), '--endpoint', endpoint, '-y'] + cmd
         logger.debug("Executing command = {}".format(full_command))
         try:
-            result = yatest.common.execute(full_command, stdin=subprocess.PIPE)
-            result.process.communicate(input=b"y\n")
-            return result
+            return yatest.common.execute(full_command)
         except yatest.common.ExecutionError as e:
-            logger.exception("YDB CLI command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
+            logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
                 cmd=" ".join(str(x) for x in full_command),
                 e=str(e),
                 out=e.execution_result.std_out,

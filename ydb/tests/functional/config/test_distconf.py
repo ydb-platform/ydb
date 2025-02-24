@@ -44,6 +44,7 @@ class DistConfKiKiMRTest(object):
                                              metadata_section=cls.metadata_section,
                                              separate_node_configs=cls.separate_node_configs,
                                              use_distconf=True,
+                                             extra_grpc_services=['config'],
                                              )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()

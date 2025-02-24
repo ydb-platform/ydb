@@ -248,6 +248,8 @@ class KikimrConfigGenerator(object):
         self.__bs_cache_file_path = bs_cache_file_path
 
         self.yaml_config = _load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
+        if self.use_distconf:
+            self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
 
         security_config_root = self.yaml_config["domains_config"]
 
@@ -733,7 +735,7 @@ class KikimrConfigGenerator(object):
             hosts.append(
                 {
                     "host": "localhost",
-                    "port": self.port_allocator.get_node_port_allocator(node_id).grpc_port,
+                    "port": self.port_allocator.get_node_port_allocator(node_id).ic_port,
                     "host_config_id": host_config_id,
                 }
             )

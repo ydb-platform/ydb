@@ -2232,7 +2232,7 @@ public:
         if (State == EState::COMMITTING) {
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::UNDETERMINED,
-                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
                 TStringBuilder() << "Failed to deviler message.",
                 {});
         } else {

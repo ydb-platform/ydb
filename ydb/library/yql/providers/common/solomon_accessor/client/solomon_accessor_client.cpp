@@ -257,7 +257,7 @@ private:
         return std::move(result);
     }
 
-    TGetDataResult ProcessGrpcResponse(NYdbGrpc::TGrpcStatus&& status, ReadResponse &&response) const
+    TGetDataResult ProcessGrpcResponse(NYdbGrpc::TGrpcStatus&& status, ReadResponse&& response) const
     {
         std::vector<TTimeseries> result;
 

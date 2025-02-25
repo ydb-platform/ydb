@@ -10,7 +10,7 @@ namespace NYql::NSo {
 
 class TMetric {
 public:
-    TMetric(const NJson::TJsonValue& value);
+    explicit TMetric(const NJson::TJsonValue& value);
 
 public:
     std::map<TString, TString> Labels;

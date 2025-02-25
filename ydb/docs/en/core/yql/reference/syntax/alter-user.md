@@ -8,21 +8,61 @@ Changes the user password.
 ALTER USER user_name [ WITH ] option [ ... ]
 ```
 
-* `user_name`: The name of the user.
+* `user_name` - The name of the user.
 * `option` — The command option:
-  * `PASSWORD 'password'` — changes the password to `password`.
-  * `PASSWORD NULL` — sets an empty password.
-  * `NOLOGIN` - disallows user login (user lockout).
-  * `LOGIN` - allows user login (user unlocking).
-  * `HASH 'hash'` -  creates a user with the a password whose hash is equal to `hash`; you can't uset it together with `PASSWORD`.
+  * `PASSWORD 'password'` — changes the password to `password`; you can't use it together with `HASH`.
+  * `PASSWORD NULL` — sets an empty password; you can't use it together with `HASH`.
+  * `NOLOGIN` - disallows user to log in; you can't use it together with `LOGIN`.
+  * `LOGIN` - allows user to log in; you can't use it together with `NOLOGIN`.
+  * `HASH 'hash'` -  sets the user's password, which will have a hash is equal to `hash`; you can't use it together with `PASSWORD`.
 
 {% include [!](../../../_includes/do-not-create-users-in-ldap.md) %}
 
-## Notes
+## PASSWORD
 
-### Hash
+Database administrator can change the user's password. Note, that password should be in quotation marks, except in case with `PASSWORD NULL`.
 
-The YDB stores the user's password in encrypted form. Therefore, in order to be able to restore the user during database backup, there is a `HASH` option that allows you to alter a user, after his creating, knowing only the hash in JSON format.
+{% note info %}
+
+User can change his password, even if he is not administrator.
+
+{% endnote %}
+
+There are examples:
+
+```yql
+ALTER USER user1 PASSWORD 'password';
+```
+
+```yql
+ALTER USER user1 PASSWORD NULL;
+```
+
+## NOLOGIN
+
+Database administrator can block user.
+
+There is example:
+
+```yql
+ALTER USER user1 NOLOGIN;
+```
+
+## LOGIN
+
+If the limit on the number of authorization attempts is exceeded, the user is temporarily blocked. To unlock user ahead of time, you can use the `LOGIN` option.
+
+Besides, user can be blocked by `NOLOGIN` option. In this case, database administrator can unblock user by `LOGIN` option.
+
+There is example:
+
+```yql
+ALTER USER user1 LOGIN;
+```
+
+## HASH
+
+The {{ ydb-short-name }} stores the user's password in hashed form. Therefore, in order to be able to restore the user with same password during database backup, there is a `HASH` option that allows you to alter a user, after his creating, knowing only the hash in JSON format.
 
 In the `HASH` option, the 'hash' parameter must get a JSON object with exactly three fields:
 
@@ -38,16 +78,4 @@ ALTER USER user1 HASH '{
     "salt": "U+tzBtgo06EBQCjlARA6Jg==",
     "type": "argon2id"
 }'
-```
-
-### Login
-
-Only for [local users](../../../concepts/glossary.md#access-user).
-
-If the limit on the number of authorization attempts is exceeded, the user is temporarily blocked. To unlock user ahead of time, you can use the `LOGIN` option.
-
-There is example:
-
-```yql
-ALTER USER user1 LOGIN
 ```

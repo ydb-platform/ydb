@@ -2677,11 +2677,11 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 2);
 
         // Write some more rows to trigger another split
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 6; ++i) {
             fnWriteRow(Sprintf("C-%d", i), bigValue);
         }
 
-        // Check that split actually happened
+        // Check that another split actually happened
         for (int retry = 0; retry < 30 && partitions.size() == 2; ++retry) {
             partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/T1");
             Sleep(TDuration::Seconds(1));

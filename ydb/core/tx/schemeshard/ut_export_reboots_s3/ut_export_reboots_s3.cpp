@@ -535,26 +535,26 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     const char* TestData::TableName = "Table";
 
     const TTypedScheme TestData::TableScheme = TTypedScheme {
+        EPathTypeTable,
         Sprintf(R"(
-            Name: "%s"
-            Columns { Name: "key" Type: "Utf8" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
-        )", TableName),
-        EPathTypeTable
+                    Name: "%s"
+                    Columns { Name: "key" Type: "Utf8" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )", TableName)
     };
 
     const TTypedScheme TestData::ChangefeedScheme = TTypedScheme {
+        EPathTypeCdcStream,
         Sprintf(R"(
-            TableName: "%s"
-            StreamDescription {
-                Name: "update_feed"
-                Mode: ECdcStreamModeUpdate
-                Format: ECdcStreamFormatJson
-                State: ECdcStreamStateReady
-            }
-        )", TableName),
-        EPathTypeCdcStream
+                    TableName: "%s"
+                    StreamDescription {
+                        Name: "update_feed"
+                        Mode: ECdcStreamModeUpdate
+                        Format: ECdcStreamFormatJson
+                        State: ECdcStreamStateReady
+                    }
+                )", TableName)
     };
 
     const TString TestData::RequestString = R"(

@@ -2432,30 +2432,36 @@ private:
     }
 };
 
-    template<size_t Digits, bool Exacly = true>
+    template<size_t Digits, bool Trailing = true, bool Leading = true>
     struct PrintNDigits;
 
-    template<bool Exacly>
-    struct PrintNDigits<0U, Exacly> {
+    template<bool Trailing, bool Leading>
+    struct PrintNDigits<0U, Trailing, Leading> {
         static constexpr ui32 Miltiplier = 1U;
 
         template <typename T>
         static constexpr size_t Do(T, char*) { return 0U; }
     };
 
-    template<size_t Digits, bool Exacly>
+    template<size_t Digits, bool Trailing, bool Leading>
     struct PrintNDigits {
-        using TNextPrint = PrintNDigits<Digits - 1U, Exacly>;
-        static constexpr ui32 Miltiplier = TNextPrint::Miltiplier * 10U;
+        using TNextNoLeadPrint = PrintNDigits<Digits - 1U, Trailing, false>;
+        using TNextCommonPrint = PrintNDigits<Digits - 1U, Trailing, true>;
+        static_assert(TNextNoLeadPrint::Miltiplier == TNextCommonPrint::Miltiplier);
+        static constexpr ui32 Miltiplier = TNextCommonPrint::Miltiplier * 10U;
 
         template <typename T>
         static constexpr size_t Do(T in, char* out) {
             in %= Miltiplier;
-            if (Exacly || in) {
-                *out = "0123456789"[in / TNextPrint::Miltiplier];
-                return 1U + TNextPrint::Do(in, ++out);
+            if (!Trailing && in == 0) {
+                return 0U;
             }
-            return 0U;
+            const auto digit = in / TNextCommonPrint::Miltiplier;
+            if (!Leading && digit == 0) {
+                return TNextNoLeadPrint::Do(in, out);
+            }
+            *out = "0123456789"[digit];
+            return 1U + TNextCommonPrint::Do(in, ++out);
         }
     };
 
@@ -2482,26 +2488,10 @@ private:
                 return false;
             }
 
-            auto resourceType = builder.Resource(TMResourceName);
-
-            auto stringType = builder.SimpleType<char*>();
-
-            auto boolType = builder.SimpleType<bool>();
-            auto optionalBoolType = builder.Optional()->Item(boolType).Build();
-
-            auto args = builder.Args();
-            args->Add(stringType);
-            args->Add(optionalBoolType).Name("AlwaysWriteFractionalSeconds");
-            args->Done();
-            builder.OptionalArgs(1);
+            builder.OptionalArgs(1).Args()->Add<char*>()
+                .Add<TOptional<bool>>().Name("AlwaysWriteFractionalSeconds");
             builder.Returns(
-                builder.Callable(1)
-                    ->Returns(stringType)
-                    .Arg(resourceType)
-                        .Flags(ICallablePayload::TArgumentFlags::AutoMap)
-                .Build()
-            );
-
+                builder.SimpleSignatureType<char*(TAutoMap<TResource<TM64ResourceName>>)>());
             if (!typesOnly) {
                 builder.Implementation(new TFormat(builder.GetSourcePosition()));
             }
@@ -2600,17 +2590,24 @@ private:
                         break;
                     }
                     case 'Y': {
-                        static constexpr size_t size = 4;
+                        static constexpr size_t size = 6;
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                            return PrintNDigits<size>::Do(GetYear(value), out);
+                            i64 year = GetYear<TM64ResourceName>(value);
+                            Y_DEBUG_ABORT_UNLESS(year != 0);
+                            i64 yearRepr = std::abs(year);
+                            if (year < 0) {
+                                *out++ = '-';
+                            }
+                            return (year < 0 ? 1 : 0) + PrintNDigits<size, true, false>::Do(yearRepr, out);
                         });
-                        ReservedSize_ += size;
+                        // Reserve one more slot for possible '-' char.
+                        ReservedSize_ += size + 1;
                         break;
                     }
                     case 'm': {
                         static constexpr size_t size = 2;
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                            return PrintNDigits<size>::Do(GetMonth(value), out);
+                            return PrintNDigits<size>::Do(GetMonth<TM64ResourceName>(value), out);
                         });
                         ReservedSize_ += size;
                         break;
@@ -2618,7 +2615,7 @@ private:
                     case 'd': {
                         static constexpr size_t size = 2;
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                            return PrintNDigits<size>::Do(GetDay(value), out);
+                            return PrintNDigits<size>::Do(GetDay<TM64ResourceName>(value), out);
                         });
                         ReservedSize_ += size;
                         break;
@@ -2626,7 +2623,7 @@ private:
                     case 'H': {
                         static constexpr size_t size = 2;
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                            return PrintNDigits<size>::Do(GetHour(value), out);
+                            return PrintNDigits<size>::Do(GetHour<TM64ResourceName>(value), out);
                         });
                         ReservedSize_ += size;
                         break;
@@ -2634,7 +2631,7 @@ private:
                     case 'M': {
                         static constexpr size_t size = 2;
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                            return PrintNDigits<size>::Do(GetMinute(value), out);
+                            return PrintNDigits<size>::Do(GetMinute<TM64ResourceName>(value), out);
                         });
                         ReservedSize_ += size;
                         break;
@@ -2642,8 +2639,8 @@ private:
                     case 'S':
                         Printers_.emplace_back([alwaysWriteFractionalSeconds](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                             constexpr size_t size = 2;
-                            if (const auto microsecond = GetMicrosecond(value); microsecond || alwaysWriteFractionalSeconds) {
-                                out += PrintNDigits<size>::Do(GetSecond(value), out);
+                            if (const auto microsecond = GetMicrosecond<TM64ResourceName>(value); microsecond || alwaysWriteFractionalSeconds) {
+                                out += PrintNDigits<size>::Do(GetSecond<TM64ResourceName>(value), out);
                                 *out++ = '.';
                                 constexpr size_t msize = 6;
                                 auto addSz = alwaysWriteFractionalSeconds ?
@@ -2651,7 +2648,7 @@ private:
                                     PrintNDigits<msize, false>::Do(microsecond, out);
                                 return size + 1U + addSz;
                             }
-                            return PrintNDigits<size>::Do(GetSecond(value), out);
+                            return PrintNDigits<size>::Do(GetSecond<TM64ResourceName>(value), out);
                         });
                         ReservedSize_ += 9;
                         break;
@@ -2659,14 +2656,19 @@ private:
                     case 'z': {
                         static constexpr size_t size = 5;
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder& builder) {
-                            auto timezoneId = GetTimezoneId(value);
+                            auto timezoneId = GetTimezoneId<TM64ResourceName>(value);
                             if (TTMStorage::IsUniversal(timezoneId)) {
                                 std::memcpy(out, "+0000", size);
                                 return size;
                             }
                             i32 shift;
-                            if (!builder.GetTimezoneShift(GetYear(value), GetMonth(value), GetDay(value),
-                                GetHour(value), GetMinute(value), GetSecond(value), timezoneId, shift))
+                            if (!builder.GetTimezoneShift(GetYear<TM64ResourceName>(value),
+                                                          GetMonth<TM64ResourceName>(value),
+                                                          GetDay<TM64ResourceName>(value),
+                                                          GetHour<TM64ResourceName>(value),
+                                                          GetMinute<TM64ResourceName>(value),
+                                                          GetSecond<TM64ResourceName>(value),
+                                                          timezoneId, shift))
                             {
                                 std::memcpy(out, "+0000", size);
                                 return size;
@@ -2683,7 +2685,7 @@ private:
                     }
                     case 'Z':
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                            const auto timezoneId = GetTimezoneId(value);
+                            const auto timezoneId = GetTimezoneId<TM64ResourceName>(value);
                             const auto tzName = NUdf::GetTimezones()[timezoneId];
                             std::memcpy(out, tzName.data(), std::min(tzName.size(), MAX_TIMEZONE_NAME_LEN));
                             return tzName.size();
@@ -2707,7 +2709,7 @@ private:
                                 "Nov",
                                 "Dec"
                             };
-                            auto month = GetMonth(value);
+                            auto month = GetMonth<TM64ResourceName>(value);
                             Y_ENSURE(month > 0 && month <= sizeof(mp) / sizeof(mp[0]), "Invalid month value");
                             std::memcpy(out, mp[month - 1].data(), size);
                             return size;
@@ -2731,7 +2733,7 @@ private:
                                 "November",
                                 "December"
                             };
-                            auto month = GetMonth(value);
+                            auto month = GetMonth<TM64ResourceName>(value);
                             Y_ENSURE(month > 0 && month <= sizeof(mp) / sizeof(mp[0]), "Invalid month value");
                             const std::string_view monthFullName = mp[month - 1];
                             std::memcpy(out, monthFullName.data(), monthFullName.size());

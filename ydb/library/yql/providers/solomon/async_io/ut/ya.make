@@ -11,8 +11,8 @@ PEERDIR(
     library/cpp/http/simple
     library/cpp/retry
     ydb/core/testlib/basics
-    yql/essentials/minikql/computation/llvm14
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/computation/llvm16
+    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql
     yql/essentials/sql/pg_dummy

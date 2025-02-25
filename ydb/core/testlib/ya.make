@@ -84,11 +84,11 @@ PEERDIR(
     ydb/library/mkql_proto/protos
     ydb/library/persqueue/topic_parser
     ydb/library/security
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     ydb/library/yql/providers/s3/actors_factory
     yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm14
-    yt/yql/providers/yt/comp_nodes/dq/llvm14
+    yt/yql/providers/yt/comp_nodes/llvm16
+    yt/yql/providers/yt/comp_nodes/dq/llvm16
     yql/essentials/public/udf/service/exception_policy
     ydb/public/api/protos
     ydb/public/lib/base

@@ -12,7 +12,7 @@ IF (NOT OS_WINDOWS)
         contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
         ydb/core/protos
         ydb/core/testlib/basics/default
-        yql/essentials/minikql/comp_nodes/llvm14
+        yql/essentials/minikql/comp_nodes/llvm16
         ydb/core/wrappers/ut_helpers
     )
     SRCS(

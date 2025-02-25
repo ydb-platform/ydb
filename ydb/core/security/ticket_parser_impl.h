@@ -1784,12 +1784,16 @@ protected:
     void SetError(const TString& key, TTokenRecord& record, const TEvTicketParser::TError& error) {
         record.Error = error;
         TInstant now = TlsActivationContext->Now();
+        TStringBuilder errorLogMessage;
+        if (error.HasLogMessage()) {
+            errorLogMessage << " (" << error.LogMessage << ")";
+        }
         if (record.Error.Retryable) {
             record.ExpireTime = GetExpireTime(record, now);
             record.SetErrorRefreshTime(this, now);
             CounterTicketsErrorsRetryable->Inc();
             BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
-                        << record.PeerName << ") has now retryable error message '" << error.Message << "'");
+                        << record.PeerName << ") has now retryable error message '" << error.Message << errorLogMessage << "'");
             if (record.RefreshRetryableErrorImmediately) {
                 record.RefreshRetryableErrorImmediately = false;
                 GetDerived()->CanRefreshTicket(key, record);
@@ -1802,7 +1806,7 @@ protected:
             record.SetOkRefreshTime(this, now);
             CounterTicketsErrorsPermanent->Inc();
             BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
-                        << record.PeerName << ") has now permanent error message '" << error.Message << "'");
+                        << record.PeerName << ") has now permanent error message '" << error.Message << errorLogMessage << "'");
         }
         CounterTicketsErrors->Inc();
         record.IsLowAccessServiceRequestPriority = true;

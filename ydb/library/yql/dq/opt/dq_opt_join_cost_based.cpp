@@ -295,13 +295,13 @@ public:
         auto relsCount = joinTree->Labels().size();
 
         if (relsCount <= 14) {
-            return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, hints);
+            return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints);
         } else if (relsCount <= 64) { // The algorithm is more efficient.
-            return JoinSearchImpl<TNodeSet64, TDPHypSolverClassic<TNodeSet64>, true>(joinTree, hints);
+            return JoinSearchImpl<TNodeSet64, TDPHypSolverClassic<TNodeSet64>>(joinTree, true, hints);
         } else if (64 < relsCount && relsCount <= 128) {
-            return JoinSearchImpl<TNodeSet128, TDPHypSolverClassic<TNodeSet128>, true>(joinTree, hints);
+            return JoinSearchImpl<TNodeSet128, TDPHypSolverClassic<TNodeSet128>>(joinTree, true, hints);
         } else if (128 < relsCount && relsCount <= 192) {
-            return JoinSearchImpl<TNodeSet192, TDPHypSolverClassic<TNodeSet192>, true>(joinTree, hints);
+            return JoinSearchImpl<TNodeSet192, TDPHypSolverClassic<TNodeSet192>>(joinTree, true, hints);
         }
 
         ComputeStatistics(joinTree, this->Pctx);
@@ -315,11 +315,11 @@ private:
 
     template <
         typename TNodeSet, 
-        typename TDPHypImpl, 
-        bool PostEnumerationShuffleElimination = false /* we eliminate shuffles during enum algo only in case of TDPHypSolverShuffleElimination */
+        typename TDPHypImpl
     >
     std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,
+        bool postEnumerationShuffleElimination /* we eliminate shuffles during enum algo only in case of TDPHypSolverShuffleElimination */,
         const TOptimizerHints& hints = {}
     ) {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
@@ -342,7 +342,7 @@ private:
         }
 
         auto bestJoinOrder = solver.Solve(hints);
-        if constexpr (PostEnumerationShuffleElimination) {
+        if (postEnumerationShuffleElimination) {
             EliminateShuffles(hypergraph, bestJoinOrder, orderingsFSM);
         }
         auto resTree = ConvertFromInternal(bestJoinOrder, fdStorage);

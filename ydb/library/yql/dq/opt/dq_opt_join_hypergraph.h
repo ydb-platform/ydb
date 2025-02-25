@@ -13,6 +13,7 @@
 #include <library/cpp/iterator/zip.h>
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 #include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include "dq_opt_conflict_rules_collector.h"
 

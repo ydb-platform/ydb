@@ -19,6 +19,10 @@ namespace NYql::NDq {
  * This class is templated by std::bitset with the largest number of joins we can process
  * or std::bitset<64>, which has a more efficient implementation of enumerating subsets of set.
  * 
+ * TDPHypSolverBase class contains core enumeration logic. It is templated with TDerived parameter.
+ * TDerived is a class which is derived from TDPHypSolverBase. This class contains DPTable and 
+ * saving the lowest cost plan logic (EmitCsgCmp method).
+ * 
  * Also, it has a bool ProcessCycles template parameter, which makes algorithm consider all edges
  * between csg-cmp. It makes dphyp slower, but without it we can miss a condition in case of cycles
  */
@@ -701,7 +705,7 @@ template <typename TNodeSet> TDPHypSolverShuffleElimination<TNodeSet>::TBestJoin
             }
         }
 
-        // todo with edge.IsCommutative ticket #12291
+        
         if (edge.IsCommutative) {
             if (this->Pctx_.IsJoinApplicable(right, left, edge.RightJoinKeys, edge.LeftJoinKeys, joinAlgo, edge.JoinKind)){
                 auto stats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats,  edge.RightJoinKeys, edge.LeftJoinKeys, joinAlgo, edge.JoinKind, maybeCardHint, shuffleRightSide, shuffleLeftSide);
@@ -794,7 +798,6 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
     std::array<std::shared_ptr<IBaseOptimizerNode>, 2> trees = { nullptr, nullptr };
     std::size_t treeCount = 0;
 
-    // todo with edge.IsCommutative ticket #12291
     if ((edge.IsCommutative && this->Pctx_.IsJoinApplicable(right, left, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
         auto stats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
         auto tree = MakeJoinInternal(std::move(stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->LogicalOrderings);
@@ -846,7 +849,7 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
         trees[treeCount++] = std::move(tree);
     }
 
-    // todo with edge.IsCommutative ticket #12291
+    
     if ((edge.IsCommutative && this->Pctx_.IsJoinApplicable(right, left, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
         auto stats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
         auto tree = MakeJoinInternal(std::move(stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->LogicalOrderings);
@@ -862,24 +865,25 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
     EMinCostTree minCostTree;
     double minCost = std::numeric_limits<double>::max();
 
-    TOptimizerStatistics shuffleLeftSideAndMapJoinStats;
-    shuffleLeftSideAndMapJoinStats.Cost = std::numeric_limits<double>::max();
-    if (this->Pctx_.IsJoinApplicable(left, right, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind)) {
-        shuffleLeftSideAndMapJoinStats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, true, false);
-        minCost = shuffleLeftSideAndMapJoinStats.Cost;
-        minCostTree = EShuffleBothSides;
-    }
+    // V Now we don't support shuffling sides not of the GraceJoin 
 
-    TOptimizerStatistics shuffleRightSideAndReversedMapJoinStats;
-    shuffleRightSideAndReversedMapJoinStats.Cost = std::numeric_limits<double>::max();
-    // todo with edge.IsCommutative ticket #12291
-    if ((edge.IsCommutative && this->Pctx_.IsJoinApplicable(left, right, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
-        shuffleRightSideAndReversedMapJoinStats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, true);
-        if (shuffleRightSideAndReversedMapJoinStats.Cost < minCost) {
-            minCost = shuffleRightSideAndReversedMapJoinStats.Cost;
-            minCostTree = EShuffleRightSideAndReversedMapJoin;
-        }
-    }
+    // TOptimizerStatistics shuffleLeftSideAndMapJoinStats;
+    // shuffleLeftSideAndMapJoinStats.Cost = std::numeric_limits<double>::max();
+    // if (this->Pctx_.IsJoinApplicable(left, right, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind)) {
+    //     shuffleLeftSideAndMapJoinStats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, true, false);
+    //     minCost = shuffleLeftSideAndMapJoinStats.Cost;
+    //     minCostTree = EShuffleBothSides;
+    // }
+
+    // TOptimizerStatistics shuffleRightSideAndReversedMapJoinStats;
+    // shuffleRightSideAndReversedMapJoinStats.Cost = std::numeric_limits<double>::max();
+    // if ((edge.IsCommutative && this->Pctx_.IsJoinApplicable(left, right, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
+    //     shuffleRightSideAndReversedMapJoinStats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, true);
+    //     if (shuffleRightSideAndReversedMapJoinStats.Cost < minCost) {
+    //         minCost = shuffleRightSideAndReversedMapJoinStats.Cost;
+    //         minCostTree = EShuffleRightSideAndReversedMapJoin;
+    //     }
+    // }
 
     TBestJoin shuffleBothSidesBestJoin = PickBestJoin(left, right, edge, true, true, maybeCardHint, maybeAlgoHint);
     if (shuffleBothSidesBestJoin.Stats.Cost < minCost) {
@@ -888,22 +892,22 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
     }
 
     std::shared_ptr<TJoinOptimizerNodeInternal> tree;
-    switch (minCostTree) {
-        case EMinCostTree::EShuffleLeftSideAndMapJoin: {
-            tree = MakeJoinInternal(std::move(shuffleLeftSideAndMapJoinStats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, this->OrderingsFSM.CreateState());
-            tree->LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
-            tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
-            tree->ShuffleLeftSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
-            break;
-        }
-        case EMinCostTree::EShuffleRightSideAndReversedMapJoin: { // todo with edge.IsCommutative ticket #12291
-            tree = MakeJoinInternal(std::move(shuffleRightSideAndReversedMapJoinStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, this->OrderingsFSM.CreateState());
-            tree->LogicalOrderings.SetOrdering(edge.RightJoinKeysShuffleOrderingIdx);
-            tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
-            tree->ShuffleLeftSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
-            break;
-        }
-        case EMinCostTree::EShuffleBothSides: {
+    // switch (minCostTree) {
+        // case EMinCostTree::EShuffleLeftSideAndMapJoin: {
+        //     tree = MakeJoinInternal(std::move(shuffleLeftSideAndMapJoinStats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, this->OrderingsFSM.CreateState());
+        //     tree->LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
+        //     tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
+        //     tree->ShuffleLeftSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
+        //     break;
+        // }
+        // case EMinCostTree::EShuffleRightSideAndReversedMapJoin: { 
+        //     tree = MakeJoinInternal(std::move(shuffleRightSideAndReversedMapJoinStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, this->OrderingsFSM.CreateState());
+        //     tree->LogicalOrderings.SetOrdering(edge.RightJoinKeysShuffleOrderingIdx);
+        //     tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
+        //     tree->ShuffleLeftSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
+        //     break;
+        // }
+        // case EMinCostTree::EShuffleBothSides: {
             if (!shuffleBothSidesBestJoin.IsReversed) {
                 tree = MakeJoinInternal(std::move(shuffleBothSidesBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleBothSidesBestJoin.Algo, edge.LeftAny, edge.RightAny, this->OrderingsFSM.CreateState());
                 tree->LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
@@ -917,9 +921,9 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
                 tree->ShuffleLeftSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
                 tree->ShuffleRightSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
             }
-            break;
-        }
-    }
+            // break;
+        // }
+    // }
 
     trees[treeCount++] = std::move(tree);
     return trees;

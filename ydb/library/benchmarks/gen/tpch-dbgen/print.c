@@ -75,7 +75,7 @@ print_prep(int table, int update)
 				}
 			else
 				{
-				sprintf(upath, "%s%c%s.u%d",
+				snprintf(upath, 128, "%s%c%s.u%d",
 				env_config(PATH_TAG, PATH_DFLT),
 				PATH_SEP, tdefs[table].name, update);
 				}

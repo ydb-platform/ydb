@@ -2563,17 +2563,23 @@ Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo, TFixture)
     size_t successCount = 0;
 
     for (size_t i = 0; i < TXS_COUNT; ++i) {
-        futures[i].Wait();
-        const auto& result = futures[i].GetValueSync();
-        switch (result.GetStatus()) {
-        case EStatus::SUCCESS:
-            ++successCount;
-            break;
-        case EStatus::ABORTED:
-            break;
-        default:
-            UNIT_FAIL("unexpected status: " << static_cast<const NYdb::TStatus&>(result));
-            break;
+        for (bool stop = false; !stop; ) {
+            futures[i].Wait();
+            const auto& result = futures[i].GetValueSync();
+            switch (result.GetStatus()) {
+            case EStatus::SUCCESS:
+                ++successCount;
+                [[fallthrough]];
+            case EStatus::ABORTED:
+                stop = true;
+                break;
+            case EStatus::SESSION_BUSY:
+                futures[i] = transactions[i].Commit();
+                break;
+            default:
+                UNIT_FAIL("unexpected status: " << static_cast<const NYdb::TStatus&>(result));
+                break;
+            }
         }
     }
 

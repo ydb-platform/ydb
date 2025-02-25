@@ -134,7 +134,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             command.append("--suppress-version-check")
 
         if self.__configurator.use_config_store:
-            command.append("--config-store=%s" % self.__config_path)
+            command.append("--config-dir=%s" % self.__config_path)
         else:
             command.append("--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"))
 

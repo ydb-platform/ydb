@@ -2260,7 +2260,7 @@ message TAppConfig {
     optional TConfigVersion Version = 102;
     repeated TLabel Labels = 103;
 
-    optional string ConfigStorePath = 104;
+    optional string ConfigDirPath = 104;
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
     optional string StartupConfigYaml = 107;
     optional string StartupStorageYaml = 108;

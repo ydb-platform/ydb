@@ -102,7 +102,7 @@ void TNodeWarden::SendRegisterNode() {
         }
     }
 
-    if (!Cfg->ConfigStorePath.empty() && YamlConfig) {
+    if (!Cfg->ConfigDirPath.empty() && YamlConfig) {
         ev->Record.SetMainConfigVersion(YamlConfig->GetMainConfigVersion());
         ev->Record.SetMainConfigHash(NYaml::GetConfigHash(YamlConfig->GetMainConfig()));
         if (YamlConfig->HasStorageConfigVersion()) {

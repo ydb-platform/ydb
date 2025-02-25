@@ -65,7 +65,7 @@ class TestGenerateDynamicConfig(AbstractKiKiMRTest):
         )
 
 
-class TestGenerateDynamicConfigFromConfigStore(AbstractKiKiMRTest):
+class TestGenerateDynamicConfigFromConfigDir(AbstractKiKiMRTest):
     erasure = Erasure.BLOCK_4_2
 
     @classmethod

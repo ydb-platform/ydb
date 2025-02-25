@@ -70,7 +70,12 @@ private:
 };
 
 TConclusionStatus TFilterProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const {
-    const std::vector<std::shared_ptr<IChunkedArray>> inputColumns = resources->ExtractAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
+    std::vector<std::shared_ptr<IChunkedArray>> inputColumns;
+    if (ReuseColumns) {
+        inputColumns = resources->GetAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
+    } else {
+        inputColumns = resources->ExtractAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
+    }
     TFilterVisitor filterVisitor(inputColumns.front()->GetRecordsCount());
     for (auto& arr : inputColumns) {
         AFL_VERIFY(arr->GetRecordsCount() == inputColumns.front()->GetRecordsCount())("arr", arr->GetRecordsCount())(

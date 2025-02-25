@@ -246,7 +246,7 @@ void TAccessorsCollection::RemainOnly(const std::vector<ui32>& columns, const bo
     }
     AFL_VERIFY(columnIds.empty());
     for (auto&& i : toRemove) {
-        Remove(std::vector<ui32>({ i }));
+        Remove(i);
     }
     if (useAsSequence) {
         ColumnIdsSequence = columns;

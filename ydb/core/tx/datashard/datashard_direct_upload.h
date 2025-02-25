@@ -16,7 +16,7 @@ public:
 
     bool Execute(TDataShard* self, TTransactionContext& txc,
         const TRowVersion& readVersion, const TRowVersion& writeVersion,
-        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies) override;
+        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies, const NActors::TActorContext& ctx) override;
     TDirectTxResult GetResult(TDataShard* self) override;
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const override;
 };

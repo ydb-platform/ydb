@@ -8,12 +8,12 @@ TDataShard::TTxS3UploadRows::TTxS3UploadRows(TDataShard* ds, TEvDataShard::TEvS3
 {
 }
 
-bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActorContext&) {
+bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
     
     // NOTE: will not throw TNeedGlobalTxId since we set breakLocks to false
     if (!TCommonUploadOps::Execute(Self, txc, readVersion, writeVersion,
-            /* globalTxId */ 0, /* volatile read dependencies */ nullptr))
+            /* globalTxId */ 0, /* volatile read dependencies */ nullptr, ctx))
     {
         return false;
     }

@@ -65,17 +65,17 @@ class TDirectTxErase : public IDirectTx {
     static EStatus CheckedExecute(
         TDataShard* self, const TExecuteParams& params,
         const NKikimrTxDataShard::TEvEraseRowsRequest& request,
-        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error);
+        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error, const NActors::TActorContext& ctx);
 
 public:
     explicit TDirectTxErase(TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
 
     static bool CheckRequest(TDataShard* self, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
-        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error);
+        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error, const NActors::TActorContext& ctx);
 
     bool Execute(TDataShard* self, TTransactionContext& txc,
         const TRowVersion& readVersion, const TRowVersion& writeVersion,
-        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies) override;
+        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies, const NActors::TActorContext& ctx) override;
     TDirectTxResult GetResult(TDataShard* self) override;
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const override;
 };

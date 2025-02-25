@@ -1,5 +1,6 @@
 #include "impl.h"
 #include "console_interaction.h"
+#include "group_geometry_info.h"
 
 #include <ydb/library/yaml_config/yaml_config.h>
 
@@ -518,9 +519,23 @@ public:
             }
         }
 
+        THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+
         // calculate group status for all groups
         for (auto& [id, group] : Self->GroupMap) {
             group->CalculateGroupStatus();
+
+            group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
+                const auto [it, inserted] = cache.try_emplace(group->StoragePoolId);
+                if (inserted) {
+                    if (const auto jt = Self->StoragePools.find(it->first); jt != Self->StoragePools.end()) {
+                        it->second = TGroupGeometryInfo(group->Topology->GType, jt->second.GetGroupGeometry());
+                    } else {
+                        Y_DEBUG_ABORT();
+                    }
+                }
+                return it->second;
+            });
         }
 
         return true;

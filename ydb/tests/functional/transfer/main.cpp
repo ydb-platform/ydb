@@ -118,6 +118,7 @@ struct TConfig {
     const char* Lambda;
     const TVector<TMessage> Messages;
     TVector<std::pair<TString, std::shared_ptr<IChecker>>> Expectations;
+    std::optional<TString> AlterLambda = std::nullopt;
 };
 
 
@@ -169,6 +170,20 @@ struct MainTestCase {
                 );
             )", Config.Lambda, TransferName.data(), TopicName.data(), TableName.data(), connectionString.data()), TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        {
+            if (Config.AlterLambda) {
+                auto res = session.ExecuteQuery(Sprintf(R"(
+                    %s;
+    
+                    ALTER TRANSFER `%s`
+                    SET USING $l;
+                )", Config.Lambda, TransferName.data()), TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+                Sleep(TDuration::Seconds(1));
+            }
         }
 
         {
@@ -664,6 +679,51 @@ Y_UNIT_TEST_SUITE(Transfer)
             }
         }).Run();
     }
+
+    Y_UNIT_TEST(AlterLambda)
+    {
+        MainTestCase({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+    
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data || " old lambda" AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+    
+            .Messages = {{"Message-1"}},
+    
+            .Expectations = {
+                _C("Message", TString("Message-1 new lambda")),
+            },
+
+            .AlterLambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data || " new lambda" AS Utf8)
+                        |>
+                    ];
+                };
+            )"
+    
+        }).Run();
+    }
+
 
 }
 

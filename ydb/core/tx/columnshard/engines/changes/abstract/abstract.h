@@ -299,7 +299,7 @@ public:
         ActivityFlag = flag;
     }
 
-    std::shared_ptr<TDataAccessorsRequest> ExtractDataAccessorsRequest() const {
+    std::shared_ptr<TDataAccessorsRequest> ExtractDataAccessorsRequest() {
         AFL_VERIFY(!!PortionsToAccess);
         return std::move(PortionsToAccess);
     }

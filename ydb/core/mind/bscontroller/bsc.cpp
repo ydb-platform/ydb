@@ -3,6 +3,8 @@
 #include "self_heal.h"
 #include "sys_view.h"
 #include "console_interaction.h"
+#include "group_geometry_info.h"
+#include "group_layout_checker.h"
 
 #include <library/cpp/streams/zstd/zstd.h>
 
@@ -79,6 +81,25 @@ void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
             }
         }
         Status.MakeWorst(DeriveStatus(Topology.get(), failed), DeriveStatus(Topology.get(), failed | failedByPDisk));
+    }
+}
+
+void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageController *self,
+        TBlobStorageGroupInfo::TTopology *topology, const std::function<TGroupGeometryInfo()>& getGeom) {
+    LayoutCorrect = true;
+    if (VDisksInGroup) {
+        NLayoutChecker::TGroupLayout layout(*topology);
+        NLayoutChecker::TDomainMapper mapper;
+        auto geom = getGeom();
+
+        for (size_t index = 0; index < VDisksInGroup.size(); ++index) {
+            const TVSlotInfo *slot = VDisksInGroup[index];
+            TPDiskId pdiskId = slot->VSlotId.ComprisingPDiskId();
+            const auto& location = self->HostRecords->GetLocation(pdiskId.NodeId);
+            layout.AddDisk({mapper, location, pdiskId, geom}, index);
+        }
+
+        LayoutCorrect = layout.IsCorrect();
     }
 }
 

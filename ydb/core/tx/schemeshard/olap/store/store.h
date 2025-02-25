@@ -17,6 +17,8 @@ private:
     NKikimrSchemeOp::TColumnStoreDescription Description;
     ui64 AlterVersion = 0;
 public:
+    static const inline TString DefaultPresetName = "default";
+
     using TPtr = std::shared_ptr<TOlapStoreInfo>;
 
     class TLayoutInfo {
@@ -99,6 +101,41 @@ public:
             shardInfoProto->SetLocalId(idx.GetLocalId().GetValue());
         }
     }
+
+    const TOlapStoreSchemaPreset* GetPresetOptional(const ui32 presetId) const {
+        auto it = SchemaPresets.find(presetId);
+        if (it == SchemaPresets.end()) {
+            return nullptr;
+        }
+        return &it->second;
+    }
+
+    const TOlapStoreSchemaPreset& GetPresetVerified(const ui32 presetId) const {
+        auto* result = GetPresetOptional(presetId);
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+    const TOlapStoreSchemaPreset* GetPresetOptional(const TString& presetName) const {
+        auto it = SchemaPresetByName.find(presetName);
+        if (it == SchemaPresetByName.end()) {
+            return nullptr;
+        }
+        return &GetPresetVerified(it->second);
+    }
+
+    const TOlapStoreSchemaPreset* GetPresetOptional(const NKikimrSchemeOp::TColumnTableDescription& description) const {
+        if (description.HasSchemaPresetId()) {
+            return GetPresetOptional(description.GetSchemaPresetId());
+        } else {
+            if (description.HasSchemaPresetName()) {
+                return GetPresetOptional(description.GetSchemaPresetName());
+            } else {
+                return GetPresetOptional(DefaultPresetName);
+            }
+        }
+    }
+
     void SerializeDescription(NKikimrSchemeOp::TColumnStoreDescription& descriptionProto) const;
     void ParseFromLocalDB(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto);
     bool ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto, IErrorCollector& errors);

@@ -97,6 +97,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
     , SysLocks(this) {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
+    SpaceWatcher = new TSpaceWatcher(this);
+    SpaceWatcherId = TActorContext::AsActorContext().Register(SpaceWatcher);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -1158,6 +1160,7 @@ void TColumnShard::Die(const TActorContext& ctx) {
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
+    Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
     IActor::Die(ctx);
 }
 

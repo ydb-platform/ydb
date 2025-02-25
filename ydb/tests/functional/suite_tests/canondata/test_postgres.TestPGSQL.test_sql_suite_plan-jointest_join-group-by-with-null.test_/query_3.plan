@@ -62,7 +62,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Aggregate-LeftJoin (MapJoin)-Filter",
+                                                        "Node Type": "Aggregate-LeftJoin (MapJoin)",
                                                         "Operators": [
                                                             {
                                                                 "Aggregation": "{COUNT(item.t2.q1)}",
@@ -82,19 +82,10 @@
                                                                         "ExternalPlanNodeId": 15
                                                                     },
                                                                     {
-                                                                        "InternalOperatorId": 2
-                                                                    }
-                                                                ],
-                                                                "Name": "LeftJoin (MapJoin)"
-                                                            },
-                                                            {
-                                                                "Inputs": [
-                                                                    {
                                                                         "ExternalPlanNodeId": 13
                                                                     }
                                                                 ],
-                                                                "Name": "Filter",
-                                                                "Predicate": "Exist(item.q1)"
+                                                                "Name": "LeftJoin (MapJoin)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 16,

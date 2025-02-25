@@ -28,7 +28,7 @@ struct TFqSetupSettings : public NKikimrRun::TServerSettings {
     EVerbose VerboseLevel = EVerbose::Info;
 
     TString YqlToken;
-    NYql::IPqGateway::TPtr PqGateway;
+    NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     NFq::NConfig::TConfig FqConfig;
     NKikimrConfig::TLogConfig LogConfig;

@@ -119,6 +119,9 @@ TTargetTable::TTargetTable(TReplication* replication, ui64 id, const IConfig::TP
 {
 }
 
+void TTargetTable::UpdateConfig(const NKikimrReplication::TReplicationConfig&) {
+}
+
 TString TTargetTable::BuildStreamPath() const {
     return CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName()));
 }
@@ -132,6 +135,9 @@ TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const I
 {
 }
 
+void TTargetIndexTable::UpdateConfig(const NKikimrReplication::TReplicationConfig&) {
+}
+
 TString TTargetIndexTable::BuildStreamPath() const {
     return CanonizePath(ChildPath(SplitPath(GetSrcPath()), {"indexImplTable", GetStreamName()}));
 }
@@ -139,6 +145,11 @@ TString TTargetIndexTable::BuildStreamPath() const {
 TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConfig::TPtr& config)
     : TTargetTableBase(replication, ETargetKind::Transfer, id, config)
 {
+}
+
+void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig& cfg) {
+    auto& t = cfg.GetTransferSpecific().GetTargets(0);
+    Config = std::make_shared<TTargetTransfer::TTransferConfig>(GetConfig()->GetSrcPath(), GetConfig()->GetDstPath(), t.GetTransformLambda());
 }
 
 TString TTargetTransfer::BuildStreamPath() const {

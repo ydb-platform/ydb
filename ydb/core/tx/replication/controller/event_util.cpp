@@ -51,7 +51,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
             break;
         }
         case TReplication::ETargetKind::Transfer: {
-            auto p = std::dynamic_pointer_cast<TTargetTransfer::TTransferConfig>(config);
+            auto p = std::dynamic_pointer_cast<const TTargetTransfer::TTransferConfig>(config);
             auto& writerSettings = *record.MutableCommand()->MutableTransferWriter();
             dstPathId.ToProto(writerSettings.MutablePathId());
             writerSettings.SetTransformLambda(p->GetTransformLambda());

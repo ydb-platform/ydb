@@ -1,5 +1,4 @@
 #include "utils.h"
-#include "application.h"
 
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/json/json_reader.h>
@@ -49,17 +48,6 @@ void FloatingPointExceptionHandler(int) {
 
     abort();
 }
-
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-void InterruptHandler(int) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cout << colors.Red() << "Execution interrupted, finishing profile memory allocations..." << colors.Default() << Endl;
-    TMainBase::FinishProfileMemoryAllocations();
-
-    abort();
-}
-#endif
 
 }  // nonymous namespace
 
@@ -263,10 +251,6 @@ void SetupSignalActions() {
     std::set_terminate(&TerminateHandler);
     signal(SIGSEGV, &SegmentationFaultHandler);
     signal(SIGFPE, &FloatingPointExceptionHandler);
-
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    signal(SIGINT, &InterruptHandler);
-#endif
 }
 
 void PrintResultSet(EResultOutputFormat format, IOutputStream& output, const Ydb::ResultSet& resultSet) {

@@ -18,6 +18,27 @@
 
 namespace NKikimrRun {
 
+namespace {
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+void InterruptHandler(int) {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+
+    Cout << colors.Red() << "Execution interrupted, finishing profile memory allocations..." << colors.Default() << Endl;
+    TMainBase::FinishProfileMemoryAllocations();
+
+    abort();
+}
+#endif
+
+}  // anonymous namespace
+
+TMainBase::TMainBase() {
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    signal(SIGINT, &InterruptHandler);
+#endif
+}
+
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 void TMainBase::FinishProfileMemoryAllocations() {
     if (ProfileAllocationsOutput) {
@@ -103,7 +124,7 @@ void TMainBase::RegisterLogOptions(NLastGetopt::TOpts& options) {
         .StoreMappedResultT<TString>(&DefaultLogPriority, GetLogPrioritiesMap("log-default"));
 
     options.AddLongOption("log", "Component log priority in format <component>=<priority> (e. g. KQP_YQL=trace)")
-        .RequiredArgument("component priority")
+        .RequiredArgument("component=priority")
         .Handler1([this, logPriority = GetLogPrioritiesMap("log")](const NLastGetopt::TOptsParser* option) {
             TStringBuf component;
             TStringBuf priority;
@@ -117,13 +138,6 @@ void TMainBase::RegisterLogOptions(NLastGetopt::TOpts& options) {
                 ythrow yexception() << "Got duplicated log service name: " << component;
             }
         });
-}
-
-void TMainBase::FillLogConfig(NKikimrConfig::TLogConfig& config) const {
-    if (DefaultLogPriority) {
-        config.SetDefaultLevel(*DefaultLogPriority);
-    }
-    ModifyLogPriorities(LogPriorities, config);
 }
 
 IOutputStream* TMainBase::GetDefaultOutput(const TString& file) {

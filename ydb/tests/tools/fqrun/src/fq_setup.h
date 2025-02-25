@@ -29,6 +29,10 @@ public:
 
     TRequestResult CreateBinding(const FederatedQuery::BindingContent& binding) const;
 
+    void QueryRequestAsync(const TRequestOptions& query, TDuration pingPeriod) const;
+
+    void WaitAsyncQueries() const;
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl;

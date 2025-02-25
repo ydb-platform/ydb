@@ -14,6 +14,14 @@ namespace NFqRun {
 constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 constexpr i64 MAX_RESULT_SET_ROWS = 1000;
 
+struct TExternalDatabase {
+    TString Endpoint;
+    TString Database;
+    TString Token;
+
+    static TExternalDatabase Parse(const TString& optionValue, const TString& tokenVar);
+};
+
 struct TFqSetupSettings : public NKikimrRun::TServerSettings {
     enum class EVerbose {
         None,
@@ -25,6 +33,18 @@ struct TFqSetupSettings : public NKikimrRun::TServerSettings {
 
     bool EmulateS3 = false;
 
+    bool EnableQuotas = false;
+    std::optional<TExternalDatabase> RateLimiterDatabase;
+
+    bool EnableCheckpoints = false;
+    std::optional<TExternalDatabase> CheckpointsDatabase;
+
+    bool EnableCpStorage = false;
+    std::optional<TExternalDatabase> CpStorageDatabase;
+
+    bool EnableRemoteRd = false;
+    std::optional<TExternalDatabase> RowDispatcherDatabase;
+
     EVerbose VerboseLevel = EVerbose::Info;
 
     TString YqlToken;
@@ -33,12 +53,14 @@ struct TFqSetupSettings : public NKikimrRun::TServerSettings {
     NFq::NConfig::TConfig FqConfig;
     NKikimrConfig::TLogConfig LogConfig;
     std::optional<NKikimrConfig::TActorSystemConfig> ActorSystemConfig;
+    NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
 };
 
 struct TRunnerOptions {
     IOutputStream* ResultOutput = nullptr;
     NKikimrRun::EResultOutputFormat ResultOutputFormat = NKikimrRun::EResultOutputFormat::RowsJson;
 
+    TDuration PingPeriod;
     TFqSetupSettings FqSettings;
 };
 
@@ -47,5 +69,9 @@ struct TRequestOptions {
 };
 
 void SetupAcl(FederatedQuery::Acl* acl);
+
+NYql::TIssue GroupIssues(NYql::TIssue rootIssue, const NYql::TIssues& childrenIssues);
+
+bool IsFinalStatus(FederatedQuery::QueryMeta::ComputeStatus status);
 
 }  // namespace NFqRun

@@ -55,11 +55,6 @@ std::optional<TFetchingInfo> TGetJsonPath::BuildFetchTask(const ui32 columnId, c
     AFL_VERIFY(input.size() == 2 && input.front().GetColumnId() == columnId);
     auto description = BuildDescription(input, resources).DetachResult();
     const std::vector<TString> subColumns = { TString(description.GetJsonPath().data(), description.GetJsonPath().size()) };
-    //    if (!description.GetInputAccessor()) {
-    //        return TFetchingInfo::BuildFullRestore();
-    //    } else {
-    //        return {};
-    //    }
     if (!description.GetInputAccessor()) {
         return TFetchingInfo::BuildSubColumnsRestore(subColumns);
     }

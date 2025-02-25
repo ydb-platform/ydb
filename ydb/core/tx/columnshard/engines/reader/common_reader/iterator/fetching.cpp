@@ -60,13 +60,13 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         AFL_VERIFY(!CurrentStartDataSize);
         CurrentStartDataSize = step->GetProcessingDataSize(source);
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
+        FlushDuration();
         if (!resultStep) {
             return resultStep;
         }
         if (!*resultStep) {
             return false;
         }
-        FlushDuration();
         ++CurrentStepIdx;
     }
     return true;

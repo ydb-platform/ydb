@@ -76,6 +76,9 @@ private:
             return TConclusionStatus::Fail("incorrect path format: have to be as '$.**...**'");
         }
         svPath = svPath.substr(2);
+        if (svPath.starts_with("\"") && svPath.ends_with("\"") && svPath.size() > 2) {
+            svPath = svPath.substr(1, svPath.size() - 2);
+        }
 
         return TDescription(resources->GetAccessorOptional(input.front().GetColumnId()), svPath);
     }

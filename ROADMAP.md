@@ -127,7 +127,7 @@ We use the following symbols as abbreviations:
 Detailed roadmap could be found at [YDB Embedded UI repo](https://github.com/ydb-platform/ydb-embedded-ui/blob/main/ROADMAP.md).
 
 ## Command Line Interface
-1. ✅ ㉔ Use a **single `ydb sql` command** instead of  `ydb yql`, `ydb table query` or `ydb scripting` to execute any query
+1. ✅ ㉔ Use a **single `ydb sql` command** instead of `ydb yql`, `ydb table query` or `ydb scripting` to execute any query
 1. ✅ ㉓ Interactive CLI
 
 ## Tests and Benchmarks

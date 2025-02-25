@@ -164,7 +164,8 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const TString& tenantName)
         : TActor(&TThis::StateFunc)
-        , TBase(config, s3Config, common, computeConfig, counters, tenantName) {}
+        , TBase(config, s3Config, common, computeConfig, counters, tenantName)
+    {}
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE";
 
@@ -225,7 +226,7 @@ private:
         }
 
         TCommonRequestContext(TInMemoryControlPlaneStorageActor& self, TEvRequest::TPtr& ev, const TString& requestStr, const TString& responseStr)
-            : TCommonRequestContext(self, ev, "", "", TStringBuilder() << "{" << ev->Get()->Request.DebugString() << "} ", requestStr, responseStr)
+            : TCommonRequestContext(self, ev, "", "", GetLogPrefix(ev), requestStr, responseStr)
         {}
 
         virtual bool Validate() {
@@ -263,6 +264,10 @@ private:
                 Self.Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{});
         }
 
+        static TString GetLogPrefix(TEvRequest::TPtr& ev) {
+            return TStringBuilder() << "{" << ev->Get()->Request.DebugString() << "} ";
+        }
+
     public:
         const TInstant StartTime;
         const TEvRequest& Event;
@@ -290,7 +295,7 @@ private:
         TRequestContext(TInMemoryControlPlaneStorageActor& self, TEvRequest::TPtr& ev, const TString& requestStr, const TString& responseStr)
             : TBase(
                 self, ev, ev->Get()->CloudId, ev->Get()->Scope,
-                TStringBuilder() << "{" << ev->Get()->Request.DebugString() << "} " << MakeUserInfo(ev->Get()->User, ev->Get()->Token),
+                TStringBuilder() << TBase::GetLogPrefix(ev) << MakeUserInfo(ev->Get()->User, ev->Get()->Token),
                 requestStr, responseStr
             )
             , CloudId(TBase::Event.CloudId)

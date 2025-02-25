@@ -1,6 +1,7 @@
 #include "utils.h"
 
 #include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
+
 namespace NFq {
 
 NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev) const {

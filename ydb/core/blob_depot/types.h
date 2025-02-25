@@ -165,16 +165,18 @@ namespace NKikimr::NBlobDepot {
     template<typename TCallback>
     void EnumerateBlobsForValueChain(const TValueChain& valueChain, ui64 tabletId, TCallback&& callback) {
         for (const auto& item : valueChain) {
-            const auto& locator = item.GetLocator();
-            const auto& blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
-            if (locator.GetFooterLen() == 0) {
-                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
-            } else if (locator.GetTotalDataLen() + locator.GetFooterLen() > MaxBlobSize) {
-                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
-                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_FOOTER_BLOB, 0, locator.GetFooterLen()), 0, 0);
-            } else {
-                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_COMPOSITE_BLOB, 0, locator.GetTotalDataLen() +
-                    locator.GetFooterLen()), 0, locator.GetTotalDataLen());
+            if (item.HasLocator()) {
+                const auto& locator = item.GetLocator();
+                const auto& blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
+                if (locator.GetFooterLen() == 0) {
+                    callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
+                } else if (locator.GetTotalDataLen() + locator.GetFooterLen() > MaxBlobSize) {
+                    callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
+                    callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_FOOTER_BLOB, 0, locator.GetFooterLen()), 0, 0);
+                } else {
+                    callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_COMPOSITE_BLOB, 0, locator.GetTotalDataLen() +
+                        locator.GetFooterLen()), 0, locator.GetTotalDataLen());
+                }
             }
         }
     }

@@ -141,6 +141,18 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
+            TString MakeTextualKey() const {
+                if (Data.Type == BlobIdType) {
+                    return GetBlobId().ToString();
+                } else if (Data.Type <= MaxInlineStringLen || Data.Type == StringType) {
+                    return TString(GetStringBuf());
+                } else if (Data.Type == MinType) {
+                    return {};
+                } else {
+                    Y_ABORT();
+                }
+            }
+
             static TKey FromBinaryKey(const TString& key, const NKikimrBlobDepot::TBlobDepotConfig& config) {
                 if (config.HasVirtualGroupId()) {
                     return TKey(TLogoBlobID::FromBinary(key));

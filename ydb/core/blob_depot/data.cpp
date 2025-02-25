@@ -1,6 +1,7 @@
 #include "data.h"
 #include "data_uncertain.h"
 #include "garbage_collection.h"
+#include "s3.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -193,6 +194,7 @@ namespace NKikimr::NBlobDepot {
                         } else if (!inserted) {
                             row.template UpdateToNull<Schema::Data::UncertainWrite>();
                         }
+                        Self->S3Manager->OnKeyWritten(key, value.ValueChain);
                     }
                     if (wasUncertain && !value.IsWrittenUncertainly()) {
                         UncertaintyResolver->MakeKeyCertain(key);

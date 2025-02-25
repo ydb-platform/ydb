@@ -79,6 +79,10 @@ namespace NKikimr::NBlobDepot {
             record->SetDecommitGroupId(Config.GetVirtualGroupId());
         }
 
+        if (Config.HasS3BackendSettings()) {
+            record->MutableS3BackendSettings()->CopyFrom(Config.GetS3BackendSettings());
+        }
+
         TActivationContext::Send(response.release());
 
         if (!agent.InvalidatedStepInFlight.empty()) {

@@ -31,8 +31,10 @@ namespace {
 bool IsStreamLookup(const TCoEquiJoinTuple& joinTuple) {
     for (const auto& outer: joinTuple.Options()) {
         for (const auto& inner: outer.Cast<TExprList>()) {
-            if (inner.Cast<TCoAtom>().StringValue() == "forceStreamLookup") {
-                return true;
+            if (auto maybeForceStreamLookupOption = inner.Maybe<TCoAtom>()) {
+                if (maybeForceStreamLookupOption.Cast().StringValue() == "forceStreamLookup") {
+                    return true;
+                } 
             }
         }
     }

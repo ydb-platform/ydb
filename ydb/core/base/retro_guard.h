@@ -10,6 +10,11 @@
 
 namespace NKikimr {
 
+template <class TEvent>
+constexpr bool EventSupportsParentRetroSpan() {
+    return std::is_same_v<TEvent, TEvBlobStorage::TEvVPut>;
+}
+
 template <class TSpan> requires std::derived_from<TSpan, NRetro::TRetroSpan>
 struct TRetroGuard {
 public:
@@ -17,7 +22,7 @@ public:
 
     template <class TEvent>
     TRetroGuard(const TEvent* ev) {
-        if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvVPut>) {
+        if constexpr (EventSupportsParentRetroSpan<TEvent>()) {
             if (ev->Record.HasParentRetroSpan()) {
                 NRetro::TFullSpanId spanId = NRetro::SpanIdToFullSpanId(
                         ev->Record.GetParentRetroSpan());

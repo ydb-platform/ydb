@@ -18,7 +18,6 @@ enum ERetroSpanType : ui32 {
     DSProxyRequest = 1,
     BackpressureInFlight,
     VDiskLogPut,
-    PDiskLogWrite,
 };
 
 using TTraceId = ui64;
@@ -45,6 +44,7 @@ public:
 public:
     TRetroSpan(TInstant begin);
     TRetroSpan(TFullSpanId parentSpan, TInstant begin);
+    TRetroSpan(const NRetroProto::TSpanId& parentSpan, TInstant begin);
 
     virtual ~TRetroSpan() = default;
 
@@ -61,6 +61,8 @@ public:
 
     // TODO: priority and graceful degradation
     // ui32 GetPriority() const;
+
+    static TPtr FromRawData(ui32 type, const void* data);
 
 private:
     TFullSpanId Id;

@@ -53,7 +53,7 @@ public:
     template<typename TPtr>
     TEventHolder(TPtr& ev, const ::NMonitoring::TDynamicCounters::TCounterPtr& serItems,
             const ::NMonitoring::TDynamicCounters::TCounterPtr& serBytes, const TBSProxyContextPtr& bspctx,
-            ui32 interconnectChannel, bool local)
+            ui32 interconnectChannel, bool local, NRetro::TSpanId retroTraceId)
         : Type(ev->GetTypeRewrite())
         , Sender(ev->Sender)
         , Cookie(ev->Cookie)
@@ -64,11 +64,12 @@ public:
     {
         // trace the event
         if constexpr (std::is_same_v<TPtr, TEvBlobStorage::TEvVPut::TPtr>) {
-            const auto& record = ev->Get()->Record;
+            auto& record = ev->Get()->Record;
             TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
             LWTRACK(DSQueueVPutIsQueued, Orbit, vDiskId.GroupID.GetRawId(), blob.ToString(), blob.Channel(), blob.PartId(),
                     blob.BlobSize());
+            record.MutableParentRetroSpan()->SetSpanId(retroTraceId);
         }
 
         if (local && ev->HasEvent()) {

@@ -477,7 +477,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 if (RetroSpan) {
                     NRetro::TTraceId retroTraceId = RetroSpan->GetId().TraceId;
                     RetroSpan.Drop();
-                    NRetro::DemandTrace(retroTraceId);
+                    NRetro::DemandTrace(retroTraceId, SelfId());
                 }
             }
             PassAway();
@@ -603,6 +603,7 @@ public:
         RequestBytes = params.Common.Event->Buffer.size();
         RequestHandleClass = HandleClassToHandleClass(HandleClass);
         MaxSaneRequests = Info->Type.TotalPartCount() * (1ull + Info->Type.Handoff()) * 2;
+        RetroSpan->SetBlobId(PutImpl.Blobs[0].BlobId);
     }
 
     TBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters& params)

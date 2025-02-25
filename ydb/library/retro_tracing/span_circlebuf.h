@@ -27,7 +27,7 @@ public:
     std::shared_ptr<TSpanCircleBufStats> GetStatsSnapshot();
 
 private:
-    constexpr static ui32 CellSize = 512;
+    constexpr static ui32 CellSize = 1024;
 
     struct TCell {
         TCell() : Type(ERetroSpanType::None), Data{0} {}

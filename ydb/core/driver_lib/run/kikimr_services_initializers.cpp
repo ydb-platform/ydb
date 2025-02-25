@@ -2828,12 +2828,13 @@ void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, c
 
 TRetroUploaderInitializer::TRetroUploaderInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
+    , NodeId(runConfig.NodeId)
 {
 }
 
 void TRetroUploaderInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = GetServiceCounters(appData->Counters, "retro_tracing");
-    setup->LocalServices.emplace_back(NRetro::MakeRetroUploaderId(),
+    setup->LocalServices.emplace_back(NRetro::MakeRetroUploaderId(NodeId),
             TActorSetupCmd(NRetro::CreateRetroUploader(countersGroup), TMailboxType::HTSwap, appData->BatchPoolId));
 }
 

@@ -80,4 +80,22 @@ void TRetroSpan::FillWilsonSpanAttributes(NWilson::TSpan* span) const {
     Y_UNUSED(span);
 }
 
+TRetroSpan::TPtr TRetroSpan::FromRawData(ui32 type, const void* data) {
+    switch (type) {
+#define ALLOCATE_MINI_SPAN_OF_TYPE(type)                                    \
+        case ERetroSpanType::type:                                          \
+            return std::make_unique<TRetroSpan##type>(                      \
+                        *reinterpret_cast<const TRetroSpan##type*>(data));
+
+        ALLOCATE_MINI_SPAN_OF_TYPE(DSProxyRequest);
+        ALLOCATE_MINI_SPAN_OF_TYPE(BackpressureInFlight);
+        ALLOCATE_MINI_SPAN_OF_TYPE(VDiskLogPut);
+
+#undef ALLOCATE_MINI_SPAN_OF_TYPE
+
+        default:
+            return nullptr;
+    }
+}
+
 } // namespace NRetro

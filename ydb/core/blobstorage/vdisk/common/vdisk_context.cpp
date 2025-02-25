@@ -42,6 +42,7 @@ namespace NKikimr {
         , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(VDiskCounters, "subsystem", "interface"))
         , GroupId(selfVDisk.GroupID)
         , ShortSelfVDisk(selfVDisk)
+        , SelfVDiskId(selfVDisk)
         , VDiskLogPrefix(GenerateVDiskLogPrefix(selfVDisk, donorMode))
         , NodeId(as ? as->NodeId : 0)
         , FreshIndex(VDiskMemCounters->GetCounter("MemTotal:FreshIndex"))

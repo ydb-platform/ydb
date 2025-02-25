@@ -59,7 +59,8 @@ class TBlobStorageQueue {
             , CostEssence(*event->Get())
             , Span(TWilson::VDiskTopLevel, std::move(event->TraceId), "Backpressure.InFlight")
             , RetroSpan(event->Get())
-            , Event(event, serItems, serBytes, bspctx, interconnectChannel, local)
+            , Event(event, serItems, serBytes, bspctx, interconnectChannel, local,
+                    (RetroSpan ? RetroSpan->GetId().SpanId : 0))
             , MsgId(Max<ui64>())
             , SequenceId(0)
             , Deadline(deadline)

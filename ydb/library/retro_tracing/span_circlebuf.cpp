@@ -19,22 +19,8 @@ std::vector<TRetroSpan::TPtr> TSpanCircleBuf::ReadSpansOfTrace(ui64 traceId) {
 
     for (ui32 i = 0; i < Buffer.size(); ++i) {
         TRetroSpan* spanPtr = Buffer[i].GetSpanPtr();
-
         if (spanPtr->GetId().TraceId == traceId) {
-            switch (Buffer[i].Type) {
-#define ALLOCATE_MINI_SPAN_OF_TYPE(type)                                    \
-            case ERetroSpanType::type:                                      \
-                spans.push_back(std::make_unique<TRetroSpan##type>(         \
-                        *reinterpret_cast<TRetroSpan##type*>(spanPtr)));    \
-                break
-
-            ALLOCATE_MINI_SPAN_OF_TYPE(DSProxyRequest);
-            ALLOCATE_MINI_SPAN_OF_TYPE(BackpressureInFlight);
-#undef ALLOCATE_MINI_SPAN_OF_TYPE
-
-            default:
-                break;
-            }
+            spans.push_back(TRetroSpan::FromRawData((ui32)Buffer[i].Type, spanPtr));
         }
     }
 

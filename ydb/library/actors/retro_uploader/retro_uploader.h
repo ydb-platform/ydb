@@ -7,11 +7,11 @@
 
 namespace NRetro {
 
-inline NActors::TActorId MakeRetroUploaderId() {
-    return NActors::TActorId(0, TStringBuf("retro_upload", 12));
+inline NActors::TActorId MakeRetroUploaderId(ui32 nodeId = 0) {
+    return NActors::TActorId(nodeId, TStringBuf("retro_upload", 12));
 }
 
-void DemandTrace(TTraceId traceId);
+void DemandTrace(TTraceId traceId, NActors::TActorId sender);
  
 NActors::IActor* CreateRetroUploader(TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 

@@ -672,39 +672,6 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         }
     }
 
-    Y_UNIT_TEST(KeyComparison) {
-        auto table = MakeTable1000();
-
-        std::shared_ptr<arrow::RecordBatch> border; // {2, 3, 4}
-        {
-            arrow::ScalarVector scalars{
-                std::make_shared<arrow::Int8Scalar>(2),
-                std::make_shared<arrow::Int16Scalar>(3),
-                std::make_shared<arrow::Int32Scalar>(4),
-            };
-
-            std::vector<std::shared_ptr<arrow::Array>> columns;
-            for (auto scalar : scalars) {
-                auto res = arrow::MakeArrayFromScalar(*scalar, 1);
-                UNIT_ASSERT(res.ok());
-                columns.push_back(*res);
-            }
-
-            border = arrow::RecordBatch::Make(table->schema(), 1, columns);
-        }
-
-        // TODO: rewrite test (functions removed)
-        const NArrow::TColumnFilter lt = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::LESS);
-        const NArrow::TColumnFilter le = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::LESS_OR_EQUAL);
-        const NArrow::TColumnFilter gt = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::GREATER);
-        const NArrow::TColumnFilter ge = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::GREATER_OR_EQUAL);
-
-        UNIT_ASSERT(CheckFilter(lt.BuildSimpleFilter(), 234, true));
-        UNIT_ASSERT(CheckFilter(le.BuildSimpleFilter(), 235, true));
-        UNIT_ASSERT(CheckFilter(gt.BuildSimpleFilter(), 235, false));
-        UNIT_ASSERT(CheckFilter(ge.BuildSimpleFilter(), 234, false));
-    }
-
     Y_UNIT_TEST(SortWithCompositeKey) {
         std::shared_ptr<arrow::Table> table = Shuffle(MakeTable1000());
 

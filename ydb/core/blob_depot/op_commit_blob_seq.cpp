@@ -58,8 +58,6 @@ namespace NKikimr::NBlobDepot {
                     return false;
                 }
 
-                NIceDb::TNiceDb db(txc.DB);
-
                 NKikimrBlobDepot::TEvCommitBlobSeqResult *responseRecord;
                 std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request);
 
@@ -87,13 +85,20 @@ namespace NKikimr::NBlobDepot {
 
                     auto key = TData::TKey::FromBinaryKey(item.GetKey(), Self->Config);
                     if (!item.GetCommitNotify()) {
+                        bool blocksPass = true;
                         if (const auto& v = key.AsVariant(); const auto *id = std::get_if<TLogoBlobID>(&v)) {
-                            if (!Self->BlocksManager->CheckBlock(id->TabletID(), id->Generation())) {
-                                // FIXME(alexvru): ExtraBlockChecks?
-                                responseItem->SetStatus(NKikimrProto::BLOCKED);
-                                responseItem->SetErrorReason("block race detected");
-                                continue;
+                            blocksPass = Self->BlocksManager->CheckBlock(id->TabletID(), id->Generation());
+                        }
+                        for (const auto& extra : item.GetExtraBlockChecks()) {
+                            if (!blocksPass) {
+                                break;
                             }
+                            blocksPass = Self->BlocksManager->CheckBlock(extra.GetTabletId(), extra.GetGeneration());
+                        }
+                        if (!blocksPass) {
+                            responseItem->SetStatus(NKikimrProto::BLOCKED);
+                            responseItem->SetErrorReason("block race detected");
+                            continue;
                         }
                     }
 

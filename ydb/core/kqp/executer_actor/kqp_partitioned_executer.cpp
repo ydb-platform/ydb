@@ -324,7 +324,8 @@ public:
             Send(exInfo->BufferId, new TEvKqpBuffer::TEvTerminate{});
         }
 
-        exInfo->Response = EExecuterResponse::NONE;
+        ExecutersInfo.erase(exInfo->ExecuterId);
+        BuffersInfo.erase(exInfo->BufferId);
         CreateExecuterWithBuffer(exInfo->PartitionIdx, /*isRetry*/ true);
     }
 

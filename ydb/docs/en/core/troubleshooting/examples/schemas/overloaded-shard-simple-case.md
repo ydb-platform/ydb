@@ -4,17 +4,23 @@ This article describes an example of how to diagnose overloaded shards and resol
 
 For more information about overloaded shards and their causes, see [{#T}](../../performance/schemas/overloaded-shards.md).
 
-The article begins by [stating the problem](#initial-problem). Then, we'll examine diagrams in Grafana and information on the **Diagnostics** tab in the [Embedded UI](../../../reference/embedded-ui/index.md) to [solve the problem](#solution) and [observe the solution in action](#aftermath).
+The article begins by [stating the problem](#initial-issue). Then, we'll examine diagrams in Grafana and information on the **Diagnostics** tab in the [Embedded UI](../../../reference/embedded-ui/index.md) to [solve the problem](#solution) and [observe the solution in action](#aftermath).
 
 At the end of the article, you can find the steps to [reproduce the situation](#testbed).
 
-## Initial problem {#initial-problem}
+## Initial issue {#initial-issue}
 
 You were notified that your system has started taking too long to process user requests.
 
+{% note info %}
+
+These requests access a [row-oriented table](../../../concepts/datamodel/table.md#row-oriented-tables), which is managed by [data shards](../../../concepts/glossary.md#data-shard).
+
+{% endnote %}
+
 Let's examine the **Latency** diagrams in the [DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview) Grafana dashboard to determine whether the problem is related to the {{ ydb-short-name }} cluster:
 
-![DB Overview > Latencies > R tx server latency percentiles](_assets/overloaded-shard-1/incident-grafana-latency-percentiles.png)
+![DB Overview > Latencies > R tx server latency percentiles](_assets/overloaded-shard-simple-case/incident-grafana-latency-percentiles.png)
 
 {% cut "See the diagram description" %}
 
@@ -22,7 +28,7 @@ The diagram shows transaction latency percentiles. At approximately ##10:19:30##
 
 {% endcut %}
 
-![DB Overview > Latencies > Read only tx server latency](_assets/overloaded-shard-1/incident-grafana-latencies.png)
+![DB Overview > Latencies > Read only tx server latency](_assets/overloaded-shard-simple-case/incident-grafana-latencies.png)
 
 {% cut "See the diagram description" %}
 
@@ -38,39 +44,35 @@ Indeed, the latencies have increased. Now, we need to localize the problem.
 
 Let's determine why the latencies increased. Could the cause be an increased workload? Here is the **Requests** diagram from the **API details** section of the [DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview) Grafana dashboard:
 
-![API details](./_assets/overloaded-shard-1/incident-grafana-api-section-requests.png)
-
-<!--![API details](./_assets/overloaded-shard-1/incident-grafana-api-section-request-size.png)
-
-![API details](./_assets/overloaded-shard-1/incident-grafana-api-section-response-size.png)-->
+![API details](./_assets/overloaded-shard-simple-case/incident-grafana-api-section-requests.png)
 
 The number of user requests increased from approximately 27,000 to 35,000 at around ##10:20:00##. But can {{ ydb-short-name }} handle the increased load without additional hardware resources?
 
 The CPU load has increased, as shown in the **CPU by execution pool** diagram.
 
-![CPU](./_assets/overloaded-shard-1/incident-grafana-cpu-by-execution-pool.png)
+![CPU](./_assets/overloaded-shard-simple-case/incident-grafana-cpu-by-execution-pool.png)
 
 {% cut "See the details on the CPU Grafana dashboard" %}
 
 Examining the **CPU** Grafana dashboard reveals that CPU usage increased [in the user pool and the interconnect pool](../../../concepts/glossary.md#actor-system-pool):
 
-![CPU](./_assets/overloaded-shard-1/incident-grafana-cpu-dashboard-user-pool-by-actors.png)
+![CPU](./_assets/overloaded-shard-simple-case/incident-grafana-cpu-dashboard-user-pool-by-actors.png)
 
-![CPU](./_assets/overloaded-shard-1/incident-grafana-cpu-dashboard-ic-pool.png)
+![CPU](./_assets/overloaded-shard-simple-case/incident-grafana-cpu-dashboard-ic-pool.png)
 
-![CPU](./_assets/overloaded-shard-1/incident-grafana-cpu-dashboard-ic-pool-by-host.png)
+![CPU](./_assets/overloaded-shard-simple-case/incident-grafana-cpu-dashboard-ic-pool-by-host.png)
 
 {% endcut %}
 
 We can also observe overall CPU usage on the **Diagnostics** tab of the [Embedded UI](../../../reference/embedded-ui/index.md):
 
-![CPU diagnostics](./_assets/overloaded-shard-1/incident-ui-cpu-usage.png)
+![CPU diagnostics](./_assets/overloaded-shard-simple-case/incident-ui-cpu-usage.png)
 
 The {{ ydb-short-name }} cluster appears not to utilize all of its CPU capacity.
 
 By inspecting the **DataShard** and **DataShard details** sections of the [DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview) Grafana dashboard, we can see that after the cluster load increased, one of its data shards became overloaded.
 
-![Throughput](./_assets/overloaded-shard-1/incident-grafana-throughput-rows.png)
+![Throughput](./_assets/overloaded-shard-simple-case/incident-grafana-throughput-rows.png)
 
 {% cut "See the diagram description" %}
 
@@ -78,7 +80,7 @@ This diagram shows that the number of rows read per second in the {{ ydb-short-n
 
 {% endcut %}
 
-![Shard distribution by load](./_assets/overloaded-shard-1/incident-grafana-shard-distribution-by-workload.png)
+![Shard distribution by load](./_assets/overloaded-shard-simple-case/incident-grafana-shard-distribution-by-workload.png)
 
 {% cut "See the diagram description" %}
 
@@ -88,7 +90,7 @@ The diagram shows only one data shard whose workload changed at approximately ##
 
 {% endcut %}
 
-![Overloaded shard](./_assets/overloaded-shard-1/incident-grafana-overloaded-shards.png)
+![Overloaded shard](./_assets/overloaded-shard-simple-case/incident-grafana-overloaded-shards.png)
 
 {% cut "See the diagram description" %}
 
@@ -100,13 +102,13 @@ This diagram shows that the workload on one data shard increased to 70% at appro
 
 To determine which table the overloaded data shard is processing, let's open the **Diagnostics > Top shards** tab in the Embedded UI:
 
-![Diagnostics > shards](./_assets/overloaded-shard-1/incident-ui-top-shards.png)
+![Diagnostics > shards](./_assets/overloaded-shard-simple-case/incident-ui-top-shards.png)
 
 We can see that one of the data shards processing queries for the `kv_test` table is loaded at 67%.
 
 Next, let's examine the `kv_test` table on the **Info** tab:
 
-![stock table info](./_assets/overloaded-shard-1/incident-ui-table-info.png)
+![stock table info](./_assets/overloaded-shard-simple-case/incident-ui-table-info.png)
 
 {% note warning %}
 
@@ -124,7 +126,7 @@ We should enable partitioning by load for the `kv_test` table:
 2. Open the **Query** tab.
 3. Run the following query:
 
-    ```sql
+    ```yql
     ALTER TABLE kv_test SET (
         AUTO_PARTITIONING_BY_LOAD = ENABLED
     );
@@ -134,7 +136,7 @@ We should enable partitioning by load for the `kv_test` table:
 
 When we enable automatic partitioning for the `kv_test` table, the overloaded data shard splits into two.
 
-![Shard distribution by load](./_assets/overloaded-shard-1/aftermath-grafana-shard-distribution-by-workload.png)
+![Shard distribution by load](./_assets/overloaded-shard-simple-case/aftermath-grafana-shard-distribution-by-workload.png)
 
 {% cut "See the diagram description" %}
 
@@ -142,7 +144,7 @@ The diagram shows that the number of data shards increased at about ##10:28:00##
 
 {% endcut %}
 
-![overloaded shard count](./_assets/overloaded-shard-1/aftermath-grafana-overloaded-shards.png)
+![overloaded shard count](./_assets/overloaded-shard-simple-case/aftermath-grafana-overloaded-shards.png)
 
 {% cut "See the diagram description" %}
 
@@ -152,11 +154,11 @@ The overloaded shard disappeared from the diagram at approximately ##10:28:00##.
 
 Now, two data shards are processing queries to the `kv_test` table, and neither is overloaded:
 
-![Overloaded shard count](./_assets/overloaded-shard-1/aftermath-ui-top-shards.png)
+![Overloaded shard count](./_assets/overloaded-shard-simple-case/aftermath-ui-top-shards.png)
 
 Let's confirm that latencies have returned to normal:
 
-![Final latency percentiles](./_assets/overloaded-shard-1/aftermath-grafana-latency-percentiles.png)
+![Final latency percentiles](./_assets/overloaded-shard-simple-case/aftermath-grafana-latency-percentiles.png)
 
 {% cut "See the diagram description" %}
 
@@ -164,7 +166,7 @@ At approximately ##10:28:00##, the p50, p75, and p95 latency percentiles dropped
 
 {% endcut %}
 
-![Final latencies](./_assets/overloaded-shard-1/aftermath-grafana-latencies.png)
+![Final latencies](./_assets/overloaded-shard-simple-case/aftermath-grafana-latencies.png)
 
 {% cut "See the diagram description" %}
 
@@ -178,41 +180,41 @@ The latencies are almost as low as they were before the workload increased. We d
 || Bucket name
 | Latencies, ms
 |
-Transactions,
-single overloaded data shard
+Single overloaded data shard,
+transactions per second
 |
-Transactions,
-multiple data shards
+Multiple data shards,
+transactions per second
 ||
 || 1
 | 0-1
 | 2110
-| ⇧ 16961
+| <span style="color:teal">▲</span> 16961
 ||
 || 2
 | 1-2
 | 5472
-| ⇧ 13147
+| <span style="color:teal">▲</span> 13147
 ||
 || 4
 | 2-4
 | 16437
-| ⇩ 6041
+| <span style="color:navy">▼</span> 6041
 ||
 || 8
 | 4-8
 | 9430
-| ⇩ 432
+| <span style="color:navy">▼</span> 432
 ||
 || 16
 | 8-16
 | 98.8
-| ⇩ 52.4
+| <span style="color:navy">▼</span> 52.4
 ||
 || 32
 | 16-32
 | —
-| ⇧ 0.578
+| <span style="color:teal">▲</span> 0.578
 ||
 |#
 
@@ -267,6 +269,10 @@ The servers are virtual machines with the following computing resources:
 - Guaranteed vCPU performance: 100%
 - vCPU: 28
 - RAM: 32 GB
+- Storage:
+    - 3 x 93 GB SSD per storage node
+    - 20 GB HDD for the operating system
+
 
 ### Test
 
@@ -302,4 +308,6 @@ To reproduce the load, follow these steps:
 
 ## See also
 
-- [Troubleshooting performance issues](../../performance/index.md) > [Overloaded shards](../../performance/schemas/overloaded-shards.md)
+- [Troubleshooting performance issues](../../performance/index.md)
+- [Overloaded shards](../../performance/schemas/overloaded-shards.md)
+- [Row-oriented tables](../../../concepts/datamodel/table.md#row-oriented-tables)

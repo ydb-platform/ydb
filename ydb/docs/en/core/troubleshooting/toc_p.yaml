@@ -7,5 +7,5 @@ items:
 - name: Diagnostic examples
   items:
     - name: Overloaded shard
-      href: examples/schemas/overloaded-shard-1.md
+      href: examples/schemas/overloaded-shard-simple-case.md
 

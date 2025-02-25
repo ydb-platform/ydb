@@ -52,6 +52,12 @@ Returning these timestamps for each query may cause noticeable overhead in case 
 
 For explicitly created transactions (transactions created via BeginTransactionRequest rpc call), these timestamps are always returned and do not require the flag.
 
+{% note info %}
+
+StreamReadTable and StreamExecuteScanQuery calls also have snapshot_timestamp fields in the response.
+
+{% endnote %}
+
 ## Initial table scan {#initial-scan}
 
 By default, a changefeed only includes records about those table rows that changed after the changefeed was created. Initial table scan enables you to export, to the changefeed, the values of all the rows that existed at the time of changefeed creation.

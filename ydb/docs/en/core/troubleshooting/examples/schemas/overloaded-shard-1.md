@@ -164,15 +164,15 @@ At approximately ##10:28:00##, the p50, p75, and p95 latency percentiles dropped
 
 {% endcut %}
 
-![final latencies](./_assets/overloaded-shard-1/aftermath-grafana-latencies.png)
+![Final latencies](./_assets/overloaded-shard-1/aftermath-grafana-latencies.png)
 
 {% cut "See the diagram description" %}
 
-The diagram shows that transactions are grouped into six buckets now. Approximately half of the transactions are back to `Bucket 1`, meaning that their latency is less than one millisecond. More than a third of the transactions are in `Bucket 2` with the latencies from one up to two milliseconds. One sixth of the transactions are in `Bucket 4`. The size of other buckets is insignificant.
+The diagram shows that transactions are now grouped into six buckets. Approximately half of the transactions have returned to `Bucket 1`, meaning their latency is less than one millisecond. More than a third of the transactions are in `Bucket 2`, with latencies between one and two milliseconds. One-sixth of the transactions are in `Bucket 4`. The sizes of the other buckets are insignificant.
 
 {% endcut %}
 
-The latencies are almost as low as they used to be before the workload increased. We did not add any additional hardware resources, just enabled automatic partitioning by load.
+The latencies are almost as low as they were before the workload increased. We did not increase the system costs by introducing additional hardware resources. We've only enabled automatic partitioning by the load, which allowed us to use the existing resources more efficiently.
 
 #|
 || Bucket name
@@ -220,7 +220,7 @@ multiple data shards
 
 ### Topology
 
-For the example, we used a {{ ydb-short-name }} cluster consisting of three servers running Ubuntu 22.04 LTS.
+For this example, we used a {{ ydb-short-name }} cluster consisting of three servers running Ubuntu 22.04 LTS. Each server runs one [storage node](../../../concepts/glossary.md#storage-node) and three [database nodes](../../../concepts/glossary.md#database-node) belonging to the same database.
 
 ```mermaid
 flowchart
@@ -233,19 +233,19 @@ client-->cluster
 
 subgraph cluster["YDB Cluster"]
     direction TB
-    subgraph VM1["VM 1"]
+    subgraph S1["Server 1"]
         node1(YDB database node 1)
         node2(YDB database node 2)
         node3(YDB database node 3)
         node4(YDB storage node 1)
     end
-    subgraph VM2["VM 2"]
+    subgraph S2["Server 2"]
         node5(YDB database node 1)
         node6(YDB database node 2)
         node7(YDB database node 3)
         node8(YDB storage node 1)
     end
-    subgraph VM3["VM 3"]
+    subgraph S3["Server 3"]
         node9(YDB database node 1)
         node10(YDB database node 2)
         node11(YDB database node 3)
@@ -261,7 +261,7 @@ class node1,node2,node3,node5,node6,node7,node9,node10,node11 database-node
 
 ### Hardware configuration
 
-Each virtual machine has the following computing resources:
+The servers are virtual machines with the following computing resources:
 
 - Platform: Intel Broadwell
 - Guaranteed vCPU performance: 100%
@@ -270,7 +270,7 @@ Each virtual machine has the following computing resources:
 
 ### Test
 
-The load on the {{ ydb-short-name }} was generated with the `ydb workload` CLI command. For more information, see [{#T}](../../../reference/ydb-cli/commands/workload/index.md).
+The load on the {{ ydb-short-name }} cluster was generated using the `ydb workload` CLI command. For more information, see [{#T}](../../../reference/ydb-cli/commands/workload/index.md).
 
 To reproduce the load, follow these steps:
 
@@ -288,12 +288,11 @@ To reproduce the load, follow these steps:
     ydb workload kv run select -s 600 -t 100
     ```
 
-    We ran a simple load type using a {{ ydb-short-name }} database as a Key-Value storage. Specifically, we used the `select` load to create SELECT queries and get rows based on an exact match of the primary key.
+    We ran a simple load type using a {{ ydb-short-name }} database as a key-value storage. Specifically, we used the `select` load to create SELECT queries and retrieve rows based on an exact match of the primary key.
 
-    The `-t 100` parameter is used to ran the test in 100 threads.
+    The `-t 100` parameter is used to run the test in 100 threads.
 
-
-1. Overload the {{ ydb-short-name }} cluster:
+3. Overload the {{ ydb-short-name }} cluster:
 
     ```shell
     ydb workload kv run select -s 1200 -t 250

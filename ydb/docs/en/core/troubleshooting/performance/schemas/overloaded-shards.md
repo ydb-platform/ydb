@@ -55,7 +55,7 @@ Also, consider changing your application logic for generating primary key values
 
 {% endnote %}
 
-## See also
+## Example
 
-- [{#T}](../../examples/schemas/overloaded-shard-1.md)
+For a practical demonstration of how to follow these instructions, see [{#T}](../../examples/schemas/overloaded-shard-1.md).
 

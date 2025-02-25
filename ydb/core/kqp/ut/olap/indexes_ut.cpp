@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 

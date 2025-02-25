@@ -2,23 +2,23 @@
 
 This article describes an example of how to diagnose overloaded shards and resolve the issue.
 
-For more information about overloaded shards and the causes for this issue, see the article [{#T}](../../performance/schemas/overloaded-shards.md).
+For more information about overloaded shards and their causes, see [{#T}](../../performance/schemas/overloaded-shards.md).
 
-The article starts with [stating the problem](#initial-problem). Then we'll take a look at diagrams in Grafana and information on the **Diagnostics** tab in the [Embedded UI](../../../reference/embedded-ui/index.md) to [solve the problem](#solution) and [watch the solution in action](#aftermath).
+The article begins by [stating the problem](#initial-problem). Then, we'll examine diagrams in Grafana and information on the **Diagnostics** tab in the [Embedded UI](../../../reference/embedded-ui/index.md) to [solve the problem](#solution) and [observe the solution in action](#aftermath).
 
-Also, in the end of the article you can see the steps how to [reproduce the situation](#testbed).
+At the end of the article, you can find the steps to [reproduce the situation](#testbed).
 
 ## Initial problem {#initial-problem}
 
-You were notified that your system started taking too long to process user requests.
+You were notified that your system has started taking too long to process user requests.
 
-Let's take a look at the **Latency** diagrams in the [DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview) Grafana dashboard to see if the problem has to do with the {{ ydb-short-name }} cluster:
+Let's examine the **Latency** diagrams in the [DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview) Grafana dashboard to determine whether the problem is related to the {{ ydb-short-name }} cluster:
 
 ![DB Overview > Latencies > R tx server latency percentiles](_assets/overloaded-shard-1/incident-grafana-latency-percentiles.png)
 
 {% cut "See the diagram description" %}
 
-The diagram shows the transaction latency percentiles. At approximately ##10:19:30## these values increased by two to three times.
+The diagram shows transaction latency percentiles. At approximately ##10:19:30##, these values increased by two to three times.
 
 {% endcut %}
 
@@ -26,17 +26,17 @@ The diagram shows the transaction latency percentiles. At approximately ##10:19:
 
 {% cut "See the diagram description" %}
 
-The diagram shows the heatmap of transaction latencies. The transactions here are grouped into buckets based on their latency, each bucket has a different color. So on this diagram you can see both the number of transactions processed by {{ ydb-short-name }} per second and the latency distribution among the transactions.
+The diagram shows a heatmap of transaction latencies. Transactions are grouped into buckets based on their latency, with each bucket represented by a different color. This diagram displays both the number of transactions processed by {{ ydb-short-name }} per second (on the vertical axis) and the latency distribution among them (with color).
 
-By ##10:20:30## the share of transactions with the lowest latencies (`Bucket 1`, dark green) dropped by four to five times. `Bucket 4` grew by approximately five times. And there appeared a new group of slower transactions - `Bucket 8`.
+By ##10:20:30##, the share of transactions with the lowest latencies (`Bucket 1`, dark green) had dropped by four to five times. `Bucket 4` grew by approximately five times, and a new group of slower transactions, `Bucket 8`, appeared.
 
 {% endcut %}
 
-Indeed, the latencies have increased. Now we need to localize the problem.
+Indeed, the latencies have increased. Now, we need to localize the problem.
 
 ## Diagnostics {#diagnostics}
 
-Let's find out why the latencies increased. Perhaps, the reason is the increased workload? Here is the **Requests** diagram from the **API details** section of the [DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview) Grafana dashboard:
+Let's determine why the latencies increased. Could the cause be an increased workload? Here is the **Requests** diagram from the **API details** section of the [DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview) Grafana dashboard:
 
 ![API details](./_assets/overloaded-shard-1/incident-grafana-api-section-requests.png)
 
@@ -44,15 +44,15 @@ Let's find out why the latencies increased. Perhaps, the reason is the increased
 
 ![API details](./_assets/overloaded-shard-1/incident-grafana-api-section-response-size.png)-->
 
-The number of user requests has increased from ~27000 to ~35000 at around ##10:20:00##. But can {{ ydb-short-name }} handle the increased load without additional hardware resources?
+The number of user requests increased from approximately 27,000 to 35,000 at around ##10:20:00##. But can {{ ydb-short-name }} handle the increased load without additional hardware resources?
 
-The CPU load has increased, you can see it on the **CPU by execution pool** diagram.
+The CPU load has increased, as shown in the **CPU by execution pool** diagram.
 
 ![CPU](./_assets/overloaded-shard-1/incident-grafana-cpu-by-execution-pool.png)
 
 {% cut "See the details on the CPU Grafana dashboard" %}
 
-If we take a look at the **CPU** Grafana dashboard, the CPU usage increased [in the user pool and in the interconnect pool](../../../concepts/glossary.md#actor-system-pool):
+Examining the **CPU** Grafana dashboard reveals that CPU usage increased [in the user pool and the interconnect pool](../../../concepts/glossary.md#actor-system-pool):
 
 ![CPU](./_assets/overloaded-shard-1/incident-grafana-cpu-dashboard-user-pool-by-actors.png)
 
@@ -62,19 +62,19 @@ If we take a look at the **CPU** Grafana dashboard, the CPU usage increased [in 
 
 {% endcut %}
 
-We can also see the overall CPU usage on the **Diagnostics** tab of the [Embedded UI](../../../reference/embedded-ui/index.md):
+We can also observe overall CPU usage on the **Diagnostics** tab of the [Embedded UI](../../../reference/embedded-ui/index.md):
 
 ![CPU diagnostics](./_assets/overloaded-shard-1/incident-ui-cpu-usage.png)
 
-It looks like the {{ ydb-short-name }} cluster is not utilizing all of its CPU capacity.
+The {{ ydb-short-name }} cluster appears not to utilize all of its CPU capacity.
 
-If we look at the **DataShard** and **DataShard details** sections of the [DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview) Grafana dashboard, we can see that after the load on the cluster increased, one of its data shards got overloaded.
+By inspecting the **DataShard** and **DataShard details** sections of the [DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview) Grafana dashboard, we can see that after the cluster load increased, one of its data shards became overloaded.
 
 ![Throughput](./_assets/overloaded-shard-1/incident-grafana-throughput-rows.png)
 
 {% cut "See the diagram description" %}
 
-This diagram shows that the number of rows read per second in the {{ ydb-short-name }} database increased from ~26000 to ~33500 rows per second.
+This diagram shows that the number of rows read per second in the {{ ydb-short-name }} database increased from approximately 26,000 to 33,500 rows per second.
 
 {% endcut %}
 
@@ -82,9 +82,9 @@ This diagram shows that the number of rows read per second in the {{ ydb-short-n
 
 {% cut "See the diagram description" %}
 
-This diagram shows the heatmap of data shard distribution by workload. Data shards are grouped into ten buckets by their workload. So on this diagram you can see how many data shards your {{ ydb-short-name }} cluster contains and how loaded they are.
+This diagram shows a heatmap of data shard distribution by workload. Data shards are grouped into ten buckets based on the ratio of their current workload to full computing capacity. This allows you to see how many data shards your {{ ydb-short-name }} cluster currently runs and how loaded they are.
 
-The diagram shows only one data shard, which workload changed at about ##10:19:30## — the data shard moved to `Bucket 70` that contains shards with workload between 60% and 70%.
+The diagram shows only one data shard whose workload changed at approximately ##10:19:30##—the data shard moved to `Bucket 70`, which contains shards loaded to between 60% and 70% of their capacity.
 
 {% endcut %}
 
@@ -92,19 +92,19 @@ The diagram shows only one data shard, which workload changed at about ##10:19:3
 
 {% cut "See the diagram description" %}
 
-Just like the previous diagram, the **Overloaded shard count** is a heatmap of data shard distribution by load. But it displays only data shards which workload exceeds 60%.
+Similar to the previous diagram, the **Overloaded shard count** is a heatmap of data shard distribution by load. However, it displays only data shards with a workload exceeding 60%.
 
-On this diagram we can see that the workload on one data shard grew up to 70% at about ##10:19:30##.
+This diagram shows that the workload on one data shard increased to 70% at approximately ##10:19:30##.
 
 {% endcut %}
 
-To determine what table the overloaded data shard is processing, let's open the **Diagnostics > Top shards** tab in the Embedded UI:
+To determine which table the overloaded data shard is processing, let's open the **Diagnostics > Top shards** tab in the Embedded UI:
 
 ![Diagnostics > shards](./_assets/overloaded-shard-1/incident-ui-top-shards.png)
 
-See that one of the data shards that processes queries for the `kv_test` table is loaded by 67%.
+We can see that one of the data shards processing queries for the `kv_test` table is loaded at 67%.
 
-Let's take a look at the `kv_test` table on the **Info** tab:
+Next, let's examine the `kv_test` table on the **Info** tab:
 
 ![stock table info](./_assets/overloaded-shard-1/incident-ui-table-info.png)
 
@@ -112,7 +112,7 @@ Let's take a look at the `kv_test` table on the **Info** tab:
 
 The `kv_test` table was created with partitioning by load disabled and has only one partition.
 
-It means that only one data shard processes requests to this table. And we know that a data shard can process only one request at a time. This is really bad practice.
+This means that a single data shard processes all requests to this table. Since data shards are single-threaded and thus can handle only one request at a time, this is a poor practice.
 
 {% endnote %}
 
@@ -132,13 +132,13 @@ We should enable partitioning by load for the `kv_test` table:
 
 ## Aftermath {#aftermath}
 
-As soon as we enable automatic partitioning for the `kv_test` table, the overloaded data shard split in two.
+When we enable automatic partitioning for the `kv_test` table, the overloaded data shard splits into two.
 
-![shard distribution by load](./_assets/overloaded-shard-1/aftermath-grafana-shard-distribution-by-workload.png)
+![Shard distribution by load](./_assets/overloaded-shard-1/aftermath-grafana-shard-distribution-by-workload.png)
 
 {% cut "See the diagram description" %}
 
-The diagram shows that the number of data shards increased at about ##10:28:00##. Their workload does not exceed 40% judging by the bucket color.
+The diagram shows that the number of data shards increased at about ##10:28:00##. Based on the bucket color, their workload does not exceed 40%.
 
 {% endcut %}
 
@@ -146,21 +146,21 @@ The diagram shows that the number of data shards increased at about ##10:28:00##
 
 {% cut "See the diagram description" %}
 
-The overloaded shard disappeared from the diagram at about ##10:28:00##.
+The overloaded shard disappeared from the diagram at approximately ##10:28:00##.
 
 {% endcut %}
 
-Two data shards are processing queries to the `kv_test` table now, none of them are overloaded:
+Now, two data shards are processing queries to the `kv_test` table, and neither is overloaded:
 
-![overloaded shard count](./_assets/overloaded-shard-1/aftermath-ui-top-shards.png)
+![Overloaded shard count](./_assets/overloaded-shard-1/aftermath-ui-top-shards.png)
 
-Let's make sure the latencies are back to normal:
+Let's confirm that latencies have returned to normal:
 
-![final latency percentiles](./_assets/overloaded-shard-1/aftermath-grafana-latency-percentiles.png)
+![Final latency percentiles](./_assets/overloaded-shard-1/aftermath-grafana-latency-percentiles.png)
 
 {% cut "See the diagram description" %}
 
-At about ##10:28:00## p50, p75, p95 latencies dropped almost to the original level. The p99 latency decrease is less pronounced, but still, it's a twofold drop.
+At approximately ##10:28:00##, the p50, p75, and p95 latency percentiles dropped almost to their original levels. The decrease in p99 latency is less pronounced but still shows a twofold reduction.
 
 {% endcut %}
 
@@ -299,7 +299,7 @@ To reproduce the load, follow these steps:
     ydb workload kv run select -s 1200 -t 250
     ```
 
-    To simulate the overload, as soon as the first test ended, we ran the same load test in 250 threads.
+    As soon as the first test ended, we ran the same load test in 250 threads to simulate the overload.
 
 ## See also
 

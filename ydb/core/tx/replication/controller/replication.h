@@ -56,7 +56,7 @@ public:
     class ITarget {
     public:
         struct IConfig {
-            using TPtr = std::shared_ptr<IConfig>;
+            using TPtr = std::shared_ptr<const IConfig>;
 
             virtual ~IConfig() = default;
 

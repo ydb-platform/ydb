@@ -512,32 +512,39 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
     class TestData {
     public:
-    static const TTypedScheme& Table() const {
+    static const TTypedScheme& Table() {
         return TableScheme;
     } 
 
-    static const TTypedScheme& Changefeed() const {
+    static const TTypedScheme& Changefeed() {
         return ChangefeedScheme;
     }
 
-    static const TString& Request() const {
-        return Request;
+    static const TString& Request() {
+        return RequestString;
     }
 
     private:
-    static const char* TableName = "Table";
+    static const char* TableName;
+    static const TTypedScheme TableScheme;
+    static const TTypedScheme ChangefeedScheme;
+    static const TString RequestString;
 
-    static const TTypedScheme TableScheme = TTypedScheme {
+    };
+
+    const char* TestData::TableName = "Table";
+
+    const TTypedScheme TestData::TableScheme = TTypedScheme {
         Sprintf(R"(
             Name: "%s"
             Columns { Name: "key" Type: "Utf8" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
-        )", tableName),
+        )", TableName),
         EPathTypeTable
     };
 
-    static const TTypedScheme ChangefeedScheme = TTypedScheme {
+    const TTypedScheme TestData::ChangefeedScheme = TTypedScheme {
         Sprintf(R"(
             TableName: "%s"
             StreamDescription {
@@ -546,11 +553,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 Format: ECdcStreamFormatJson
                 State: ECdcStreamStateReady
             }
-        )", tableName),
+        )", TableName),
         EPathTypeCdcStream
     };
 
-    static const TString Request = R"(
+    const TString TestData::RequestString = R"(
         ExportToS3Settings {
             endpoint: "localhost:%d"
             scheme: HTTP
@@ -560,7 +567,6 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             }
         }
     )";
-    };
 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTableWithChangefeed) {
         RunS3({

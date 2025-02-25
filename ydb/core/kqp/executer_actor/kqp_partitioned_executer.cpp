@@ -12,6 +12,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -23,6 +24,15 @@ class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecute
         NONE,
         SUCCESS,
         ERROR
+    };
+
+    struct TKqpExecuterInfo {
+        using TPtr = std::shared_ptr<TKqpExecuterInfo>;
+
+        TActorId ExecuterId;
+        TActorId BufferId;
+        size_t PartitionIdx;
+        EExecuterResponse Response = EExecuterResponse::NONE;
     };
 
 public:
@@ -86,13 +96,11 @@ public:
 
         const TVector<TCell> minKey(KeyColumnTypes.size());
         const TTableRange range(minKey, true, {}, false, false);
+
         YQL_ENSURE(range.IsFullRange(KeyColumnTypes.size()));
-        auto keyRange = MakeHolder<TKeyDesc>(
-            TableId,
-            range,
-            TKeyDesc::ERowOperation::Update,
-            KeyColumnTypes,
-            TVector<TKeyDesc::TColumnOp>{});
+
+        auto keyRange = MakeHolder<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Update,
+            KeyColumnTypes,TVector<TKeyDesc::TColumnOp>{});
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
         request->ResultSet.emplace_back(std::move(keyRange));
@@ -116,18 +124,20 @@ public:
         } catch (...) {
             RuntimeError(
                 Ydb::StatusIds::INTERNAL_ERROR,
-                NYql::TIssues({NYql::TIssue("RuntimeError: PrepareState.")}));
+                NYql::TIssues({NYql::TIssue(CurrentStateFuncName())}));
         }
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         auto* request = ev->Get()->Request.Get();
+
         PE_LOG_I("Got TEvTxProxySchemeCache::TEvResolveKeySetResult from ActorId = " << ev->Sender);
 
         if (request->ErrorCount > 0) {
             RuntimeError(
                 Ydb::StatusIds::INTERNAL_ERROR,
-                NYql::TIssues({NYql::TIssue("RuntimeError: PrepareState, failed to get table")}));
+                NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
+                    << ", failed to get table")}));
         }
 
         YQL_ENSURE(request->ResultSet.size() == 1);
@@ -145,18 +155,16 @@ public:
             << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
             << ", message: " << issues.ToOneLineString());
 
-        if (auto idx = GetExecuterIdx(ev->Sender); idx != Executers.size()) {
-            ExecutersResponses[idx] = EExecuterResponse::ERROR;
+        if (auto it = ExecutersInfo.find(ev->Sender); it != ExecutersInfo.end()) {
+            auto& [_, exInfo] = *it;
+            exInfo->Response = EExecuterResponse::ERROR;
+            Send(exInfo->BufferId, new TEvKqpBuffer::TEvTerminate{});
         }
 
         Abort();
     }
 
     void CreateExecuters() {
-        Executers.resize(Partitioning->size());
-        BufferActors.resize(Partitioning->size());
-        ExecutersResponses.resize(Partitioning->size(), EExecuterResponse::NONE);
-
         for (size_t i = 0; i < Partitioning->size(); ++i) {
             CreateExecuterWithBuffer(i, /* isRetry */ false);
         }
@@ -180,16 +188,17 @@ public:
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
         auto bufferActorId = RegisterWithSameMailbox(bufferActor);
-        BufferActors[partitionIdx] = bufferActorId;
 
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, RequestCounters,
             TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId);
         auto exId = RegisterWithSameMailbox(executerActor);
-        Executers[partitionIdx] = exId;
 
         PE_LOG_I("Create new KQP executer from Partitioned: ExId = " << exId << ", isRetry = "
             << isRetry << ", PartitionIdx = " << partitionIdx);
+
+        TKqpExecuterInfo::TPtr exInfo = std::make_shared<TKqpExecuterInfo>(exId, bufferActorId, partitionIdx);
+        ExecutersInfo[exId] = BuffersInfo[bufferActorId] = exInfo;
 
         auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
         Send(MakeTxProxyID(), ev.release());
@@ -203,17 +212,12 @@ public:
     void SendAbortToActors() {
         PE_LOG_I("Send abort to executers");
 
-        for (size_t i = 0; i < Executers.size(); ++i) {
-            if (ExecutersResponses[i] == EExecuterResponse::SUCCESS) {
-                ExecutersResponses[i] = EExecuterResponse::NONE;
-            }
-
-            if (ExecutersResponses[i] != EExecuterResponse::ERROR) {
+        for (auto& [exId, exInfo] : ExecutersInfo) {
+            if (exInfo->Response != EExecuterResponse::ERROR) {
                 auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Aborted by Partitioned Executer");
-                Send(Executers[i], abortEv.Release());
+                Send(exId, abortEv.Release());
+                Send(exInfo->BufferId, new TEvKqpBuffer::TEvTerminate{});
             }
-
-            Send(BufferActors[i], new TEvKqpBuffer::TEvTerminate{});
         }
     }
 
@@ -229,7 +233,7 @@ public:
         } catch (...) {
             RuntimeError(
                 Ydb::StatusIds::INTERNAL_ERROR,
-                NYql::TIssues({NYql::TIssue("RuntimeError: ExecuteState.")}));
+                NYql::TIssues({NYql::TIssue(CurrentStateFuncName())}));
         }
         return;
     }
@@ -241,35 +245,36 @@ public:
 
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
-                OnSuccessResponse(GetExecuterIdx(ev->Sender));
+                OnSuccessResponse(ev->Sender);
                 break;
             case Ydb::StatusIds::STATUS_CODE_UNSPECIFIED:
             case Ydb::StatusIds::ABORTED:
             case Ydb::StatusIds::UNAVAILABLE:
             case Ydb::StatusIds::OVERLOADED:
-                RetryPartExecution(GetExecuterIdx(ev->Sender), /* fromBuffer */ false);
+                RetryPartExecution(ev->Sender, /* fromBuffer */ false);
                 break;
             default:
                 RuntimeError(
                     Ydb::StatusIds::INTERNAL_ERROR,
-                    NYql::TIssues({NYql::TIssue("RuntimeError: TEvTxResponse handle execute.")}));
+                    NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
+                        << ", error from TEvKqpExecuter::TEvTxResponse")}));
         }
     }
 
-    void OnSuccessResponse(size_t exIdx) {
-        if (exIdx == Executers.size()) {
+    void OnSuccessResponse(TActorId exId) {
+        if (ExecutersInfo.find(exId) == ExecutersInfo.end()) {
             return;
         }
 
-        PE_LOG_I("Got success response from ExId = " << Executers[exIdx]);
+        PE_LOG_I("Got success response from ExId = " << exId);
 
-        ExecutersResponses[exIdx] = EExecuterResponse::SUCCESS;
+        ExecutersInfo[exId]->Response = EExecuterResponse::SUCCESS;
         if (!CheckExecutersAreSuccess()) {
             return;
         }
 
-        for (size_t i = 0; i < BufferActors.size(); ++i) {
-            Send(BufferActors[i], new TEvKqpBuffer::TEvTerminate{});
+        for (auto& [_, exInfo] : ExecutersInfo) {
+            Send(exInfo->BufferId, new TEvKqpBuffer::TEvTerminate{});
         }
 
         PE_LOG_I("All executers are success. Send success to SessionActor");
@@ -293,31 +298,34 @@ public:
             case NYql::NDqProto::StatusIds::ABORTED:
             case NYql::NDqProto::StatusIds::UNAVAILABLE:
             case NYql::NDqProto::StatusIds::OVERLOADED:
-                RetryPartExecution(GetBufferIdx(ev->Sender), /* fromBuffer */ true);
+                RetryPartExecution(ev->Sender, /* fromBuffer */ true);
                 break;
             default:
                 RuntimeError(
                     Ydb::StatusIds::INTERNAL_ERROR,
-                    NYql::TIssues({NYql::TIssue("RuntimeError: TEvError handle execute.")}));
+                    NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
+                        << ", error from TEvError")}));
         }
     }
 
-    void RetryPartExecution(size_t partitionIdx, bool fromBuffer) {
-        PE_LOG_I("Got error for PartitionIdx = " << partitionIdx << ", retry execution");
+    void RetryPartExecution(TActorId actorId, bool fromBuffer) {
+        PE_LOG_I("Got retry error from ActorId = " << actorId << ", retry execution");
 
-        if (partitionIdx == Executers.size()) {
+        auto it = (fromBuffer) ? BuffersInfo.find(actorId) : ExecutersInfo.find(actorId);
+        if (it == BuffersInfo.end() || it == ExecutersInfo.end()) {
             return;
         }
 
+        auto& [_, exInfo] = *it;
         if (fromBuffer) {
             auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Aborted by Partitioned Executer");
-            Send(Executers[partitionIdx], abortEv.Release());
+            Send(exInfo->ExecuterId, abortEv.Release());
         } else {
-            Send(BufferActors[partitionIdx], new TEvKqpBuffer::TEvTerminate{});
+            Send(exInfo->BufferId, new TEvKqpBuffer::TEvTerminate{});
         }
 
-        ExecutersResponses[partitionIdx] = EExecuterResponse::NONE;
-        CreateExecuterWithBuffer(partitionIdx, /*isRetry*/ true);
+        exInfo->Response = EExecuterResponse::NONE;
+        CreateExecuterWithBuffer(exInfo->PartitionIdx, /*isRetry*/ true);
     }
 
     STFUNC(AbortState) {
@@ -330,27 +338,25 @@ public:
         } catch (...) {
             RuntimeError(
                 Ydb::StatusIds::INTERNAL_ERROR,
-                NYql::TIssues({NYql::TIssue("RuntimeError: AbortState.")}));
+                NYql::TIssues({NYql::TIssue(CurrentStateFuncName())}));
         }
     }
 
     void HandleAbort(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         const auto& response = ev->Get()->Record.MutableResponse();
-        auto idx = GetExecuterIdx(ev->Sender);
 
         PE_LOG_I("Got TEvKqpExecuter::TEvTxResponse from ActorId = " << ev->Sender << ", status = " << response->GetStatus());
 
-        if (idx == Executers.size()) {
-            return;
-        }
+        if (auto it = ExecutersInfo.find(ev->Sender); it != ExecutersInfo.end()) {
+            auto& [_, exInfo] = *it;
+            exInfo->Response = EExecuterResponse::ERROR;
 
-        ExecutersResponses[idx] = EExecuterResponse::ERROR;
-
-        if (CheckExecutersAreFailed()) {
-            PE_LOG_I("All executers are aborted. Abort partitioned executer.");
-            RuntimeError(
-                Ydb::StatusIds::ABORTED,
-                NYql::TIssues({NYql::TIssue("RuntimeError: Aborted.")}));
+            if (CheckExecutersAreFailed()) {
+                PE_LOG_I("All executers are aborted. Abort partitioned executer.");
+                RuntimeError(
+                    Ydb::StatusIds::ABORTED,
+                    NYql::TIssues({NYql::TIssue("Aborted.")}));
+            }
         }
     }
 
@@ -373,16 +379,6 @@ private:
         } else {
             return "unknown state";
         }
-    }
-
-    size_t GetExecuterIdx(const TActorId exId) const {
-        auto end = std::find(Executers.begin(), Executers.end(), exId);
-        return std::distance(Executers.begin(), end);
-    }
-
-    size_t GetBufferIdx(const TActorId buferId) const {
-        auto end = std::find(BufferActors.begin(), BufferActors.end(), buferId);
-        return std::distance(BufferActors.begin(), end);
     }
 
     void FillTableMetaInfo(const NKqpProto::TKqpSink& sink) {
@@ -410,7 +406,8 @@ private:
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
             RuntimeError(
                 Ydb::StatusIds::BAD_REQUEST,
-                NYql::TIssues({NYql::TIssue("RuntimeError: Error status from literal.")}));
+                NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
+                    << ", error status from literal.")}));
         }
 
         FillRequestWithParams(physicalRequest, partitionIdx, /* literal */ false);
@@ -570,18 +567,19 @@ private:
         } catch (const yexception& ex) {
             RuntimeError(
                 Ydb::StatusIds::BAD_REQUEST,
-                NYql::TIssues({NYql::TIssue("RuntimeError: Cannot prepare parameters for request.")}));
+                NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
+                    << ", cannot prepare parameters for request.")}));
         }
     }
 
     bool CheckExecutersAreSuccess() const {
-        return std::all_of(ExecutersResponses.cbegin(), ExecutersResponses.cend(),
-            [](const auto& resp) { return resp == EExecuterResponse::SUCCESS; });
+        return std::all_of(ExecutersInfo.cbegin(), ExecutersInfo.cend(),
+            [](auto it) { return it.second->Response == EExecuterResponse::SUCCESS; });
     }
 
     bool CheckExecutersAreFailed() const {
-        return std::all_of(ExecutersResponses.cbegin(), ExecutersResponses.cend(),
-            [](const auto& resp) { return resp == EExecuterResponse::ERROR; });
+        return std::all_of(ExecutersInfo.cbegin(), ExecutersInfo.cend(),
+            [](auto it) { return it.second->Response == EExecuterResponse::ERROR; });
     }
 
     void RuntimeError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
@@ -620,18 +618,15 @@ private:
 
 private:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
-    IKqpGateway::TExecPhysicalRequest LiteralRequest;
-    IKqpGateway::TExecPhysicalRequest PhysicalRequest;
-    const TActorId SessionActorId;
-    TVector<TActorId> Executers;
-    TVector<TActorId> BufferActors;
-    TVector<EExecuterResponse> ExecutersResponses;
+    THashMap<TActorId, TKqpExecuterInfo::TPtr> ExecutersInfo;
+    THashMap<TActorId, TKqpExecuterInfo::TPtr> BuffersInfo;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
     TTableId TableId;
     TString TablePath;
-
-    // Args for child executers and buffer write actors
+    IKqpGateway::TExecPhysicalRequest LiteralRequest;
+    IKqpGateway::TExecPhysicalRequest PhysicalRequest;
+    const TActorId SessionActorId;
     TString Database;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TIntrusivePtr<TKqpCounters> Counters;

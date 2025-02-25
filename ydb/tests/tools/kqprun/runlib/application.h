@@ -16,8 +16,10 @@
 namespace NKikimrRun {
 
 class TMainBase : public TMainClassArgs {
-#ifdef PROFILE_MEMORY_ALLOCATIONS
 public:
+    TMainBase();
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
     static void FinishProfileMemoryAllocations();
 #endif
 

@@ -673,7 +673,7 @@ protected:
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev) const;
 
     void UpdateTaskInfo(
-        Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
+        NActors::TActorSystem* actorSystem, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
         FederatedQuery::Internal::QueryInternal& internal, FederatedQuery::Job& job, TString& owner,
         TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const;
 
@@ -688,7 +688,8 @@ protected:
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev) const;
 
 protected:
-    template<typename T>
+    // Should not be used from callbacks
+    template <typename T>
     void SendResponseIssues(TActorId sender, const NYql::TIssues& issues, ui64 cookie, const TDuration& delta, TRequestCounters requestCounters) {
         std::unique_ptr<T> event(new T{issues});
         requestCounters.Common->ResponseBytes->Add(event->GetByteSize());
@@ -698,7 +699,7 @@ protected:
         requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
     }
 
-    template<class ResponseEvent, class Result, class RequestEventPtr>
+    template <class ResponseEvent, class Result, class RequestEventPtr>
     TFuture<bool> SendResponse(const TString& name,
         NActors::TActorSystem* actorSystem,
         const TAsyncStatus& status,

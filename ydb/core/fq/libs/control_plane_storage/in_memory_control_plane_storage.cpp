@@ -716,7 +716,7 @@ private:
 
         TDuration backoff = Config->TaskLeaseTtl;
         TInstant expireAt = ctx.StartTime + Config->AutomaticQueriesTtl;
-        UpdateTaskInfo(resuest, finalStatus, query->Query, query->QueryInternal, job->Job, pendingQuery->Owner, pendingQuery->RetryLimiter, backoff, expireAt);
+        UpdateTaskInfo(TActivationContext::ActorSystem(), resuest, finalStatus, query->Query, query->QueryInternal, job->Job, pendingQuery->Owner, pendingQuery->RetryLimiter, backoff, expireAt);
         PingTask(ctx, *query, *job, *pendingQuery, backoff, expireAt);
 
         if (IsTerminalStatus(ctx.Request.status())) {

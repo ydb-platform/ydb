@@ -18,6 +18,27 @@
 
 namespace NKikimrRun {
 
+namespace {
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+void InterruptHandler(int) {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+
+    Cout << colors.Red() << "Execution interrupted, finishing profile memory allocations..." << colors.Default() << Endl;
+    TMainBase::FinishProfileMemoryAllocations();
+
+    abort();
+}
+#endif
+
+}  // nonymous namespace
+
+TMainBase::TMainBase() {
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    signal(SIGINT, &InterruptHandler);
+#endif
+}
+
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 void TMainBase::FinishProfileMemoryAllocations() {
     if (ProfileAllocationsOutput) {

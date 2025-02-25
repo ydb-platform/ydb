@@ -129,7 +129,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
         // running query us locked for lease period
         TDuration backoff = Config->TaskLeaseTtl;
         TInstant expireAt = TInstant::Now() + Config->AutomaticQueriesTtl;
-        UpdateTaskInfo(request, finalStatus, query, internal, job, owner, retryLimiter, backoff, expireAt);
+        UpdateTaskInfo(actorSystem, request, finalStatus, query, internal, job, owner, retryLimiter, backoff, expireAt);
 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "HardPingTask(write)");
         writeQueryBuilder.AddString("tenant", request.tenant());
@@ -324,7 +324,7 @@ NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::
 }
 
 void TControlPlaneStorageBase::UpdateTaskInfo(
-    Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
+    NActors::TActorSystem* actorSystem, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
     FederatedQuery::Internal::QueryInternal& internal, FederatedQuery::Job& job, TString& owner,
     TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const
 {
@@ -420,7 +420,7 @@ void TControlPlaneStorageBase::UpdateTaskInfo(
                 issues->AddIssue(issue);
             }
         }
-        CPS_LOG_D("PingTaskRequest (resign): " << (!policyFound ? " DEFAULT POLICY" : "") << (owner ? " FAILURE " : " ") << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code()) << " " << retryLimiter.RetryCount << " " << retryLimiter.RetryCounterUpdatedAt << " " << backoff);
+        CPS_LOG_AS_D(*actorSystem, "PingTaskRequest (resign): " << (!policyFound ? " DEFAULT POLICY" : "") << (owner ? " FAILURE " : " ") << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code()) << " " << retryLimiter.RetryCount << " " << retryLimiter.RetryCounterUpdatedAt << " " << backoff);
     }
 
     if (queryStatus) {
@@ -462,7 +462,7 @@ void TControlPlaneStorageBase::UpdateTaskInfo(
             try {
                 statistics = GetPrettyStatistics(statistics);
             } catch (const std::exception&) {
-                CPS_LOG_E("Error on statistics prettification: " << CurrentExceptionMessage());
+                CPS_LOG_AS_E(*actorSystem, "Error on statistics prettification: " << CurrentExceptionMessage());
             }
         }
         *query.mutable_statistics()->mutable_json() = statistics;

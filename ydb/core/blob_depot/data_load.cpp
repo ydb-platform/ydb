@@ -2,6 +2,7 @@
 #include "schema.h"
 #include "garbage_collection.h"
 #include "coro_tx.h"
+#include "s3.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -12,7 +13,7 @@ namespace NKikimr::NBlobDepot {
             bool progress = false;
 
             TString trash;
-            bool trashLoaded = false;
+            TS3Locator s3;
 
             TScanRange r{
                 .Begin = TKey::Min(),
@@ -21,7 +22,8 @@ namespace NKikimr::NBlobDepot {
                 .PrechargeBytes = 1'000'000,
             };
 
-            while (!(trashLoaded = LoadTrash(*TCoroTx::GetTxc(), trash, progress)) ||
+            while (!LoadTrash(*TCoroTx::GetTxc(), trash, progress) ||
+                    !LoadTrashS3(*TCoroTx::GetTxc(), s3, progress) ||
                     !ScanRange(r, TCoroTx::GetTxc(), &progress, [](const TKey&, const TValue&) { return true; })) {
                 if (std::exchange(progress, false)) {
                     TCoroTx::FinishTx();
@@ -52,6 +54,36 @@ namespace NKikimr::NBlobDepot {
             if (auto key = rows.GetKey(); key != from) {
                 Self->Data->AddTrashOnLoad(TLogoBlobID::FromBinary(key));
                 from = std::move(key);
+                progress = true;
+            }
+            if (!rows.Next()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool TData::LoadTrashS3(NTabletFlatExecutor::TTransactionContext& txc, TS3Locator& from, bool& progress) {
+        NIceDb::TNiceDb db(txc.DB);
+        auto table = db.Table<Schema::TrashS3>().GreaterOrEqual(from.Generation, from.KeyId);
+        static constexpr ui64 PrechargeRows = 10'000;
+        static constexpr ui64 PrechargeBytes = 1'000'000;
+        if (!table.Precharge(PrechargeRows, PrechargeBytes)) {
+            return false;
+        }
+        auto rows = table.Select();
+        if (!rows.IsReady()) {
+            return false;
+        }
+        while (rows.IsValid()) {
+            TS3Locator item{
+                .Len = rows.GetValue<Schema::TrashS3::Len>(),
+                .Generation = rows.GetValue<Schema::TrashS3::Generation>(),
+                .KeyId = rows.GetValue<Schema::TrashS3::KeyId>(),
+            };
+            if (item != from) {
+                Self->S3Manager->AddTrashToCollect(item);
+                from = item;
                 progress = true;
             }
             if (!rows.Next()) {
@@ -110,6 +142,23 @@ namespace NKikimr::NBlobDepot {
             return true;
         }
     }
+
+    template<typename TRecord>
+    bool TData::LoadMissingKeys(const TRecord& record, NTabletFlatExecutor::TTransactionContext& txc) {
+        if (IsLoaded()) {
+            return true;
+        }
+        for (const auto& item : record.GetItems()) {
+            auto key = TKey::FromBinaryKey(item.GetKey(), Self->Config);
+            if (!EnsureKeyLoaded(key, txc)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    template bool TData::LoadMissingKeys(const NKikimrBlobDepot::TEvCommitBlobSeq& record, NTabletFlatExecutor::TTransactionContext& txc);
+    template bool TData::LoadMissingKeys(const NKikimrBlobDepot::TEvPrepareWriteS3& record, NTabletFlatExecutor::TTransactionContext& txc);
 
     void TBlobDepot::StartDataLoad() {
         Data->StartLoad();

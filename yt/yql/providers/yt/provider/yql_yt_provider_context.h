@@ -41,16 +41,14 @@ public:
 
     TYtProviderContext(TJoinAlgoLimits limits, TVector<TYtProviderRelInfo> relInfo);
 
-    virtual TOptimizerStatistics ComputeJoinStatsV1(
+    virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
         const TVector<NDq::TJoinColumn>& leftJoinKeys,
         const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
         EJoinKind joinKind,
-        TCardinalityHints::TCardinalityHint* maybeHint = nullptr,
-        bool shuffleLeftSide = false,
-        bool shuffleRightSide = false) const override;
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const override;
 
     bool IsJoinApplicable(
         const std::shared_ptr<IBaseOptimizerNode>& leftStats,

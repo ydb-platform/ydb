@@ -144,18 +144,14 @@ bool TYtProviderContext::IsJoinApplicable(
     return joinAlgo == EJoinAlgoType::MergeJoin;
 }
 
-TOptimizerStatistics TYtProviderContext::ComputeJoinStatsV1(
+TOptimizerStatistics TYtProviderContext::ComputeJoinStats(
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
     const TVector<NDq::TJoinColumn>& leftJoinKeys,
     const TVector<NDq::TJoinColumn>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
     EJoinKind /*joinKind*/,
-    TCardinalityHints::TCardinalityHint* /*maybeHint*/,
-    bool shuffleLeftSide,
-    bool shuffleRightSide) const {
-
-    Y_UNUSED(shuffleLeftSide, shuffleRightSide);
+    TCardinalityHints::TCardinalityHint* /*maybeHint*/) const {
 
     const TYtProviderStatistic* leftSpecific = static_cast<const TYtProviderStatistic*>(leftStats.Specific.get());
     const TYtProviderStatistic* rightSpecific = static_cast<const TYtProviderStatistic*>(rightStats.Specific.get());

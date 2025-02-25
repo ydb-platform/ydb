@@ -45,6 +45,7 @@ namespace NFq {
 
 using namespace NActors;
 using namespace NKikimr;
+using namespace NKikimrRun;
 
 //////////////////////////////////////////////////////
 
@@ -100,8 +101,8 @@ struct TTestBootstrap {
     TTestBootstrap(std::string tablePrefix, const NConfig::TControlPlaneStorageConfig& config = {})
         : Config(config)
     {
-        NKikimrRun::SetupSignalActions();
-        NKikimr::EnableYDBBacktraceFormat();
+        SetupSignalActions();
+        EnableYDBBacktraceFormat();
 
         Cerr << "Netstat: " << Exec("netstat --all --program") << Endl;
         Cerr << "Process stat: " << Exec("ps aux") << Endl;

@@ -23,6 +23,7 @@ PEERDIR(
     ydb/core/fq/libs/rate_limiter/events
     ydb/core/testlib/default
     ydb/library/security
+    ydb/tests/tools/fqrun/src
     ydb/tests/tools/kqprun/runlib
 )
 

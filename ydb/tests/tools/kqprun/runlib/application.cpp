@@ -31,7 +31,7 @@ void InterruptHandler(int) {
 }
 #endif
 
-}  // nonymous namespace
+}  // anonymous namespace
 
 TMainBase::TMainBase() {
 #ifdef PROFILE_MEMORY_ALLOCATIONS

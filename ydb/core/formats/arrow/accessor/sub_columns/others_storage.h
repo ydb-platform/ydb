@@ -121,10 +121,6 @@ public:
         return Stats;
     }
 
-    ui32 GetColumnsCount() const {
-        return Records->num_rows();
-    }
-
     static std::shared_ptr<arrow::Schema> GetSchema() {
         static arrow::FieldVector fields = { std::make_shared<arrow::Field>("record_idx", arrow::uint32()),
             std::make_shared<arrow::Field>("key", arrow::uint32()), std::make_shared<arrow::Field>("value", arrow::utf8()) };

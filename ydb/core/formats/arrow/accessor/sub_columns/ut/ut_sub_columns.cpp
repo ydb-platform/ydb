@@ -40,6 +40,13 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         return sb;
     }
 
+    Y_UNIT_TEST(EmptyOthers){ 
+        auto arrEmpty = NSubColumns::TOthersData::BuildEmpty();
+        auto arrSliceEmpty = arrEmpty.Slice(0, 1000, NSubColumns::TSettings());
+        AFL_VERIFY(arrSliceEmpty.GetRecords()->num_rows() == 0);
+        AFL_VERIFY(arrSliceEmpty.GetRecords()->GetColumnsCount() == 0);
+    }
+
     Y_UNIT_TEST(SlicesDef) {
         NSubColumns::TSettings settings(4, 1, 0, 0);
 

@@ -169,10 +169,13 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
 
 TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSettings& settings) const {
     AFL_VERIFY(Records->GetColumnsCount() == 3);
-    if (!count) {
+    if (!count || !Records || !Records->num_rows()) {
         return TOthersData::BuildEmpty();
     }
     TOthersData::TIterator itOthersData = BuildIterator();
+    if (!itOthersData.IsValid()) {
+        return TOthersData::BuildEmpty();
+    }
     std::optional<ui32> startPosition = itOthersData.FindPosition(offset);
     std::optional<ui32> finishPosition = itOthersData.FindPosition(offset + count);
     if (!startPosition || startPosition == finishPosition) {

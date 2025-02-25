@@ -159,13 +159,10 @@ bool IsRetryableError(int error) {
     switch (error) {
         case LDAP_SERVER_DOWN:
         case LDAP_TIMEOUT:
-        case LDAP_NO_MEMORY:
         case LDAP_CONNECT_ERROR:
-        case LDAP_NO_RESULTS_RETURNED:
         case LDAP_BUSY:
         case LDAP_UNAVAILABLE:
-        case LDAP_UNWILLING_TO_PERFORM:
-        case LDAP_LOOP_DETECT:
+        case LDAP_ADMIN_LIMIT_EXCEEDED:
             return true;
     }
     return false;

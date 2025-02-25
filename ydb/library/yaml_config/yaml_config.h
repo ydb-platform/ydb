@@ -94,6 +94,8 @@ class IConfigSwissKnife {
 public:
     virtual ~IConfigSwissKnife() = default;
     virtual bool VerifyReplaceRequest(const Ydb::Config::ReplaceConfigRequest& request, Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) const = 0;
+    virtual bool VerifyMainConfig(const TString& config) const = 0;
+    virtual bool VerifyStorageConfig(const TString& config) const = 0;
 };
 
 

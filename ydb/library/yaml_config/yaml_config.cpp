@@ -102,6 +102,14 @@ public:
     bool VerifyReplaceRequest(const Ydb::Config::ReplaceConfigRequest&, Ydb::StatusIds::StatusCode&, NYql::TIssues&) const override {
         return true;
     }
+
+    bool VerifyMainConfig(const TString&) const override {
+        return true;
+    };
+
+    bool VerifyStorageConfig(const TString&) const override {
+        return true;
+    }
 };
 
 

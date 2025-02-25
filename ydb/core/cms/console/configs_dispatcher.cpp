@@ -862,7 +862,7 @@ try {
     NLastGetopt::TOptsParseResultException parseResult(&opts, argv.size(), argv.data());
 
     initCfg.ValidateOptions(opts, parseResult);
-    initCfg.Parse(parseResult.GetFreeArgs());
+    initCfg.Parse(parseResult.GetFreeArgs(), nullptr);
 
     NKikimrConfig::TAppConfig appConfig;
     ui32 nodeId;

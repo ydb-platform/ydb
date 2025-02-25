@@ -5,6 +5,7 @@
 #include <util/datetime/base.h>
 
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>
+#include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
 #include <ydb/public/lib/fq/scope.h>
@@ -247,6 +248,85 @@ TDuration ExtractLimit(const TTask& task) {
     return executionLimit;
 }
 
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev) const
+{
+    const auto& request = ev->Get()->Request;
+    NYql::TIssues issues = ValidateGetTask(request.owner_id(), request.host());
+
+    if (!ev->Get()->TenantInfo) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::NOT_READY, "Control Plane is not ready yet. Please retry later."));
+    }
+
+    return issues;
+}
+
+void TControlPlaneStorageBase::FillGetTaskResult(Fq::Private::GetTaskResult& result, const TVector<TTask>& tasks) const
+{
+    for (const auto& task : tasks) {
+        const auto& queryType = task.Query.content().type();
+        if (queryType != FederatedQuery::QueryContent::ANALYTICS && queryType != FederatedQuery::QueryContent::STREAMING) { //TODO: fix
+            ythrow yexception()
+                << "query type "
+                << FederatedQuery::QueryContent::QueryType_Name(queryType)
+                << " unsupported";
+        }
+
+        auto* newTask = result.add_tasks();
+        newTask->set_query_type(queryType);
+        newTask->set_query_syntax(task.Query.content().syntax());
+        newTask->set_execute_mode(task.Query.meta().execute_mode());
+        newTask->set_state_load_mode(task.Internal.state_load_mode());
+        auto* queryId = newTask->mutable_query_id();
+        queryId->set_value(task.Query.meta().common().id());
+        newTask->set_streaming(queryType == FederatedQuery::QueryContent::STREAMING);
+        newTask->set_text(task.Query.content().text());
+        *newTask->mutable_connection() = task.Internal.connection();
+        *newTask->mutable_binding() = task.Internal.binding();
+        newTask->set_user_token(task.Internal.token());
+        newTask->set_user_id(task.Query.meta().common().created_by());
+        newTask->set_generation(task.Generation);
+        newTask->set_status(task.Query.meta().status());
+        *newTask->mutable_created_topic_consumers() = task.Internal.created_topic_consumers();
+        newTask->mutable_sensor_labels()->insert({"cloud_id", task.Internal.cloud_id()});
+        newTask->mutable_sensor_labels()->insert({"scope", task.Scope});
+        newTask->set_automatic(task.Query.content().automatic());
+        newTask->set_query_name(task.Query.content().name());
+        *newTask->mutable_deadline() = NProtoInterop::CastToProto(task.Deadline);
+        newTask->mutable_disposition()->CopyFrom(task.Internal.disposition());
+        newTask->set_result_limit(task.Internal.result_limit());
+        *newTask->mutable_execution_limit() = NProtoInterop::CastToProto(ExtractLimit(task));
+        *newTask->mutable_request_started_at() = task.Query.meta().started_at();
+        *newTask->mutable_request_submitted_at() = task.Query.meta().submitted_at();
+
+        newTask->set_restart_count(task.RetryCount);
+        auto* jobId = newTask->mutable_job_id();
+        jobId->set_value(task.Query.meta().last_job_id());
+
+        for (const auto& connection: task.Internal.connection()) {
+            const auto serviceAccountId = ExtractServiceAccountId(connection);
+            if (!serviceAccountId) {
+                continue;
+            }
+            auto* account = newTask->add_service_accounts();
+            account->set_value(serviceAccountId);
+        }
+
+        *newTask->mutable_dq_graph() = task.Internal.dq_graph();
+        newTask->set_dq_graph_index(task.Internal.dq_graph_index());
+        *newTask->mutable_dq_graph_compressed() = task.Internal.dq_graph_compressed();
+
+        *newTask->mutable_result_set_meta() = task.Query.result_set_meta();
+        newTask->set_scope(task.Scope);
+        *newTask->mutable_resources() = task.Internal.resources();
+
+        newTask->set_execution_id(task.Internal.execution_id());
+        newTask->set_operation_id(task.Internal.operation_id());
+        *newTask->mutable_compute_connection() = task.Internal.compute_connection();
+        *newTask->mutable_result_ttl() = task.Internal.result_ttl();
+        *newTask->mutable_parameters() = task.Query.content().parameters();
+    }
+}
+
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
@@ -262,13 +342,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
     CPS_LOG_T("GetTaskRequest: {" << request.DebugString() << "}");
 
-    NYql::TIssues issues = ValidateGetTask(owner, hostName);
-
-    if (!ev->Get()->TenantInfo) {
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::NOT_READY, "Control Plane is not ready yet. Please retry later."));
-    }
-
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_W("GetTaskRequest: {" << request.DebugString() << "} FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvGetTaskResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
@@ -364,15 +438,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         responseTasks=responseTasks] (const auto& readFuture) mutable
     {
         try {
-            if (!readFuture.GetValue().IsSuccess())
+            if (!readFuture.GetValue().IsSuccess()) {
                 return readFuture;
+            }
         } catch (...) {
             return readFuture;
         }
 
         auto pickTaskParams = prepareParams(*resultSets);
-        if (pickTaskParams.empty())
+        if (pickTaskParams.empty()) {
             return readFuture;
+        }
 
         auto debugInfos = std::make_shared<TVector<TDebugInfoPtr>>(pickTaskParams.size());
         if (Config->Proto.GetEnableDebugMode()) {
@@ -410,74 +486,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         });
     });
 
-    auto prepare = [response] {
+    auto prepare = [this, response] {
         Fq::Private::GetTaskResult result;
-        const auto& tasks = std::get<0>(*response);
-
-        for (const auto& task : tasks) {
-            const auto& queryType = task.Query.content().type();
-            if (queryType != FederatedQuery::QueryContent::ANALYTICS && queryType != FederatedQuery::QueryContent::STREAMING) { //TODO: fix
-                ythrow yexception()
-                    << "query type "
-                    << FederatedQuery::QueryContent::QueryType_Name(queryType)
-                    << " unsupported";
-            }
-
-            auto* newTask = result.add_tasks();
-            newTask->set_query_type(queryType);
-            newTask->set_query_syntax(task.Query.content().syntax());
-            newTask->set_execute_mode(task.Query.meta().execute_mode());
-            newTask->set_state_load_mode(task.Internal.state_load_mode());
-            auto* queryId = newTask->mutable_query_id();
-            queryId->set_value(task.Query.meta().common().id());
-            newTask->set_streaming(queryType == FederatedQuery::QueryContent::STREAMING);
-            newTask->set_text(task.Query.content().text());
-            *newTask->mutable_connection() = task.Internal.connection();
-            *newTask->mutable_binding() = task.Internal.binding();
-            newTask->set_user_token(task.Internal.token());
-            newTask->set_user_id(task.Query.meta().common().created_by());
-            newTask->set_generation(task.Generation);
-            newTask->set_status(task.Query.meta().status());
-            *newTask->mutable_created_topic_consumers() = task.Internal.created_topic_consumers();
-            newTask->mutable_sensor_labels()->insert({"cloud_id", task.Internal.cloud_id()});
-            newTask->mutable_sensor_labels()->insert({"scope", task.Scope});
-            newTask->set_automatic(task.Query.content().automatic());
-            newTask->set_query_name(task.Query.content().name());
-            *newTask->mutable_deadline() = NProtoInterop::CastToProto(task.Deadline);
-            newTask->mutable_disposition()->CopyFrom(task.Internal.disposition());
-            newTask->set_result_limit(task.Internal.result_limit());
-            *newTask->mutable_execution_limit() = NProtoInterop::CastToProto(ExtractLimit(task));
-            *newTask->mutable_request_started_at() = task.Query.meta().started_at();
-            *newTask->mutable_request_submitted_at() = task.Query.meta().submitted_at();
-
-            newTask->set_restart_count(task.RetryCount);
-            auto* jobId = newTask->mutable_job_id();
-            jobId->set_value(task.Query.meta().last_job_id());
-
-            for (const auto& connection: task.Internal.connection()) {
-                const auto serviceAccountId = ExtractServiceAccountId(connection);
-                if (!serviceAccountId) {
-                    continue;
-                }
-                auto* account = newTask->add_service_accounts();
-                account->set_value(serviceAccountId);
-            }
-
-            *newTask->mutable_dq_graph() = task.Internal.dq_graph();
-            newTask->set_dq_graph_index(task.Internal.dq_graph_index());
-            *newTask->mutable_dq_graph_compressed() = task.Internal.dq_graph_compressed();
-
-            *newTask->mutable_result_set_meta() = task.Query.result_set_meta();
-            newTask->set_scope(task.Scope);
-            *newTask->mutable_resources() = task.Internal.resources();
-
-            newTask->set_execution_id(task.Internal.execution_id());
-            newTask->set_operation_id(task.Internal.operation_id());
-            *newTask->mutable_compute_connection() = task.Internal.compute_connection();
-            *newTask->mutable_result_ttl() = task.Internal.result_ttl();
-            *newTask->mutable_parameters() = task.Query.content().parameters();
-        }
-
+        FillGetTaskResult(result, std::get<0>(*response));
         return result;
     };
     auto success = SendResponse<TEvControlPlaneStorage::TEvGetTaskResponse, Fq::Private::GetTaskResult>

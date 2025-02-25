@@ -131,17 +131,9 @@ TInteractiveCLI::TInteractiveCLI(TClientCommand::TConfig & config, std::string p
 {}
 
 void TInteractiveCLI::Run() {
-    std::vector<std::string> SQLWords = {"SELECT", "FROM", "WHERE", "GROUP", "ORDER", "BY", "LIMIT", "OFFSET", 
-        "EXPLAIN", "AST", "SET"};
-    std::vector<std::string> Words;
-    for (auto & word : SQLWords) {
-        Words.push_back(word);
-        Words.push_back(ToLower(word));
-    }
-
     TFsPath homeDirPath(HomeDir);
     TString historyFilePath(homeDirPath / ".ydb_history");
-    std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath, Suggest{std::move(Words)});
+    std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath);
 
     InteractiveCLIState interactiveCLIState;
 

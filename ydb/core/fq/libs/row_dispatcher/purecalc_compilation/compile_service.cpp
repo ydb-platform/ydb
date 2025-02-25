@@ -188,7 +188,7 @@ private:
         }
         auto options = NYql::NPureCalc::TProgramFactoryOptions();
         options.SetLLVMSettings(settings.EnabledLLVM ? "ON" : "OFF");
-        options.UseAntlr4 = false;
+        options.UseAntlr4 = true;
         return ProgramFactories.emplace(settings, NYql::NPureCalc::MakeProgramFactory(options)).first->second;
     }
 

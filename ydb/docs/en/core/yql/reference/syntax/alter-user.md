@@ -1,6 +1,6 @@
 # ALTER USER
 
-Changes the user password.
+Changes the database user.
 
 ## Syntax
 
@@ -12,9 +12,9 @@ ALTER USER user_name [ WITH ] option [ ... ]
 * `option` — The command option:
   * `PASSWORD 'password'` — changes the password to `password`; you can't use it together with `HASH`.
   * `PASSWORD NULL` — sets an empty password; you can't use it together with `HASH`.
+  * `HASH 'hash'` -  sets the user's password, which will have a hash is equal to `hash`; you can't use it together with `PASSWORD`.
   * `NOLOGIN` - disallows user to log in; you can't use it together with `LOGIN`.
   * `LOGIN` - allows user to log in; you can't use it together with `NOLOGIN`.
-  * `HASH 'hash'` -  sets the user's password, which will have a hash is equal to `hash`; you can't use it together with `PASSWORD`.
 
 {% include [!](../../../_includes/do-not-create-users-in-ldap.md) %}
 
@@ -38,6 +38,26 @@ ALTER USER user1 PASSWORD 'password';
 ALTER USER user1 PASSWORD NULL;
 ```
 
+## HASH
+
+The {{ ydb-short-name }} stores the user's password in hashed form. Therefore, in order to be able to restore the user with same password during database backup, there is a `HASH` option that allows you to alter a user, after his creating, knowing only the hash in JSON format.
+
+In the `HASH` option, the 'hash' parameter must get a JSON object with exactly three fields:
+
+* `hash` - value of hash in base64 format;
+* `salt` - sault in base64 format;
+* `type` - hashing algorithm; this value always must be equal `argon2id`.
+
+There is example:
+
+```yql
+ALTER USER user1 HASH '{
+    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+    "type": "argon2id"
+}'
+```
+
 ## NOLOGIN
 
 Database administrator can block user.
@@ -58,24 +78,4 @@ There is example:
 
 ```yql
 ALTER USER user1 LOGIN;
-```
-
-## HASH
-
-The {{ ydb-short-name }} stores the user's password in hashed form. Therefore, in order to be able to restore the user with same password during database backup, there is a `HASH` option that allows you to alter a user, after his creating, knowing only the hash in JSON format.
-
-In the `HASH` option, the 'hash' parameter must get a JSON object with exactly three fields:
-
-* `hash` - value of hash in base64 format;
-* `salt` - sault in base64 format;
-* `type` - hashing algorithm; this value always must be equal `argon2id`.
-
-There is example:
-
-```yql
-ALTER USER user1 HASH '{
-    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
-    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
-    "type": "argon2id"
-}'
 ```

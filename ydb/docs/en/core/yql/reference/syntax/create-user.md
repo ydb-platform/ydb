@@ -1,6 +1,6 @@
 # CREATE USER
 
-Creates a user with the specified name and password.
+Creates the database user.
 
 Syntax:
 
@@ -12,9 +12,9 @@ CREATE USER user_name [option]
 * `option` — command option:
   * `PASSWORD 'password'` — creates a user with the password `password`; you can't use it together with `HASH`.
   * `PASSWORD NULL` — creates a user with an empty password; you can't use it together with `HASH`; default value.
+  * `HASH 'hash'` - creates a user with the a password whose hash is equal to `hash`; you can't use it together with `PASSWORD`.
   * `NOLOGIN` - disallows user to log in; you can't use it together with `LOGIN`.
   * `LOGIN` - allows user to log in; you can't use it together with `NOLOGIN`; default value.
-  * `HASH 'hash'` - creates a user with the a password whose hash is equal to `hash`; you can't use it together with `PASSWORD`.
 
 {% include [!](../../../_includes/do-not-create-users-in-ldap.md) %}
 
@@ -30,26 +30,6 @@ CREATE USER user1 PASSWORD 'password';
 
 ```yql
 CREATE USER user1 PASSWORD NULL;
-```
-
-## NOLOGIN
-
-Database administrator can create blocked user. Without specifying the `NOLOGIN`, the user is created unblocked.
-
-There is example:
-
-```yql
-CREATE USER user1 NOLOGIN;
-```
-
-## LOGIN
-
-The option explicitly indicates that the user is being created unblocked.
-
-There is example:
-
-```yql
-CREATE USER user1 LOGIN;
 ```
 
 ## HASH
@@ -70,4 +50,24 @@ CREATE USER user1 HASH '{
     "salt": "U+tzBtgo06EBQCjlARA6Jg==",
     "type": "argon2id"
 }';
+```
+
+## NOLOGIN
+
+Database administrator can create blocked user. Without specifying the `NOLOGIN`, the user is created unblocked.
+
+There is example:
+
+```yql
+CREATE USER user1 NOLOGIN;
+```
+
+## LOGIN
+
+The option explicitly indicates that the user is being created unblocked.
+
+There is example:
+
+```yql
+CREATE USER user1 LOGIN;
 ```

@@ -28,10 +28,6 @@ public:
         : Self(self) {
     }
 
-    ~TSpaceWatcher() {
-        fprintf(stderr, "SpaceWatcher destroyed\n");
-    }
-
     void PersistSubDomainPathId(ui64 localPathId, NTabletFlatExecutor::TTransactionContext &txc);
     void StopWatchingSubDomainPathId();
     void StartWatchingSubDomainPathId();

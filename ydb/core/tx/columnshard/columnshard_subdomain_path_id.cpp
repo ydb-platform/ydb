@@ -85,17 +85,22 @@ void TSpaceWatcher::Handle(NActors::TEvents::TEvPoison::TPtr& , const TActorCont
     Die(ctx);
 }
 
-void TSpaceWatcher::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
+void TSpaceWatcher::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext&) {
+    auto* msg = ev->Get();
+    if (msg->PathId.LocalPathId == SubDomainPathId) {
+        Send(Self->SelfId(), ev.Release()->Get());
+    }
+}
+
+void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("notify_subdomain", msg->PathId);
-    if (msg->PathId.LocalPathId == SubDomainPathId) {
-        const bool outOfSpace = msg->Result->GetPathDescription()
-            .GetDomainDescription()
-            .GetDomainState()
-            .GetDiskQuotaExceeded();
+    const bool outOfSpace = msg->Result->GetPathDescription()
+        .GetDomainDescription()
+        .GetDomainState()
+        .GetDiskQuotaExceeded();
 
-        Self->Execute(new TTxPersistSubDomainOutOfSpace(Self, outOfSpace), ctx);
-    }
+    Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
 }
 
 static constexpr TDuration MaxFindSubDomainPathIdDelay = TDuration::Minutes(10);

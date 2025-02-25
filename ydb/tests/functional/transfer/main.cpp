@@ -174,15 +174,15 @@ struct MainTestCase {
 
         {
             if (Config.AlterLambda) {
+                Sleep(TDuration::Seconds(1));
+
                 auto res = session.ExecuteQuery(Sprintf(R"(
                     %s;
-    
+
                     ALTER TRANSFER `%s`
                     SET USING $l;
-                )", Config.Lambda, TransferName.data()), TTxControl::NoTx()).GetValueSync();
+                )", Config.AlterLambda->data(), TransferName.data()), TTxControl::NoTx()).GetValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-
-                Sleep(TDuration::Seconds(1));
             }
         }
 

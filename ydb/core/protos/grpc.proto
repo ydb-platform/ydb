@@ -49,8 +49,8 @@ service TGRpcServer {
     // KV-TABLET INTERNAL INTERFACE
     /////////////////////////////////////////////////////////////////////////////////////////////////
     rpc HiveCreateTablet(THiveCreateTablet) returns (TResponse);
-    rpc LocalEnumerateTablets(TLocalEnumerateTablets) returns (TResponse);
-    rpc KeyValue(TKeyValueRequest) returns (TResponse);
+    //rpc LocalEnumerateTablets(TLocalEnumerateTablets) returns (TResponse);
+    //rpc KeyValue(TKeyValueRequest) returns (TResponse);
     rpc TestShardControl(TTestShardControlRequest) returns (TResponse);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////

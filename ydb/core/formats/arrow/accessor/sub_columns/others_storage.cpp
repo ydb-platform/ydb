@@ -179,7 +179,7 @@ TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSetti
     std::optional<ui32> startPosition = itOthersData.FindPosition(offset);
     std::optional<ui32> finishPosition = itOthersData.FindPosition(offset + count);
     if (!startPosition || startPosition == finishPosition) {
-        return TOthersData(TDictStats::BuildEmpty(), std::make_shared<TGeneralContainer>(0));
+        return TOthersData::BuildEmpty();
     }
     TUsedKeysCollection usedKeys(Stats);
     {

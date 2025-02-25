@@ -18,6 +18,7 @@ TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
             }
             ++idx;
         }
+        records.DeleteFieldsByIndex(indexesToRemove);
         return TColumnsData(builder.Finish(), std::make_shared<TGeneralContainer>(std::move(records)));
 
     } else {

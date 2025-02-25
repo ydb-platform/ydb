@@ -16,7 +16,8 @@ namespace NKikimr::NBlobDepot {
                     KEYVALUE_TABLE({
                         KEYVALUE_P("Loaded", Loaded ? "true" : "false");
                         KEYVALUE_P("Data size, number of keys", Data.size());
-                        KEYVALUE_P("RefCount size, number of blobs", RefCount.size());
+                        KEYVALUE_P("RefCount size, number of blobs", RefCountBlobs.size());
+                        KEYVALUE_P("RefCount size, number of S3 objects", RefCountS3.size());
                         KEYVALUE_P("Total stored data size, bytes", FormatByteSize(TotalStoredDataSize));
                         KEYVALUE_P("Keys made certain, number of keys", KeysMadeCertain.size());
                     })

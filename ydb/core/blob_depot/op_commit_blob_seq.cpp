@@ -1,8 +1,8 @@
 #include "blob_depot_tablet.h"
 #include "schema.h"
 #include "data.h"
-#include "garbage_collection.h"
 #include "blocks.h"
+#include "s3.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -30,7 +30,7 @@ namespace NKikimr::NBlobDepot {
                 const auto& items = Request->Get()->Record.GetItems();
                 Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_PUTS_INCOMING] += items.size();
                 for (const auto& item : items) {
-                    if (TData::TValue::Validate(item) && !item.GetCommitNotify()) {
+                    if (TData::TValue::Validate(item) && !item.GetCommitNotify() && item.HasBlobLocator()) {
                         const auto blobSeqId = TBlobSeqId::FromProto(item.GetBlobLocator().GetBlobSeqId());
                         if (Self->Data->CanBeCollected(blobSeqId)) {
                             // check for internal sanity -- we can't issue barriers on given ids without confirmed trimming
@@ -54,11 +54,9 @@ namespace NKikimr::NBlobDepot {
                     return true;
                 }
 
-                if (!LoadMissingKeys(txc)) {
+                if (!Self->Data->LoadMissingKeys(Request->Get()->Record, txc)) {
                     return false;
                 }
-
-                NIceDb::TNiceDb db(txc.DB);
 
                 NKikimrBlobDepot::TEvCommitBlobSeqResult *responseRecord;
                 std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request);
@@ -72,28 +70,43 @@ namespace NKikimr::NBlobDepot {
                         responseItem->SetErrorReason("TEvCommitBlobSeq item protobuf is not valid");
                         continue;
                     }
-                    const auto& blobLocator = item.GetBlobLocator();
 
-                    const auto blobSeqId = TBlobSeqId::FromProto(blobLocator.GetBlobSeqId());
-                    if (FailedBlobSeqIds.contains(blobSeqId)) {
-                        responseItem->SetStatus(NKikimrProto::ERROR);
-                        responseItem->SetErrorReason("couldn't start commit sequence for blob");
-                        continue;
+                    bool canBeCollected = false; // can the just-written-blob be collected with GC logic?
+
+                    if (item.HasBlobLocator()) {
+                        const auto& blobLocator = item.GetBlobLocator();
+
+                        const auto blobSeqId = TBlobSeqId::FromProto(blobLocator.GetBlobSeqId());
+                        if (FailedBlobSeqIds.contains(blobSeqId)) {
+                            responseItem->SetStatus(NKikimrProto::ERROR);
+                            responseItem->SetErrorReason("couldn't start commit sequence for blob");
+                            continue;
+                        }
+
+                        canBeCollected = Self->Data->CanBeCollected(blobSeqId);
+
+                        Y_VERIFY_DEBUG_S(canBeCollected || !CanBeCollectedBlobSeqIds.contains(blobSeqId),
+                            "BlobSeqId# " << blobSeqId);
                     }
 
                     responseItem->SetStatus(NKikimrProto::OK);
 
-                    const bool canBeCollected = Self->Data->CanBeCollected(blobSeqId);
-
                     auto key = TData::TKey::FromBinaryKey(item.GetKey(), Self->Config);
                     if (!item.GetCommitNotify()) {
+                        bool blocksPass = true;
                         if (const auto& v = key.AsVariant(); const auto *id = std::get_if<TLogoBlobID>(&v)) {
-                            if (!Self->BlocksManager->CheckBlock(id->TabletID(), id->Generation())) {
-                                // FIXME(alexvru): ExtraBlockChecks?
-                                responseItem->SetStatus(NKikimrProto::BLOCKED);
-                                responseItem->SetErrorReason("block race detected");
-                                continue;
+                            blocksPass = Self->BlocksManager->CheckBlock(id->TabletID(), id->Generation());
+                        }
+                        for (const auto& extra : item.GetExtraBlockChecks()) {
+                            if (!blocksPass) {
+                                break;
                             }
+                            blocksPass = Self->BlocksManager->CheckBlock(extra.GetTabletId(), extra.GetGeneration());
+                        }
+                        if (!blocksPass) {
+                            responseItem->SetStatus(NKikimrProto::BLOCKED);
+                            responseItem->SetErrorReason("block race detected");
+                            continue;
                         }
                     }
 
@@ -107,13 +120,10 @@ namespace NKikimr::NBlobDepot {
                         continue;
                     }
 
-                    Y_VERIFY_DEBUG_S(!CanBeCollectedBlobSeqIds.contains(blobSeqId), "BlobSeqId# " << blobSeqId);
-
-                    TString error;
-                    if (!CheckKeyAgainstBarrier(key, &error)) {
+                    if (auto error = Self->Data->CheckKeyAgainstBarrier(key)) {
                         responseItem->SetStatus(NKikimrProto::ERROR);
                         responseItem->SetErrorReason(TStringBuilder() << "BlobId# " << key.ToString()
-                            << " is being put beyond the barrier: " << error);
+                            << " is being put beyond the barrier: " << *error);
                         continue;
                     }
 
@@ -128,15 +138,25 @@ namespace NKikimr::NBlobDepot {
                             responseItem->SetStatus(NKikimrProto::RACE);
                         }
                     } else {
-                        Y_VERIFY_DEBUG_S(AllowedBlobSeqIds.contains(blobSeqId), "BlobSeqId# " << blobSeqId);
-                        Y_VERIFY_DEBUG_S(
-                            Self->Channels[blobSeqId.Channel].GetLeastExpectedBlobId(generation) <= blobSeqId,
-                            "BlobSeqId# " << blobSeqId
-                            << " LeastExpectedBlobId# " << Self->Channels[blobSeqId.Channel].GetLeastExpectedBlobId(generation)
-                            << " Generation# " << generation);
-                        Y_VERIFY_DEBUG_S(blobSeqId.Generation == generation, "BlobSeqId# " << blobSeqId << " Generation# " << generation);
-                        Y_VERIFY_DEBUG_S(Self->Channels[blobSeqId.Channel].SequenceNumbersInFlight.contains(blobSeqId.ToSequentialNumber()),
-                            "BlobSeqId# " << blobSeqId);
+                        if (item.HasBlobLocator()) {
+                            const auto blobSeqId = TBlobSeqId::FromProto(item.GetBlobLocator().GetBlobSeqId());
+                            Y_VERIFY_DEBUG_S(AllowedBlobSeqIds.contains(blobSeqId), "BlobSeqId# " << blobSeqId);
+                            Y_VERIFY_DEBUG_S(
+                                Self->Channels[blobSeqId.Channel].GetLeastExpectedBlobId(generation) <= blobSeqId,
+                                "BlobSeqId# " << blobSeqId
+                                << " LeastExpectedBlobId# " << Self->Channels[blobSeqId.Channel].GetLeastExpectedBlobId(generation)
+                                << " Generation# " << generation);
+                            Y_VERIFY_DEBUG_S(blobSeqId.Generation == generation, "BlobSeqId# " << blobSeqId << " Generation# " << generation);
+                            Y_VERIFY_DEBUG_S(Self->Channels[blobSeqId.Channel].SequenceNumbersInFlight.contains(blobSeqId.ToSequentialNumber()),
+                                "BlobSeqId# " << blobSeqId);
+                        }
+                        if (item.HasS3Locator()) {
+                            auto locator = TS3Locator::FromProto(item.GetS3Locator());
+
+                            // remove written item from the trash
+                            NIceDb::TNiceDb db(txc.DB);
+                            db.Table<Schema::TrashS3>().Key(locator.Generation, locator.KeyId).Delete();
+                        }
                         Self->Data->UpdateKey(key, item, txc, this);
                     }
                 }
@@ -149,41 +169,6 @@ namespace NKikimr::NBlobDepot {
                     ].Increment(1);
                 }
 
-                return true;
-            }
-
-            bool LoadMissingKeys(TTransactionContext& txc) {
-                NIceDb::TNiceDb db(txc.DB);
-                if (Self->Data->IsLoaded()) {
-                    return true;
-                }
-                for (const auto& item : Request->Get()->Record.GetItems()) {
-                    auto key = TData::TKey::FromBinaryKey(item.GetKey(), Self->Config);
-                    if (!Self->Data->EnsureKeyLoaded(key, txc)) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-
-            bool CheckKeyAgainstBarrier(const TData::TKey& key, TString *error) {
-                const auto& v = key.AsVariant();
-                if (const auto *id = std::get_if<TLogoBlobID>(&v)) {
-                    bool underSoft, underHard;
-                    Self->BarrierServer->GetBlobBarrierRelation(*id, &underSoft, &underHard);
-                    if (underHard) {
-                        *error = TStringBuilder() << "under hard barrier# " << Self->BarrierServer->ToStringBarrier(
-                            id->TabletID(), id->Channel(), true);
-                        return false;
-                    } else if (underSoft) {
-                        const TData::TValue *value = Self->Data->FindKey(key);
-                        if (!value || value->KeepState != NKikimrBlobDepot::EKeepState::Keep) {
-                            *error = TStringBuilder() << "under soft barrier# " << Self->BarrierServer->ToStringBarrier(
-                                id->TabletID(), id->Channel(), false);
-                            return false;
-                        }
-                    }
-                }
                 return true;
             }
 

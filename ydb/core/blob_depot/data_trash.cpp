@@ -5,7 +5,7 @@ namespace NKikimr::NBlobDepot {
     using TData = TBlobDepot::TData;
 
     void TData::CommitTrash(void *cookie) {
-        auto [first, last] = InFlightTrash.equal_range(cookie);
+        auto [first, last] = InFlightTrashBlobs.equal_range(cookie);
         std::unordered_set<TRecordsPerChannelGroup*> records;
         for (auto it = first; it != last; ++it) {
             auto& record = GetRecordsPerChannelGroup(it->second);
@@ -13,7 +13,7 @@ namespace NKikimr::NBlobDepot {
             records.insert(&record);
             InFlightTrashSize -= it->second.BlobSize();
         }
-        InFlightTrash.erase(first, last);
+        InFlightTrashBlobs.erase(first, last);
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
 
         for (TRecordsPerChannelGroup *record : records) {

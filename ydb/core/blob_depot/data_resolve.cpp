@@ -215,17 +215,22 @@ namespace NKikimr::NBlobDepot {
                 LogoBlobIDFromLogoBlobID(key.GetBlobId(), out->MutableBlobId());
                 item.SetReliablyWritten(reliablyWritten);
             } else {
-                EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](const TLogoBlobID& id, ui32 begin, ui32 end) {
-                    if (begin != end) {
-                        auto *out = item.AddValueChain();
-                        out->SetGroupId(Self->Info()->GroupFor(id.Channel(), id.Generation()));
-                        LogoBlobIDFromLogoBlobID(id, out->MutableBlobId());
-                        if (begin) {
-                            out->SetSubrangeBegin(begin);
+                EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), TOverloaded {
+                    [&](TLogoBlobID id, ui32 begin, ui32 end) {
+                        if (begin != end) {
+                            auto *out = item.AddValueChain();
+                            out->SetGroupId(Self->Info()->GroupFor(id.Channel(), id.Generation()));
+                            LogoBlobIDFromLogoBlobID(id, out->MutableBlobId());
+                            if (begin) {
+                                out->SetSubrangeBegin(begin);
+                            }
+                            if (end != id.BlobSize()) {
+                                out->SetSubrangeEnd(end);
+                            }
                         }
-                        if (end != id.BlobSize()) {
-                            out->SetSubrangeEnd(end);
-                        }
+                    },
+                    [&](TS3Locator) {
+                        Y_DEBUG_ABORT();
                     }
                 });
                 item.SetReliablyWritten(true);

@@ -46,7 +46,8 @@ public:
         }
 
         if (Ev->Get()->IsSuccess()) {
-            target->SetDstState(TReplication::EDstState::Done);
+            target->SetDstState(TReplication::EDstState::Ready);
+            target->UpdateConfig(replication->GetConfig());
 
             CLOG_N(ctx, "Target dst altered"
                 << ": rid# " << rid
@@ -55,7 +56,7 @@ public:
             if (replication->CheckAlterDone()) {
                 CLOG_N(ctx, "Replication altered"
                     << ": rid# " << rid);
-                replication->SetState(TReplication::EState::Done);
+                replication->SetState(TReplication::EState::Ready);
             }
         } else {
             target->SetDstState(TReplication::EDstState::Error);
@@ -88,6 +89,15 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         CLOG_D(ctx, "Complete");
+
+        const auto rid = Ev->Get()->ReplicationId;
+
+        auto replication = Self->Find(rid);
+        if (replication && replication->GetState() == TReplication::EState::Ready) {
+            CLOG_W(ctx, ">>>>> Progress "
+                << ": rid# " << rid);
+            replication->Progress(ctx);
+        }
     }
 
 }; // TTxAlterDstResult

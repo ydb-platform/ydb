@@ -75,7 +75,6 @@ private:
     TReplication* const Replication;
     const ui64 Id;
     const ETargetKind Kind;
-    const IConfig::TPtr Config;
 
     EDstState DstState = EDstState::Creating;
     TPathId DstPathId;
@@ -89,6 +88,9 @@ private:
     TActorId WorkerRegistar;
     THashMap<ui64, TWorker> Workers;
     bool PendingRemoveWorkers = false;
+
+protected:
+    IConfig::TPtr Config;
 
 }; // TTargetBase
 

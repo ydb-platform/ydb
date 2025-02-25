@@ -37,27 +37,38 @@ public:
             return true;
         }
 
+        bool alter = false;
+
+        const auto& oldConfig = Replication->GetConfig();
+        const auto& newConfig = record.GetConfig();
+
+        if (oldConfig.HasTransferSpecific()) {
+            auto& oldLambda = oldConfig.GetTransferSpecific().GetTargets(0).GetTransformLambda();
+            auto& newLambda = newConfig.GetTransferSpecific().GetTargets(0).GetTransformLambda();
+
+            alter = oldLambda != newLambda;
+        }
+
         Replication->SetConfig(std::move(*record.MutableConfig()));
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString())
         );
 
-        if (!record.HasSwitchState()) {
+        if (record.HasSwitchState()) {
+            switch (record.GetSwitchState().GetStateCase()) {
+                case NKikimrReplication::TReplicationState::kDone:
+                    break;
+                default:
+                    Y_ABORT("Invalid state");
+                }
+        } else if (!alter) {
             Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
             return true;
         }
 
-        switch (record.GetSwitchState().GetStateCase()) {
-        case NKikimrReplication::TReplicationState::kDone:
-            break;
-        default:
-            Y_ABORT("Invalid state");
-        }
-
         Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
 
-        bool alter = false;
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
             if (!target) {

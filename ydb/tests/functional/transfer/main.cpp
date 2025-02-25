@@ -183,6 +183,8 @@ struct MainTestCase {
                     SET USING $l;
                 )", Config.AlterLambda->data(), TransferName.data()), TTxControl::NoTx()).GetValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+                Sleep(TDuration::Seconds(1));
             }
         }
 

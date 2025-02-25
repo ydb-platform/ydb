@@ -29,6 +29,8 @@ public:
     explicit TTargetTable(TReplication* replication,
         ui64 id, const IConfig::TPtr& config);
 
+    void UpdateConfig(const NKikimrReplication::TReplicationConfig&) override;
+
 protected:
     TString BuildStreamPath() const override;
 };
@@ -45,6 +47,8 @@ public:
 
     explicit TTargetIndexTable(TReplication* replication,
         ui64 id, const IConfig::TPtr& config);
+
+    void UpdateConfig(const NKikimrReplication::TReplicationConfig&) override;
 
 protected:
     TString BuildStreamPath() const override;
@@ -66,6 +70,7 @@ public:
     explicit TTargetTransfer(TReplication* replication,
         ui64 id, const IConfig::TPtr& config);
 
+    void UpdateConfig(const NKikimrReplication::TReplicationConfig&) override;
 
 protected:
     TString BuildStreamPath() const override;

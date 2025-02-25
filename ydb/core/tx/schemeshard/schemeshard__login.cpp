@@ -1,5 +1,6 @@
 #include <ydb/library/security/util.h>
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/base/auth.h>
 
 #include "schemeshard_impl.h"
 
@@ -87,19 +88,12 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
 
 private:
     bool IsAdmin() const {
-        const auto& adminSids = AppData()->AdministrationAllowedSIDs;
-        if (adminSids.empty()) {
-            return true;
-        }
-
         const auto& user = Request->Get()->Record.GetUser();
         const auto providerGroups = Self->LoginProvider.GetGroupsMembership(user);
         const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
         const auto userToken = NACLib::TUserToken(user, groups);
-        auto hasSid = [&userToken](const TString& sid) -> bool {
-            return userToken.IsExist(sid);
-        };
-        return std::find_if(adminSids.begin(), adminSids.end(), hasSid) != adminSids.end();
+
+        return IsAdministrator(AppData(), &userToken);
     }
 
     void LoginAttempt(NIceDb::TNiceDb& db, const TActorContext& ctx) {

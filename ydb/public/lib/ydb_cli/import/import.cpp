@@ -1005,10 +1005,12 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
         UpsertTValueBuffer(dbPath, std::move(buildFunc))
             .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
                 jobInflightManager->ReleaseJob();
-                batchStatus->Completed = true;
-                if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
-                    ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
-                        "Couldn't add worker func to save progress"));
+                if (asyncStatus.GetValueSync().IsSuccess()) {
+                    batchStatus->Completed = true;
+                    if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
+                        ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+                            "Couldn't add worker func to save progress"));
+                    }
                 }
                 return asyncStatus;
             });

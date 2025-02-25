@@ -43,6 +43,8 @@ public:
     static ::google::protobuf::Map<TStringType, Ydb::TypedValue>* GetProtoMapPtr(TParams& params);
     static const Ydb::TableStats::QueryStats& GetProto(const NTable::TQueryStats& queryStats);
     static const Ydb::Table::DescribeTableResult& GetProto(const NTable::TTableDescription& tableDescription);
+    static const Ydb::Table::DescribeExternalDataSourceResult& GetProto(const NTable::TExternalDataSourceDescription&);
+    static const Ydb::Table::DescribeExternalTableResult& GetProto(const NTable::TExternalTableDescription&);
     static const Ydb::Topic::DescribeTopicResult& GetProto(const NYdb::NTopic::TTopicDescription& topicDescription);
     static const Ydb::Topic::DescribeConsumerResult& GetProto(const NYdb::NTopic::TConsumerDescription& consumerDescription);
     static const Ydb::Monitoring::SelfCheckResult& GetProto(const NYdb::NMonitoring::TSelfCheckResult& selfCheckResult);

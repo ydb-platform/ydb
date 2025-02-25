@@ -7,9 +7,6 @@
 
 namespace NSQLTranslationV1 {
 
-TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
-    TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig);
-
 using namespace NSQLv1Generated;
 
 static bool ValidateForCounters(const TString& input) {
@@ -49,26 +46,42 @@ TNodePtr TSqlCallExpr::BuildCall() {
             TNodePtr named = named_args->Y("TypeOf", named_args);
 
             TNodePtr custom_user_type = new TCallNodeImpl(Pos, "TupleType", {positional, named, udf_node->GetExternalTypes()});
+            TNodePtr options = udf_node->BuildOptions();
+
+            if (udf_node->IsScript()) {
+                auto udf = BuildScriptUdf(Pos, udf_node->GetModule(), udf_node->GetFunction(), udf_node->GetScriptArgs(), options);
+                TVector<TNodePtr> applyArgs;
+                applyArgs.push_back(new TAstAtomNodeImpl(Pos, !NamedArgs.empty() ? "NamedApply" : "Apply", TNodeFlags::Default));
+                applyArgs.push_back(udf);
+                if (!NamedArgs.empty()) {
+                    applyArgs.push_back(BuildTuple(Pos, PositionalArgs));
+                    applyArgs.push_back(BuildStructure(Pos, NamedArgs));
+                } else {
+                    applyArgs.insert(applyArgs.end(), PositionalArgs.begin(), PositionalArgs.end());
+                }
+
+                return new TAstListNodeImpl(Pos, applyArgs);
+            }
 
             return BuildSqlCall(Ctx, Pos, udf_node->GetModule(), udf_node->GetFunction(),
                                 args, positional_args, named_args, custom_user_type,
-                                udf_node->GetTypeConfig(), udf_node->GetRunConfig());
+                                udf_node->GetTypeConfig(), udf_node->GetRunConfig(), options);
         }
 
-        if (Node && !Node->FuncName()) {
+        if (Node && (!Node->FuncName() || Node->IsScript())) {
             Module = "YQL";
             Func = NamedArgs.empty() ? "Apply" : "NamedApply";
             warnOnYqlNameSpace = false;
             args.push_back(Node);
         }
 
-        if (Node && Node->FuncName()) {
+        if (Node && Node->FuncName() && !Node->IsScript()) {
             Module = Node->ModuleName() ? *Node->ModuleName() : "YQL";
             Func = *Node->FuncName();
         }
         bool mustUseNamed = !NamedArgs.empty();
         if (mustUseNamed) {
-            if (Node && !Node->FuncName()) {
+            if (Node && (!Node->FuncName() || Node->IsScript())) {
                 mustUseNamed = false;
             }
             args.emplace_back(BuildTuple(Pos, PositionalArgs));
@@ -276,7 +289,7 @@ bool TSqlCallExpr::FillArg(const TString& module, const TString& func, size_t& i
 bool TSqlCallExpr::FillArgs(const TRule_named_expr_list& node) {
     TString module = Module;
     TString func = Func;
-    if (Node && Node->FuncName()) {
+    if (Node && Node->FuncName() && !Node->IsScript()) {
         module = Node->ModuleName() ? *Node->ModuleName() : "YQL";
         func = *Node->FuncName();
     }

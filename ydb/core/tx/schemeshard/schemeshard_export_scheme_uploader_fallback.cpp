@@ -31,9 +31,10 @@ private:
 
 
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
+    bool enablePermissions
 ) {
-    Y_UNUSED(sourcePathId, settings, databaseRoot, metadata);
+    Y_UNUSED(sourcePathId, settings, databaseRoot, metadata, enablePermissions);
     return new TSchemeUploaderFallback(schemeShard, exportId, itemIdx);
 }
 

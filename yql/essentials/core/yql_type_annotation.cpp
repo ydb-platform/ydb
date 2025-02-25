@@ -4,8 +4,6 @@
 #include "yql_library_compiler.h"
 #include "yql_type_helpers.h"
 
-#include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/ast/yql_constraint.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -529,7 +527,7 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
         settings.FileAliasPrefix = FileAliasPrefix;
-        astRes = SqlToYql(query, settings);
+        astRes = SqlToYql(Translators, query, settings);
         if (!astRes.IsOk()) {
             ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to parse SQL: " << fullName), astRes.Issues));
             return false;
@@ -646,7 +644,7 @@ IModuleResolver::TPtr TModuleResolver::CreateMutableChild() const {
         throw yexception() << "Module resolver should not contain user data and URL loader";
     }
 
-    return std::make_shared<TModuleResolver>(&Modules, LibsContext.NextUniqueId, ClusterMapping, SqlFlags, OptimizeLibraries, KnownPackages, Libs, FileAliasPrefix);
+    return std::make_shared<TModuleResolver>(Translators, &Modules, LibsContext.NextUniqueId, ClusterMapping, SqlFlags, OptimizeLibraries, KnownPackages, Libs, FileAliasPrefix);
 }
 
 void TModuleResolver::SetFileAliasPrefix(TString&& prefix) {

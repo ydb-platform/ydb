@@ -2,7 +2,10 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+
 #include <ydb/library/security/util.h>
+#include <ydb/core/base/auth.h>
+
 #include <ydb/core/protos/auth.pb.h>
 
 namespace {
@@ -88,7 +91,8 @@ public:
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                            Schema::LoginSids::SidHash,
-                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, sid.IsEnabled);
+                                                                           Schema::LoginSids::IsEnabled,
+                                                                           Schema::LoginSids::FailedAttemptCount>(sid.Type, sid.PasswordHash, sid.IsEnabled, sid.FailedLoginAttemptCount);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
                         AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);
@@ -288,6 +292,10 @@ public:
     }
 
     NLogin::TLoginProvider::TBasicResponse CanRemoveSid(TOperationContext& context, const TString sid, const TString& sidType) {
+        if (!AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
+            return {}; 
+        }
+
         auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
         for (auto pathId : subTree) {
             TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -299,7 +307,7 @@ public:
             NACLib::TACL acl(path->ACL);
             if (acl.HasAccess(sid)) {
                 auto pathStr = TPath::Init(pathId, context.SS).PathString();
-                return {.Error = TStringBuilder() << 
+                return {.Error = TStringBuilder() <<
                     sidType << " " << sid << " has an ACL record on " << pathStr << " and can't be removed"};
             }
         }
@@ -308,19 +316,11 @@ public:
     }
 
     void AddIsUserAdmin(const TString& user, NLogin::TLoginProvider& loginProvider, TParts& additionalParts) {
-        const auto& adminSids = AppData()->AdministrationAllowedSIDs;
-        bool isAdmin = adminSids.empty();
-        if (!isAdmin) {
-            const auto providerGroups = loginProvider.GetGroupsMembership(user);
-            const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
-            const auto userToken = NACLib::TUserToken(user, groups);
-            auto hasSid = [&userToken](const TString& sid) -> bool {
-                return userToken.IsExist(sid);
-            };
-            isAdmin = std::find_if(adminSids.begin(), adminSids.end(), hasSid) != adminSids.end();   
-        }
+        const auto providerGroups = loginProvider.GetGroupsMembership(user);
+        const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
+        const auto userToken = NACLib::TUserToken(user, groups);
 
-        if (isAdmin) {
+        if (IsAdministrator(AppData(), &userToken)) {
             additionalParts.emplace_back("login_user_level", "admin");
         }
     }

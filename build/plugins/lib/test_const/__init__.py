@@ -448,6 +448,7 @@ class PythonLinterName(Enum):
 
 class CppLinterName(Enum):
     ClangFormat = "clang_format"
+    ClangFormatYT = "clang_format_yt"
 
 
 class DefaultLinterConfig(Enum):
@@ -455,8 +456,17 @@ class DefaultLinterConfig(Enum):
     Python = "build/config/tests/py_style/default_configs.json"
 
 
+# TODO Fill up like
+"""
+{
+    PythonLinterName.Ruff: "build/config/tests/ruff/rules.yaml",
+}
+"""
+LINTER_TO_VALIDATION_CONFIG = {}
+
 LINTER_CONFIG_TYPES = {
     CppLinterName.ClangFormat: (".clang-format",),
+    CppLinterName.ClangFormatYT: (".clang-format",),
     PythonLinterName.Black: ("pyproject.toml",),
     PythonLinterName.Ruff: ("pyproject.toml", "ruff.toml"),
 }

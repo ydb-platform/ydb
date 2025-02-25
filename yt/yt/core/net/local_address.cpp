@@ -8,6 +8,7 @@
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
+#include <library/cpp/yt/system/exit.h>
 
 #ifdef _unix_
     #include <sys/types.h>
@@ -28,96 +29,106 @@ namespace NYT::NNet {
 
 namespace {
 
-constexpr size_t MaxLocalFieldLength = 256;
-constexpr size_t MaxLocalFieldDataSize = 1024;
+class TStaticName
+{
+public:
+    TStringBuf Read() const noexcept
+    {
+        // Writer-side imposes AcqRel ordering, so all preceding writes must be visible.
+        char* ptr = Ptr_.load(std::memory_order::relaxed);
+        return ptr ? ptr : Buffer_;
+    }
 
-// All static variables below must be const-initialized.
-// - char[] is a POD, so it must be const-initialized.
-// - std::atomic has constexpr value constructors.
-// However, there is no way to enforce in compile-time that these variables
-// are really const-initialized, so please double-check it with `objdump -s`.
-char LocalHostNameData[MaxLocalFieldDataSize] = "(unknown)";
-std::atomic<char*> LocalHostNamePtr;
+    std::string Get() const
+    {
+        return std::string(Read());
+    }
 
-char LocalYPClusterData[MaxLocalFieldDataSize] = "(unknown)";
-std::atomic<char*> LocalYPClusterPtr;
+    void Write(TStringBuf value) noexcept
+    {
+        char* ptr = Ptr_.load(std::memory_order::relaxed);
+        ptr = ptr ? ptr : Buffer_;
 
-std::atomic<bool> IPv6Enabled_ = false;
+        if (::strncmp(ptr, value.data(), value.length()) == 0) {
+            // No changes; just return.
+            return;
+        }
+
+        ptr = ptr + strlen(ptr) + 1;
+
+        if (ptr + value.length() + 1 >= Buffer_ + BufferSize) {
+            AbortProcessDramatically(
+                EProcessExitCode::InternalError,
+                "TStaticName is out of buffer space");
+        }
+
+        ::memcpy(ptr, value.data(), value.length());
+        *(ptr + value.length()) = 0;
+
+        Ptr_.store(ptr, std::memory_order::seq_cst);
+    }
+
+private:
+    static constexpr size_t BufferSize = 1024;
+    char Buffer_[BufferSize] = "(unknown)";
+    std::atomic<char*> Ptr_;
+};
+
+// All static variables below must be constinit.
+constinit TStaticName LocalHostName;
+constinit TStaticName LocalYPCluster;
+constinit std::atomic<bool> IPv6Enabled = false;
 
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const char* ReadLocalHostName() noexcept
+TStringBuf GetLocalHostNameRaw() noexcept
 {
     NYT::NDetail::EnableErrorOriginOverrides();
-    // Writer-side imposes AcqRel ordering, so all preceding writes must be visible.
-    char* ptr = LocalHostNamePtr.load(std::memory_order::relaxed);
-    return ptr ? ptr : LocalHostNameData;
+    return LocalHostName.Read();
 }
 
-const char* ReadLocalYPCluster() noexcept
+TStringBuf GetLocalYPClusterRaw() noexcept
 {
     // Writer-side imposes AcqRel ordering, so all preceding writes must be visible.
-    char* ptr = LocalYPClusterPtr.load(std::memory_order::relaxed);
-    return ptr ? ptr : LocalYPClusterData;
+    return LocalYPCluster.Read();
 }
 
-void GuardedWriteString(std::atomic<char*>& storage, char* initial, TStringBuf string)
-{
-    char* ptr = storage.load(std::memory_order::relaxed);
-    ptr = ptr ? ptr : initial;
-
-    if (::strncmp(ptr, string.data(), string.length()) == 0) {
-        return; // No changes; just return.
-    }
-
-    ptr = ptr + strlen(ptr) + 1;
-
-    if (ptr + string.length() + 1 >= initial + MaxLocalFieldDataSize) {
-        ::abort(); // Once we crash here, we can start reusing space.
-    }
-
-    ::memcpy(ptr, string.data(), string.length());
-    *(ptr + string.length()) = 0;
-
-    storage.store(ptr, std::memory_order::seq_cst);
-}
-
-void WriteLocalHostName(TStringBuf hostName) noexcept
+void SetLocalHostName(TStringBuf hostName) noexcept
 {
     NYT::NDetail::EnableErrorOriginOverrides();
 
     static NThreading::TForkAwareSpinLock Lock;
     auto guard = Guard(Lock);
 
-    GuardedWriteString(LocalHostNamePtr, LocalHostNameData, hostName);
+    LocalHostName.Write(hostName);
 
     if (auto ypCluster = InferYPClusterFromHostNameRaw(hostName)) {
-        GuardedWriteString(LocalYPClusterPtr, LocalYPClusterData, *ypCluster);
+        LocalYPCluster.Write(*ypCluster);
     }
 }
 
-TString GetLocalHostName()
+std::string GetLocalHostName()
 {
-    return {ReadLocalHostName()};
+    return LocalHostName.Get();
 }
 
-TString GetLocalYPCluster()
+std::string GetLocalYPCluster()
 {
-    return {ReadLocalYPCluster()};
+    return LocalYPCluster.Get();
 }
 
 void UpdateLocalHostName(const TAddressResolverConfigPtr& config)
 {
-    std::array<char, MaxLocalFieldLength> hostName;
-    hostName.fill(0);
+    // See https://man7.org/linux/man-pages/man7/hostname.7.html
+    std::array<char, 256> hostName{};
 
     auto onFail = [&] (const std::vector<TError>& errors) {
         THROW_ERROR_EXCEPTION("Failed to update localhost name") << errors;
     };
 
-    auto runWithRetries = [&] (std::function<int()> func, std::function<TError(int /*result*/)> onError) {
+    auto runWithRetries = [&] (auto func, auto onError) {
         std::vector<TError> errors;
 
         for (int retryIndex = 0; retryIndex < config->Retries; ++retryIndex) {
@@ -141,7 +152,7 @@ void UpdateLocalHostName(const TAddressResolverConfigPtr& config)
         [&] (int /*result*/) { return TError("gethostname failed: %v", strerror(errno)); });
 
     if (!config->ResolveHostNameIntoFqdn) {
-        WriteLocalHostName(TStringBuf(hostName.data()));
+        SetLocalHostName(TStringBuf(hostName.data()));
         return;
     }
 
@@ -164,7 +175,7 @@ void UpdateLocalHostName(const TAddressResolverConfigPtr& config)
         onFail({error});
     }
 
-    WriteLocalHostName(TStringBuf(response->ai_canonname));
+    SetLocalHostName(TStringBuf(response->ai_canonname));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,12 +184,12 @@ const std::string& GetLoopbackAddress()
 {
     static const std::string ipv4result("[127.0.1.1]");
     static const std::string ipv6result("[::1]");
-    return IPv6Enabled_.load(std::memory_order::relaxed) ? ipv6result : ipv4result;
+    return IPv6Enabled.load(std::memory_order::relaxed) ? ipv6result : ipv4result;
 }
 
 void UpdateLoopbackAddress(const TAddressResolverConfigPtr& config)
 {
-    IPv6Enabled_ = config->EnableIPv6;
+    IPv6Enabled = config->EnableIPv6;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

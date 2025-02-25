@@ -426,6 +426,7 @@ const TTypedColumn ConvertJsonValueToColumn(const TKqpOlapJsonValue& jsonValueCa
         jsonValueCallable.Column(),
         jsonValueCallable.Path(),
         type);
+    jsonValueFunc->SetKernelName("JsonValue");
     jsonValueFunc->SetKernelIdx(idx);
 
     return {command->GetColumn().GetId(), ctx.ConvertToBlockType(type)};

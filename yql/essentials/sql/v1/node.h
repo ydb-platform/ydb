@@ -194,6 +194,7 @@ namespace NSQLTranslationV1 {
         virtual bool HasSelectResult() const;
         virtual const TString* FuncName() const;
         virtual const TString* ModuleName() const;
+        virtual bool IsScript() const;
         virtual bool HasSkip() const;
 
         virtual TColumnNode* GetColumnNode();
@@ -325,6 +326,7 @@ namespace NSQLTranslationV1 {
         virtual bool HasSelectResult() const override;
         virtual const TString* FuncName() const override;
         virtual const TString* ModuleName() const override;
+        virtual bool IsScript() const override;
         virtual bool HasSkip() const override;
 
         virtual TColumnNode* GetColumnNode() override;
@@ -950,6 +952,9 @@ namespace NSQLTranslationV1 {
         const TDeferredAtom& GetTypeConfig() const;
         TUdfNode* GetUdfNode() override;
         const TUdfNode* GetUdfNode() const override;
+        bool IsScript() const override;
+        const TVector<TNodePtr>& GetScriptArgs() const;
+        TNodePtr BuildOptions() const;
     private:
         TVector<TNodePtr> Args;
         const TString* FunctionName;
@@ -957,6 +962,10 @@ namespace NSQLTranslationV1 {
         TNodePtr ExternalTypesTuple = nullptr;
         TNodePtr RunConfig;
         TDeferredAtom TypeConfig;
+        TDeferredAtom Cpu;
+        TDeferredAtom ExtraMem;
+        bool ScriptUdf = false;
+        TVector<TNodePtr> ScriptArgs;
     };
 
     class IAggregation: public INode {
@@ -1268,6 +1277,11 @@ namespace NSQLTranslationV1 {
         bool Temporary = false;
     };
 
+    struct TAlterDatabaseParameters {
+        TDeferredAtom DbPath;
+        std::optional<TDeferredAtom> Owner;
+    };
+
     struct TTableRef;
     struct TAnalyzeParams {
         std::shared_ptr<TTableRef> Table;
@@ -1511,6 +1525,12 @@ namespace NSQLTranslationV1 {
 
 
     // Implemented in builtin.cpp
+    TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
+        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig,
+        TNodePtr options);
+    TNodePtr BuildScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args,
+        TNodePtr options);
+
     TNodePtr BuildCallable(TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args, bool forReduce = false);
     TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args);
     TNodePtr BuildBuiltinFunc(

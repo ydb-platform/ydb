@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/request.h>
-#include <ydb/library/formats/arrow/accessor/common/const.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NArrow::NAccessor::NPlain {
 

@@ -5,7 +5,7 @@
 #include <ydb/core/formats/arrow/arrow_filter.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
@@ -58,7 +58,7 @@ public:
             }
             slices.emplace_back(batch->Slice(filter.GetStartIndex(), filter.GetSliceSize()));
         }
-        return NArrow::ToBatch(TStatusValidator::GetValid(arrow::Table::FromRecordBatches(slices)), true);
+        return NArrow::ToBatch(TStatusValidator::GetValid(arrow::Table::FromRecordBatches(slices)));
     }
     [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> GetEmptySame(const std::shared_ptr<arrow::RecordBatch>& batch) {
         return batch->Slice(0, 0);

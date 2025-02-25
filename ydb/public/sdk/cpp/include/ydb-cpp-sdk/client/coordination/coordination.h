@@ -4,9 +4,11 @@
 
 namespace Ydb {
 namespace Coordination {
+    class Config;
+    class CreateNodeRequest;
     class DescribeNodeResult;
-    class SemaphoreSession;
     class SemaphoreDescription;
+    class SemaphoreSession;
 }
 }
 
@@ -107,6 +109,8 @@ public:
     const std::vector<NScheme::TPermissions>& GetEffectivePermissions() const;
     const Ydb::Coordination::DescribeNodeResult& GetProto() const;
 
+    void SerializeTo(Ydb::Coordination::CreateNodeRequest& creationRequest) const;
+
 private:
     struct TImpl;
     std::shared_ptr<TImpl> Impl_;
@@ -189,7 +193,10 @@ struct TNodeSettings : public TOperationRequestSettings<TDerived> {
     FLUENT_SETTING_DEFAULT(ERateLimiterCountersMode, RateLimiterCountersMode, ERateLimiterCountersMode::UNSET);
 };
 
-struct TCreateNodeSettings : public TNodeSettings<TCreateNodeSettings> { };
+struct TCreateNodeSettings : public TNodeSettings<TCreateNodeSettings> {
+    TCreateNodeSettings() = default;
+    TCreateNodeSettings(const Ydb::Coordination::Config& config);
+};
 struct TAlterNodeSettings : public TNodeSettings<TAlterNodeSettings> { };
 struct TDropNodeSettings : public TOperationRequestSettings<TDropNodeSettings> { };
 struct TDescribeNodeSettings : public TOperationRequestSettings<TDescribeNodeSettings> { };

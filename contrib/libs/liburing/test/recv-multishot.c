@@ -166,7 +166,7 @@ static int test(struct args *args)
 		io_uring_prep_recv_multishot(sqe, fds[0], NULL, 0, 0);
 	}
 	sqe->flags |= IOSQE_BUFFER_SELECT;
-	sqe->buf_group = 7;
+        io_uring_sqe_set_buf_group(sqe, 7);
 	io_uring_sqe_set_data64(sqe, 1234);
 	io_uring_submit(&ring);
 
@@ -504,7 +504,7 @@ static int test_enobuf(void)
 	assert(sqe);
 	io_uring_prep_recv_multishot(sqe, fds[0], NULL, 0, 0);
 	io_uring_sqe_set_data64(sqe, 1);
-	sqe->buf_group = 0;
+	io_uring_sqe_set_buf_group(sqe, 0);
 	sqe->flags |= IOSQE_BUFFER_SELECT;
 
 	ret = io_uring_submit(&ring);

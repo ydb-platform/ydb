@@ -422,12 +422,7 @@ namespace NActors {
         TActorId SessionVirtualId;
         TActorId RemoteSessionVirtualId;
 
-        TActorId GenerateSessionVirtualId() {
-            ICPROXY_PROFILED;
-
-            const ui64 localId = TlsActivationContext->ExecutorThread.ActorSystem->AllocateIDSpace(1);
-            return NActors::TActorId(SelfId().NodeId(), 0, localId, 0);
-        }
+        TActorId GenerateSessionVirtualId();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

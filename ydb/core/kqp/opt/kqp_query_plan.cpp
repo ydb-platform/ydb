@@ -2845,6 +2845,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
                 stats["PhysicalStageId"] = (*stat)->GetStageId();
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
+                stats["FinishedTasks"] = (*stat)->GetFinishedTasksCount();
 
                 stats["StageDurationUs"] = (*stat)->GetStageDurationUs();
 
@@ -2921,6 +2922,38 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     for (auto ingress : (*stat)->GetIngress()) {
                         auto& ingressInfo = ingressStats.AppendValue(NJson::JSON_MAP);
                         ingressInfo["Name"] = ingress.first;
+                        if (ingress.second.HasExternal()) {
+                            auto& node = ingressInfo.InsertValue("External", NJson::JSON_MAP);
+                            auto& externalInfo = ingress.second.GetExternal();
+                            if (externalInfo.HasExternalRows()) {
+                                FillAggrStat(node, externalInfo.GetExternalRows(), "ExternalRows");
+                            }
+                            if (externalInfo.HasExternalBytes()) {
+                                FillAggrStat(node, externalInfo.GetExternalBytes(), "ExternalBytes");
+                            }
+                            if (externalInfo.HasStorageRows()) {
+                                FillAggrStat(node, externalInfo.GetStorageRows(), "StorageRows");
+                            }
+                            if (externalInfo.HasStorageBytes()) {
+                                FillAggrStat(node, externalInfo.GetStorageBytes(), "StorageBytes");
+                            }
+                            if (externalInfo.HasCpuTimeUs()) {
+                                FillAggrStat(node, externalInfo.GetCpuTimeUs(), "CpuTimeUs");
+                            }
+                            if (externalInfo.HasWaitInputTimeUs()) {
+                                FillAggrStat(node, externalInfo.GetWaitInputTimeUs(), "WaitInputTimeUs");
+                            }
+                            if (externalInfo.HasWaitOutputTimeUs()) {
+                                FillAggrStat(node, externalInfo.GetWaitOutputTimeUs(), "WaitOutputTimeUs");
+                            }
+                            if (externalInfo.HasFirstMessageMs()) {
+                                FillAggrStat(node, externalInfo.GetFirstMessageMs(), "FirstMessageMs");
+                            }
+                            if (externalInfo.HasLastMessageMs()) {
+                                FillAggrStat(node, externalInfo.GetLastMessageMs(), "LastMessageMs");
+                            }
+                            SetNonZero(node, "PartitionCount", externalInfo.GetPartitionCount());
+                        }
                         if (ingress.second.HasIngress()) {
                             FillAsyncAggrStat(ingressInfo.InsertValue("Ingress", NJson::JSON_MAP), ingress.second.GetIngress());
                         }

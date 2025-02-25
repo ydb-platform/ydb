@@ -301,13 +301,13 @@ web_join(int col, ds_key_t join_key)
     {
         dSiteClose = strtodate(WEB_END_DATE);
         nSiteDuration = dSiteClose->julian;
-        free(dSiteClose);
         nConcurrentSites = (int)get_rowcount(CONCURRENT_WEB_SITES);
         dSiteOpen = strtodate(WEB_START_DATE);
         nSiteDuration -= dSiteOpen->julian;
-        free(dSiteOpen);
         nSiteDuration *= nConcurrentSites;
         nOffset = (dSiteClose->julian - dSiteOpen->julian) / (2 * nSiteDuration) ;
+        free(dSiteClose);
+        free(dSiteOpen);
         init = 1;
     }
     

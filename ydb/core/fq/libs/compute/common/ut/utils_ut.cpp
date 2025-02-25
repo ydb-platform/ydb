@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(StatsFormat) {
 
     Y_UNIT_TEST(AggregateStat) {
         auto res = NFq::AggregateStats(NResource::Find("plan.json"));
-        UNIT_ASSERT_VALUES_EQUAL(res.size(), 14);
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 18);
         UNIT_ASSERT_VALUES_EQUAL(res["IngressBytes"], 6333256);
         UNIT_ASSERT_VALUES_EQUAL(res["EgressBytes"], 0);
         UNIT_ASSERT_VALUES_EQUAL(res["InputBytes"], 1044);

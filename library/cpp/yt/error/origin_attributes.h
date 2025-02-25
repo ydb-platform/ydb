@@ -76,7 +76,7 @@ inline constexpr NGlobal::TVariableTag ExtractFromDictionaryTag = {};
 // NB(arkady-e1ppa): ExtractFromDictionary symbol is left in yt/yt/core/misc/origin_attributes
 // because it depends on ytree for now.
 std::optional<TOriginAttributes::TErasedExtensionData> GetExtensionData();
-TString FormatOrigin(const TOriginAttributes& attributes);
+std::string FormatOrigin(const TOriginAttributes& attributes);
 
 ////////////////////////////////////////////////////////////////////////////////
 

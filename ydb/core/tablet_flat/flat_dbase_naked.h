@@ -481,21 +481,16 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void Replace(ui32 tid, TArrayRef<const TPartView> partViews, const TSubset &subset) noexcept
+        void Replace(
+            ui32 tid,
+            const TSubset &subset,
+            TArrayRef<const TPartView> newParts,
+            TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus) noexcept
         {
             auto &wrap = Get(tid, true);
 
             wrap.Aggr(Stats, false /* leave */);
-            wrap->Replace(partViews, subset);
-            wrap.Aggr(Stats, true /* enter */);
-        }
-
-        void ReplaceTxStatus(ui32 tid, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> txStatus, const TSubset &subset) noexcept
-        {
-            auto &wrap = Get(tid, true);
-
-            wrap.Aggr(Stats, false /* leave */);
-            wrap->ReplaceTxStatus(txStatus, subset);
+            wrap->Replace(subset, newParts, newTxStatus);
             wrap.Aggr(Stats, true /* enter */);
         }
 
@@ -524,6 +519,22 @@ namespace NTable {
             wrap.Aggr(Stats, false /* leave */);
             wrap->Merge(std::move(txStatus));
             wrap.Aggr(Stats, true /* enter */);
+        }
+
+        void MergeDone(ui32 tid) noexcept
+        {
+            auto &wrap = Get(tid, true);
+
+            wrap.Aggr(Stats, false /* leave */);
+            wrap->MergeDone();
+            wrap.Aggr(Stats, true /* enter */);
+        }
+
+        void MergeDone() noexcept
+        {
+            for (auto &pr : Tables) {
+                MergeDone(pr.first);
+            }
         }
 
         bool ApplySchema(const TSchemeChanges &delta)

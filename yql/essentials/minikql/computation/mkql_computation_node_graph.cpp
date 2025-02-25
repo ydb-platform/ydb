@@ -164,6 +164,10 @@ public:
         }
     }
 
+    ITerminator& GetTerminator() {
+        return *ValueBuilder;
+    }
+
     const TComputationMutables& GetMutables() const {
         return Mutables;
     }
@@ -994,6 +998,7 @@ TIntrusivePtr<TComputationPatternImpl> MakeComputationPatternImpl(TExploringNode
     depScanner.Walk(root.GetNode(), opts.Env);
 
     auto builder = MakeHolder<TComputationGraphBuildingVisitor>(opts);
+    const TBindTerminator bind(&builder->GetPatternNodes()->GetTerminator());
     for (const auto& node : explorer.GetNodes()) {
         Y_ABORT_UNLESS(node->GetCookie() <= IS_NODE_REACHABLE, "TNode graph should not be reused");
         if (node->GetCookie() == IS_NODE_REACHABLE) {

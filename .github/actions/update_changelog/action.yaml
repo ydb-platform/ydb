@@ -1,0 +1,44 @@
+name: "Update Changelog"
+
+description: "Custom action to update changelog based on input parameters."
+
+inputs:
+  pr_data:
+    description: "List of ids"
+    required: true
+  changelog_path:
+    description: "The value associated with the type."
+    required: true
+  base_branch:
+    description: "The base branch for the changelog update"
+    required: true
+  suffix:
+    description: "Suffix for the changelog update"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.x"
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+
+    - name: Store PR data to a temporary file
+      shell: bash
+      run: |
+        echo '${{ inputs.pr_data }}' > pr_data.txt
+
+    - name: Run update_changelog.py
+      shell: bash
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git config --local github.token ${{ env.YDBOT_TOKEN }}
+        python ${{ github.action_path }}/update_changelog.py pr_data.txt "${{ inputs.changelog_path }}" "${{ inputs.base_branch }}" "${{ inputs.suffix }}"

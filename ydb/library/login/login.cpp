@@ -141,6 +141,10 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
 
     if (request.CanLogin.has_value()) {
         user.IsEnabled = request.CanLogin.value();
+
+        if (user.IsEnabled && CheckLockoutByAttemptCount(user)) {
+            ResetFailedLoginAttemptCount(&user);
+        }
     }
 
     return response;
@@ -347,9 +351,12 @@ std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) 
     return groups;
 }
 
+bool TLoginProvider::CheckLockoutByAttemptCount(const TSidRecord& sid) const {
+    return AccountLockout.AttemptThreshold != 0 && sid.FailedLoginAttemptCount >= AccountLockout.AttemptThreshold;
+}
+
 bool TLoginProvider::CheckLockout(const TSidRecord& sid) const {
-    return  !sid.IsEnabled
-            || AccountLockout.AttemptThreshold != 0 && sid.FailedLoginAttemptCount >= AccountLockout.AttemptThreshold;
+    return !sid.IsEnabled || CheckLockoutByAttemptCount(sid);
 }
 
 void TLoginProvider::ResetFailedLoginAttemptCount(TSidRecord* sid) {
@@ -364,9 +371,11 @@ bool TLoginProvider::ShouldResetFailedAttemptCount(const TSidRecord& sid) const 
     if (sid.FailedLoginAttemptCount == 0) {
         return false;
     }
+
     if (AccountLockout.AttemptResetDuration == std::chrono::system_clock::duration::zero()) {
         return false;
     }
+
     return sid.LastFailedLogin + AccountLockout.AttemptResetDuration < std::chrono::system_clock::now();
 }
 
@@ -376,7 +385,7 @@ bool TLoginProvider::ShouldUnlockAccount(const TSidRecord& sid) const {
 
 bool TLoginProvider::IsLockedOut(const TSidRecord& user) const {
     Y_ABORT_UNLESS(user.Type == NLoginProto::ESidType::USER);
-    
+
     if (AccountLockout.AttemptThreshold == 0) {
         return false;
     }
@@ -524,6 +533,7 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
             // we check audience manually because we want an explicit error instead of wrong key id in case of databases mismatch
             auto audience = decoded_token.get_audience();
             if (audience.empty() || TString(*audience.begin()) != Audience) {
+                response.WrongAudience = true;
                 response.Error = "Wrong audience";
                 return response;
             }

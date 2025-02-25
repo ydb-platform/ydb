@@ -176,7 +176,7 @@ namespace NTxMediator {
 
             if (bucketIdx < Buckets.size()) {
                 ev->Rewrite(ev->GetTypeRewrite(), Buckets[bucketIdx].ActiveActor);
-                ctx.ExecutorThread.Send(ev.Release());
+                ctx.Send(ev.Release());
             }
         }
 
@@ -190,7 +190,7 @@ namespace NTxMediator {
 
             if (bucketIdx < Buckets.size()) {
                 ev->Rewrite(ev->GetTypeRewrite(), Buckets[bucketIdx].ActiveActor);
-                ctx.ExecutorThread.Send(ev.Release());
+                ctx.Send(ev.Release());
             }
         }
 
@@ -209,7 +209,7 @@ namespace NTxMediator {
         void Bootstrap(const TActorContext &ctx) {
             Buckets.resize(BucketSelector.Buckets());
             for (ui32 bucketIdx = 0; bucketIdx < Buckets.size(); ++bucketIdx)
-                Buckets[bucketIdx].ActiveActor = ctx.ExecutorThread.RegisterActor(CreateTxMediatorTabletQueue(ctx.SelfID, MediatorId, 1, bucketIdx), TMailboxType::ReadAsFilled);
+                Buckets[bucketIdx].ActiveActor = ctx.Register(CreateTxMediatorTabletQueue(ctx.SelfID, MediatorId, 1, bucketIdx), TMailboxType::ReadAsFilled);
         }
 
     public:

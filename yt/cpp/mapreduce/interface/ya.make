@@ -19,6 +19,7 @@ SRCS(
     protobuf_format.cpp
     serialize.cpp
     skiff_row.cpp
+    temp.cpp
     tvm.cpp
 )
 

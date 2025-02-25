@@ -79,6 +79,26 @@ TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) 
     return databasePath;
 }
 
+TPath DatabasePathFromModifySchemeOperation(TSchemeShard* SS, const NKikimrSchemeOp::TModifyScheme& operation) {
+    if (operation.GetWorkingDir().empty()) {
+        // Moving operations does not have working directory. It is valid to take src or dst as directory for database
+        if (operation.HasMoveTable()) {
+            return DatabasePathFromWorkingDir(SS, operation.GetMoveTable().GetSrcPath());
+        }
+        if (operation.HasMoveSequence()) {
+            return DatabasePathFromWorkingDir(SS, operation.GetMoveSequence().GetSrcPath());
+        }
+        if (operation.HasMoveIndex()) {
+            return DatabasePathFromWorkingDir(SS, operation.GetMoveIndex().GetTablePath());
+        }
+        if (operation.HasMoveTableIndex()) {
+            return DatabasePathFromWorkingDir(SS, operation.GetMoveTableIndex().GetSrcPath());
+        }
+    }
+
+    return DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
+}
+
 }  // anonymous namespace
 
 void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operation,
@@ -87,7 +107,7 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
                                    ui64 txId, const TParts& additionalParts) {
     auto logEntry = MakeAuditLogFragment(operation);
 
-    TPath databasePath = DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
+    TPath databasePath = DatabasePathFromModifySchemeOperation(SS, operation);
     auto [cloud_id, folder_id, database_id] = GetDatabaseCloudIds(databasePath);
     auto address = NKikimr::NAddressClassifier::ExtractAddress(peerName);
 
@@ -140,7 +160,7 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
 
 void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request,
                                      const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS,
-                                     const TString& peerName, const TString& userSID, const TString& sanitizedToken) { 
+                                     const TString& peerName, const TString& userSID, const TString& sanitizedToken) {
     // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
     // (even if it was packed into a single TxProxy transaction with some other operations).
     const auto txId = request.GetTxId();
@@ -163,7 +183,7 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
     for (const auto& operation : request.GetTransaction()) {
         auto logEntry = MakeAuditLogFragment(operation);
 
-        TPath databasePath = DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
+        TPath databasePath = DatabasePathFromModifySchemeOperation(SS, operation);
         auto peerName = request.GetPeerName();
 
         auto entry = TStringBuilder();

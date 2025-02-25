@@ -178,11 +178,23 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
         try {
             TType* mkqlUserType = nullptr;
             if (udf.UserType) {
+                if (udf.UserType->HasErrors()) {
+                    // scan for error types
+                    TErrorTypeVisitor errorVisitor(ctx);
+                    udf.UserType->Accept(errorVisitor);
+                    if (errorVisitor.HasErrors()) {
+                        hasErrors = true;
+                        continue;
+                    }
+                }
+
                 TStringStream err;
                 mkqlUserType = BuildType(*udf.UserType, {env}, err);//
                 if (!mkqlUserType) {
-                    ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Invalid user type for function: "
-                        << udf.Name << ", error: " << err.Str()));
+                    auto issue = TIssue(udf.Pos, TStringBuilder() << "Invalid user type for function: "
+                        << udf.Name << ", error: " << err.Str());
+                    issue.SetCode(UNEXPECTED_ERROR, ESeverity::TSeverityIds_ESeverityId_S_FATAL);
+                    ctx.AddError(issue);
                     hasErrors = true;
                     continue;
                 }
@@ -216,9 +228,11 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
             udf.SupportsBlocks = funcInfo.SupportsBlocks;
             udf.IsStrict = funcInfo.IsStrict;
         } catch (const std::exception& e) {
-            ctx.AddError(TIssue(udf.Pos, TStringBuilder()
+            auto issue = TIssue(udf.Pos, TStringBuilder()
                 << "Internal error was found when udf metadata is loading for function: " << udf.Name
-                << ", reason: " << e.what()));
+                << ", reason: " << e.what());
+            issue.SetCode(UNEXPECTED_ERROR, ESeverity::TSeverityIds_ESeverityId_S_FATAL);
+            ctx.AddError(issue);
             hasErrors = true;
         }
     }

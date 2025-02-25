@@ -1,5 +1,5 @@
---- contrib/libs/cxxsupp/libcxxabi/src/abort_message.cpp	(d1f0c42a1f66211dc9b8b0cd7a0560228ddbc65c)
-+++ contrib/libs/cxxsupp/libcxxabi/src/abort_message.cpp	(index)
+--- contrib/libs/cxxsupp/libcxxabi/src/abort_message.cpp	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/abort_message.cpp	(working tree)
 @@ -33,12 +33,21 @@ void abort_message(const char* format, ...)
      // formatting into the variable-sized buffer fails.
  #if !defined(NDEBUG) || !defined(LIBCXXABI_BAREMETAL)
@@ -22,8 +22,8 @@
      }
  #endif
  
---- contrib/libs/cxxsupp/libcxxabi/src/cxa_exception.cpp	(d1f0c42a1f66211dc9b8b0cd7a0560228ddbc65c)
-+++ contrib/libs/cxxsupp/libcxxabi/src/cxa_exception.cpp	(index)
+--- contrib/libs/cxxsupp/libcxxabi/src/cxa_exception.cpp	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/cxa_exception.cpp	(working tree)
 @@ -271,6 +271,13 @@ handler, _Unwind_RaiseException may return. In that case, __cxa_throw
  will call terminate, assuming that there was no handler for the
  exception.
@@ -60,7 +60,7 @@
  #else
      _Unwind_RaiseException(&exception_header->unwindHeader);
  #endif
-@@ -770,8 +785,13 @@ __cxa_rethrow_primary_exception(void* thrown_object)
+@@ -770,6 +785,11 @@ __cxa_rethrow_primary_exception(void* thrown_object)
          dep_exception_header->unwindHeader.exception_cleanup = dependent_exception_cleanup;
  #ifdef __USING_SJLJ_EXCEPTIONS__
          _Unwind_SjLj_RaiseException(&dep_exception_header->unwindHeader);
@@ -68,15 +68,12 @@
 +        // In debug mode, call a JS library function to use
 +        // WebAssembly.Exception JS API, which enables us to include stack
 +        // traces
-+        __throw_exception_with_stack_trace(&exception_header->unwindHeader);
++        __throw_exception_with_stack_trace(&dep_exception_header->unwindHeader);
  #else
--        _Unwind_RaiseException(&dep_exception_header->unwindHeader);
-+        _Unwind_RaiseException(&exception_header->unwindHeader);
+         _Unwind_RaiseException(&dep_exception_header->unwindHeader);
  #endif
-         // Some sort of unwinding error.  Note that terminate is a handler.
-         __cxa_begin_catch(&dep_exception_header->unwindHeader);
---- contrib/libs/cxxsupp/libcxxabi/src/cxa_exception.h	(d1f0c42a1f66211dc9b8b0cd7a0560228ddbc65c)
-+++ contrib/libs/cxxsupp/libcxxabi/src/cxa_exception.h	(index)
+--- contrib/libs/cxxsupp/libcxxabi/src/cxa_exception.h	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/cxa_exception.h	(working tree)
 @@ -19,6 +19,26 @@
  
  namespace __cxxabiv1 {
@@ -113,8 +110,8 @@
  }  // namespace __cxxabiv1
  
  #endif // _CXA_EXCEPTION_H
---- contrib/libs/cxxsupp/libcxxabi/src/cxa_handlers.cpp	(d1f0c42a1f66211dc9b8b0cd7a0560228ddbc65c)
-+++ contrib/libs/cxxsupp/libcxxabi/src/cxa_handlers.cpp	(index)
+--- contrib/libs/cxxsupp/libcxxabi/src/cxa_handlers.cpp	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/cxa_handlers.cpp	(working tree)
 @@ -73,7 +73,7 @@ __attribute__((noreturn))
  void
  terminate() noexcept
@@ -124,8 +121,8 @@
      // If there might be an uncaught exception
      using namespace __cxxabiv1;
      __cxa_eh_globals* globals = __cxa_get_globals_fast();
---- contrib/libs/cxxsupp/libcxxabi/src/cxa_personality.cpp	(d1f0c42a1f66211dc9b8b0cd7a0560228ddbc65c)
-+++ contrib/libs/cxxsupp/libcxxabi/src/cxa_personality.cpp	(index)
+--- contrib/libs/cxxsupp/libcxxabi/src/cxa_personality.cpp	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/cxa_personality.cpp	(working tree)
 @@ -663,6 +663,7 @@ static void scan_eh_tab(scan_results &results, _Unwind_Action actions,
      const uint8_t* lpStart = lpStartEncoding == DW_EH_PE_omit
                                   ? (const uint8_t*)funcStart
@@ -143,8 +140,8 @@
  #endif
      uint32_t callSiteTableLength = static_cast<uint32_t>(readULEB128(&lsda));
      const uint8_t* callSiteTableStart = lsda;
---- contrib/libs/cxxsupp/libcxxabi/src/cxa_thread_atexit.cpp	(d1f0c42a1f66211dc9b8b0cd7a0560228ddbc65c)
-+++ contrib/libs/cxxsupp/libcxxabi/src/cxa_thread_atexit.cpp	(index)
+--- contrib/libs/cxxsupp/libcxxabi/src/cxa_thread_atexit.cpp	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/cxa_thread_atexit.cpp	(working tree)
 @@ -112,9 +112,14 @@ extern "C" {
  #ifdef HAVE___CXA_THREAD_ATEXIT_IMPL
      return __cxa_thread_atexit_impl(dtor, obj, dso_symbol);
@@ -161,8 +158,8 @@
        // Initialize the dtors std::__libcpp_tls_key (uses __cxa_guard_*() for
        // one-time initialization and __cxa_atexit() for destruction)
        static DtorsManager manager;
---- contrib/libs/cxxsupp/libcxxabi/src/private_typeinfo.cpp	(d1f0c42a1f66211dc9b8b0cd7a0560228ddbc65c)
-+++ contrib/libs/cxxsupp/libcxxabi/src/private_typeinfo.cpp	(index)
+--- contrib/libs/cxxsupp/libcxxabi/src/private_typeinfo.cpp	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/private_typeinfo.cpp	(working tree)
 @@ -1542,5 +1542,64 @@ __base_class_type_info::search_below_dst(__dynamic_cast_info* info,
                                        not_public_path,
                                    use_strcmp);
@@ -171,7 +168,7 @@
 +
 +
 +// XXX EMSCRIPTEN
-+#ifndef __WASM_EXCEPTIONS__
++#if defined(__wasm__) && !defined(__WASM_EXCEPTIONS__)
 +
 +#include "cxa_exception.h"
 +
@@ -226,5 +223,5 @@
  
  }  // __cxxabiv1
 +
-+#endif // !__WASM_EXCEPTIONS__
++#endif // __wasm__ && !__WASM_EXCEPTIONS__
 +

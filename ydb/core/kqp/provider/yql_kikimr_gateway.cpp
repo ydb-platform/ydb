@@ -300,7 +300,7 @@ bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::Read
             << "'. It should be one of: "
             << "1) 'PER_AZ:<read_replicas_count>' to set equal read replicas count for every AZ; "
             << "2) 'ANY_AZ:<read_replicas_count>' to set total read replicas count between all AZs; "
-            << "3) '<az1_name>:<read_replicas_count1>, <az2_name>:<read_replicas_count2>, ...' "
+//          << "3) '<az1_name>:<read_replicas_count1>, <az2_name>:<read_replicas_count2>, ...' "
             << "to specify read replicas count for each AZ in cluster.";
         return false;
     }

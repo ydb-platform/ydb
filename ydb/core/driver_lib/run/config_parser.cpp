@@ -89,9 +89,6 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
 void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResult& res) {
     if (res.Has("sys-file")) {
         Y_ABORT_UNLESS(ParsePBFromFile(res.Get("sys-file"), Config.AppConfig.MutableActorSystemConfig()));
-    } else {
-        auto sysConfig = DummyActorSystemConfig();
-        Config.AppConfig.MutableActorSystemConfig()->CopyFrom(*sysConfig);
     }
 
     if (res.Has("naming-file")) {

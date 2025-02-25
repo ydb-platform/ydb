@@ -534,6 +534,54 @@ Y_UNIT_TEST_SUITE(Login) {
         }
     }
 
+    Y_UNIT_TEST(ResetFailedAttemptCountWithAlterUserLogin) {
+        TAccountLockout::TInitializer accountLockoutInitializer {.AttemptThreshold = 4, .AttemptResetDuration = "3s"};
+        TLoginProvider provider(accountLockoutInitializer);
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+
+        TString userName = "user1";
+        TString userPassword = "password1";
+
+        TLoginProvider::TCreateUserRequest createUserRequest {
+            .User = userName,
+            .Password = userPassword
+        };
+
+        auto createUserResponse = provider.CreateUser(createUserRequest);
+        UNIT_ASSERT(!createUserResponse.Error);
+
+        for (size_t attempt = 0; attempt < accountLockoutInitializer.AttemptThreshold; attempt++) {
+            UNIT_ASSERT_VALUES_EQUAL(provider.IsLockedOut(provider.Sids[userName]), false);
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = userName});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::UNLOCKED);
+            auto loginUserResponse = provider.LoginUser({.User = userName, .Password = TStringBuilder() << "wrongpassword" << attempt});
+            UNIT_ASSERT_EQUAL(loginUserResponse.Status, TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD);
+            UNIT_ASSERT_VALUES_EQUAL(loginUserResponse.Error, "Invalid password");
+        }
+
+        {
+            UNIT_ASSERT_VALUES_EQUAL(provider.IsLockedOut(provider.Sids[userName]), true);
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = userName});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::SUCCESS);
+            UNIT_ASSERT_STRING_CONTAINS(checkLockoutResponse.Error, TStringBuilder() << "User " << userName << " is not permitted to log in");
+        }
+
+        {
+            TLoginProvider::TModifyUserRequest alterRequest;
+            alterRequest.User = userName;
+            alterRequest.CanLogin = true;
+            auto alterResponse = provider.ModifyUser(alterRequest);
+            UNIT_ASSERT(!alterResponse.Error);
+        }
+
+        {
+            UNIT_ASSERT_VALUES_EQUAL(provider.IsLockedOut(provider.Sids[userName]), false);
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = userName});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::UNLOCKED);
+        }
+    }
+
     Y_UNIT_TEST(CreateAlterUserWithHash) {
         TLoginProvider provider;
         provider.RotateKeys();

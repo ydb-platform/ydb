@@ -436,7 +436,7 @@ void DumpSigcontext(void* uc)
         formatter.AppendString(name);
         formatter.AppendChar(' ', 7 - name.length());
         formatter.AppendString("0x");
-        formatter.AppendNumber(context->uc_mcontext.gregs[reg], /*radix*/ 16, /*width*/ 16);
+        formatter.AppendNumber(context->uc_mcontext.gregs[reg], /*radix*/ 16, /*width*/ 16, /*ch*/ '0');
         ++horizontalPos;
     };
     formatRegister("RAX", REG_RAX);

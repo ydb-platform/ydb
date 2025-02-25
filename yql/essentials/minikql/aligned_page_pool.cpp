@@ -460,6 +460,7 @@ void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_UNLIKELY(IsDefaultAllocator)) {
         ReturnBlock(addr, POOL_PAGE_SIZE);
+        AllPages.erase(addr);
         return;
     }
 #endif

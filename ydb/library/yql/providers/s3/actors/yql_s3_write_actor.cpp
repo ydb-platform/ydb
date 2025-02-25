@@ -573,15 +573,15 @@ private:
             const auto& key = MakePartitionKey(row);
             const auto [keyIt, insertedNew] = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
             if (insertedNew || keyIt->second.empty() || keyIt->second.back()->IsFinishing()) {
-            auto fileWrite = std::make_unique<TS3FileWriteActor>(
-                TxId,
-                Gateway,
-                Credentials,
-                key,
-                NS3Util::UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension),
-                Compression,
-                RetryPolicy, DirtyWrite, Token);
-            keyIt->second.emplace_back(fileWrite.get());
+                auto fileWrite = std::make_unique<TS3FileWriteActor>(
+                    TxId,
+                    Gateway,
+                    Credentials,
+                    key,
+                    NS3Util::UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension),
+                    Compression,
+                    RetryPolicy, DirtyWrite, Token);
+                keyIt->second.emplace_back(fileWrite.get());
                 RegisterWithSameMailbox(fileWrite.release());
             }
 
@@ -619,6 +619,10 @@ private:
         NDqProto::StatusIds::StatusCode statusCode = result->Get()->StatusCode;
         if (statusCode == NDqProto::StatusIds::UNSPECIFIED) {
             statusCode = StatusFromS3ErrorCode(result->Get()->S3ErrorCode);
+            if (statusCode == NDqProto::StatusIds::UNSPECIFIED) {
+                statusCode = NDqProto::StatusIds::INTERNAL_ERROR;
+                result->Get()->Issues.AddIssue("Got upload error with unspecified error code.");
+            }
         }
 
         Callbacks->OnAsyncOutputError(OutputIndex, result->Get()->Issues, statusCode);
@@ -640,9 +644,14 @@ private:
             if (const auto ft = std::find_if(it->second.cbegin(), it->second.cend(), [&](TS3FileWriteActor* actor){ return result->Get()->Url == actor->GetUrl(); }); it->second.cend() != ft) {
                 (*ft)->PassAway();
                 it->second.erase(ft);
-                if (it->second.empty())
+                if (it->second.empty()) {
                     FileWriteActors.erase(it);
+                }
             }
+        }
+        if (!Finished && GetFreeSpace() > 0) {
+            LOG_D("TS3WriteActor", "Has free space, notify owner");
+            Callbacks->ResumeExecution();
         }
         FinishIfNeeded();
     }

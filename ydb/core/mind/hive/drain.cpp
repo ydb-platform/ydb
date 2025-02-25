@@ -19,6 +19,7 @@ protected:
     TActorId DomainHivePipeClient;
     TTabletId DomainHiveId = 0;
     ui32 DomainMovements = 0;
+    ui64 SeqNo = 0;
     TDrainSettings Settings;
 
     TString GetLogPrefix() const {
@@ -150,6 +151,7 @@ protected:
         event->Record.SetDownPolicy(Settings.DownPolicy);
         event->Record.SetPersist(Settings.Persist);
         event->Record.SetDrainInFlight(Settings.DrainInFlight);
+        event->Record.SetSeqNo(SeqNo);
         NTabletPipe::SendData(SelfId(), DomainHivePipeClient, event.Release());
         BLOG_I("Drain " << SelfId() << " forwarded for node " << NodeId << " to hive " << DomainHiveId);
     }
@@ -187,6 +189,7 @@ public:
             if (!DownBefore) {
                 nodeInfo->SetDown(true);
             }
+            SeqNo = nodeInfo->DrainSeqNo;
 
             if (nodeInfo->ServicedDomains.size() == 1) {
                 TDomainInfo* domainInfo = Hive->FindDomain(nodeInfo->ServicedDomains.front());

@@ -368,7 +368,7 @@ public:
 
 private:
 
-    TStringBuilder LogPrefix() const;
+    TStringBuilder LogPrefixImpl() const;
 
     void UpdateTokenIfNeededImpl();
 
@@ -399,7 +399,7 @@ private:
 
     //std::string GetDebugIdentity() const;
     TClientMessage GetInitClientMessage();
-    bool CleanupOnAcknowledged(uint64_t id);
+    bool CleanupOnAcknowledgedImpl(uint64_t id);
     bool IsReadyToSendNextImpl() const;
     uint64_t GetNextIdImpl(const std::optional<uint64_t>& seqNo);
     uint64_t GetSeqNoImpl(uint64_t id);

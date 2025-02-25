@@ -261,6 +261,9 @@ public:
             for (const auto& partition : pathDescription.GetPersQueueGroup().GetPartitions()) {
                 Tablets[partition.GetTabletId()] = NKikimrTabletBase::TTabletTypes::PersQueue;
             }
+            if (pathDescription.HasPersQueueGroup()) {
+                Tablets[pathDescription.GetPersQueueGroup().GetBalancerTabletID()] = NKikimrTabletBase::TTabletTypes::PersQueueReadBalancer;
+            }
             if (pathDescription.HasRtmrVolumeDescription()) {
                 for (const auto& partition : pathDescription.GetRtmrVolumeDescription().GetPartitions()) {
                     Tablets[partition.GetTabletId()] = NKikimrTabletBase::TTabletTypes::RTMRPartition;

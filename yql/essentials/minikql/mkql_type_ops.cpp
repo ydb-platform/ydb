@@ -1005,7 +1005,9 @@ public:
         if (Y_LIKELY(year%SOLAR_CYCLE_YEARS >= 0)) {
             val = (year / SOLAR_CYCLE_YEARS) * SOLAR_CYCLE_DAYS + Years_[year % SOLAR_CYCLE_YEARS];
         } else {
-            val = (year / SOLAR_CYCLE_YEARS - 1) * SOLAR_CYCLE_DAYS + Years_[SOLAR_CYCLE_YEARS + year % SOLAR_CYCLE_YEARS];
+            i32 index = SOLAR_CYCLE_YEARS + year % SOLAR_CYCLE_YEARS;
+            Y_ASSERT(index < SOLAR_CYCLE_YEARS && index >= 0);
+            val = (year / SOLAR_CYCLE_YEARS - 1) * SOLAR_CYCLE_DAYS + Years_[index];
         }
         val += isLeap ? LeapMonths_[month] : Months_[month];
         val += day - 1;

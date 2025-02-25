@@ -30,7 +30,7 @@ namespace NActors {
         explicit TIOExecutorPool(const TIOExecutorPoolConfig& cfg, IHarmonizer *harmonizer = nullptr);
         ~TIOExecutorPool();
 
-        TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override;
+        TMailbox* GetReadyActivation(ui64 revolvingCounter) override;
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
@@ -46,5 +46,8 @@ namespace NActors {
         void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override;
         void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override;
+
+        ui64 TimePerMailboxTs() const override;
+        ui32 EventsPerMailbox() const override;
     };
 }

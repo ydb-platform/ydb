@@ -2286,7 +2286,8 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
 }
 
 TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
-    TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig)
+    TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig,
+    TNodePtr options)
 {
     const TString fullName = module + "." + name;
     TNodePtr callable;
@@ -2318,18 +2319,24 @@ TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const
     // optional arguments
     if (customUserType) {
         sqlCallArgs.push_back(customUserType);
-    } else if (!typeConfig.Empty()) {
+    } else if (!typeConfig.Empty() || runConfig || options) {
         sqlCallArgs.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
 
     if (!typeConfig.Empty()) {
         sqlCallArgs.push_back(typeConfig.Build());
-    } else if (runConfig) {
+    } else if (runConfig || options) {
         sqlCallArgs.push_back(BuildQuotedAtom(pos, ""));
     }
 
     if (runConfig) {
         sqlCallArgs.push_back(runConfig);
+    } else if (options) {
+        sqlCallArgs.push_back(new TCallNodeImpl(pos, "Void", {}));
+    }
+
+    if (options) {
+        sqlCallArgs.push_back(options);
     }
 
     return new TCallNodeImpl(pos, "SqlCall", sqlCallArgs);
@@ -2463,45 +2470,47 @@ TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TSt
 
 class TScriptUdf final: public INode {
 public:
-    TScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args)
+    TScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args,
+        TNodePtr options)
         : INode(pos)
-        , ModuleName(moduleName)
-        , FuncName(funcName)
-        , Args(args)
+        , ModuleName_(moduleName)
+        , FuncName_(funcName)
+        , Args_(args)
+        , Options_(options)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        const bool isPython = ModuleName.find(TStringBuf("Python")) != TString::npos;
+        const bool isPython = ModuleName_.find(TStringBuf("Python")) != TString::npos;
         if (!isPython) {
-            if (Args.size() != 2) {
-                ctx.Error(Pos) << ModuleName << " script declaration requires exactly two parameters";
+            if (Args_.size() != 2) {
+                ctx.Error(Pos) << ModuleName_ << " script declaration requires exactly two parameters";
                 return false;
             }
         } else {
-            if (Args.size() < 1 || Args.size() > 2) {
-                ctx.Error(Pos) << ModuleName << " script declaration requires one or two parameters";
+            if (Args_.size() < 1 || Args_.size() > 2) {
+                ctx.Error(Pos) << ModuleName_ << " script declaration requires one or two parameters";
                 return false;
             }
         }
 
-        auto nameAtom = BuildQuotedAtom(Pos, FuncName);
-        auto scriptNode = Args.back();
+        auto nameAtom = BuildQuotedAtom(Pos, FuncName_);
+        auto scriptNode = Args_.back();
         if (!scriptNode->Init(ctx, src)) {
             return false;
         }
-        auto scriptStrPtr = Args.back()->GetLiteral("String");
+        auto scriptStrPtr = Args_.back()->GetLiteral("String");
         if (!ctx.CompactNamedExprs && scriptStrPtr && scriptStrPtr->size() > SQL_MAX_INLINE_SCRIPT_LEN) {
             scriptNode = ctx.UniversalAlias("scriptudf", std::move(scriptNode));
         }
 
         INode::TPtr type;
-        if (Args.size() == 2) {
-            type = Args[0];
+        if (Args_.size() == 2) {
+            type = Args_[0];
         } else {
             // Python supports getting functions signatures right from docstrings
             type = Y("EvaluateType", Y("ParseTypeHandle", Y("Apply",
                 Y("bind", "core_module", Q("PythonFuncSignature")),
-                Q(ModuleName),
+                Q(ModuleName_),
                 scriptNode,
                 Y("String", nameAtom)
                 )));
@@ -2511,14 +2520,18 @@ public:
             return false;
         }
 
-        Node = Y("ScriptUdf", Q(ModuleName), nameAtom, type, scriptNode);
+        Node_ = Y("ScriptUdf", Q(ModuleName_), nameAtom, type, scriptNode);
+        if (Options_) {
+            Node_ = L(Node_, Options_);
+        }
+
         return true;
     }
 
     TAstNode* Translate(TContext& ctx) const override {
         Y_UNUSED(ctx);
-        Y_DEBUG_ABORT_UNLESS(Node);
-        return Node->Translate(ctx);
+        Y_DEBUG_ABORT_UNLESS(Node_);
+        return Node_->Translate(ctx);
     }
 
     void DoUpdateState() const override {
@@ -2526,19 +2539,46 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TScriptUdf(GetPos(), ModuleName, FuncName, CloneContainer(Args));
+        return new TScriptUdf(GetPos(), ModuleName_, FuncName_, CloneContainer(Args_), Options_);
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_DEBUG_ABORT_UNLESS(Node);
-        Node->VisitTree(func, visited);
+        Y_DEBUG_ABORT_UNLESS(Node_);
+        Node_->VisitTree(func, visited);
     }
+
+    const TString* FuncName() const final {
+        return &FuncName_;
+    }
+
+    const TString* ModuleName() const final {
+        return &ModuleName_;
+    }
+
+    bool IsScript() const final {
+        return true;
+    }
+
+    size_t GetTupleSize() const final {
+        return Args_.size();
+    }
+
+    TPtr GetTupleElement(size_t index) const final {
+        return Args_[index];
+    }
+
 private:
-    TString ModuleName;
-    TString FuncName;
-    TVector<TNodePtr> Args;
-    TNodePtr Node;
+    TString ModuleName_;
+    TString FuncName_;
+    TVector<TNodePtr> Args_;
+    TNodePtr Node_;
+    TNodePtr Options_;
 };
+
+TNodePtr BuildScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args,
+        TNodePtr options) {
+    return new TScriptUdf(pos, moduleName, funcName, args, options);
+}
 
 template <bool Sorted, bool Hashed>
 class TYqlToDict final: public TCallNode {
@@ -3429,8 +3469,6 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
             return BuildUdf(ctx, pos, moduleName, name, newArgs);
         }
-    } else if (ns == "datetime2" && (name == "Parse")) {
-        return BuildUdf(ctx, pos, nameSpace, name, args);
     } else if (ns == "pg" || ns == "pgagg" || ns == "pgproc") {
         bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
         bool isNormalFunc = NYql::NPg::HasProc(name, NYql::NPg::EProcKind::Function);
@@ -3549,7 +3587,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         return BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs());
     } else if (scriptType != NKikimr::NMiniKQL::EScriptType::Unknown) {
         auto scriptName = NKikimr::NMiniKQL::IsCustomPython(scriptType) ? nameSpace : TString(NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType));
-        return new TScriptUdf(pos, scriptName, name, args);
+        return BuildScriptUdf(pos, scriptName, name, args, nullptr);
     } else if (ns.empty()) {
         if (auto simpleType = LookupSimpleType(normalizedName, ctx.FlexibleTypes, /* isPgType = */ false)) {
             const auto type = *simpleType;
@@ -3871,7 +3909,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     }
 
     TNodePtr typeConfig = MakeTypeConfig(pos, ns, usedArgs);
-    return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, customUserType, TDeferredAtom(typeConfig, ctx), nullptr);
+    return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, customUserType,
+        TDeferredAtom(typeConfig, ctx), nullptr, nullptr);
 }
 
 } // namespace NSQLTranslationV1

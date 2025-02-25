@@ -47,6 +47,7 @@ class TJsonQuery : public TViewerPipeClient {
     NHttp::THttpOutgoingResponsePtr HttpResponse;
     std::vector<bool> ResultSetHasColumns;
     bool ConcurrentResults = false;
+    TString ContentType;
 
 public:
     ESchemaType StringToSchemaType(const TString& schemaStr) {
@@ -129,8 +130,16 @@ public:
         if (Streaming) {
             NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
             TStringBuf accept = headers["Accept"];
-            if (accept.find("multipart/x-mixed-replace") == TString::npos) {
-                return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Multipart request must accept multipart/x-mixed-replace content"), "BadRequest");
+            auto posMixedReplace = accept.find("multipart/x-mixed-replace");
+            auto posFormData = accept.find("multipart/form-data");
+            auto posFirst = std::min(posMixedReplace, posFormData);
+            if (posFirst == TString::npos) {
+                return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Multipart request must accept multipart content-type"), "BadRequest");
+            }
+            if (posFirst == posMixedReplace) {
+                ContentType = "multipart/x-mixed-replace";
+            } else if (posFirst == posFormData) {
+                ContentType = "multipart/form-data";
             }
         }
         if (Streaming && QueryId.empty()) {
@@ -141,12 +150,30 @@ public:
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
-    void Cancelled() {
+    void CancelQuery() {
         if (SessionId) {
             auto event = std::make_unique<NKqp::TEvKqp::TEvCancelQueryRequest>();
             event->Record.MutableRequest()->SetSessionId(SessionId);
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
+            if (QueryResponse && !QueryResponse.IsDone()) {
+                QueryResponse.Error("QueryCancelled");
+            }
         }
+    }
+
+    void CloseSession() {
+        if (SessionId) {
+            if (QueryResponse && !QueryResponse.IsDone()) {
+                CancelQuery();
+            }
+            auto event = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
+            event->Record.MutableRequest()->SetSessionId(SessionId);
+            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
+        }
+    }
+
+    void Cancelled() {
+        CancelQuery();
         PassAway();
     }
 
@@ -160,11 +187,7 @@ public:
         if (QueryId) {
             Viewer->EndRunningQuery(QueryId, SelfId());
         }
-        if (SessionId) {
-            auto event = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
-            event->Record.MutableRequest()->SetSessionId(SessionId);
-            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
-        }
+        CloseSession();
         TBase::PassAway();
     }
 
@@ -224,7 +247,7 @@ public:
         }
         CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
         if (Streaming) {
-            HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), "multipart/x-mixed-replace;boundary=boundary"));
+            HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), ContentType + ";boundary=boundary"));
             Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
         }
     }
@@ -353,6 +376,7 @@ public:
         }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         QueryResponse = MakeRequest<NKqp::TEvKqp::TEvQueryResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+
     }
 
 private:
@@ -565,6 +589,7 @@ private:
             NYql::IssuesFromMessage(record.GetIssues(), issues);
             MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(record.GetStatusCode()), NYdb::NAdapters::ToSdkIssues(std::move(issues))));
         }
+        CancelQuery();
         ReplyWithJsonAndPassAway(jsonResponse);
     }
 
@@ -578,7 +603,7 @@ private:
                 NJson::ReadJsonTree(progress.GetQueryPlan(), &(json["plan"]));
             }
             if (progress.HasQueryStats()) {
-                NProtobufJson::Proto2Json(progress.GetQueryStats(), json["stats"]);
+                Proto2Json(progress.GetQueryStats(), json["stats"]);
             }
             StreamJsonResponse(json);
         }
@@ -805,7 +830,7 @@ private:
                 NJson::ReadJsonTree(response.GetQueryPlan(), &(jsonResponse["plan"]));
             }
             if (response.HasQueryStats()) {
-                NProtobufJson::Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
+                Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
             }
         }
         catch (const std::exception& ex) {
@@ -1003,6 +1028,10 @@ public:
                                 type: object
                                 description: format depends on schema parameter
                         multipart/x-mixed-replace:
+                            schema:
+                                type: object
+                                description: format depends on schema parameter
+                        multipart/form-data:
                             schema:
                                 type: object
                                 description: format depends on schema parameter

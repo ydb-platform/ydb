@@ -83,7 +83,7 @@ public:
         }
 
         auto selfId = ctx.SelfID;
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+        auto* actorSystem = ctx.ActorSystem();
         auto clientLostCb = [selfId, actorSystem]() {
             actorSystem->Send(selfId, new TRpcServices::TEvForgetOperation());
         };

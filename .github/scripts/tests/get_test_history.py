@@ -59,9 +59,15 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
                 ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY run_timestamp DESC) AS rn
             FROM 
                 `test_results/test_runs_column`
-            where (job_name ='Nightly-run' or job_name like 'Postcommit%') and
-            build_type = $build_type and
-            suite_folder ||'/' || test_name in  $test_names
+            where job_name in (
+                'Nightly-run',
+                'Regression-run',
+                'Regression-whitelist-run',
+                'Postcommit_relwithdebinfo', 
+                'Postcommit_asan'
+            )
+            and build_type = $build_type
+            and suite_folder ||'/' || test_name in  $test_names
             and status != 'skipped'
         );
 

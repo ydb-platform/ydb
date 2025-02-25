@@ -32,6 +32,7 @@ public:
     std::string TableName = "log_writer_test";
 
     YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
+    TWorkloadDataInitializer::TList CreateDataInitializers() const override;
 };
 
 class TLogGenerator final: public TWorkloadQueryGeneratorBase<TLogWorkloadParams> {
@@ -70,16 +71,11 @@ public:
     };
 
 private:
-    std::string RandomWord(bool canBeEmpty) const;
-    std::string RandomPhrase(ui32 maxLen, ui32 minLen = 1) const;
-    TInstant RandomInstant() const;
-    bool RandomIsNotNull() const;
     TQueryInfoList WriteRows(TString operation, TVector<TRow>&& rows) const;
     TQueryInfoList Insert(TVector<TRow>&& rows) const;
     TQueryInfoList Upsert(TVector<TRow>&& rows) const;
     TQueryInfoList BulkUpsert(TVector<TRow>&& rows) const;
     TQueryInfoList Select() const;
-    TVector<TRow> GenerateRandomRows() const;
 };
 
 } // namespace NLog

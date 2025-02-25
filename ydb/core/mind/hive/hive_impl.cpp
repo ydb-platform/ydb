@@ -1176,15 +1176,15 @@ TNodeInfo* THive::SelectNode<NKikimrConfig::THiveConfig::HIVE_NODE_SELECT_STRATE
     return itNode->Node;
 }
 
-TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNode> selectedNodes, const TTabletInfo& tablet) const
+TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNode> selectedNodes, const TTabletInfo& tablet, TDataCenterPriority& dcPriority) const
 {
     i32 priority = std::numeric_limits<i32>::min();
     for (const TSelectedNode& selectedNode : selectedNodes) {
-        priority = std::max(priority, selectedNode.Node->GetPriorityForTablet(tablet));
+        priority = std::max(priority, selectedNode.Node->GetPriorityForTablet(tablet, dcPriority));
     }
 
     auto it = std::partition(selectedNodes.begin(), selectedNodes.end(), [&] (const TSelectedNode& selectedNode) {
-        return selectedNode.Node->GetPriorityForTablet(tablet) == priority;
+        return selectedNode.Node->GetPriorityForTablet(tablet, dcPriority) == priority;
     });
 
     selectedNodes.erase(it, selectedNodes.end());
@@ -1195,6 +1195,11 @@ TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNod
 THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId) {
     BLOG_D("[FBN] Finding best node for tablet " << tablet.ToString());
     BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " family " << tablet.FamilyString());
+
+    const TDomainInfo* domain = FindDomain(tablet.NodeFilter.ObjectDomain);
+    if (domain && domain->Stopped) {
+        return TNoNodeFound();
+    }
 
     if (tablet.PreferredNodeId != 0) {
         TNodeInfo* node = FindNode(tablet.PreferredNodeId);
@@ -1274,53 +1279,21 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
         }
     }
 
-    std::vector<std::vector<TNodeInfo*>> candidateGroups;
-    candidateGroups.resize(dataCentersGroups.size() + 1);
-    std::unordered_map<TDataCenterId, std::vector<TNodeInfo*>*> indexDC2Group;
+    TDataCenterPriority dcPriority;
     for (size_t numGroup = 0; numGroup < dataCentersGroups.size(); ++numGroup) {
         const NKikimrHive::TDataCentersGroup* dcGroup = dataCentersGroups[numGroup];
-        if (dcGroup->DataCenterSize()) {
-            for (TDataCenterId dc : dcGroup->GetDataCenter()) {
-                indexDC2Group[dc] = candidateGroups.data() + numGroup;
-            }
-        } else {
-            for (const ui64 dcId : dcGroup->GetDataCenterNum()) {
-                indexDC2Group[DataCenterToString(dcId)] = candidateGroups.data() + numGroup;
-            }
-        }
-    }
-    for (auto it = Nodes.begin(); it != Nodes.end(); ++it) {
-        TNodeInfo* nodeInfo = &it->second;
-        if (nodeInfo->IsAlive()) {
-            TDataCenterId dataCenterId = nodeInfo->GetDataCenter();
-            auto itDataCenter = indexDC2Group.find(dataCenterId);
-            if (itDataCenter != indexDC2Group.end()) {
-                itDataCenter->second->push_back(nodeInfo);
-            } else {
-                candidateGroups.back().push_back(nodeInfo);
-            }
-        } else {
-            BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " node " << nodeInfo->Id << " is not alive");
-            debugState.NodesDead++;
+        for (TDataCenterId dc : dcGroup->GetDataCenter()) {
+            // First group gets largest priority, last group gets +1 priority, dcs not in any groups get 0
+            dcPriority[dc] = dataCentersGroups.size() - numGroup;
         }
     }
 
     TVector<TSelectedNode> selectedNodes;
+    selectedNodes.reserve(Nodes.size());
     bool thereAreNodesWithManyStarts = false;
 
-    for (auto itCandidateNodes = candidateGroups.begin(); itCandidateNodes != candidateGroups.end(); ++itCandidateNodes) {
-        const std::vector<TNodeInfo*>& candidateNodes(*itCandidateNodes);
-        if (candidateGroups.size() > 1) {
-            BLOG_TRACE("[FBN] Tablet " << tablet.ToString()
-                       << " checking candidates group " << (itCandidateNodes - candidateGroups.begin() + 1)
-                       << " of " << candidateGroups.size());
-        }
-
-        selectedNodes.clear();
-        selectedNodes.reserve(candidateNodes.size());
-
-        for (auto it = candidateNodes.begin(); it != candidateNodes.end(); ++it) {
-            TNodeInfo& nodeInfo = *(*it);
+    for (auto& [_, nodeInfo] : Nodes) {
+        if (nodeInfo.IsAlive()) {
             if (nodeInfo.IsAllowedToRunTablet(tablet, &debugState)) {
                 if (nodeInfo.IsAbleToScheduleTablet()) {
                     if (nodeInfo.IsAbleToRunTablet(tablet, &debugState)) {
@@ -1346,11 +1319,12 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
                             << " tablet allowed domains " << tablet.GetNodeFilter().AllowedDomains
                             << " tablet effective allowed domains " << tablet.GetNodeFilter().GetEffectiveAllowedDomains());
             }
-        }
-        if (!selectedNodes.empty()) {
-            break;
+        } else {
+            BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " node " << nodeInfo.Id << " is not alive");
+            debugState.NodesDead++;
         }
     }
+
     BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " selected nodes count " << selectedNodes.size());
     if (selectedNodes.empty() && thereAreNodesWithManyStarts) {
         BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " all available nodes are booting too many tablets");
@@ -1359,7 +1333,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
 
     TNodeInfo* selectedNode = nullptr;
     if (!selectedNodes.empty()) {
-        selectedNodes = SelectMaxPriorityNodes(std::move(selectedNodes), tablet);
+        selectedNodes = SelectMaxPriorityNodes(std::move(selectedNodes), tablet, dcPriority);
         BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " selected max priority nodes count " << selectedNodes.size());
 
         switch (GetNodeSelectStrategy()) {
@@ -2209,7 +2183,7 @@ void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
         .Persist = ev->Get()->Record.GetPersist(),
         .DownPolicy = policy,
         .DrainInFlight = ev->Get()->Record.GetDrainInFlight(),
-    }, ev->Sender));
+    }, ev->Sender, ev->Get()->Record.GetSeqNo()));
 }
 
 void THive::Handle(TEvHive::TEvFillNode::TPtr& ev) {
@@ -2379,6 +2353,17 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         nodeUsageHistogram.IncrementFor(record.Usage * 100);
     }
 
+    std::optional<TBalancerSettings> settings;
+    const auto maybeStartBalancer = [&settings, this]() -> bool {
+        Y_DEBUG_ABORT_UNLESS(settings);
+        if (LastBalancerTrigger == settings->Type
+            && BalancerStats[static_cast<size_t>(settings->Type)].LastRunMovements == 0) {
+            return false;
+        }
+        StartHiveBalancer(std::move(*settings));
+        return true;
+    };
+
     double minUsageToKick = GetMaxNodeUsageToKick() - GetNodeUsageRangeToKick();
     if (stats.MaxUsage >= GetMaxNodeUsageToKick() && stats.MinUsage < minUsageToKick) {
         std::vector<TNodeId> overloadedNodes;
@@ -2389,15 +2374,17 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         }
 
         if (!overloadedNodes.empty()) {
-            BLOG_D("Nodes " << overloadedNodes << " with usage over limit " << GetMaxNodeUsageToKick() << " - starting balancer");
-            StartHiveBalancer({
+            BLOG_D("Nodes " << overloadedNodes << " with usage over limit " << GetMaxNodeUsageToKick() << " - triggered balancer");
+            settings.emplace(TBalancerSettings{
                 .Type = EBalancerType::Emergency,
                 .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnEmergencyBalancer(),
                 .RecheckOnFinish = CurrentConfig.GetContinueEmergencyBalancer(),
                 .MaxInFlight = GetEmergencyBalancerInflight(),
                 .FilterNodeIds = std::move(overloadedNodes),
             });
-            return;
+            if (maybeStartBalancer()) {
+                return;
+            }
         }
     }
 
@@ -2406,24 +2393,19 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     }
 
     if (ObjectDistributions.GetMaxImbalance() > GetObjectImbalanceToBalance()) {
-        TInstant now = TActivationContext::Now();
-        if (LastBalancerTrigger != EBalancerType::SpreadNeighbours
-            || BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunMovements != 0
-            || BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunTimestamp + TDuration::Seconds(1) < now) {
-            auto objectToBalance = ObjectDistributions.GetObjectToBalance();
-            BLOG_D("Max imbalance " << ObjectDistributions.GetMaxImbalance() << " - starting balancer for object " << objectToBalance.ObjectId);
-            StartHiveBalancer({
-                .Type = EBalancerType::SpreadNeighbours,
-                .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
-                .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
-                .MaxInFlight = GetBalancerInflight(),
-                .FilterNodeIds = std::move(objectToBalance.Nodes),
-                .ResourceToBalance = EResourceToBalance::Counter,
-                .FilterObjectId = objectToBalance.ObjectId,
-            });
+        auto objectToBalance = ObjectDistributions.GetObjectToBalance();
+        BLOG_D("Max imbalance " << ObjectDistributions.GetMaxImbalance() << " - triggered balancer for object " << objectToBalance.ObjectId);
+        settings.emplace(TBalancerSettings{
+            .Type = EBalancerType::SpreadNeighbours,
+            .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
+            .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+            .MaxInFlight = GetBalancerInflight(),
+            .FilterNodeIds = std::move(objectToBalance.Nodes),
+            .ResourceToBalance = EResourceToBalance::Counter,
+            .FilterObjectId = objectToBalance.ObjectId,
+        });
+        if (maybeStartBalancer()) {
             return;
-        } else {
-            BLOG_D("Skipping SpreadNeigbours Balancer, now: " << now << ", allowed: " << BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunTimestamp + TDuration::Seconds(1));
         }
     }
 
@@ -2448,14 +2430,21 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                 break;
         }
         BLOG_TRACE("Scatter " << stats.ScatterByResource << " over limit "
-                   << GetMinScatterToBalance() << " - starting balancer " << EBalancerTypeName(balancerType));
-        StartHiveBalancer({
+                   << GetMinScatterToBalance() << " - triggered balancer " << EBalancerTypeName(balancerType));
+        settings.emplace(TBalancerSettings{
             .Type = balancerType,
             .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
             .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
             .MaxInFlight = GetBalancerInflight(),
             .ResourceToBalance = *scatteredResource,
         });
+        if (maybeStartBalancer()) {
+            return;
+        }
+    }
+
+    if (settings) {
+        StartHiveBalancer(std::move(*settings));
         return;
     }
 
@@ -2888,6 +2877,20 @@ void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects)
         }
     } else {
         DeleteTabletQueue.push(tabletId);
+    }
+}
+
+void THive::ProcessPendingStopTablet() {
+    if (!StopTenantTabletsQueue.empty()) {
+        Execute(CreateStopTabletByTenant(StopTenantTabletsQueue.front()));
+        StopTenantTabletsQueue.pop();
+    }
+}
+
+void THive::ProcessPendingResumeTablet() {
+    if (!ResumeTenantTabletsQueue.empty()) {
+        Execute(CreateResumeTabletByTenant(ResumeTenantTabletsQueue.front()));
+        ResumeTenantTabletsQueue.pop();
     }
 }
 

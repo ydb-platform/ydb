@@ -409,8 +409,8 @@ def test_check_access(ydb_cluster):
         ydb_cluster.wait_tenant_up(user['path'])
 
         driver_config = ydb.DriverConfig(
-            "%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
-            user['path']
+            database=user['path'],
+            endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
         )
 
         with ydb.Driver(driver_config) as driver:
@@ -426,8 +426,9 @@ def test_check_access(ydb_cluster):
     user_2 = users['user_2']
 
     driver_config = ydb.DriverConfig(
-        "%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
-        user_1['path'], auth_token=user_1['owner']
+        database=user_1['path'],
+        endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
+        auth_token=user_1['owner'],
     )
 
     with ydb.Driver(driver_config) as driver:

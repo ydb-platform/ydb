@@ -345,6 +345,12 @@ private:
             Counters->DataShardIteratorFails->Inc();
         }
 
+        auto replyError = [&](auto message, auto status) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
+            return RuntimeError(message, status, issues);
+        };
+
         switch (record.GetStatus().GetCode()) {
             case Ydb::StatusIds::SUCCESS:
                 break;
@@ -354,15 +360,23 @@ private:
                 return ResolveTableShards();
             }
             case Ydb::StatusIds::OVERLOADED: {
+                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(read)) {
+                    return replyError(
+                        TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded.",
+                        NYql::NDqProto::StatusIds::OVERLOADED);
+                }
                 return RetryTableRead(read, /*allowInstantRetry = */false);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
+                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(read)) {
+                    return replyError(
+                        TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded.",
+                        NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                }
                 return RetryTableRead(read);
             }
             default: {
-                NYql::TIssues issues;
-                NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
-                return RuntimeError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED, issues);
+                return replyError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED);
             }
         }
 
@@ -538,24 +552,33 @@ private:
         }
     }
 
+    bool CheckTotalRetriesExeeded() {
+        const auto limit = MaxTotalRetries();
+        return limit && TotalRetryAttempts + 1 > *limit;
+    }
+
+    bool CheckShardRetriesExeeded(TReadState& failedRead) {
+        const auto& shardState = ReadsPerShard[failedRead.ShardId];
+        return shardState.RetryAttempts + 1 > MaxShardRetries();
+    }
+
     void RetryTableRead(TReadState& failedRead, bool allowInstantRetry = true) {
         CA_LOG_D("Retry reading of table: " << StreamLookupWorker->GetTablePath() << ", readId: " << failedRead.Id
             << ", shardId: " << failedRead.ShardId);
 
-        ++TotalRetryAttempts;
-        auto totalRetriesLimit = MaxTotalRetries();
-        if (totalRetriesLimit && TotalRetryAttempts > *totalRetriesLimit) {
+        if (CheckTotalRetriesExeeded()) {
             return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
+        ++TotalRetryAttempts;
 
-        auto& shardState = ReadsPerShard[failedRead.ShardId];
-        ++shardState.RetryAttempts;
-        if (shardState.RetryAttempts > MaxShardRetries()) {
+        if (CheckShardRetriesExeeded(failedRead)) {
             StreamLookupWorker->ResetRowsProcessing(failedRead.Id, failedRead.FirstUnprocessedQuery, failedRead.LastProcessedKey);
             failedRead.SetFinished();
             return ResolveTableShards();
         }
+        auto& shardState = ReadsPerShard[failedRead.ShardId];
+        ++shardState.RetryAttempts;
 
         auto delay = CalcDelay(shardState.RetryAttempts, allowInstantRetry);
         if (delay == TDuration::Zero()) {

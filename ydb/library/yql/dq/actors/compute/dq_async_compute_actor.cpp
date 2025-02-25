@@ -228,6 +228,10 @@ private:
             DUMP_PREFIXED(prefix, asyncStats, Rows);
             DUMP_PREFIXED(prefix, asyncStats, Chunks);
             DUMP_PREFIXED(prefix, asyncStats, Splits);
+            DUMP_PREFIXED(prefix, asyncStats, FilteredBytes);
+            DUMP_PREFIXED(prefix, asyncStats, FilteredRows);
+            DUMP_PREFIXED(prefix, asyncStats, QueuedBytes);
+            DUMP_PREFIXED(prefix, asyncStats, QueuedRows);
             DUMP_PREFIXED(prefix, asyncStats, FirstMessageTs, .ToString());
             DUMP_PREFIXED(prefix, asyncStats, PauseMessageTs, .ToString());
             DUMP_PREFIXED(prefix, asyncStats, ResumeMessageTs, .ToString());

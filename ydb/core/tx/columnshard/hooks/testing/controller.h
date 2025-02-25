@@ -1,10 +1,13 @@
 #pragma once
 #include "ro_controller.h"
-#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/wrappers/unavailable_storage.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
@@ -26,6 +29,7 @@ private:
     YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
     YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
     YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
+    YDB_FLAG_ACCESSOR(ExternalStorageUnavailable, false);
 
     YDB_ACCESSOR_DEF(std::optional<NKikimrProto::EReplyStatus>, OverrideBlobPutResultOnWriteValue);
 
@@ -225,6 +229,15 @@ protected:
         return ExternalLocks;
     }
 
+    virtual NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetStorageOperatorOverride(
+        const ::NKikimr::NColumnShard::NTiers::TExternalStorageId& /*storageId*/) const override {
+        if (ExternalStorageUnavailableFlag) {
+            return std::make_shared<NWrappers::NExternalStorage::TUnavailableExternalStorageOperator>(
+                "unavailable", "disabled by test controller");
+        }
+        return nullptr;
+    }
+
 public:
     virtual bool CheckPortionsToMergeOnCompaction(const ui64 /*memoryAfterAdd*/, const ui32 currentSubsetsCount) override {
         return currentSubsetsCount > 1;
@@ -248,6 +261,11 @@ public:
     void DisableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);
         DisabledBackgrounds.emplace(id);
+    }
+
+    bool IsBackgroundEnable(const EBackground id) {
+        TGuard<TMutex> g(Mutex);
+        return !DisabledBackgrounds.contains(id);
     }
 
     void EnableBackground(const EBackground id) {

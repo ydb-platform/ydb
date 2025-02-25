@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/tx/tiering/tier/identifier.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -26,6 +27,7 @@ class TColumnEngineChanges;
 class IBlobsGCAction;
 class TPortionInfo;
 class TDataAccessorsResult;
+class IBlobsStorageOperator;
 namespace NIndexes {
 class TIndexMetaContainer;
 }
@@ -35,6 +37,10 @@ class ILock;
 }   // namespace NKikimr::NOlap
 namespace arrow {
 class RecordBatch;
+}
+
+namespace NKikimr::NWrappers::NExternalStorage {
+class IExternalStorageOperator;
 }
 
 namespace NKikimr::NYDBTest {
@@ -92,6 +98,8 @@ protected:
     virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
+    }
+    virtual void DoOnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& /*result*/) {
     }
 
     virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
@@ -214,6 +222,11 @@ public:
         return original;
     }
 
+    virtual std::shared_ptr<NWrappers::NExternalStorage::IExternalStorageOperator> GetStorageOperatorOverride(
+        const NColumnShard::NTiers::TExternalStorageId& /*storageId*/) const {
+        return nullptr;
+    }
+
     TDuration GetActualizationTasksLag() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetActualizationTasksLagMs());
         return DoGetActualizationTasksLag(defaultValue);
@@ -269,6 +282,10 @@ public:
 
     void OnAfterGCAction(const NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) {
         DoOnAfterGCAction(shard, action);
+    }
+
+    void OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& result) {
+        DoOnCollectGarbageResult(result);
     }
 
     bool OnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {

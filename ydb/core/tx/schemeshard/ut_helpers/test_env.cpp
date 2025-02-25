@@ -587,6 +587,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableTableDatetime64(true);
     app.FeatureFlags.SetEnableVectorIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
+    app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);    
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
@@ -607,6 +608,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableBackupService(opts.EnableBackupService_);
     app.SetEnableExportChecksums(true);
     app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
+    app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

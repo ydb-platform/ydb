@@ -239,7 +239,7 @@ namespace NKikimr {
                          ui64 internalMessageId) {
                 if (!Queue->Head() && CanSendToSkeleton(cost)) {
                     // send to Skeleton for further processing
-                    ctx.ExecutorThread.Send(converted.release());
+                    ctx.Send(converted.release());
                     ++InFlightCount;
                     InFlightCost += cost;
                     InFlightBytes += recByteSize;
@@ -298,7 +298,7 @@ namespace NKikimr {
                             ++Deadlines;
                             front.GetExtQueue(rec->ExtQueueId).DeadlineHappened(ctx, rec, now, front);
                         } else {
-                            ctx.ExecutorThread.Send(rec->Ev.release());
+                            ctx.Send(rec->Ev.release());
 
                             ++InFlightCount;
                             InFlightCost += cost;
@@ -437,20 +437,6 @@ namespace NKikimr {
 
             bool IsStuck() const {
                 return InFlightCount > 0 && TActivationContext::Monotonic() - LastUpdate > StuckQueueThreshold;
-            }
-
-            void ResetQueue() {
-                InFlightCount = 0;
-                InFlightCost = 0;
-                InFlightBytes = 0;
-
-                *SkeletonFrontInFlightCount = 0;
-                *SkeletonFrontInFlightCost = 0;
-                *SkeletonFrontInFlightBytes = 0;
-                *SkeletonFrontCostProcessed = 0;
-
-                Msgs.clear();
-                UpdateState();
             }
 
             TString GenerateHtmlState() const {
@@ -701,12 +687,14 @@ namespace NKikimr {
         NMonGroup::TSyncerGroup SyncerMonGroup;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
         NMonGroup::TCostGroup CostGroup;
-        NMonGroup::TMalfunctionGroup MalfunctionGroup;
+        NMonGroup::TTimerGroup TimerGroup;
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         bool HasUnreadableBlobs = false;
         TInstant LastSanitizeTime = TInstant::Zero();
         TInstant LastSanitizeWithErrorTime = TInstant::Zero();
         ui64 NextUniqueMessageId = 1;
+
+        TMonotonic StartTimestamp = TMonotonic::Zero();
 
         static constexpr TDuration StuckQueueCheckPeriod = TDuration::Seconds(60);
 
@@ -750,14 +738,14 @@ namespace NKikimr {
                 TString path = Sprintf("vdisk%09" PRIu32 "_%09" PRIu32, bi.PDiskId, bi.VDiskSlotId);
                 TString name = Sprintf("%s VDisk%09" PRIu32 "_%09" PRIu32 " (%" PRIu32 ")",
                                       VCtx->VDiskLogPrefix.data(), bi.PDiskId, bi.VDiskSlotId, GInfo->GroupID.GetRawId());
-                mon->RegisterActorPage(vdisksMonPage, path, name, false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+                mon->RegisterActorPage(vdisksMonPage, path, name, false, TActivationContext::ActorSystem(), ctx.SelfID);
             }
         }
 
         void Bootstrap(const TActorContext &ctx) {
             const auto& baseInfo = Config->BaseInfo;
             VCtx = MakeIntrusive<TVDiskContext>(ctx.SelfID, GInfo->PickTopology(), VDiskCounters, SelfVDiskId,
-                        ctx.ExecutorThread.ActorSystem, baseInfo.DeviceType, baseInfo.DonorMode,
+                        TActivationContext::ActorSystem(), baseInfo.DeviceType, baseInfo.DonorMode,
                         baseInfo.ReplPDiskReadQuoter, baseInfo.ReplPDiskWriteQuoter, baseInfo.ReplNodeRequestQuoter,
                         baseInfo.ReplNodeResponseQuoter);
 
@@ -812,6 +800,8 @@ namespace NKikimr {
             ActiveActors.Insert(SkeletonId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
             SetupMonitoring(ctx);
+            StartTimestamp = TActivationContext::Monotonic();
+            TimerGroup.SkeletonFrontUptimeSeconds() = 0;
             Become(&TThis::StateLocalRecoveryInProgress);
         }
 
@@ -1813,7 +1803,7 @@ namespace NKikimr {
         }
 
     private:
-        void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             ActiveActors.Erase(ev->Sender);
         }
@@ -1870,7 +1860,7 @@ namespace NKikimr {
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
@@ -1917,7 +1907,7 @@ namespace NKikimr {
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
@@ -1961,7 +1951,7 @@ namespace NKikimr {
             hFunc(TEvGetLogoBlobRequest, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
@@ -2077,18 +2067,20 @@ namespace NKikimr {
         }
 
         void HandleWakeup(const TActorContext& ctx) {
+            TMonotonic now = TActivationContext::Monotonic();
+            TimerGroup.SkeletonFrontUptimeSeconds() = (now - StartTimestamp).Seconds();
             for (TIntQueueClass* queue : { IntQueueAsyncGets.get(), IntQueueFastGets.get(),
                     IntQueueDiscover.get(), IntQueueLowGets.get(), IntQueueLogPuts.get(),
                     IntQueueHugePutsForeground.get(), IntQueueHugePutsBackground.get() }) {
                 if (queue->IsStuck()) {
-                    queue->DropWithError(ctx, *this);
-                    queue->ResetQueue();
-                    DisconnectClients(ctx);
                     LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                            << "Stuck internal queue detected, dropping queues, "
+                            << "Stuck internal queue detected, restarting VDisk, "
                             << " Queue.Name# " << queue->Name
                             << " Marker# BSVSF08");
-                    ++MalfunctionGroup.DroppingStuckInternalQueue();
+                    TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+                    ctx.Send(wardenId, new TEvBlobStorage::TEvAskRestartVDisk(
+                            Config->BaseInfo.PDiskId, SelfVDiskId));
+                    return;
                 }
             }
             Schedule(StuckQueueCheckPeriod, new TEvents::TEvWakeup);
@@ -2129,7 +2121,7 @@ namespace NKikimr {
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
@@ -2266,7 +2258,7 @@ namespace NKikimr {
             , SyncerMonGroup(VDiskCounters, "subsystem", "syncer")
             , VDiskMonGroup(VDiskCounters, "subsystem", "state")
             , CostGroup(VDiskCounters, "subsystem", "cost")
-            , MalfunctionGroup(VDiskCounters, "subsystem", "malfunction")
+            , TimerGroup(VDiskCounters, "subsystem", "timer")
         {
             ReplMonGroup.ReplUnreplicatedVDisks() = 1;
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::Initial);

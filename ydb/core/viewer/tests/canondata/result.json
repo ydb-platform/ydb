@@ -3,6 +3,48 @@
         "status_code": 200,
         "text": "1\n"
     },
+    "test.test_pqrb_tablet": {
+        "response_create_topic": {
+            "version": "not-zero-number"
+        },
+        "response_tablet_info": {
+            "ResponseTime": "not-zero-number-text",
+            "TabletStateInfo": [
+                {
+                    "ChangeTime": "not-zero-number-text",
+                    "FollowerId": 0,
+                    "Generation": 1,
+                    "HiveId": "not-zero-number-text",
+                    "Leader": true,
+                    "NodeId": "not-zero-number",
+                    "Overall": "Green",
+                    "State": "Active",
+                    "TabletId": "not-zero-number-text",
+                    "TenantId": {
+                        "PathId": "not-zero-number-text",
+                        "SchemeShard": "not-zero-number-text"
+                    },
+                    "Type": "PersQueue"
+                },
+                {
+                    "ChangeTime": "not-zero-number-text",
+                    "FollowerId": 0,
+                    "Generation": 1,
+                    "HiveId": "not-zero-number-text",
+                    "Leader": true,
+                    "NodeId": "not-zero-number",
+                    "Overall": "Green",
+                    "State": "Active",
+                    "TabletId": "not-zero-number-text",
+                    "TenantId": {
+                        "PathId": "not-zero-number-text",
+                        "SchemeShard": "not-zero-number-text"
+                    },
+                    "Type": "PersQueueReadBalancer"
+                }
+            ]
+        }
+    },
     "test.test_storage_groups": {
         "FieldsAvailable": "111111111111111111111",
         "FieldsRequired": "111111111111111111111",
@@ -10,7 +52,7 @@
         "StorageGroups": [
             {
                 "AllocationUnits": "0",
-                "Available": "0",
+                "Available": "not-zero-number-text",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
                 "GroupGeneration": "1",
@@ -18,7 +60,7 @@
                 "LatencyGetFast": "accepted-value",
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
-                "Limit": "0",
+                "Limit": "not-zero-number-text",
                 "MissingDisks": "0",
                 "Overall": "Green",
                 "PoolName": "static",
@@ -99,7 +141,7 @@
             },
             {
                 "AllocationUnits": "0",
-                "Available": "0",
+                "Available": "not-zero-number-text",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
                 "GroupGeneration": "1",
@@ -108,7 +150,7 @@
                 "LatencyGetFast": "accepted-value",
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
-                "Limit": "0",
+                "Limit": "not-zero-number-text",
                 "MediaType": "ROT,Kind:0",
                 "MissingDisks": "0",
                 "Overall": "Green",
@@ -190,7 +232,7 @@
             },
             {
                 "AllocationUnits": "0",
-                "Available": "0",
+                "Available": "not-zero-number-text",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
                 "GroupGeneration": "1",
@@ -199,7 +241,7 @@
                 "LatencyGetFast": "accepted-value",
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
-                "Limit": "0",
+                "Limit": "not-zero-number-text",
                 "MediaType": "ROT,Kind:0",
                 "MissingDisks": "0",
                 "Overall": "Green",
@@ -281,7 +323,7 @@
             },
             {
                 "AllocationUnits": "30",
-                "Available": "0",
+                "Available": "not-zero-number-text",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
                 "GroupGeneration": "2",
@@ -290,7 +332,7 @@
                 "LatencyGetFast": "accepted-value",
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
-                "Limit": "0",
+                "Limit": "not-zero-number-text",
                 "MediaType": "ROT",
                 "MissingDisks": "0",
                 "Overall": "Green",
@@ -372,7 +414,7 @@
             },
             {
                 "AllocationUnits": "48",
-                "Available": "0",
+                "Available": "not-zero-number-text",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
                 "GroupGeneration": "2",
@@ -381,7 +423,7 @@
                 "LatencyGetFast": "accepted-value",
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
-                "Limit": "0",
+                "Limit": "not-zero-number-text",
                 "MediaType": "ROT",
                 "MissingDisks": "0",
                 "Overall": "Green",
@@ -1393,6 +1435,7 @@
         "MapVersions": "not-empty-object",
         "MemoryTotal": "not-zero-number-text",
         "NetworkUtilization": "number",
+        "NetworkWriteThroughput": "text",
         "NodesAlive": 3,
         "NodesTotal": 3,
         "NumberOfCpus": "not-zero-number",
@@ -1462,7 +1505,7 @@
                         "Name": ".metadata",
                         "Owner": "metadata@system",
                         "ParentPathId": "1",
-                        "PathId": "2",
+                        "PathId": "not-zero-number-text",
                         "PathState": 2,
                         "PathType": 1,
                         "SchemeshardId": "72075186232723360"
@@ -1476,7 +1519,7 @@
                         "Name": "dedicated_db",
                         "Owner": "root@builtin",
                         "ParentPathId": "1",
-                        "PathId": "6",
+                        "PathId": "not-zero-number-text",
                         "PathState": 2,
                         "PathType": 10,
                         "SchemeshardId": "72075186232723360"
@@ -1490,7 +1533,7 @@
                         "Name": "serverless_db",
                         "Owner": "root@builtin",
                         "ParentPathId": "1",
-                        "PathId": "8",
+                        "PathId": "not-zero-number-text",
                         "PathState": 3,
                         "PathType": 10,
                         "SchemeshardId": "72075186232723360"
@@ -1504,7 +1547,7 @@
                         "Name": "shared_db",
                         "Owner": "root@builtin",
                         "ParentPathId": "1",
-                        "PathId": "7",
+                        "PathId": "not-zero-number-text",
                         "PathState": 2,
                         "PathType": 10,
                         "SchemeshardId": "72075186232723360"
@@ -1521,7 +1564,7 @@
                 "DomainDescription": {
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
-                        "PathId": "1",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "PQPartitionsInside": "0",
@@ -1540,7 +1583,7 @@
                         "TimeCastBucketsPerMediator": "2"
                     },
                     "ResourcesDomainKey": {
-                        "PathId": "1",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "SchemeShardId_Depricated": "72075186232723360",
@@ -1636,7 +1679,7 @@
                     "Name": "Root",
                     "Owner": "root",
                     "ParentPathId": "1",
-                    "PathId": "1",
+                    "PathId": "not-zero-number-text",
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 1,
@@ -1644,7 +1687,7 @@
                     "SchemeshardId": "72075186232723360"
                 }
             },
-            "PathId": "1",
+            "PathId": "not-zero-number-text",
             "PathOwnerId": "72075186232723360",
             "Source": 1,
             "Status": "StatusSuccess"
@@ -1663,7 +1706,7 @@
                         "Name": ".metadata",
                         "Owner": "metadata@system",
                         "ParentPathId": "1",
-                        "PathId": "2",
+                        "PathId": "not-zero-number-text",
                         "PathState": 3,
                         "PathType": 1,
                         "SchemeshardId": "72075186224037897"
@@ -1680,7 +1723,7 @@
                 "DomainDescription": {
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
-                        "PathId": "6",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "PQPartitionsInside": "0",
@@ -1707,7 +1750,7 @@
                         "TimeCastBucketsPerMediator": "2"
                     },
                     "ResourcesDomainKey": {
-                        "PathId": "6",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "SchemeShardId_Depricated": "72075186232723360",
@@ -1733,7 +1776,7 @@
                     "Name": "Root/dedicated_db",
                     "Owner": "root@builtin",
                     "ParentPathId": "1",
-                    "PathId": "1",
+                    "PathId": "not-zero-number-text",
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
@@ -1741,7 +1784,7 @@
                     "SchemeshardId": "72075186224037897"
                 }
             },
-            "PathId": "1",
+            "PathId": "not-zero-number-text",
             "PathOwnerId": "72075186224037897",
             "Source": 1,
             "Status": "StatusSuccess"
@@ -1763,7 +1806,7 @@
                 "DomainDescription": {
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
-                        "PathId": "8",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "PQPartitionsInside": "0",
@@ -1786,7 +1829,7 @@
                         "TimeCastBucketsPerMediator": "2"
                     },
                     "ResourcesDomainKey": {
-                        "PathId": "7",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "SchemeShardId_Depricated": "72075186232723360",
@@ -1814,7 +1857,7 @@
                     "Name": "Root/serverless_db",
                     "Owner": "root@builtin",
                     "ParentPathId": "1",
-                    "PathId": "1",
+                    "PathId": "not-zero-number-text",
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
@@ -1822,7 +1865,7 @@
                     "SchemeshardId": "72075186224038899"
                 }
             },
-            "PathId": "1",
+            "PathId": "not-zero-number-text",
             "PathOwnerId": "72075186224038899",
             "Source": 1,
             "Status": "StatusSuccess"
@@ -1841,7 +1884,7 @@
                         "Name": ".metadata",
                         "Owner": "metadata@system",
                         "ParentPathId": "1",
-                        "PathId": "2",
+                        "PathId": "not-zero-number-text",
                         "PathState": 3,
                         "PathType": 1,
                         "SchemeshardId": "72075186224038898"
@@ -1858,7 +1901,7 @@
                 "DomainDescription": {
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
-                        "PathId": "7",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "PQPartitionsInside": "0",
@@ -1885,7 +1928,7 @@
                         "TimeCastBucketsPerMediator": "2"
                     },
                     "ResourcesDomainKey": {
-                        "PathId": "7",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "SchemeShardId_Depricated": "72075186232723360",
@@ -1911,7 +1954,7 @@
                     "Name": "Root/shared_db",
                     "Owner": "root@builtin",
                     "ParentPathId": "1",
-                    "PathId": "1",
+                    "PathId": "not-zero-number-text",
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
@@ -1919,7 +1962,7 @@
                     "SchemeshardId": "72075186224038898"
                 }
             },
-            "PathId": "1",
+            "PathId": "not-zero-number-text",
             "PathOwnerId": "72075186224038898",
             "Source": 1,
             "Status": "StatusSuccess"
@@ -3525,7 +3568,7 @@
                         "State": 10,
                         "TabletId": "72075186224037888",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 14
@@ -3541,7 +3584,7 @@
                         "State": 10,
                         "TabletId": "72075186224037889",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3557,7 +3600,7 @@
                         "State": 10,
                         "TabletId": "72075186224037890",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3573,7 +3616,7 @@
                         "State": 10,
                         "TabletId": "72075186224037891",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 32
@@ -3589,7 +3632,7 @@
                         "State": 10,
                         "TabletId": "72075186224037892",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3605,7 +3648,7 @@
                         "State": 10,
                         "TabletId": "72075186224037893",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3621,7 +3664,7 @@
                         "State": 10,
                         "TabletId": "72075186224037894",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 40
@@ -3637,7 +3680,7 @@
                         "State": 10,
                         "TabletId": "72075186224037895",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3653,7 +3696,7 @@
                         "State": 10,
                         "TabletId": "72075186224037896",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3669,7 +3712,7 @@
                         "State": 10,
                         "TabletId": "72075186224037897",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 16
@@ -3692,7 +3735,7 @@
                         "State": 10,
                         "TabletId": "72075186224038899",
                         "TenantId": {
-                            "PathId": "8",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 16
@@ -3708,7 +3751,7 @@
                         "State": 10,
                         "TabletId": "72075186224038900",
                         "TenantId": {
-                            "PathId": "8",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3724,7 +3767,7 @@
                         "State": 10,
                         "TabletId": "72075186224038901",
                         "TenantId": {
-                            "PathId": "8",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3740,7 +3783,7 @@
                         "State": 10,
                         "TabletId": "72075186224038902",
                         "TenantId": {
-                            "PathId": "8",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3756,7 +3799,7 @@
                         "State": 10,
                         "TabletId": "72075186224038903",
                         "TenantId": {
-                            "PathId": "8",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3772,7 +3815,7 @@
                         "State": 10,
                         "TabletId": "72075186224038904",
                         "TenantId": {
-                            "PathId": "8",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 32
@@ -3795,7 +3838,7 @@
                         "State": 10,
                         "TabletId": "72075186224038889",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 14
@@ -3811,7 +3854,7 @@
                         "State": 10,
                         "TabletId": "72075186224038890",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 40
@@ -3827,7 +3870,7 @@
                         "State": 10,
                         "TabletId": "72075186224038891",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3843,7 +3886,7 @@
                         "State": 10,
                         "TabletId": "72075186224038892",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3859,7 +3902,7 @@
                         "State": 10,
                         "TabletId": "72075186224038893",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 32
@@ -3875,7 +3918,7 @@
                         "State": 10,
                         "TabletId": "72075186224038894",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3891,7 +3934,7 @@
                         "State": 10,
                         "TabletId": "72075186224038895",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3907,7 +3950,7 @@
                         "State": 10,
                         "TabletId": "72075186224038896",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3923,7 +3966,7 @@
                         "State": 10,
                         "TabletId": "72075186224038897",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3939,7 +3982,7 @@
                         "State": 10,
                         "TabletId": "72075186224038898",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 16
@@ -4087,6 +4130,7 @@
                 "Metrics": {},
                 "Name": "/Root",
                 "NetworkUtilization": "number",
+                "NetworkWriteThroughput": "text",
                 "NodeIds": [
                     1
                 ],
@@ -4133,6 +4177,7 @@
                 "Metrics": "not-empty-object",
                 "Name": "/Root/dedicated_db",
                 "NetworkUtilization": "number",
+                "NetworkWriteThroughput": "text",
                 "NodeIds": [
                     50000
                 ],
@@ -4219,6 +4264,7 @@
                 "Metrics": "not-empty-object",
                 "Name": "/Root/shared_db",
                 "NetworkUtilization": "number",
+                "NetworkWriteThroughput": "text",
                 "NodeIds": [
                     50001
                 ],
@@ -4285,6 +4331,7 @@
                     "Metrics": {},
                     "Name": "/Root",
                     "NetworkUtilization": "number",
+                    "NetworkWriteThroughput": "text",
                     "NodeIds": [
                         1
                     ],
@@ -4335,6 +4382,7 @@
                     "Metrics": "not-empty-object",
                     "Name": "/Root/dedicated_db",
                     "NetworkUtilization": "number",
+                    "NetworkWriteThroughput": "text",
                     "NodeIds": [
                         50000
                     ],
@@ -4428,6 +4476,7 @@
                     "Metrics": "not-empty-object",
                     "Name": "/Root/shared_db",
                     "NetworkUtilization": "number",
+                    "NetworkWriteThroughput": "text",
                     "NodeIds": [
                         50001
                     ],

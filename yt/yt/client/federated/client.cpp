@@ -42,7 +42,7 @@ DECLARE_REFCOUNTED_CLASS(TClient)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFuture<std::optional<TString>> GetDataCenterByClient(const IClientPtr& client)
+TFuture<std::optional<std::string>> GetDataCenterByClient(const IClientPtr& client)
 {
     TListNodeOptions options;
     options.MaxSize = 1;
@@ -51,10 +51,10 @@ TFuture<std::optional<TString>> GetDataCenterByClient(const IClientPtr& client)
         .Apply(BIND([] (const NYson::TYsonString& items) {
             auto itemsList = NYTree::ConvertTo<NYTree::IListNodePtr>(items);
             if (!itemsList->GetChildCount()) {
-                return std::optional<TString>();
+                return std::optional<std::string>();
             }
             auto host = itemsList->GetChildren()[0];
-            return NNet::InferYPClusterFromHostName(host->GetValue<TString>());
+            return NNet::InferYPClusterFromHostName(host->GetValue<std::string>());
         }));
 }
 
@@ -379,6 +379,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, RemountTable, (const NYPath::TYPath&, const TRemountTableOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, FreezeTable, (const NYPath::TYPath&, const TFreezeTableOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, UnfreezeTable, (const NYPath::TYPath&, const TUnfreezeTableOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, CancelTabletTransition, (NTabletClient::TTabletId, const TCancelTabletTransitionOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, ReshardTable, (const NYPath::TYPath&, const std::vector<NTableClient::TUnversionedOwningRow>&, const TReshardTableOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, ReshardTable, (const NYPath::TYPath&, int, const TReshardTableOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, ReshardTableAutomatic, (const NYPath::TYPath&, const TReshardTableAutomaticOptions&));

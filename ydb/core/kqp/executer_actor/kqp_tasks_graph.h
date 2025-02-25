@@ -91,13 +91,16 @@ struct TStageInfoMeta {
 struct TGraphMeta {
     IKqpGateway::TKqpSnapshot Snapshot;
     TMaybe<ui64> LockTxId;
-    ui32 LockNodeId;
+    ui32 LockNodeId = 0;
     TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
     bool UseFollowers = false;
     bool AllowInconsistentReads = false;
     bool AllowWithSpilling = false;
+    bool SinglePartitionOptAllowed = false;
+    bool LocalComputeTasks = false;
+    bool MayRunTasksLocally = false;
     TIntrusivePtr<TProtoArenaHolder> Arena;
     TString Database;
     NKikimrConfig::TTableServiceConfig::EChannelTransportVersion ChannelTransportVersion;

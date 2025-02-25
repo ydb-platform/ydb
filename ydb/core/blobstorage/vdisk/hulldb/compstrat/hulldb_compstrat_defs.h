@@ -38,10 +38,13 @@ namespace NKikimr {
             ui64 FullCompactionLsn = 0;
             // time compaction request was issued
             TInstant CompactionStartTime;
+            // explicit set of SSTables we need to compact
+            THashSet<ui64> TablesToCompact;
 
-            TFullCompactionAttrs(ui64 lsn, TInstant startTime)
+            TFullCompactionAttrs(ui64 lsn, TInstant startTime, THashSet<ui64> tablesToCompact)
                 : FullCompactionLsn(lsn)
                 , CompactionStartTime(startTime)
+                , TablesToCompact(std::move(tablesToCompact))
             {}
 
             bool operator==(const TFullCompactionAttrs &attrs) const {

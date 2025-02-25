@@ -23,14 +23,13 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
 
 void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr) {
     AFL_VERIFY(FetchingPlan);
-    AFL_VERIFY(!GetContext()->IsAborted());
     if (!IsReadyFlag) {
         AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);
     }
     if (AtomicCas(&SourceStartedFlag, 1, 0)) {
         SetMemoryGroupId(interval.GetIntervalId());
         AFL_VERIFY(FetchingPlan);
-        StageData = std::make_unique<TFetchedData>(GetExclusiveIntervalOnly());
+        StageData = std::make_unique<TFetchedData>(GetExclusiveIntervalOnly(), GetRecordsCount());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", GetSourceIdx());
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", GetSourceIdx())("method", "InitFetchingPlan"));
         if (GetContext()->IsAborted()) {
@@ -53,20 +52,27 @@ void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& /*owner*/, const s
     Intervals.clear();
 }
 
-void IDataSource::DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
+void IDataSource::DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
     if (ResourceGuards.size()) {
         if (ExclusiveIntervalOnly) {
             ResourceGuards.back()->Update(0);
         } else {
-            ResourceGuards.back()->Update(GetColumnRawBytes(GetContext()->GetPKColumns()->GetColumnIds()));
+            ResourceGuards.back()->Update(GetColumnRawBytes(GetContext()->GetMergeColumns()->GetColumnIds()));
         }
     }
-    DoBuildStageResult(sourcePtr);
+    TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT_EMPTY", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
+    if (ExclusiveIntervalOnly) {
+        StageResult = TFetchedResult::BuildEmpty();
+    } else {
+        StageResult = std::make_unique<TFetchedResult>(
+            std::move(StageData), GetContext()->GetMergeColumns()->GetColumnIds(), *GetContext()->GetCommonContext()->GetResolver());
+    }
+    StageData.reset();
 }
 
 void IDataSource::DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-    StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
+    StageResult = std::make_unique<TFetchedResult>(std::move(StageData), *GetContext()->GetCommonContext()->GetResolver());
     StageData.reset();
 }
 
@@ -224,8 +230,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
                      .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
                      .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
                      .DetachResult();
-
-    MutableStageData().AddBatch(batch);
+    MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }
 
 namespace {
@@ -291,7 +296,7 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
     const ISnapshotSchema::TPtr batchSchema =
         GetContext()->GetReadMetadata()->GetIndexVersions().GetSchemaVerified(GetCommitted().GetSchemaVersion());
     const ISnapshotSchema::TPtr resultSchema = GetContext()->GetReadMetadata()->GetResultSchema();
-    if (!GetStageData().GetTable()) {
+    if (!GetStageData().GetTable()->HasAccessors()) {
         AFL_VERIFY(GetStageData().GetBlobs().size() == 1);
         auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
         auto schema = GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion());
@@ -313,12 +318,12 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
         }
         GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(*batch, ss, (ui64)CommittedBlob.GetInsertWriteId());
         GetContext()->GetReadMetadata()->GetIndexInfo().AddDeleteFlagsColumn(*batch, CommittedBlob.GetIsDelete());
-        MutableStageData().AddBatch(batch);
+        MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
         if (CommittedBlob.GetIsDelete()) {
             MutableStageData().AddFilter(NArrow::TColumnFilter::BuildDenyFilter());
         }
     }
-    MutableStageData().SyncTableColumns(columns->GetSchema()->fields(), *resultSchema);
+    MutableStageData().SyncTableColumns(columns->GetSchema()->fields(), *resultSchema, GetRecordsCount());
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

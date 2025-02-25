@@ -174,6 +174,18 @@ void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
     }
 }
 
+bool TExecutorGCLogic::HasGarbageBefore(TGCTime snapshotTime) {
+    for (const auto& [_, ci] : ChannelInfo) {
+        if (ci.MinUncollectedTime < snapshotTime) {
+            return true;
+        }
+        if (!ci.CommittedDelta.empty() && ci.CommittedDelta.begin()->first < snapshotTime) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
     if (!AllowGarbageCollection)
         return;
@@ -193,12 +205,6 @@ TExecutorGCLogic::TChannelInfo::TChannelInfo()
     : GcCounter(1)
     , GcWaitFor(0)
 {
-}
-
-void TExecutorGCLogic::TChannelInfo::ApplyDelta(TGCTime time, TGCBlobDelta& delta) {
-    TGCBlobDelta& committedDelta = CommittedDelta[time];
-    DoSwap(committedDelta, delta);
-    Y_DEBUG_ABORT_UNLESS(delta.Created.empty() && delta.Deleted.empty());
 }
 
 void TExecutorGCLogic::MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source) {
@@ -358,6 +364,8 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
     if (GcWaitFor > 0)
         return;
 
+    MinUncollectedTime = uncommittedTime;
+
     TVector<TLogoBlobID> keep;
     TVector<TLogoBlobID> notKeep;
 
@@ -374,7 +382,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
 
     // The first barrier of gen:0 (zero entry) is special
     TGCTime zeroTime{ generation, 0 };
-    if (KnownGcBarrier < zeroTime && collectBarrier < zeroTime && zeroTime <= uncommittedTime) {
+    if (CommitedGcBarrier < zeroTime && collectBarrier < zeroTime && zeroTime <= uncommittedTime) {
         collectBarrier = zeroTime;
     }
 

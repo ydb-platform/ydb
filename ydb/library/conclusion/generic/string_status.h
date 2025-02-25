@@ -3,11 +3,12 @@
 #include "generic_status.h"
 
 #include <util/generic/string.h>
+#include <util/generic/yexception.h>
 
 namespace NKikimr {
 
 template <class TStatus, TStatus StatusOk, TStatus DefaultError>
-class TConclusionStatusImpl : public TConclusionStatusGenericImpl<TConclusionStatusImpl<TStatus, StatusOk, DefaultError>, TString, TStatus, StatusOk, DefaultError> {
+class TConclusionStatusImpl: public TConclusionStatusGenericImpl<TConclusionStatusImpl<TStatus, StatusOk, DefaultError>, TString, TStatus, StatusOk, DefaultError> {
 protected:
     using TSelf = TConclusionStatusImpl<TStatus, StatusOk, DefaultError>;
     using TBase = TConclusionStatusGenericImpl<TSelf, TString, TStatus, StatusOk, DefaultError>;
@@ -31,6 +32,14 @@ public:
             Y_ABORT_UNLESS(TBase::Ok(), "error=%s, processInfo=%s", GetErrorMessage().c_str(), processInfo.c_str());
         } else {
             Y_ABORT_UNLESS(TBase::Ok(), "error=%s", GetErrorMessage().c_str());
+        }
+    }
+
+    void Ensure(const TString& processInfo = Default<TString>()) const {
+        if (processInfo) {
+            Y_ENSURE(TBase::Ok(), "error=" + GetErrorMessage() + ", processInfo=" + processInfo);
+        } else {
+            Y_ENSURE(TBase::Ok(), "error=" + GetErrorMessage());
         }
     }
 

@@ -1,3 +1,19 @@
+* Add `ydb admin node config init` command to initialize directory with node config files.
+* Add `ydb admin cluster config generate` command to generate dynamic config from static config on cluster.
+* Fixed memory leak in tpcds generator.
+* Include external data sources and external tables in local backups (`ydb tools dump` and `ydb tools restore`). Both scheme objects are backed up as YQL creation queries saved in the `create_external_data_source.sql` and `create_external_table.sql` files respectively, which can be executed to recreate the original scheme objects.
+* Fixed a bug where `ydb auth get-token` command tried to authenticate twice: while listing andpoints and while executing actual token request.
+* Fixed a bug where `ydb import file csv` command was saving progress even if a batch upload had been failed.
+* Include coordination nodes in local backups (`ydb tools dump` and `ydb tools restore`). Rate limiters that utilize the coordination node are saved in the coordination node's backup folder, preserving the existing path hierarchy.
+* Fixed a bug where some errors could be ignored when restoring from a local backup.
+* Added `ydb workload log import generator` command.
+* Queries in `ydb workload run` command are now executed in random order.
+* Include topics in local backups (`ydb tools dump` and `ydb tools restore`). In this release, only the settings of the topics are retained; messages are not included in the backup.
+* Added `ydb admin cluster dump` and `ydb admin cluster restore` commands for dumping all cluster-level data
+* Added `ydb admin database dump` and `ydb admin database restore` commands for dumping all database-level data
+
+## 2.19.0 ##
+
 * Added some temporary changes to experimental `ydb admin storage` command for internal usage
 * Added message query text if query fails in `ydb workload run` comamnd.
 * Enable view exports and imports. Views are exported as `CREATE VIEW` YQL statements which are executed on import.
@@ -12,7 +28,6 @@
 * Backup and restore of changefeeds has been added to `ydb tools dump` and `ydb tools restore`. As a result, there are changes in the backup file structure: for tables with changefeeds, a subdirectory is created for each changefeed, named after the changefeed. This subdirectory contains two files: `changefeed_description.pb`, which contains the changefeed description, and `topic_description.pb`, which contains information about the underlying topic.
 * Added `--skip-checksum-validation` option to `ydb import s3` command to skip server-side checksum validation.
 * Added new experimental options for `ydb debug ping` command: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
-
 
 ## 2.18.0 ##
 

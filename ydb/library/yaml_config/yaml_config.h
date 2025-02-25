@@ -7,6 +7,9 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <ydb/public/api/protos/ydb_config.pb.h>
 
 #include <openssl/sha.h>
 
@@ -86,5 +89,14 @@ void ResolveAndParseYamlConfig(
  * if corresponding configs are presenet in 'from'
  */
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to);
+
+class IConfigSwissKnife {
+public:
+    virtual ~IConfigSwissKnife() = default;
+    virtual bool VerifyReplaceRequest(const Ydb::Config::ReplaceConfigRequest& request, Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) const = 0;
+};
+
+
+std::unique_ptr<IConfigSwissKnife> CreateDefaultConfigSwissKnife();
 
 } // namespace NKikimr::NYamlConfig

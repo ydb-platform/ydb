@@ -146,6 +146,11 @@ public:
             issues.AddIssue("DryRun is not supported yet.");
             return false;
         }
+
+        if (!AppData()->ConfigSwissKnife->VerifyReplaceRequest(request, status, issues)) {
+            return false;
+        }
+
         return true;
     }
 

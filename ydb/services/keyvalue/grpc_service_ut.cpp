@@ -813,6 +813,7 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         auto describeVolumeResult = DescribeVolume(channel, tablePath);
         UNIT_ASSERT_VALUES_EQUAL(1, describeVolumeResult.partition_count());
         UNIT_ASSERT(describeVolumeResult.has_storage_config());
+        UNIT_ASSERT_VALUES_EQUAL(describeVolumeResult.storage_config().channel_size(), 3);
         for (const auto& channel : describeVolumeResult.storage_config().channel()) {
             UNIT_ASSERT_VALUES_EQUAL(channel.media(), "ssd");
         }
@@ -825,6 +826,7 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         describeVolumeResult = DescribeVolume(channel, tablePath);
         UNIT_ASSERT_VALUES_EQUAL(2, describeVolumeResult.partition_count());
         UNIT_ASSERT(describeVolumeResult.has_storage_config());
+        UNIT_ASSERT_VALUES_EQUAL(describeVolumeResult.storage_config().channel_size(), 3);
         for (const auto& channel : describeVolumeResult.storage_config().channel()) {
             UNIT_ASSERT_VALUES_EQUAL(channel.media(), "ssd");
         }

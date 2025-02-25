@@ -1415,6 +1415,7 @@ message TSolomonVolumeDescription {
     optional uint64 PathId = 2;
     optional uint64 PartitionCount = 3;
     repeated TPartition Partitions = 4;
+    repeated NKikimrStoragePool.TChannelBind BoundChannels = 5;
 }
 
 message TCreateSolomonVolume {

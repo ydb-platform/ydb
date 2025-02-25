@@ -333,7 +333,7 @@ public:
     std::optional<TFormedBlobInfo> Add(TClientBlob&& blob);
     std::optional<TFormedBlobInfo> Add(const TKey& key, ui32 size);
 
-    bool IsInited() const { return !SourceId.empty(); }
+    bool IsInited() const { return TotalParts > 0; }
 
     bool IsComplete() const;
 

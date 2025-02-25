@@ -6,7 +6,6 @@ import logging
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.util import LogLevels
 
 
 logger = logging.getLogger(__name__)

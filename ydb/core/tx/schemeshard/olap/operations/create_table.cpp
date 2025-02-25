@@ -99,7 +99,7 @@ private:
 
 class TOlapPresetConstructor : public TTableConstructorBase {
     ui32 PresetId = 0;
-    TString PresetName = "default";
+    TString PresetName = TOlapStoreInfo::DefaultPresetName;
     const TOlapStoreInfo& StoreInfo;
     mutable bool NeedUpdateObject = false;
 public:
@@ -118,24 +118,13 @@ public:
             return false;
         }
 
-        if (description.HasSchemaPresetId()) {
-            PresetId = description.GetSchemaPresetId();
-            if (!StoreInfo.SchemaPresets.contains(PresetId)) {
-                errors.AddError(Sprintf("Specified schema preset %" PRIu32 " does not exist in tablestore", PresetId));
-                return false;
-            }
-            PresetName = StoreInfo.SchemaPresets.at(PresetId).GetName();
-        } else {
-            if (description.HasSchemaPresetName()) {
-                PresetName = description.GetSchemaPresetName();
-            }
-            if (!StoreInfo.SchemaPresetByName.contains(PresetName)) {
-                errors.AddError(Sprintf("Specified schema preset '%s' does not exist in tablestore", PresetName.c_str()));
-                return false;
-            }
-            PresetId = StoreInfo.SchemaPresetByName.at(PresetName);
-            Y_ABORT_UNLESS(StoreInfo.SchemaPresets.contains(PresetId));
+        auto* preset = StoreInfo.GetPresetOptional(description);
+        if (!preset) {
+            errors.AddError("preset not found in tables store");
+            return false;
         }
+        PresetId = preset->GetId();
+        PresetName = preset->GetName();
 
         if (description.HasSchema()) {
             if (!GetSchema().Validate(description.GetSchema(), errors)) {
@@ -708,6 +697,11 @@ public:
 
         if (storeInfo) {
             TOlapPresetConstructor tableConstructor(*storeInfo);
+            auto conclusion = storeInfo->FillInheritance(createDescription);
+            if (conclusion.IsFail()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, conclusion.GetErrorMessage());
+                return result;
+            }
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
             needUpdateObject = tableConstructor.GetNeedUpdateObject();
         } else {

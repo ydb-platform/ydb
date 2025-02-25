@@ -46,4 +46,11 @@ bool TOlapOptionsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
     return true;
 }
 
+TConclusionStatus TOlapOptionsDescription::FillInheritance(NKikimrSchemeOp::TColumnTableDescription& description) const {
+    if (description.HasSchema() && !description.GetSchema().HasOptions()) {
+        Serialize(*description.MutableSchema());
+    }
+    return TConclusionStatus::Success();
+}
+
 }

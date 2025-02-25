@@ -86,6 +86,28 @@ bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, 
     return true;
 }
 
+TConclusionStatus TOlapSchema::FillInheritance(NKikimrSchemeOp::TColumnTableDescription& description) const {
+    {
+        TConclusionStatus conclusion = Columns.FillInheritance(description);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+    {
+        TConclusionStatus conclusion = Indexes.FillInheritance(description);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+    {
+        TConclusionStatus conclusion = Options.FillInheritance(description);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+    return TConclusionStatus::Success();
+}
+
 void TOlapStoreSchemaPreset::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto) {
     Y_ABORT_UNLESS(presetProto.HasId());
     Y_ABORT_UNLESS(presetProto.HasName());

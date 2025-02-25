@@ -263,4 +263,8 @@ const NKikimr::NSchemeShard::TOlapColumnSchema* TOlapColumnsDescription::GetById
     return TValidator::CheckNotNull(GetById(id));
 }
 
+TConclusionStatus TOlapColumnsDescription::FillInheritance(NKikimrSchemeOp::TColumnTableDescription& /*description*/) const {
+    return TConclusionStatus::Success();
+}
+
 }

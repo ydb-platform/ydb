@@ -131,4 +131,11 @@ NKikimr::NSchemeShard::TOlapIndexSchema* TOlapIndexesDescription::MutableByIdVer
     return TValidator::CheckNotNull(MutableById(id));
 }
 
+TConclusionStatus TOlapIndexesDescription::FillInheritance(NKikimrSchemeOp::TColumnTableDescription& description) const {
+    if (description.HasSchema() && description.GetSchema().GetIndexes().size() == 0) {
+        Serialize(*description.MutableSchema());
+    }
+    return TConclusionStatus::Success();
+}
+
 }

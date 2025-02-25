@@ -368,6 +368,10 @@ public:
 
         TColumnFilter MakeFilter(const ui64 recordsCount) const;
 
+        TString DebugString() const {
+            return TStringBuilder() << "[" << Begin << ";" << End << ")";
+        }
+
         TRowRange(const ui64 begin, const ui64 end)
             : Begin(begin)
             , End(end) {
@@ -401,7 +405,7 @@ public:
         void AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const;
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
         TString DebugString(const ui32 position) const;
-        TRowRange EqualRange(const std::shared_ptr<arrow::Scalar>& value, const TRowRange& range) const;
+        TRowRange EqualRange(const TAddress& value, const TRowRange& range) const;
     };
 
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 index) const {

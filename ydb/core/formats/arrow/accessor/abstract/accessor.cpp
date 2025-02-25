@@ -22,39 +22,33 @@ std::shared_ptr<arrow::Array> IChunkedArray::TReader::CopyRecord(const ui64 reco
     return NArrow::CopyRecords(address.GetArray(), { address.GetPosition() });
 }
 
-IChunkedArray::TRowRange IChunkedArray::TReader::EqualRange(const std::shared_ptr<arrow::Scalar>& value, const TRowRange& range) const {
+IChunkedArray::TRowRange IChunkedArray::TReader::EqualRange(const TAddress& value, const TRowRange& range) const {
     const TRowRange clippedRange = range.Intersect({0, GetRecordsCount()});
     const auto localIndexes = std::ranges::iota_view(clippedRange.GetBegin(), clippedRange.GetEnd());
-    const auto getScalar = [this](const ui64 index) {
-        const auto chunk = GetReadChunk(index);
-        return *chunk.GetArray()->GetScalar(index - chunk.GetPosition());
-    };
 
-    ui64 begin;
-    {
-        const auto findBound = std::lower_bound(
-            localIndexes.begin(), localIndexes.end(), value, [&getScalar](const ui64 index, const std::shared_ptr<arrow::Scalar>& bound) {
-                return NArrow::ScalarLess(getScalar(index), bound);
+    const ui64 begin = [&]() {
+        const auto findBound =
+            std::lower_bound(localIndexes.begin(), localIndexes.end(), value, [this](const ui64 index, const TAddress& bound) {
+                return GetReadChunk(index).Compare(bound) == std::partial_ordering::less;
             });
         if (findBound == localIndexes.end()) {
-            begin = clippedRange.GetEnd();
+            return clippedRange.GetEnd();
         } else {
-            begin = *findBound;
+            return *findBound;
         }
-    }
+    }();
 
-    ui64 end;
-    {
-        const auto findBound = std::upper_bound(
-            localIndexes.begin(), localIndexes.end(), value, [&getScalar](const std::shared_ptr<arrow::Scalar>& bound, const ui64 index) {
-                return NArrow::ScalarLess(bound, getScalar(index));
+    const ui64 end = [&]() {
+        const auto findBound =
+            std::upper_bound(localIndexes.begin(), localIndexes.end(), value, [this](const TAddress& bound, const ui64 index) {
+                return GetReadChunk(index).Compare(bound) == std::partial_ordering::greater;
             });
         if (findBound == localIndexes.end()) {
-            end = clippedRange.GetEnd();
+            return clippedRange.GetEnd();
         } else {
-            end = *findBound;
+            return *findBound;
         }
-    }
+    }();
 
     return { begin, end };
 }
@@ -167,7 +161,7 @@ std::shared_ptr<IChunkedArray> IChunkedArray::ApplyFilter(const TColumnFilter& f
 }
 
 TColumnFilter IChunkedArray::TRowRange::MakeFilter(const ui64 recordsCount) const {
-    AFL_VERIFY(End < recordsCount);
+    AFL_VERIFY(End <= recordsCount)("end", End)("count", recordsCount);
     TColumnFilter result = TColumnFilter::BuildAllowFilter();
     result.Add(false, Begin);
     result.Add(true, Size());

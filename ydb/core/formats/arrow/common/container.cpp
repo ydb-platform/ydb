@@ -264,7 +264,8 @@ NAccessor::IChunkedArray::TRowRange TGeneralContainer::EqualRange(const arrow::R
             "actual", border.schema()->field(i)->ToString());
         const auto column = GetColumnVerified(i);
         const NAccessor::IChunkedArray::TReader reader(column);
-        range = reader.EqualRange(NArrow::TStatusValidator::GetValid(border.column(i)->GetScalar(0)), range);
+        auto array = NAccessor::TTrivialArray::BuildArrayFromScalar(NArrow::TStatusValidator::GetValid(border.column(i)->GetScalar(0)));
+        range = reader.EqualRange(NAccessor::IChunkedArray::TAddress(array, 0), range);
         if (range.Empty()) {
             return range;
         }

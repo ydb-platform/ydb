@@ -216,8 +216,6 @@ GROUP BY
 ;
 ```
 
-
-
 {% endif %}
 
 ## DISTINCT {#distinct}
@@ -263,6 +261,7 @@ GROUP COMPACT BY key
 ORDER BY count DESC
 LIMIT 3;
 ```
+
 {% endif %}
 
 ## GROUP BY ... HOP
@@ -298,11 +297,10 @@ Functions with omitted `HOP_START` and `HOP_END` parameters, return a value of t
 
 The **tumbling window** known in other systems is a special case of a **hopping window** when `interval` == `hop`.
 
-
 ## Examples
 
 ```yql
-{% if select_command != "SELECT STREAM" %}`SELECT`{% else %}`SELECT STREAM`{% endif %}
+SELECT{% if select_command == "SELECT STREAM" %} STREAM{% endif %}
     key,
     COUNT(*)
 FROM my_stream
@@ -315,7 +313,7 @@ GROUP BY
 ```
 
 ```yql
-{% if select_command != "SELECT STREAM" %}`SELECT`{% else %}`SELECT STREAM`{% endif %}
+SELECT{% if select_command == "SELECT STREAM" %} STREAM{% endif %}
     double_key,
     HOP_END() as time,
     COUNT(*) as count
@@ -332,7 +330,7 @@ Filtering a {% if select_command != "SELECT STREAM" %}`SELECT`{% else %}`SELECT 
 ### Example
 
 ```yql
-{% if select_command != "SELECT STREAM" %}`SELECT`{% else %}`SELECT STREAM`{% endif %}
+SELECT{% if select_command == "SELECT STREAM" %} STREAM{% endif %}
     key
 FROM my_table
 GROUP BY key

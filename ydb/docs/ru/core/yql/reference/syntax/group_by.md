@@ -256,6 +256,7 @@ GROUP /*+ COMPACT() */ BY key
 ORDER BY count DESC
 LIMIT 3;
 ```
+
 {% endif %}
 
   ## GROUP BY ... HOP
@@ -274,9 +275,11 @@ LIMIT 3;
 Агрегатные функции автоматически пропускают `NULL` в своих аргументах.
 
 Среди столбцов, по которым производится группировка, должна присутствовать конструкция `HOP`, определяющая характеристики окна времени для группировки.
+
 ```yql
 HOP(time_extractor, hop, interval, delay)
 ```
+
 Реализованный вариант окна времени называется **hopping window**. Это окно, продвигающееся вперёд дискретными интервалами (параметр `hop`). Общая длительность окна задаётся параметром `interval`. Для определения времени каждого входного события используется параметр `time_extractor`. Это выражение, зависящее только от входных значений столбцов стрима, должно иметь тип `Timestamp`. Оно указывает, откуда именно во входных событиях доставать значение времени.
 
 В каждом потоке, определяемом значениями всех столбцов группировки, окно продвигается независимо от других потоков. Продвижение окна полностью зависит от самого позднего события потока. Поскольку записи в потоках слегка перемешиваются во времени, добавлен параметр `delay`, позволяющий отложить закрытие окна на указанную величину. События, приходящие до текущего окна, игнорируются.
@@ -292,7 +295,7 @@ HOP(time_extractor, hop, interval, delay)
 ### Примеры
 
 ```yql
-{% if select_command != "SELECT STREAM" %}`SELECT`{% else %}`SELECT STREAM`{% endif %}
+SELECT{% if select_command == "SELECT STREAM" %} STREAM{% endif %}
     key,
     COUNT(*)
 FROM my_stream
@@ -305,7 +308,7 @@ GROUP BY
 ```
 
 ```yql
-{% if select_command != "SELECT STREAM" %}`SELECT`{% else %}`SELECT STREAM`{% endif %}
+SELECT{% if select_command == "SELECT STREAM" %} STREAM{% endif %}
     double_key,
     HOP_END() as time,
     COUNT(*) as count
@@ -322,7 +325,7 @@ GROUP BY
 ### Пример
 
 ```yql
-{% if select_command != "SELECT STREAM" %}`SELECT`{% else %}`SELECT STREAM`{% endif %}
+SELECT{% if select_command == "SELECT STREAM" %} STREAM{% endif %}
     key
 FROM my_table
 GROUP BY key

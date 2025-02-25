@@ -1810,8 +1810,10 @@ namespace NActors {
 
         setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId(), &InterconnectMock);
 
-        setup->LocalServices.emplace_back(MakePollerActorId(), NActors::TActorSetupCmd(CreatePollerActor(),
-            NActors::TMailboxType::Simple, InterconnectPoolId()));
+        if (UseRealInterconnect) {
+            setup->LocalServices.emplace_back(MakePollerActorId(), NActors::TActorSetupCmd(CreatePollerActor(),
+                NActors::TMailboxType::Simple, InterconnectPoolId()));
+        }
 
         if (!SingleSysEnv) { // Single system env should do this self
             if (LogBackendFactory) {

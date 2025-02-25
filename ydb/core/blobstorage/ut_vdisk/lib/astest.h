@@ -6,7 +6,6 @@
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
@@ -65,7 +64,7 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     const TActorId nameserviceId = GetNameserviceActorId();
     TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
     setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, std::move(nameserviceSetup)));
-    setup1->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::Simple, 0));
+
 
     ///////////////////////// LOGGER ///////////////////////////////////////////////
     NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");

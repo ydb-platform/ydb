@@ -13,6 +13,7 @@ public:
     using TBase::SelfId;
 
     const TActorId Owner;
+    const TActorId Poller;
     SocketAddressType Address;
     TString Destination;
     TActorId RequestOwner;
@@ -23,9 +24,10 @@ public:
     bool AllowConnectionReuse = false;
     NActors::TPollerToken::TPtr PollerToken;
 
-    TOutgoingConnectionActor(const TActorId& owner)
+    TOutgoingConnectionActor(const TActorId& owner, const TActorId& poller)
         : TBase(&TSelf::StateWaiting)
         , Owner(owner)
+        , Poller(poller)
     {
     }
 
@@ -171,7 +173,7 @@ protected:
     }
 
     void RegisterPoller() {
-        Send(NActors::MakePollerActorId(), new NActors::TEvPollerRegister(TSocketImpl::Socket, SelfId(), SelfId()));
+        Send(Poller, new NActors::TEvPollerRegister(TSocketImpl::Socket, SelfId(), SelfId()));
     }
 
     void OnConnect() {
@@ -349,11 +351,11 @@ protected:
     }
 };
 
-NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure) {
+NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure, const TActorId& poller) {
     if (secure) {
-        return new TOutgoingConnectionActor<TSecureSocketImpl>(owner);
+        return new TOutgoingConnectionActor<TSecureSocketImpl>(owner, poller);
     } else {
-        return new TOutgoingConnectionActor<TPlainSocketImpl>(owner);
+        return new TOutgoingConnectionActor<TPlainSocketImpl>(owner, poller);
     }
 }
 

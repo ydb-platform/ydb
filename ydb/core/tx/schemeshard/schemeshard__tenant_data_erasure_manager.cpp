@@ -4,6 +4,21 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace {
+
+void SendResponseToRootSchemeShard(TSchemeShard* const schemeShard, const TActorContext& ctx) {
+    std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
+        new TEvSchemeShard::TEvTenantDataErasureResponse(schemeShard->ParentDomainId, schemeShard->DataErasureManager->GetGeneration(), NKikimrScheme::TEvTenantDataErasureResponse::COMPLETED));
+
+    const ui64 rootSchemeshard = schemeShard->ParentDomainId.OwnerId;
+    schemeShard->PipeClientCache->Send(
+        ctx,
+        ui64(rootSchemeshard),
+        response.release());
+}
+
+} // namespace
+
 TTenantDataErasureManager::TStarter::TStarter(TTenantDataErasureManager* const manager)
     : Manager(manager)
 {}
@@ -442,14 +457,7 @@ void TTenantDataErasureManager::SendResponseToRootSchemeShard() {
         << ", Status# " << static_cast<ui32>(Status)
         << ", RootSchemeshard# " << SchemeShard->ParentDomainId.OwnerId);
 
-    std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
-        new TEvSchemeShard::TEvTenantDataErasureResponse(SchemeShard->ParentDomainId, Generation, TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
-
-    const ui64 rootSchemeshard = SchemeShard->ParentDomainId.OwnerId;
-    SchemeShard->PipeClientCache->Send(
-        ctx,
-        ui64(rootSchemeshard),
-        response.release());
+    NKikimr::NSchemeShard::SendResponseToRootSchemeShard(SchemeShard, ctx);
 }
 
 
@@ -504,14 +512,7 @@ struct TSchemeShard::TTxRunTenantDataErasure : public TSchemeShard::TRwTxBase {
             << ", NeedResponseComplete# " << (NeedResponseComplete ? "true" : "false"));
 
         if (NeedResponseComplete) {
-            std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
-                new TEvSchemeShard::TEvTenantDataErasureResponse(Self->ParentDomainId, Self->DataErasureManager->GetGeneration(), TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
-
-            const ui64 rootSchemeshard = Self->ParentDomainId.OwnerId;
-            Self->PipeClientCache->Send(
-                ctx,
-                ui64(rootSchemeshard),
-                response.release());
+            NKikimr::NSchemeShard::SendResponseToRootSchemeShard(Self, ctx);
         }
     }
 };
@@ -557,14 +558,7 @@ struct TSchemeShard::TTxCompleteDataErasureShard : public TSchemeShard::TRwTxBas
             << ", NeedResponseComplete# " << (NeedResponseComplete ? "true" : "false"));
 
         if (NeedResponseComplete) {
-            std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
-                new TEvSchemeShard::TEvTenantDataErasureResponse(Self->ParentDomainId, Self->DataErasureManager->GetGeneration(), TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
-
-            const ui64 rootSchemeshard = Self->ParentDomainId.OwnerId;
-            Self->PipeClientCache->Send(
-                ctx,
-                ui64(rootSchemeshard),
-                response.release());
+            NKikimr::NSchemeShard::SendResponseToRootSchemeShard(Self, ctx);
         }
     }
 };
@@ -601,14 +595,7 @@ struct TSchemeShard::TTxAddEntryToDataErasure : public TSchemeShard::TRwTxBase {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxAddEntryToDataErasure Complete at schemestard: " << Self->TabletID());
         if (NeedResponseComplete) {
-            std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
-                new TEvSchemeShard::TEvTenantDataErasureResponse(Self->ParentDomainId, Self->DataErasureManager->GetGeneration(), TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
-
-            const ui64 rootSchemeshard = Self->ParentDomainId.OwnerId;
-            Self->PipeClientCache->Send(
-                ctx,
-                ui64(rootSchemeshard),
-                response.release());
+            NKikimr::NSchemeShard::SendResponseToRootSchemeShard(Self, ctx);
         }
     }
 };
@@ -650,14 +637,7 @@ struct TSchemeShard::TTxCancelDataErasureShards : public TSchemeShard::TRwTxBase
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxCancelDataErasureShards Complete at schemestard: " << Self->TabletID());
         if (NeedResponseComplete) {
-            std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
-                new TEvSchemeShard::TEvTenantDataErasureResponse(Self->ParentDomainId, Self->DataErasureManager->GetGeneration(), TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
-
-            const ui64 rootSchemeshard = Self->ParentDomainId.OwnerId;
-            Self->PipeClientCache->Send(
-                ctx,
-                ui64(rootSchemeshard),
-                response.release());
+            NKikimr::NSchemeShard::SendResponseToRootSchemeShard(Self, ctx);
         }
     }
 };

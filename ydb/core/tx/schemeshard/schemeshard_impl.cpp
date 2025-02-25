@@ -7614,20 +7614,20 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, c
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Handle TEvDataErasureInfoRequest, at schemeshard: " << TabletID());
 
-    TEvSchemeShard::TEvDataErasureInfoResponse::EStatus status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::UNSPECIFIED;
+    NKikimrScheme::TEvDataErasureInfoResponse::EStatus status = NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
 
     switch (DataErasureManager->GetStatus()) {
     case TDataErasureManager::EStatus::UNSPECIFIED:
-        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::UNSPECIFIED;
+        status = NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
         break;
     case TDataErasureManager::EStatus::COMPLETED:
-        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::COMPLETED;
+        status = NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED;
         break;
     case TDataErasureManager::EStatus::IN_PROGRESS:
-        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::IN_PROGRESS_TENANT;
+        status = NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_TENANT;
         break;
     case TDataErasureManager::EStatus::IN_PROGRESS_BSC:
-        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::IN_PROGRESS_BSC;
+        status = NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_BSC;
         break;
     }
     ctx.Send(ev->Sender, new TEvSchemeShard::TEvDataErasureInfoResponse(DataErasureManager->GetGeneration(), status));

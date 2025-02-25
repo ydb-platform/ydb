@@ -23,10 +23,10 @@ class TSchemeShard;
 class TDataErasureManager {
 public:
     enum class EStatus : ui32 {
-        UNSPECIFIED,
-        COMPLETED,
-        IN_PROGRESS,
-        IN_PROGRESS_BSC,
+        UNSPECIFIED = 0,
+        COMPLETED = 1,
+        IN_PROGRESS = 2,
+        IN_PROGRESS_BSC = 3,
     };
 
 protected:

@@ -480,21 +480,6 @@ std::vector<TDataRow> TestRows() {
     return rows;
 }
 
-bool CheckFilter(const std::vector<bool>& f, size_t count, bool value) {
-    for (size_t i = 0; i < f.size(); ++i) {
-        if (i < count) {
-            if (f[i] != value) {
-                return false;
-            }
-        } else {
-            if (f[i] == value) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 std::shared_ptr<arrow::Table> MakeTable1000() {
     TDataRowTableBuilder builder;
 

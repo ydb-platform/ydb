@@ -6,7 +6,6 @@
 #include "target_table.h"
 #include "tenant_resolver.h"
 #include "util.h"
-#include "logging.h"
 
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -168,8 +167,6 @@ public:
             TenantResolver = ctx.Register(CreateTenantResolver(ctx.SelfID, ReplicationId, PathId));
         }
 
-        TStringBuilder LogPrefix;
-        CLOG_E(ctx, ">>>>> Progress State=" << State);
         switch (State) {
         case EState::Ready:
             if (!Targets) {

@@ -74,8 +74,10 @@ void TTargetBase::SetDstState(const EDstState value) {
     case EDstState::Alter:
         return Replication->AddPendingAlterTarget(Id);
     case EDstState::Done:
-        PendingRemoveWorkers = false;
         return Replication->RemovePendingAlterTarget(Id);
+    case EDstState::Ready:
+        PendingRemoveWorkers = false;
+        break;
     default:
         break;
     }

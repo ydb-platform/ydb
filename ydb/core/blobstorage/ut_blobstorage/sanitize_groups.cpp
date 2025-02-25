@@ -38,9 +38,9 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         const ui32 disksPerNode = 1;
         const ui32 slotsPerDisk = 3;
 
-        // Assure that sanitizer doesn't send request to initially allocated groups
         env->Runtime->FilterFunction = CatchSanitizeRequests;
         env->CreateBoxAndPool(disksPerNode, numNodes * disksPerNode * slotsPerDisk / 9);
+        env->Runtime->FilterFunction = {};
     }
 
     NActorsInterconnect::TNodeLocation LocationGenerator(ui32 dc, ui32 rack, ui32 unit) {
@@ -58,7 +58,13 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         std::unique_ptr<TEnvironmentSetup> env;
 
         CreateEnv(env, locations, groupType);
+
+
+        // Assure that sanitizer doesn't send request to initially allocated groups
+        env->UpdateSettings(true, false, true);
+        env->Runtime->FilterFunction = CatchSanitizeRequests;
         env->Sim(TDuration::Minutes(3));
+        env->UpdateSettings(false, false, false);
 
         TGroupGeometryInfo geom = CreateGroupGeometry(groupType);
 

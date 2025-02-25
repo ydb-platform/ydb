@@ -30,7 +30,7 @@
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute_0_0",
-                                        "Node Type": "Limit-Filter-InnerJoin (MapJoin)-Filter-Filter-ConstantExpr",
+                                        "Node Type": "Limit-Filter-InnerJoin (MapJoin)-ConstantExpr-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -63,13 +63,18 @@
                                                 "Condition": "tt6.f1 = tt5.f1",
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 4
                                                     },
                                                     {
-                                                        "InternalOperatorId": 4
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
                                             },
                                             {
                                                 "Inputs": [
@@ -79,20 +84,6 @@
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.f1)"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 5
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.f1)"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute_0_0"
                                             }
                                         ],
                                         "PlanNodeId": 9,

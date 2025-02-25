@@ -136,14 +136,6 @@ public:
         }
     }
 
-    [[nodiscard]] TConclusionStatus FillInheritance(NKikimrSchemeOp::TColumnTableDescription& description) const {
-        auto* preset = GetPresetOptional(description);
-        if (!preset) {
-            return TConclusionStatus::Fail("preset not found in tables store");
-        }
-        return preset->FillInheritance(description);
-    }
-
     void SerializeDescription(NKikimrSchemeOp::TColumnStoreDescription& descriptionProto) const;
     void ParseFromLocalDB(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto);
     bool ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto, IErrorCollector& errors);

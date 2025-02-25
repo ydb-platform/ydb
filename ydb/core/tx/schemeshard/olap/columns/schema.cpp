@@ -165,7 +165,7 @@ void TOlapColumnsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
     }
 }
 
-bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+bool TOlapColumnsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
 
     ui32 lastColumnId = 0;
@@ -261,10 +261,6 @@ bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
 
 const NKikimr::NSchemeShard::TOlapColumnSchema* TOlapColumnsDescription::GetByIdVerified(const ui32 id) const noexcept {
     return TValidator::CheckNotNull(GetById(id));
-}
-
-TConclusionStatus TOlapColumnsDescription::FillInheritance(NKikimrSchemeOp::TColumnTableDescription& /*description*/) const {
-    return TConclusionStatus::Success();
 }
 
 }

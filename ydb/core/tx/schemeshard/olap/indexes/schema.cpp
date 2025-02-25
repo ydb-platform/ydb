@@ -83,7 +83,10 @@ void TOlapIndexesDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
     }
 }
 
-bool TOlapIndexesDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+bool TOlapIndexesDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+    if (opSchema.GetIndexes().size() == 0) {
+        return true;
+    }
     THashSet<ui32> usedIndexes;
     ui32 lastIdx = 0;
     for (const auto& proto : opSchema.GetIndexes()) {
@@ -129,13 +132,6 @@ const NKikimr::NSchemeShard::TOlapIndexSchema* TOlapIndexesDescription::GetByIdV
 
 NKikimr::NSchemeShard::TOlapIndexSchema* TOlapIndexesDescription::MutableByIdVerified(const ui32 id) noexcept {
     return TValidator::CheckNotNull(MutableById(id));
-}
-
-TConclusionStatus TOlapIndexesDescription::FillInheritance(NKikimrSchemeOp::TColumnTableDescription& description) const {
-    if (description.HasSchema() && description.GetSchema().GetIndexes().size() == 0) {
-        Serialize(*description.MutableSchema());
-    }
-    return TConclusionStatus::Success();
 }
 
 }

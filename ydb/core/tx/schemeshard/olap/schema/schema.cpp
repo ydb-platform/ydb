@@ -71,41 +71,23 @@ void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt)
     std::swap(resultLocal, tableSchemaExt);
 }
 
-bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
-    if (!Columns.Validate(opSchema, errors)) {
+bool TOlapSchema::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+    if (!Columns.ValidateForStore(opSchema, errors)) {
         return false;
     }
 
-    if (!Indexes.Validate(opSchema, errors)) {
+    if (!Indexes.ValidateForStore(opSchema, errors)) {
         return false;
     }
 
-    if (!Options.Validate(opSchema, errors)) {
+    if (!Options.ValidateForStore(opSchema, errors)) {
+        return false;
+    }
+
+    if (!ColumnFamilies.ValidateForStore(opSchema, errors)) {
         return false;
     }
     return true;
-}
-
-TConclusionStatus TOlapSchema::FillInheritance(NKikimrSchemeOp::TColumnTableDescription& description) const {
-    {
-        TConclusionStatus conclusion = Columns.FillInheritance(description);
-        if (conclusion.IsFail()) {
-            return conclusion;
-        }
-    }
-    {
-        TConclusionStatus conclusion = Indexes.FillInheritance(description);
-        if (conclusion.IsFail()) {
-            return conclusion;
-        }
-    }
-    {
-        TConclusionStatus conclusion = Options.FillInheritance(description);
-        if (conclusion.IsFail()) {
-            return conclusion;
-        }
-    }
-    return TConclusionStatus::Success();
 }
 
 void TOlapStoreSchemaPreset::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto) {

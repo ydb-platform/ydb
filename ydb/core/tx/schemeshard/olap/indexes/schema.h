@@ -38,7 +38,6 @@ private:
     YDB_READONLY_DEF(TIndexes, Indexes);
     YDB_READONLY_DEF(TIndexesByName, IndexesByName);
 public:
-    [[nodiscard]] TConclusionStatus FillInheritance(NKikimrSchemeOp::TColumnTableDescription& description) const;
     const TOlapIndexSchema* GetByName(const TString& name) const noexcept {
         auto it = IndexesByName.find(name);
         if (it != IndexesByName.end()) {
@@ -78,6 +77,6 @@ public:
 
     void Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
     void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
-    bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
+    bool ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
 };
 }

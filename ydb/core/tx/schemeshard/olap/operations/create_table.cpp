@@ -127,7 +127,7 @@ public:
         PresetName = preset->GetName();
 
         if (description.HasSchema()) {
-            if (!GetSchema().Validate(description.GetSchema(), errors)) {
+            if (!GetSchema().ValidateForStore(description.GetSchema(), errors)) {
                 return false;
             }
         }
@@ -697,11 +697,6 @@ public:
 
         if (storeInfo) {
             TOlapPresetConstructor tableConstructor(*storeInfo);
-            auto conclusion = storeInfo->FillInheritance(createDescription);
-            if (conclusion.IsFail()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, conclusion.GetErrorMessage());
-                return result;
-            }
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
             needUpdateObject = tableConstructor.GetNeedUpdateObject();
         } else {

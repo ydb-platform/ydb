@@ -30,9 +30,8 @@ namespace NKikimr::NSchemeShard {
 
         void ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
         void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
-        bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
+        bool ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
         bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings, const TOperationContext& context, IErrorCollector& errors) const;
-        [[nodiscard]] TConclusionStatus FillInheritance(NKikimrSchemeOp::TColumnTableDescription& description) const;
     };
 
     class TOlapStoreSchemaPreset: public TOlapSchema {

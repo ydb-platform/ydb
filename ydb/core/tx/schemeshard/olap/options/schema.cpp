@@ -42,15 +42,11 @@ void TOlapOptionsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
     }
 }
 
-bool TOlapOptionsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& /*opSchema*/, IErrorCollector& /*errors*/) const {
-    return true;
-}
-
-TConclusionStatus TOlapOptionsDescription::FillInheritance(NKikimrSchemeOp::TColumnTableDescription& description) const {
-    if (description.HasSchema() && !description.GetSchema().HasOptions()) {
-        Serialize(*description.MutableSchema());
+bool TOlapOptionsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& /*errors*/) const {
+    if (!opSchema.HasOptions()) {
+        return true;
     }
-    return TConclusionStatus::Success();
+    return true;
 }
 
 }

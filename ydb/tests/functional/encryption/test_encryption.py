@@ -35,25 +35,16 @@ def write_encryption_key_for(database):
 
 
 def create_sample_table(pool):
-    def callee(s):
-        s.execute_scheme(
-            '--!syntax_v1\n create table db1 (key uint64, value utf8, primary key(key)) WITH ( UNIFORM_PARTITIONS = 64 ); '
-        )
-
-    pool.retry_operation_sync(callee)
+    pool.execute_with_retries('--!syntax_v1\n create table db1 (key uint64, value utf8, primary key(key)) WITH ( UNIFORM_PARTITIONS = 64 ); ')
 
 
 def simple_write_data(pool, idx):
-
-    def callee(s):
-        s.transaction().execute(
-            s.prepare('declare $key as Uint64;\n declare $value as Utf8;\n upsert into db1 (key, value) values ($key, $value); \n'),
-            parameters={'$key': idx, '$value': str(idx) * 20},
-            commit_tx=True,
-        )
-
     try:
-        pool.retry_operation_sync(callee, retry_settings=ydb.RetrySettings(max_retries=2))
+        pool.execute_with_retries(
+            'declare $key as Uint64;\n declare $value as Utf8;\n upsert into db1 (key, value) values ($key, $value); \n',
+            parameters={'$key': (idx, ydb.PrimitiveType.Uint64), '$value': (str(idx) * 20, ydb.PrimitiveType.Utf8)},
+            retry_settings=ydb.RetrySettings(max_retries=2),
+        )
     except Exception:
         logger.exception("Error executing transaction")
 
@@ -112,7 +103,7 @@ class TestEncryption(object):
             db_name = '/Root/test_simple_encryption_%d' % idx
             self.cluster.wait_tenant_up(db_name)
             drivers.append(ydb.Driver(ydb.DriverConfig(self.discovery_endpoint, db_name)))
-            pools.append(ydb.SessionPool(drivers[idx]))
+            pools.append(ydb.QuerySessionPool(drivers[idx]))
 
         time.sleep(3)
 

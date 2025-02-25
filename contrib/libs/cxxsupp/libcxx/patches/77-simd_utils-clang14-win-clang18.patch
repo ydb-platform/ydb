@@ -1,0 +1,13 @@
+diff --git a/include/__algorithm/simd_utils.h b/include/__algorithm/simd_utils.h
+index c0d04c4..8404007 100644
+--- a/include/__algorithm/simd_utils.h
++++ b/include/__algorithm/simd_utils.h
+@@ -28,7 +28,7 @@ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
+ 
+ // TODO: Find out how altivec changes things and allow vectorizations there too.
+-#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && !defined(__ALTIVEC__) && !defined(__CUDACC__)
++#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && !defined(__ALTIVEC__) && !defined(__CUDACC__) && !(defined(_MSC_VER) && _LIBCPP_CLANG_VER <= 1801) && _LIBCPP_CLANG_VER >= 1600
+ #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 1
+ #else
+ #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 0

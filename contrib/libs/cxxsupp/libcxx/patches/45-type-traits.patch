@@ -130,10 +130,19 @@ index 9561b7b..5013724 100644
  _LIBCPP_END_NAMESPACE_STD
  
 diff --git a/include/__type_traits/remove_cv.h b/include/__type_traits/remove_cv.h
-index 8e1c043..639a9c4 100644
+index 2c4e9e4..639a9c4 100644
 --- a/include/__type_traits/remove_cv.h
 +++ b/include/__type_traits/remove_cv.h
-@@ -21,10 +21,14 @@ _LIBCPP_BEGIN_NAMESPACE_STD
+@@ -10,6 +10,8 @@
+ #define _LIBCPP___TYPE_TRAITS_REMOVE_CV_H
+ 
+ #include <__config>
++#include <__type_traits/remove_const.h>
++#include <__type_traits/remove_volatile.h>
+ 
+ #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+ #  pragma GCC system_header
+@@ -19,10 +21,14 @@ _LIBCPP_BEGIN_NAMESPACE_STD
  
  template <class _Tp>
  struct remove_cv {

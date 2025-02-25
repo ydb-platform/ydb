@@ -332,7 +332,7 @@ struct TCommonAppOptions {
     TString PathToInterconnectPrivateKeyFile;
     TString PathToInterconnectCaFile;
     TString YamlConfigFile;
-    TString ConfigStorePath;
+    TString ConfigDirPath;
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
@@ -427,7 +427,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("body", "body name (used to describe dynamic node location)")
             .RequiredArgument("NUM").StoreResult(&Body);
         opts.AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").StoreResult(&YamlConfigFile);
-        opts.AddLongOption("config-store", "Directory to store Yaml config").RequiredArgument("PATH").StoreResult(&ConfigStorePath);
+        opts.AddLongOption("config-dir", "Directory to store Yaml config").RequiredArgument("PATH").StoreResult(&ConfigDirPath);
 
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
@@ -1068,10 +1068,10 @@ public:
         TString storageYamlConfigFile;
         bool loadedFromStore = false;
 
-        if (CommonAppOptions.ConfigStorePath) {
-            AppConfig.SetConfigStorePath(CommonAppOptions.ConfigStorePath);
+        if (CommonAppOptions.ConfigDirPath) {
+            AppConfig.SetConfigDirPath(CommonAppOptions.ConfigDirPath);
 
-            auto dir = fs::path(CommonAppOptions.ConfigStorePath.c_str());
+            auto dir = fs::path(CommonAppOptions.ConfigDirPath.c_str());
 
             if (auto path = dir / STORAGE_CONFIG_NAME; fs::is_regular_file(path)) {
                 storageYamlConfigFile = path.string();

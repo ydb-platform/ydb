@@ -27,7 +27,7 @@ void SetupAcl(FederatedQuery::Acl* acl) {
     }
 }
 
-NYql::TIssue GroupIssues(NYql::TIssue rootIssue, NYql::TIssues childrenIssues) {
+NYql::TIssue GroupIssues(NYql::TIssue rootIssue, const NYql::TIssues& childrenIssues) {
     for (const auto& issue : childrenIssues) {
         rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
     }

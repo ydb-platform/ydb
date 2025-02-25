@@ -66,7 +66,7 @@ struct TRequestOptions {
 
 void SetupAcl(FederatedQuery::Acl* acl);
 
-NYql::TIssue GroupIssues(NYql::TIssue rootIssue, NYql::TIssues childrenIssues);
+NYql::TIssue GroupIssues(NYql::TIssue rootIssue, const NYql::TIssues& childrenIssues);
 
 bool IsFinalStatus(FederatedQuery::QueryMeta::ComputeStatus status);
 

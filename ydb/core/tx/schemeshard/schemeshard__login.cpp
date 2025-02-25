@@ -153,7 +153,7 @@ private:
         case TLoginProvider::TLoginUserResponse::EStatus::SUCCESS: {
             const auto& sid = Self->LoginProvider.Sids[loginRequest.User];
             db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastSuccessfulAttempt,
-                                                                        Schema::LoginSids::FailedAttemptCount>(ToInstant(sid.LastSuccessfulLogin).MilliSeconds(), sid.FailedLoginAttemptCount);
+                                                                        Schema::LoginSids::FailedAttemptCount>(ToInstant(sid.LastSuccessfulLogin).MicroSeconds(), sid.FailedLoginAttemptCount);
             Result->Record.SetToken(loginResponse.Token);
             Result->Record.SetSanitizedToken(loginResponse.SanitizedToken);
             Result->Record.SetIsAdmin(IsAdmin());
@@ -162,7 +162,7 @@ private:
         case TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD: {
             const auto& sid = Self->LoginProvider.Sids[loginRequest.User];
             db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastFailedAttempt,
-                                                                        Schema::LoginSids::FailedAttemptCount>(ToInstant(sid.LastFailedLogin).MilliSeconds(), sid.FailedLoginAttemptCount);
+                                                                        Schema::LoginSids::FailedAttemptCount>(ToInstant(sid.LastFailedLogin).MicroSeconds(), sid.FailedLoginAttemptCount);
             Result->Record.SetError(loginResponse.Error);
             break;
         }

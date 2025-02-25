@@ -798,10 +798,10 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
                 sid.Members.emplace(pbSubSid);
                 ChildToParentIndex[pbSubSid].emplace(sid.Name);
             }
-            sid.CreatedAt = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetCreatedAt()));
+            sid.CreatedAt = std::chrono::system_clock::time_point(std::chrono::microseconds(pbSid.GetCreatedAt()));
             sid.FailedLoginAttemptCount = pbSid.GetFailedLoginAttemptCount();
-            sid.LastFailedLogin = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetLastFailedLogin()));
-            sid.LastSuccessfulLogin = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetLastSuccessfulLogin()));
+            sid.LastFailedLogin = std::chrono::system_clock::time_point(std::chrono::microseconds(pbSid.GetLastFailedLogin()));
+            sid.LastSuccessfulLogin = std::chrono::system_clock::time_point(std::chrono::microseconds(pbSid.GetLastSuccessfulLogin()));
         }
     }
 }

@@ -51,7 +51,7 @@ public:
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                            Schema::LoginSids::SidHash,
                                                                            Schema::LoginSids::CreatedAt,
-                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MilliSeconds(), sid.IsEnabled);
+                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MicroSeconds(), sid.IsEnabled);
 
                         if (securityConfig.HasAllUsersGroup()) {
                             auto response = context.SS->LoginProvider.AddGroupMembership({
@@ -127,7 +127,7 @@ public:
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[group];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                           Schema::LoginSids::CreatedAt>(sid.Type, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                           Schema::LoginSids::CreatedAt>(sid.Type, ToInstant(sid.CreatedAt).MicroSeconds());
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                     }
                     break;

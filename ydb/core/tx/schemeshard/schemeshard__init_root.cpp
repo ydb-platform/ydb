@@ -58,7 +58,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                 auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                    Schema::LoginSids::SidHash,
-                                                                   Schema::LoginSids::CreatedAt>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                   Schema::LoginSids::CreatedAt>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MicroSeconds());
                 if (owner.empty()) {
                     owner = defaultUser.GetName();
                 }
@@ -81,7 +81,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultGroup.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                   Schema::LoginSids::CreatedAt>(sid.Type, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                   Schema::LoginSids::CreatedAt>(sid.Type, ToInstant(sid.CreatedAt).MicroSeconds());
                 for (const auto& member : defaultGroup.GetMembers()) {
                     auto response = Self->LoginProvider.AddGroupMembership({
                         .Group = defaultGroup.GetName(),

@@ -316,6 +316,29 @@ private:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
+    virtual TString GetColumnStorageId(const ui32 columnId) const override {
+        return Portion->GetColumnStorageId(columnId, Schema->GetIndexInfo());
+    }
+
+    virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& rangeLink) const override {
+        return Portion->RestoreBlobRange(rangeLink);
+    }
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
+        return Schema;
+    }
+
+    virtual std::optional<TSnapshot> GetDataSnapshot() const override {
+        if (Portion->HasInsertWriteId()) {
+            if (Portion->HasCommitSnapshot()) {
+                return Portion->GetCommitSnapshotVerified();
+            } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
+                return GetContext()->GetReadMetadata()->GetRequestSnapshot();
+            }
+        }
+        return std::nullopt;
+    }
+
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const override {
         return Portion->GetApproxChunksCount(entityIds.size()) * sizeof(TColumnRecord);
     }

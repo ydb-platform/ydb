@@ -62,7 +62,7 @@ void IDataSource::DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>
 
 void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-    if (memoryLimit) {
+    if (memoryLimit && !IsSourceInMemory()) {
         const auto accessor = StageData->GetPortionAccessor();
         StageResult = std::make_unique<TFetchedResult>(std::move(StageData), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages(accessor.BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
@@ -253,6 +253,7 @@ private:
         auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId());
         NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     }
+
 public:
     TPortionAccessorFetchingSubscriber(const TFetchingScriptCursor& step, const std::shared_ptr<IDataSource>& source)
         : Step(step)

@@ -9,6 +9,10 @@ private:
 
     virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const override;
 
+    virtual bool IsAggregation() const override {
+        return false;
+    }
+
 public:
     TProjectionProcessor(std::vector<TColumnChainInfo>&& columns)
         : TBase(std::vector<TColumnChainInfo>(columns), {}, EProcessorType::Projection) {

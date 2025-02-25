@@ -1,6 +1,8 @@
 #include "abstract.h"
 #include "collection.h"
 
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow::NSSA {
@@ -25,6 +27,21 @@ TConclusionStatus IResourceProcessor::Execute(const std::shared_ptr<TAccessorsCo
         }
     }
     return DoExecute(resources);
+}
+
+std::optional<TFetchingInfo> IResourceProcessor::BuildFetchTask(
+    const ui32 columnId, const NAccessor::IChunkedArray::EType /*arrType*/, const std::shared_ptr<TAccessorsCollection>& resources) const {
+    auto acc = resources->GetAccessorOptional(columnId);
+    if (!acc) {
+        return TFetchingInfo::BuildFullRestore(false);
+    }
+    return NAccessor::TCompositeChunkedArray::VisitDataOwners<TFetchingInfo>(acc, [](const std::shared_ptr<NAccessor::IChunkedArray>& arr) {
+        if (arr->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
+            return std::optional<TFetchingInfo>(TFetchingInfo::BuildFullRestore(true));
+        } else {
+            return std::optional<TFetchingInfo>();
+        }
+    });
 }
 
 NJson::TJsonValue TResourceProcessorStep::DebugJson() const {

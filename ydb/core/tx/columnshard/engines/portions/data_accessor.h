@@ -284,7 +284,7 @@ public:
         }
 
         void SetExpectedRecordsCount(const ui32 expectedRowsCount) {
-            AFL_VERIFY(!ExpectedRowsCount);
+            AFL_VERIFY(!ExpectedRowsCount || ExpectedRowsCount == expectedRowsCount);
             ExpectedRowsCount = expectedRowsCount;
             if (!Data) {
                 AFL_VERIFY(*ExpectedRowsCount == DefaultRowsCount);

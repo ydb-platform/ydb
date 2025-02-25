@@ -328,4 +328,30 @@ public:
     }
 };
 
+class TProgramStepPrepare: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    const NArrow::NSSA::TResourceProcessorStep Step;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TProgramStepPrepare(const NArrow::NSSA::TResourceProcessorStep& step)
+        : TBase("PROGRAM_STEP_PREPARE")
+        , Step(step) {
+    }
+};
+
+class TProgramStepAssemble: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    const NArrow::NSSA::TResourceProcessorStep Step;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TProgramStepAssemble(const NArrow::NSSA::TResourceProcessorStep& step)
+        : TBase("PROGRAM_STEP_ASSEMBLE")
+        , Step(step) {
+    }
+};
+
 }   // namespace NKikimr::NOlap::NReader::NCommon

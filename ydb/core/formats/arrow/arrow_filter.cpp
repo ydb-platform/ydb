@@ -389,9 +389,10 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
         filter.GetRecordsCountVerified() < filter.GetFilteredCountVerified() * 50) {
         batch =
             NAdapter::TDataBuilderPolicy<TData>::ApplySlicesFilter(batch, filter.BuildSlicesIterator(context.GetStartPos(), context.GetCount()));
+    } else if (context.HasSlice()) {
+        batch = NAdapter::TDataBuilderPolicy<TData>::ApplyArrowFilter(batch, filter.Slice(*context.GetStartPos(), *context.GetCount()));
     } else {
-        batch = NAdapter::TDataBuilderPolicy<TData>::ApplyArrowFilter(
-            batch, filter.BuildArrowFilter(batch->num_rows(), context.GetStartPos(), context.GetCount()));
+        batch = NAdapter::TDataBuilderPolicy<TData>::ApplyArrowFilter(batch, filter);
     }
     return batch->num_rows();
 }
@@ -705,6 +706,83 @@ ui32 TColumnFilter::GetFilteredCountVerified() const {
     const std::optional<ui32> result = GetFilteredCount();
     AFL_VERIFY(!!result);
     return *result;
+}
+
+TColumnFilter TColumnFilter::Slice(const ui32 offset, const ui32 count) const {
+    AFL_VERIFY(count);
+    if (IsTotalAllowFilter()) {
+        return TColumnFilter::BuildAllowFilter();
+    }
+    if (IsTotalDenyFilter()) {
+        return TColumnFilter::BuildDenyFilter();
+    }
+    AFL_VERIFY(offset + count <= GetRecordsCountVerified())("offset", offset)("count", count)("records_count", GetRecordsCountVerified());
+    std::vector<ui32> chunks;
+    ui32 index = 0;
+    bool currentValue = GetStartValue();
+
+    const auto buildResult = [](std::vector<ui32>&& chunks, const bool currentValue, const ui32 count) {
+        TColumnFilter result = TColumnFilter::BuildAllowFilter();
+        result.LastValue = !currentValue;
+        result.Filter = std::move(chunks);
+        result.RecordsCount = count;
+        return result;
+    };
+    ui32 countFilter = 0;
+    for (auto&& i : Filter) {
+        const ui32 nextIndex = index + i;
+        if (index >= offset + count) {
+            AFL_VERIFY(countFilter == count);
+            return buildResult(std::move(chunks), currentValue, count);
+        } else if (nextIndex > offset) {
+            chunks.emplace_back(std::min(nextIndex, offset + count) - std::max(index, offset));
+            countFilter += chunks.back();
+        }
+        currentValue = !currentValue;
+        index = nextIndex;
+    }
+    AFL_VERIFY(countFilter == count);
+    AFL_VERIFY(offset + count <= index)("index", index)("offset", offset)("count", count);
+    return buildResult(std::move(chunks), currentValue, count);
+}
+
+bool TColumnFilter::CheckSlice(const ui32 offset, const ui32 count) const {
+    if (IsTotalAllowFilter()) {
+        return true;
+    }
+    if (IsTotalDenyFilter()) {
+        return false;
+    }
+    ui32 index = 0;
+    bool currentValue = GetStartValue();
+    for (auto&& i : Filter) {
+        const ui32 nextIndex = index + i;
+        if (index >= offset + count) {
+            return false;
+        } else if (nextIndex > offset) {
+            if (currentValue) {
+                return true;
+            }
+        }
+        currentValue = !currentValue;
+        index = nextIndex;
+    }
+    AFL_VERIFY(offset + count <= index)("index", index)("offset", offset)("count", count);
+    return false;
+}
+
+TString TColumnFilter::DebugString() const {
+    TStringBuilder sb;
+    sb << "{" << GetStartValue() << "}";
+    sb << "[";
+    for (ui32 i = 0; i < Filter.size(); ++i) {
+        sb << Filter[i];
+        if (i + 1 < Filter.size()) {
+            sb << ",";
+        }
+    }
+    sb << "]";
+    return sb;
 }
 
 }   // namespace NKikimr::NArrow

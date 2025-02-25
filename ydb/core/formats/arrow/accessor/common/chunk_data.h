@@ -20,6 +20,8 @@ private:
 public:
     TChunkConstructionData(const ui32 recordsCount, const std::shared_ptr<arrow::Scalar>& defaultValue,
         const std::shared_ptr<arrow::DataType>& columnType, const std::shared_ptr<NSerialization::ISerializer>& defaultSerializer);
+
+    TChunkConstructionData GetSubset(const ui32 recordsCount) const;
 };
 
 }   // namespace NKikimr::NArrow::NAccessor

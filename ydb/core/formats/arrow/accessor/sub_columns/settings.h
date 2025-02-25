@@ -16,6 +16,34 @@ private:
     YDB_READONLY(double, OthersAllowedFraction, 0.05);
 
 public:
+    class TColumnsDistributor {
+    private:
+        const TSettings& Settings;
+        const ui64 SumSize;
+        const ui32 RecordsCount;
+        ui64 CurrentColumnsSize = 0;
+        ui32 SeparatedCount = 0;
+        std::optional<ui64> PredSize;
+
+    public:
+        TColumnsDistributor(const TSettings& settings, const ui64 size, const ui32 recordsCount)
+            : Settings(settings)
+            , SumSize(size)
+            , RecordsCount(recordsCount) {
+        }
+
+        enum class EColumnType {
+            Separated,
+            Other
+        };
+
+        EColumnType TakeAndDetect(const ui64 columnSize, const ui32 columnValuesCount);
+    };
+
+    TColumnsDistributor BuildDistributor(const ui64 size, const ui32 recordsCount) const {
+        return TColumnsDistributor(*this, size, recordsCount);
+    }
+
     TSettings() = default;
     TSettings(const ui32 sparsedDetectorKff, const ui32 columnsLimit, const ui32 chunkMemoryLimit, const double othersAllowedFraction)
         : SparsedDetectorKff(sparsedDetectorKff)

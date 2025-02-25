@@ -120,13 +120,17 @@ std::shared_ptr<IChunkedArray> IChunkedArray::DoApplyFilter(const TColumnFilter&
 }
 
 std::shared_ptr<IChunkedArray> IChunkedArray::ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const {
+    AFL_VERIFY(selfPtr);
     if (filter.IsTotalAllowFilter()) {
         return selfPtr;
     }
     if (filter.IsTotalDenyFilter()) {
         return TTrivialArray::BuildEmpty(GetDataType());
     }
-    return DoApplyFilter(filter);
+    auto result = DoApplyFilter(filter);
+    AFL_VERIFY(result);
+    AFL_VERIFY(result->GetRecordsCount() == filter.GetFilteredCountVerified());
+    return result;
 }
 
 TString IChunkedArray::TReader::DebugString(const ui32 position) const {

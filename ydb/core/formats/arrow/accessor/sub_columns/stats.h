@@ -145,6 +145,12 @@ public:
         return std::make_shared<arrow::Schema>(fields);
     }
 
+    std::shared_ptr<arrow::Field> GetField(const ui32 index) const {
+        AFL_VERIFY(index < DataNames->length());
+        auto name = DataNames->GetView(index);
+        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), arrow::utf8());
+    }
+
     TRTStats GetRTStats(const ui32 index) const {
         auto view = GetColumnName(index);
         return TRTStats(TString(view.data(), view.size()), GetColumnRecordsCount(index), GetColumnSize(index));

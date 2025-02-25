@@ -96,6 +96,14 @@ public:
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
         return nullptr;
     }
+
+    std::shared_ptr<IChunkedArray> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
+        auto accResult = ColumnsData.GetPathAccessor(svPath);
+        if (accResult) {
+            return accResult;
+        }
+        return OthersData.GetPathAccessor(svPath, recordsCount);
+    }
 };
 
 }   // namespace NKikimr::NArrow::NAccessor

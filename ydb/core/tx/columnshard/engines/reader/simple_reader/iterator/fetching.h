@@ -47,17 +47,6 @@ public:
 
 class IDataSource;
 
-class TBuildFakeSpec: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-
-public:
-    TBuildFakeSpec()
-        : TBase("FAKE_SPEC") {
-    }
-};
-
 class TApplyIndexStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

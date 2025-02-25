@@ -15,4 +15,9 @@ TChunkConstructionData::TChunkConstructionData(const ui32 recordsCount, const st
     AFL_VERIFY(!!DefaultSerializer);
 }
 
+TChunkConstructionData TChunkConstructionData::GetSubset(const ui32 recordsCount) const {
+    AFL_VERIFY(recordsCount <= RecordsCount)("sub", recordsCount)("global", RecordsCount);
+    return TChunkConstructionData(recordsCount, DefaultValue, ColumnType, DefaultSerializer);
+}
+
 }   // namespace NKikimr::NArrow::NAccessor

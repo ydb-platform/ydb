@@ -141,7 +141,7 @@ public:
     TColumnsData(const TDictStats& dict, const std::shared_ptr<TGeneralContainer>& data)
         : Stats(dict)
         , Records(data) {
-        AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount());
+        AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount())("records", Records->num_columns())("stats", Stats.GetColumnsCount());
         for (auto&& i : Records->GetColumns()) {
             AFL_VERIFY(i->GetDataType()->id() == arrow::utf8()->id());
         }

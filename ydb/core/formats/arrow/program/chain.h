@@ -19,6 +19,10 @@ private:
 public:
     TProgramChain() = default;
 
+    bool HasAggregations() const {
+        return !!FirstAggregation;
+    }
+
     bool IsGenerated(const ui32 columnId) const {
         auto it = SourcesByColumnId.find(columnId);
         AFL_VERIFY(it != SourcesByColumnId.end());

@@ -4,7 +4,7 @@
 #include "yson_struct_update.h"
 #endif
 
-namespace NYT::NYTree::NYsonStructUpdate {
+namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -60,7 +60,7 @@ template <class TValue>
 TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::Updater(TCallback<void(const TValue&)> updater)
 {
     VerifyEmpty();
-    Updater_ = BIND([updater = std::move(updater)] (const TValue& /*oldValue*/, const TValue& newValue) {
+    Updater_ = BIND_NO_PROPAGATE([updater = std::move(updater)] (const TValue& /*oldValue*/, const TValue& newValue) {
         updater(std::move(newValue));
     });
     return *this;
@@ -83,7 +83,7 @@ TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::Updater(TCallback<void(const T
 template <class TValue>
 template <CYsonStructDerived TUnwrappedValue>
 TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::NestedUpdater(
-    TCallback<void(TConfigurator<TUnwrappedValue>)> registerCallback)
+    TCallback<TSealedConfigurator<TUnwrappedValue>()> configureCallback)
 {
     static_assert(
         std::is_same_v<
@@ -91,10 +91,9 @@ TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::NestedUpdater(
             typename NDetail::TUnwrapYsonStructIntrusivePtr<TValue>::TStruct>);
 
     VerifyEmpty();
-    TConfigurator<TUnwrappedValue> registrar;
-    registerCallback(registrar);
-    Updater_ = BIND([registrar = std::move(registrar)] (const TValue& oldValue, const TValue& newValue) {
-        Update(registrar, oldValue, newValue);
+    auto configurator = configureCallback();
+    Updater_ = BIND_NO_PROPAGATE([configurator = std::move(configurator)] (const TValue& oldValue, const TValue& newValue) {
+        configurator.Update(oldValue, newValue);
     });
     return *this;
 }
@@ -165,18 +164,27 @@ TConfigurator<TStruct>::operator TConfigurator<TAncestor>() const
     return TConfigurator<TAncestor>(RegisteredFields_);
 }
 
+template <CYsonStructDerived TStruct>
+TSealedConfigurator<TStruct> TConfigurator<TStruct>::Seal() &&
+{
+    return std::move(*this);
+}
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TStruct>
-void Update(
-    const TConfigurator<TStruct>& registrar,
+template <CYsonStructDerived TStruct>
+TSealedConfigurator<TStruct>::TSealedConfigurator(TConfigurator<TStruct> configurator)
+    : RegisteredFields_(std::move(configurator.RegisteredFields_))
+{ }
+
+template <CYsonStructDerived TStruct>
+void TSealedConfigurator<TStruct>::Update(
     TIntrusivePtr<TStruct> oldStruct,
-    TIntrusivePtr<TStruct> newStruct)
+    TIntrusivePtr<TStruct> newStruct) const
 {
     const auto* meta = oldStruct->GetMeta();
     YT_VERIFY(meta == newStruct->GetMeta());
-    const auto& parameterToFieldRegistrar = registrar.RegisteredFields_->ParameterToFieldRegistrar;
-    YT_VERIFY(registrar.RegisteredFields_->Meta == meta);
+    const auto& parameterToFieldRegistrar = RegisteredFields_->ParameterToFieldRegistrar;
+    YT_VERIFY(RegisteredFields_->Meta == meta);
     for (const auto& [name, parameter] : meta->GetParameterMap()) {
         if (parameter->CompareParameter(oldStruct.Get(), newStruct.Get())) {
             continue;
@@ -193,4 +201,4 @@ void Update(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NYTree::NYsonStructUpdate
+} // namespace NYT::NYTree

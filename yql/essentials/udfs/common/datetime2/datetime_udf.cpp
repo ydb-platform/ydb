@@ -47,6 +47,8 @@ extern const char EndOfUDF[] = "EndOf";
 extern const char ShiftYearsUDF[] = "ShiftYears";
 extern const char ShiftQuartersUDF[] = "ShiftQuarters";
 extern const char ShiftMonthsUDF[] = "ShiftMonths";
+extern const char ParseUDF[] = "Parse";
+extern const char Parse64UDF[] = "Parse64";
 
 extern const char TMResourceName[] = "DateTime2.TM";
 extern const char TM64ResourceName[] = "DateTime2.TM64";
@@ -2762,33 +2764,42 @@ private:
         const TSourcePosition Pos_;
     };
 
-    template<size_t Digits>
-    struct ParseExaclyNDigits;
+    template<size_t Digits, bool Variable = false>
+    struct ParseNDigits;
 
-    template<>
-    struct ParseExaclyNDigits<0U> {
+    template<bool Variable>
+    struct ParseNDigits<0U, Variable> {
         template <typename T>
         static constexpr bool Do(std::string_view::const_iterator&, T&) {
             return true;
         }
     };
 
-    template<size_t Digits>
-    struct ParseExaclyNDigits {
+    template<size_t Digits, bool Variable>
+    struct ParseNDigits {
         template <typename T>
         static constexpr bool Do(std::string_view::const_iterator& it, T& out) {
             const auto d = *it;
             if (!std::isdigit(d)) {
+                // XXX: If the current char is not a digit, the
+                // parsing succeeds iff there are no more digits
+                // to be parsed (see the class specialization
+                // above) or there are given less than N digits
+                // to be parsed.
+                if constexpr (Variable) {
+                    return true;
+                }
                 return false;
             }
             out *= 10U;
             out += d - '0';
-            return ParseExaclyNDigits<Digits - 1U>::Do(++it, out);
+            return ParseNDigits<Digits - 1U, Variable>::Do(++it, out);
         }
     };
 
     // Parse
 
+    template<const char* TUdfName, const char* TResourceName>
     class TParse : public TBoxedValue {
     public:
         class TFactory : public TBoxedValue {
@@ -2808,7 +2819,7 @@ private:
         };
 
         static const TStringRef& Name() {
-            static auto name = TStringRef::Of("Parse");
+            static auto name = TStringRef(TUdfName, std::strlen(TUdfName));
             return name;
         }
 
@@ -2822,15 +2833,10 @@ private:
                 return false;
             }
 
-            auto resourceType = builder.Resource(TMResourceName);
-            auto optionalResourceType = builder.Optional()->Item(resourceType).Build();
-
-            builder.Args()->Add<char*>().Flags(ICallablePayload::TArgumentFlags::AutoMap)
-                .Add(builder.Optional()->Item<ui16>())
-                .Done()
-                .OptionalArgs(1);
-            builder.RunConfig<char*>().Returns(optionalResourceType);
-
+            builder.OptionalArgs(1).Args()->Add<char*>()
+                .template Add<TOptional<ui16>>();
+            builder.Returns(
+                builder.SimpleSignatureType<TOptional<TResource<TResourceName>>(TAutoMap<char*>)>());
             if (!typesOnly) {
                 builder.Implementation(new TParse::TFactory(builder.GetSourcePosition()));
             }
@@ -2866,7 +2872,7 @@ private:
                 const std::string_view buffer = args[0].AsStringRef();
 
                 TUnboxedValuePod result(0);
-                auto& storage = Reference(result);
+                auto& storage = Reference<TResourceName>(result);
                 storage.MakeDefault();
 
                 auto& builder = valueBuilder->GetDateBuilder();
@@ -2918,13 +2924,27 @@ private:
                     break;
 
                 case 'Y': {
-                    static constexpr size_t size = 4;
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
-                        ui32 year = 0U;
-                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, year) || !ValidateYear(year)) {
-                            return false;
+                        if constexpr (TResourceName == TMResourceName) {
+                            static constexpr size_t size = 4;
+                            ui32 year = 0U;
+                            if (limit < size || !ParseNDigits<size>::Do(it, year) || !ValidateYear(year)) {
+                                return false;
+                            }
+                            SetYear<TMResourceName>(result, year);
+                        } else {
+                            static constexpr size_t size = 6;
+                            i64 year = 0LL;
+                            i64 negative = 1LL;
+                            if (*it == '-') {
+                                negative = -1LL;
+                                it++;
+                            }
+                            if (!ParseNDigits<size, true>::Do(it, year) || !ValidateYear(negative * year)) {
+                                return false;
+                            }
+                            SetYear<TM64ResourceName>(result, negative * year);
                         }
-                        SetYear(result, year);
                         return true;
                     });
                     break;
@@ -2933,10 +2953,10 @@ private:
                     static constexpr size_t size = 2;
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
                         ui32 month = 0U;
-                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, month) || !ValidateMonth(month)) {
+                        if (limit < size || !ParseNDigits<size>::Do(it, month) || !ValidateMonth(month)) {
                             return false;
                         }
-                        SetMonth(result, month);
+                        SetMonth<TResourceName>(result, month);
                         return true;
                     });
                     break;
@@ -2945,10 +2965,10 @@ private:
                     static constexpr size_t size = 2;
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
                         ui32 day = 0U;
-                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, day) || !ValidateDay(day)) {
+                        if (limit < size || !ParseNDigits<size>::Do(it, day) || !ValidateDay(day)) {
                             return false;
                         }
-                        SetDay(result, day);
+                        SetDay<TResourceName>(result, day);
                         return true;
                     });
                     break;
@@ -2957,10 +2977,10 @@ private:
                     static constexpr size_t size = 2;
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
                         ui32 hour = 0U;
-                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, hour) || !ValidateHour(hour)) {
+                        if (limit < size || !ParseNDigits<size>::Do(it, hour) || !ValidateHour(hour)) {
                             return false;
                         }
-                        SetHour(result, hour);
+                        SetHour<TResourceName>(result, hour);
                         return true;
                     });
                     break;
@@ -2969,10 +2989,10 @@ private:
                     static constexpr size_t size = 2;
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
                         ui32 minute = 0U;
-                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, minute) || !ValidateMinute(minute)) {
+                        if (limit < size || !ParseNDigits<size>::Do(it, minute) || !ValidateMinute(minute)) {
                             return false;
                         }
-                        SetMinute(result, minute);
+                        SetMinute<TResourceName>(result, minute);
                         return true;
                     });
                     break;
@@ -2981,10 +3001,10 @@ private:
                     static constexpr size_t size = 2;
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
                         ui32 second = 0U;
-                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, second) || !ValidateSecond(second)) {
+                        if (limit < size || !ParseNDigits<size>::Do(it, second) || !ValidateSecond(second)) {
                             return false;
                         }
-                        SetSecond(result, second);
+                        SetSecond<TResourceName>(result, second);
                         limit -= size;
 
                         if (!limit || *it != '.') {
@@ -3010,7 +3030,7 @@ private:
                         while (digits--) {
                             usec *= 10U;
                         }
-                        SetMicrosecond(result, usec);
+                        SetMicrosecond<TResourceName>(result, usec);
                         return true;
                     });
                     break;
@@ -3028,7 +3048,7 @@ private:
                         if (!builder.FindTimezoneId(TStringRef(&*start, size), timezoneId)) {
                             return false;
                         }
-                        SetTimezoneId(result, timezoneId);
+                        SetTimezoneId<TResourceName>(result, timezoneId);
                         return true;
                     });
                     break;
@@ -3047,7 +3067,7 @@ private:
                         if (cnt < size || !ValidateMonthShortName(monthName, month)) {
                             return false;
                         }
-                        SetMonth(result, month);
+                        SetMonth<TResourceName>(result, month);
                         return true;
                     });
                     break;
@@ -3067,7 +3087,7 @@ private:
                         if (!ValidateMonthFullName(monthName, month)) {
                             return false;
                         }
-                        SetMonth(result, month);
+                        SetMonth<TResourceName>(result, month);
                         return true;
                     });
                     break;
@@ -3210,7 +3230,8 @@ private:
         TToUnits<ToMicrosecondsUDF, ui64, 1000000>,
 
         TFormat,
-        TParse,
+        TParse<ParseUDF, TMResourceName>,
+        TParse<Parse64UDF, TM64ResourceName>,
 
         TParseRfc822,
         TParseIso8601,

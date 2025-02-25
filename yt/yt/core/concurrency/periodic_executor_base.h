@@ -88,6 +88,12 @@ public:
     //! Starts the instance.
     void Start();
 
+    //! Starts the instance. Returns a future that becomes set when the first callback
+    //! invocation since the last stop finishes.
+    //! If the call arrives to an already started executor, the future stays the same
+    //! and still corresponds to the first invocation.
+    TFuture<void> StartAndGetFirstExecutedEvent();
+
     bool IsStarted() const;
 
     //! Stops the instance, cancels all subsequent invocations.
@@ -134,6 +140,7 @@ private:
     TDelayedExecutorCookie Cookie_;
     TPromise<void> IdlePromise_;
     TPromise<void> ExecutedPromise_;
+    TPromise<void> FirstExecutedEventPromise_;
 
     void DoStop(TGuard<NThreading::TSpinLock>& guard);
 

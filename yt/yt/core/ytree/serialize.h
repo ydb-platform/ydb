@@ -290,6 +290,15 @@ concept CYsonSerializable = requires (const T& value, NYson::IYsonConsumer* cons
     { Serialize(value, consumer, std::forward<TExtraArgs>(args)...) } -> std::same_as<void>;
 };
 
+template <class T>
+concept CYsonDeserializable = requires (T& value, INodePtr node)
+{
+    { Deserialize(value, node) } -> std::same_as<void>;
+};
+
+template <class T, class... TExtraArgs>
+concept CYsonSerializableDeserializable = CYsonSerializable<T, TExtraArgs...> && CYsonDeserializable<T>;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYTree

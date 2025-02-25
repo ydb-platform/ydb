@@ -633,7 +633,7 @@ void TNodeWarden::ProcessShredStatus(ui64 cookie, ui64 generation, std::optional
 
 void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVersion, std::optional<TString> storageYaml,
         std::optional<ui64> storageYamlVersion) {
-    if (!Cfg->ConfigStorePath) {
+    if (!Cfg->ConfigDirPath) {
         // no storage directory specified
         return;
     } else if (auto *appData = AppData(); appData->DynamicNameserviceConfig &&
@@ -658,7 +658,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
     }
 
     struct TSaveContext {
-        TString ConfigStorePath;
+        TString ConfigDirPath;
         std::optional<TString> MainYaml;
         ui64 MainYamlVersion;
         std::optional<TString> StorageYaml;
@@ -669,7 +669,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
     };
 
     auto saveCtx = std::make_shared<TSaveContext>(TSaveContext{
-        .ConfigStorePath = Cfg->ConfigStorePath,
+        .ConfigDirPath = Cfg->ConfigDirPath,
         .MainYaml = std::move(mainYaml),
         .MainYamlVersion = mainYamlVersion,
         .StorageYaml = std::move(storageYaml),
@@ -682,7 +682,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
     EnqueueSyncOp([this, saveCtx](const TActorContext&) {
         bool success = true;
         try {
-            MakePathIfNotExist(saveCtx->ConfigStorePath.c_str());
+            MakePathIfNotExist(saveCtx->ConfigDirPath.c_str());
         } catch (const yexception& e) {
             STLOG(PRI_ERROR, BS_NODE, NW91, "Failed to create config store path", (Error, e.what()));
             success = false;
@@ -690,8 +690,8 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
 
         auto saveConfig = [&](const TString& yaml, const TString& configFileName) -> bool {
             try {
-                TString tempPath = TStringBuilder() << saveCtx->ConfigStorePath << "/temp_" << configFileName;
-                TString configPath = TStringBuilder() << saveCtx->ConfigStorePath << "/" << configFileName;
+                TString tempPath = TStringBuilder() << saveCtx->ConfigDirPath << "/temp_" << configFileName;
+                TString configPath = TStringBuilder() << saveCtx->ConfigDirPath << "/" << configFileName;
 
                 {
                     TFileOutput tempFile(tempPath);
@@ -725,7 +725,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         }
 
         if (saveCtx->DeleteStorage) {
-            std::filesystem::remove(std::filesystem::path(saveCtx->ConfigStorePath.c_str()) / StorageConfigFileName);
+            std::filesystem::remove(std::filesystem::path(saveCtx->ConfigDirPath.c_str()) / StorageConfigFileName);
         } else if (success && saveCtx->UpdateStorage) {
             success = saveConfig(*saveCtx->StorageYaml, StorageConfigFileName);
             if (success) {

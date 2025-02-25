@@ -40,7 +40,7 @@ void TestCreate(
 void CreateSchemeObjects(TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<TTypedScheme>& schemeObjects) {
     TSet<ui64> toWait;
 
-    for (const auto& [scheme, type, _] : schemeObjects) {
+    for (const auto& [type, scheme, _] : schemeObjects) {
         TestCreate(runtime, ++t.TxId, scheme, type);
         toWait.insert(t.TxId);
     }

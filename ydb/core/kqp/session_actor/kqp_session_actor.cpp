@@ -1199,21 +1199,11 @@ public:
         auto physicalRequest = PreparePhysicalRequest(QueryState.get(), txCtx.TxAlloc);
 
         literalRequest.Transactions.emplace_back(tx, QueryState->QueryData);
-        QueryState->TxCtx->OnNewExecutor(true);
-        // UpdateTempTablesState();
-
-        for (const auto& effect : txCtx.DeferredEffects) {
-            physicalRequest.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
-        }
         QueryState->TxCtx->OnNewExecutor(false);
         QueryState->Commited = true;
 
         literalRequest.TraceId = QueryState->KqpSessionSpan.GetTraceId();
         physicalRequest.LocksOp = ELocksOp::Commit;
-
-        if (!txCtx.DeferredEffects.Empty()) {
-            physicalRequest.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
-        }
 
         SendToPartitionedExecuter(QueryState->TxCtx.Get(), std::move(literalRequest), std::move(physicalRequest));
         QueryState->CurrentTx += 2;

@@ -318,7 +318,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     pqGroup.SetName("streamImpl");
 
     NKikimrSchemeOp::TDescribeOptions opts;
-    // opts.SetReturnPartitioningInfo(false);
+    opts.SetReturnPartitioningInfo(false);
     opts.SetReturnPartitionConfig(true);
     opts.SetReturnBoundaries(true);
     opts.SetReturnIndexTableBoundaries(true);

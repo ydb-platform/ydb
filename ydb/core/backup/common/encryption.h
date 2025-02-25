@@ -12,12 +12,52 @@ namespace NKikimr::NBackup {
 
 // Backup file type.
 // Must be different for all files in one backup item folder.
-// Must suit to one byte.
+// Must be one byte size.
 enum class EBackupFileType : unsigned char {
+    // All items
     Metadata = 0,
-    Permissions,
-    Schema,
-    Data,
+    Permissions = 1,
+
+    // Table
+    TableSchema = 10,
+    TableData = 11,
+
+    // Topic
+    TopicDescription = 10,
+    TopicCreate = 11,
+
+    // Coordination node
+    CoordinationNodeCreate = 10,
+    CoordinationNodeCreateRateLimiter = 11,
+
+    // Incomplete
+    Incomplete = 10,
+    IncompleteCsv = 11,
+
+    // Directory
+    DirectoryEmpty = 10,
+
+    // View
+    ViewCreate = 10,
+
+    // Database
+    Database = 10,
+
+    // User
+    UserCreate = 10,
+
+    // Group
+    GroupCreate = 10,
+    GroupAlter = 11,
+
+    // Replication
+    AsyncReplicationCreate = 10,
+
+    // External data source
+    ExternalDataSourceCreate = 10,
+
+    // External table
+    ExternalTableCreate = 10,
 };
 
 struct TEncryptionIV {

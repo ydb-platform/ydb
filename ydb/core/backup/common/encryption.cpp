@@ -33,8 +33,8 @@ static constexpr size_t MAX_HEADER_SIZE = 16_KB; // Header does not contain much
 static constexpr size_t MAX_BLOCK_SIZE = 30_MB; // Max block size must always be at least size of table row (~8 MB) serialized into text csv format.
 
 THashMap<TString, TString> AlgNames = {
-    {"aes128gcm",        "AES-128-GCM"},
-    {"aes256gcm",        "AES-256-GCM"},
+    {"aes128gcm", "AES-128-GCM"},
+    {"aes256gcm", "AES-256-GCM"},
     {"chacha20poly1305", "ChaCha20-Poly1305"},
 };
 

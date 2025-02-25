@@ -283,7 +283,6 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
     Y_UNIT_TEST(TestTraceDistributedSelect) {
         auto [runtime, server, sender] = TestCreateServer();
-        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
         bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);

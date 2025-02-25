@@ -2579,11 +2579,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(AutoSplitBySize) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableLocalDBBtreeIndex(true);        
-        TServerSettings serverSettings(port);
-        serverSettings.SetFeatureFlags(featureFlags);
-        TServer cleverServer = TServer(serverSettings);        
+        TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);

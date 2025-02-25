@@ -426,8 +426,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             Cerr << "Captured pages request" << Endl;
             for (auto pageId : msg->Fetch->Pages) {
                 auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
-                // Note: FlatIndex pages also have been preloaded, but don't stick in private cache (see TLoaderEnv)
-                UNIT_ASSERT_C(type != NTable::EPage::BTreeIndex, "Index pages should be preload during a part switch");
+                UNIT_ASSERT_C(type != NTable::EPage::BTreeIndex && type != NTable::EPage::FlatIndex, "Index pages should be preload during a part switch");
             }
         });
 

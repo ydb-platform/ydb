@@ -153,7 +153,6 @@ Y_UNIT_TEST(Limits) {
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
     ui32 passiveBytes = bTreeIndex ? 131 : 7772;
 
@@ -222,7 +221,6 @@ Y_UNIT_TEST(Limits_Config) {
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
     ui32 passiveBytes = bTreeIndex ? 131 : 7772;
 
@@ -294,7 +292,6 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
     SetupSharedCache(env);
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -396,7 +393,6 @@ Y_UNIT_TEST(S3FIFO) {
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
     SetupSharedCache(env, NKikimrSharedCache::S3FIFO);
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -498,7 +494,6 @@ Y_UNIT_TEST(ClockPro) {
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
     SetupSharedCache(env, NKikimrSharedCache::ClockPro);
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -614,7 +609,6 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
     SetupSharedCache(env);
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {

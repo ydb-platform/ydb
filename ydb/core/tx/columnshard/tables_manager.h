@@ -234,6 +234,10 @@ public:
         return Ttl.GetTableTtl(pathId, snapshot);
     }
 
+    const TTtlVersions& GetTtlVersions() const {
+        return Ttl;
+    }
+
     const std::map<NOlap::TSnapshot, THashSet<ui64>>& GetPathsToDrop() const {
         return PathsToDrop;
     }

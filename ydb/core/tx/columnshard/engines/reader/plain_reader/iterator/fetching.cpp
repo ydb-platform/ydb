@@ -101,14 +101,16 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
     return false;
 }
 
-TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool> TBuildFakeColumns::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
-    for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
+    for (auto&& f : Fields) {
         source->MutableStageData().AddColumn(IIndexInfo::GetColumnIdVerified(f->name()),
             std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount())));
+                NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()),
+                    source->MutableStageData().GetFilteredCount(source->GetRecordsCount(), std::numeric_limits<ui32>::max()))));
+        AFL_CRIT(NKikimrServices::TX_TIERING)("aboba", "buildFakeColumns")(
+            "records", source->MutableStageData().GetFilteredCount(source->GetRecordsCount(), std::numeric_limits<ui32>::max()));
     }
-    source->BuildStageResult(source);
     return true;
 }
 

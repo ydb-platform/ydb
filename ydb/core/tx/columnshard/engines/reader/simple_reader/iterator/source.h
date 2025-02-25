@@ -85,6 +85,14 @@ public:
         }
     }
 
+    const NArrow::TReplaceKey& GetReplaceKey() const {
+        return Value;
+    }
+
+    bool IsReversed() const {
+        return Reverse;
+    }
+
     TString DebugString() const {
         return TStringBuilder() << "point:{" << Value.DebugString() << "};reverse:" << Reverse << ";";
     }
@@ -140,8 +148,16 @@ public:
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }
-    const TReplaceKeyAdapter GetFinish() const {
+    const TReplaceKeyAdapter& GetFinish() const {
         return Finish;
+    }
+    virtual const NArrow::TReplaceKey& GetMinReplaceKey() const override {
+        AFL_VERIFY(Start.IsReversed() == Finish.IsReversed())("start", Start.IsReversed())("finish", Finish.IsReversed());
+        return Start.IsReversed() ? Finish.GetReplaceKey() : Start.GetReplaceKey();
+    }
+    virtual const NArrow::TReplaceKey& GetMaxReplaceKey() const override {
+        AFL_VERIFY(Start.IsReversed() == Finish.IsReversed())("start", Start.IsReversed())("finish", Finish.IsReversed());
+        return Start.IsReversed() ? Start.GetReplaceKey() : Finish.GetReplaceKey();
     }
 
     bool GetIsStartedByCursor() const {

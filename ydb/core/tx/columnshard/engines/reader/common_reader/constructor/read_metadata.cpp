@@ -21,6 +21,15 @@ TConclusionStatus TReadMetadata::Init(
     SelectInfo = dataAccessor.Select(readDescription, !!LockId);
     if (LockId) {
         for (auto&& i : SelectInfo->Portions) {
+            if (!readDescription.ReadExpiredRows && GetTtlBound() &&
+                GetTtlBound()->GetColumnId() == ResultIndexSchema->GetIndexInfo().GetPKFirstColumnId()) {
+                const std::shared_ptr<arrow::Scalar> bound = GetTtlBound()->GetLargestExpiredScalar();
+                const std::shared_ptr<arrow::Scalar> maxValue =
+                    NArrow::TReplaceKey::ToScalar(i->GetMeta().GetFirstLastPK().GetFirst(ResultIndexSchema->GetIndexInfo().GetPrimaryKey()), 0);
+                if (!NArrow::ScalarLess(bound, maxValue)) {
+                    continue;
+                }
+            }
             if (i->HasInsertWriteId() && !i->HasCommitSnapshot()) {
                 if (owner->HasLongTxWrites(i->GetInsertWriteIdVerified())) {
                 } else {
@@ -40,6 +49,15 @@ TConclusionStatus TReadMetadata::Init(
 
     StatsMode = readDescription.StatsMode;
     return TConclusionStatus::Success();
+}
+
+TReadMetadata::TReadMetadata(
+    const std::shared_ptr<TVersionedIndex>& schemaIndex, const NColumnShard::TTtlVersions& ttlVersions, const TReadDescription& read)
+    : TBase(schemaIndex, read.PKRangesFilter->IsReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC,
+          read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(), read.GetScanCursor(),
+          MakeTtlBound(schemaIndex, ttlVersions, read))
+    , PathId(read.PathId)
+    , ReadStats(std::make_shared<TReadStats>()) {
 }
 
 std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
@@ -114,6 +132,23 @@ bool TReadMetadata::IsMyUncommitted(const TInsertWriteId writeId) const {
     auto it = ConflictedWriteIds.find(writeId);
     AFL_VERIFY(it != ConflictedWriteIds.end())("write_id", writeId)("write_ids_count", ConflictedWriteIds.size());
     return it->second.GetLockId() == LockSharingInfo->GetLockId();
+}
+
+std::optional<TReadMetadataBase::TTtlBound> TReadMetadata::MakeTtlBound(
+    const std::shared_ptr<TVersionedIndex> schemaIndex, const NColumnShard::TTtlVersions& ttlVersions, const TReadDescription& read) {
+    std::optional<TTiering> ttl = ttlVersions.GetTableTtl(read.PathId, read.GetSnapshot());
+    if (!ttl) {
+        return std::nullopt;
+    }
+    const auto& lastTier = std::prev(ttl->GetOrderedTiers().end())->Get();
+    if (lastTier.GetExternalStorageId()) {
+        return std::nullopt;
+    }
+    const auto& indexInfo = schemaIndex->GetSchemaVerified(read.GetSnapshot())->GetIndexInfo();
+    const ui64 columnId = indexInfo.GetColumnIdVerified(lastTier.GetEvictColumnName());
+    const auto scalar = TValidator::CheckNotNull(lastTier.GetLargestExpiredScalar(
+        read.GetSnapshot().GetPlanInstant(), indexInfo.GetColumnFeaturesVerified(columnId).GetArrowField()->type()->id()));
+    return TReadMetadataBase::TTtlBound(columnId, scalar);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

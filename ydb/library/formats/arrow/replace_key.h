@@ -217,7 +217,7 @@ public:
         return TReplaceKeyTemplate<TArrayVecPtr>(std::make_shared<TArrayVec>(1, *res), 0);
     }
 
-    static std::shared_ptr<arrow::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key, int colNumber = 0) {
+    static std::shared_ptr<arrow::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key, ui64 colNumber = 0) {
         Y_DEBUG_ABORT_UNLESS(colNumber < key.Size());
         auto& column = key.Column(colNumber);
         auto res = column.GetScalar(key.GetPosition());

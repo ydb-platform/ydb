@@ -203,6 +203,9 @@ public:
         AFL_VERIFY(!!StageResult);
         return *StageResult;
     }
+
+    virtual const NArrow::TReplaceKey& GetMinReplaceKey() const = 0;
+    virtual const NArrow::TReplaceKey& GetMaxReplaceKey() const = 0;
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

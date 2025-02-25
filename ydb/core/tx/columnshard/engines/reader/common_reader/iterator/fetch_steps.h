@@ -1,6 +1,7 @@
 #pragma once
 #include "fetching.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
@@ -20,7 +21,6 @@ private:
         }
     };
     std::vector<TColumnsPack> Packs;
-    THashMap<ui32, THashSet<EMemType>> Control;
     const EStageFeaturesIndexes StageIndex;
     const std::optional<ui64> PredefinedSize;
 
@@ -51,9 +51,7 @@ public:
         if (!ids.GetColumnsCount()) {
             return;
         }
-        for (auto&& i : ids.GetColumnIds()) {
-            AFL_VERIFY(Control[i].emplace(memType).second);
-        }
+        // TODO: valid?
         Packs.emplace_back(ids, memType);
     }
     EStageFeaturesIndexes GetStage() const {
@@ -126,12 +124,21 @@ public:
 class TColumnBlobsFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
-    TColumnsSetIds Columns;
+    YDB_READONLY_DEF(TColumnsSetIds, Columns);
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "columns=" << Columns.DebugString() << ";";
+    }
+
+    virtual bool Merge(const std::shared_ptr<const IFetchingStep>& nextStep) override {
+        const auto step = std::dynamic_pointer_cast<const TColumnBlobsFetchingStep>(nextStep);
+        if (!step) {
+            return false;
+        }
+        Columns = Columns + step->Columns;
+        return true;
     }
 
 public:
@@ -140,6 +147,17 @@ public:
         : TBase("FETCHING_COLUMNS")
         , Columns(columns) {
         AFL_VERIFY(Columns.GetColumnsCount());
+    }
+};
+
+class TTtlFilter: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TTtlFilter()
+        : TBase("TTL") {
     }
 };
 

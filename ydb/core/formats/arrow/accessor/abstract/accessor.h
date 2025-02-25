@@ -2,6 +2,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/splitter/similar_packer.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
@@ -364,6 +365,7 @@ public:
         void AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const;
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
         TString DebugString(const ui32 position) const;
+        ui64 UpperBoundPosition(const std::shared_ptr<arrow::Scalar>& scalar) const;
     };
 
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 index) const {

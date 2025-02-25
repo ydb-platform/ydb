@@ -85,8 +85,20 @@ public:
         }
         return result;
     }
+
+    TColumnsSetIds& operator+=(const TColumnsSetIds& external) {
+        return (*this = *this + external);
+    }
+
+    TColumnsSetIds& operator-=(const TColumnsSetIds& external) {
+        return (*this = *this - external);
+    }
+
     bool IsEmpty() const {
         return ColumnIds.empty();
+    }
+    bool Size() const {
+        return ColumnIds.size();
     }
 
     bool operator!() const {

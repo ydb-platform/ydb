@@ -22,6 +22,32 @@ std::shared_ptr<arrow::Array> IChunkedArray::TReader::CopyRecord(const ui64 reco
     return NArrow::CopyRecords(address.GetArray(), { address.GetPosition() });
 }
 
+ui64 IChunkedArray::TReader::UpperBoundPosition(const std::shared_ptr<arrow::Scalar>& scalar) const {
+    ui64 position = 0;
+    while (position < GetRecordsCount()) {
+        std::shared_ptr<arrow::Array> chunk = GetReadChunk(position).GetArray();
+
+        if (NArrow::ScalarLess(scalar, *chunk->GetScalar(0))) {
+            return position;
+        }
+
+        if (NArrow::ScalarLess(scalar, *chunk->GetScalar(chunk->length() - 1))) {
+            const auto range = std::ranges::iota_view((decltype(chunk->length()))0, chunk->length());
+            const auto positionInChunk =
+                std::upper_bound(range.begin(), range.end(), scalar, [&chunk](const std::shared_ptr<arrow::Scalar>& bound, const ui64 index) {
+                    return NArrow::ScalarLess(bound, *chunk->GetScalar(index));
+                });
+            AFL_VERIFY(positionInChunk != range.end());
+            AFL_VERIFY(positionInChunk != range.begin());
+            return position + *positionInChunk;
+        }
+
+        position += chunk->length();
+        AFL_VERIFY(position <= GetRecordsCount())("position", position)("size", GetRecordsCount());
+    }
+    return GetRecordsCount();
+}
+
 std::shared_ptr<arrow::ChunkedArray> IChunkedArray::Slice(const ui32 offset, const ui32 count) const {
     AFL_VERIFY(offset + count <= (ui64)GetRecordsCount())("offset", offset)("count", count)("length", GetRecordsCount());
     ui32 currentOffset = offset;

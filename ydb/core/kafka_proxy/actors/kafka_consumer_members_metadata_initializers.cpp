@@ -60,7 +60,7 @@ void TKafkaConsumerMembersMetaInitializer::DoPrepare(NInitializer::IInitializerI
             auto* ttlSettings = request.mutable_ttl_settings();
             auto* columnTtl = ttlSettings->mutable_date_type_column();
             columnTtl->set_column_name("heartbeat_deadline");
-            columnTtl->set_expire_after_seconds(NKafka::MAX_SESSION_TIMEOUT_MS * 5);
+            columnTtl->set_expire_after_seconds(NKafka::MAX_SESSION_TIMEOUT_MS * 5 / 1000);
         }
         {
             auto& index = *request.add_indexes();
@@ -72,6 +72,16 @@ void TKafkaConsumerMembersMetaInitializer::DoPrepare(NInitializer::IInitializerI
             index.add_index_columns("heartbeat_deadline");
         }
         result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogCreateTable>(request, "create"));
+
+        {
+            Ydb::Table::AlterTableRequest request;
+            request.set_session_id("");
+            request.set_path(tablePath);
+            request.mutable_alter_partitioning_settings()->set_min_partitions_count(1);
+            request.mutable_alter_partitioning_settings()->set_partitioning_by_load(::Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED);
+
+            result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogAlterTable>(request, "enable_autopartitioning_by_load"));
+        }
     }
 
     result.emplace_back(NInitializer::TACLModifierConstructor::GetReadOnlyModifier(tablePath, "acl"));

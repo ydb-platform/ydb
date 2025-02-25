@@ -72,7 +72,11 @@ void TKqpTxHelper::SendYqlRequest(TString yqlRequest, NYdb::TParams sqlParams, u
     ev->Record.MutableRequest()->SetDatabase(DataBase);
     ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
     ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(commit);
-    ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
+    if (!TxId.empty()) {
+        ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
+    } else {
+        ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+    }
     ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
 

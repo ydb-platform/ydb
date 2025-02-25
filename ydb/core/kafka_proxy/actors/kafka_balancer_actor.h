@@ -21,7 +21,7 @@
 namespace NKafka {
 using namespace NKikimr;
 
-constexpr ui32 DEFAULT_REBALANCE_TIMEOUT_MS = 45000;
+constexpr ui32 DEFAULT_REBALANCE_TIMEOUT_MS = 5000; // savnik
 constexpr ui32 MIN_REBALANCE_TIMEOUT_MS = 3000;
 constexpr ui32 MAX_REBALANCE_TIMEOUT_MS = 300000;
 
@@ -32,10 +32,12 @@ constexpr ui32 MAX_SESSION_TIMEOUT_MS = 300000;
 constexpr ui32 MAX_GROUPS_COUNT = 1000;
 constexpr ui32 LIMIT_MEMBERS_PER_REQUEST = 999;
 
-constexpr ui8 MASTER_WAIT_JOINS_DELAY_SECONDS = 5;
-constexpr ui8 WAIT_FOR_MASTER_DELAY_SECONDS = 1;
-constexpr ui8 TX_ABORT_MAX_RETRY_COUNT = 5;
-constexpr ui8 TABLES_TO_INIT_COUNT = 2;
+constexpr ui32 MASTER_WAIT_JOINS_DELAY_SECONDS = 3;
+constexpr ui32 WAIT_FOR_MASTER_MAX_RETRY_COUNT = 1;
+constexpr ui32 FULL_RETRY_MAX_COUNT = 5;
+constexpr ui32 TABLES_TO_INIT_COUNT = 2;
+
+constexpr TKafkaUint16 ASSIGNMENT_VERSION = 3;
 
 extern const TString INSERT_NEW_GROUP;
 extern const TString UPDATE_GROUP;
@@ -51,6 +53,7 @@ extern const TString CHECK_DEAD_MEMBERS;
 extern const TString UPDATE_LASTHEARTBEATS;
 extern const TString UPDATE_LASTHEARTBEAT_TO_LEAVE_GROUP;
 extern const TString CHECK_GROUPS_COUNT;
+extern const TString UPDATE_GROUP_STATE;
 
 struct TGroupStatus {
     bool Exists;
@@ -81,8 +84,9 @@ public:
 
         JOIN_TX1_0_BEGIN_TX,
         JOIN_TX1_1_CHECK_STATE_AND_GENERATION,
-        JOIN_TX1_2_GET_MEMBERS,
-        JOIN_TX1_3_COMMIT_TX,
+        JOIN_TX1_1_SET_MASTER_DEAD,
+        JOIN_TX1_3_GET_MEMBERS,
+        JOIN_TX1_4_COMMIT_TX,
 
         SYNC_TX0_0_BEGIN_TX,
         SYNC_TX0_1_SELECT_MASTER,
@@ -137,10 +141,9 @@ public:
             SessionTimeoutMs = JoinGroupRequestData->SessionTimeoutMs;
         }
 
-        if (JoinGroupRequestData->RebalanceTimeoutMs) {
-            RebalanceTimeoutMs = JoinGroupRequestData->RebalanceTimeoutMs;
-            WaitingMasterMaxRetryCount = JoinGroupRequestData->RebalanceTimeoutMs / WAIT_FOR_MASTER_DELAY_SECONDS * 1000;
-        }
+        // if (JoinGroupRequestData->RebalanceTimeoutMs) {
+        //     RebalanceTimeoutMs = JoinGroupRequestData->RebalanceTimeoutMs;
+        // }
     }
 
     TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TSyncGroupRequestData> message, ui8 retryNum = 0)
@@ -241,6 +244,8 @@ private:
 
     void HandleResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
 
+    void RequestFullRetry();
+
     void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
@@ -306,7 +311,7 @@ private:
     std::optional<TGroupStatus> ParseCheckStateAndGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
     bool ParseAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, TString& assignments);
     bool ParseWorkerStates(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, NKafka::TWorkerState>& workerStates, TString& lastMemberId);
-    bool ParseDeadCountAndSessionTimeout(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& outCount, ui32& outSessionTimeoutMs);
+    bool ParseDeadsAndSessionTimeout(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, bool& outDeadsFound, ui32& outSessionTimeoutMs);
     bool ParseGroupsCount(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& groupsCount);
     bool ChooseProtocolAndFillStates();
 
@@ -320,13 +325,14 @@ private:
     NYdb::TParamsBuilder BuildLeaveGroupParams();
     NYdb::TParamsBuilder BuildUpdateLastHeartbeatsParams();
     NYdb::TParamsBuilder BuildCheckDeadsParams();
+    NYdb::TParamsBuilder BuildSetMasterDeadParams();
 
 private:
     enum EGroupState : ui32 {
         GROUP_STATE_JOIN = 0,
-        GROUP_STATE_JOINED,
         GROUP_STATE_SYNC,
-        GROUP_STATE_WORKING
+        GROUP_STATE_WORKING,
+        GROUP_STATE_MASTER_IS_DEAD
     };
 
 private:
@@ -335,7 +341,6 @@ private:
 
     ui8 TablesInited = 0;
     TString GroupId;
-    TString GroupName;
     TString MemberId;
     ui32 SessionTimeoutMs = DEFAULT_SESSION_TIMEOUT_MS;
     ui32 RebalanceTimeoutMs = DEFAULT_REBALANCE_TIMEOUT_MS;
@@ -345,7 +350,6 @@ private:
     ui64 Cookie = 0;
     ui64 KqpReqCookie = 0;
     ui8 WaitingMasterRetryCount = 0;
-    ui8 WaitingMasterMaxRetryCount = 10;
 
     TString WorkerStatesPaginationMemberId = "";
 

@@ -58,6 +58,19 @@ const TString UPDATE_GROUP = R"sql(
       AND consumer_group = $ConsumerGroup;
 )sql";
 
+const TString UPDATE_GROUP_STATE = R"sql(
+    --!syntax_v1
+    DECLARE $ConsumerGroup AS Utf8;
+    DECLARE $Database AS Utf8;
+    DECLARE $State AS Uint64;
+
+    UPDATE `%s`
+    SET
+        state = $State
+    WHERE database = $Database
+      AND consumer_group = $ConsumerGroup;
+)sql";
+
 const TString UPDATE_GROUP_STATE_AND_PROTOCOL = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
@@ -184,16 +197,16 @@ const TString CHECK_DEAD_MEMBERS = R"sql(
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Generation AS Uint64;
     DECLARE $Database AS Utf8;
-    DECLARE $Deadline AS Datetime;
     DECLARE $MemberId AS Utf8;
 
-    SELECT COUNT(1) as cnt
+    SELECT heartbeat_deadline
     FROM `%s`
     VIEW idx_group_generation_db_hb
     WHERE database = $Database
-      AND consumer_group = $ConsumerGroup
-      AND generation = $Generation
-      AND heartbeat_deadline < $Deadline;
+    AND consumer_group = $ConsumerGroup
+    AND generation = $Generation
+    ORDER BY heartbeat_deadline
+    LIMIT 1;
 
     SELECT session_timeout_ms
     FROM `%s`
@@ -246,8 +259,12 @@ const TString UPDATE_LASTHEARTBEAT_TO_LEAVE_GROUP = R"sql(
 
 const TString CHECK_GROUPS_COUNT = R"sql(
     --!syntax_v1
+    DECLARE $GroupsCountCheckDeadline AS Datetime;
+
     SELECT COUNT(1) as groups_count
     FROM `%s`
+    VIEW idx_last_hb
+    WHERE last_heartbeat_time > $GroupsCountCheckDeadline;
 )sql";
 
 } // namespace NKafka

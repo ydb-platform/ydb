@@ -2,23 +2,31 @@
 
 #include <util/system/env.h>
 
+#include <ydb/library/aclib/aclib.h>
+
 namespace NFqRun {
 
-TExternalDatabase TExternalDatabase::Parse(const TString& optionValue) {
+TExternalDatabase TExternalDatabase::Parse(const TString& optionValue, const TString& tokenVar) {
     TStringBuf database, endpoint;
     TStringBuf(optionValue).Split('@', database, endpoint);
     if (database.empty() || endpoint.empty()) {
         ythrow yexception() << "Incorrect external database mapping, expected form database@endpoint";
     }
 
-    if (!GetEnv(YQL_TOKEN_VARIABLE)) {
-        ythrow yexception() << "Cannot use external databases without token, please specify environment variable " << YQL_TOKEN_VARIABLE;
+    TExternalDatabase result = {
+        .Endpoint = TString(endpoint),
+        .Database = TString(database),
+        .Token = GetEnv(tokenVar)
+    };
+
+    if (!result.Token) {
+        result.Token = GetEnv(YQL_TOKEN_VARIABLE);
+        if (!result.Token) {
+            result.Token = BUILTIN_ACL_ROOT;
+        }
     }
 
-    return {
-        .Endpoint = TString(endpoint),
-        .Database = TString(database)
-    };
+    return result;
 }
 
 void SetupAcl(FederatedQuery::Acl* acl) {

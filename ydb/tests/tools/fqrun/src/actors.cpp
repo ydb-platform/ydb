@@ -14,7 +14,7 @@ public:
     TRunQueryActor(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise)
         : Scope(request.Event->Scope)
         , UserSid(request.Event->User)
-        , Tocken(request.Event->Token)
+        , Token(request.Event->Token)
         , PingPeriod(request.PingPeriod)
         , Request(std::move(request.Event))
         , Promise(promise)
@@ -67,7 +67,7 @@ public:
         FederatedQuery::DescribeQueryRequest request;
         request.set_query_id(QueryId);
 
-        Send(NFq::ControlPlaneProxyActorId(), new NFq::TEvControlPlaneProxy::TEvDescribeQueryRequest(Scope, request, UserSid, Tocken, TVector<TString>{}));
+        Send(NFq::ControlPlaneProxyActorId(), new NFq::TEvControlPlaneProxy::TEvDescribeQueryRequest(Scope, request, UserSid, Token, TVector<TString>{}));
     }
 
 private:
@@ -82,7 +82,7 @@ private:
 private:
     const TString Scope;
     const TString UserSid;
-    const TString Tocken;
+    const TString Token;
     const TDuration PingPeriod;
 
     std::unique_ptr<NFq::TEvControlPlaneProxy::TEvCreateQueryRequest> Request;

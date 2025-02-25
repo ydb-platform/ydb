@@ -106,26 +106,21 @@ private:
 
         const TString endpoint = TStringBuilder() << "localhost:" << grpcPort;
         const TString database = NKikimr::CanonizePath(Settings.DomainName);
-        const auto fillStorageConfig = [this, endpoint, database](NFq::NConfig::TYdbStorageConfig* config, std::optional<TExternalDatabase> externalDatabase = std::nullopt) {
+        const auto fillStorageConfig = [endpoint, database](NFq::NConfig::TYdbStorageConfig* config, std::optional<TExternalDatabase> externalDatabase = std::nullopt) {
             config->SetEndpoint(externalDatabase ? externalDatabase->Endpoint : endpoint);
             config->SetDatabase(externalDatabase ? externalDatabase->Database : database);
             if (externalDatabase) {
-                config->SetToken(Settings.YqlToken);
+                config->SetToken(externalDatabase->Token);
             }
         };
-        fillStorageConfig(fqConfig.MutableRowDispatcher()->MutableCoordinator()->MutableDatabase());
 
         auto* privateApiConfig = fqConfig.MutablePrivateApi();
-        privateApiConfig->SetTaskServiceEndpoint(endpoint);
+        privateApiConfig->SetTaskServiceEndpoint(endpoint); // TODO: remove when Loopback: true 
         privateApiConfig->SetTaskServiceDatabase(database);
 
         auto* nodesMenagerConfig = fqConfig.MutableNodesManager();
-        nodesMenagerConfig->SetPort(grpcPort);
+        nodesMenagerConfig->SetPort(grpcPort); // TODO: remove?
         nodesMenagerConfig->SetHost("localhost");
-
-        auto* healthConfig = fqConfig.MutableHealth();
-        healthConfig->SetPort(grpcPort);
-        healthConfig->SetDatabase(database);
 
         if (Settings.EmulateS3) {
             fqConfig.MutableCommon()->SetObjectStorageEndpoint("file://");
@@ -133,8 +128,8 @@ private:
 
         auto& cpStorage = *fqConfig.MutableControlPlaneStorage();
         cpStorage.SetUseInMemory(!Settings.EnableCpStorage);
-        fillStorageConfig(cpStorage.MutableStorage(), Settings.CpStorageDatabase);
-        fillStorageConfig(fqConfig.MutableDbPool()->MutableStorage(), Settings.CpStorageDatabase);
+        fillStorageConfig(cpStorage.MutableStorage(), Settings.CpStorageDatabase);  // TODO: remove on in memory cp
+        fillStorageConfig(fqConfig.MutableDbPool()->MutableStorage(), Settings.CpStorageDatabase);  // TODO: remove on in memory cp
 
         auto& checkpoints = *fqConfig.MutableCheckpointCoordinator();
         checkpoints.SetEnabled(Settings.EnableCheckpoints);
@@ -150,6 +145,12 @@ private:
         rateLimiter.SetDataPlaneEnabled(Settings.EnableQuotas);
         if (Settings.EnableQuotas) {
             fillStorageConfig(rateLimiter.MutableDatabase(), Settings.RateLimiterDatabase);
+        }
+
+        auto& rowDispatcher = *fqConfig.MutableRowDispatcher()->MutableCoordinator();
+        rowDispatcher.SetLocalMode(!Settings.EnableRemoteRd);
+        if (Settings.EnableRemoteRd) {
+            fillStorageConfig(rowDispatcher.MutableDatabase(), Settings.RowDispatcherDatabase);
         }
 
         return fqConfig;

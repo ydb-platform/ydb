@@ -17,8 +17,9 @@ constexpr i64 MAX_RESULT_SET_ROWS = 1000;
 struct TExternalDatabase {
     TString Endpoint;
     TString Database;
+    TString Token;
 
-    static TExternalDatabase Parse(const TString& optionValue);
+    static TExternalDatabase Parse(const TString& optionValue, const TString& tokenVar);
 };
 
 struct TFqSetupSettings : public NKikimrRun::TServerSettings {
@@ -40,6 +41,9 @@ struct TFqSetupSettings : public NKikimrRun::TServerSettings {
 
     bool EnableCpStorage = false;
     std::optional<TExternalDatabase> CpStorageDatabase;
+
+    bool EnableRemoteRd = false;
+    std::optional<TExternalDatabase> RowDispatcherDatabase;
 
     EVerbose VerboseLevel = EVerbose::Info;
 

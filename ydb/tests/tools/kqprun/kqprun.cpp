@@ -404,6 +404,7 @@ class TMain : public TMainBase {
 
     inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
 
+    TDuration PingPeriod;
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
 
@@ -623,6 +624,11 @@ protected:
             .Choices(verbose.GetChoices())
             .StoreMappedResultT<TString>(&RunnerOptions.YdbSettings.AsyncQueriesSettings.Verbose, verbose);
 
+        options.AddLongOption("ping-period", "Query ping period in milliseconds")
+            .RequiredArgument("uint")
+            .DefaultValue(1000)
+            .StoreMappedResultT<ui64>(&PingPeriod, &TDuration::MilliSeconds<ui64>);
+
         TChoices<NKikimrKqp::EQueryAction> scriptAction({
             {"execute", NKikimrKqp::QUERY_ACTION_EXECUTE},
             {"explain", NKikimrKqp::QUERY_ACTION_EXPLAIN}
@@ -790,9 +796,11 @@ protected:
         RunnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry().Get();
 
         auto& appConfig = RunnerOptions.YdbSettings.AppConfig;
+        auto& queryService = *appConfig.MutableQueryServiceConfig();
         if (ExecutionOptions.ResultsRowsLimit) {
-            appConfig.MutableQueryServiceConfig()->SetScriptResultRowsLimit(ExecutionOptions.ResultsRowsLimit);
+            queryService.SetScriptResultRowsLimit(ExecutionOptions.ResultsRowsLimit);
         }
+        queryService.SetProgressStatsPeriodMs(PingPeriod.MilliSeconds());
 
         SetupLogsConfig();
 

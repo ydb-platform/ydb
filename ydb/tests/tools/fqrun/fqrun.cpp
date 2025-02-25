@@ -331,7 +331,7 @@ protected:
 
         options.AddLongOption("ping-period", "Query ping period in milliseconds")
             .RequiredArgument("uint")
-            .DefaultValue(1000)
+            .DefaultValue(100)
             .StoreMappedResultT<ui64>(&RunnerOptions.PingPeriod, &TDuration::MilliSeconds<ui64>);
 
         options.AddLongOption("loop-count", "Number of runs of the query (use 0 to start infinite loop)")
@@ -350,30 +350,39 @@ protected:
 
         // Cluster settings
 
-        options.AddLongOption("enable-cp-storage", "Start real control plane storage instead of in memory (will use local database by default)")
+        options.AddLongOption("enable-cp-storage", "Start real control plane storage instead of in memory (will use local database by default), token variable CP_STORAGE_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableCpStorage = true;
                 if (const auto value = option->CurVal()) {
-                    RunnerOptions.FqSettings.CpStorageDatabase = TExternalDatabase::Parse(value);
+                    RunnerOptions.FqSettings.CpStorageDatabase = TExternalDatabase::Parse(value, "CP_STORAGE_TOKEN");
                 }
             });
 
-        options.AddLongOption("enable-checkpoints", "Start checkpoint coordinator (will use local database by default)")
+        options.AddLongOption("enable-checkpoints", "Start checkpoint coordinator (will use local database by default), token variable CHECKPOINTS_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableCheckpoints = true;
                 if (const auto value = option->CurVal()) {
-                    RunnerOptions.FqSettings.CheckpointsDatabase = TExternalDatabase::Parse(value);
+                    RunnerOptions.FqSettings.CheckpointsDatabase = TExternalDatabase::Parse(value, "CHECKPOINTS_TOKEN");
                 }
             });
 
-        options.AddLongOption("enable-quotas", "Start FQ quotas service and rate limiter (will be created local rate limiter by default)")
+        options.AddLongOption("enable-quotas", "Start FQ quotas service and rate limiter (will be created local rate limiter by default), token variable QUOTAS_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableQuotas = true;
                 if (const auto value = option->CurVal()) {
-                    RunnerOptions.FqSettings.RateLimiterDatabase = TExternalDatabase::Parse(value);
+                    RunnerOptions.FqSettings.RateLimiterDatabase = TExternalDatabase::Parse(value, "QUOTAS_TOKEN");
+                }
+            });
+
+        options.AddLongOption("enable-row-dispatcher", TStringBuilder() << "Use real coordinator for row dispatcher (will use local database by default), token variable ROW_DISPATCHER_TOKEN")
+            .OptionalArgument("database@endpoint")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                RunnerOptions.FqSettings.EnableRemoteRd = true;
+                if (const auto value = option->CurVal()) {
+                    RunnerOptions.FqSettings.RowDispatcherDatabase = TExternalDatabase::Parse(value, "ROW_DISPATCHER_TOKEN");
                 }
             });
 
@@ -386,12 +395,15 @@ protected:
         RunnerOptions.FqSettings.YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
         RunnerOptions.FqSettings.FunctionRegistry = CreateFunctionRegistry().Get();
 
-        auto& gatewayConfig = *RunnerOptions.FqSettings.FqConfig.mutable_gateways();
+        auto& fqConfig = RunnerOptions.FqSettings.FqConfig;
+        auto& gatewayConfig = *fqConfig.mutable_gateways();
         FillTokens(gatewayConfig.mutable_pq());
         FillTokens(gatewayConfig.mutable_s3());
         FillTokens(gatewayConfig.mutable_generic());
         FillTokens(gatewayConfig.mutable_ydb());
         FillTokens(gatewayConfig.mutable_solomon());
+
+        fqConfig.MutablePendingFetcher()->SetPendingFetchPeriodMs(RunnerOptions.PingPeriod.MilliSeconds());
 
         SetupLogsConfig();
 

@@ -670,7 +670,7 @@ class LintConfigs:
 class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
-    _CUSTOM_CLANG_FORMAT_BIN_ALLOWED_PATHS = consts.CUSTOM_CLANG_FORMAT_YT_ALLOWED_PATHS
+    _CUSTOM_CLANG_FORMAT_BIN_ALLOWED_PATHS = ('ads', 'bigrt', 'grut')
 
     @classmethod
     def from_macro_args(cls, unit, flat_args, spec_args):

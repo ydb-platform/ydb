@@ -2715,8 +2715,19 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
 }
 
 
-TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationContext& optCtx,
-                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin, bool shuffleMapJoin, bool useGraceCoreForMap)
+TExprBase DqBuildJoin(
+    const TExprBase& node, 
+    TExprContext& ctx, 
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, 
+    bool allowStageMultiUsage, 
+    bool pushLeftStage, 
+    EHashJoinMode hashJoin, 
+    bool shuffleMapJoin, 
+    bool useGraceCoreForMap,
+    bool shuffleElimination,
+    bool shuffleEliminationWithMap
+)
 {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -2755,7 +2766,7 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     }
 
     if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
-        return DqBuildHashJoin(join, hashJoin, ctx, optCtx);
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

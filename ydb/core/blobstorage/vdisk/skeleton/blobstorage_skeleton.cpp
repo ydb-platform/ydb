@@ -51,6 +51,7 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/library/retro_tracing/retro_span_base.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/intrlist.h>
@@ -422,14 +423,16 @@ namespace NKikimr {
             NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
             NWilson::TTraceId TraceId;
             bool WrittenBeyondBarrier = false;
+            std::optional<NRetro::TFullSpanId> RetroTraceId;
 
             TVPutInfo(TLogoBlobID blobId, TRope &&buffer,
                     NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
-                    NWilson::TTraceId traceId)
+                    NWilson::TTraceId traceId, std::optional<NRetro::TFullSpanId> retroTraceId = std::nullopt)
                 : Buffer(std::move(buffer))
                 , BlobId(blobId)
                 , HullStatus({NKikimrProto::UNKNOWN, "", false})
                 , TraceId(std::move(traceId))
+                , RetroTraceId(retroTraceId)
             {
                 ExtraBlockChecks.Swap(extraBlockChecks);
             }
@@ -478,7 +481,8 @@ namespace NKikimr {
 
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
             auto loggedRec = new typename TLoggedRecType<TEvResult>::T(seg, confirmSyncLogAlso,
-                id, ingress, std::move(buffer), std::move(result), sender, cookie, std::move(info.TraceId));
+                id, ingress, std::move(buffer), std::move(result), sender, cookie, std::move(info.TraceId),
+                info.RetroTraceId);
             intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
@@ -743,7 +747,12 @@ namespace NKikimr {
             const TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetBlobID());
             LWTRACK(VDiskSkeletonVPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
-            TVPutInfo info(id, ev->Get()->GetBuffer(), record.MutableExtraBlockChecks(), std::move(ev->TraceId));
+            std::optional<NRetro::TFullSpanId> retroTraceId;
+            if (ev->Get()->Record.HasParentRetroSpan()) {
+                retroTraceId.emplace(NRetro::SpanIdToFullSpanId(ev->Get()->Record.GetParentRetroSpan()));
+            }
+            TVPutInfo info(id, ev->Get()->GetBuffer(), record.MutableExtraBlockChecks(), std::move(ev->TraceId),
+                    retroTraceId);
             const ui64 bufSize = info.Buffer.GetSize();
 
             try {

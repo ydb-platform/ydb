@@ -4,6 +4,8 @@
 #include "common.h"
 #include "event.h"
 
+#include <ydb/core/base/retro_guard.h>
+
 namespace NKikimr::NBsQueue {
 
 static constexpr size_t MaxUnusedItems = 1024;
@@ -35,6 +37,7 @@ class TBlobStorageQueue {
         EItemQueue Queue;
         TCostModel::TMessageCostEssence CostEssence;
         NWilson::TSpan Span;
+        TRetroGuard<NRetro::TRetroSpanBackpressureInFlight> RetroSpan;
         TEventHolder Event;
         ui64 MsgId;
         ui64 SequenceId;
@@ -55,7 +58,9 @@ class TBlobStorageQueue {
             : Queue(EItemQueue::NotSet)
             , CostEssence(*event->Get())
             , Span(TWilson::VDiskTopLevel, std::move(event->TraceId), "Backpressure.InFlight")
-            , Event(event, serItems, serBytes, bspctx, interconnectChannel, local)
+            , RetroSpan(event->Get())
+            , Event(event, serItems, serBytes, bspctx, interconnectChannel, local,
+                    (RetroSpan ? RetroSpan->GetId().SpanId : 0))
             , MsgId(Max<ui64>())
             , SequenceId(0)
             , Deadline(deadline)

@@ -56,6 +56,7 @@ namespace NWilson {
             TFlags Flags;
             int UncaughtExceptions = std::uncaught_exceptions();
             bool Sent = false;
+            bool Terminated = false;
             bool Ignored = false;
             NActors::TActorSystem* ActorSystem;
 
@@ -231,9 +232,12 @@ namespace NWilson {
 
         void End() {
             if (Y_UNLIKELY(*this)) {
-                Data->Span.set_trace_id(Data->TraceId.GetTraceIdPtr(), Data->TraceId.GetTraceIdSize());
-                Data->Span.set_span_id(Data->TraceId.GetSpanIdPtr(), Data->TraceId.GetSpanIdSize());
-                Data->Span.set_end_time_unix_nano(TimeUnixNano());
+                if (!Data->Terminated) {
+                    Data->Span.set_trace_id(Data->TraceId.GetTraceIdPtr(), Data->TraceId.GetTraceIdSize());
+                    Data->Span.set_span_id(Data->TraceId.GetSpanIdPtr(), Data->TraceId.GetSpanIdSize());
+                    Data->Span.set_end_time_unix_nano(TimeUnixNano());
+                    Data->Terminated = true;
+                }
                 Send();
             } else {
                 VerifyNotSent();
@@ -258,7 +262,16 @@ namespace NWilson {
 
         static const TSpan Empty;
 
+        void SetParentId(const TTraceId& parentId);
+
+        static TSpan CreateTerminated(TString name, TTraceId&& traceId, TInstant start, TInstant end,
+                TFlags flags = EFlags::NONE) {
+            return TSpan(name, std::forward<TTraceId>(traceId), start, end, flags);
+        }
+
     private:
+        TSpan(TString name, TTraceId&& traceId, TInstant start, TInstant end, TFlags flags);
+
         void Send();
 
         ui64 TimeUnixNano() const {

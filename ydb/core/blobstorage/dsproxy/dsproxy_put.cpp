@@ -8,6 +8,8 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/util/stlog.h>
 
+#include <ydb/library/actors/retro_uploader/retro_uploader.h>
+
 #include <util/generic/ymath.h>
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
@@ -471,6 +473,13 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         if (ResponsesSent == PutImpl.Blobs.size()) {
+            if (TActivationContext::Monotonic() - RequestStartTime >= TDuration::Seconds(1)) {
+                if (RetroSpan) {
+                    NRetro::TTraceId retroTraceId = RetroSpan->GetId().TraceId;
+                    RetroSpan.Drop();
+                    NRetro::DemandTrace(retroTraceId, SelfId());
+                }
+            }
             PassAway();
             Done = true;
             return true;
@@ -573,7 +582,8 @@ public:
         : TBlobStorageGroupRequestActor(params)
         , PutImpl(Info, GroupQueues, params.Common.Event, Mon,
                 params.EnableRequestMod3x3ForMinLatency, params.Common.Source,
-                params.Common.Cookie, Span.GetTraceId(), params.AccelerationParams)
+                params.Common.Cookie, Span.GetTraceId(), params.AccelerationParams,
+                RetroSpan.GetPtr())
         , WaitingVDiskResponseCount(Info->GetTotalVDisksNum())
         , HandleClass(params.Common.Event->HandleClass)
         , ReportedBytes(0)
@@ -593,6 +603,7 @@ public:
         RequestBytes = params.Common.Event->Buffer.size();
         RequestHandleClass = HandleClassToHandleClass(HandleClass);
         MaxSaneRequests = Info->Type.TotalPartCount() * (1ull + Info->Type.Handoff()) * 2;
+        RetroSpan->SetBlobId(PutImpl.Blobs[0].BlobId);
     }
 
     TBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters& params)

@@ -26,6 +26,7 @@ RECURSE(
     pretty_types_print
     protobuf_printer
     query_actor
+    retro_tracing
     schlab
     security
     table_creator

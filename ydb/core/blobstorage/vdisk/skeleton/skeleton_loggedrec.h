@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/core/base/retro_guard.h>
+#include <ydb/library/retro_tracing/retro_span.h>
 
 namespace NKikimr {
 
@@ -50,7 +52,8 @@ namespace NKikimr {
     public:
         TLoggedRecVPut(TLsnSeg seg, bool confirmSyncLogAlso, const TLogoBlobID &id, const TIngress &ingress,
                 TRope &&buffer, std::unique_ptr<TEvBlobStorage::TEvVPutResult> result, const TActorId &recipient,
-                ui64 recipientCookie, NWilson::TTraceId traceId);
+                ui64 recipientCookie, NWilson::TTraceId traceId,
+                const std::optional<NRetro::TFullSpanId>& retroTraceId);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
         NWilson::TTraceId GetTraceId() const;
@@ -63,6 +66,7 @@ namespace NKikimr {
         TActorId Recipient;
         ui64 RecipientCookie;
         NWilson::TSpan Span;
+        TRetroGuard<NRetro::TRetroSpanVDiskLogPut> RetroSpan;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -72,7 +76,8 @@ namespace NKikimr {
     public:
         TLoggedRecVMultiPutItem(TLsnSeg seg, bool confirmSyncLogAlso, const TLogoBlobID &id, const TIngress &ingress,
                 TRope &&buffer, std::unique_ptr<TEvVMultiPutItemResult> result, const TActorId &recipient,
-                ui64 recipientCookie, NWilson::TTraceId traceId);
+                ui64 recipientCookie, NWilson::TTraceId traceId,
+                const std::optional<NRetro::TFullSpanId>& retroTraceId);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
         NWilson::TTraceId GetTraceId() const;

@@ -48,6 +48,7 @@ namespace NKikimr {
         // Self VDisk related info
         const TGroupId GroupId;
         const TVDiskIdShort ShortSelfVDisk;
+        const TVDiskID SelfVDiskId;
         const TString VDiskLogPrefix;
         const ui32 NodeId;
         // Memory consumption

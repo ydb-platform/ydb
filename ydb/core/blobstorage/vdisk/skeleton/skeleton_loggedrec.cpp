@@ -27,7 +27,8 @@ namespace NKikimr {
             std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
             const TActorId &recipient,
             ui64 recipientCookie,
-            NWilson::TTraceId traceId)
+            NWilson::TTraceId traceId,
+            const std::optional<NRetro::TFullSpanId>& retroTraceId)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
         , Ingress(ingress)
@@ -40,20 +41,30 @@ namespace NKikimr {
         if (Span) {
             Span.Attribute("blob_id", id.ToString());
         }
+        if (retroTraceId) {
+            RetroSpan.Emplace(*retroTraceId, TActivationContext::Now());
+        }
     }
 
     void TLoggedRecVPut::Replay(THull &hull, const TActorContext &ctx) {
         TLogoBlobID genId(Id, 0);
         hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Seg.Point());
+        const TVDiskContextPtr& vctx = hull.GetHullCtx()->VCtx;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix << "TEvVPut: reply;"
+        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, vctx->VDiskLogPrefix << "TEvVPut: reply;"
                 << " id# " << Id
                 << " msg# " << Result->ToString()
                 << " Marker# BSVSLR01");
 
+        if (RetroSpan) {
+            RetroSpan->SetVDiskId(vctx->SelfVDiskId);
+            RetroSpan->SetNodeId(vctx->NodeId);
+        }
+
+        RetroSpan.Drop();
         Span.EndOk();
-        const auto& vCtx = hull.GetHullCtx()->VCtx;
-        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx);
+
+        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vctx);
     }
 
     NWilson::TTraceId TLoggedRecVPut::GetTraceId() const {
@@ -72,7 +83,8 @@ namespace NKikimr {
             std::unique_ptr<TEvVMultiPutItemResult> result,
             const TActorId &recipient,
             ui64 recipientCookie,
-            NWilson::TTraceId traceId)
+            NWilson::TTraceId traceId,
+            const std::optional<NRetro::TFullSpanId>&)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
         , Ingress(ingress)

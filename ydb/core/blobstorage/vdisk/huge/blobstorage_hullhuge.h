@@ -2,10 +2,12 @@
 
 #include "defs.h"
 #include "blobstorage_hullhugerecovery.h"
+#include <ydb/core/base/retro_guard.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/retro_tracing/retro_span.h>
 
 namespace NKikimr {
 

@@ -36,6 +36,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
+    ydb/library/actors/retro_uploader
     library/cpp/getopt/small
     library/cpp/logger
     library/cpp/malloc/api

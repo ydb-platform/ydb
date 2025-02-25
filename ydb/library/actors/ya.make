@@ -9,6 +9,7 @@ RECURSE(
     log_backend
     memory_log
     prof
+    retro_uploader
     testlib
     util
     wilson

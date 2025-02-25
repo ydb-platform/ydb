@@ -46,6 +46,7 @@ private:
     const TEvBlobStorage::TEvPut::ETactic Tactic;
 
     const TAccelerationParams AccelerationParams;
+    NRetro::TRetroSpanDSProxyRequest* RetroSpanPtr;
 
     struct TBlobInfo {
         TLogoBlobID BlobId;
@@ -109,7 +110,7 @@ public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TEvBlobStorage::TEvPut *ev, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             bool enableRequestMod3x3ForMinLatecy, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
-            const TAccelerationParams& accelerationParams)
+            const TAccelerationParams& accelerationParams, NRetro::TRetroSpanDSProxyRequest* retroSpanPtr = nullptr)
         : Info(info)
         , Blackboard(info, state, ev->HandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(1)
@@ -120,6 +121,7 @@ public:
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
         , Tactic(ev->Tactic)
         , AccelerationParams(accelerationParams)
+        , RetroSpanPtr(retroSpanPtr)
         , History(Info)
     {
         BlobMap.emplace(ev->Id, Blobs.size());
@@ -134,7 +136,8 @@ public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TBatchedVec<TEvBlobStorage::TEvPut::TPtr> &events, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             NKikimrBlobStorage::EPutHandleClass putHandleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-            bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams)
+            bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams,
+            NRetro::TRetroSpanDSProxyRequest* retroSpanPtr = nullptr)
         : Info(info)
         , Blackboard(info, state, putHandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(events.size())
@@ -145,6 +148,7 @@ public:
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
         , Tactic(tactic)
         , AccelerationParams(accelerationParams)
+        , RetroSpanPtr(retroSpanPtr)
         , History(Info)
     {
         Y_ABORT_UNLESS(events.size(), "TEvPut vector is empty");
@@ -235,7 +239,10 @@ public:
             if (std::next(it) == end) { // TEvVPut
                 auto [orderNumber, ptr] = *it++;
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(ptr->Id, ptr->Buffer, Info->GetVDiskId(orderNumber),
-                    false, nullptr, Blobs[ptr->BlobIdx].Deadline, Blackboard.PutHandleClass);
+                    false, nullptr, Blobs[ptr->BlobIdx].Deadline, Blackboard.PutHandleClass, RetroSpanPtr);
+                if (RetroSpanPtr) {
+                    RetroSpanPtr->AddPartNode(Info->GetActorId(orderNumber).NodeId());
+                }
 
                 auto& record = ev->Record;
                 for (const auto& [tabletId, generation] : Blobs[ptr->BlobIdx].ExtraBlockChecks) {

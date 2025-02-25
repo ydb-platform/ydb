@@ -28,6 +28,8 @@ namespace NActors {
             ES_HTTP = 11,
             ES_PGWIRE = 12,
 
+            ES_RETRO = 13,
+
             ES_USERSPACE = 4096,
 
             ES_PRIVATE = (1 << 15) - 16,

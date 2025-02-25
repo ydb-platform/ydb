@@ -1,0 +1,20 @@
+option java_package = "ru.yandex.kikimr.proto";
+
+package NRetroUploaderProto;
+
+message TEvCollectSpans {
+    optional uint64 TraceId = 1;
+}
+
+message TSerializedSpan {
+    optional uint32 Type = 1;
+    optional bytes Data = 2;
+}
+
+message TEvCollectSpansRequest {
+    optional uint64 TraceId = 1;
+}
+
+message TEvCollectSpansResponse {
+    repeated TSerializedSpan Spans = 1;
+}

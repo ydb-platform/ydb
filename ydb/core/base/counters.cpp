@@ -42,6 +42,7 @@ static const THashSet<TString> DATABASE_SERVICES
          TString("pqproxy|mirrorWriteTimeLag"),
          TString("pqproxy|userAgents"),
          TString("datastreams"),
+         TString("retro_tracing"),
     }};
 
 

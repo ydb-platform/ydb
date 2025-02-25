@@ -642,5 +642,15 @@ public:
 };
 #endif
 
+class TRetroUploaderInitializer : public IKikimrServicesInitializer {
+public:
+    TRetroUploaderInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+
+private:
+    ui32 NodeId;
+};
+
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

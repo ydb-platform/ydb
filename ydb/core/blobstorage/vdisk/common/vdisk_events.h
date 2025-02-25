@@ -25,6 +25,8 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <ydb/library/retro_tracing/retro_span.h>
+
 #include <util/digest/multi.h>
 #include <util/generic/maybe.h>
 #include <util/stream/str.h>
@@ -593,14 +595,15 @@ namespace NKikimr {
 
         TEvVPut(const TLogoBlobID &logoBlobId, TRope buffer, const TVDiskID &vdisk,
                 const bool ignoreBlock, const ui64 *cookie, TInstant deadline,
-                NKikimrBlobStorage::EPutHandleClass cls)
+                NKikimrBlobStorage::EPutHandleClass cls, NRetro::TRetroSpan* retroSpan = nullptr)
         {
-            InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls);
+            InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls, retroSpan);
             StorePayload(std::move(buffer));
         }
 
         void InitWithoutBuffer(const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const bool ignoreBlock,
-                const ui64 *cookie, TInstant deadline, NKikimrBlobStorage::EPutHandleClass cls)
+                const ui64 *cookie, TInstant deadline, NKikimrBlobStorage::EPutHandleClass cls,
+                NRetro::TRetroSpan* retroSpan)
         {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&logoBlobId, sizeof(logoBlobId));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&vdisk, sizeof(vdisk));
@@ -623,6 +626,10 @@ namespace NKikimr {
             }
             Record.SetHandleClass(cls);
             Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(cls));
+
+            if (retroSpan) {
+                NRetro::FillSpanId(retroSpan->GetId(), Record.MutableParentRetroSpan());
+            }
         }
 
         bool GetIgnoreBlock() const {

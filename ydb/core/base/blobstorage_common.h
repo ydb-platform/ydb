@@ -2,10 +2,8 @@
 
 #include <ydb/core/base/id_wrapper.h>
 
-namespace NKikimr{
+namespace NKikimr {
 
     using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
-    
-}
 
-
+} // namespace NKikimr

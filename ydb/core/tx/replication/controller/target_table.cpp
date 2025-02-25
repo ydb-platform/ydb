@@ -31,8 +31,6 @@ class TTableWorkerRegistar: public TActorBootstrapped<TTableWorkerRegistar> {
                 continue;
             }
 
-            LOG_E(">>>>> Start worker " << partition.GetPartitionId());
-
             auto ev = MakeRunWorkerEv(
                 ReplicationId, TargetId, Config, partition.GetPartitionId(),
                 ConnectionParams, ConsistencySettings, SrcStreamPath, DstPathId);

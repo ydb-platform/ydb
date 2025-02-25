@@ -94,8 +94,6 @@ public:
 
         auto replication = Self->Find(rid);
         if (replication && replication->GetState() == TReplication::EState::Ready) {
-            CLOG_W(ctx, ">>>>> Progress "
-                << ": rid# " << rid);
             replication->Progress(ctx);
         }
     }

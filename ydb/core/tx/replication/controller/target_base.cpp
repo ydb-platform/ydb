@@ -5,8 +5,6 @@
 #include "target_base.h"
 #include "util.h"
 
-#include "logging.h"
-
 #include <ydb/library/actors/core/events.h>
 
 namespace NKikimr::NReplication::NController {
@@ -130,12 +128,9 @@ const THashMap<ui64, TTargetBase::TWorker>& TTargetBase::GetWorkers() const {
 }
 
 void TTargetBase::RemoveWorkers(const TActorContext& ctx) {
-    TStringBuilder LogPrefix;
-    CLOG_E(ctx, ">>>>> TTargetBase::RemoveWorkers !PendingRemoveWorkers = " << !PendingRemoveWorkers);
-    if (!PendingRemoveWorkers) { // ??? где надо сбрасыватьобратно в false?
+    if (!PendingRemoveWorkers) {
         PendingRemoveWorkers = true;
         for (const auto& [id, _] : Workers) {
-            CLOG_E(ctx, ">>>>> TTargetBase::RemoveWorkers Worker = " << id);
             ctx.Send(ctx.SelfID, new TEvPrivate::TEvRemoveWorker(Replication->GetId(), Id, id));
         }
     }

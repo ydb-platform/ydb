@@ -147,7 +147,9 @@ public:
             return false;
         }
 
-        if (!AppData()->ConfigSwissKnife->VerifyReplaceRequest(request, status, issues)) {
+        auto* csk = AppData()->ConfigSwissKnife;
+
+        if (csk && csk->VerifyReplaceRequest(request, status, issues)) {
             return false;
         }
 

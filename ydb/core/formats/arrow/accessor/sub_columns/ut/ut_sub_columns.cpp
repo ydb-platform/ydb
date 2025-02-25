@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         auto arrEmpty = NSubColumns::TOthersData::BuildEmpty();
         auto arrSliceEmpty = arrEmpty.Slice(0, 1000, NSubColumns::TSettings());
         AFL_VERIFY(arrSliceEmpty.GetRecords()->num_rows() == 0);
-        AFL_VERIFY(arrSliceEmpty.GetRecords()->GetColumnsCount() == 0);
+        AFL_VERIFY(arrSliceEmpty.GetRecords()->GetColumnsCount() == (ui32)NSubColumns::TOthersData::GetSchema()->num_fields());
     }
 
     Y_UNIT_TEST(SlicesDef) {

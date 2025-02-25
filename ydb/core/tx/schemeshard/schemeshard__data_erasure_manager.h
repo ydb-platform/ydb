@@ -21,17 +21,9 @@ namespace NKikimr::NSchemeShard {
 class TSchemeShard;
 
 class TDataErasureManager {
-public:
-    enum class EStatus : ui32 {
-        UNSPECIFIED = 0,
-        COMPLETED = 1,
-        IN_PROGRESS = 2,
-        IN_PROGRESS_BSC = 3,
-    };
-
 protected:
     TSchemeShard* const SchemeShard;
-    EStatus Status = EStatus::UNSPECIFIED;
+    EDataErasureStatus Status = EDataErasureStatus::UNSPECIFIED;
     ui64 Generation = 0;
     bool Running = false;
 
@@ -62,8 +54,8 @@ public:
 
     void Clear();
 
-    EStatus GetStatus() const;
-    void SetStatus(const EStatus& status);
+    EDataErasureStatus GetStatus() const;
+    void SetStatus(const EDataErasureStatus& status);
 
     void IncGeneration();
     void SetGeneration(ui64 generation);
@@ -97,7 +89,7 @@ using TQueue = NOperationQueue::TOperationQueueWithTimer<
 private:
     TStarter Starter;
     TQueue* Queue = nullptr;
-    THashMap<TPathId, EStatus> WaitingDataErasureTenants;
+    THashMap<TPathId, EDataErasureStatus> WaitingDataErasureTenants;
     THashMap<TPathId, TActorId> ActivePipes;
 
     TDuration DataErasureInterval;
@@ -169,7 +161,7 @@ using TQueue = NOperationQueue::TOperationQueueWithTimer<
 private:
     TStarter Starter;
     TQueue* Queue = nullptr;
-    THashMap<TShardIdx, EStatus> WaitingDataErasureShards;
+    THashMap<TShardIdx, EDataErasureStatus> WaitingDataErasureShards;
     THashMap<TShardIdx, TActorId> ActivePipes;
 
 public:

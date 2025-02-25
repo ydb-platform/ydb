@@ -2254,7 +2254,7 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
         }
 
         if (DataErasureManager->Remove(pathId)) {
-            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(static_cast<ui32>(TDataErasureManager::EStatus::COMPLETED));
+            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(EDataErasureStatus::COMPLETED);
         }
 
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
@@ -7617,16 +7617,16 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, c
     NKikimrScheme::TEvDataErasureInfoResponse::EStatus status = NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
 
     switch (DataErasureManager->GetStatus()) {
-    case TDataErasureManager::EStatus::UNSPECIFIED:
+    case EDataErasureStatus::UNSPECIFIED:
         status = NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
         break;
-    case TDataErasureManager::EStatus::COMPLETED:
+    case EDataErasureStatus::COMPLETED:
         status = NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED;
         break;
-    case TDataErasureManager::EStatus::IN_PROGRESS:
+    case EDataErasureStatus::IN_PROGRESS:
         status = NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_TENANT;
         break;
-    case TDataErasureManager::EStatus::IN_PROGRESS_BSC:
+    case EDataErasureStatus::IN_PROGRESS_BSC:
         status = NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_BSC;
         break;
     }

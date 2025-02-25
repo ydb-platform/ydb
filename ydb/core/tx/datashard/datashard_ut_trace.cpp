@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
     Y_UNIT_TEST(TestTraceDistributedSelect) {
         auto [runtime, server, sender] = TestCreateServer();
-        bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
 
@@ -361,12 +361,6 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                                 ExpectedSpan("Tablet.Transaction",
                                     ExpectedSpan("Tablet.Transaction.Execute",
                                         Repeat("Datashard.Unit", 3)),
-                                    // No extra page fault with btree index (root is in meta)
-                                    ConditionalSpanVec(!bTreeIndex,
-                                        "Tablet.Transaction.Wait",
-                                        "Tablet.Transaction.Enqueued",
-                                        ExpectedSpan("Tablet.Transaction.Execute",
-                                            "Datashard.Unit")),
                                     "Tablet.Transaction.Wait",
                                     "Tablet.Transaction.Enqueued",
                                     ExpectedSpan("Tablet.Transaction.Execute",

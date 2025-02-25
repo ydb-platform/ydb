@@ -794,7 +794,7 @@ protected:
             appConfig.MutableQueryServiceConfig()->SetScriptResultRowsLimit(ExecutionOptions.ResultsRowsLimit);
         }
 
-        FillLogConfig(*appConfig.MutableLogConfig());
+        SetupLogsConfig();
 
         if (EmulateYt) {
             const auto& fileStorageConfig = appConfig.GetQueryServiceConfig().GetFileStorage();
@@ -842,6 +842,14 @@ private:
                 ythrow yexception() << "Failed to replace ${YQL_TOKEN} template, please specify YQL_TOKEN environment variable";
             }
         }
+    }
+
+    void SetupLogsConfig() {
+        auto& logConfig = *RunnerOptions.YdbSettings.AppConfig.MutableLogConfig();
+        if (DefaultLogPriority) {
+            logConfig.SetDefaultLevel(*DefaultLogPriority);
+        }
+        ModifyLogPriorities(LogPriorities, logConfig);
     }
 };
 

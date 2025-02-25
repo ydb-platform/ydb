@@ -58,7 +58,7 @@ private:
         TRuntimePtr runtime(new TTestBasicRuntime(1));
         runtime->SetLogPriority(NKikimrServices::YQ_CONTROL_PLANE_STORAGE, NLog::PRI_DEBUG);
 
-        auto controlPlaneProxy = CreateInMemoryControlPlaneStorageServiceActor(Config);
+        auto controlPlaneProxy = CreateInMemoryControlPlaneStorageServiceActor(Config, {}, {}, {}, MakeIntrusive<NMonitoring::TDynamicCounters>(), "/Root");
 
         runtime->AddLocalService(
             ControlPlaneStorageServiceActorId(),

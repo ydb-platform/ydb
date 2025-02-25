@@ -10,8 +10,6 @@ namespace NFqRun {
 class TFqRunner::TImpl {
     using EVerbose = TFqSetupSettings::EVerbose;
 
-    static constexpr TDuration REFRESH_PERIOD = TDuration::Seconds(1);
-
 public:
     explicit TImpl(const TRunnerOptions& options)
         : Options(options)
@@ -114,12 +112,19 @@ public:
         return true;
     }
 
-private:
-    static bool IsFinalStatus(FederatedQuery::QueryMeta::ComputeStatus status) {
-        using EStatus = FederatedQuery::QueryMeta;
-        return IsIn({EStatus::FAILED, EStatus::COMPLETED, EStatus::ABORTED_BY_USER, EStatus::ABORTED_BY_SYSTEM}, status);
+    void ExecuteQueryAsync(const TRequestOptions& query) const {
+        if (VerboseLevel >= EVerbose::QueriesText) {
+            Cout << CoutColors.Cyan() << "Starting async stream request:\n" << CoutColors.Default() << query.Query << Endl;
+        }
+
+        FqSetup.QueryRequestAsync(query, Options.PingPeriod);
     }
 
+    void FinalizeRunner() const {
+        FqSetup.WaitAsyncQueries();
+    }
+
+private:
     bool WaitStreamQuery() {
         StartTime = TInstant::Now();
 
@@ -141,7 +146,7 @@ private:
                 return false;
             }
 
-            Sleep(REFRESH_PERIOD);
+            Sleep(Options.PingPeriod);
         }
 
         if (VerboseLevel >= EVerbose::Info) {
@@ -196,6 +201,14 @@ bool TFqRunner::CreateConnections(const std::vector<FederatedQuery::ConnectionCo
 
 bool TFqRunner::CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings) const {
     return Impl->CreateBindings(bindings);
+}
+
+void TFqRunner::ExecuteQueryAsync(const TRequestOptions& query) const {
+    Impl->ExecuteQueryAsync(query);
+}
+
+void TFqRunner::FinalizeRunner() const {
+    Impl->FinalizeRunner();
 }
 
 }  // namespace NFqRun

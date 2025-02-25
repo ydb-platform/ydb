@@ -178,6 +178,7 @@ void AddProtoConfigOptions(IProtoConfigFileProvider& out);
 void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out);
 void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, const TString& storageYamlConfigFile,
     bool loadedFromStore, NKikimrConfig::TAppConfig& appConfig,
+    NYamlConfig::IConfigSwissKnife* csk,
     const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src);
 void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src);
@@ -1056,7 +1057,7 @@ public:
         MbusAppOptions.ValidateCliOptions(opts, parseResult);
     }
 
-    void Parse(const TVector<TString>& freeArgs) override {
+    void Parse(const TVector<TString>& freeArgs, NYamlConfig::IConfigSwissKnife* csk) override {
         using TCfg = NKikimrConfig::TAppConfig;
 
         NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
@@ -1085,7 +1086,7 @@ public:
             }
         }
 
-        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig);
+        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
         OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
 
         // start memorylog as soon as possible
@@ -1107,7 +1108,7 @@ public:
             InitDynamicNode();
         }
 
-        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig);
+        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
 
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{});
 

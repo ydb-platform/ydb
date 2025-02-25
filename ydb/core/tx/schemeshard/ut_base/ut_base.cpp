@@ -9530,47 +9530,46 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
         )", {NKikimrScheme::StatusInvalidParameter});
 
-        // case 2: add partition, with update channels binding
+        // case 2: add partition
         TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
             Name: "Solomon"
-            PartitionCount: 2
-            UpdateChannelsBinding: true
+            PartitionCount: 2    
             StorageConfig {
                 Channel {
-                    PreferredPoolKind: "pool-kind-2"
+                    PreferredPoolKind: "pool-kind-1"
                 }
                 Channel {
-                    PreferredPoolKind: "pool-kind-2"
+                    PreferredPoolKind: "pool-kind-1"
                 }
                 Channel {
-                    PreferredPoolKind: "pool-kind-2"
+                    PreferredPoolKind: "pool-kind-1"
                 }
             }
         )");
 
         env.TestWaitNotification(runtime, txId);
-        check("/MyRoot/Solomon", 2, {{"pool-2", 3}});
+        check("/MyRoot/Solomon", 2, {{"pool-1", 3}});
 
-        // case 4: add partition & update channels binding
+        // case 3: add partition & update channels binding
         TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
             Name: "Solomon"
             PartitionCount: 3
             UpdateChannelsBinding: true
             StorageConfig {
                 Channel {
-                    PreferredPoolKind: "pool-kind-1"
+                    PreferredPoolKind: "pool-kind-2"
                 }
                 Channel {
-                    PreferredPoolKind: "pool-kind-1"
+                    PreferredPoolKind: "pool-kind-2"
                 }
                 Channel {
-                    PreferredPoolKind: "pool-kind-1"
+                    PreferredPoolKind: "pool-kind-2"
                 }
             }
         )");
 
         env.TestWaitNotification(runtime, txId);
-        check("/MyRoot/Solomon", 3, {{"pool-1", 3}});
+        check("/MyRoot/Solomon", 3, {{"pool-2", 3}});
     }
 
     Y_UNIT_TEST(UpdateChannelsBindingSolomonStorageConfig) {

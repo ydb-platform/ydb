@@ -1074,11 +1074,11 @@ public:
             auto dir = fs::path(CommonAppOptions.ConfigStorePath.c_str());
 
             if (auto path = dir / STORAGE_CONFIG_NAME; fs::is_regular_file(path)) {
-                storageYamlConfigFile = path.c_str();
+                storageYamlConfigFile = path.string();
             }
 
             if (auto path = dir / CONFIG_NAME; fs::is_regular_file(path)) {
-                yamlConfigFile = path.c_str();
+                yamlConfigFile = path.string();
                 loadedFromStore = true;
             } else {
                 storageYamlConfigFile.clear();

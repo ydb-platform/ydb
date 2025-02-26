@@ -782,23 +782,6 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     }
                                 }
                             }
-/*
-                            if (auto* tableArrayNode = stage->StatsNode->GetValueByPath("Table")) {
-                                for (const auto& tableNode : tableArrayNode->GetArray()) {
-                                    if (auto* pathNode = tableNode.GetValueByPath("Path")) {
-                                        if (tablePath == pathNode->GetStringSafe()) {
-                                            if (auto* bytesNode = tableNode.GetValueByPath("ReadBytes")) {
-                                                stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes, *bytesNode);
-                                            }
-                                            if (auto* rowsNode = tableNode.GetValueByPath("ReadRows")) {
-                                                stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows, *rowsNode);
-                                            }
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-*/
                         }
                     }
                 }
@@ -864,22 +847,6 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
             }
         }
 
-        if (auto* spillingComputeBytesNode = stage->StatsNode->GetValueByPath("SpillingComputeBytes")) {
-            stage->SpillingComputeBytes = std::make_shared<TSingleMetric>(SpillingComputeBytes, *spillingComputeBytesNode);
-        }
-
-        if (auto* spillingComputeTimeNode = stage->StatsNode->GetValueByPath("SpillingComputeTimeUs")) {
-            stage->SpillingComputeTime = std::make_shared<TSingleMetric>(SpillingComputeTime, *spillingComputeTimeNode);
-        }
-
-        if (auto* spillingChannelBytesNode = stage->StatsNode->GetValueByPath("SpillingChannelBytes")) {
-            stage->SpillingChannelBytes = std::make_shared<TSingleMetric>(SpillingChannelBytes, *spillingChannelBytesNode);
-        }
-
-        if (auto* spillingChannelTimeNode = stage->StatsNode->GetValueByPath("SpillingChannelTimeUs")) {
-            stage->SpillingChannelTime = std::make_shared<TSingleMetric>(SpillingChannelTime, *spillingChannelTimeNode);
-        }
-
         if (auto* outputNode = stage->StatsNode->GetValueByPath("Output")) {
             for (const auto& subNode : outputNode->GetArray()) {
                 if (auto* nameNode = subNode.GetValueByPath("Name")) {
@@ -906,6 +873,26 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                 }
             }
+        }
+
+        if (auto* spillingComputeBytesNode = stage->StatsNode->GetValueByPath("SpillingComputeBytes")) {
+            stage->SpillingComputeBytes = std::make_shared<TSingleMetric>(SpillingComputeBytes, *spillingComputeBytesNode,
+                stage->MinTime, stage->MaxTime);
+        }
+
+        if (auto* spillingComputeTimeNode = stage->StatsNode->GetValueByPath("SpillingComputeTimeUs")) {
+            stage->SpillingComputeTime = std::make_shared<TSingleMetric>(SpillingComputeTime, *spillingComputeTimeNode,
+                stage->MinTime, stage->MaxTime);
+        }
+
+        if (auto* spillingChannelBytesNode = stage->StatsNode->GetValueByPath("SpillingChannelBytes")) {
+            stage->SpillingChannelBytes = std::make_shared<TSingleMetric>(SpillingChannelBytes, *spillingChannelBytesNode,
+                stage->MinTime, stage->MaxTime);
+        }
+
+        if (auto* spillingChannelTimeNode = stage->StatsNode->GetValueByPath("SpillingChannelTimeUs")) {
+            stage->SpillingChannelTime = std::make_shared<TSingleMetric>(SpillingChannelTime, *spillingChannelTimeNode,
+                stage->MinTime, stage->MaxTime);
         }
 
         inputNode = stage->StatsNode->GetValueByPath("Input");
@@ -1571,11 +1558,13 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             PrintStageSummary(background, canvas, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, taskCount);
 
             if (s->SpillingChannelBytes && s->SpillingChannelBytes->Details.Sum) {
-                auto x1 = Config.SummaryLeft + Config.SummaryWidth - INTERNAL_GAP_X;
-                auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
                 background
                 << "<g><title>";
+
                 auto textSum = FormatTooltip(background, "Channel Spilling", s->SpillingChannelBytes.get(), FormatBytes);
+                auto x1 = Config.SummaryLeft + Config.SummaryWidth - INTERNAL_GAP_X;
+                auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
+
                 background
                 << "</title>" << Endl
                 << "  <rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
@@ -1615,11 +1604,13 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             PrintStageSummary(background, canvas, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip, taskCount);
 
             if (s->SpillingComputeBytes && s->SpillingComputeBytes->Details.Sum) {
-                auto x1 = Config.SummaryLeft + Config.SummaryWidth - INTERNAL_GAP_X;
-                auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
                 background
                 << "<g><title>";
+
                 auto textSum = FormatTooltip(background, "Compute Spilling", s->SpillingComputeBytes.get(), FormatBytes);
+                auto x1 = Config.SummaryLeft + Config.SummaryWidth - INTERNAL_GAP_X;
+                auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
+
                 background
                 << "</title>" << Endl
                 << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2

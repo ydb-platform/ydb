@@ -62,7 +62,7 @@ static constexpr auto Endless = "\0"sv;
 
 struct TRange : public TOperation {
     std::string Key, RangeEnd;
-    bool KeysOnly, CountOnly;
+    bool KeysOnly, CountOnly, Serializable;
     ui64 Limit;
     i64 KeyRevision;
     i64 MinCreateRevision, MaxCreateRevision;
@@ -73,7 +73,7 @@ struct TRange : public TOperation {
     static constexpr std::string_view Fields[] = {"key"sv, "version"sv, "created"sv, "modified"sv, "value"sv};
 
     std::ostream& Dump(std::ostream& out) const {
-        out << (RangeEnd.empty() ? "Get" : "Range") << '(';
+        out << (RangeEnd.empty() ? (CountOnly ? "Has" : "Get") : (CountOnly ? "Count" : "Range")) << '(';
         DumpKeyRange(out, Key, RangeEnd);
         if (KeyRevision)
             out << ",revision=" << KeyRevision;
@@ -87,10 +87,10 @@ struct TRange : public TOperation {
             out << ",max_mod_rev=" << MaxModificateRevision;
         if (const auto sort = SortOrder)
             out << ",by " << Fields[SortTarget]  << ' ' << (*sort ? "asc" : "desc");
-        if (CountOnly)
-            out << ",count";
         if (KeysOnly)
             out << ",keys";
+        if (Serializable)
+            out << ",serializable";
         if (Limit)
             out << ",limit=" << Limit;
         out << ')';
@@ -109,6 +109,7 @@ struct TRange : public TOperation {
         MinModificateRevision = rec.min_mod_revision();
         MaxModificateRevision = rec.max_mod_revision();
         SortTarget = rec.sort_target();
+        Serializable = rec.serializable();
         switch (rec.sort_order()) {
             case etcdserverpb::RangeRequest_SortOrder_ASCEND: SortOrder = true; break;
             case etcdserverpb::RangeRequest_SortOrder_DESCEND: SortOrder = false; break;
@@ -273,7 +274,9 @@ struct TPut : public TOperation {
         sql << '\t' << "`version` + 1L as `version`," << std::endl;
         sql << '\t' << "nvl(" << valueParamName << ",`value`) as `value`," << std::endl;
         sql << '\t' << "nvl(" << leaseParamName << ",`lease`) as `lease`" << std::endl;
-        sql << '\t' << "from (select * from";
+        sql << '\t' << "from ";
+        if (!txnFilter.empty())
+            sql << "(select * from ";
 
         const bool update = IgnoreValue || IgnoreLease;
         if (update)
@@ -282,8 +285,8 @@ struct TPut : public TOperation {
             sql << "(select * from " << oldResultSetName <<" union all select * from as_table([<|`key`:" << keyParamName << ", `created`:0L, `modified`: 0L, `version`:0L, `value`:'', `lease`:0L|>]) order by `created` desc limit 1)";
 
         if (!txnFilter.empty())
-            sql << " where " << txnFilter;
-        sql << ')' << ';' << std::endl;
+            sql << " where " << txnFilter << ')';
+        sql << ';' << std::endl;
 
         sql << "insert into `verhaal` select * from " << newResultSetName << ';' << std::endl;
         sql << (update ? "update `huidig` on" : "upsert into `huidig`") << " select * from " << newResultSetName << ';' << std::endl;
@@ -659,16 +662,6 @@ struct TTxn : public TOperation {
             sql << "select true;" << std::endl;
             make(Success, paramsCounter, resultsCounter, keyFilter, keyParamName, txnFilter);
         } else {
-/*          std::ostringstream where;
-
-            thenWhere << keyFilter;
-            elseWhere << keyFilter;
-
-            if (!def) {
-                thenWhere << " and (" << thenFilter.view() << ')';
-                elseWhere << " and (" << elseFilter.view() << ')';
-            }
-*/
             std::ostringstream thenExtra, elseExtra;
             if (!txnFilter.empty()) {
                 thenExtra << txnFilter << " and ";
@@ -679,7 +672,7 @@ struct TTxn : public TOperation {
 
             sql << "select nvl(bool_and(`cmp`), " << (def ? "true" : "false") << ") from (select " << (def ? '0' : '1') << "UL = count(*) as `cmp` from (";
             MakeSlice(keyFilter, sql, params, paramsCounter);
-            sql << ") where " <<  thenFilter.view() << " group by `key`);" << std::endl;
+            sql << ") where " << (def ? elseFilter : thenFilter).view() << " group by `key`);" << std::endl;
 
             make(Success, paramsCounter, resultsCounter, keyFilter, keyParamName, thenExtra.view());
             make(Failure, paramsCounter, resultsCounter, keyFilter, keyParamName, elseExtra.view());
@@ -741,23 +734,23 @@ struct TTxn : public TOperation {
             sql << "select * from " << cmpResultSetName << ';' << std::endl;
 
 
-            const auto& scalarBoolOneName = GetNameWithIndex("One", resultsCounter);
-            const auto& scalarBoolTwoName = GetNameWithIndex("Two", resultsCounter);
+            const auto& scalarSuccessName = GetNameWithIndex("Success", resultsCounter);
+            const auto& scalarFailureName = GetNameWithIndex("Failure", resultsCounter);
 
             if (txnFilter.empty()) {
                 if (!Success.empty())
-                    sql << scalarBoolOneName << " = select " << cmpResultSetName << ';' << std::endl;
+                    sql << scalarSuccessName << " = select " << cmpResultSetName << ';' << std::endl;
                 if (!Failure.empty())
-                    sql << scalarBoolTwoName << " = select not " << cmpResultSetName << ';' << std::endl;
+                    sql << scalarFailureName << " = select not " << cmpResultSetName << ';' << std::endl;
             } else {
                 if (!Success.empty())
-                    sql << scalarBoolOneName << " = select " << txnFilter << " and " << cmpResultSetName << ';' << std::endl;
+                    sql << scalarSuccessName << " = select " << txnFilter << " and " << cmpResultSetName << ';' << std::endl;
                 if (!Failure.empty())
-                    sql << scalarBoolTwoName << " = select " << txnFilter << " and not " << cmpResultSetName << ';' << std::endl;
+                    sql << scalarFailureName << " = select " << txnFilter << " and not " << cmpResultSetName << ';' << std::endl;
             }
 
-            make(Success, paramsCounter, resultsCounter, scalarBoolOneName);
-            make(Failure, paramsCounter, resultsCounter, scalarBoolTwoName);
+            make(Success, paramsCounter, resultsCounter, scalarSuccessName);
+            make(Failure, paramsCounter, resultsCounter, scalarFailureName);
         }
     }
 
@@ -1021,7 +1014,7 @@ private:
         TTxn::TKeysSet keys;
         Txn.GetKeys(keys);
         size_t resultsCounter = 0U, paramsCounter = 0U;
-        if (false && keys.size() < 2U && !Txn.Compares.empty()) {
+        if (keys.size() < 2U && !Txn.Compares.empty()) {
             std::ostringstream where;
             where << " where ";
             const auto& keyParamName = MakeSimplePredicate(keys.cbegin()->first, keys.cbegin()->second, where, params);

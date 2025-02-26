@@ -552,6 +552,58 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
          });
     }
 
+    Y_UNIT_TEST(TxnWithoutCompres) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            Put("kk0", "vv0", etcd);
+            Put("kk1", "vv1", etcd);
+            Put("kk2", "vv2", etcd);
+            Put("kk3", "vv3", etcd);
+
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                const auto put1 = txnRequest.add_success()->mutable_request_put();
+                put1->set_key("kk5");
+                put1->set_value("vv5");
+
+                const auto del = txnRequest.add_success()->mutable_request_delete_range();
+                del->set_key("kk1");
+                del->set_range_end("kk3");
+
+                const auto put2 = txnRequest.add_success()->mutable_request_put();
+                put2->set_key("kk4");
+                put2->set_value("vv4");
+
+                etcdserverpb::TxnResponse txnResponse;
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
+
+                UNIT_ASSERT(txnResponse.succeeded());
+                UNIT_ASSERT_VALUES_EQUAL(txnResponse.responses(1).response_delete_range().deleted(), 2U);
+            }
+
+            {
+                grpc::ClientContext readRangeCtx;
+                etcdserverpb::RangeRequest rangeRequest;
+                rangeRequest.set_key("kk");
+                rangeRequest.set_range_end("kl");
+                rangeRequest.set_sort_target(etcdserverpb::RangeRequest_SortTarget_KEY);
+                rangeRequest.set_sort_order(etcdserverpb::RangeRequest_SortOrder_ASCEND);
+                rangeRequest.set_keys_only(true);
+                etcdserverpb::RangeResponse rangeResponse;
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
+
+                UNIT_ASSERT(!rangeResponse.more());
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 4LL);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 4U);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "kk0");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).key(), "kk3");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).key(), "kk4");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(3).key(), "kk5");
+            }
+         });
+    }
+
     Y_UNIT_TEST(OptimisticCreate) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
             const auto key = "new_key"sv;

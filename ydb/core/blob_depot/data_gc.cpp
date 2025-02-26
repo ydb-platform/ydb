@@ -1,5 +1,6 @@
 #include "data.h"
 #include "schema.h"
+#include "garbage_collection.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -139,6 +140,25 @@ namespace NKikimr::NBlobDepot {
 
     void TData::ExecuteHardGC(ui8 channel, ui32 groupId, TGenStep hardGenStep) {
         Self->Execute(std::make_unique<TTxHardGC>(Self, channel, groupId, hardGenStep));
+    }
+
+    std::optional<TString> TData::CheckKeyAgainstBarrier(const TKey& key) {
+        const auto& v = key.AsVariant();
+        if (const auto *id = std::get_if<TLogoBlobID>(&v)) {
+            bool underSoft, underHard;
+            Self->BarrierServer->GetBlobBarrierRelation(*id, &underSoft, &underHard);
+            if (underHard) {
+                return TStringBuilder() << "under hard barrier# " << Self->BarrierServer->ToStringBarrier(
+                    id->TabletID(), id->Channel(), true);
+            } else if (underSoft) {
+                const TData::TValue *value = Self->Data->FindKey(key);
+                if (!value || value->KeepState != NKikimrBlobDepot::EKeepState::Keep) {
+                    return TStringBuilder() << "under soft barrier# " << Self->BarrierServer->ToStringBarrier(
+                        id->TabletID(), id->Channel(), false);
+                }
+            }
+        }
+        return std::nullopt;
     }
 
 } // NKikimr::NBlobDepot

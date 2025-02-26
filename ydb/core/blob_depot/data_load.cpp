@@ -111,6 +111,23 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    template<typename TRecord>
+    bool TData::LoadMissingKeys(const TRecord& record, NTabletFlatExecutor::TTransactionContext& txc) {
+        if (IsLoaded()) {
+            return true;
+        }
+        for (const auto& item : record.GetItems()) {
+            auto key = TKey::FromBinaryKey(item.GetKey(), Self->Config);
+            if (!EnsureKeyLoaded(key, txc)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    template bool TData::LoadMissingKeys(const NKikimrBlobDepot::TEvCommitBlobSeq& record, NTabletFlatExecutor::TTransactionContext& txc);
+    template bool TData::LoadMissingKeys(const NKikimrBlobDepot::TEvPrepareWriteS3& record, NTabletFlatExecutor::TTransactionContext& txc);
+
     void TBlobDepot::StartDataLoad() {
         Data->StartLoad();
     }

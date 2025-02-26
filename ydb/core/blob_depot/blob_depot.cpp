@@ -3,6 +3,7 @@
 #include "blocks.h"
 #include "garbage_collection.h"
 #include "data.h"
+#include "s3.h"
 #include "data_uncertain.h"
 #include "space_monitor.h"
 
@@ -21,6 +22,7 @@ namespace NKikimr::NBlobDepot {
         , BlocksManager(new TBlocksManager(this))
         , BarrierServer(new TBarrierServer(this))
         , Data(new TData(this))
+        , S3Manager(new TS3Manager(this))
         , SpaceMonitor(new TSpaceMonitor(this))
         , JsonHandler(std::bind(&TBlobDepot::RenderJson, this, std::placeholders::_1), TEvPrivate::EvJsonTimer, TEvPrivate::EvJsonUpdate)
     {}
@@ -39,6 +41,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvBlobDepot::TEvQueryBlocks, BlocksManager->Handle);
             hFunc(TEvBlobDepot::TEvCollectGarbage, BarrierServer->Handle);
             hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
+            hFunc(TEvBlobDepot::TEvPrepareWriteS3, Handle);
 
             default:
                 Y_ABORT();
@@ -110,6 +113,7 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvBlobDepot::EvQueryBlocks, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvPushNotifyResult, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvCollectGarbage, handleFromAgentPipe);
+                fFunc(TEvBlobDepot::EvPrepareWriteS3, handleFromAgentPipe);
 
                 fFunc(TEvPrivate::EvDeliver, handleDelivery);
 
@@ -144,11 +148,13 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
-        for (const TActorId& actorId : {GroupAssimilatorId}) {
+        for (const TActorId& actorId : {GroupAssimilatorId, S3Manager->GetWrapperId()}) {
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }
         }
+
+        S3Manager->TerminateAllUploaders();
 
         TActor::PassAway();
     }

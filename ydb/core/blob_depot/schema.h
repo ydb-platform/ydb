@@ -106,13 +106,24 @@ namespace NKikimr::NBlobDepot {
             using TColumns = TableColumns<Channel, GroupId, IssuedGenStep, ConfirmedGenStep>;
         };
 
+        struct TrashS3 : Table<7> {
+            struct Generation : Column<1, NScheme::NTypeIds::Uint32> {};
+            struct KeyId : Column<2, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<Generation, KeyId>;
+            using TColumns = TableColumns<Generation, KeyId>;
+
+            using Precharge = NoAutoPrecharge;
+        };
+
         using TTables = SchemaTables<
             Config,
             Blocks,
             Barriers,
             Data,
             Trash,
-            GC
+            GC,
+            TrashS3
         >;
 
         using TSettings = SchemaSettings<

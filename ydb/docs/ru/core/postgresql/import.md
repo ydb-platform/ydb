@@ -1,5 +1,7 @@
 # Импорт данных из PostgreSQL
 
+{% include [./_includes/alert.md](./_includes/alert_preview.md) %}
+
 Данные из PostgreSQL в {{ ydb-name }} можно импортировать различными способами:
 
 - С помощью [pg-dump](#pg-dump).
@@ -78,10 +80,12 @@
 1. Поднять докер-контейнеры с PostgreSQL и {{ ydb-short-name }}:
 
     ```bash
-    docker run -d --rm -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 \
-        -e POSTGRES_DB=local --name postgres postgres:14
+    docker run --name my_postgres_container \
+        -e POSTGRES_USER=pgroot -e POSTGRES_PASSWORD=1234 \
+        -e POSTGRES_DB=local \
+        -p 5433:5433 -d postgres:14 -c 'port=5433'
     docker run --name ydb-postgres -d --pull always -p 5432:5432 -p 8765:8765 \
-        -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 \
+        -e POSTGRES_USER=ydbroot -e POSTGRES_PASSWORD=4321 \
         -e YDB_FEATURE_FLAGS=enable_temp_tables,enable_table_pg_types \
         -e YDB_USE_IN_MEMORY_PDISKS=true \
         ghcr.io/ydb-platform/local-ydb:latest
@@ -90,18 +94,18 @@
 2. Сгенерировать данные через [pgbench](https://www.postgresql.org/docs/current/pgbench.html):
 
     ```bash
-    docker exec postgres pgbench postgres://root:1234@localhost/local -i
+    docker exec my_postgres_container pgbench postgres://pgroot:1234@localhost:5433/local -i
     ```
 
 3. Сделать дамп базы через [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html):
 
     ```bash
-    docker exec postgres pg_dump postgres://root:1234@localhost/local --inserts \
+    docker exec my_postgres_container pg_dump postgres://pgroot:1234@localhost:5433/local --inserts \
         --column-inserts --encoding=utf_8 --rows-per-insert=1000 > dump.sql
     ```
 
 4. Загрузить дамп базы в {{ ydb-short-name }}:
 
     ```bash
-    ydb tools pg-convert --ignore-unsupported -i dump.sql | psql postgresql://root:1234@localhost/local
+    ydb tools pg-convert --ignore-unsupported -i dump.sql | psql postgresql://ydbroot:4321@localhost:5432/local
     ```

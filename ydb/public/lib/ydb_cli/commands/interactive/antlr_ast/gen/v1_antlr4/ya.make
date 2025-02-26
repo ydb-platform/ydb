@@ -25,7 +25,7 @@ COPY_FILE(
 RUN_ANTLR4(
     ${SQL_GRAMMAR}
     -no-listener
-    -package NALPDefaultAntlr4
+    -package NALADefaultAntlr4
     -lib .
     IN 
         ${SQL_GRAMMAR} 

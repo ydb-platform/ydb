@@ -7,7 +7,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Parser.h>
 
-#define RULE_(mode, name) NALP##mode##Antlr4::SQLv1Antlr4Parser::Rule##name
+#define RULE_(mode, name) NALA##mode##Antlr4::SQLv1Antlr4Parser::Rule##name
 
 #define RULE(name) RULE_(Default, name)
 
@@ -68,9 +68,9 @@ namespace NSQLComplete {
     private:
         static const antlr4::dfa::Vocabulary* GetVocabulary(bool isAnsiLexer) {
             if (isAnsiLexer) { // Taking a reference is okay as vocabulary storage is static
-                return &NALPAnsiAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
+                return &NALAAnsiAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
             }
-            return &NALPDefaultAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
+            return &NALADefaultAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
         }
 
         std::unordered_set<TTokenId> ComputeAllTokens() {

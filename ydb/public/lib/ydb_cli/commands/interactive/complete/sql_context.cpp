@@ -17,12 +17,12 @@ namespace NSQLComplete {
     class TSpecializedSqlContextInference: public ISqlContextInference {
     private:
         using TDefaultYQLGrammar = TAntlrGrammar<
-            NALPDefaultAntlr4::SQLv1Antlr4Lexer,
-            NALPDefaultAntlr4::SQLv1Antlr4Parser>;
+            NALADefaultAntlr4::SQLv1Antlr4Lexer,
+            NALADefaultAntlr4::SQLv1Antlr4Parser>;
 
         using TAnsiYQLGrammar = TAntlrGrammar<
-            NALPAnsiAntlr4::SQLv1Antlr4Lexer,
-            NALPAnsiAntlr4::SQLv1Antlr4Parser>;
+            NALAAnsiAntlr4::SQLv1Antlr4Lexer,
+            NALAAnsiAntlr4::SQLv1Antlr4Parser>;
 
         using G = std::conditional_t<
             IsAnsiLexer,

@@ -31,6 +31,7 @@ SRCS(
     bootstrapper.proto
     change_exchange.proto
     channel_purpose.proto
+    checksum.proto
     cms.proto
     compaction.proto
     compile_service_config.proto

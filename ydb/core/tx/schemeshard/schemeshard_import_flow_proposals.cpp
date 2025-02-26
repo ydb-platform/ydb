@@ -171,8 +171,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
                 restoreSettings.SetRegion(region);
             }
 
-            if (item.Metadata.HasVersion()) {
-                task.SetValidateChecksums(item.Metadata.GetVersion() > 0 && !importInfo->Settings.skip_checksum_validation());
+            if (!item.Metadata.HasVersion() || item.Metadata.GetVersion() > 0) {
+                task.SetValidateChecksums(!importInfo->Settings.skip_checksum_validation());
             }
         }
         break;

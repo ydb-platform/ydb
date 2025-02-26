@@ -80,7 +80,7 @@ public:
                     VDiskIncarnationGuid,
                     GInfo
                 );
-                SendVDiskResponse(TActivationContext::AsActorContext(), SenderId, response.release(), Request->Cookie, VCtx);
+                SendVDiskResponse(TActivationContext::AsActorContext(), SenderId, response.release(), Request->Cookie, VCtx, {});
                 return PassAway();
             }
         }

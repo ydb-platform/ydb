@@ -80,4 +80,28 @@ void TDummyPqGateway::UpdateClusterConfigs(
     Y_UNUSED(secure);
 }
 
+void TDummyPqGateway::UpdateClusterConfigs(const TPqGatewayConfigPtr& config) {
+     Y_UNUSED(config);
+}
+
+NYdb::NTopic::TTopicClientSettings TDummyPqGateway::GetTopicClientSettings() const {
+    return NYdb::NTopic::TTopicClientSettings();
+}
+
+class TPqFileGatewayFactory : public IPqGatewayFactory {
+public:
+    TPqFileGatewayFactory(const TDummyPqGateway::TPtr pqFileGateway)
+        : PqFileGateway(pqFileGateway) {}
+
+    IPqGateway::TPtr CreatePqGateway() override {
+        return PqFileGateway;
+    }
+private:
+    const TDummyPqGateway::TPtr PqFileGateway;
+};
+
+IPqGatewayFactory::TPtr CreatePqFileGatewayFactory(const TDummyPqGateway::TPtr pqFileGateway) {
+    return MakeIntrusive<TPqFileGatewayFactory>(pqFileGateway);
+}
+
 } // namespace NYql

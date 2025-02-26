@@ -3,6 +3,8 @@
 
 #include <ydb/core/fq/libs/control_plane_storage/internal/utils.h>
 
+#include <ranges>
+
 namespace NFq {
 
 class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryControlPlaneStorageActor>,
@@ -396,9 +398,9 @@ private:
             FillConnectionsAndBindings(
                 queryInternal,
                 queryType,
-                GetEntities(Connections),
-                GetEntitiesWithVisibilityPriority(Connections),
-                GetEntitiesWithVisibilityPriority(Bindings)
+                GetEntities(Connections, ctx.Scope, ctx.User),
+                GetEntitiesWithVisibilityPriority(Connections, ctx.Scope, ctx.User),
+                GetEntitiesWithVisibilityPriority(Bindings, ctx.Scope, ctx.User)
             );
         }
         if (queryInternal.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
@@ -522,11 +524,12 @@ private:
 
     HANDLE_CPS_REQUEST(TEvCreateConnectionRequest, TEvCreateConnectionResponse, CREATE_CONNECTION) {
         const auto& content = ctx.Request.content();
+        const auto visibility = content.acl().visibility();
         const auto& name = content.name();
-        if (!CheckConnectionOrBindingName(Connections, ctx.Scope, name)) {
+        if (!CheckConnectionOrBindingName(Connections, ctx.Scope, ctx.User, visibility, name)) {
             return ctx.Fail("check name", {NYql::TIssue("Connection with the same name already exists. Please choose another name")});
         }
-        if (!CheckConnectionOrBindingName(Bindings, ctx.Scope, name)) {
+        if (!CheckConnectionOrBindingName(Bindings, ctx.Scope, ctx.User, visibility, name)) {
             return ctx.Fail("check name", {NYql::TIssue("Binding with the same name already exists. Please choose another name")});
         }
         if (GetNumberEntitiesByScope(Connections, ctx.Scope) >= Config->Proto.GetMaxCountConnections()) {
@@ -581,11 +584,12 @@ private:
 
     HANDLE_CPS_REQUEST(TEvCreateBindingRequest, TEvCreateBindingResponse, CREATE_BINDING) {
         const auto& content = ctx.Request.content();
+        const auto visibility = content.acl().visibility();
         const auto& name = content.name();
-        if (!CheckConnectionOrBindingName(Connections, ctx.Scope, name)) {
+        if (!CheckConnectionOrBindingName(Connections, ctx.Scope, ctx.User, visibility, name)) {
             return ctx.Fail("check name", {NYql::TIssue("Connection with the same name already exists. Please choose another name")});
         }
-        if (!CheckConnectionOrBindingName(Bindings, ctx.Scope, name)) {
+        if (!CheckConnectionOrBindingName(Bindings, ctx.Scope, ctx.User, visibility, name)) {
             return ctx.Fail("check name", {NYql::TIssue("Binding with the same name already exists. Please choose another name")});
         }
         if (GetNumberEntitiesByScope(Bindings, ctx.Scope) >= Config->Proto.GetMaxCountBindings()) {
@@ -788,30 +792,46 @@ private:
         return table.Values.emplace(key, value).second;
     }
 
-    template <typename TTable>
-    TVector<typename TTable::TEntity> GetEntities(const TTable& table) const {
-        TVector<typename TTable::TEntity> entities;
-        for (const auto& [_, value] : table.Values) {
-            const auto& entity = value.GetEntity();
-            const auto visibility = entity.content().acl().visibility();
-            if (Config->Proto.GetIgnorePrivateSources() && visibility == FederatedQuery::Acl::PRIVATE) {
-                continue;
+    template <typename TValue>
+    auto GetScopeRange(const TMap<TScopeKey, TValue>& table, const TString& scope) const {
+        const auto startIt = table.lower_bound({scope, ""});
+
+        std::ranges::subrange range(startIt, table.end());
+        return range | std::views::take_while([scope](auto element) {
+            return element.first.Scope == scope;
+        });
+    }
+
+    template <typename TValue>
+    auto GetVisibleRange(const TMap<TScopeKey, TValue>& table, const TString& scope, const TString& user, std::optional<FederatedQuery::Acl::Visibility> visibility = std::nullopt) const {
+        auto range = GetScopeRange(table, scope);
+        return range | std::views::filter([user, visibility, ignorePrivate = Config->Proto.GetIgnorePrivateSources()](const auto& element) {
+            const auto entityVisibility = element.second.GetEntity().content().acl().visibility();
+            if (ignorePrivate && entityVisibility == FederatedQuery::Acl::PRIVATE) {
+                return false;
             }
-            entities.emplace_back(entity);
-        }
-        return entities;
+            if (visibility && entityVisibility != *visibility) {
+                return false;
+            }
+            return entityVisibility == FederatedQuery::Acl::SCOPE || element.second.User == user;
+        });
     }
 
     template <typename TTable>
-    THashMap<TString, typename TTable::TEntity> GetEntitiesWithVisibilityPriority(const TTable& table) const {
+    TVector<typename TTable::TEntity> GetEntities(const TTable& table, const TString& scope, const TString& user) const {
+        auto range = GetVisibleRange(table.Values, scope, user) | std::views::transform([](const auto& element) {
+            return element.second.GetEntity();
+        }) | std::views::common;
+        return {range.begin(), range.end()};
+    }
+
+    template <typename TTable>
+    THashMap<TString, typename TTable::TEntity> GetEntitiesWithVisibilityPriority(const TTable& table, const TString& scope, const TString& user) const {
         THashMap<TString, typename TTable::TEntity> entities;
-        for (const auto& [_, value] : table.Values) {
+        for (const auto& [_, value] : GetVisibleRange(table.Values, scope, user)) {
             const auto& entity = value.GetEntity();
             const auto visibility = entity.content().acl().visibility();
-            if (Config->Proto.GetIgnorePrivateSources() && visibility == FederatedQuery::Acl::PRIVATE) {
-                continue;
-            }
-            const TString name = entity.content().name();
+            const TString& name = entity.content().name();
             if (auto it = entities.find(name); it != entities.end()) {
                 if (visibility == FederatedQuery::Acl::PRIVATE) {
                     it->second = entity;
@@ -824,10 +844,9 @@ private:
     }
 
     template <typename TTable>
-    static bool CheckConnectionOrBindingName(const TTable& table, const TString& scope, const TString& name) {
-        for (const auto& [key, value] : table.Values) {
-            const auto& entity = value.GetEntity();
-            if (key.Scope == scope && entity.content().name() == name) {
+    bool CheckConnectionOrBindingName(const TTable& table, const TString& scope, const TString& user, FederatedQuery::Acl::Visibility visibility, const TString& name) const {
+        for (const auto& [_, value] : GetVisibleRange(table.Values, scope, user, visibility)) {
+            if (value.GetEntity().content().name() == name) {
                 return false;
             }
         }
@@ -835,14 +854,9 @@ private:
     }
 
     template <typename TTable>
-    static ui64 GetNumberEntitiesByScope(const TTable& table, const TString& scope) {
-        ui64 result = 0;
-        for (const auto& [key, _] : table.Values) {
-            if (key.Scope == scope) {
-                result++;
-            }
-        }
-        return result;
+    ui64 GetNumberEntitiesByScope(const TTable& table, const TString& scope) const {
+        auto range = GetScopeRange(table.Values, scope) | std::views::common;
+        return std::distance(range.begin(), range.end());
     }
 
 private:

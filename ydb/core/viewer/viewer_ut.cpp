@@ -20,11 +20,11 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/tenant_runtime.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/core/testlib/test_pq_client.h>
 
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/actors/core/interconnect.h>
-
 #include <util/string/builder.h>
 #include <regex>
 
@@ -2117,5 +2117,77 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_BAD_REQUEST, statusCode << ": " << response);
         UNIT_ASSERT_C(response.StartsWith("Conversion error"), response);
     }
+
+
+    Y_UNIT_TEST(GetTopicDataTest) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+
+        auto settings = NKikimr::NPersQueueTests::PQSettings(port, 1);
+        settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetMonitoringPortOffset(monPort, true);
+
+        auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
+        TServer server{settings};
+        server.EnableGRpc(grpcSettings);
+
+        auto client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        client->InitRoot();
+        client->InitSourceIds();
+        client->CheckClustersList(server.GetRuntime());
+        NYdb::TDriverConfig driverCfg;
+        TString topicPath = "/Root/topic1";
+        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
+                 .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+
+        std::shared_ptr<NYdb::TDriver> ydbDriver(new NYdb::TDriver(driverCfg));
+        auto topicClient = NYdb::NTopic::TTopicClient(*ydbDriver);
+
+        auto res = topicClient.CreateTopic(topicPath).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        NYdb::NTopic::TWriteSessionSettings wsSettings;
+        wsSettings.Path(topicPath);
+        wsSettings.ProducerId("12345");
+        Cerr << "Write data\n";
+        auto writer = topicClient.CreateSimpleBlockingWriteSession(wsSettings);
+        for (auto i = 0u; i < 20; ++i) {
+            writer->Write(TStringBuilder() << "Message " << i);
+        }
+        Cerr << "Close writer\n";
+        writer->Close();
+        Cerr << "Write data - done\n";
+
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+        TStringStream responseStream;
+        NHttp::TUrlParameters params{"/viewer/get_topic_data"};
+        params["topic_path"] = topicPath;
+        params["database"] = "Root";
+
+
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Accept"] = "application/json";
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.HttpHeaders.AddHeader("Accept", "application/json");
+
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(params.Render(), &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        NJson::TJsonReaderConfig jsonCfg;
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+    }
+
 
 }

@@ -86,12 +86,6 @@ sudo usermod -aG disk ydb
     curl -L {{ ydb-binaries-url }}/{{ ydb-stable-binary-archive }} | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
     ```
 
-1. Создайте директории для размещения программного обеспечения {{ ydb-short-name }}:
-
-    ```bash
-    sudo mkdir -p /opt/ydb /opt/ydb/cfg
-    ```
-
 1. Скопируйте исполняемый файл и библиотеки в соответствующие директории:
 
     ```bash
@@ -230,7 +224,7 @@ grpc_config:
   - legacy
 ```
 
-Сохраните конфигурационный файл {{ ydb-short-name }} под именем `/opt/ydb/cfg/config.yaml` на каждом сервере кластера.
+Сохраните конфигурационный файл {{ ydb-short-name }} под именем `/tmp/config.yaml` на каждом сервере кластера.
 
 Более подробная информация по созданию файла конфигурации приведена в разделе [{#T}](../../../reference/configuration/index.md).
 
@@ -250,10 +244,11 @@ sudo chmod 700 /opt/ydb/certs
 
 ## Подготовьте конфигурацию на статических узлах кластера
 
-Создайте на каждом статическом узле отдельную директорию для работы кластера с конфигурацией. В случае поднятия нескольких узлов на одной машине, используйте одну и ту же директорию. Выполнив специальную команду на каждом из узлов, инициализируйте директорию файлом конфигурации.
+Создайте на каждой машине пустую директорию для работы кластера с конфигурацией. Если на одной машине запускается несколько узлов, используйте одну и ту же директорию. Выполнив специальную команду на каждой машине, инициализируйте директорию файлом конфигурации.
 
 ```bash
 sudo mkdir -p /opt/ydb/cfg
+sudo chown -R ydb:ydb /opt/ydb/cfg
 ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.yaml
 ```
 
@@ -415,6 +410,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.y
 
 ```bash
 sudo mkdir -p /opt/ydb/cfg
+sudo chown -R ydb:ydb /opt/ydb/cfg
 ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <grpcs://<node.ydb.tech>:2135>
 ```
 

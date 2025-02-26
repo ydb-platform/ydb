@@ -1942,7 +1942,7 @@ struct Schema : NIceDb::Schema {
 
     struct DataErasureGenerations : Table<115> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Status : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
         struct StartTime : Column<3, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<Generation>;
@@ -1956,7 +1956,7 @@ struct Schema : NIceDb::Schema {
     struct WaitingDataErasureTenants : Table<116> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1968,7 +1968,7 @@ struct Schema : NIceDb::Schema {
 
     struct TenantDataErasureGenerations : Table<117> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Status : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
 
         using TKey = TableKey<Generation>;
         using TColumns = TableColumns<
@@ -1980,7 +1980,7 @@ struct Schema : NIceDb::Schema {
     struct WaitingDataErasureShards : Table<118> {
         struct OwnerShardIdx :  Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalShardIdx :  Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
-        struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
 
         using TKey = TableKey<OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<

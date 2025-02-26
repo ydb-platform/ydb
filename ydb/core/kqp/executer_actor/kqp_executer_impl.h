@@ -291,8 +291,8 @@ protected:
             return Proto.GetChannelData().GetData().GetRaw().size() + Payload.size();
         }
 
-        ui32 RowCount() const {
-            return Proto.GetChannelData().GetData().GetRows();
+        ui32 ChunkCount() const {
+            return Proto.GetChannelData().GetData().GetChunks();
         }
     };
 
@@ -346,11 +346,11 @@ protected:
                 ackEv->Record.SetChannelId(channel.Id);
                 ackEv->Record.SetFreeSpace(50_MB);
                 this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
-                ui64 rowCount = batch.RowCount();
+                ui64 chunkCount = batch.ChunkCount();
                 ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
                 txResult.HasTrailingResult = true;
                 LOG_D("staging TEvStreamData to " << Target << ", seqNo: " << computeData.Proto.GetSeqNo()
-                    << ", nRows: " << rowCount);
+                    << ", nRows: " << chunkCount); // FIXME with RowCount
             }
 
             return;
@@ -366,7 +366,7 @@ protected:
         YQL_ENSURE(Stats);
 
         Stats->ResultBytes += batch.Size();
-        Stats->ResultRows += batch.RowCount();
+        Stats->ResultRows += batch.ChunkCount(); // FIXME with RowCount
 
         LOG_T("Got result, channelId: " << channel.Id << ", shardId: " << task.Meta.ShardId
             << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender

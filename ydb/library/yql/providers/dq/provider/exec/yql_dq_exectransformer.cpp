@@ -171,7 +171,7 @@ public:
                     NDq::TDqSerializedBatch data;
                     while (runner->GetOutputChannel(0)->Pop(data)) {
                         totalSize += data.Size();
-                        totalRows += data.RowCount();
+                        totalRows += data.ChunkCount(); // FIXME with RowCount
                         rows.push_back(std::move(data));
                         if (!fillSettings.Discard) {
                             if (fillSettings.AllResultsBytesLimit && totalSize >= *fillSettings.AllResultsBytesLimit) {
@@ -1644,7 +1644,7 @@ private:
     }
 
     IDqGateway::TDqProgressWriter MakeDqProgressWriter(const TPublicIds::TPtr& publicIds) const {
-        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<IDqGateway::TProgressWriterState>()](IDqGateway::TProgressWriterState state) 
+        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<IDqGateway::TProgressWriterState>()](IDqGateway::TProgressWriterState state)
         {
             if (*current != state) {
                 for (const auto& publicId : publicIds->AllPublicIds) {

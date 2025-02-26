@@ -13,6 +13,7 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_query_stats.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_common.proto";
 
 message CreateSessionRequest {
 }
@@ -82,6 +83,9 @@ message TransactionControl {
     }
 
     bool commit_tx = 10;
+
+    // If set the timestamp will be returned along with ExecuteQueryResponsePart
+    bool with_tx_timestamp = 11;
 }
 
 message BeginTransactionRequest {
@@ -93,6 +97,8 @@ message BeginTransactionRequest {
 message TransactionMeta {
     // Transaction identifier
     string id = 1 [(Ydb.length).le = 1024];
+    // Optional timestamp that represents snapshot acquired to start transaction
+    VirtualTimestamp snapshot_timestamp = 2;
 }
 
 message BeginTransactionResponse {
@@ -112,6 +118,9 @@ message CommitTransactionRequest {
 message CommitTransactionResponse {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
+
+    // Optional timestamp that corresponds to the commit transaction
+    VirtualTimestamp commit_timestamp = 3;
 }
 
 message RollbackTransactionRequest {
@@ -200,6 +209,9 @@ message ExecuteQueryResponsePart {
     Ydb.TableStats.QueryStats exec_stats = 5;
 
     TransactionMeta tx_meta = 6;
+
+    // Optional timestamp that corresponds to the commit transaction
+    VirtualTimestamp commit_timestamp = 7;
 }
 
 message ExecuteScriptRequest {

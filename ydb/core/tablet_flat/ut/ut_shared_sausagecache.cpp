@@ -221,9 +221,6 @@ Y_UNIT_TEST(Limits_Config) {
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
-    bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
-    ui32 passiveBytes = bTreeIndex ? 131 : 7772;
-
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
@@ -277,7 +274,7 @@ Y_UNIT_TEST(Limits_Config) {
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(1_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 0_MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 0_MB);
 }
 

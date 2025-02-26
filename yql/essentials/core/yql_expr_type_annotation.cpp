@@ -335,21 +335,26 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         } else if (from == EDataSlot::Date && (
                     to == EDataSlot::Date32 ||
                     to == EDataSlot::TzDate ||
+                    to == EDataSlot::TzDate32 ||
                     to == EDataSlot::Datetime ||
                     to == EDataSlot::Timestamp ||
                     to == EDataSlot::TzDatetime ||
                     to == EDataSlot::TzTimestamp ||
                     to == EDataSlot::Datetime64 ||
-                    to == EDataSlot::Timestamp64))
+                    to == EDataSlot::Timestamp64 ||
+                    to == EDataSlot::TzDatetime64 ||
+                    to == EDataSlot::TzTimestamp64))
         {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Datetime && (
                     to == EDataSlot::Datetime64 ||
                     to == EDataSlot::TzDatetime ||
+                    to == EDataSlot::TzDatetime64 ||
                     to == EDataSlot::Timestamp ||
                     to == EDataSlot::TzTimestamp ||
-                    to == EDataSlot::Timestamp64))
+                    to == EDataSlot::Timestamp64 ||
+                    to == EDataSlot::TzTimestamp64))
         {
             allow = true;
             useCast = true;
@@ -365,7 +370,13 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         } else if (from == EDataSlot::Date32 && (to == EDataSlot::Datetime64 || to == EDataSlot::Timestamp64)) {
             allow = true;
             useCast = true;
+        } else if (from == EDataSlot::TzDate32 && (to == EDataSlot::TzDatetime64 || to == EDataSlot::TzTimestamp64)) {
+            allow = true;
+            useCast = true;
         } else if (from == EDataSlot::Datetime64 && (to == EDataSlot::Timestamp64)) {
+            allow = true;
+            useCast = true;
+        } else if (from == EDataSlot::TzDatetime64 && to == EDataSlot::TzTimestamp64) {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Interval && (to == EDataSlot::Interval64)) {

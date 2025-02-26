@@ -368,6 +368,17 @@ namespace NTypeAnnImpl {
                     .Build(), ctx.MakeType<TDataExprType>(EDataSlot::TzTimestamp) };
             }
 
+            if (resType->GetTag() == "DateTime2.TM64") {
+                return { ctx.Builder(input->Pos())
+                    .Callable("Apply")
+                        .Callable(0, "Udf")
+                            .Atom(0, "DateTime2.MakeTzTimestamp64", TNodeFlags::Default)
+                        .Seal()
+                        .Add(1, input)
+                    .Seal()
+                    .Build(), ctx.MakeType<TDataExprType>(EDataSlot::TzTimestamp64) };
+            }
+
             if (resType->GetTag() == "JsonNode") {
                 return { ctx.Builder(input->Pos())
                     .Callable("Apply")

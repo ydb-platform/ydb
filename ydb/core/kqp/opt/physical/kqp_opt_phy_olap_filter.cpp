@@ -745,7 +745,7 @@ void SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree, TOLAPPredi
 } // anonymous namespace end
 
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    TTypeAnnotationContext& typesCtx)
+    TTypeAnnotationContext& /*typesCtx*/)
 {
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;

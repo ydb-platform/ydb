@@ -322,6 +322,7 @@ private:
             response.Error = {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)};
             LDAP_LOG_D(logErrorMessage);
             NKikimrLdap::MsgFree(searchMessage);
+            searchMessage = nullptr;
             return response;
         }
         const int countEntries = NKikimrLdap::CountEntries(request.Ld, searchMessage);
@@ -337,6 +338,7 @@ private:
             response.Error = {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false};
             response.Status = TEvLdapAuthProvider::EStatus::UNAUTHORIZED;
             NKikimrLdap::MsgFree(searchMessage);
+            searchMessage = nullptr;
             LDAP_LOG_D(logErrorMessage);
             return response;
         }
@@ -359,11 +361,13 @@ private:
         int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, NKikimrLdap::noAttributes, 0, &searchMessage);
         if (!NKikimrLdap::IsSuccess(result)) {
             NKikimrLdap::MsgFree(searchMessage);
+            searchMessage = nullptr;
             return {};
         }
         const int countEntries = NKikimrLdap::CountEntries(ld, searchMessage);
         if (countEntries == 0) {
             NKikimrLdap::MsgFree(searchMessage);
+            searchMessage = nullptr;
             return {};
         }
         std::vector<TString> groups;
@@ -375,6 +379,7 @@ private:
             dn = nullptr;
         }
         NKikimrLdap::MsgFree(searchMessage);
+        searchMessage = nullptr;
         return groups;
     }
 
@@ -406,10 +411,12 @@ private:
             int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, RequestedAttributes, 0, &searchMessage);
             if (!NKikimrLdap::IsSuccess(result)) {
                 NKikimrLdap::MsgFree(searchMessage);
+                searchMessage = nullptr;
                 return;
             }
             if (NKikimrLdap::CountEntries(ld, searchMessage) == 0) {
                 NKikimrLdap::MsgFree(searchMessage);
+                searchMessage = nullptr;
                 return;
             }
             for (LDAPMessage* groupEntry = NKikimrLdap::FirstEntry(ld, searchMessage); groupEntry != nullptr; groupEntry = NKikimrLdap::NextEntry(ld, groupEntry)) {
@@ -432,6 +439,7 @@ private:
                 }
             }
             NKikimrLdap::MsgFree(searchMessage);
+            searchMessage = nullptr;
         }
     }
 

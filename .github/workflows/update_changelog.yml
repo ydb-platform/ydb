@@ -39,7 +39,7 @@ jobs:
           TYPE="${{ github.event.inputs.type }}"
           START="${{ github.event.inputs.start }}"
           BRANCH="${GITHUB_REF_NAME}"
-
+          echo `gh auth status`
           echo "::notice:: branch = ${GITHUB_REF_NAME}, start = $START"
 
           if [ "$TYPE" == "date" ]; then
@@ -82,11 +82,14 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-
+      - name: Debug token
+        run: |
+          echo `gh auth status`
       - name: Update Changelog
         uses: ./.github/actions/update_changelog 
         env:
           YDBOT_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         with:
           pr_data: "${{ needs.gather-prs.outputs.prs }}"
           changelog_path: "${{ github.event.inputs.changelog_path }}"

@@ -164,6 +164,8 @@ class KikimrConfigGenerator(object):
             column_shard_config=None,
             use_config_store=False,
             separate_node_configs=False,
+            default_clusteradmin=None,
+            enable_resource_pools=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -270,6 +272,8 @@ class KikimrConfigGenerator(object):
 
         # for faster shutdown: there is no reason to wait while tablets are drained before whole cluster is stopping
         self.yaml_config["feature_flags"]["enable_drain_on_shutdown"] = False
+        if enable_resource_pools is not None:
+            self.yaml_config["feature_flags"]["enable_resource_pools"] = enable_resource_pools
         for extra_feature_flag in extra_feature_flags:
             self.yaml_config["feature_flags"][extra_feature_flag] = True
         if enable_alter_database_create_hive_first:
@@ -456,6 +460,16 @@ class KikimrConfigGenerator(object):
 
         self.use_config_store = use_config_store
         self.separate_node_configs = separate_node_configs
+
+        self.__default_clusteradmin = default_clusteradmin
+        if self.__default_clusteradmin is not None:
+            security_config = self.yaml_config["domains_config"]["security_config"]
+            security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
+            security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
+
+    @property
+    def default_clusteradmin(self):
+        return self.__default_clusteradmin
 
     @property
     def pdisks_info(self):

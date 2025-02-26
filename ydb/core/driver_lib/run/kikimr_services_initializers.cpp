@@ -949,8 +949,8 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
         nodeWardenConfig->SelfManagementConfig.emplace(Config.GetSelfManagementConfig());
     }
 
-    if (Config.HasConfigStorePath()) {
-        nodeWardenConfig->ConfigStorePath = Config.GetConfigStorePath();
+    if (Config.HasConfigDirPath()) {
+        nodeWardenConfig->ConfigDirPath = Config.GetConfigDirPath();
     }
 
     if (Config.HasStoredConfigYaml()) {

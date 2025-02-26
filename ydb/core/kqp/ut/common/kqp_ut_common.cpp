@@ -1008,6 +1008,8 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
             if (mit != meta.end()) {
                 res.ConsumedRuFromHeader = std::stol(mit->second);
             }
+            UNIT_ASSERT_EQUAL_C(res.ConsumedRuFromHeader, streamPart.GetConsumedRu(),
+                "Request unit values from headers and TStatus are differ");
             break;
         }
 

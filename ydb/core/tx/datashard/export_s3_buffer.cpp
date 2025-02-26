@@ -297,7 +297,7 @@ IEventBase* TS3Buffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& sta
     stats.BytesSent = buffer->Size();
 
     if (Checksum && last) {
-        return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last, Checksum->Serialize());
+        return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last, Checksum->Finalize());
     } else {
         return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last);
     }

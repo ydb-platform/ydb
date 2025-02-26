@@ -21,9 +21,9 @@ struct TCommonHandleClass {
     template <typename TEv>
     TCommonHandleClass(const TEv& ev) {
         if constexpr (THasRecordWithGetHandleClass<TEv>::value) {
-            TCommonHandleClass(ev.Record.GetHandleClass());
+            HandleClass = ev.Record.GetHandleClass();
         } else if constexpr (THasGetHandleClass<TEv>::value) {
-            TCommonHandleClass(ev.GetHandleClass());
+            HandleClass = ev.GetHandleClass();
         }
     }
 

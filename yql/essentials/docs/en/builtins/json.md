@@ -916,7 +916,7 @@ JSON_VALUE(
 
 The `JSON_EXISTS` function checks if a JSON value meets the specified JsonPath.
 
-### Syntax
+#### Syntax
 
 ```yql
 JSON_EXISTS(
@@ -975,7 +975,7 @@ SELECT
 
 The `JSON_VALUE` function retrieves a scalar value from JSON (anything that isn't an array or object).
 
-### Syntax
+#### Syntax
 
 ```yql
 JSON_VALUE(
@@ -1032,7 +1032,7 @@ Errors executing `JSON_VALUE` are as follows:
 
 `The RETURNING` section supports such types as numbers, `Date`, `DateTime`, `Timestamp`, `Utf8`, `String`, and `Bool`.
 
-### Examples
+#### Examples
 
 ```yql
 $json = CAST(@@{
@@ -1079,7 +1079,7 @@ SELECT
 
 The `JSON_QUERY` function lets you retrieve arrays and objects from JSON.
 
-### Syntax
+#### Syntax
 
 ```yql
 JSON_QUERY(

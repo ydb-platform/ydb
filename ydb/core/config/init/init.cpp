@@ -582,8 +582,15 @@ void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErr
     }
 }
 
-void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, const TString& storageYamlConfigFile,
-        bool loadedFromStore, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location) {
+void LoadMainYamlConfig(
+    TConfigRefs refs,
+    const TString& mainYamlConfigFile,
+    const TString& storageYamlConfigFile,
+    bool loadedFromStore,
+    NKikimrConfig::TAppConfig& appConfig,
+    NYamlConfig::IConfigSwissKnife* csk,
+    const NCompat::TSourceLocation location)
+{
     if (!mainYamlConfigFile) {
         return;
     }
@@ -595,9 +602,18 @@ void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, con
     std::optional<TString> storageYamlConfigString;
     if (storageYamlConfigFile) {
         storageYamlConfigString.emplace(protoConfigFileProvider.GetProtoFromFile(storageYamlConfigFile, errorCollector));
+
+        if (csk) {
+            csk->VerifyStorageConfig(*storageYamlConfigString);
+        }
     }
 
     const TString mainYamlConfigString = protoConfigFileProvider.GetProtoFromFile(mainYamlConfigFile, errorCollector);
+
+    if (csk) {
+        csk->VerifyMainConfig(mainYamlConfigString);
+    }
+
     appConfig.SetStartupConfigYaml(mainYamlConfigString);
     if (storageYamlConfigString) {
         appConfig.SetStartupStorageYaml(*storageYamlConfigString);

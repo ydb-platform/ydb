@@ -801,7 +801,7 @@ public:                                                                         
                     case NKikimrProto::ERROR:
                         return ResponsesWithStatusError.GetCounter(handleClass);
                     case NKikimrProto::RACE:
-                        return ResponsesWithStatusRace.GetCounter();
+                        return ResponsesWithStatusRace.GetCounter(handleClass);
                     case NKikimrProto::BLOCKED:
                         return ResponsesWithStatusBlocked.GetCounter(handleClass);
                     case NKikimrProto::OUT_OF_SPACE:
@@ -809,10 +809,10 @@ public:                                                                         
                     case NKikimrProto::DEADLINE:
                         return ResponsesWithStatusDeadline.GetCounter(handleClass);
                     case NKikimrProto::NOTREADY:
-                        return ResponsesWithStatusNotReady.GetCounter();
+                        return ResponsesWithStatusNotReady.GetCounter(handleClass);
                     case NKikimrProto::VDISK_ERROR_STATE:
-                        return ResponsesWithStatusVdiskErrorState.GetCounter();
-                    default: return Undefined.GetCounter();
+                        return ResponsesWithStatusVdiskErrorState.GetCounter(handleClass);
+                    default: return Undefined.GetCounter(handleClass);
                 }
             }
 

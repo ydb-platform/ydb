@@ -125,10 +125,10 @@ class TestAlterCompression(ColumnFamilyTestBase):
         tables_path: str = f"{test_dir}/test_table"
 
         tables_family: list[str] = [
-            self.add_family_in_create(name = 'default', settings = 'COMPRESSION = "off"'),
-            self.add_family_in_create(name = 'family_lz4', settings = 'COMPRESSION = "lz4"'),
-            self.add_family_in_create(name = 'family_zstd', settings = 'COMPRESSION = "zstd"'),
-            self.add_family_in_create(name = 'family_zstd_10', settings = 'COMPRESSION = "zstd", COMPRESSION_LEVEL = 10'),
+            self.add_family_in_create(name='default', settings='COMPRESSION = "off"'),
+            self.add_family_in_create(name='family_lz4', settings='COMPRESSION = "lz4"'),
+            self.add_family_in_create(name='family_zstd', settings='COMPRESSION = "zstd"'),
+            self.add_family_in_create(name='family_zstd_10', settings='COMPRESSION = "zstd", COMPRESSION_LEVEL = 10'),
         ]
 
         self.ydb_client.query(
@@ -155,9 +155,9 @@ class TestAlterCompression(ColumnFamilyTestBase):
                     assert row['value'] == count_row and row['value1'] == count_row
                     count_row += 1
             assert count_row == rows_cont
-        
+
         self.upsert_and_wait_portions(test_table, single_upsert_rows_count, upsert_rows_count)
-        rows_count += single_upsert_rows_count * upsert_rows_count        
+        rows_count += single_upsert_rows_count * upsert_rows_count
         check_data(table=test_table, rows_cont=rows_count)
 
         self.ydb_client.query(f"ALTER TABLE `{tables_path}` ALTER COLUMN `value` SET FAMILY family_lz4")

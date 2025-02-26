@@ -18,7 +18,7 @@ class ColumnTableHelper:
             for row in result.rows:
                 count_row += row["Rows"]
         return count_row
-    
+
     def get_portion_count(self) -> int:
         return self.ydb_client.query(f"select count(*) as Rows from `{self.path}/.sys/primary_index_portion_stats`")[0].rows[0]["Rows"]
 
@@ -44,7 +44,7 @@ class ColumnTableHelper:
             for result_set in results
             for row in result_set.rows
         }
-    
+
     def set_fast_compaction(self):
         self.ydb_client.query(
             f"""

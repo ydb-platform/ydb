@@ -1,5 +1,6 @@
 import ydb
 
+
 class YdbClient:
     def __init__(self, endpoint, database):
         self.driver = ydb.Driver(endpoint=endpoint, database=database, oauth=None)

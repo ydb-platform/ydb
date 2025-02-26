@@ -46,7 +46,7 @@ class TestSchemeLoad(BaseTestSet):
         with allure.step('Drop tables'):
             threads: TestThreads = TestThreads()
             for t in range(threads_count):
-                index:int = threads.append(
+                index: int = threads.append(
                     TestThread(target=self._drop_tables, args=[str(t), int(tables_count / threads_count), ctx])
                 )
                 threads.start_thread(index)

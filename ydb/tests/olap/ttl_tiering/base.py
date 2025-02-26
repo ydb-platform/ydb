@@ -1,7 +1,6 @@
 import yatest.common
 import os
 import time
-import ydb
 import logging
 import boto3
 import requests
@@ -11,7 +10,6 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.olap.common.ydb_client import YdbClient
-from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
 
 logger = logging.getLogger(__name__)
 

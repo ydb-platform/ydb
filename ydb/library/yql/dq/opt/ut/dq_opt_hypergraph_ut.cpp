@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "dq_opt_log.h"
-#include "dq_opt_join.h"
+#include <ydb/library/yql/dq/opt/dq_opt_log.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join.h>
 
 #include <util/string/split.h>
 
@@ -286,6 +286,15 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         return Join(lhsArg, rhsArg, on, EJoinKind::Cross);
     }
 
+    Y_UNIT_TEST(SimpleDimpleJoin) {
+        auto join = Join("A", "B");
+        
+        auto graph = MakeJoinHypergraph<TNodeSet64>(join);
+        Cout << graph.String() << Endl;
+
+        Enumerate(join);
+    }
+
     Y_UNIT_TEST(AnyJoinWithTransitiveClosure) {
         auto root = Join("A", Join("B", Join("C", "D", "C.id=D.id"), "B.id=C.id"), "A.id=B.id");
         std::static_pointer_cast<TJoinOptimizerNode>(root)->LeftAny = true;
@@ -499,20 +508,23 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
 
     Y_UNIT_TEST(JoinTopologiesBenchmark) {
         #if defined(_asan_enabled_)
-            enum { CliqueSize = 0, ChainSize = 0, StarSize = 0 };
+            enum { CliqueSize = 0, StarSize = 0, ChainSize = 0 };
             std::cerr << "test is not running for ASAN!" << std::endl;
             return;
         #elif !defined(NDEBUG)
-            enum { CliqueSize = 11, ChainSize = 71, StarSize = 15 };
+            enum { CliqueSize = 6, StarSize = 6, ChainSize = 6 };
         #else
-            enum { CliqueSize = 15, ChainSize = 165, StarSize = 20 };
+            enum { CliqueSize = 10, StarSize = 14, ChainSize = 28 }; // after
+            // enum { CliqueSize = 15, StarSize = 20, ChainSize = 165, }; // before
         #endif
 
         TVector<double> cliqueTime{};
         TVector<double> starTime{};
         TVector<double> chainTime{};
 
-        for (size_t i = 0; i < 1; ++i) {
+        for (size_t i = 0; i < 3; ++i) {
+            srand(2281337);
+
             {
                 auto startClique = std::chrono::high_resolution_clock::now();
                 Enumerate(MakeClique(CliqueSize));

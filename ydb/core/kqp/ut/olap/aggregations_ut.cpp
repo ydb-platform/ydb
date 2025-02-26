@@ -1286,6 +1286,24 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         TestTableWithNulls({testCase});
     }
 
+    Y_UNIT_TEST(Json_ValueAndLike) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id FROM `/Root/tableWithNulls`
+                WHERE 
+                    -- (JSON_VALUE(jsonval, "$.labels.http_status_code") = '500')
+                    -- AND JSON_EXISTS(jsonval, "$.meta.exception.stacktrace")
+                    --AND 
+                        (JSON_VALUE(jsonval, "$.meta.uri") like "%unified%")
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter");
+            // .SetExpectedReply(R"([[1;["val1"];#]])");
+
+        TestTableWithNulls({testCase});
+    }
+
+
+
     Y_UNIT_TEST(Json_GetValue_Minus) {
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(

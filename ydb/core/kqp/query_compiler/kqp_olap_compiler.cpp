@@ -450,6 +450,7 @@ const TTypedColumn CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallabl
         jsonExistsCallable.Column(),
         jsonExistsCallable.Path(),
         type);
+    jsonExistsFunc->SetKernelName("JsonExists");
     jsonExistsFunc->SetKernelIdx(idx);
 
     if constexpr (NSsa::RuntimeVersion >= 4U) {

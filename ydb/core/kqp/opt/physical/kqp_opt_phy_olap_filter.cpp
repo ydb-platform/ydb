@@ -775,19 +775,6 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     auto predicate = optionaIf.Predicate();
     auto value = optionaIf.Value();
 
-    if constexpr (NSsa::RuntimeVersion >= 5U) {
-        TExprNode::TPtr afterPeephole;
-        bool hasNonDeterministicFunctions;
-        if (const auto status = PeepHoleOptimizeNode(optionaIf.Ptr(), afterPeephole, ctx, typesCtx, nullptr, hasNonDeterministicFunctions);
-            status != IGraphTransformer::TStatus::Ok) {
-            YQL_CLOG(ERROR, ProviderKqp) << "Peephole OLAP failed." << Endl << ctx.IssueManager.GetIssues().ToString();
-            return node;
-        }
-
-        const TCoIf simplified(std::move(afterPeephole));
-        predicate = simplified.Predicate();
-        value = simplified.ThenValue().Cast<TCoJust>().Input();
-    }
 
     TOLAPPredicateNode predicateTree;
     predicateTree.ExprNode = predicate.Ptr();

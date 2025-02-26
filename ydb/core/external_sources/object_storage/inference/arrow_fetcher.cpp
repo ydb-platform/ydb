@@ -106,6 +106,9 @@ public:
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames: {
                 file = CleanupCsvFile(data, request, std::dynamic_pointer_cast<CsvConfig>(Config_)->ParseOpts, ctx);
+                if (!file) {
+                    return;
+                }
                 ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
                 break;
             }
@@ -115,12 +118,18 @@ public:
                     return;
                 }
                 file = BuildParquetFileFromMetadata(data, request, ctx);
+                if (!file) {
+                    return;
+                }
                 ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
                 break;
             }
             case EFileFormat::JsonEachRow:
             case EFileFormat::JsonList: {
                 file = CleanupJsonFile(data, request, std::dynamic_pointer_cast<JsonConfig>(Config_)->ParseOpts, ctx);
+                if (!file) {
+                    return;
+                }
                 ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
                 break;
             }
@@ -232,6 +241,9 @@ private:
         auto chunker = arrow::csv::MakeChunker(options);
         std::shared_ptr<arrow::Buffer> whole, partial;
         auto arrowData = BuildBufferFromData(data, request, ctx);
+        if (!arrowData) {
+            return nullptr;
+        }
         auto status = chunker->Process(arrowData, &whole, &partial);
 
         if (!status.ok()) {
@@ -273,6 +285,9 @@ private:
 
     std::shared_ptr<arrow::io::RandomAccessFile> BuildParquetFileFromMetadata(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
         auto arrowData = BuildBufferFromData(data, request, ctx);
+        if (!arrowData) {
+            return nullptr;
+        }
         return std::make_shared<arrow::io::BufferReader>(std::move(arrowData));
     }
 
@@ -280,6 +295,9 @@ private:
         auto chunker = arrow::json::MakeChunker(options);
         std::shared_ptr<arrow::Buffer> whole, partial;
         auto arrowData = BuildBufferFromData(data, request, ctx);
+        if (!arrowData) {
+            return nullptr;
+        }
 
         if (Config_->Format == EFileFormat::JsonList) {
             auto empty = std::make_shared<arrow::Buffer>(nullptr, 0);

@@ -290,7 +290,7 @@ namespace {
         const TTypedScheme& typedScheme,
         const TVector<std::pair<TString, ui64>>& shardsConfig = {{"a", 1}},
         const TString& permissions = "",
-        const TString& metadata = ""
+        const TString& metadata = R"({"version": 0})"
     ) {
         TTestDataWithScheme result;
         result.Type = typedScheme.Type;

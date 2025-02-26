@@ -2354,7 +2354,7 @@ partitioning_settings {
 
     Y_UNIT_TEST(Checksums) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnablePermissionsExport(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnablePermissionsExport(true).EnableChecksumsExport(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -2405,7 +2405,7 @@ partitioning_settings {
 
     Y_UNIT_TEST(EnableChecksumsPersistance) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
         ui64 txId = 100;
     
         // Create test table
@@ -2474,7 +2474,7 @@ partitioning_settings {
 
     Y_UNIT_TEST(ChecksumsWithCompression) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -2634,7 +2634,7 @@ attributes {
             }
         )", port);
 
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
         Run(runtime, env, TVector<TString>{
             R"(
                 Name: "Table"

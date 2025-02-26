@@ -361,10 +361,6 @@ bool TContext::AddExport(TPosition pos, const TString& name) {
         Error(pos) << "Can not export anonymous name " << name;
         return false;
     }
-    if (Exports.contains(name)) {
-        Error(pos) << "Duplicate export symbol: " << name;
-        return false;
-    }
     if (!Scoped->LookupNode(name)) {
         Error(pos) << "Unable to export unknown symbol: " << name;
         return false;

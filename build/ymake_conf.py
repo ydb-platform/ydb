@@ -110,10 +110,12 @@ class Platform(object):
         self.is_arm = self.is_armv7 or self.is_armv8 or self.is_armv8m or self.is_armv7em
         self.is_armv7_neon = self.arch in ('armv7a_neon', 'armv7ahf', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv7hf = self.arch in ('armv7ahf', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
-        self.is_armv5te = self.arch in ('armv5te_arm968e_s')
+        self.is_armv5te = self.arch in ('armv5te_arm968e_s',)
 
-        self.is_rv32imc = self.arch in ('riscv32_esp',)
-        self.is_riscv32 = self.is_rv32imc
+        self.is_rv32imc = self.arch in ('riscv32_imc', 'riscv32_esp')
+        self.is_rv32imc_zicsr = self.arch in ('riscv32_imc_zicsr',)
+
+        self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr
 
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
         self.is_tc32 = self.arch in ('tc32_elf',)
@@ -1275,6 +1277,9 @@ class GnuToolchain(Toolchain):
 
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
+
+        if target.is_rv32imc_zicsr:
+            self.c_flags_platform.append('-march=rv32imc_zicsr')
 
         if self.tc.is_clang or self.tc.is_gcc and self.tc.version_at_least(8, 2):
             target_flags = select(default=[], selectors=[

@@ -499,7 +499,7 @@ void TAddressCache::AddAddress(TString hostName, TAddressPtr address)
 
     {
         TWriteGuard guard(Lock_);
-        Cache_.emplace(std::move(hostName), std::move(entry));
+        Cache_[std::move(hostName)] = std::move(entry);
     }
 }
 

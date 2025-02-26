@@ -1520,6 +1520,7 @@ public:
 private:
     TString InstanceId;
     std::shared_ptr<std::atomic_uint64_t> SelfHealUnreassignableGroups = std::make_shared<std::atomic_uint64_t>();
+    std::shared_ptr<std::atomic_uint64_t> GroupLayoutSanitizerInvalidGroups = std::make_shared<std::atomic_uint64_t>();
     TMaybe<TActorId> MigrationId;
     TVSlots VSlots; // ordering is important
     TPDisks PDisks; // ordering is important

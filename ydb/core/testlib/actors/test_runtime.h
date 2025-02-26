@@ -87,7 +87,7 @@ namespace NActors {
         inline TResult WaitFuture(NThreading::TFuture<TResult> f, TDuration simTimeout = TDuration::Max()) {
             if (!f.HasValue() && !f.HasException()) {
                 TDispatchOptions options;
-                options.CustomFinalCondition = [&](bool) {
+                options.CustomFinalCondition = [&]() {
                     return f.HasValue() || f.HasException();
                 };
                 // Quirk: non-empty FinalEvents enables full simulation

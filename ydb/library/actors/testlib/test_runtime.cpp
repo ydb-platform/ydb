@@ -1187,7 +1187,7 @@ namespace NActors {
                 }
             }
 
-            if (options.CustomFinalCondition && options.CustomFinalCondition(perMessage)) {
+            if (options.CustomFinalCondition && options.CustomFinalCondition()) {
                 return true;
             }
 
@@ -1293,7 +1293,7 @@ namespace NActors {
                                         case EEventAction::PROCESS:
                                             UpdateFinalEventsStatsForEachContext(*ev);
                                             SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
-                                            if (checkStopConditions(/* perMessage */ true)) {
+                                            if (AllowBreakOnStopCondition && checkStopConditions(/* perMessage */ true)) {
                                                 stopCondition = true;
                                             }
                                             break;

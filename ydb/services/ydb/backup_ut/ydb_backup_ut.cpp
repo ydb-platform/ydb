@@ -319,6 +319,12 @@ NTopic::TTopicDescription DescribeTopic(NTopic::TTopicClient& topicClient, const
     return describeResult.GetTopicDescription();
 }
 
+std::vector<TChangefeedDescription> DescribeChangefeeds(TSession& session, const TString& tablePath) {
+    auto describeResult = session.DescribeTable(tablePath).ExtractValueSync();
+    UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+    return describeResult.GetTableDescription().GetChangefeedDescriptions();
+}
+
 // note: the storage pool kind must be preconfigured in the server
 void CreateDatabase(TTenants& tenants, TStringBuf path, TStringBuf storagePoolKind) {
     Ydb::Cms::CreateDatabaseRequest request;
@@ -786,6 +792,65 @@ void TestViewDependentOnAnotherViewIsRestored(
 
     restore();
     CompareResults(GetTableContent(session, dependentView), originalContent);
+}
+
+std::pair<std::vector<TChangefeedDescription>, std::vector<Ydb::Topic::DescribeTopicResult>> 
+GetChangefeedAndTopicDescriptions(const char* table, TSession& session, NTopic::TTopicClient& topicClient) {
+    auto describeChangefeeds = DescribeChangefeeds(session, table);
+    std::vector<Ydb::Topic::DescribeTopicResult> describeTopics;
+
+    for (size_t i = 0; i < describeChangefeeds.size(); ++i) {
+        auto changefeedDesc = describeChangefeeds[i];
+        describeTopics.push_back(
+            TProtoAccessor::GetProto(DescribeTopic(topicClient, TStringBuilder() << table << "/" << changefeedDesc.GetName() << "/streamImpl"))
+        );
+    }
+
+    // std::transform(describeChangefeeds.begin(), describeChangefeeds.end(), describeTopics.begin(), [table, &topicClient](TChangefeedDescription changefeedDesc){
+    //     return DescribeTopic(topicClient, TStringBuilder() << table << "/" << changefeedDesc.GetName() << "/streamImpl");
+    // });
+    
+    return {describeChangefeeds, describeTopics};
+}
+
+void TestChangefeedAndTopicDescriptionsIsPreserved(
+    const char* table, TSession& session, NTopic::TTopicClient& topicClient,
+    TBackupFunction&& backup, TRestoreFunction&& restore, const TVector<TString>& changefeeds
+) {
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Uint32,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            );
+        )",
+        table
+    ));
+
+    for (const auto& changefeed : changefeeds) {
+        ExecuteDataModificationQuery(session, Sprintf(R"(
+                ALTER TABLE `%s` ADD CHANGEFEED `%s` WITH (
+                    FORMAT = 'JSON',
+                    MODE = 'UPDATES'
+                );
+            )",
+            table,
+            changefeed.c_str()
+        ));
+    }
+
+    auto changefeedsAndTopicsBefore = GetChangefeedAndTopicDescriptions(table, session, topicClient);
+    backup();
+
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+
+    restore();
+    auto changefeedsAndTopicsAfter = GetChangefeedAndTopicDescriptions(table, session, topicClient);
+
+    UNIT_ASSERT_EQUAL(changefeedsAndTopicsBefore, changefeedsAndTopicsAfter);
 }
 
 void TestTopicSettingsArePreserved(
@@ -1525,6 +1590,28 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    void TestChangefeedBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        NTopic::TTopicClient topicClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        const std::string table = "/Root/test";
+
+        TestChangefeedAndTopicDescriptionsIsPreserved(
+            table,
+            session,
+            tableClient,
+            topicClient
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup),
+            {"update_feed"}
+        );
+    }
+
     void TestReplicationBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
 
@@ -1688,7 +1775,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeView:
                 return TestViewBackupRestore();
             case EPathTypeCdcStream:
-                break; // https://github.com/ydb-platform/ydb/issues/7054
+                return TestChangefeedBackupRestore(); // https://github.com/ydb-platform/ydb/issues/7054
             case EPathTypeReplication:
                 return TestReplicationBackupRestore();
             case EPathTypeTransfer:

@@ -2,7 +2,7 @@ YQL_UDF(yql_language_udf)
 
 YQL_ABI_VERSION(
     2
-    22
+    39
     0
 )
 
@@ -21,6 +21,7 @@ PEERDIR(
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
     yql/essentials/sql/pg_dummy
     yql/essentials/sql/v1/format
+    library/cpp/protobuf/util
 )
 
 END()

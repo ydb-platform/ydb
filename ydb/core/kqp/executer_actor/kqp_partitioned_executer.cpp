@@ -26,13 +26,18 @@ class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecute
         ERROR
     };
 
-    struct TKqpExecuterInfo {
-        using TPtr = std::shared_ptr<TKqpExecuterInfo>;
-
+    struct TBatchPartitionInfo {
+        TMaybe<TKeyDesc::TPartitionRangeInfo> BeginRange;
+        TMaybe<TKeyDesc::TPartitionRangeInfo> EndRange;
+        size_t PartitionIdx = 0;
+        bool IsFirstQuery = false;
+        bool IsLastQuery = false;
+        ui64 LimitSize = 0;
         TActorId ExecuterId;
         TActorId BufferId;
-        size_t PartitionIdx;
         EExecuterResponse Response = EExecuterResponse::NONE;
+
+        using TPtr = std::shared_ptr<TBatchPartitionInfo>;
     };
 
 public:
@@ -141,7 +146,24 @@ public:
         }
 
         YQL_ENSURE(request->ResultSet.size() == 1);
-        Partitioning = std::move(request->ResultSet[0].KeyDescription->Partitioning);
+
+        auto partitioning = std::move(request->ResultSet[0].KeyDescription->Partitioning);
+        Partitions.reserve(partitioning->size());
+
+        for (size_t i = 0; i < partitioning->size(); ++i) {
+            auto ptr = std::make_shared<TBatchPartitionInfo>();
+            ptr->EndRange = partitioning->at(i).Range;
+            ptr->PartitionIdx = i;
+            ptr->IsFirstQuery = (i == 0);
+            ptr->IsLastQuery = (i + 1 == partitioning->size());
+            ptr->LimitSize = 1000;
+
+            if (i > 0) {
+                ptr->BeginRange = partitioning->at(i - 1).Range;
+            }
+
+            Partitions.push_back(std::move(ptr));
+        }
 
         CreateExecuters();
     }
@@ -155,7 +177,7 @@ public:
             << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
             << ", message: " << issues.ToOneLineString());
 
-        if (auto it = ExecutersInfo.find(ev->Sender); it != ExecutersInfo.end()) {
+        if (auto it = ExecuterPartition.find(ev->Sender); it != ExecuterPartition.end()) {
             auto& [_, exInfo] = *it;
             exInfo->Response = EExecuterResponse::ERROR;
             Send(exInfo->BufferId, new TEvKqpBuffer::TEvTerminate{});
@@ -165,7 +187,7 @@ public:
     }
 
     void CreateExecuters() {
-        for (size_t i = 0; i < Partitioning->size(); ++i) {
+        for (size_t i = 0; i < Partitions.size(); ++i) {
             CreateExecuterWithBuffer(i, /* isRetry */ false);
         }
 
@@ -175,6 +197,8 @@ public:
     void CreateExecuterWithBuffer(size_t partitionIdx, bool isRetry) {
         IKqpGateway::TExecPhysicalRequest newRequest(PhysicalRequest.TxAlloc);
         FillPhysicalRequest(newRequest, partitionIdx);
+
+        auto& partInfo = Partitions[partitionIdx];
 
         auto txManager = CreateKqpTransactionManager();
 
@@ -191,14 +215,16 @@ public:
 
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, RequestCounters,
             TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
-            FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId);
+            FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId, partInfo->LimitSize);
         auto exId = RegisterWithSameMailbox(executerActor);
 
         PE_LOG_I("Create new KQP executer from Partitioned: ExId = " << exId << ", isRetry = "
             << isRetry << ", PartitionIdx = " << partitionIdx);
 
-        TKqpExecuterInfo::TPtr exInfo = std::make_shared<TKqpExecuterInfo>(exId, bufferActorId, partitionIdx);
-        ExecutersInfo[exId] = BuffersInfo[bufferActorId] = exInfo;
+        partInfo->Response = EExecuterResponse::NONE;
+        partInfo->ExecuterId = exId;
+        partInfo->BufferId = bufferActorId;
+        ExecuterPartition[exId] = BufferPartition[bufferActorId] = partInfo;
 
         auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
         Send(MakeTxProxyID(), ev.release());
@@ -207,16 +233,23 @@ public:
     void Abort() {
         SendAbortToActors();
         Become(&TKqpPartitionedExecuter::AbortState);
+
+        if (CheckExecutersAreFailed()) {
+            PE_LOG_I("All executers are aborted. Abort partitioned executer.");
+            RuntimeError(
+                Ydb::StatusIds::ABORTED,
+                NYql::TIssues({NYql::TIssue("Aborted.")}));
+        }
     }
 
     void SendAbortToActors() {
         PE_LOG_I("Send abort to executers");
 
-        for (auto& [exId, exInfo] : ExecutersInfo) {
-            if (exInfo->Response != EExecuterResponse::ERROR) {
+        for (auto& [exId, partInfo] : ExecuterPartition) {
+            if (partInfo->Response != EExecuterResponse::ERROR) {
                 auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Aborted by Partitioned Executer");
                 Send(exId, abortEv.Release());
-                Send(exInfo->BufferId, new TEvKqpBuffer::TEvTerminate{});
+                Send(partInfo->BufferId, new TEvKqpBuffer::TEvTerminate{});
             }
         }
     }
@@ -262,19 +295,19 @@ public:
     }
 
     void OnSuccessResponse(TActorId exId) {
-        if (ExecutersInfo.find(exId) == ExecutersInfo.end()) {
+        if (ExecuterPartition.find(exId) == ExecuterPartition.end()) {
             return;
         }
 
         PE_LOG_I("Got success response from ExId = " << exId);
 
-        ExecutersInfo[exId]->Response = EExecuterResponse::SUCCESS;
+        ExecuterPartition[exId]->Response = EExecuterResponse::SUCCESS;
         if (!CheckExecutersAreSuccess()) {
             return;
         }
 
-        for (auto& [_, exInfo] : ExecutersInfo) {
-            Send(exInfo->BufferId, new TEvKqpBuffer::TEvTerminate{});
+        for (auto& [_, partInfo] : ExecuterPartition) {
+            Send(partInfo->BufferId, new TEvKqpBuffer::TEvTerminate{});
         }
 
         PE_LOG_I("All executers are success. Send success to SessionActor");
@@ -311,22 +344,22 @@ public:
     void RetryPartExecution(TActorId actorId, bool fromBuffer) {
         PE_LOG_I("Got retry error from ActorId = " << actorId << ", retry execution");
 
-        auto it = (fromBuffer) ? BuffersInfo.find(actorId) : ExecutersInfo.find(actorId);
-        if (it == BuffersInfo.end() || it == ExecutersInfo.end()) {
+        auto it = (fromBuffer) ? BufferPartition.find(actorId) : ExecuterPartition.find(actorId);
+        if (it == BufferPartition.end() || it == ExecuterPartition.end()) {
             return;
         }
 
-        auto& [_, exInfo] = *it;
+        auto& [_, partInfo] = *it;
         if (fromBuffer) {
             auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Aborted by Partitioned Executer");
-            Send(exInfo->ExecuterId, abortEv.Release());
+            Send(partInfo->ExecuterId, abortEv.Release());
         } else {
-            Send(exInfo->BufferId, new TEvKqpBuffer::TEvTerminate{});
+            Send(partInfo->BufferId, new TEvKqpBuffer::TEvTerminate{});
         }
 
-        ExecutersInfo.erase(exInfo->ExecuterId);
-        BuffersInfo.erase(exInfo->BufferId);
-        CreateExecuterWithBuffer(exInfo->PartitionIdx, /*isRetry*/ true);
+        ExecuterPartition.erase(partInfo->ExecuterId);
+        BufferPartition.erase(partInfo->BufferId);
+        CreateExecuterWithBuffer(partInfo->PartitionIdx, /*isRetry*/ true);
     }
 
     STFUNC(AbortState) {
@@ -348,9 +381,9 @@ public:
 
         PE_LOG_I("Got TEvKqpExecuter::TEvTxResponse from ActorId = " << ev->Sender << ", status = " << response->GetStatus());
 
-        if (auto it = ExecutersInfo.find(ev->Sender); it != ExecutersInfo.end()) {
-            auto& [_, exInfo] = *it;
-            exInfo->Response = EExecuterResponse::ERROR;
+        if (auto it = ExecuterPartition.find(ev->Sender); it != ExecuterPartition.end()) {
+            auto& [_, partInfo] = *it;
+            partInfo->Response = EExecuterResponse::ERROR;
 
             if (CheckExecutersAreFailed()) {
                 PE_LOG_I("All executers are aborted. Abort partitioned executer.");
@@ -400,6 +433,7 @@ private:
     void FillPhysicalRequest(IKqpGateway::TExecPhysicalRequest& physicalRequest, size_t partitionIdx) {
         IKqpGateway::TExecPhysicalRequest newLiteralRequest(LiteralRequest.TxAlloc);
         FillRequestWithParams(newLiteralRequest, partitionIdx, /* literal */ true);
+        PrepareParameters(newLiteralRequest);
 
         auto ev = ExecuteLiteral(std::move(newLiteralRequest), RequestCounters, SelfId(), UserRequestContext);
         auto* response = ev->Record.MutableResponse();
@@ -419,6 +453,7 @@ private:
         if (!ev->GetTxResults().empty()) {
             queryData->AddTxResults(0, std::move(ev->GetTxResults()));
         }
+
         queryData->AddTxHolders(std::move(ev->GetTxHolders()));
 
         PrepareParameters(physicalRequest);
@@ -426,68 +461,16 @@ private:
 
     void FillRequestWithParams(IKqpGateway::TExecPhysicalRequest& newRequest, size_t partitionIdx, bool literal)
     {
-        YQL_ENSURE(Partitioning);
         FillNewRequest(newRequest, literal);
 
         auto& queryData = newRequest.Transactions.front().Params;
-        YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsFirstQuery, partitionIdx == 0));
+        auto& partition = Partitions[partitionIdx];
 
-        auto partition = Partitioning->at(partitionIdx).Range;
-        if (!partition) {
-            YQL_ENSURE(false);
-        }
+        YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsFirstQuery, partition->IsFirstQuery));
+        YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsLastQuery, partition->IsLastQuery));
 
-        auto cells = partition->EndKeyPrefix.GetCells();
-
-        YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsLastQuery, cells.empty()));
-        YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsInclusiveRight, partition->IsInclusive));
-
-        for (size_t i = 0; i < KeyColumnTypes.size(); ++i) {
-            auto endParam = NBatchParams::End + ToString(i + 1);
-
-            if (i >= cells.size()) {
-                YQL_ENSURE(FillParamValue(queryData, endParam, false, /* setDefault */ true));
-                continue;
-            }
-
-            auto cellValue = NMiniKQL::GetCellValue(cells[i], KeyColumnTypes[i]);
-            YQL_ENSURE(FillParamValue(queryData, endParam, cellValue));
-        }
-
-        if (partitionIdx > 0) {
-            auto prevPartition = Partitioning->at(partitionIdx - 1).Range;
-            if (!prevPartition) {
-                YQL_ENSURE(false);
-            }
-
-            YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsInclusiveLeft, !prevPartition->IsInclusive));
-
-            auto prevCells = prevPartition->EndKeyPrefix.GetCells();
-            YQL_ENSURE(!prevCells.empty());
-
-            for (size_t i = 0; i < KeyColumnTypes.size(); ++i) {
-                auto beginParam = NBatchParams::Begin + ToString(i + 1);
-
-                if (i >= prevCells.size()) {
-                    YQL_ENSURE(FillParamValue(queryData, beginParam, false, /* setDefault */ true));
-                    continue;
-                }
-
-                auto prevCellValue = NMiniKQL::GetCellValue(prevCells[i], KeyColumnTypes[i]);
-                YQL_ENSURE(FillParamValue(queryData, beginParam, prevCellValue));
-            }
-        } else {
-            YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsInclusiveLeft, false));
-
-            for (size_t i = 0; i < KeyColumnTypes.size(); ++i) {
-                auto beginParam = NBatchParams::Begin + ToString(i + 1);
-                YQL_ENSURE(FillParamValue(queryData, beginParam, false, /* setDefault */ true));
-            }
-        }
-
-        if (literal) {
-            PrepareParameters(newRequest);
-        }
+        FillRequestRange(queryData, partition->BeginRange, /* isBegin */ true);
+        FillRequestRange(queryData, partition->EndRange, /* isBegin */ false);
     }
 
     void FillNewRequest(IKqpGateway::TExecPhysicalRequest& newRequest, bool literal) {
@@ -520,7 +503,7 @@ private:
         newRequest.UserTraceId = from.UserTraceId;
         newRequest.OutputChunkMaxSize = from.OutputChunkMaxSize;
 
-        newRequest.Transactions.emplace_back(PreparedQuery->GetTransactions()[(literal) ? 0 : 1], std::make_shared<TQueryData>(from.TxAlloc));
+        newRequest.Transactions.emplace_back(PreparedQuery->GetTransactions()[static_cast<size_t>(!literal)], std::make_shared<TQueryData>(from.TxAlloc));
 
         auto newParams = newRequest.Transactions.front().Params;
         auto oldParams = LiteralRequest.Transactions.front().Params;
@@ -528,6 +511,29 @@ private:
             if (!name.StartsWith(NBatchParams::Header)) {
                 TTypedUnboxedValue& typedValue = oldParams->GetParameterUnboxedValue(name);
                 newParams->AddUVParam(name, typedValue.first, typedValue.second);
+            }
+        }
+    }
+
+    void FillRequestRange(TQueryData::TPtr queryData, const TMaybe<TKeyDesc::TPartitionRangeInfo>& range, bool isBegin) {
+        YQL_ENSURE(FillParamValue(queryData,
+            (isBegin)
+                ? NBatchParams::IsInclusiveLeft
+                : NBatchParams::IsInclusiveRight,
+            (range)
+                ? ((isBegin)
+                    ? !range->IsInclusive
+                    : range->IsInclusive)
+                : false)
+        );
+
+        for (size_t i = 0; i < KeyColumnTypes.size(); ++i) {
+            auto paramName = ((isBegin) ? NBatchParams::Begin : NBatchParams::End) + ToString(i + 1);
+            if (range && i < range->EndKeyPrefix.GetCells().size()) {
+                auto cellValue = NMiniKQL::GetCellValue(range->EndKeyPrefix.GetCells()[i], KeyColumnTypes[i]);
+                YQL_ENSURE(FillParamValue(queryData, paramName, cellValue));
+            } else {
+                YQL_ENSURE(FillParamValue(queryData, paramName, false, /* setDefault */ true));
             }
         }
     }
@@ -559,6 +565,7 @@ private:
 
         try {
             for (const auto& paramDesc : PreparedQuery->GetParameters()) {
+                Cerr << paramDesc.GetName() << Endl;
                 queryData->ValidateParameter(paramDesc.GetName(), paramDesc.GetType(), request.TxAlloc->TypeEnv);
             }
 
@@ -574,13 +581,13 @@ private:
     }
 
     bool CheckExecutersAreSuccess() const {
-        return std::all_of(ExecutersInfo.cbegin(), ExecutersInfo.cend(),
-            [](auto it) { return it.second->Response == EExecuterResponse::SUCCESS; });
+        return std::all_of(Partitions.cbegin(), Partitions.cend(),
+            [](auto it) { return it->Response == EExecuterResponse::SUCCESS; });
     }
 
     bool CheckExecutersAreFailed() const {
-        return std::all_of(ExecutersInfo.cbegin(), ExecutersInfo.cend(),
-            [](auto it) { return it.second->Response == EExecuterResponse::ERROR; });
+        return std::all_of(Partitions.cbegin(), Partitions.cend(),
+            [](auto it) { return it->Response == EExecuterResponse::ERROR; });
     }
 
     void RuntimeError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
@@ -619,10 +626,10 @@ private:
 
 private:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
-    THashMap<TActorId, TKqpExecuterInfo::TPtr> ExecutersInfo;
-    THashMap<TActorId, TKqpExecuterInfo::TPtr> BuffersInfo;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    TVector<TBatchPartitionInfo::TPtr> Partitions;
+    THashMap<TActorId, TBatchPartitionInfo::TPtr> ExecuterPartition;
+    THashMap<TActorId, TBatchPartitionInfo::TPtr> BufferPartition;
     TTableId TableId;
     TString TablePath;
     IKqpGateway::TExecPhysicalRequest LiteralRequest;

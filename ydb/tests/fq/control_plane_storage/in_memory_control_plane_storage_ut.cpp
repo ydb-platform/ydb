@@ -71,18 +71,20 @@ protected:
     }
 
     TExecutionMeta WaitQueryExecution(const TString& queryId, TDuration timeout = WAIT_TIMEOUT) const {
+        using EStatus = FederatedQuery::QueryMeta;
+
         const TInstant start = TInstant::Now();
         while (TInstant::Now() - start <= timeout) {
             TExecutionMeta meta;
             CheckSuccess(FqSetup->DescribeQuery(queryId, meta));
 
-            if (!IsFinalStatus(meta.Status)) {
-                Cerr << "Wait query execution " << TInstant::Now() - start << ": " << FederatedQuery::QueryMeta::ComputeStatus_Name(meta.Status) << "\n";
+            if (!IsIn({EStatus::FAILED, EStatus::COMPLETED, EStatus::ABORTED_BY_USER, EStatus::ABORTED_BY_SYSTEM}, meta.Status)) {
+                Cerr << "Wait query execution " << TInstant::Now() - start << ": " << EStatus::ComputeStatus_Name(meta.Status) << "\n";
                 Sleep(TDuration::Seconds(1));
                 continue;
             }
 
-            UNIT_ASSERT_C(meta.Status == FederatedQuery::QueryMeta::COMPLETED, "issues: " << meta.Issues.ToOneLineString() << ", transient issues: " << meta.TransientIssues.ToOneLineString());
+            UNIT_ASSERT_C(meta.Status == EStatus::COMPLETED, "issues: " << meta.Issues.ToOneLineString() << ", transient issues: " << meta.TransientIssues.ToOneLineString());
             return meta;
         }
 

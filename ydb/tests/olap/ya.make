@@ -31,4 +31,6 @@ RECURSE(
     docs
     load
     ttl_tiering
+    column_family
+    common
 )

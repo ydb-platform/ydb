@@ -21,6 +21,7 @@ PEERDIR(
     ydb/public/sdk/python/enable_v3_new_behavior
     contrib/python/boto3
     library/recipes/common
+    ydb/tests/olap/common
 )
 
 DEPENDS(

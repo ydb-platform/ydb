@@ -16,7 +16,7 @@ class YdbClient:
 
     def query(self, statement):
         return self.session_pool.execute_with_retries(statement)
-    
+
     def bulk_upsert(self, table_path, column_types: ydb.BulkUpsertColumns, data_slice):
         self.driver.table_client.bulk_upsert(
             table_path,

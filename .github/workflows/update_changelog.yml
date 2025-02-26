@@ -82,9 +82,7 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-      - name: Debug token
-        run: |
-          echo `gh auth status`
+    
       - name: Update Changelog
         uses: ./.github/actions/update_changelog 
         env:

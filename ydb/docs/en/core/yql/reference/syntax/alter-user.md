@@ -12,7 +12,7 @@ ALTER USER user_name [ WITH ] option [ ... ]
 * `option` — The command option:
   * `PASSWORD 'password'` — changes the password to `password`; you can't use it together with `HASH`.
   * `PASSWORD NULL` — sets an empty password; you can't use it together with `HASH`.
-  * `HASH 'hash'` -  sets the user's password, which will have a hash is equal to `hash`; you can't use it together with `PASSWORD`.
+  * `HASH 'hash'` -  sets the user's password, the hash of which is contained in the `'hash'` [JSON structure](#hash-link); you can't use it together with `PASSWORD`.
   * `NOLOGIN` - disallows user to log in; you can't use it together with `LOGIN`.
   * `LOGIN` - allows user to log in; you can't use it together with `NOLOGIN`.
 
@@ -38,9 +38,9 @@ ALTER USER user1 PASSWORD 'password';
 ALTER USER user1 PASSWORD NULL;
 ```
 
-## HASH
+## HASH {#hash-link}
 
-The {{ ydb-short-name }} stores the user's password in hashed form. Therefore, in order to be able to restore the user with same password during database backup, there is a `HASH` option that allows you to alter a user, after his creating, knowing only the hash in JSON format. This JSON object stores the digest of the hash function and the name of the algorithm (at the moment the [argon2id](https://en.wikipedia.org/wiki/Argon2) algorithm is used for hashing).
+The {{ ydb-short-name }} stores the user's password in hashed unchanged form. Therefore, in order to be able to restore the user with same password during database backup, there is a `HASH` option that allows you to alter a user, after his creating, knowing only the hash in JSON format. This JSON object stores the digest of the hash function and the name of the algorithm (at the moment the [argon2id](https://en.wikipedia.org/wiki/Argon2) algorithm is used for hashing).
 
 So, in the `HASH` option, the 'hash' parameter must get a JSON object with exactly three fields:
 

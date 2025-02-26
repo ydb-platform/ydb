@@ -1,6 +1,7 @@
 #include "sys_view.h"
 #include "group_geometry_info.h"
 #include "storage_stats_calculator.h"
+#include "group_layout_checker.h"
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/base/utility.h>
@@ -517,6 +518,7 @@ void TBlobStorageController::UpdateSystemViews() {
 
                     const NKikimrBlobStorage::TVDiskMetrics zero;
                     std::vector<TGroupDiskInfo> disks;
+                    std::vector<TPDiskId> pdiskIds;
                     for (const auto& realm : group.GetRings()) {
                         for (const auto& domain : realm.GetFailDomains()) {
                             for (const auto& location : domain.GetVDiskLocations()) {
@@ -532,10 +534,28 @@ void TBlobStorageController::UpdateSystemViews() {
                                 if (disk.VDiskMetrics && disk.PDiskMetrics) {
                                     disks.push_back(std::move(disk));
                                 }
+                                pdiskIds.emplace_back(location.GetNodeID(), location.GetPDiskID());
                             }
                         }
                     }
                     CalculateGroupUsageStats(pb, disks, (TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies());
+
+                    if (auto groupInfo = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr)) {
+                        NLayoutChecker::TGroupLayout layout(groupInfo->GetTopology());
+                        NLayoutChecker::TDomainMapper mapper;
+                        TGroupGeometryInfo geom(groupInfo->Type, SelfManagementEnabled
+                            ? StorageConfig.GetSelfManagementConfig().GetGeometry()
+                            : NKikimrBlobStorage::TGroupGeometry());
+
+                        Y_DEBUG_ABORT_UNLESS(pdiskIds.size() == groupInfo->GetTotalVDisksNum());
+
+                        for (size_t i = 0; i < pdiskIds.size(); ++i) {
+                            const TPDiskId pdiskId = pdiskIds[i];
+                            layout.AddDisk({mapper, HostRecords->GetLocation(pdiskId.NodeId), pdiskId, geom}, i);
+                        }
+
+                        pb->SetLayoutCorrect(layout.IsCorrect());
+                    }
                 }
             }
         }

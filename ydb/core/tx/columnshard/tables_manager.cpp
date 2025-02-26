@@ -100,7 +100,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             }
         }
 
-        AFL_VERIFY(rowset.EndOfSet())("reson", "multiple_presets_not_supported");
+        AFL_VERIFY(rowset.EndOfSet())("reason", "multiple_presets_not_supported");
     }
 
     {
@@ -164,12 +164,12 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(info);
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager,
-                    version, preset->Id, schemaInitializationData, PortionsStats);
+                    version, schemaInitializationData, PortionsStats);
             } else if (PrimaryIndex->GetVersionedIndex().IsEmpty() ||
                        info.GetSchema().GetVersion() > PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion()) {
-                PrimaryIndex->RegisterSchemaVersion(version, preset->Id, schemaInitializationData);
+                PrimaryIndex->RegisterSchemaVersion(version, schemaInitializationData);
             } else {
-                PrimaryIndex->RegisterOldSchemaVersion(version, preset->Id, schemaInitializationData);
+                PrimaryIndex->RegisterOldSchemaVersion(version, schemaInitializationData);
             }
 
             if (!rowset.Next()) {
@@ -279,13 +279,13 @@ void TTablesManager::AddSchemaVersion(
     Schema::SaveSchemaPresetVersionInfo(db, presetId, version, versionInfo);
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager,
-            version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
+            version, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);
         }
         PrimaryIndex->OnTieringModified(GetTtl());
     } else {
-        PrimaryIndex->RegisterSchemaVersion(version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
+        PrimaryIndex->RegisterSchemaVersion(version, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
     }
 }
 

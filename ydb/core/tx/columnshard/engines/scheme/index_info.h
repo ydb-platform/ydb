@@ -96,9 +96,9 @@ private:
     }
 
     TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, const std::shared_ptr<IStoragesManager>& operators,
-        const std::shared_ptr<TSchemaObjectsCache>& cache);
+        const std::shared_ptr<TSchemaObjectsCache>& cache, const bool isStandalone);
 
-    void DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto);
+    void DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto, const bool isStandalone);
     bool DeserializeDefaultCompressionFromProto(const NKikimrSchemeOp::TCompressionOptions& compressionProto);
     TConclusion<std::shared_ptr<TColumnFeatures>> CreateColumnFeatures(const NTable::TColumn& col,
         const NKikimrSchemeOp::TOlapColumnDescription& colProto, const std::shared_ptr<IStoragesManager>& operators,
@@ -109,7 +109,7 @@ private:
     void BuildColumnIndexByName();
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
-        const std::shared_ptr<TSchemaObjectsCache>& cache);
+        const std::shared_ptr<TSchemaObjectsCache>& cache, const bool isStandlalone);
     void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns,
         const std::shared_ptr<TSchemaObjectsCache>& cache, const bool withColumnFeatures = true);
     std::shared_ptr<TColumnFeatures> BuildDefaultColumnFeatures(
@@ -222,25 +222,17 @@ public:
         return sb;
     }
 
-    static TIndexInfo BuildDefault();
 
-    static TIndexInfo BuildDefault(const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<ui32>& pkIds) {
-        TIndexInfo result = BuildDefault();
-        result.PKColumnIds = pkIds;
-        result.SetAllKeys(operators, columns);
-        result.Validate();
-        return result;
-    }
-
+    static TIndexInfo BuildDefault(const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<ui32>& pkIds, const bool isStandalone);
     std::vector<std::shared_ptr<IPortionDataChunk>> ActualizeColumnData(
         const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TIndexInfo& sourceIndexInfo, const ui32 columnId) const {
         return GetColumnFeaturesVerified(columnId).ActualizeColumnData(source, sourceIndexInfo.GetColumnFeaturesVerified(columnId));
     }
 
     static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema,
-        const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
+        const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache, const bool isStandalone);
     static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& schema, const TIndexInfo& prevSchema,
-        const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
+        const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache, const bool isStandalone);
 
     bool HasColumnId(const ui32 columnId) const {
         return !!GetColumnIndexOptional(columnId);

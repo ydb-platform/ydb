@@ -193,11 +193,6 @@ private:
     virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const = 0;
 
 public:
-    static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto result = TFactory::MakeHolder("l-buckets");
-        AFL_VERIFY(!!result);
-        return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
-    }
 
     virtual ~IOptimizerPlannerConstructor() = default;
 

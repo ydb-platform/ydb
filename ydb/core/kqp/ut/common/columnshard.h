@@ -68,7 +68,7 @@ public:
         YDB_ACCESSOR_DEF(TVector<TString>, Sharding);
         YDB_ACCESSOR(ui32, MinPartitionsCount, 1);
         YDB_ACCESSOR_DEF(TVector<TColumnFamily>, ColumnFamilies);
-
+        YDB_ACCESSOR(bool, UseLegacyCompaction, true);
         std::optional<std::pair<TString, TString>> TTLConf;
 
     public:

@@ -7,7 +7,7 @@ from ydb.tests.olap.scenario.helpers import (
     DropTable,
 )
 from ydb import PrimitiveType
-from helpers.thread_helper import TestThread
+from ydb.tests.olap.common.thread_helper import TestThread, TestThreads
 import allure
 
 
@@ -35,21 +35,19 @@ class TestSchemeLoad(BaseTestSet):
 
         ScenarioTestHelper(ctx).execute_scheme_query(CreateTableStore('store').with_schema(self.schema1))
         with allure.step('Create tables'):
-            threads = []
+            threads: TestThreads = TestThreads()
             for t in range(threads_count):
-                threads.append(
+                index: int = threads.append(
                     TestThread(target=self._create_tables, args=[str(t), int(tables_count / threads_count), ctx])
                 )
-                threads[-1].start()
-            for t in threads:
-                t.join()
+                threads.start_thread(index)
+            threads.join_all()
 
         with allure.step('Drop tables'):
-            threads = []
+            threads: TestThreads = TestThreads()
             for t in range(threads_count):
-                threads.append(
+                index:int = threads.append(
                     TestThread(target=self._drop_tables, args=[str(t), int(tables_count / threads_count), ctx])
                 )
-                threads[-1].start()
-            for t in threads:
-                t.join()
+                threads.start_thread(index)
+            threads.join_all()

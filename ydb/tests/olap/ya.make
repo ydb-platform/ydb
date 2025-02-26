@@ -32,4 +32,5 @@ RECURSE(
     load
     ttl_tiering
     column_family
+    common
 )

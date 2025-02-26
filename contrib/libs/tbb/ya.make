@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2021.10.0)
+VERSION(2022.0.0)
 
-ORIGINAL_SOURCE(https://github.com/uxlfoundation/oneTBB/archive/v2021.10.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/uxlfoundation/oneTBB/archive/v2022.0.0.tar.gz)
 
 LICENSE(Apache-2.0)
 
@@ -20,6 +20,7 @@ NO_UTIL()
 
 CFLAGS(
     -D__TBB_BUILD
+    -D__TBB_GNU_ASM_VERSION=2041
 )
 
 SRCS(
@@ -49,6 +50,10 @@ SRCS(
     src/tbb/task.cpp
     src/tbb/task_dispatcher.cpp
     src/tbb/task_group_context.cpp
+    src/tbb/tcm_adaptor.cpp
+    src/tbb/thread_dispatcher.cpp
+    src/tbb/thread_request_serializer.cpp
+    src/tbb/threading_control.cpp
     src/tbb/version.cpp
 )
 

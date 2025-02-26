@@ -51,18 +51,18 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         return proto;
     }
 
-    void Test(TBlobStorageGroupType groupType, ui32 dcs, ui32 racks) {
+    void Test(TBlobStorageGroupType groupType, ui32 dcs, ui32 racks, ui32 units) {
         std::vector<TNodeLocation> locations;
 
-        MakeLocations(locations, dcs, racks, 1, LocationGenerator);
+        MakeLocations(locations, dcs, racks, units, LocationGenerator);
         std::unique_ptr<TEnvironmentSetup> env;
 
         CreateEnv(env, locations, groupType);
 
 
         // Assure that sanitizer doesn't send request to initially allocated groups
-        env->UpdateSettings(true, false, true);
         env->Runtime->FilterFunction = CatchSanitizeRequests;
+        env->UpdateSettings(true, false, true);
         env->Sim(TDuration::Minutes(3));
         env->UpdateSettings(false, false, false);
 
@@ -71,14 +71,15 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         TString error;
         auto cfg = env->FetchBaseConfig();
         UNIT_ASSERT_C(CheckBaseConfigLayout(geom, cfg, true, error), error);
-        env->Cleanup();
 
         // Shuffle node locayion, assure that layout error occured
-        std::random_shuffle(locations.begin(), locations.end());
-        env->Initialize();
-        env->Sim(TDuration::Seconds(100));
-        cfg = env->FetchBaseConfig();
-        CheckBaseConfigLayout(geom, cfg, true, error);
+        do {
+            env->Cleanup();
+            std::random_shuffle(locations.begin(), locations.end());
+            env->Initialize();
+            env->Sim(TDuration::Seconds(100));
+            cfg = env->FetchBaseConfig();
+        } while (CheckBaseConfigLayout(geom, cfg, true, error));
         Cerr << error << Endl;
 
         // Sanitize groups
@@ -96,15 +97,15 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
     }
 
     Y_UNIT_TEST(Test3dc) {
-        Test(TBlobStorageGroupType::ErasureMirror3dc, 3, 5);
+        Test(TBlobStorageGroupType::ErasureMirror3dc, 3, 5, 1);
     }
 
     Y_UNIT_TEST(TestBlock4Plus2) {
-        Test(TBlobStorageGroupType::Erasure4Plus2Block, 1, 12);
+        Test(TBlobStorageGroupType::Erasure4Plus2Block, 1, 10, 2);
     }
 
     Y_UNIT_TEST(TestMirror3of4) {
-        Test(TBlobStorageGroupType::ErasureMirror3of4, 1, 12);
+        Test(TBlobStorageGroupType::ErasureMirror3of4, 1, 10, 2);
     }
 
     TString PrintGroups(TBlobStorageGroupType groupType, const NKikimrBlobStorage::TBaseConfig& cfg,

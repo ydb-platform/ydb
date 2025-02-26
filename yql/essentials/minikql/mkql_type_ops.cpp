@@ -894,8 +894,7 @@ public:
     {
         if (tzId) {
             ui32 hour, min, sec;
-            i64 utcSeconds = (date >= 0) ? ((date + 1) * 86400ll - 1) : (date * 86400ll);
-            ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
+            ToLocalTime64(86400ll * ++date - 1, tzId, year, month, day, hour, min, sec);
             if (year <= 0) {
                 year--;
             }
@@ -924,7 +923,7 @@ public:
             if (year <= 0) {
                 year--;
             }
-            if (!MakeDate32(year, month, day, date)) {
+            if (!GetDate32Offset(year, month, day, date)) {
                 return false;
             }
             SplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
@@ -986,8 +985,12 @@ public:
         return true;
     }
 
-    bool MakeDate32(i32 year, ui32 month, ui32 day, i32& value) const {
-        if (Y_UNLIKELY(year == 0 || year < NUdf::MIN_YEAR32 || year >= NUdf::MAX_YEAR32)) {
+    bool GetDate32Offset(i32 year, ui32 month, ui32 day, i32& value) const {
+        if (Y_UNLIKELY(year < NUdf::MIN_YEAR32 - 1 || year > NUdf::MAX_YEAR32
+            || (year == NUdf::MAX_YEAR32 && (day > 1U || month > 1U))
+            || (year == NUdf::MIN_YEAR32 - 1 && (day < 31U || month < 12U))
+            || year == 0))
+        {
             return false;
         }
         auto isLeap = IsLeapYear(year);
@@ -1012,6 +1015,16 @@ public:
         val += isLeap ? LeapMonths_[month] : Months_[month];
         val += day - 1;
         value = val;
+        return true;
+    }
+
+    bool MakeDate32(i32 year, ui32 month, ui32 day, i32& value) const {
+        if (Y_UNLIKELY(year == 0 || year < NUdf::MIN_YEAR32 || year >= NUdf::MAX_YEAR32)) {
+            return false;
+        }
+        if (Y_UNLIKELY(!GetDate32Offset(year, month, day, value))) {
+            return false;
+        }
         return true;
     }
 
@@ -1766,7 +1779,7 @@ NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
     }
 
     bool waiting_for_z = true;
-    
+
     ui32 offset_hours = 0;
     ui32 offset_minutes = 0;
     bool is_offset_negative = false;
@@ -1776,12 +1789,12 @@ NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
         // Skip sign
         ++pos;
 
-        if (!ParseNumber(pos, buf, offset_hours, 2) || 
+        if (!ParseNumber(pos, buf, offset_hours, 2) ||
             pos == buf.Size() || buf.Data()[pos] != ':')
         {
             return NUdf::TUnboxedValuePod();
         }
- 
+
         // Skip ':'
         ++pos;
 
@@ -2049,12 +2062,12 @@ NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
         // Skip sign
         ++pos;
 
-        if (!ParseNumber(pos, buf, offset_hours, 2) || 
+        if (!ParseNumber(pos, buf, offset_hours, 2) ||
             pos == buf.Size() || buf.Data()[pos] != ':')
         {
             return NUdf::TUnboxedValuePod();
         }
- 
+
         // Skip ':'
         ++pos;
 
@@ -2085,7 +2098,7 @@ NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
     }
 
     ui64 value = dateValue * 86400000000ull + timeValue * 1000000ull + microseconds;
-    
+
     if (is_offset_negative) {
         if (UINT64_MAX - value < offset_value) {
             return NUdf::TUnboxedValuePod();

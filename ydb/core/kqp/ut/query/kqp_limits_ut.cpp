@@ -762,9 +762,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
-    void DoCancelAfterRo(bool follower, bool streamLookup, bool dependedRead) {
+    void DoCancelAfterRo(bool follower, bool dependedRead) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(streamLookup);
 
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -879,23 +878,15 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
     Y_UNIT_TEST(CancelAfterRoTx) {
         // false, false has no sense since we use TEvRead to read without followers
-        DoCancelAfterRo(false, true, false);
-    }
-
-    Y_UNIT_TEST(CancelAfterRoTxWithFollowerLegacy) {
-        DoCancelAfterRo(true, false, false);
-    }
-
-    Y_UNIT_TEST(CancelAfterRoTxWithFollowerLegacyDependedRead) {
-        DoCancelAfterRo(true, false, true);
+        DoCancelAfterRo(false, false);
     }
 
     Y_UNIT_TEST(CancelAfterRoTxWithFollowerStreamLookup) {
-        DoCancelAfterRo(true, true, false);
+        DoCancelAfterRo(true, false);
     }
 
     Y_UNIT_TEST(CancelAfterRoTxWithFollowerStreamLookupDepededRead) {
-        DoCancelAfterRo(true, true, true);
+        DoCancelAfterRo(true, true);
     }
 
     Y_UNIT_TEST(QueryExecTimeout) {

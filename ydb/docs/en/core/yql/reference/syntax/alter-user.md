@@ -70,7 +70,7 @@ ALTER USER user1 NOLOGIN;
 
 ## LOGIN
 
-If the limit on the number of authorization attempts is exceeded, the user is temporarily blocked. To unlock user ahead of time, you can use the `LOGIN` option.
+If the limit on the number of authentication attempts is exceeded, the user is temporarily blocked. To unlock user ahead of time, you can use the `LOGIN` option.
 
 Besides, user can be blocked by `NOLOGIN` option. In this case, database administrator can unblock user by `LOGIN` option.
 

@@ -845,12 +845,10 @@ private:
 
     template <typename TTable>
     bool CheckConnectionOrBindingName(const TTable& table, const TString& scope, const TString& user, FederatedQuery::Acl::Visibility visibility, const TString& name) const {
-        for (const auto& [_, value] : GetVisibleRange(table.Values, scope, user, visibility)) {
-            if (value.GetEntity().content().name() == name) {
-                return false;
-            }
-        }
-        return true;
+        auto range = GetVisibleRange(table.Values, scope, user) | std::views::transform([](const auto& element) {
+            return element.second.GetEntity().content().name();
+        });
+        return std::ranges::find(range, name) == range.end();
     }
 
     template <typename TTable>

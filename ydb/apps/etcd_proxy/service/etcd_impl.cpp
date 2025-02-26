@@ -845,7 +845,7 @@ private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NEtcd::TEvQueryResult, Handle);
-            hFunc(NEtcd::TEvQueryError, Handle);
+            HFunc(NEtcd::TEvQueryError, Handle);
         }
     }
 
@@ -853,12 +853,12 @@ private:
         this->ReplyWith(ev->Get()->Results, ctx);
     }
 
-    void Handle(NEtcd::TEvQueryError::TPtr &ev) {
+    void Handle(NEtcd::TEvQueryError::TPtr &ev, const TActorContext& ctx) {
         TryToRollbackRevision();
         std::ostringstream err;
         err << GetRequestName() << " SQL error received:" << std::endl << ev->Get()->Issues.ToString() << std::endl;
         std::cout << err.view();
-        this->Request_->ReplyWithRpcStatus(grpc::StatusCode::INTERNAL, err.str());
+        Reply(grpc::StatusCode::INTERNAL, err.view(), ctx);
     }
 protected:
     void TryToRollbackRevision() {
@@ -876,7 +876,7 @@ protected:
         this->Die(ctx);
     }
 
-    void Reply(grpc::StatusCode code, const std::string& error, const TActorContext& ctx) {
+    void Reply(grpc::StatusCode code, const std::string_view& error, const TActorContext& ctx) {
         this->Request_->ReplyWithRpcStatus(code, TString(error));
         this->Die(ctx);
     }
@@ -914,7 +914,7 @@ private:
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         auto response = Range.MakeResponse(Revision, results);
         Range.Dump(std::cout) << '=' << response.count() << std::endl;
-        return this->Reply(response, ctx);
+        return Reply(response, ctx);
     }
 
     TRange Range;
@@ -949,11 +949,11 @@ private:
         Put.Dump(std::cout) << '=';
         if (const auto good = std::get_if<etcdserverpb::PutResponse>(&response)) {
             std::cout << "ok" << std::endl;
-            return this->Reply(*good, ctx);
+            return Reply(*good, ctx);
         } else if (const auto bad = std::get_if<TGrpcError>(&response)) {
             TryToRollbackRevision();
             std::cout << bad->second << std::endl;
-            return this->Reply(bad->first, bad->second, ctx);
+            return Reply(bad->first, bad->second, ctx);
         }
     }
 
@@ -989,7 +989,7 @@ private:
             TryToRollbackRevision();
 
         DeleteRange.Dump(std::cout) << '=' << response.deleted() << std::endl;
-        return this->Reply(response, ctx);
+        return Reply(response, ctx);
     }
 
     TDeleteRange DeleteRange;
@@ -1014,7 +1014,7 @@ private:
         TTxn::TKeysSet keys;
         Txn.GetKeys(keys);
         size_t resultsCounter = 0U, paramsCounter = 0U;
-        if (keys.size() < 2U && !Txn.Compares.empty()) {
+        if (keys.size() < 2U) {
             std::ostringstream where;
             where << " where ";
             const auto& keyParamName = MakeSimplePredicate(keys.cbegin()->first, keys.cbegin()->second, where, params);
@@ -1034,11 +1034,11 @@ private:
         Txn.Dump(std::cout) << '=';
         if (const auto good = std::get_if<etcdserverpb::TxnResponse>(&response)) {
             std::cout << (good->succeeded() ? "success" : "failure") << std::endl;
-            return this->Reply(*good, ctx);
+            return Reply(*good, ctx);
         } else if (const auto bad = std::get_if<TGrpcError>(&response)) {
             TryToRollbackRevision();
             std::cout << bad->second << std::endl;
-            return this->Reply(bad->first, bad->second, ctx);
+            return Reply(bad->first, bad->second, ctx);
         }
     }
 
@@ -1069,7 +1069,7 @@ private:
         etcdserverpb::CompactionResponse response;
         FillHeader(Revision, *response.mutable_header());
         std::cout << "Compact(" << KeyRevision << ')' << std::endl;
-        return this->Reply(response, ctx);
+        return Reply(response, ctx);
     }
 
     i64 KeyRevision;
@@ -1104,7 +1104,7 @@ private:
         response.set_id(Lease);
         response.set_ttl(TTL);
         std::cout << "Grant(" << TTL << ")=" << response.id() << ',' << response.ttl() << std::endl;
-        return this->Reply(response, ctx);
+        return Reply(response, ctx);
     }
 
     i64 Lease, TTL;
@@ -1131,6 +1131,7 @@ private:
         const auto& revisionParamName = AddParam("Revision", params, Revision);
         const auto& leaseParamName = AddParam("Lease", params, Lease);
 
+        sql << "select count(*) > 0UL from `leases` where " << leaseParamName << " = `id`;" << std::endl;
         sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `huidig` where " << leaseParamName << " = `lease`;" << std::endl;
         sql << "insert into `verhaal`" << std::endl;
         sql << "select `key`, `created`, " << revisionParamName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
@@ -1144,9 +1145,16 @@ private:
     }
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
+        if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow()) {
+            if (!NYdb::TValueParser(parser.GetValue(0)).GetBool()) {
+                TryToRollbackRevision();
+                return Reply(grpc::StatusCode::NOT_FOUND, "requested lease not found", ctx);
+            }
+        }
+
         if constexpr (NotifyWatchtower) {
             i64 deleted = 0ULL;
-            for (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow(); ++deleted) {
+            for (auto parser = NYdb::TResultSetParser(results.back()); parser.TryNextRow(); ++deleted) {
                 NEtcd::TData oldData;
                 oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
                 oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
@@ -1165,7 +1173,7 @@ private:
         etcdserverpb::LeaseRevokeResponse response;
         FillHeader(Revision, *response.mutable_header());
         std::cout << "Revoke(" << Lease << ')' << std::endl;
-        return this->Reply(response, ctx);
+        return Reply(response, ctx);
     }
 
     i64 Lease;
@@ -1214,7 +1222,7 @@ private:
         }
 
         std::cout << "TimeToLive(" << Lease << ")=" << response.ttl() << ',' << response.grantedttl() << std::endl;
-        return this->Reply(response, ctx);
+        return Reply(response, ctx);
     }
 
     i64 Lease = 0LL;
@@ -1245,7 +1253,7 @@ private:
         }
 
         std::cout << "Leases()=" << response.leases().size() << std::endl;
-        return this->Reply(response, ctx);
+        return Reply(response, ctx);
     }
 };
 

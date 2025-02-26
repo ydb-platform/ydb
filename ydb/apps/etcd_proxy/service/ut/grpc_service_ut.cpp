@@ -190,14 +190,14 @@ i64 Grant(const i64 ttl, const std::unique_ptr<etcdserverpb::Lease::Stub> &stub)
     return id;
 }
 
-void Revoke(const i64 id, const std::unique_ptr<etcdserverpb::Lease::Stub> &stub)
+bool Revoke(const i64 id, const std::unique_ptr<etcdserverpb::Lease::Stub> &stub)
 {
     grpc::ClientContext leaseRevokeCtx;
     etcdserverpb::LeaseRevokeRequest leaseRevokeRequest;
     leaseRevokeRequest.set_id(id);
 
     etcdserverpb::LeaseRevokeResponse leaseRevokeResponse;
-    UNIT_ASSERT(stub->LeaseRevoke(&leaseRevokeCtx, leaseRevokeRequest, &leaseRevokeResponse).ok());
+    return stub->LeaseRevoke(&leaseRevokeCtx, leaseRevokeRequest, &leaseRevokeResponse).ok();
 }
 
 std::unordered_multiset<i64> Leases(const std::unique_ptr<etcdserverpb::Lease::Stub> &stub)
@@ -952,7 +952,7 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(7).value(), "value7");
             }
 
-            Revoke(leaseId, lease);
+            UNIT_ASSERT(Revoke(leaseId, lease));
 
             {
                 grpc::ClientContext readRangeCtx;
@@ -1032,7 +1032,7 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
                 UNIT_ASSERT_VALUES_EQUAL(set.count("key6"), 1U);
             }
 
-            Revoke(one, lease);
+            UNIT_ASSERT(Revoke(one, lease));
 
             {
                 grpc::ClientContext timeToLiveCtx;
@@ -1048,6 +1048,8 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
                 UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.grantedttl(), 0LL);
                 UNIT_ASSERT(timeToLiveResponse.keys().empty());
             }
+
+            UNIT_ASSERT(!Revoke(one, lease));
         });
     }
 
@@ -1064,7 +1066,7 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
                 UNIT_ASSERT_VALUES_EQUAL(leases.count(two), 1U);
             }
 
-            Revoke(one, lease);
+            UNIT_ASSERT(Revoke(one, lease));
 
             {
                 const auto& leases = Leases(lease);
@@ -1072,6 +1074,8 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
                 UNIT_ASSERT_VALUES_EQUAL(leases.count(one), 0U);
                 UNIT_ASSERT_VALUES_EQUAL(leases.count(two), 1U);
             }
+
+            UNIT_ASSERT(!Revoke(one, lease));
         });
     }
 } // Y_UNIT_TEST_SUITE(Etcd_Lease)

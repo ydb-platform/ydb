@@ -414,7 +414,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::NCommon::TLoggerInit(server->GetRuntime()).Clear().SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
 
         auto& runtime = *server->GetRuntime();
-        runtime.DisableBreakOnStopCondition();
 //        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
 //        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
 
@@ -463,8 +462,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             TAtomic unusedPrev;
             runtime.GetAppData().Icb->SetValue("ColumnShardControls.GranuleIndexedPortionsCountLimit", 1, unusedPrev);
         }
-        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch1);
-        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch2);
+        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch1, Ydb::StatusIds::SUCCESS, false);
+        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch2, Ydb::StatusIds::SUCCESS, false);
         {
             const TInstant start = Now();
             bool check = false;
@@ -480,7 +479,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 check = true;
 #endif
                 runtime.AdvanceCurrentTime(TDuration::Minutes(6));
-                lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batchSmall);
+                lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batchSmall, Ydb::StatusIds::SUCCESS, false);
             }
             UNIT_ASSERT(check);
         }
@@ -506,7 +505,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 check = true;
 #endif
                 runtime.AdvanceCurrentTime(TDuration::Minutes(6));
-                lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batchSmall);
+                lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batchSmall, Ydb::StatusIds::SUCCESS, false);
             }
             UNIT_ASSERT(check);
         }

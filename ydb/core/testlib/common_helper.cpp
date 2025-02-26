@@ -216,7 +216,7 @@ void THelper::DropTable(const TString& tablePath) {
         });
 
     TDispatchOptions options;
-    options.CustomFinalCondition = [&]() {
+    options.CustomFinalCondition = [&](bool) {
         return responses >= 1;
     };
 

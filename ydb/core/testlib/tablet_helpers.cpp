@@ -350,7 +350,7 @@ namespace NKikimr {
             // Wait for the tablet to boot or to become deleted
             TDispatchOptions rebootOptions;
             rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
-            rebootOptions.CustomFinalCondition = [this]() -> bool {
+            rebootOptions.CustomFinalCondition = [this](bool) -> bool {
                 return DeletedTablets.contains(TabletId);
             };
             runtime.DispatchEvents(rebootOptions);

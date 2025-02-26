@@ -62,7 +62,7 @@ void THelperSchemaless::CreateTestOlapTable(TActorId sender, TString storeOrDirN
     WaitForSchemeOperation(sender, txId);
 }
 
-void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& expectedStatus) const {
+void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& expectedStatus, bool breakLoop) const {
     auto* runtime = Server.GetRuntime();
 
     UNIT_ASSERT(batch);
@@ -94,7 +94,10 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
     });
 
     TDispatchOptions options;
-    options.CustomFinalCondition = [&]() {
+    options.CustomFinalCondition = [&](bool perMessage = false) {
+        if (perMessage && !breakLoop) {
+            return false;
+        }
         return responses.load() >= 1;
     };
 

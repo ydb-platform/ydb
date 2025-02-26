@@ -39,7 +39,7 @@ The {{ ydb-short-name }} stores the user's password in hashed form. Therefore, i
 In the `HASH` option, the 'hash' parameter must get a JSON object with exactly three fields:
 
 * `hash` - value of hash in base64 format;
-* `salt` - sault in base64 format;
+* `salt` - [salt](https://en.wikipedia.org/wiki/Salt_(cryptography)) in base64 format;
 * `type` - hashing algorithm; this value always must be equal `argon2id`.
 
 There is example:
@@ -54,7 +54,7 @@ CREATE USER user1 HASH '{
 
 ## NOLOGIN
 
-Database administrator can create blocked user. Without specifying the `NOLOGIN`, the user is created unblocked.
+Database administrator can create blocked user. Blocked user can't log in in system.
 
 There is example:
 
@@ -64,7 +64,7 @@ CREATE USER user1 NOLOGIN;
 
 ## LOGIN
 
-The option explicitly indicates that the user is being created unblocked.
+The option explicitly indicates that the user is being created unblocked. By default (that is, without specifying the `LOGIN` and `NOLOGIN` options), created user is not blocked.
 
 There is example:
 

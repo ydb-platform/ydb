@@ -45,7 +45,7 @@ The {{ ydb-short-name }} stores the user's password in hashed form. Therefore, i
 In the `HASH` option, the 'hash' parameter must get a JSON object with exactly three fields:
 
 * `hash` - value of hash in base64 format;
-* `salt` - sault in base64 format;
+* `salt` - [salt](https://en.wikipedia.org/wiki/Salt_(cryptography)) in base64 format;
 * `type` - hashing algorithm; this value always must be equal `argon2id`.
 
 There is example:
@@ -60,7 +60,7 @@ ALTER USER user1 HASH '{
 
 ## NOLOGIN
 
-Database administrator can block user.
+Database administrator can block user. Blocked user can't log in in system.
 
 There is example:
 

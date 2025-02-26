@@ -41,13 +41,22 @@ TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& req
     return TTxId(tx.session(), tx.id());
 }
 
-TTxIdOpt GetTransactionId(const NTable::TTransaction* tx)
+TTxIdOpt GetTransactionId(const std::optional<TTransactionId>& tx)
 {
     if (!tx) {
         return std::nullopt;
     }
 
-    return TTxId(tx->GetSession().GetId(), tx->GetId());
+    return TTxId(tx->SessionId, tx->TxId);
+}
+
+std::optional<TTransactionId> MakeTransactionId(const NTable::TTransaction* tx)
+{
+    if (!tx) {
+        return std::nullopt;
+    }
+
+    return TTransactionId{tx->GetSession().GetId(), tx->GetId()};
 }
 
 }
@@ -645,7 +654,7 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         CurrentBatch.Add(
                 seqNo, createdAtValue, message.Data, message.Codec, message.OriginalSize,
                 message.MessageMeta_,
-                message.GetTxPtr()
+                MakeTransactionId(message.GetTxPtr())
         );
 
         FlushWriteIfRequiredImpl();
@@ -1418,10 +1427,10 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             if (!currMessage.MessageMeta.empty()) {
                 OriginalMessagesToSend.emplace(id, createTs, datum.size(),
                                                std::move(currMessage.MessageMeta),
-                                               currMessage.Tx);
+                                               std::move(currMessage.Tx));
             } else {
                 OriginalMessagesToSend.emplace(id, createTs, datum.size(),
-                                               currMessage.Tx);
+                                               std::move(currMessage.Tx));
             }
         }
         block.Data = std::move(CurrentBatch.Data);
@@ -1529,8 +1538,8 @@ void TWriteSessionImpl::SendImpl() {
                 auto* msgData = writeRequest->add_messages();
 
                 if (message.Tx) {
-                    writeRequest->mutable_tx()->set_id(TStringType{message.Tx->GetId()});
-                    writeRequest->mutable_tx()->set_session(TStringType{message.Tx->GetSession().GetId()});
+                    writeRequest->mutable_tx()->set_id(message.Tx->TxId);
+                    writeRequest->mutable_tx()->set_session(message.Tx->SessionId);
                 }
 
                 msgData->set_seq_no(GetSeqNoImpl(message.Id));

@@ -294,8 +294,10 @@ HOP(time_extractor, hop, interval, delay)
 
 ### Примеры
 
+{% if select_command == "SELECT STREAM" %}
+
 ```yql
-SELECT{% if select_command == "SELECT STREAM" %} STREAM{% endif %}
+SELECT STREAM
     key,
     COUNT(*)
 FROM my_stream
@@ -308,7 +310,7 @@ GROUP BY
 ```
 
 ```yql
-SELECT{% if select_command == "SELECT STREAM" %} STREAM{% endif %}
+SELECT STREAM
     double_key,
     HOP_END() as time,
     COUNT(*) as count
@@ -318,17 +320,58 @@ GROUP BY
     HOP(ts, "PT1М", "PT1M", "PT1M");
 ```
 
+{% else %}
+
+```yql
+SELECT
+    key,
+    COUNT(*)
+FROM my_stream
+GROUP BY
+    HOP(CAST(subkey AS Timestamp), "PT10S", "PT1M", "PT30S"),
+    key;
+-- hop = 10 секунд
+-- interval = 1 минута
+-- delay = 30 секунд
+```
+
+```yql
+SELECT
+    double_key,
+    HOP_END() as time,
+    COUNT(*) as count
+FROM my_stream
+GROUP BY
+    key + key AS double_key,
+    HOP(ts, "PT1М", "PT1M", "PT1M");
+```
+
+{% endif %}
 ## HAVING {#having}
 
 Фильтрация выборки {% if select_command != "SELECT STREAM" %}`SELECT`{% else %}`SELECT STREAM`{% endif %} по результатам вычисления [агрегатных функций](../builtins/aggregation.md). Синтаксис аналогичен конструкции [`WHERE`](select/where.md).
 
 ### Пример
 
+{% if select_command == "SELECT STREAM" %}
+
 ```yql
-SELECT{% if select_command == "SELECT STREAM" %} STREAM{% endif %}
+SELECT STREAM
     key
 FROM my_table
 GROUP BY key
 HAVING COUNT(value) > 100;
 ```
+
+{% else %}
+
+```yql
+SELECT
+    key
+FROM my_table
+GROUP BY key
+HAVING COUNT(value) > 100;
+```
+
+{% endif %}
 

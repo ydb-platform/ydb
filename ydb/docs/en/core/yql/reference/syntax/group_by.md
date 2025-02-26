@@ -299,8 +299,10 @@ The **tumbling window** known in other systems is a special case of a **hopping 
 
 ## Examples
 
+{% if select_command == "SELECT STREAM" %}
+
 ```yql
-SELECT{% if select_command == "SELECT STREAM" %} STREAM{% endif %}
+SELECT STREAM
     key,
     COUNT(*)
 FROM my_stream
@@ -313,7 +315,7 @@ GROUP BY
 ```
 
 ```yql
-SELECT{% if select_command == "SELECT STREAM" %} STREAM{% endif %}
+SELECT STREAM
     double_key,
     HOP_END() as time,
     COUNT(*) as count
@@ -323,16 +325,58 @@ GROUP BY
     HOP(ts, "PT1M", "PT1M", "PT1M");
 ```
 
+{% else %}
+
+```yql
+SELECT
+    key,
+    COUNT(*)
+FROM my_stream
+GROUP BY
+    HOP(CAST(subkey AS Timestamp), "PT10S", "PT1M", "PT30S"),
+    key;
+-- hop = 10 seconds
+-- interval = 1 minute
+-- delay = 30 seconds
+```
+
+```yql
+SELECT
+    double_key,
+    HOP_END() as time,
+    COUNT(*) as count
+FROM my_stream
+GROUP BY
+    key + key AS double_key,
+    HOP(ts, "PT1M", "PT1M", "PT1M");
+```
+
+{% endif %}
+
 ## HAVING {#having}
 
 Filtering a {% if select_command != "SELECT STREAM" %}`SELECT`{% else %}`SELECT STREAM`{% endif %} based on the calculation results of [aggregate functions](../builtins/aggregation.md). The syntax is similar to [WHERE](select/where.md).
 
 ### Example
 
+{% if select_command == "SELECT STREAM" %}
+
 ```yql
-SELECT{% if select_command == "SELECT STREAM" %} STREAM{% endif %}
+SELECT STREAM
     key
 FROM my_table
 GROUP BY key
 HAVING COUNT(value) > 100;
 ```
+
+{% else %}
+
+```yql
+SELECT STREAM
+    key
+FROM my_table
+GROUP BY key
+HAVING COUNT(value) > 100;
+```
+
+{% endif %}

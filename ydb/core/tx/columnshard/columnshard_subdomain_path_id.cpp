@@ -88,7 +88,7 @@ void TSpaceWatcher::Handle(NActors::TEvents::TEvPoison::TPtr& , const TActorCont
 void TSpaceWatcher::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext&) {
     auto* msg = ev->Get();
     if (msg->PathId.LocalPathId == SubDomainPathId) {
-        Send(Self->SelfId(), ev.Release()->Get());
+        Send(Self->SelfId(), ev.Get()->Release());
     }
 }
 

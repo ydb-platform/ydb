@@ -394,7 +394,7 @@ message TS3GatewayConfig {
     repeated TS3FormatSizeLimit FormatSizeLimit = 6; // Format limits (override FileSizeLimit)
     optional uint64 BlockFileSizeLimit = 10;         // Global limit for block readers (overrides FormatSizeLimit)
     optional uint64 MaxFilesPerQuery = 3;
-    optional uint64 MaxReadSizePerQuery = 4;
+    reserved 4;
     optional uint64 MaxDiscoveryFilesPerQuery = 5;
     optional uint64 MaxInflightListsPerQuery = 7;
     optional uint64 MaxDirectoriesAndFilesPerQuery = 8;

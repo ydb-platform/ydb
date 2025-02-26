@@ -58,8 +58,11 @@ public:
         const TString& endpoint,
         const TString& database,
         bool secure) override;
-    
+
+    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) override;
+
     ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override;
 
     using TClusterNPath = std::pair<TString, TString>;
 private:
@@ -70,5 +73,7 @@ private:
 };
 
 IPqGateway::TPtr CreatePqFileGateway();
+
+IPqGatewayFactory::TPtr CreatePqFileGatewayFactory(const TDummyPqGateway::TPtr pqFileGateway);
 
 } // namespace NYql

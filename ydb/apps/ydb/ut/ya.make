@@ -1,5 +1,7 @@
 UNITTEST()
 
+REQUIREMENTS(ram:32)
+
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

@@ -6,6 +6,11 @@ $check = ($arg) -> {
         eomonth:   DateTime::MakeTimestamp64(DateTime::EndOfMonth($arg)),
         eoweek:    DateTime::MakeTimestamp64(DateTime::EndOfWeek($arg)),
         eoday:     DateTime::MakeTimestamp64(DateTime::EndOfDay($arg)),
+        sopt13h:   DateTime::MakeTimestamp64(DateTime::EndOf($arg, Interval("PT13H"))),
+        sopt4h:    DateTime::MakeTimestamp64(DateTime::EndOf($arg, Interval("PT4H"))),
+        sopt15m:   DateTime::MakeTimestamp64(DateTime::EndOf($arg, Interval("PT15M"))),
+        sopt20s:   DateTime::MakeTimestamp64(DateTime::EndOf($arg, Interval("PT20S"))),
+        sopt7s:    DateTime::MakeTimestamp64(DateTime::EndOf($arg, Interval("PT7S"))),
     |>
 };
 

@@ -226,8 +226,8 @@ private:
         if (auto* result = MapFindPtr(CsvOutputs, fname)) {
             return std::make_pair(result->Get(), false);
         }
-        auto result = MakeAtomicShared<TFileOutput>(Owner.UploadParams.FileOutputPath / fname);
-        CsvOutputs[fname] = result;
+        auto& result = CsvOutputs[fname];
+        result = MakeAtomicShared<TFileOutput>(Owner.UploadParams.FileOutputPath / fname);
         return std::make_pair(result.Get(), true);
     }
     TMap<TString, TAtomicSharedPtr<TFileOutput>> CsvOutputs;

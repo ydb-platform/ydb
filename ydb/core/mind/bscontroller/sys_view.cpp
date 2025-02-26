@@ -398,6 +398,8 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
     if (latencyStats.GetFast) {
         info->SetGetFastLatency(latencyStats.GetFast->MicroSeconds());
     }
+
+    info->SetLayoutCorrect(groupInfo->LayoutCorrect);
 }
 
 void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageController::TStoragePoolInfo& poolInfo) {

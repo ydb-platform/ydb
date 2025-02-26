@@ -855,7 +855,7 @@ protected:
         }
 
         bool IsPaused() const {
-            return PendingWatermarks.empty() || PendingCheckpoint.has_value();
+            return !PendingWatermarks.empty() || PendingCheckpoint.has_value();
         }
 
         void Pause(TInstant watermark) {

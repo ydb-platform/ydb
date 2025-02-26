@@ -226,8 +226,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownKeyExtract(TExp
             const auto kfColumns = GetKeyFilterColumns(section, kfType);
             YQL_ENSURE(!kfColumns.empty());
             for (auto path: section.Paths()) {
-                TYtPathInfo pathInfo(path);
-                auto pathRowSpec = pathInfo.Table->RowSpec;
+                auto pathRowSpec = TYtTableBaseInfo::GetRowSpec(path.Table());
 
                 if (auto maybeOp = getInnerOpForUpdate(path, kfColumns)) {
                     auto innerOp = maybeOp.Cast();
@@ -263,8 +262,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownKeyExtract(TExp
                     TExprNode::TPtr updatedSection;
                     if (kfType == EYtSettingType::KeyFilter2 && State_->Configuration->DropUnusedKeysFromKeyFilter.Get().GetOrElse(DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER)) {
                         for (auto innerOpPath: innerOpSection.Paths()) {
-                            TYtPathInfo innerOpPathInfo(innerOpPath);
-                            auto innerOpPathRowSpec = innerOpPathInfo.Table->RowSpec;
+                            auto innerOpPathRowSpec = TYtTableBaseInfo::GetRowSpec(innerOpPath.Table());
 
                             YQL_ENSURE(kfColumns.size() <= innerOpPathRowSpec->SortedBy.size());
                             for (size_t i = 0; i < kfColumns.size(); i++) {

@@ -3469,8 +3469,6 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
             return BuildUdf(ctx, pos, moduleName, name, newArgs);
         }
-    } else if (ns == "datetime2" && (name == "Parse")) {
-        return BuildUdf(ctx, pos, nameSpace, name, args);
     } else if (ns == "pg" || ns == "pgagg" || ns == "pgproc") {
         bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
         bool isNormalFunc = NYql::NPg::HasProc(name, NYql::NPg::EProcKind::Function);

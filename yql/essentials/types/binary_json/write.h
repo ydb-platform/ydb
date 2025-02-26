@@ -10,10 +10,16 @@
 
 namespace NKikimr::NBinaryJson {
 
+enum class EInfinityHandlingPolicy {
+    REJECT = 1,
+    CLIP = 2,
+};
+
 /**
  * @brief Translates textual JSON into BinaryJson
  */
-std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json);
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(
+    const TStringBuf json, const EInfinityHandlingPolicy infinityHandling = EInfinityHandlingPolicy::REJECT);
 
 /**
  * @brief Translates DOM layout from `yql/library/dom` library into BinaryJson

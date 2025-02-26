@@ -17,7 +17,7 @@
 
 namespace NKikimr::NArrow {
 
-static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryPool& memPool, TString& errorMessage) {
+static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryPool& memPool, TString& errorMessage, const NBinaryJson::EInfinityHandlingPolicy infinityHandling) {
     if (!cell.AsBuf()) {
         cell = TCell();
         return true;
@@ -34,7 +34,7 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
             break;
         }
         case NScheme::NTypeIds::JsonDocument: {
-            const auto binaryJson = NBinaryJson::SerializeToBinaryJson(cell.AsBuf());
+            const auto binaryJson = NBinaryJson::SerializeToBinaryJson(cell.AsBuf(), infinityHandling);
             if (std::holds_alternative<TString>(binaryJson)) {
                 errorMessage = "Invalid JSON for JsonDocument provided: " + std::get<TString>(binaryJson);
                 return false;
@@ -326,7 +326,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
 
             if (NeedDataConversion(colType)) {
                 for (i32 i = 0; i < unroll; ++i) {
-                    if (!ConvertData(cells[i][col], colType, memPool, errorMessage)) {
+                    if (!ConvertData(cells[i][col], colType, memPool, errorMessage, InfinityHandling_)) {
                         return false;
                     }
                 }
@@ -371,7 +371,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
                 return false;
             }
 
-            if (!ConvertData(curCell, colType, memPool, errorMessage)) {
+            if (!ConvertData(curCell, colType, memPool, errorMessage, InfinityHandling_)) {
                 return false;
             }
             ++col;

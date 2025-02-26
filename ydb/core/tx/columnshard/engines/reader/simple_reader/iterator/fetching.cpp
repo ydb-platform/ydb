@@ -88,7 +88,8 @@ TConclusion<bool> TPortionAccessorFetchingStep::DoExecuteInplace(
 }
 
 TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    if (Columns.GetColumnsCount()) {
+    const auto& chainProgram = source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified();
+    if (Columns.GetColumnsCount() && !chainProgram->HasAggregations()) {
         source->SetSourceInMemory(
             source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
@@ -161,6 +162,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
             AFL_VERIFY(filter->Apply(resultBatch, NArrow::TColumnFilter::TApplyContext(StartIndex, RecordsCount).SetTrySlices(true)));
         }
     }
+
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
         new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
             std::make_shared<TApplySourceResult>(source, std::move(resultBatch), StartIndex, RecordsCount, step)));
@@ -186,16 +188,6 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
     auto task = std::make_shared<TStepAction>(source, std::move(cursor), source->GetContext()->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     return false;
-}
-
-TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
-        source->MutableStageData().GetTable()->AddVerified(source->GetContext()->GetCommonContext()->GetResolver()->GetColumnIdVerified(f->name()),
-            NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount()));
-    }
-    source->SetUsedRawBytes(0);
-    source->Finalize({});
-    return true;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

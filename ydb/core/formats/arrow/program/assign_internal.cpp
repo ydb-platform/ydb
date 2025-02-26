@@ -18,7 +18,7 @@ TConclusionStatus TCalculationProcessor::DoExecute(const std::shared_ptr<TAccess
     if (result.IsFail()) {
         return result;
     }
-    resources->AddVerified(GetOutputColumnIdOnce(), std::move(*result));
+    resources->AddVerified(GetOutputColumnIdOnce(), std::move(*result), false);
     return TConclusionStatus::Success();
 }
 

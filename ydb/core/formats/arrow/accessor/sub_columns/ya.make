@@ -15,6 +15,8 @@ PEERDIR(
 SRCS(
     GLOBAL constructor.cpp
     GLOBAL request.cpp
+    header.cpp
+    partial.cpp
     data_extractor.cpp
     accessor.cpp
     direct_builder.cpp

@@ -575,11 +575,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    if (!AppDataVerified().ColumnShardConfig.GetWritingEnabled()) {
-        sendError("writing disabled", NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
-        return;
-    }
-
     std::optional<ui32> granuleShardingVersionId;
     if (record.HasGranuleShardingVersionId()) {
         granuleShardingVersionId = record.GetGranuleShardingVersionId();

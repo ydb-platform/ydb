@@ -17,16 +17,16 @@ TSplittedColumns TDictStats::SplitByVolume(const TSettings& settings, const ui32
     }
     std::vector<TRTStats> columnStats;
     std::vector<TRTStats> otherStats;
-    ui64 columnsSize = 0;
+    TSettings::TColumnsDistributor distributor = settings.BuildDistributor(sumSize, recordsCount);
     for (auto it = bySize.rbegin(); it != bySize.rend(); ++it) {
         for (auto&& i : it->second) {
-            AFL_VERIFY(sumSize >= columnsSize);
-            if (columnStats.size() < settings.GetColumnsLimit() &&
-                (!sumSize || 1.0 * (sumSize - columnsSize) / sumSize > settings.GetOthersAllowedFraction())) {
-                columnsSize += it->first;
-                columnStats.emplace_back(std::move(i));
-            } else {
-                otherStats.emplace_back(std::move(i));
+            switch (distributor.TakeAndDetect(it->first, i.GetRecordsCount())) {
+                case TSettings::TColumnsDistributor::EColumnType::Separated:
+                    columnStats.emplace_back(std::move(i));
+                    break;
+                case TSettings::TColumnsDistributor::EColumnType::Other:
+                    otherStats.emplace_back(std::move(i));
+                    break;
             }
         }
     }
@@ -100,6 +100,7 @@ TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex)
         case IChunkedArray::EType::SerializedChunkedArray:
         case IChunkedArray::EType::CompositeChunkedArray:
         case IChunkedArray::EType::SubColumnsArray:
+        case IChunkedArray::EType::SubColumnsPartialArray:
         case IChunkedArray::EType::ChunkedArray:
             AFL_VERIFY(false)("type", GetAccessorType(columnIndex));
             return TConstructorContainer();

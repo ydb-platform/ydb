@@ -26,6 +26,8 @@ protected:
     bool NeedConcatenation = false;
 
 public:
+    virtual bool IsAggregation() const = 0;
+
     arrow::compute::ExecContext* GetContext() const {
         return GetCustomExecContext();
     }
@@ -68,6 +70,10 @@ private:
     const EOperation OperationId;
     virtual std::vector<std::string> GetRegistryFunctionNames() const override {
         return { GetFunctionName(OperationId) };
+    }
+
+    virtual bool IsAggregation() const override {
+        return false;
     }
 
 public:
@@ -320,6 +326,10 @@ private:
     using TBase = IStepFunction;
     const std::shared_ptr<arrow::compute::ScalarFunction> Function;
     std::shared_ptr<arrow::compute::FunctionOptions> FunctionOptions;
+
+    virtual bool IsAggregation() const override {
+        return false;
+    }
 
 public:
     TKernelFunction(const std::shared_ptr<arrow::compute::ScalarFunction> kernelsFunction,

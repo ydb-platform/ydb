@@ -1,10 +1,14 @@
 #pragma once
-#include "common/owner.h"
+#include "sub_columns.h"
+
 #include "common/histogram.h"
+#include "common/owner.h"
+
 #include <ydb/core/protos/table_stats.pb.h>
-#include <ydb/core/tx/columnshard/resources/memory.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
+#include <ydb/core/tx/columnshard/resources/memory.h>
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NColumnShard {
@@ -16,15 +20,14 @@ private:
     std::shared_ptr<NOlap::TMemoryAggregation> RequestedResourcesMemory;
     std::shared_ptr<TValueAggregationClient> ScanDuration;
     std::shared_ptr<TValueAggregationClient> BlobsWaitingDuration;
+
 public:
     TScanAggregations(const TString& moduleId)
         : TBase(moduleId)
         , ResultsReady(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Results/Ready"))
         , RequestedResourcesMemory(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Resources/Requested"))
         , ScanDuration(TBase::GetValueAutoAggregationsClient("ScanDuration"))
-        , BlobsWaitingDuration(TBase::GetValueAutoAggregationsClient("BlobsWaitingDuration"))
-    {
-
+        , BlobsWaitingDuration(TBase::GetValueAutoAggregationsClient("BlobsWaitingDuration")) {
     }
 
     std::shared_ptr<NOlap::TMemoryAggregation> GetRequestedResourcesMemory() const {
@@ -71,6 +74,7 @@ public:
     class TScanIntervalState {
     private:
         std::vector<NMonitoring::TDynamicCounters::TCounterPtr> ValuesByStatus;
+
     public:
         TScanIntervalState(const TScanCounters& counters) {
             ValuesByStatus.resize((ui32)EIntervalStatus::COUNT);
@@ -95,10 +99,10 @@ public:
     private:
         EIntervalStatus Status = EIntervalStatus::Undefined;
         const std::shared_ptr<TScanIntervalState> BaseCounters;
+
     public:
         TScanIntervalStateGuard(const std::shared_ptr<TScanIntervalState>& baseCounters)
-            : BaseCounters(baseCounters)
-        {
+            : BaseCounters(baseCounters) {
             BaseCounters->Add(Status);
         }
 
@@ -144,8 +148,14 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr NotIndexBlobs;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsAcceptedByIndex;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByIndex;
+    std::shared_ptr<TSubColumnCounters> SubColumnCounters;
 
 public:
+    const std::shared_ptr<TSubColumnCounters>& GetSubColumns() const {
+        AFL_VERIFY(SubColumnCounters);
+        return SubColumnCounters;
+    }
+
     void OnNotIndexBlobs() const {
         NotIndexBlobs->Add(1);
     }
@@ -157,7 +167,6 @@ public:
     }
     NMonitoring::TDynamicCounters::TCounterPtr AcceptedByIndex;
     NMonitoring::TDynamicCounters::TCounterPtr DeniedByIndex;
-
 
     TScanIntervalStateGuard CreateIntervalStateGuard() const {
         return TScanIntervalStateGuard(ScanIntervalState);
@@ -299,6 +308,7 @@ public:
 class TCounterGuard: TMoveOnly {
 private:
     std::shared_ptr<TAtomicCounter> Counter;
+
 public:
     TCounterGuard(TCounterGuard&& guard) {
         Counter = guard.Counter;
@@ -306,8 +316,7 @@ public:
     }
 
     TCounterGuard(const std::shared_ptr<TAtomicCounter>& counter)
-        : Counter(counter)
-    {
+        : Counter(counter) {
         AFL_VERIFY(Counter);
         Counter->Inc();
     }
@@ -316,7 +325,6 @@ public:
             AFL_VERIFY(Counter->Dec() >= 0);
         }
     }
-
 };
 
 class TConcreteScanCounters: public TScanCounters {
@@ -397,10 +405,8 @@ public:
         , ResourcesAllocationTasksCount(std::make_shared<TAtomicCounter>())
         , ResultsForSourceCount(std::make_shared<TAtomicCounter>())
         , ResultsForReplyGuard(std::make_shared<TAtomicCounter>())
-        , Aggregations(TBase::BuildAggregations())
-    {
-
+        , Aggregations(TBase::BuildAggregations()) {
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

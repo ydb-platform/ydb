@@ -23,7 +23,19 @@ private:
         , Function(function) {
     }
 
+    virtual bool IsAggregation() const override {
+        return Function->IsAggregation();
+    }
+
 public:
+    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType,
+        const std::shared_ptr<TAccessorsCollection>& resources) const override {
+        if (!KernelLogic) {
+            return TBase::BuildFetchTask(columnId, arrType, resources);
+        }
+        return KernelLogic->BuildFetchTask(columnId, arrType, GetInput(), resources);
+    }
+
     static TConclusion<std::shared_ptr<TCalculationProcessor>> Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, 
         const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic = nullptr);
 };

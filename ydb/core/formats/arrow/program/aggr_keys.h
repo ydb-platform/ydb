@@ -44,6 +44,10 @@ private:
     }
 
 public:
+    virtual bool IsAggregation() const override {
+        return true;
+    }
+
     TAggregateFunction(const EAggregate aggregationType, const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions = nullptr)
         : TBase(functionOptions, true)
         , AggregationType(aggregationType) {
@@ -152,6 +156,9 @@ private:
         : TBase(std::move(input), std::move(output), EProcessorType::Aggregation)
         , AggregationKeys(std::move(aggregationKeys))
         , Aggregations(std::move(aggregations)) {
+    }
+    virtual bool IsAggregation() const override {
+        return true;
     }
 
 public:

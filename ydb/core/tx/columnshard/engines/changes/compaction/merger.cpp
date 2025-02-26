@@ -105,7 +105,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             const ui32 portionRecordsCountLimit =
                 batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
 
-            TChunkMergeContext context(portionRecordsCountLimit, batchIdx, batchResult->num_rows());
+            TChunkMergeContext context(portionRecordsCountLimit, batchIdx, batchResult->num_rows(), Context.Counters);
             chunkGroups[batchIdx][columnId] = merger->Execute(context, mergingContext);
             ++batchIdx;
         }

@@ -10,6 +10,10 @@ private:
 
     virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const override;
 
+    virtual bool IsAggregation() const override {
+        return false;
+    }
+
 public:
     TConstProcessor(const std::shared_ptr<arrow::Scalar>& scalar, const ui32 columnId)
         : TBase(std::vector<TColumnChainInfo>(), std::vector<TColumnChainInfo>({ TColumnChainInfo(columnId) }), EProcessorType::Const)

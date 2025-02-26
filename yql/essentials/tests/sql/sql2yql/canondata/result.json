@@ -1091,6 +1091,27 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_bigdate-const_timestamp64_/sql.yql"
         }
     ],
+    "test_sql2yql.test[bigdate-date_tz_bounds]": [
+        {
+            "checksum": "7e6319138c451a9af0fab81161b22c28",
+            "size": 3131,
+            "uri": "https://{canondata_backend}/1880306/7ab74c806ebfa825c90d696b230a4fba9939dddd/resource.tar.gz#test_sql2yql.test_bigdate-date_tz_bounds_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[bigdate-date_tz_bounds_scale]": [
+        {
+            "checksum": "21dcb7017ac0fa052b508230f773ecad",
+            "size": 6261,
+            "uri": "https://{canondata_backend}/1880306/7ab74c806ebfa825c90d696b230a4fba9939dddd/resource.tar.gz#test_sql2yql.test_bigdate-date_tz_bounds_scale_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[bigdate-date_tz_impossible_cast]": [
+        {
+            "checksum": "96261bbea3e8e2d39aa2f6a88862e07a",
+            "size": 1128,
+            "uri": "https://{canondata_backend}/1900335/95072b0ab538df1cd8fe21db18063639e62a6b12/resource.tar.gz#test_sql2yql.test_bigdate-date_tz_impossible_cast_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[bigdate-explicit_cast]": [
         {
             "checksum": "cdd5d03853871d3eb099ce8f7bf3c490",
@@ -8050,6 +8071,21 @@
     "test_sql_format.test[bigdate-const_timestamp64]": [
         {
             "uri": "file://test_sql_format.test_bigdate-const_timestamp64_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[bigdate-date_tz_bounds]": [
+        {
+            "uri": "file://test_sql_format.test_bigdate-date_tz_bounds_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[bigdate-date_tz_bounds_scale]": [
+        {
+            "uri": "file://test_sql_format.test_bigdate-date_tz_bounds_scale_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[bigdate-date_tz_impossible_cast]": [
+        {
+            "uri": "file://test_sql_format.test_bigdate-date_tz_impossible_cast_/formatted.sql"
         }
     ],
     "test_sql_format.test[bigdate-explicit_cast]": [

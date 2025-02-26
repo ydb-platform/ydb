@@ -21,8 +21,13 @@ public:
         auto grpcPort = portManager.GetPort(2135);
         auto settings = TServerSettings(mbusPort);
         settings.SetDomainName("Root");
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.SetAppConfig(appConfig);
         Server = MakeHolder<TServer>(settings);
         Server->EnableGRpc(NYdbGrpc::TServerOptions().SetHost("localhost").SetPort(grpcPort));
+        Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::EPriority::PRI_DEBUG);
+        Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_DEBUG);
         auto driverConfig = TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << grpcPort);
 
         Driver = MakeHolder<TDriver>(driverConfig);

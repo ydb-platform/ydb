@@ -49,20 +49,30 @@ public:
             alter = oldLambda != newLambda;
         }
 
-        Replication->SetConfig(std::move(*record.MutableConfig()));
-        NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString())
-        );
-
+        auto purposeState = Replication->GetState();
         if (record.HasSwitchState()) {
             switch (record.GetSwitchState().GetStateCase()) {
                 case NKikimrReplication::TReplicationState::kDone:
+                    purposeState = TReplication::EState::Done;
+                    alter = true;
                     break;
                 default:
                     Y_ABORT("Invalid state");
                 }
-        } else if (!alter) {
+        }
+
+        if (alter) {
+            Replication->SetPurposeState(purposeState);
+        }
+
+        Replication->SetConfig(std::move(*record.MutableConfig()));
+        NIceDb::TNiceDb db(txc.DB);
+        db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),
+            NIceDb::TUpdate<Schema::Replications::PurposeState>(purposeState)
+        );
+
+        if (!alter) {
             Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
             return true;
         }

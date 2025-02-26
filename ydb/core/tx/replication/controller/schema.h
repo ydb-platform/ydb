@@ -25,9 +25,10 @@ struct TControllerSchema: NIceDb::Schema {
         struct State: Column<5, NScheme::NTypeIds::Uint8> { using Type = TReplication::EState; };
         struct Issue: Column<6, NScheme::NTypeIds::Utf8> {};
         struct NextTargetId: Column<7, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 1; };
+        struct PurposeState: Column<8, NScheme::NTypeIds::Uint8> { using Type = TReplication::EState; };
 
         using TKey = TableKey<Id>;
-        using TColumns = TableColumns<Id, PathOwnerId, PathLocalId, Config, State, Issue, NextTargetId>;
+        using TColumns = TableColumns<Id, PathOwnerId, PathLocalId, Config, State, Issue, NextTargetId, PurposeState>;
     };
 
     struct Targets: Table<3> {

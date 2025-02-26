@@ -137,6 +137,8 @@ public:
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
+    EState GetPurposeState() const;
+    void SetPurposeState(EState state);
     const TString& GetIssue() const;
     const TMaybe<TDuration> GetLag() const;
 

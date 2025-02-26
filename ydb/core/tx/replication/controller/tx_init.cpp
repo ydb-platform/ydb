@@ -53,10 +53,12 @@ class TController::TTxInit: public TTxBase {
             const auto state = rowset.GetValue<Schema::Replications::State>();
             const auto issue = rowset.GetValue<Schema::Replications::Issue>();
             const auto nextTid = rowset.GetValue<Schema::Replications::NextTargetId>();
+            const auto purposeState = rowset.GetValue<Schema::Replications::PurposeState>();
 
             auto replication = Self->Add(rid, pathId, config);
             replication->SetState(state, issue);
             replication->SetNextTargetId(nextTid);
+            replication->SetPurposeState(purposeState);
 
             if (!rowset.Next()) {
                 return false;

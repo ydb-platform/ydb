@@ -46,7 +46,7 @@ public:
         }
 
         if (Ev->Get()->IsSuccess()) {
-            target->SetDstState(TReplication::EDstState::Ready);
+            target->SetDstState(NextState(replication->GetPurposeState()));
             target->UpdateConfig(replication->GetConfig());
 
             CLOG_N(ctx, "Target dst altered"
@@ -56,7 +56,7 @@ public:
             if (replication->CheckAlterDone()) {
                 CLOG_N(ctx, "Replication altered"
                     << ": rid# " << rid);
-                replication->SetState(TReplication::EState::Ready);
+                replication->SetState(replication->GetPurposeState());
             }
         } else {
             target->SetDstState(TReplication::EDstState::Error);
@@ -85,6 +85,19 @@ public:
         );
 
         return true;
+    }
+
+    TReplication::EDstState NextState(TReplication::EState state) {
+        switch (state) {
+        case TReplication::EState::Done:
+            return TReplication::EDstState::Done;
+        case TReplication::EState::Ready:
+            return TReplication::EDstState::Ready;
+        case TReplication::EState::Error:
+            return TReplication::EDstState::Error;
+        case TReplication::EState::Removing:
+            return TReplication::EDstState::Removing;
+        }
     }
 
     void Complete(const TActorContext& ctx) override {

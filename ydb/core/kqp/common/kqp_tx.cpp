@@ -402,9 +402,8 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     modifiedTables.insert(getTable(settings.GetTable()));
-
                     if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
-                        // INSERT should be executed immediately, because it returns an error in case of duplicate rows.
+                        // INSERT with sink should be executed immediately, because it returns an error in case of duplicate rows.
                         return true;
                     }
                 } else {

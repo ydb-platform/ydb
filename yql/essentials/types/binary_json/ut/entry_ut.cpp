@@ -116,6 +116,7 @@ public:
 
             UNIT_ASSERT_VALUES_EQUAL(container.GetElement(0).GetNumber(), testCase.second);
         }
+    }
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TBinaryJsonEntryTest);

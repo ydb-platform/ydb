@@ -149,7 +149,7 @@ public:
 
         auto* csk = AppData()->ConfigSwissKnife;
 
-        if (csk && csk->VerifyReplaceRequest(request, status, issues)) {
+        if (csk && !csk->VerifyReplaceRequest(request, status, issues)) {
             return false;
         }
 

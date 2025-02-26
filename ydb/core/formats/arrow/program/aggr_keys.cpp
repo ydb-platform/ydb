@@ -104,9 +104,9 @@ TConclusionStatus TWithKeysAggregationProcessor::DoExecute(const std::shared_ptr
 
         funcOpts.assigns.emplace_back(gbAssign);
         for (auto&& i : aggr.GetInputs()) {
-            if (fieldsUsage.emplace(i).second) {
-                batch.emplace_back(resources->GetArrayVerified(i));
-                fields.emplace_back(resources->GetFieldVerified(i));
+            if (fieldsUsage.emplace(i.GetColumnId()).second) {
+                batch.emplace_back(resources->GetArrayVerified(i.GetColumnId()));
+                fields.emplace_back(resources->GetFieldVerified(i.GetColumnId()));
             }
         }
     }
@@ -127,7 +127,7 @@ TConclusionStatus TWithKeysAggregationProcessor::DoExecute(const std::shared_ptr
             return TConclusionStatus::Fail("No expected column in GROUP BY result.");
         }
         if (auto columnId = TryFromString<ui32>(assign.result_column)) {
-            resources->AddVerified(*columnId, column);
+            resources->AddVerified(*columnId, column, false);
         } else {
             return TConclusionStatus::Fail("Incorrect column id from name: " + assign.result_column);
         }

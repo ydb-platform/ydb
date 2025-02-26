@@ -1,13 +1,16 @@
 #pragma once
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/datashard/datashard.h>
+
+#include <ydb/library/accessor/accessor.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+
 #include <optional>
 
 namespace NKikimr::NTxUT {
@@ -31,6 +34,7 @@ private:
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> ResultBatches;
     YDB_READONLY(ui32, IterationsCount, 0);
+
 public:
     ui64 GetReadStat(const TString& paramName) const {
         AFL_VERIFY(IsCorrectlyFinished());
@@ -74,7 +78,6 @@ public:
         , TabletId(tabletId)
         , PathId(pathId)
         , Snapshot(snapshot) {
-
     }
 
     bool IsFinished() const {
@@ -170,4 +173,4 @@ public:
     }
 };
 
-} //namespace NKikimr::NTxUT
+}   //namespace NKikimr::NTxUT

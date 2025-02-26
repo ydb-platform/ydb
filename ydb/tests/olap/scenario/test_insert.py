@@ -5,7 +5,7 @@ from ydb.tests.olap.scenario.helpers import (
     TestContext,
     CreateTable,
 )
-from helpers.thread_helper import TestThread
+from ydb.tests.olap.common.thread_helper import TestThread, TestThreads
 from ydb import PrimitiveType
 from typing import List, Dict, Any
 from ydb.tests.olap.lib.utils import get_external_param, external_param_is_true
@@ -73,24 +73,18 @@ class TestInsert(BaseTestSet):
                 batch.append({"key": j + rows_count * i})
             data.append(batch)
 
-        thread1 = []
-        thread2 = []
+        thread1: TestThreads = TestThreads()
+        thread2: TestThreads = TestThreads()
         for table in range(tables_count):
             thread1.append(TestThread(target=self._loop_upsert, args=[ctx, data, str(table)]))
         for table in range(tables_count):
             thread2.append(TestThread(target=self._loop_insert, args=[ctx, inserts_count, str(table), ignore_read_errors]))
 
-        for thread in thread1:
-            thread.start()
+        thread1.start_all()
+        thread2.start_all()
 
-        for thread in thread2:
-            thread.start()
-
-        for thread in thread2:
-            thread.join()
-
-        for thread in thread1:
-            thread.join()
+        thread2.join_all()
+        thread1.join_all()
 
         for table in range(tables_count):
             cnt_table_name0 = cnt_table_name + str(table)

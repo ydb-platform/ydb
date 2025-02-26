@@ -63,6 +63,26 @@ protected:
     std::unique_ptr<TFetchedResult> StageResult;
 
 public:
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const {
+        AFL_VERIFY(false);
+        return Default<std::shared_ptr<ISnapshotSchema>>();
+    }
+
+    virtual TString GetColumnStorageId(const ui32 /*columnId*/) const {
+        AFL_VERIFY(false);
+        return "";
+    }
+
+    virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const {
+        AFL_VERIFY(false);
+        return TBlobRange();
+    }
+
+    virtual std::optional<TSnapshot> GetDataSnapshot() const {
+        return std::nullopt;
+    }
+
     IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)

@@ -32,6 +32,8 @@ private:
 public:
     TGeneralContainer(const ui32 recordsCount);
 
+    TGeneralContainer ApplyFilter(const TColumnFilter& filter) const;
+
     TGeneralContainer Slice(const ui32 offset, const ui32 count) const {
         std::vector<std::shared_ptr<NAccessor::IChunkedArray>> columns;
         for (auto&& i : Columns) {

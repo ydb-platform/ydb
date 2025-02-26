@@ -34,9 +34,9 @@ CREATE USER user1 PASSWORD NULL;
 
 ## HASH
 
-The {{ ydb-short-name }} stores the user's password in hashed form. Therefore, in order to be able to restore the user with same password during database backup, there is a `HASH` option that allows you to create a user knowing only the hash in JSON format.
+The {{ ydb-short-name }} stores the user's password in hashed form. Therefore, in order to be able to restore the user with same password during database backup, there is a `HASH` option that allows you to create a user knowing only the hash in JSON format. This JSON object stores the digest of the hash function and the name of the algorithm (at the moment the [argon2id](https://en.wikipedia.org/wiki/Argon2) algorithm is used for hashing).
 
-In the `HASH` option, the 'hash' parameter must get a JSON object with exactly three fields:
+So, in the `HASH` option, the 'hash' parameter must get a JSON object with exactly three fields:
 
 * `hash` - value of hash in base64 format;
 * `salt` - [salt](https://en.wikipedia.org/wiki/Salt_(cryptography)) in base64 format;

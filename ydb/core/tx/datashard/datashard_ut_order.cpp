@@ -1222,10 +1222,9 @@ Y_UNIT_TEST(ScanFollowedByUpdate) {
 
 Y_UNIT_TEST_SUITE(DataShardOutOfOrder) {
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, StreamLookup) {
+Y_UNIT_TEST(TestOutOfOrderLockLost) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
@@ -1350,10 +1349,9 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, StreamLookup) {
     }
 }
 
-Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, StreamLookup, EvWrite) {
+Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, EvWrite) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -1456,10 +1454,9 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, StreamLookup, EvWrite) {
     }
 }
 
-Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, StreamLookup, EvWrite) {
+Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, EvWrite) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -1571,10 +1568,9 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, StreamLookup, EvWrite) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, StreamLookup) {
+Y_UNIT_TEST(TestOutOfOrderRestartLocksReorderedWithoutBarrier) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetAppConfig(app)
@@ -1707,10 +1703,9 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, StreamLookup
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, StreamLookup) {
+Y_UNIT_TEST(TestOutOfOrderNoBarrierRestartImmediateLongTail) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetAppConfig(app)
@@ -2829,10 +2824,9 @@ Y_UNIT_TEST(TestSecondaryClearanceAfterShardRestartRace) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);"));
 }
 
-Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, StreamLookup) {
+Y_UNIT_TEST(TestShardRestartNoUndeterminedImmediate) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
@@ -2946,10 +2940,9 @@ Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, StreamLookup) {
     }
 }
 
-Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, StreamLookup, EvWrite) {
+Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, EvWrite) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")

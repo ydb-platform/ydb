@@ -278,7 +278,6 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
     Y_UNIT_TEST_QUAD(IndexLookupJoin, EnableStreamLookup, QueryService) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(EnableStreamLookup);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig);
@@ -316,7 +315,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             .ExpectedReads = EnableStreamLookup ? 13 : 10,
         });
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), EnableStreamLookup ? 1 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), EnableStreamLookup ? 1 : 2);
     }
 
     Y_UNIT_TEST_TWIN(Upsert, QueryService) {
@@ -611,10 +610,8 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
         if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin()) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-        } else if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
         }
     }
 
@@ -638,10 +635,8 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
         if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin()) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-        } else if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
         }
     }
 

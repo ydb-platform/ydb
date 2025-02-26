@@ -862,11 +862,6 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-
-        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
-        }
     }
 
     Y_UNIT_TEST(DuplicateKeyPredicateLiteral) {
@@ -1094,11 +1089,6 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         }
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 3);
-
-        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).affected_shards(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).partitions_count(), 4);
-        }
     }
 
     Y_UNIT_TEST(LiteralOrCompisite) {

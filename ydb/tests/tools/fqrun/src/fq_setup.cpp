@@ -150,7 +150,7 @@ private:
 
         NFq::Init(
             fqConfig, GetRuntime()->GetNodeId(), actorRegistrator, &GetRuntime()->GetAppData(),
-            Settings.DomainName, nullptr, YqSharedResources, folderServiceFactory, 0, {}, Settings.PqGateway
+            Settings.DomainName, nullptr, YqSharedResources, folderServiceFactory, 0, {}, Settings.PqGatewayFactory
         );
         YqSharedResources->Init(GetRuntime()->GetActorSystem(0));
     }

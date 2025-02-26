@@ -251,7 +251,7 @@ public:
 
             fakeComputeActorStats.SetDurationUs(elapsedMicros);
 
-            Stats->AddComputeActorStats(OwnerActor.NodeId(), std::move(fakeComputeActorStats));
+            Stats->AddComputeActorStats(OwnerActor.NodeId(), std::move(fakeComputeActorStats), NYql::NDqProto::COMPUTE_STATE_FINISHED);
 
             Stats->ExecuterCpuTime = executerCpuTime;
             Stats->FinishTs = Stats->StartTs + TDuration::MicroSeconds(elapsedMicros);

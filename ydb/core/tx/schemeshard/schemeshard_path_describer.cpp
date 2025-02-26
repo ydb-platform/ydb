@@ -810,6 +810,15 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
         }
     }
 
+    if (solomonVolumeInfo->Partitions.size() > 0) {
+        auto shardId = solomonVolumeInfo->Partitions.begin()->first;
+        auto shardInfo = Self->ShardInfos.FindPtr(shardId);
+        Y_ABORT_UNLESS(shardInfo);
+        for (const auto& channel : shardInfo->BindedChannels) {
+            entry->AddBoundChannels()->CopyFrom(channel);
+        }
+    }
+
     Sort(entry->MutablePartitions()->begin(),
          entry->MutablePartitions()->end(),
          [] (auto& part1, auto& part2) {

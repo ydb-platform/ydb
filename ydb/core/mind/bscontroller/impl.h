@@ -20,6 +20,8 @@ namespace NKikimr {
 
 namespace NBsController {
 
+class TGroupGeometryInfo;
+
 using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
@@ -617,6 +619,12 @@ public:
         // also it depends on the Status of underlying PDisks, so every time their status change, group status has to
         // be recalculated too
         void CalculateGroupStatus();
+
+        // group layout status: whether it is positioned correctly
+        bool LayoutCorrect = false;
+
+        void CalculateLayoutStatus(TBlobStorageController *self, TBlobStorageGroupInfo::TTopology *topology,
+            const std::function<TGroupGeometryInfo()>& getGeom);
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {

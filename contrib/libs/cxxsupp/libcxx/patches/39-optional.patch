@@ -1,5 +1,5 @@
 diff --git a/include/optional b/include/optional
-index a16e485..e6ff853 100644
+index e550745..992189b 100644
 --- a/include/optional
 +++ b/include/optional
 @@ -288,7 +288,7 @@ struct __optional_destruct_base<_Tp, false> {

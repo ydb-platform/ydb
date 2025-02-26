@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2005-2022 Intel Corporation
+    Copyright (c) 2005-2023 Intel Corporation
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -88,8 +88,9 @@ namespace d0 {
 
 template <typename ReturnType, typename OutputType>
 concept node_body_return_type = std::same_as<OutputType, tbb::detail::d1::continue_msg> ||
-                                std::same_as<OutputType, ReturnType>;
+                                std::convertible_to<OutputType, ReturnType>;
 
+// TODO: consider using std::invocable here
 template <typename Body, typename Output>
 concept continue_node_body = std::copy_constructible<Body> &&
                              requires( Body& body, const tbb::detail::d1::continue_msg& v ) {
@@ -98,15 +99,13 @@ concept continue_node_body = std::copy_constructible<Body> &&
 
 template <typename Body, typename Input, typename Output>
 concept function_node_body = std::copy_constructible<Body> &&
-                             requires( Body& body, const Input& v ) {
-                                 { body(v) } -> node_body_return_type<Output>;
-                             };
+                             std::invocable<Body&, const Input&> &&
+                             node_body_return_type<std::invoke_result_t<Body&, const Input&>, Output>;
 
 template <typename FunctionObject, typename Input, typename Key>
 concept join_node_function_object = std::copy_constructible<FunctionObject> &&
-                                    requires( FunctionObject& func, const Input& v ) {
-                                        { func(v) } -> adaptive_same_as<Key>;
-                                    };
+                                    std::invocable<FunctionObject&, const Input&> &&
+                                    std::convertible_to<std::invoke_result_t<FunctionObject&, const Input&>, Key>;
 
 template <typename Body, typename Output>
 concept input_node_body = std::copy_constructible<Body> &&
@@ -116,21 +115,16 @@ concept input_node_body = std::copy_constructible<Body> &&
 
 template <typename Body, typename Input, typename OutputPortsType>
 concept multifunction_node_body = std::copy_constructible<Body> &&
-                                  requires( Body& body, const Input& v, OutputPortsType& p ) {
-                                      body(v, p);
-                                  };
+                                  std::invocable<Body&, const Input&, OutputPortsType&>;
 
 template <typename Sequencer, typename Value>
 concept sequencer = std::copy_constructible<Sequencer> &&
-                    requires( Sequencer& seq, const Value& value ) {
-                        { seq(value) } -> adaptive_same_as<std::size_t>;
-                    };
+                    std::invocable<Sequencer&, const Value&> &&
+                    std::convertible_to<std::invoke_result_t<Sequencer&, const Value&>, std::size_t>;
 
 template <typename Body, typename Input, typename GatewayType>
 concept async_node_body = std::copy_constructible<Body> &&
-                          requires( Body& body, const Input& v, GatewayType& gateway ) {
-                              body(v, gateway);
-                          };
+                          std::invocable<Body&, const Input&, GatewayType&>;
 
 } // namespace d0
 #endif // __TBB_CPP20_CONCEPTS_PRESENT
@@ -1183,8 +1177,9 @@ protected:
 
         buffer_operation(const T& e, op_type t) : type(char(t))
                                                   , elem(const_cast<T*>(&e)) , ltask(nullptr)
+                                                  , r(nullptr)
         {}
-        buffer_operation(op_type t) : type(char(t)),  ltask(nullptr) {}
+        buffer_operation(op_type t) : type(char(t)), elem(nullptr), ltask(nullptr), r(nullptr) {}
     };
 
     bool forwarder_busy;
@@ -1271,12 +1266,14 @@ protected:
 
     //! Register successor
     virtual void internal_reg_succ(buffer_operation *op) {
+        __TBB_ASSERT(op->r, nullptr);
         my_successors.register_successor(*(op->r));
         op->status.store(SUCCEEDED, std::memory_order_release);
     }
 
     //! Remove successor
     virtual void internal_rem_succ(buffer_operation *op) {
+        __TBB_ASSERT(op->r, nullptr);
         my_successors.remove_successor(*(op->r));
         op->status.store(SUCCEEDED, std::memory_order_release);
     }
@@ -1330,12 +1327,14 @@ protected:
     }
 
     virtual bool internal_push(buffer_operation *op) {
+        __TBB_ASSERT(op->elem, nullptr);
         this->push_back(*(op->elem));
         op->status.store(SUCCEEDED, std::memory_order_release);
         return true;
     }
 
     virtual void internal_pop(buffer_operation *op) {
+        __TBB_ASSERT(op->elem, nullptr);
         if(this->pop_back(*(op->elem))) {
             op->status.store(SUCCEEDED, std::memory_order_release);
         }
@@ -1345,6 +1344,7 @@ protected:
     }
 
     virtual void internal_reserve(buffer_operation *op) {
+        __TBB_ASSERT(op->elem, nullptr);
         if(this->reserve_front(*(op->elem))) {
             op->status.store(SUCCEEDED, std::memory_order_release);
         }
@@ -1886,7 +1886,7 @@ private:
     size_t my_threshold;
     size_t my_count; // number of successful puts
     size_t my_tries; // number of active put attempts
-    size_t my_future_decrement; // number of active decrement 
+    size_t my_future_decrement; // number of active decrement
     reservable_predecessor_cache< T, spin_mutex > my_predecessors;
     spin_mutex my_mutex;
     broadcast_cache< T > my_successors;
@@ -2857,8 +2857,8 @@ public:
     async_body(const Body &body, gateway_type *gateway)
         : base_type(gateway), my_body(body) { }
 
-    void operator()( const Input &v, Ports & ) noexcept(noexcept(my_body(v, std::declval<gateway_type&>()))) {
-        my_body(v, *this->my_gateway);
+    void operator()( const Input &v, Ports & ) noexcept(noexcept(tbb::detail::invoke(my_body, v, std::declval<gateway_type&>()))) {
+        tbb::detail::invoke(my_body, v, *this->my_gateway);
     }
 
     Body get_body() { return my_body; }

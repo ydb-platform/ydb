@@ -290,10 +290,6 @@ protected:
         size_t Size() const {
             return Proto.GetChannelData().GetData().GetRaw().size() + Payload.size();
         }
-
-        ui32 ChunkCount() const {
-            return Proto.GetChannelData().GetData().GetChunks();
-        }
     };
 
     void HandleChannelData(NYql::NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {
@@ -346,11 +342,11 @@ protected:
                 ackEv->Record.SetChannelId(channel.Id);
                 ackEv->Record.SetFreeSpace(50_MB);
                 this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
-                ui64 chunkCount = batch.ChunkCount();
+                ui64 rowCount = batch.RowCount();
                 ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
                 txResult.HasTrailingResult = true;
                 LOG_D("staging TEvStreamData to " << Target << ", seqNo: " << computeData.Proto.GetSeqNo()
-                    << ", nRows: " << chunkCount); // FIXME with RowCount
+                    << ", nRows: " << rowCount);
             }
 
             return;
@@ -366,7 +362,7 @@ protected:
         YQL_ENSURE(Stats);
 
         Stats->ResultBytes += batch.Size();
-        Stats->ResultRows += batch.ChunkCount(); // FIXME with RowCount
+        Stats->ResultRows += batch.RowCount();
 
         LOG_T("Got result, channelId: " << channel.Id << ", shardId: " << task.Meta.ShardId
             << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender

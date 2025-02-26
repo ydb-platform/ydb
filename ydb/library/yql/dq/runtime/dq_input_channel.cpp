@@ -58,6 +58,7 @@ private:
             DataSerializer.Deserialize(std::move(data), inputType, batch);
         }
 
+        // single batch row is chunk and may be Arrow block
         YQL_ENSURE(batch.RowCount() == chunkCount);
         Impl.AddBatch(std::move(batch), space);
     }

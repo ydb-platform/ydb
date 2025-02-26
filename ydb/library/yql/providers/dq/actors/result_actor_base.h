@@ -124,8 +124,8 @@ struct TWriteQueue {
         void OnReceiveData(NDq::TDqSerializedBatch&& data, const TString& messageId = "", bool autoAck = false) {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
 
-            if (data.ChunkCount() > 0 && !ResultBuilder) {
-                Issues.AddIssue(TIssue("Non empty rows: >=" + ToString(data.ChunkCount())).SetCode(0, TSeverityIds::S_WARNING));
+            if (data.RowCount() > 0 && !ResultBuilder) {
+                Issues.AddIssue(TIssue("Non empty rows: >=" + ToString(data.RowCount())).SetCode(0, TSeverityIds::S_WARNING));
             }
             if (Discard || !ResultBuilder || autoAck) {
                 TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(messageId));
@@ -143,7 +143,7 @@ struct TWriteQueue {
                     if (!Truncated) {
                         NDq::TDqSerializedBatch dataCopy = WriteQueue.back().Data;
                         dataCopy.ConvertToNoOOB();
-                        Rows += dataCopy.ChunkCount();
+                        Rows += dataCopy.RowCount();
                         ResultSampleDataSize += dataCopy.Size();
 
                         if (RowsLimit && Rows > *RowsLimit) {

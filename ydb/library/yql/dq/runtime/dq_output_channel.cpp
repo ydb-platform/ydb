@@ -149,7 +149,7 @@ public:
             }
 
             Data.pop_front();
-            LOG("Data spilled. Total rows spilled: " << SpilledChunkCount << ", bytesInMemory: " << (PackedDataSize + packerSize));
+            LOG("Data spilled. Total rows spilled: " << SpilledChunkCount << ", bytesInMemory: " << (PackedDataSize + packerSize)); // FIXME with RowCount
         }
 
         if (IsFull() || FirstStoredId < NextStoredId) {
@@ -209,11 +209,11 @@ public:
             PackerCurrentChunkCount = 0;
         }
 
-        DLOG("Took " << data.RowCount() << " chunks");
+        DLOG("Took " << data.RowCount() << " rows");
 
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += data.Size();
-            PopStats.Rows += data.ChunkCount(); // FIXME with RowCount
+            PopStats.Rows += data.RowCount();
             PopStats.Chunks++;
             if (!IsFull() || FirstStoredId == NextStoredId) {
                 PopStats.Resume();
@@ -295,7 +295,7 @@ public:
         data.SetPayload(FinishPackAndCheckSize());
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += data.Size();
-            PopStats.Rows += data.ChunkCount(); // FIXME with RowCount
+            PopStats.Rows += data.RowCount();
             PopStats.Chunks++;
             if (!IsFull() || FirstStoredId == NextStoredId) {
                 PopStats.Resume();

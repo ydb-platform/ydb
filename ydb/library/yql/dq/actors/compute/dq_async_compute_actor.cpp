@@ -134,7 +134,7 @@ public:
     TComputeActorAsyncInputHelperAsync CreateInputHelper(const TString& logPrefix,
         ui64 index,
         NDqProto::EWatermarksMode watermarksMode
-    )
+    ) 
     {
         return TComputeActorAsyncInputHelperAsync(logPrefix, index, watermarksMode, Cookie, ProcessSourcesState.Inflight);
     }
@@ -630,12 +630,12 @@ private:
 
         MetricsReporter.ReportInputChannelWatermark(
             channelData.GetChannelId(),
-            batch.ChunkCount(), // FIXME with RowCount
+            batch.RowCount(),
             watermark);
 
         auto ev = MakeHolder<NTaskRunnerActor::TEvInputChannelData>(
             channelData.GetChannelId(),
-            batch.ChunkCount() ? std::optional{std::move(batch)} : std::nullopt,
+            batch.RowCount() ? std::optional{std::move(batch)} : std::nullopt,
             finished,
             channelData.HasCheckpoint()
         );

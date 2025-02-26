@@ -306,11 +306,11 @@ private:
         SendResult();
 
         Size += data.Size();
-        Rows += data.ChunkCount(); // FIXME with RowCount
+        Rows += data.RowCount();
 
         if (!Truncated &&
             (!AllResultsBytesLimit || Size + data.Size() < *AllResultsBytesLimit)
-            && (!RowsLimitPerWrite || Rows + data.ChunkCount() < *RowsLimitPerWrite)) { // FIXME with RowCount
+            && (!RowsLimitPerWrite || Rows + data.RowCount() < *RowsLimitPerWrite)) {
             Head.push_back(std::move(data));
         } else {
             Truncated = true;

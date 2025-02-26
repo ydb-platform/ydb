@@ -72,6 +72,9 @@ namespace NKikimr::NKqp {
 
         S3GatewayConfig = queryServiceConfig.GetS3();
 
+        SolomonGatewayConfig = queryServiceConfig.GetSolomon();
+        SolomonGateway = NYql::CreateSolomonGateway(SolomonGatewayConfig);
+
         S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
 
         YtGatewayConfig = queryServiceConfig.GetYt();
@@ -129,6 +132,8 @@ namespace NKikimr::NKqp {
             GenericGatewaysConfig,
             YtGatewayConfig,
             YtGateway,
+            SolomonGatewayConfig,
+            SolomonGateway,
             nullptr,
             S3ReadActorFactoryConfig};
 

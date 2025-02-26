@@ -68,6 +68,7 @@ namespace NKikimrConfig {
     class TAwsCompatibilityConfig;
     class TS3ProxyResolverConfig;
     class TBackgroundCleaningConfig;
+    class TDataErasureConfig;
     class TGraphConfig;
     class TMetadataCacheConfig;
     class TMemoryControllerConfig;
@@ -153,6 +154,10 @@ namespace NSchemeShard {
 
 class TFormatFactory;
 
+namespace NYamlConfig {
+    class IConfigSwissKnife;
+}
+
 struct TAppData {
     static const ui32 MagicTag = 0x2991AAF8;
     const ui32 Magic;
@@ -172,6 +177,7 @@ struct TAppData {
     const TFormatFactory* FormatFactory = nullptr;
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
     const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
+    const NYamlConfig::IConfigSwissKnife *ConfigSwissKnife = nullptr;
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 
@@ -235,6 +241,7 @@ struct TAppData {
     NKikimrConfig::TMemoryControllerConfig& MemoryControllerConfig;
     NKikimrReplication::TReplicationDefaults& ReplicationConfig;
     NKikimrProto::TDataIntegrityTrailsConfig& DataIntegrityTrailsConfig;
+    NKikimrConfig::TDataErasureConfig& DataErasureConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request

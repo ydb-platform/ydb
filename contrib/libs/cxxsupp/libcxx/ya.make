@@ -14,9 +14,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2024-04-02)
+VERSION(2024-07-08)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/239236b8c2154aa49e98bc7ed774a7d2712edf50.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/8ab82a2dc308c27fbdd0a87b5be7dddc623f1b0e.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
@@ -48,10 +48,11 @@ ELSEIF (OS_LINUX OR OS_DARWIN)
 ELSEIF (OS_WINDOWS)
     SET(CXX_RT "msvcrt")
     SRCS(
-        src/support/win32/locale_win32.cpp
-        src/support/win32/support.cpp
         src/support/win32/atomic_win32.cpp
+        src/support/win32/compiler_rt_shims.cpp
+        src/support/win32/locale_win32.cpp
         src/support/win32/new_win32.cpp
+        src/support/win32/support.cpp
         src/support/win32/thread_win32.cpp
     )
     IF (CLANG_CL)
@@ -173,6 +174,7 @@ SRCS(
     src/condition_variable_destructor.cpp
     src/error_category.cpp
     src/exception.cpp
+    src/expected.cpp
     src/filesystem/directory_entry.cpp
     src/filesystem/directory_iterator.cpp
     src/filesystem/filesystem_clock.cpp
@@ -224,9 +226,10 @@ ENDIF()
 
 IF (OS_LINUX)
     SRCS(
-        src/time_zone.cpp
-        src/tzdb.cpp
-        src/tzdb_list.cpp
+        src/experimental/chrono_exception.cpp
+        src/experimental/time_zone.cpp
+        src/experimental/tzdb.cpp
+        src/experimental/tzdb_list.cpp
     )
 ENDIF()
 

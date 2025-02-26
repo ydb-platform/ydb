@@ -1058,7 +1058,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     LifeCyclePhase,
                     PutTabletLogLatency,
                     PutUserDataLatency,
-                    StoragePoolId
+                    StoragePoolId,
+                    LayoutCorrect
                 FROM `/Root/.sys/ds_groups` WHERE GroupId >= 0x80000000;
             )").GetValueSync();
 
@@ -1074,7 +1075,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 12);
+        TYsonFieldChecker check(ysonString, 13);
 
         check.Uint64(0u); // AllocatedSize
         check.Uint64GreaterOrEquals(0u); // AvailableSize
@@ -1088,6 +1089,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Null(); // PutTabletLogLatency
         check.Null(); // PutUserDataLatency
         check.Uint64(2u); // StoragePoolId
+        check.Bool(true); // LayoutCorrect
     }
 
     Y_UNIT_TEST(StoragePoolsFields) {
@@ -1762,7 +1764,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 29);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 30);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -1780,7 +1782,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 23);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 24);
 
             THashSet<TString> names;
             for (const auto& child : children) {

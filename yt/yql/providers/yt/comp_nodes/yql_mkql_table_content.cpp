@@ -33,6 +33,7 @@ public:
         if (useSkiff) {
             Spec_.SetUseSkiff(optLLVM);
         }
+        Spec_.SetIsTableContent();
         Spec_.Init(codecCtx, inputSpec, {}, {}, AS_TYPE(TListType, listType)->GetItemType(), {}, TString());
     }
 

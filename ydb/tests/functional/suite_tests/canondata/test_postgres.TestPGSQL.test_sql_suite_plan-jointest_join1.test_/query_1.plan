@@ -29,8 +29,8 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "precompute_0_0",
-                                        "Node Type": "TopSort-InnerJoin (MapJoin)-Filter-TableRangeScan-ConstantExpr-Filter-ConstantExpr",
+                                        "CTE Name": "precompute_1_0",
+                                        "Node Type": "TopSort-InnerJoin (MapJoin)-ConstantExpr-Filter-TableRangeScan-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -46,18 +46,23 @@
                                                 "Condition": "t2.i = t1.i",
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 2
+                                                        "InternalOperatorId": 3
                                                     },
                                                     {
-                                                        "InternalOperatorId": 5
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
                                             },
                                             {
+                                                "Inputs": [],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
+                                            },
+                                            {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 4
                                                     }
                                                 ],
                                                 "Name": "Filter",
@@ -66,7 +71,7 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 4
+                                                        "InternalOperatorId": 5
                                                     }
                                                 ],
                                                 "Name": "TableRangeScan",
@@ -81,20 +86,6 @@
                                                 "Inputs": [],
                                                 "Iterator": "precompute_1_0",
                                                 "Name": "Iterator"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 6
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.i)"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute_0_0"
                                             }
                                         ],
                                         "PlanNodeId": 10,

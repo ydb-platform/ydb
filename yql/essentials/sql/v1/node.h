@@ -1278,7 +1278,7 @@ namespace NSQLTranslationV1 {
     };
 
     struct TAlterDatabaseParameters {
-        TString DbPath;
+        TDeferredAtom DbPath;
         std::optional<TDeferredAtom> Owner;
     };
 

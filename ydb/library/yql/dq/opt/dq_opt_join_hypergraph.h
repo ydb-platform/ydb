@@ -12,7 +12,8 @@
 #include <yql/essentials/core/yql_cost_function.h>
 #include <library/cpp/iterator/zip.h>
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
-
+#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include "dq_opt_conflict_rules_collector.h"
 
@@ -21,7 +22,7 @@ namespace NYql::NDq {
 /* 
  * JoinHypergraph - a graph, whose edge connects two sets of nodes.
  * It represents relation between tables and ordering constraints.
- * Graph is undirected, so it stores each edge twice (original and reversed) for DPHyp algorithm.
+ * Graph is directed, so it stores each edge twice (original and reversed) for DPHyp algorithm.
  */
 template <typename TNodeSet>
 class TJoinHypergraph {
@@ -77,6 +78,11 @@ public:
         TVector<TJoinColumn> LeftJoinKeys;
         TVector<TJoinColumn> RightJoinKeys;
 
+        // for interesting orderings framework
+        TOrderingsStateMachine::TFDSet FDs;
+        std::size_t LeftJoinKeysShuffleOrderingIdx;
+        std::size_t RightJoinKeysShuffleOrderingIdx;
+
         // JoinKind may not be commutative, so we need to know which edge is original and which is reversed.
         bool IsReversed;
         int64_t ReversedEdgeId = -1;
@@ -84,6 +90,7 @@ public:
         TEdge CreateReversed(int64_t reversedEdgeId) const { 
             auto reversedEdge = TEdge(Right, Left, JoinKind, RightAny, LeftAny, IsCommutative, RightJoinKeys, LeftJoinKeys);
             reversedEdge.IsReversed = true; reversedEdge.ReversedEdgeId = reversedEdgeId;
+            std::swap(reversedEdge.LeftJoinKeysShuffleOrderingIdx, reversedEdge.RightJoinKeysShuffleOrderingIdx);
             return reversedEdge;
         }
     };
@@ -421,7 +428,7 @@ public:
     {}
 
     void Construct() {
-        auto edges = Graph_.GetSimpleEdges();
+        auto edges = Graph_.GetEdges();
 
         EraseIf(
             edges, 
@@ -502,6 +509,85 @@ private:
                 }
             }
         }
+    }
+
+private:
+    TJoinHypergraph<TNodeSet>& Graph_;
+};
+
+/* 
+ * This class builds FSM which is used for the DPHypElimination algorithm. It fills edges with information of orderings and FD's
+ * which they have. Also, it converts orderings (vector of shuffles) into inner representation (just indexes) for faster enumeration.
+ */
+template <typename TNodeSet>
+class TOrderingsStateMachineConstructor {
+private:
+    using THyperedge = typename TJoinHypergraph<TNodeSet>::TEdge;
+
+public:
+    TOrderingsStateMachineConstructor(TJoinHypergraph<TNodeSet>& graph)
+        : Graph_(graph)
+    {}
+
+    TOrderingsStateMachine Construct(TFDStorage& fdStorage) {
+        auto& edges = Graph_.GetEdges();
+
+        std::vector<std::vector<std::size_t>> fdsByEdgeIdx(edges.size());
+        for (std::size_t i = 0; i < edges.size(); ++i) {
+            if (edges[i].IsReversed) {
+                continue;
+            }
+
+            std::size_t edgeIdx = i;
+            std::size_t revEdgeIdx = edges[i].ReversedEdgeId;
+            for (const auto& [lhs, rhs]: Zip(edges[i].LeftJoinKeys, edges[i].RightJoinKeys)) {
+                std::size_t fdIdx = fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false);
+                fdsByEdgeIdx[edgeIdx].push_back(fdIdx);
+                fdsByEdgeIdx[revEdgeIdx].push_back(fdIdx);
+            }
+
+            std::size_t orderingIdx; 
+            orderingIdx = fdStorage.AddInterestingOrdering(edges[i].LeftJoinKeys , TOrdering::EShuffle);
+            edges[edgeIdx].LeftJoinKeysShuffleOrderingIdx = orderingIdx;
+            edges[revEdgeIdx].RightJoinKeysShuffleOrderingIdx = orderingIdx; // reversed edge
+            orderingIdx = fdStorage.AddInterestingOrdering(edges[i].RightJoinKeys, TOrdering::EShuffle);
+            edges[edgeIdx].RightJoinKeysShuffleOrderingIdx = orderingIdx;
+            edges[revEdgeIdx].LeftJoinKeysShuffleOrderingIdx = orderingIdx; // reversed edge
+        }
+
+        std::vector<std::int64_t> shuffleOrderingIdxByNodeIdx(Graph_.GetNodes().size(), -1);
+        for (std::size_t i = 0; i < Graph_.GetNodes().size(); ++i) {
+            auto relNode = std::static_pointer_cast<TRelOptimizerNode>(Graph_.GetNodes()[i].RelationOptimizerNode);
+
+            if (!relNode->Stats.ShuffledByColumns) {
+                YQL_CLOG(TRACE, CoreDq) << "No shuffle in stats for table: " << relNode->Labels()[0];
+                continue;
+            }
+
+            std::vector<TJoinColumn> shuffledBy;
+            shuffledBy.reserve(relNode->Stats.ShuffledByColumns->Data.size());
+            for (const auto& column: relNode->Stats.ShuffledByColumns->Data) {
+                shuffledBy.emplace_back(relNode->Label, column.AttributeName);
+            }
+            shuffleOrderingIdxByNodeIdx[i] = fdStorage.AddInterestingOrdering(shuffledBy, TOrdering::EShuffle);
+        }
+
+        TOrderingsStateMachine orderingsFSM(fdStorage.FDs, fdStorage.InterestingOrderings);
+
+        for (std::size_t i = 0; i < edges.size(); ++i) {
+            edges[i].FDs = orderingsFSM.GetFDSet(fdsByEdgeIdx[i]);
+        }
+
+        for (std::size_t i = 0; i < Graph_.GetNodes().size(); ++i) {
+            auto& node = Graph_.GetNodes()[i].RelationOptimizerNode;
+            node->LogicalOrderings = orderingsFSM.CreateState();
+            if (shuffleOrderingIdxByNodeIdx[i] == -1) { 
+                continue; 
+            }
+            node->LogicalOrderings.SetOrdering(shuffleOrderingIdxByNodeIdx[i]);
+        }
+        
+        return orderingsFSM;
     }
 
 private:

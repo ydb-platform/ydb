@@ -310,6 +310,12 @@ def _build_cmd_input_paths(paths: list[str] | tuple[str], hide=False, disable_in
     return _build_directives([hide_part, disable_ip_part, "input"], paths)
 
 
+def _build_cmd_output_paths(paths: list[str] | tuple[str], hide=False):
+    hide_part = "hide" if hide else ""
+
+    return _build_directives([hide_part, "output"], paths)
+
+
 def _create_erm_json(unit: NotsUnitType):
     from lib.nots.erm_json_lite import ErmJsonLite
 
@@ -465,7 +471,7 @@ def on_ts_configure(unit: NotsUnitType) -> None:
 
         tsconfig = TsConfig.load(abs_tsconfig_path)
         config_files = tsconfig.inline_extend(dep_paths)
-        config_files = _resolve_module_files(unit, mod_dir, config_files)
+        config_files = [rootrel_arc_src(path, unit) for path in config_files]
 
         use_tsconfig_outdir = unit.get("TS_CONFIG_USE_OUTDIR") == "yes"
         tsconfig.validate(use_tsconfig_outdir)
@@ -517,15 +523,14 @@ def on_setup_build_env(unit: NotsUnitType) -> None:
     unit.set(["NOTS_TOOL_BUILD_ENV", " ".join(options)])
 
 
-def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs) -> None:
+def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs, delimiter: str = " ") -> None:
     """
     SET_APPEND() python naive implementation - append value/values to the list of values
     """
-    previous_value = unit.get(var_name) or ""
-    value_in_str = " ".join(value) if isinstance(value, list) or isinstance(value, tuple) else value
-    new_value = previous_value + " " + value_in_str
-
-    unit.set([var_name, new_value])
+    old_str_value = unit.get(var_name)
+    old_values = [old_str_value] if old_str_value else []
+    new_values = list(value) if isinstance(value, list) or isinstance(value, tuple) else [value]
+    unit.set([var_name, delimiter.join(old_values + new_values)])
 
 
 def __strip_prefix(prefix: str, line: str) -> str:
@@ -711,19 +716,6 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
         unit.set_property(["DART_DATA", data])
 
     unit.set(["TEST_RECIPES_VALUE", recipes_value])
-
-
-def _resolve_module_files(unit: NotsUnitType, mod_dir: str, file_paths: list[str]) -> list[str]:
-    mod_dir_with_sep_len = len(mod_dir) + 1
-    resolved_files = []
-
-    for path in file_paths:
-        resolved = rootrel_arc_src(path, unit)
-        if resolved.startswith(mod_dir):
-            resolved = resolved[mod_dir_with_sep_len:]
-        resolved_files.append(resolved)
-
-    return resolved_files
 
 
 def _set_resource_vars(
@@ -933,13 +925,24 @@ def on_set_ts_test_for_vars(unit: NotsUnitType, for_mod: str) -> None:
     unit.set(["TS_TEST_FOR_PATH", rootrel_arc_src(for_mod, unit)])
 
 
+def __on_ts_files(unit: NotsUnitType, files_in: list[str], files_out: list[str]) -> None:
+    for f in files_in:
+        if f.startswith(".."):
+            ymake.report_configure_error(
+                "TS_FILES* macroses are only allowed to use files inside the project directory.\n"
+                f"Got path '{f}'.\n"
+                "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-files."
+            )
+
+    new_items = _build_cmd_input_paths(paths=files_in, hide=True, disable_include_processor=True)
+    new_items += _build_cmd_output_paths(paths=files_out, hide=True)
+    __set_append(unit, "_TS_FILES_INOUTS", new_items)
+    logger.print_vars("_TS_FILES_INOUTS")
+
+
 @_with_report_configure_error
 def on_ts_files(unit: NotsUnitType, *files: str) -> None:
-    new_cmds = ['$COPY_CMD ${{context=TEXT;input:"{0}"}} ${{noauto;output:"{0}"}}'.format(f) for f in files]
-    all_cmds = unit.get("_TS_FILES_COPY_CMD")
-    if all_cmds:
-        new_cmds.insert(0, all_cmds)
-    unit.set(["_TS_FILES_COPY_CMD", " && ".join(new_cmds)])
+    __on_ts_files(unit, files, files)
 
 
 @_with_report_configure_error
@@ -956,21 +959,21 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
         )
         return
 
+    in_files = [os.path.join('${BINDIR}', f) for f in files]
+    out_files = [os.path.join('${BINDIR}', destination, f) for f in files]
+
     # TODO: FBP-1795
     # ${BINDIR} prefix for input is important to resolve to result of LARGE_FILES and not to SOURCEDIR
-    new_cmds = [
-        '$COPY_CMD ${{context=TEXT;input:"${{BINDIR}}/{0}"}} ${{noauto;output:"{1}/{0}"}}'.format(f, destination)
-        for f in files
-    ]
-    all_cmds = unit.get("_TS_FILES_COPY_CMD")
-    if all_cmds:
-        new_cmds.insert(0, all_cmds)
-    unit.set(["_TS_FILES_COPY_CMD", " && ".join(new_cmds)])
+    new_items = [f'$COPY_CMD {i} {o}' for (i, o) in zip(in_files, out_files)]
+    __set_append(unit, "_TS_PROJECT_SETUP_CMD", new_items, " && ")
+    logger.print_vars("_TS_PROJECT_SETUP_CMD")
+
+    __on_ts_files(unit, in_files, out_files)
 
 
 @_with_report_configure_error
 def on_ts_package_check_files(unit: NotsUnitType) -> None:
-    ts_files = unit.get("_TS_FILES_COPY_CMD")
+    ts_files = unit.get("_TS_FILES_INOUTS")
     if ts_files == "":
         ymake.report_configure_error(
             "\n"
@@ -994,3 +997,6 @@ def on_run_javascript_after_build_add_js_script_as_input(unit: NotsUnitType, js_
         return
 
     __set_append(unit, "_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", js_script)
+
+
+# Zero-diff commit

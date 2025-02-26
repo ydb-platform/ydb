@@ -1234,6 +1234,10 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
     }
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
         TxAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
+
+        // A temporary solution. This line should be deleted when we fix the error with the SeqNo promotion.
+        WriteAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
+
         tx.WriteInfoApplied = true;
         WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();
         WriteKeysSizeEstimate += tx.WriteInfo->SrcIdInfo.size();
@@ -1827,7 +1831,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
         AddCmdDeleteRangeForAllKeys(*PersistRequest);
 
-        ctx.Send(Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
+        ctx.Send(BlobCache, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
         PersistRequest = nullptr;
         CurrentPersistRequestSpan = std::move(PersistRequestSpan);
         PersistRequestSpan = NWilson::TSpan();
@@ -1993,7 +1997,9 @@ void TPartition::RunPersist() {
         //haveChanges = true;
     }
 
-    TryAddDeleteHeadKeysToPersistRequest();
+    if (TryAddDeleteHeadKeysToPersistRequest()) {
+        haveChanges = true;
+    }
 
     if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
         WriteCycleStartTime = now;
@@ -2055,8 +2061,10 @@ void TPartition::RunPersist() {
     PersistRequest = nullptr;
 }
 
-void TPartition::TryAddDeleteHeadKeysToPersistRequest()
+bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
 {
+    bool haveChanges = !DeletedKeys.empty();
+
     while (!DeletedKeys.empty()) {
         auto& k = DeletedKeys.back();
 
@@ -2070,6 +2078,8 @@ void TPartition::TryAddDeleteHeadKeysToPersistRequest()
 
         DeletedKeys.pop_back();
     }
+
+    return haveChanges;
 }
 
 void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)
@@ -2327,7 +2337,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            NewHead.Offset,
                                            "", // SourceId
                                            0,  // SeqNo
-                                           1,  // TotalParts
+                                           0,  // TotalParts
                                            0,  // TotalSize
                                            Head,
                                            NewHead,
@@ -2356,6 +2366,8 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                               PersistRequest.Get(),
                               ctx);
         }
+
+        PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
 
         NewHead.Clear();
         NewHead.Offset = Parameters->CurOffset;

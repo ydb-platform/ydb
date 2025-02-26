@@ -1403,7 +1403,7 @@ TCheckFunc SplitBoundaries(TVector<T>&& expectedBoundaries) {
     };
 }
 
-template TCheckFunc SplitBoundaries<ui32>(TVector<ui32>&&);
+template TCheckFunc SplitBoundaries<ui64>(TVector<ui64>&&);
 
 TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {

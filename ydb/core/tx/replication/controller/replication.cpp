@@ -50,6 +50,8 @@ class TReplication::TImpl: public TLagProvider {
             return new TTargetTable(self, id, std::forward<Args>(args)...);
         case ETargetKind::IndexTable:
             return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
+        case ETargetKind::Transfer:
+            return new TTargetTransfer(self, id, std::forward<Args>(args)...);
         }
     }
 
@@ -62,15 +64,10 @@ class TReplication::TImpl: public TLagProvider {
             case NKikimrReplication::TReplicationConfig::kEverything:
                 return ErrorState("Not implemented");
 
-            case NKikimrReplication::TReplicationConfig::kSpecific: {
-                TVector<std::pair<TString, TString>> paths;
-                for (const auto& target : Config.GetSpecific().GetTargets()) {
-                    paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
-                }
-
-                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths)));
+            case NKikimrReplication::TReplicationConfig::kSpecific:
+            case NKikimrReplication::TReplicationConfig::kTransferSpecific:
+                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, Config));
                 break;
-            }
 
             default:
                 return ErrorState(TStringBuilder() << "Unexpected targets: " << Config.GetTargetCase());
@@ -125,6 +122,7 @@ public:
                 switch (target->GetKind()) {
                 case ETargetKind::Table:
                 case ETargetKind::IndexTable:
+                case ETargetKind::Transfer:
                     TargetTablePaths.push_back(target->GetDstPath());
                     break;
                 }
@@ -262,12 +260,12 @@ TReplication::TReplication(ui64 id, const TPathId& pathId, const TString& config
 {
 }
 
-ui64 TReplication::AddTarget(ETargetKind kind, const TString& srcPath, const TString& dstPath) {
-    return Impl->AddTarget(this, kind, srcPath, dstPath);
+ui64 TReplication::AddTarget(ETargetKind kind, const ITarget::IConfig::TPtr& config) {
+    return Impl->AddTarget(this, kind, config);
 }
 
-TReplication::ITarget* TReplication::AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const TString& dstPath) {
-    Impl->AddTarget(this, id, kind, srcPath, dstPath);
+TReplication::ITarget* TReplication::AddTarget(ui64 id, ETargetKind kind, const ITarget::IConfig::TPtr& config) {
+    Impl->AddTarget(this, id, kind, config);
     return Impl->FindTarget(id);
 }
 

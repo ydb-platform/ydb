@@ -176,6 +176,7 @@
   - util.h
   - uuid/uuid.h
   - vis.h
+  - xpc/connection.h
   - xpc/xpc.h
 
   # OSX frameworks

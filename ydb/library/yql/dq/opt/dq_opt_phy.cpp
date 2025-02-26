@@ -762,7 +762,7 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
     Y_UNUSED(optCtx);
-    
+
     if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }
@@ -2014,11 +2014,29 @@ TExprBase DqBuildTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationC
         .Args({"stream"})
         .Body<TCoTake>()
             .Input("stream")
-            .Count<TCoAggrAdd>()
-                .Left(take.Count())
-                .Right(skip.Count())
+            .Count<TCoIf>()
+                .Predicate<TCoCmpGreater>()
+                    .Left(take.Count())
+                    .Right<TCoSub>()
+                        .Left<TCoUint64>()
+                            .Literal()
+                                .Value(ToString(Max<ui64>()), TNodeFlags::Default)
+                            .Build()
+                        .Build()
+                        .Right(skip.Count())
+                    .Build()
+                .Build()
+                .ThenValue<TCoUint64>()
+                    .Literal()
+                        .Value(ToString(Max<ui64>()), TNodeFlags::Default)
+                    .Build()
+                .Build()
+                .ElseValue<TCoAggrAdd>()
+                    .Left(take.Count())
+                    .Right(skip.Count())
                 .Build()
             .Build()
+        .Build()
         .Done();
 
     auto newDqUnion = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
@@ -2576,11 +2594,13 @@ TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizati
         auto takeProgram = Build<TCoLambda>(ctx, node.Pos())
             .Args({"take_arg"})
             // DqOutput expects stream as input, thus form stream with one element
-            .Body<TCoToStream>()
-                .Input<TCoTake>()
-                    .Input({"take_arg"})
-                    .Count<TCoUint64>()
-                        .Literal().Build("1")
+            .Body<TCoToFlow>()
+                .Input<TCoToStream>()
+                    .Input<TCoTake>()
+                        .Input({"take_arg"})
+                        .Count<TCoUint64>()
+                            .Literal().Build("1")
+                            .Build()
                         .Build()
                     .Build()
                 .Build()
@@ -2695,8 +2715,19 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
 }
 
 
-TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationContext& optCtx,
-                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin, bool shuffleMapJoin, bool useGraceCoreForMap)
+TExprBase DqBuildJoin(
+    const TExprBase& node, 
+    TExprContext& ctx, 
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, 
+    bool allowStageMultiUsage, 
+    bool pushLeftStage, 
+    EHashJoinMode hashJoin, 
+    bool shuffleMapJoin, 
+    bool useGraceCoreForMap,
+    bool shuffleElimination,
+    bool shuffleEliminationWithMap
+)
 {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -2735,7 +2766,7 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     }
 
     if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
-        return DqBuildHashJoin(join, hashJoin, ctx, optCtx);
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

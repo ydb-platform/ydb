@@ -4,6 +4,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb-cpp-sdk/client/value/value.h>

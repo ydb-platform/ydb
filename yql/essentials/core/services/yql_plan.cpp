@@ -363,9 +363,29 @@ public:
             info.Provider = (*provider).Get();
             info.IsVisible = (*provider)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
         } else {
-            info.IsVisible = false;
-            for (auto& child : node->Children()) {
-                dependencies.push_back(child.Get());
+            for (auto dataSource: Types_.DataSources) {
+                if (dataSource->GetPlanFormatter().HasCustomPlan(*node)) {
+                    info.Provider = dataSource.Get();
+                    info.IsVisible = dataSource->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+                    break;
+                }
+            }
+
+            if (!info.Provider) {
+                for (auto dataSink: Types_.DataSinks) {
+                    if (dataSink->GetPlanFormatter().HasCustomPlan(*node)) {
+                        info.Provider = dataSink.Get();
+                        info.IsVisible = dataSink->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+                        break;
+                    }
+                }
+            }
+
+            if (!info.Provider) {
+                info.IsVisible = false;
+                for (auto& child : node->Children()) {
+                    dependencies.push_back(child.Get());
+                }
             }
         }
 

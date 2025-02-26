@@ -353,7 +353,6 @@ private:
 
         replayMessage.InsertValue("query_id", Uid);
         replayMessage.InsertValue("version", "1.0");
-        replayMessage.InsertValue("query_text", EscapeC(QueryId.Text));
         NJson::TJsonValue queryParameterTypes(NJson::JSON_MAP);
         if (QueryId.QueryParameterTypes) {
             for (const auto& [paramName, paramType] : *QueryId.QueryParameterTypes) {
@@ -365,7 +364,6 @@ private:
         replayMessage.InsertValue("query_syntax", ToString(Config->_KqpYqlSyntaxVersion.Get().GetRef()));
         replayMessage.InsertValue("query_database", QueryId.Database);
         replayMessage.InsertValue("query_cluster", QueryId.Cluster);
-        replayMessage.InsertValue("query_plan", queryPlan);
         replayMessage.InsertValue("query_type", ToString(QueryId.Settings.QueryType));
 
         if (CollectFullDiagnostics) {
@@ -380,6 +378,8 @@ private:
             ReplayMessageUserView = NJson::WriteJson(replayMessage, /*formatOutput*/ false);
         }
 
+        replayMessage.InsertValue("query_plan", queryPlan);
+        replayMessage.InsertValue("query_text", EscapeC(QueryId.Text));
         replayMessage.InsertValue("table_metadata", TString(NJson::WriteJson(tablesMeta, false)));
         replayMessage.InsertValue("table_meta_serialization_type", EMetaSerializationType::EncodedProto);
 
@@ -401,10 +401,12 @@ private:
             << ", issues: " << KqpCompileResult->Issues.ToString()
             << ", uid: " << KqpCompileResult->Uid);
 
+        if (ReplayMessageUserView) {
+            KqpCompileResult->ReplayMessageUserView = std::move(*ReplayMessageUserView);
+        }
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(KqpCompileResult);
 
         responseEv->ReplayMessage = std::move(ReplayMessage);
-        responseEv->ReplayMessageUserView = std::move(ReplayMessageUserView);
         ReplayMessage = std::nullopt;
         ReplayMessageUserView = std::nullopt;
         auto& stats = responseEv->Stats;
@@ -632,8 +634,6 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableKqpDataQueryStreamLookup = serviceConfig.GetEnableKqpDataQueryStreamLookup();
     kqpConfig.EnableKqpScanQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
     kqpConfig.EnableKqpDataQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
-    kqpConfig.EnableSequences = serviceConfig.GetEnableSequences();
-    kqpConfig.EnableColumnsWithDefault = serviceConfig.GetEnableColumnsWithDefault();
     kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
     kqpConfig.IndexAutoChooserMode = serviceConfig.GetIndexAutoChooseMode();
     kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
@@ -644,6 +644,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableOlapSink = serviceConfig.GetEnableOlapSink();
     kqpConfig.EnableOltpSink = serviceConfig.GetEnableOltpSink();
     kqpConfig.EnableHtapTx = serviceConfig.GetEnableHtapTx();
+    kqpConfig.EnableStreamWrite = serviceConfig.GetEnableStreamWrite();
     kqpConfig.BlockChannelsMode = serviceConfig.GetBlockChannelsMode();
     kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
     kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();

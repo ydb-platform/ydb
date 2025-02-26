@@ -1,9 +1,9 @@
 #pragma once
-#include <ydb/library/formats/arrow/common/validation.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <util/system/yassert.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 extern "C" {
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
@@ -12,8 +12,7 @@ extern "C" {
 namespace NKikimr::NArrow {
 
 template <typename TType>
-struct TTypeWrapper
-{
+struct TTypeWrapper {
     using T = TType;
 };
 
@@ -181,4 +180,4 @@ template <typename T>
     });
 }
 
-}
+}   // namespace NKikimr::NArrow

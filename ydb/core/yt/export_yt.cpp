@@ -3,7 +3,6 @@
 #include "export_yt.h"
 #include "yt_wrapper.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #if __has_include("ydb/core/protos/flat_scheme_op.deps.pb.h")
     #include <ydb/core/protos/flat_scheme_op.deps.pb.h> // Y_IGNORE
 #endif

@@ -58,10 +58,48 @@ private:
     TType* ItemType_;
 };
 
-class TWideToBlocksWrapper : public TStatefulWideFlowCodegeneratorNode<TWideToBlocksWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideToBlocksWrapper>;
+struct TWideToBlocksState : public TBlockState {
+    size_t Rows_ = 0;
+    bool IsFinished_ = false;
+    size_t BuilderAllocatedSize_ = 0;
+    size_t MaxBuilderAllocatedSize_ = 0;
+    std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
+    static const size_t MaxAllocatedFactor_ = 4;
+
+    TWideToBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types, size_t maxLength)
+        : TBlockState(memInfo, types.size() + 1U)
+        , Builders_(types.size())
+    {
+        for (size_t i = 0; i < types.size(); ++i) {
+            Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i], ctx.ArrowMemoryPool, maxLength, &ctx.Builder->GetPgBuilder(), &BuilderAllocatedSize_);
+        }
+        MaxBuilderAllocatedSize_ = MaxAllocatedFactor_ * BuilderAllocatedSize_;
+    }
+
+    void Add(const NUdf::TUnboxedValuePod value, size_t idx) {
+        Builders_[idx]->Add(value);
+    }
+
+    void MakeBlocks(const THolderFactory& holderFactory) {
+        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)));
+        Rows_ = 0;
+        BuilderAllocatedSize_ = 0;
+
+        for (size_t i = 0; i < Builders_.size(); ++i) {
+            if (const auto builder = Builders_[i].get()) {
+                Values[i] = holderFactory.CreateArrowBlock(builder->Build(IsFinished_));
+            }
+        }
+
+        FillArrays();
+    }
+};
+
+class TWideToBlocksFlowWrapper : public TStatefulWideFlowCodegeneratorNode<TWideToBlocksFlowWrapper> {
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideToBlocksFlowWrapper>;
+using TState = TWideToBlocksState;
 public:
-    TWideToBlocksWrapper(TComputationMutables& mutables,
+    TWideToBlocksFlowWrapper(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
         TVector<TType*>&& types)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
@@ -154,7 +192,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideToBlocksWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideToBlocksFlowWrapper::MakeState));
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -264,43 +302,6 @@ public:
     }
 #endif
 private:
-    struct TState : public TBlockState {
-        size_t Rows_ = 0;
-        bool IsFinished_ = false;
-        size_t BuilderAllocatedSize_ = 0;
-        size_t MaxBuilderAllocatedSize_ = 0;
-        std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
-        static const size_t MaxAllocatedFactor_ = 4;
-
-        TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types, size_t maxLength, NUdf::TUnboxedValue**const fields)
-            : TBlockState(memInfo, types.size() + 1U)
-            , Builders_(types.size())
-        {
-            for (size_t i = 0; i < types.size(); ++i) {
-                fields[i] = &Values[i];
-                Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i], ctx.ArrowMemoryPool, maxLength, &ctx.Builder->GetPgBuilder(), &BuilderAllocatedSize_);
-            }
-            MaxBuilderAllocatedSize_ = MaxAllocatedFactor_ * BuilderAllocatedSize_;
-        }
-
-        void Add(const NUdf::TUnboxedValuePod value, size_t idx) {
-            Builders_[idx]->Add(value);
-        }
-
-        void MakeBlocks(const THolderFactory& holderFactory) {
-            Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)));
-            Rows_ = 0;
-            BuilderAllocatedSize_ = 0;
-
-            for (size_t i = 0; i < Builders_.size(); ++i) {
-                if (const auto builder = Builders_[i].get()) {
-                    Values[i] = holderFactory.CreateArrowBlock(builder->Build(IsFinished_));
-                }
-            }
-
-            FillArrays();
-        }
-    };
 #ifndef MKQL_DISABLE_CODEGEN
     class TLLVMFieldsStructureState: public TLLVMFieldsStructureBlockState {
     private:
@@ -351,12 +352,18 @@ private:
     }
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TState>(ctx, Types_, MaxLength_, ctx.WideFields.data() + WideFieldsIndex_);
+        state = ctx.HolderFactory.Create<TState>(ctx, Types_, MaxLength_);
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsInvalid())
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
+            auto& s = *static_cast<TState*>(state.AsBoxed().Get());
+            const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
+            for (size_t i = 0; i < Width_; ++i)
+                fields[i] = &s.Values[i];
+            return s;
+        }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
@@ -366,6 +373,92 @@ private:
     const size_t MaxLength_;
     const size_t Width_;
     const size_t WideFieldsIndex_;
+};
+
+class TWideToBlocksStreamWrapper : public TMutableComputationNode<TWideToBlocksStreamWrapper>
+{
+using TBaseComputation = TMutableComputationNode<TWideToBlocksStreamWrapper>;
+using TState = TWideToBlocksState;
+public:
+    TWideToBlocksStreamWrapper(TComputationMutables& mutables,
+        IComputationNode* stream,
+        TVector<TType*>&& types)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , Stream_(stream)
+        , Types_(std::move(types))
+        , MaxLength_(CalcBlockLen(std::accumulate(Types_.cbegin(), Types_.cend(), 0ULL, [](size_t max, const TType* type){ return std::max(max, CalcMaxBlockItemSize(type)); })))
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const
+    {
+        const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_, MaxLength_);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
+                                                      std::move(state),
+                                                      std::move(Stream_->GetValue(ctx)),
+                                                      MaxLength_);
+    }
+
+private:
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    using TBase = TComputationValue<TStreamValue>;
+    public:
+        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
+                     NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& stream,
+                     const size_t maxLength)
+            : TBase(memInfo)
+            , BlockState_(blockState)
+            , Stream_(stream)
+            , MaxLength_(maxLength)
+            , HolderFactory_(holderFactory)
+        {}
+
+    private:
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
+            auto* inputFields = blockState.Pointer_;
+            const size_t inputWidth = blockState.Values.size() - 1;
+
+            if (!blockState.Count) {
+                if (!blockState.IsFinished_) do {
+                    switch (Stream_.WideFetch(inputFields, inputWidth)) {
+                        case NUdf::EFetchStatus::Ok:
+                            for (size_t i = 0; i < inputWidth; i++)
+                                blockState.Add(blockState.Values[i], i);
+                            continue;
+                        case NUdf::EFetchStatus::Yield:
+                            return NUdf::EFetchStatus::Yield;
+                        case NUdf::EFetchStatus::Finish:
+                            blockState.IsFinished_ = true;
+                            break;
+                    }
+                    break;
+                } while (++blockState.Rows_ < MaxLength_ && blockState.BuilderAllocatedSize_ <= blockState.MaxBuilderAllocatedSize_);
+            if (blockState.Rows_)
+                blockState.MakeBlocks(HolderFactory_);
+            else
+                return NUdf::EFetchStatus::Finish;
+            }
+
+            const auto sliceSize = blockState.Slice();
+            for (size_t i = 0; i < width; i++) {
+                output[i] = blockState.Get(sliceSize, HolderFactory_, i);
+            }
+            return NUdf::EFetchStatus::Ok;
+        }
+
+        NUdf::TUnboxedValue BlockState_;
+        NUdf::TUnboxedValue Stream_;
+        const size_t MaxLength_;
+        const THolderFactory& HolderFactory_;
+    };
+
+    void RegisterDependencies() const final {
+        this->DependsOn(Stream_);
+    }
+
+    IComputationNode* const Stream_;
+    const TVector<TType*> Types_;
+    const size_t MaxLength_;
 };
 
 class TFromBlocksWrapper : public TStatefulFlowCodegeneratorNode<TFromBlocksWrapper> {
@@ -1259,13 +1352,25 @@ IComputationNode* WrapToBlocks(TCallable& callable, const TComputationNodeFactor
 IComputationNode* WrapWideToBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
 
-    const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto wideComponents = GetWideComponents(flowType);
+    const auto inputType = callable.GetInput(0).GetStaticType();
+    MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(),
+               "Expected either WideStream or WideFlow as an input");
+    const auto yieldsStream = callable.GetType()->GetReturnType()->IsStream();
+    MKQL_ENSURE(yieldsStream == inputType->IsStream(),
+                "Expected both input and output have to be either WideStream or WideFlow");
+
+    const auto wideComponents = GetWideComponents(inputType);
     TVector<TType*> items(wideComponents.begin(), wideComponents.end());
-    const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
+    const auto wideFlowOrStream = LocateNode(ctx.NodeLocator, callable, 0);
+    if (yieldsStream) {
+        const auto wideStream = wideFlowOrStream;
+        return new TWideToBlocksStreamWrapper(ctx.Mutables, wideStream, std::move(items));
+    }
+    // FIXME: Drop the branch below, when the time comes.
+    const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(wideFlowOrStream);
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
 
-    return new TWideToBlocksWrapper(ctx.Mutables, wideFlow, std::move(items));
+    return new TWideToBlocksFlowWrapper(ctx.Mutables, wideFlow, std::move(items));
 }
 
 IComputationNode* WrapFromBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

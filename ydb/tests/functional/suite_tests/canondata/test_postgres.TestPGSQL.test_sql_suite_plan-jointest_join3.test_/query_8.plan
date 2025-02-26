@@ -78,6 +78,9 @@
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 1
+                                                                                    },
+                                                                                    {
+                                                                                        "Other": "ConstantExpression"
                                                                                     }
                                                                                 ],
                                                                                 "Name": "LeftJoin (MapJoin)"

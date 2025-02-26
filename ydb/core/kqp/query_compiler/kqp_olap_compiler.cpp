@@ -426,6 +426,7 @@ const TTypedColumn ConvertJsonValueToColumn(const TKqpOlapJsonValue& jsonValueCa
         jsonValueCallable.Column(),
         jsonValueCallable.Path(),
         type);
+    jsonValueFunc->SetKernelName("JsonValue");
     jsonValueFunc->SetKernelIdx(idx);
 
     return {command->GetColumn().GetId(), ctx.ConvertToBlockType(type)};
@@ -449,6 +450,7 @@ const TTypedColumn CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallabl
         jsonExistsCallable.Column(),
         jsonExistsCallable.Path(),
         type);
+    jsonExistsFunc->SetKernelName("JsonExists");
     jsonExistsFunc->SetKernelIdx(idx);
 
     if constexpr (NSsa::RuntimeVersion >= 4U) {

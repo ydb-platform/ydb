@@ -5,8 +5,7 @@
 
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 
-#include <yt/cpp/mapreduce/http/http.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/io.h>

@@ -1,8 +1,8 @@
 diff --git a/include/__filesystem/directory_entry.h b/include/__filesystem/directory_entry.h
-index 016ad94..90e44f5 100644
+index 96d88dc..c40b5d7 100644
 --- a/include/__filesystem/directory_entry.h
 +++ b/include/__filesystem/directory_entry.h
-@@ -202,7 +202,9 @@ private:
+@@ -201,7 +201,9 @@ private:
      _IterNonSymlink,
      _RefreshSymlink,
      _RefreshSymlinkUnresolved,
@@ -13,7 +13,7 @@ index 016ad94..90e44f5 100644
    };
  
    struct __cached_data {
-@@ -241,6 +243,29 @@ private:
+@@ -240,6 +242,29 @@ private:
      return __data;
    }
  
@@ -43,7 +43,7 @@ index 016ad94..90e44f5 100644
    _LIBCPP_HIDE_FROM_ABI void __assign_iter_entry(_Path&& __p, __cached_data __dt) {
      __p_    = std::move(__p);
      __data_ = __dt;
-@@ -282,13 +307,15 @@ private:
+@@ -281,13 +306,15 @@ private:
      case _Empty:
        return __symlink_status(__p_, __ec).type();
      case _IterSymlink:
@@ -60,7 +60,7 @@ index 016ad94..90e44f5 100644
        file_status __st(__data_.__type_);
        if (__ec && !filesystem::exists(__st))
          *__ec = make_error_code(errc::no_such_file_or_directory);
-@@ -296,6 +323,7 @@ private:
+@@ -295,6 +322,7 @@ private:
          __ec->clear();
        return __data_.__type_;
      }
@@ -68,7 +68,7 @@ index 016ad94..90e44f5 100644
      __libcpp_unreachable();
    }
  
-@@ -303,8 +331,10 @@ private:
+@@ -302,8 +330,10 @@ private:
      switch (__data_.__cache_type_) {
      case _Empty:
      case _IterSymlink:
@@ -79,7 +79,7 @@ index 016ad94..90e44f5 100644
      case _IterNonSymlink:
      case _RefreshNonSymlink:
      case _RefreshSymlink: {
-@@ -324,8 +354,10 @@ private:
+@@ -323,8 +353,10 @@ private:
      case _Empty:
      case _IterNonSymlink:
      case _IterSymlink:
@@ -90,7 +90,7 @@ index 016ad94..90e44f5 100644
      case _RefreshNonSymlink:
      case _RefreshSymlink:
        return file_status(__get_ft(__ec), __data_.__non_sym_perms_);
-@@ -339,8 +371,10 @@ private:
+@@ -338,8 +370,10 @@ private:
      case _IterNonSymlink:
      case _IterSymlink:
        return __symlink_status(__p_, __ec);
@@ -101,7 +101,7 @@ index 016ad94..90e44f5 100644
      case _RefreshSymlink:
      case _RefreshSymlinkUnresolved:
        return file_status(__get_sym_ft(__ec), __data_.__sym_perms_);
-@@ -353,8 +387,10 @@ private:
+@@ -352,8 +386,10 @@ private:
      case _Empty:
      case _IterNonSymlink:
      case _IterSymlink:
@@ -112,7 +112,7 @@ index 016ad94..90e44f5 100644
      case _RefreshSymlink:
      case _RefreshNonSymlink: {
        error_code __m_ec;
-@@ -375,6 +411,8 @@ private:
+@@ -374,6 +410,8 @@ private:
      case _Empty:
      case _IterNonSymlink:
      case _IterSymlink:
@@ -121,7 +121,7 @@ index 016ad94..90e44f5 100644
      case _RefreshSymlinkUnresolved:
        return filesystem::__hard_link_count(__p_, __ec);
      case _RefreshSymlink:
-@@ -393,8 +431,10 @@ private:
+@@ -392,8 +430,10 @@ private:
      case _Empty:
      case _IterNonSymlink:
      case _IterSymlink:

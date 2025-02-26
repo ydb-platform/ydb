@@ -2,6 +2,8 @@ import time
 import logging
 from .base import TllTieringTestBase, ColumnTableHelper
 
+from ydb.tests.library.test_meta import link_test_case
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,6 +30,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
     def get_row_count_by_date(self, table_path: str, past_days: int) -> int:
         return self.ydb_client.query(f"SELECT count(*) as Rows from `{table_path}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromDays({past_days})")[0].rows[0]["Rows"]
 
+    @link_test_case("#13542")
     def test_data_unchanged_after_ttl_change(self):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13542 '''
         self.row_count = 7000000
@@ -58,7 +61,8 @@ class TestDeleteS3Ttl(TllTieringTestBase):
         if self.s3_client.get_bucket_stat(medium_bucket) != (0, 0):
             raise Exception("Bucket for medium data is not empty")
 
-        self.ydb_client.query(f"""
+        self.ydb_client.query(
+            f"""
             CREATE TABLE `{table_path}` (
                 ts Timestamp NOT NULL,
                 s String,
@@ -197,6 +201,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
 
         change_ttl_and_check(self.days_to_cool, days_to_medium, self.days_to_freeze)
 
+    @link_test_case("#13467")
     def test_ttl_delete(self):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13467 '''
         self.test_name = 'test_ttl_delete'
@@ -219,7 +224,8 @@ class TestDeleteS3Ttl(TllTieringTestBase):
         if self.s3_client.get_bucket_stat(frozen_bucket) != (0, 0):
             raise Exception("Bucket for frozen data is not empty")
 
-        self.ydb_client.query(f"""
+        self.ydb_client.query(
+            f"""
             CREATE TABLE `{table_path}` (
                 ts Timestamp NOT NULL,
                 s String,

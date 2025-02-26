@@ -1627,7 +1627,7 @@ TTenantsManager::TTenant::TPtr TTenantsManager::FindComputationalUnitKindUsage(c
     return nullptr;
 }
 
-TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TString &name)
+TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TString &name) const
 {
     auto it = Tenants.find(name);
     if (it != Tenants.end())
@@ -1635,7 +1635,7 @@ TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TString &name)
     return nullptr;
 }
 
-TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TDomainId &domainId)
+TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TDomainId &domainId) const
 {
     auto it = TenantIdToName.find(domainId);
     if (it != TenantIdToName.end())

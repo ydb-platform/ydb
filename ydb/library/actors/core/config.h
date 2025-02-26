@@ -13,7 +13,7 @@ namespace NActors {
 
     struct TBasicExecutorPoolConfig {
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TDuration::MilliSeconds(10);
-        static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = 100;
+        static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = 1'000'000;
 
         ui32 PoolId = 0;
         TString PoolName;
@@ -32,6 +32,8 @@ namespace NActors {
         EASProfile ActorSystemProfile = EASProfile::Default;
         bool HasSharedThread = false;
         bool UseRingQueue = false;
+        ui16 MinLocalQueueSize = 0;
+        ui16 MaxLocalQueueSize = 0;
     };
 
     struct TSharedExecutorPoolConfig {

@@ -628,11 +628,15 @@ class LintConfigs:
 
         # default config
         linter_name = spec_args['NAME'][0]
-        config = spec_args['CONFIGS'][0]
+        default_configs_path = spec_args['CONFIGS'][0]
+        assert_file_exists(unit, default_configs_path)
+        config = get_linter_configs(unit, default_configs_path).get(linter_name)
+        if not config:
+            message = f"Default config in {default_configs_path} can't be found for a linter {linter_name}"
+            ymake.report_configure_error(message)
+            raise DartValueError()
         assert_file_exists(unit, config)
-        cfg = get_linter_configs(unit, config)[linter_name]
-        assert_file_exists(unit, cfg)
-        resolved_configs.append(cfg)
+        resolved_configs.append(config)
         if linter_name in ('flake8', 'py2_flake8'):
             resolved_configs.extend(spec_args.get('FLAKE_MIGRATIONS_CONFIG', []))
         return {cls.KEY: serialize_list(resolved_configs)}
@@ -652,9 +656,13 @@ class LintConfigs:
 
         # default config
         linter_name = spec_args['NAME'][0]
-        config = spec_args.get('CONFIGS')[0]
-        assert_file_exists(unit, config)
-        config = get_linter_configs(unit, config)[linter_name]
+        default_configs_path = spec_args.get('CONFIGS')[0]
+        assert_file_exists(unit, default_configs_path)
+        config = get_linter_configs(unit, default_configs_path).get(linter_name)
+        if not config:
+            message = f"Default config in {default_configs_path} can't be found for a linter {linter_name}"
+            ymake.report_configure_error(message)
+            raise DartValueError()
         assert_file_exists(unit, config)
         return {cls.KEY: serialize_list([config])}
 

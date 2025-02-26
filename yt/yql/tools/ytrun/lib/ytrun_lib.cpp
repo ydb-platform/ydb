@@ -8,6 +8,9 @@
 #include <yt/yql/providers/yt/lib/log/yt_logger.h>
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/gateway/fmr/yql_yt_fmr.h>
+#include <yt/yql/providers/yt/fmr/coordinator/client/yql_yt_coordinator_client.h>
+#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
+#include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
@@ -111,6 +114,13 @@ TYtRunTool::TYtRunTool(TString name)
             .Optional()
             .NoArgument()
             .SetFlag(&GetRunOptions().UseMetaFromGrpah);
+        opts.AddLongOption("fmr-coordinator-server-url", "Fast map reduce coordinator server url")
+            .Optional()
+            .StoreResult(&FmrCoordinatorServerUrl_);
+        opts.AddLongOption("disable-local-fmr-worker", "Disable local fast map reduce worker")
+            .Optional()
+            .NoArgument()
+            .SetFlag(&DisableLocalFmrWorker_);
     });
 
     GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
@@ -169,8 +179,40 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     services.FunctionRegistry = GetFuncRegistry().Get();
     services.FileStorage = GetFileStorage();
     services.Config = std::make_shared<TYtGatewayConfig>(GetRunOptions().GatewaysConfig->GetYt());
-    auto ytGateway =  CreateYtNativeGateway(services);
-    return GetRunOptions().GatewayTypes.contains(FastMapReduceGatewayName) ? CreateYtFmrGateway(ytGateway): ytGateway;
+    auto ytGateway = CreateYtNativeGateway(services);
+    if (!GetRunOptions().GatewayTypes.contains(FastMapReduceGatewayName)) {
+        return ytGateway;
+    }
+
+    auto coordinator = NFmr::MakeFmrCoordinator();
+    if (!FmrCoordinatorServerUrl_.empty()) {
+        NFmr::TFmrCoordinatorClientSettings coordinatorClientSettings;
+        THttpURL parsedUrl;
+        if (parsedUrl.Parse(FmrCoordinatorServerUrl_) != THttpURL::ParsedOK) {
+            ythrow yexception() << "Invalid fast map reduce coordinator server url passed in parameters";
+        }
+        coordinatorClientSettings.Port = parsedUrl.GetPort();
+        coordinatorClientSettings.Host = parsedUrl.GetHost();
+        coordinator = NFmr::MakeFmrCoordinatorClient(coordinatorClientSettings);
+    }
+
+    if (!DisableLocalFmrWorker_) {
+        auto func = [&] (NFmr::TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
+            while (!cancelFlag->load()) {
+                Sleep(TDuration::Seconds(3));
+                return NFmr::ETaskStatus::Completed;
+            }
+            return NFmr::ETaskStatus::Failed;
+        }; // TODO - use function which actually calls Downloader/Uploader based on task params
+
+        NFmr::TFmrJobFactorySettings settings{.Function=func};
+        auto jobFactory = MakeFmrJobFactory(settings);
+        NFmr::TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDefaultRandomProvider(),
+            .TimeToSleepBetweenRequests=TDuration::Seconds(1)};
+        FmrWorker_ = MakeFmrWorker(coordinator, jobFactory, workerSettings);
+        FmrWorker_->Start();
+    }
+    return NFmr::CreateYtFmrGateway(ytGateway, coordinator);
 }
 
 IOptimizerFactory::TPtr TYtRunTool::CreateCboFactory() {

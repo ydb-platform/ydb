@@ -287,15 +287,18 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
 
     auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
     auto resStats = std::make_shared<TOptimizerStatistics>(           
-        ctx.ComputeJoinStats(
+        ctx.ComputeJoinStatsV1(
             *leftStats, 
             *rightStats, 
             leftJoinKeys, 
             rightJoinKeys, 
             EJoinAlgoType::MapJoin, 
             ConvertToJoinKind(join.JoinKind().StringValue()),
-            FindCardHint(unionOfLabels, hints))
-        );
+            FindCardHint(unionOfLabels, hints),
+            false,
+            false
+        )
+    );
     resStats->Labels = std::make_shared<TVector<TString>>();
     resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
     typeCtx->SetStats(join.Raw(), resStats);
@@ -351,14 +354,16 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     }
 
     auto resStats = std::make_shared<TOptimizerStatistics>(
-            ctx.ComputeJoinStats(
+            ctx.ComputeJoinStatsV1(
                 *leftStats,
                 *rightStats,
                 leftJoinKeys,
                 rightJoinKeys, 
                 joinAlgo,
                 ConvertToJoinKind(join.JoinKind().StringValue()),
-                FindCardHint(unionOfLabels, hints)
+                FindCardHint(unionOfLabels, hints),
+                false,
+                false
             )
         );
 
@@ -414,14 +419,16 @@ void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationConte
     auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
 
     auto resStats = std::make_shared<TOptimizerStatistics>(
-            ctx.ComputeJoinStats(
+            ctx.ComputeJoinStatsV1(
                 *leftStats,
                 *rightStats,
                 leftJoinKeys,
                 rightJoinKeys, 
                 joinAlgo,
                 ConvertToJoinKind(join.JoinType().StringValue()),
-                FindCardHint(unionOfLabels, hints)
+                FindCardHint(unionOfLabels, hints),
+                false,
+                false
             )
         );
 
@@ -483,6 +490,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
             inputStats->StorageType);
 
         outputStats.SortColumns = inputStats->SortColumns;
+        outputStats.ShuffledByColumns = inputStats->ShuffledByColumns;
         outputStats.Labels = inputStats->Labels;
         outputStats.Selectivity *= (inputStats->Selectivity * selectivity);
 
@@ -537,6 +545,7 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
         inputStats->StorageType
     );
     outputStats.SortColumns = inputStats->SortColumns;
+    outputStats.ShuffledByColumns = inputStats->ShuffledByColumns;
 
     outputStats.Selectivity *= (selectivity * inputStats->Selectivity);
     outputStats.Labels = inputStats->Labels;
@@ -576,6 +585,20 @@ void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnot
     auto inputStats = typeCtx->GetStats(aggInput.Raw());
     if (!inputStats) {
         return;
+    }
+
+    if (inputStats->ShuffledByColumns) {
+        TString relName{};
+        if (!inputStats->ShuffledByColumns->Data.empty()) {
+            relName = inputStats->ShuffledByColumns->Data.front().RelName;
+        }
+
+        TVector<NDq::TJoinColumn> shuffledBy;
+        shuffledBy.reserve(agg.Keys().Size());
+        for (const auto& key: agg.Keys()) {
+            shuffledBy.push_back(TJoinColumn(relName, key.StringValue()));
+        }
+        inputStats->ShuffledByColumns->Data = std::move(shuffledBy);
     }
 
     typeCtx->SetStats( input.Get(), RemoveOrdering(inputStats));

@@ -442,6 +442,9 @@ TNode SerializeParamsForSuspendOperation(
     if (options.AbortRunningJobs_) {
         result["abort_running_jobs"] = *options.AbortRunningJobs_;
     }
+    if (options.Reason_) {
+        result["reason"] = **options.Reason_;
+    }
     return result;
 }
 
@@ -879,7 +882,10 @@ TNode SerializeParamsForSkyShareTable(
     }
 
     if (options.Pool_) {
-        result["pool"] = *options.Pool_;
+        result["share_operation_options"] = BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("pool").Value(*options.Pool_)
+            .EndMap();
     }
 
     return result;

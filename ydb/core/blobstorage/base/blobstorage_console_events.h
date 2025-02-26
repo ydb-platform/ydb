@@ -32,8 +32,14 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerConsoleCommitRequest, EvControllerConsoleCommitRequest> {
         TEvControllerConsoleCommitRequest() = default;
 
-        TEvControllerConsoleCommitRequest(const TString& yamlConfig) {
+        TEvControllerConsoleCommitRequest(
+            const TString& yamlConfig,
+            bool allowUnknownFields = false,
+            bool bypassMetadataChecks = false) {
+
             Record.SetYAML(yamlConfig);
+            Record.SetAllowUnknownFields(allowUnknownFields);
+            Record.SetBypassMetadataChecks(bypassMetadataChecks);
         }
 
         TString ToString() const override {
@@ -76,8 +82,14 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerReplaceConfigRequest, EvControllerReplaceConfigRequest> {
         TEvControllerReplaceConfigRequest() = default;
 
-        TEvControllerReplaceConfigRequest(std::optional<TString> clusterYaml, std::optional<TString> storageYaml,
-                std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode) {
+        TEvControllerReplaceConfigRequest(
+            std::optional<TString> clusterYaml,
+            std::optional<TString> storageYaml,
+            std::optional<bool> switchDedicatedStorageSection,
+            bool dedicatedConfigMode,
+            bool allowUnknownFields,
+            bool bypassMetadataChecks) {
+
             if (clusterYaml) {
                 Record.SetClusterYaml(*clusterYaml);
             }
@@ -88,6 +100,8 @@ namespace NKikimr {
                 Record.SetSwitchDedicatedStorageSection(*switchDedicatedStorageSection);
             }
             Record.SetDedicatedConfigMode(dedicatedConfigMode);
+            Record.SetAllowUnknownFields(allowUnknownFields);
+            Record.SetBypassMetadataChecks(bypassMetadataChecks);
         }
 
         TString ToString() const override {

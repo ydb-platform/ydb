@@ -113,6 +113,7 @@ SRCS(
     query_stats.proto
     replication.proto
     resource_broker.proto
+    s3_settings.proto
     scheme_board.proto
     scheme_board_mon.proto
     scheme_log.proto

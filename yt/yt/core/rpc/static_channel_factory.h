@@ -16,7 +16,7 @@ public:
     IChannelPtr CreateChannel(const std::string& address) override;
 
 private:
-    THashMap<TString, IChannelPtr> ChannelMap;
+    THashMap<std::string, IChannelPtr> ChannelMap;
 };
 
 DEFINE_REFCOUNTED_TYPE(TStaticChannelFactory)

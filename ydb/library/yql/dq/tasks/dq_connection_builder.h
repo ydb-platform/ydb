@@ -105,12 +105,15 @@ void BuildUnionAllChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32
 template <typename TGraph, typename TKeyColumns>
 void BuildHashShuffleChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex,
     const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, const TKeyColumns& keyColumns,
-    bool enableSpilling, const TChannelLogFunc& logFunc)
+    bool enableSpilling, const TChannelLogFunc& logFunc, ui32 hashKind = NHashKind::EHashV1)
 {
     for (auto& originTaskId : inputStageInfo.Tasks) {
         auto& originTask = graph.GetTask(originTaskId);
         auto& taskOutput = originTask.Outputs[outputIndex];
+
         taskOutput.Type = TTaskOutputType::HashPartition;
+        taskOutput.HashKind = hashKind;
+        
         for (const auto& keyColumn : keyColumns) {
             taskOutput.KeyColumns.push_back(keyColumn);
         }

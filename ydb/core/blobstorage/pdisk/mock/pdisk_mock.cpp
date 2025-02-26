@@ -989,6 +989,8 @@ public:
         Become(&TThis::StateNormal);
     }
 
+    void Ignore() {}
+
     STRICT_STFUNC(StateNormal,
         hFunc(NPDisk::TEvYardInit, Handle);
         hFunc(NPDisk::TEvLog, Handle);
@@ -1010,6 +1012,8 @@ public:
         hFunc(NPDisk::TEvWriteMetadata, Handle);
 
         cFunc(EvBecomeError, HandleMoveToErrorState);
+
+        cFunc(TEvBlobStorage::EvMarkDirty, Ignore);
     )
 
     STRICT_STFUNC(StateError,
@@ -1030,6 +1034,8 @@ public:
 
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
         cFunc(EvBecomeNormal, HandleMoveToNormalState);
+
+        cFunc(TEvBlobStorage::EvMarkDirty, Ignore);
     )
 };
 

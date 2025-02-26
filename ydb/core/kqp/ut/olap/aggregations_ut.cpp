@@ -109,9 +109,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
         {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
@@ -898,6 +898,24 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 WHERE id > 5;
             )")
             .SetExpectedReply("[[#]]")
+#if SSA_RUNTIME_VERSION >= 2U
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_Sum_Null_Count) {
+        TAggregationTestCase testCase;
+        testCase
+            .SetQuery(R"(
+                SELECT
+                    SUM(level), COUNT(*), AVG(level)
+                FROM `/Root/tableWithNulls`
+            )")
+            .SetExpectedReply("[[[15];10u;[3.]]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else

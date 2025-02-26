@@ -157,7 +157,8 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& clientCounters,
         const TString& tenantName,
         NActors::TMon* monitoring,
-        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+        NYql::IPqGatewayFactory::TPtr pqGatewayFactory
         )
         : YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
@@ -180,6 +181,7 @@ public:
         , Monitoring(monitoring)
         , ComputeConfig(config.GetCompute())
         , S3ActorsFactory(std::move(s3ActorsFactory))
+        , PqGatewayFactory(std::move(pqGatewayFactory))
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -472,7 +474,8 @@ private:
             NProtoInterop::CastFromProto(task.result_ttl()),
             std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end()),
             S3ActorsFactory,
-            ComputeConfig.GetWorkloadManagerConfig(task.scope())
+            ComputeConfig.GetWorkloadManagerConfig(task.scope()),
+            PqGatewayFactory
             );
 
         auto runActorId =
@@ -481,9 +484,7 @@ private:
                 : Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 
         RunActorMap[runActorId] = TRunActorInfo { .QueryId = queryId, .QueryName = task.query_name() };
-        if (!task.automatic()) {
-            CountersMap[queryId] = { rootCountersParent, publicCountersParent, runActorId };
-        }
+        CountersMap[queryId] = { rootCountersParent, publicCountersParent, runActorId };
     }
 
     NActors::IActor* CreateYdbRunActor(TRunActorParams&& params, const ::NYql::NCommon::TServiceCounters& queryCounters) const {
@@ -550,6 +551,7 @@ private:
     NActors::TMon* Monitoring;
     TComputeConfig ComputeConfig;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
+    NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
 };
 
 
@@ -569,7 +571,8 @@ NActors::IActor* CreatePendingFetcher(
     const ::NMonitoring::TDynamicCounterPtr& clientCounters,
     const TString& tenantName,
     NActors::TMon* monitoring,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory)
 {
     return new TPendingFetcher(
         yqSharedResources,
@@ -587,7 +590,8 @@ NActors::IActor* CreatePendingFetcher(
         clientCounters,
         tenantName,
         monitoring,
-        std::move(s3ActorsFactory));
+        std::move(s3ActorsFactory),
+        std::move(pqGatewayFactory));
 }
 
 TActorId MakePendingFetcherId(ui32 nodeId) {

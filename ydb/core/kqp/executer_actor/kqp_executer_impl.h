@@ -136,7 +136,8 @@ public:
         TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
+        ui32 statementResultIndex,
+        ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr)
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
@@ -240,6 +241,7 @@ protected:
         auto& reply = *ev->Get();
 
         KqpShardsResolverId = {};
+        ShardsResolved = true;
 
         // TODO: count resolve time in CpuTime
 
@@ -424,21 +426,33 @@ protected:
 
         YQL_ENSURE(Stats);
 
-        if (state.HasStats() && Request.ProgressStatsPeriod) {
-            Stats->UpdateTaskStats(taskId, state.GetStats());
-            auto now = TInstant::Now();
-            if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
-                auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
-                auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
-                Stats->ExportExecStats(execStats);
-                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
-                    const auto& tx = Request.Transactions[txId].Body;
-                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
-                    execStats.AddTxPlansWithStats(planWithStats);
+        if (state.HasStats()) {
+            ui64 cycleCount = GetCycleCountFast();
+
+            Stats->UpdateTaskStats(taskId, state.GetStats(), (NYql::NDqProto::EComputeState) state.GetState());
+            if (Request.ProgressStatsPeriod) {
+                auto now = TInstant::Now();
+                if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
+                    auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
+                    auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
+                    Stats->ExportExecStats(execStats);
+                    for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                        const auto& tx = Request.Transactions[txId].Body;
+                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                        execStats.AddTxPlansWithStats(planWithStats);
+                    }
+                    this->Send(Target, progress.Release());
+                    LastProgressStats = now;
                 }
-                this->Send(Target, progress.Release());
-                LastProgressStats = now;
             }
+            auto collectBytes = Stats->EstimateCollectMem();
+            auto deltaCpuTime = NHPTimer::GetSeconds(GetCycleCountFast() - cycleCount);
+
+            Counters->Counters->QueryStatMemCollectInflightBytes->Add(
+                static_cast<i64>(collectBytes) - static_cast<i64>(StatCollectInflightBytes)
+            );
+            StatCollectInflightBytes = collectBytes;
+            Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
         }
 
         YQL_ENSURE(Planner);
@@ -449,6 +463,8 @@ protected:
             case NYql::NDqProto::COMPUTE_STATE_FINISHED:
                 // Don't finalize stats twice.
                 if (Planner->CompletedCA(taskId, computeActor)) {
+                    ui64 cycleCount = GetCycleCountFast();
+
                     auto& extraData = ExtraData[computeActor];
                     extraData.TaskId = taskId;
                     extraData.Data.Swap(state.MutableExtraData());
@@ -456,11 +472,21 @@ protected:
                     Stats->AddComputeActorStats(
                         computeActor.NodeId(),
                         std::move(*state.MutableStats()),
+                        (NYql::NDqProto::EComputeState) state.GetState(),
                         TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
                     );
 
                     LastTaskId = taskId;
                     LastComputeActorId = computeActor.ToString();
+
+                    auto collectBytes = Stats->EstimateFinishMem();
+                    auto deltaCpuTime = NHPTimer::GetSeconds(GetCycleCountFast() - cycleCount);
+
+                    Counters->Counters->QueryStatMemFinishInflightBytes->Add(
+                        static_cast<i64>(collectBytes) - static_cast<i64>(StatFinishInflightBytes)
+                    );
+                    StatFinishInflightBytes = collectBytes;
+                    Counters->Counters->QueryStatCpuFinishUs->Add(deltaCpuTime * 1'000'000);
                 }
             default:
                 ; // ignore all other states.
@@ -937,9 +963,10 @@ protected:
                 .Columns = BuildKqpColumns(op, tableInfo),
             };
 
+            auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
             task.Meta.Reads.ConstructInPlace();
             task.Meta.Reads->emplace_back(std::move(readInfo));
-            task.Meta.ReadInfo.Reverse = op.GetReadRange().GetReverse();
+            task.Meta.ReadInfo.Reverse = readSettings.Reverse;
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
@@ -1127,7 +1154,7 @@ protected:
         return result;
     }
 
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const bool shardsResolved, bool limitTasksPerNode) {
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode) {
         if (EnableReadsMerge) {
             limitTasksPerNode = true;
         }
@@ -1166,7 +1193,7 @@ protected:
             if (nodeId) {
                 task.Meta.NodeId = *nodeId;
             } else {
-                YQL_ENSURE(!shardsResolved);
+                YQL_ENSURE(!ShardsResolved);
                 task.Meta.ShardId = taskLocation;
             }
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
@@ -1278,15 +1305,14 @@ protected:
                 ? TMaybe<ui64>{*nodeIdPtr}
                 : Nothing();
 
-            YQL_ENSURE(!shardsResolved || nodeId);
+            YQL_ENSURE(!ShardsResolved || nodeId);
             YQL_ENSURE(Stats);
 
             if (shardId) {
                 Stats->AffectedShards.insert(*shardId);
             }
 
-            if (limitTasksPerNode) {
-                YQL_ENSURE(shardsResolved);
+            if (limitTasksPerNode && ShardsResolved) {
                 const auto maxScanTasksPerNode = GetScanTasksPerNode(stageInfo, /* isOlapScan */ false, *nodeId);
                 auto& nodeTasks = nodeIdToTasks[*nodeId];
                 if (nodeTasks.size() < maxScanTasksPerNode) {
@@ -1396,6 +1422,10 @@ protected:
         ui32 partitionsCount = 1;
         ui32 inputTasks = 0;
         bool isShuffle = false;
+        bool forceMapTasks = false;
+        ui32 mapCnt = 0;
+
+
         for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
             const auto& input = stage.GetInputs(inputIndex);
 
@@ -1409,6 +1439,7 @@ protected:
                     case NKqpProto::TKqpPhyConnection::kUnionAll:
                     case NKqpProto::TKqpPhyConnection::kMerge:
                     case NKqpProto::TKqpPhyConnection::kStreamLookup:
+                    case NKqpProto::TKqpPhyConnection::kMap:
                         break;
                     default:
                         YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase() << Endl
@@ -1426,18 +1457,23 @@ protected:
                 }
 
                 case NKqpProto::TKqpPhyConnection::kStreamLookup:
-                    UnknownAffectedShardCount = true;
-		    [[fallthrough]];
-                case NKqpProto::TKqpPhyConnection::kMap:
                     partitionsCount = originStageInfo.Tasks.size();
+                    UnknownAffectedShardCount = true;
                     break;
-
+                case NKqpProto::TKqpPhyConnection::kMap: 
+                    partitionsCount = originStageInfo.Tasks.size();
+                    forceMapTasks = true;
+                    ++mapCnt;
+                    break;
                 default:
                     break;
             }
+
         }
 
-        if (isShuffle) {
+        Y_ENSURE(mapCnt < 2, "There can be only < 2 'Map' connections");
+
+        if (isShuffle && !forceMapTasks) {
             if (stage.GetTaskCount()) {
                 partitionsCount = stage.GetTaskCount();
             } else {
@@ -1646,17 +1682,26 @@ protected:
         return true;
     }
 
-    void BuildScanTasksFromShards(TStageInfo& stageInfo) {
+    void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, std::vector<TShardInfoWithId>> nodeShards;
         THashMap<ui64, ui64> assignedShardsCount;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
+        if (enableShuffleElimination && stageInfo.Meta.ColumnTableInfoPtr) {
+            const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
+            stageInfo.Meta.SourceShardCount = tableDesc.GetColumnShardCount();
+            stageInfo.Meta.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
+            for (const auto& column: tableDesc.GetSharding().GetHashSharding().GetColumns()) {
+                auto columnType = stageInfo.Meta.TableConstInfo->Columns.at(column).Type;
+                stageInfo.Meta.SourceTableKeyColumnTypes->push_back(columnType);
+            }
+        }
+
         YQL_ENSURE(Stats);
 
         const auto& tableInfo = stageInfo.Meta.TableConstInfo;
         const auto& keyTypes = tableInfo->KeyColumnTypes;
-        ui32 metaId = 0;
         for (auto& op : stage.GetTableOps()) {
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
@@ -1707,7 +1752,66 @@ protected:
                     }
                 }
 
+            } else if (enableShuffleElimination /* save partitioning for shuffle elimination */) {
+                std::size_t stageInternalTaskId = 0;
+                stageInfo.Meta.TaskIdByHash = std::make_shared<TVector<ui64>>();
+                stageInfo.Meta.TaskIdByHash->resize(stageInfo.Meta.SourceShardCount);
+
+                for (auto&& pair : nodeShards) {
+                    const auto nodeId = pair.first;
+                    auto& shardsInfo = pair.second;
+                    std::size_t maxTasksPerNode = std::min<std::size_t>(shardsInfo.size(), GetScanTasksPerNode(stageInfo, isOlapScan, nodeId));
+                    std::vector<TTaskMeta> metas(maxTasksPerNode, TTaskMeta());
+                    {
+                        for (std::size_t i = 0; i < shardsInfo.size(); ++i) {
+                            auto&& shardInfo = shardsInfo[i];
+                            MergeReadInfoToTaskMeta(
+                                metas[i % maxTasksPerNode], 
+                                shardInfo.ShardId, 
+                                shardInfo.KeyReadRanges, 
+                                readSettings,
+                                columns, op, 
+                                /*isPersistentScan*/ true
+                            );
+                        }
+
+                        for (auto& meta: metas) {
+                            PrepareScanMetaForUsage(meta, keyTypes);
+                            LOG_D("Stage " << stageInfo.Id << " create scan task meta for node: " << nodeId
+                                << ", meta: " << meta.ToString(keyTypes, *AppData()->TypeRegistry));
+                        }
+                    }
+
+                    // in runtime we calc hash, which will be in [0; shardcount]
+                    // so we merge to mappings : hash -> shardID and shardID -> channelID for runtime
+                    THashMap<ui64, ui64> hashByShardId; 
+                    const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
+                    const auto& sharding = tableDesc.GetSharding();
+                    for (std::size_t i = 0; i < sharding.ColumnShardsSize(); ++i) {
+                        hashByShardId.insert({sharding.GetColumnShards(i), i});
+                    }
+                    
+                    for (ui32 t = 0; t < maxTasksPerNode; ++t, ++stageInternalTaskId) {
+                        auto& task = TasksGraph.AddTask(stageInfo);
+                        task.Meta = metas[t];
+                        task.Meta.SetEnableShardsSequentialScan(false);
+                        task.Meta.ExecuterId = SelfId();
+                        task.Meta.NodeId = nodeId;
+                        task.Meta.ScanTask = true;
+                        task.Meta.Type = TTaskMeta::TTaskType::Scan;
+                        task.SetMetaId(t);
+                        FillSecureParamsFromStage(task.Meta.SecureParams, stage);
+                        BuildSinks(stage, task);
+    
+                        for (const auto& readInfo: *task.Meta.Reads) {
+                            Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
+                            (*stageInfo.Meta.TaskIdByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
+                        }
+
+                    }
+                }
             } else {
+                ui32 metaId = 0;
                 for (auto&& pair : nodeShards) {
                     const auto nodeId = pair.first;
                     auto& shardsInfo = pair.second;
@@ -1973,15 +2077,26 @@ protected:
             ReportEventElapsedTime();
 
             Stats->FinishTs = TInstant::Now();
+
             Stats->Finish();
 
             if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
+
+                ui64 jsonSize = 0;
+                ui64 cycleCount = GetCycleCountFast();
+
                 response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
                 for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                     const auto& tx = Request.Transactions[txId].Body;
                     auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                    jsonSize += planWithStats.size();
                     response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
                 }
+
+                auto deltaCpuTime = NHPTimer::GetSeconds(GetCycleCountFast() - cycleCount);
+                Counters->Counters->QueryStatCpuConvertUs->Add(deltaCpuTime * 1'000'000);
+                Counters->Counters->QueryStatMemConvertBytes->Add(jsonSize);
+                response.MutableResult()->MutableStats()->SetStatConvertBytes(jsonSize);
             }
 
             if (Stats->CollectStatsByLongTasks) {
@@ -1990,7 +2105,16 @@ protected:
                     LOG_I("Full stats: " << response.GetResult().GetStats());
                 }
             }
+
+            auto finishSize = Stats->EstimateFinishMem();
+            Counters->Counters->QueryStatMemFinishBytes->Add(finishSize);
+            response.MutableResult()->MutableStats()->SetStatFinishBytes(finishSize);
         }
+
+        Counters->Counters->QueryStatMemCollectInflightBytes->Sub(StatCollectInflightBytes);
+        StatCollectInflightBytes = 0;
+        Counters->Counters->QueryStatMemFinishInflightBytes->Sub(StatFinishInflightBytes);
+        StatFinishInflightBytes = 0;
 
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
@@ -2082,6 +2206,7 @@ protected:
     TActorId Target;
     ui64 TxId = 0;
 
+    bool ShardsResolved = false;
     TKqpTasksGraph TasksGraph;
 
     TActorId KqpTableResolverId;
@@ -2137,6 +2262,8 @@ protected:
     const bool VerboseMemoryLimitException;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
 
+    ui64 StatCollectInflightBytes = 0;
+    ui64 StatFinishInflightBytes = 0;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

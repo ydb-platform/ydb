@@ -4,8 +4,6 @@
 #include "yql_library_compiler.h"
 #include "yql_type_helpers.h"
 
-#include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/ast/yql_constraint.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -506,9 +504,9 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         QContext.GetWriter()->Put({ModuleResolverComponent, fullName}, query).GetValueSync();
     }
 
-    const auto addSubIssues = [&fullName](TIssue&& issue, const TIssues& issues) {
+    const auto addSubIssues = [](TIssue&& issue, const TIssues& issues) {
         std::for_each(issues.begin(), issues.end(), [&](const TIssue& i) {
-            issue.AddSubIssue(MakeIntrusive<TIssue>(TPosition(i.Position.Column, i.Position.Row, fullName), i.GetMessage()));
+            issue.AddSubIssue(MakeIntrusive<TIssue>(i));
         });
         return std::move(issue);
     };
@@ -516,10 +514,6 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
     TAstParseResult astRes;
     if (sExpr) {
         astRes = ParseAst(query, nullptr, fullName);
-        if (!astRes.IsOk()) {
-            ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to parse YQL: " << fullName), astRes.Issues));
-            return false;
-        }
     } else {
         NSQLTranslation::TTranslationSettings settings;
         settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
@@ -529,11 +523,18 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
         settings.FileAliasPrefix = FileAliasPrefix;
-        astRes = SqlToYql(query, settings);
-        if (!astRes.IsOk()) {
-            ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to parse SQL: " << fullName), astRes.Issues));
-            return false;
-        }
+        astRes = SqlToYql(Translators, query, settings);
+    }
+
+    if (!astRes.IsOk()) {
+        ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to parse: " << fullName), astRes.Issues));
+        return false;
+    }
+
+    if (!astRes.Issues.Empty()) {
+        auto issue = TIssue(pos, TStringBuilder() << "Parsing issues for: " << fullName);
+        issue.SetCode(TIssuesIds::INFO, NYql::TSeverityIds::S_INFO);
+        ctx.IssueManager.RaiseIssue(addSubIssues(std::move(issue), astRes.Issues));
     }
 
     TLibraryCohesion cohesion;
@@ -646,7 +647,7 @@ IModuleResolver::TPtr TModuleResolver::CreateMutableChild() const {
         throw yexception() << "Module resolver should not contain user data and URL loader";
     }
 
-    return std::make_shared<TModuleResolver>(&Modules, LibsContext.NextUniqueId, ClusterMapping, SqlFlags, OptimizeLibraries, KnownPackages, Libs, FileAliasPrefix);
+    return std::make_shared<TModuleResolver>(Translators, &Modules, LibsContext.NextUniqueId, ClusterMapping, SqlFlags, OptimizeLibraries, KnownPackages, Libs, FileAliasPrefix);
 }
 
 void TModuleResolver::SetFileAliasPrefix(TString&& prefix) {

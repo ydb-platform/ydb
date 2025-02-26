@@ -1,23 +1,23 @@
-diff --git a/include/__config b/include/__config
-index 8550b1d..d32ad24 100644
---- a/include/__config
-+++ b/include/__config
-@@ -138,7 +138,12 @@
+diff --git a/include/__configuration/abi.h b/include/__configuration/abi.h
+index 513da6e..c31fbba 100644
+--- a/include/__configuration/abi.h
++++ b/include/__configuration/abi.h
+@@ -47,7 +47,12 @@
  // Previously libc++ used "unsigned int" exclusively.
- #    define _LIBCPP_ABI_VARIANT_INDEX_TYPE_OPTIMIZATION
+ #  define _LIBCPP_ABI_VARIANT_INDEX_TYPE_OPTIMIZATION
  // Unstable attempt to provide a more optimized std::function
--#    define _LIBCPP_ABI_OPTIMIZED_FUNCTION
-+#    ifdef __EMSCRIPTEN__
+-#  define _LIBCPP_ABI_OPTIMIZED_FUNCTION
++#  ifdef __EMSCRIPTEN__
 +// XXX EMSCRIPTEN https://github.com/emscripten-core/emscripten/issues/11022
-+// #    define _LIBCPP_ABI_OPTIMIZED_FUNCTION
-+#    else
-+#      define _LIBCPP_ABI_OPTIMIZED_FUNCTION
-+#    endif
++// #  define _LIBCPP_ABI_OPTIMIZED_FUNCTION
++#  else
++#    define _LIBCPP_ABI_OPTIMIZED_FUNCTION
++#  endif
  // All the regex constants must be distinct and nonzero.
- #    define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
+ #  define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
  // Re-worked external template instantiations for std::string with a focus on
 diff --git a/include/typeinfo b/include/typeinfo
-index 1ae075e..3a1981a 100644
+index d1c0de3..8b75ced 100644
 --- a/include/typeinfo
 +++ b/include/typeinfo
 @@ -96,7 +96,13 @@ public:
@@ -36,7 +36,7 @@ index 1ae075e..3a1981a 100644
      // from different translation units, so it is sufficient to compare their addresses.
      if (__libcpp_is_constant_evaluated()) {
 diff --git a/src/filesystem/operations.cpp b/src/filesystem/operations.cpp
-index 62bb248..fa31f05 100644
+index a83c1ae..fd770e1 100644
 --- a/src/filesystem/operations.cpp
 +++ b/src/filesystem/operations.cpp
 @@ -37,7 +37,7 @@

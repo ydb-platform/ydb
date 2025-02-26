@@ -10,7 +10,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(arkady-e1ppa): Try switching to TString/std::string eventually.
-// representing text-encoded yson string eventually (maybe).
+// representing text-encoded YSON string eventually (maybe).
 class TErrorAttributes
 {
 public:

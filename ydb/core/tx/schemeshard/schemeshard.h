@@ -698,64 +698,28 @@ namespace TEvSchemeShard {
     };
 
     struct TEvTenantDataErasureResponse : TEventPB<TEvTenantDataErasureResponse, NKikimrScheme::TEvTenantDataErasureResponse, EvTenantDataErasureResponse> {
-        enum class EStatus {
-            UNSPECIFIED,
-            COMPLETED,
-            IN_PROGRESS,
-        };
 
         TEvTenantDataErasureResponse() = default;
-
-        TEvTenantDataErasureResponse(const TPathId& pathId, ui64 generation, const EStatus& status) {
+        TEvTenantDataErasureResponse(const TPathId& pathId, ui64 generation, const NKikimrScheme::TEvTenantDataErasureResponse::EStatus& status) {
             Record.MutablePathId()->SetOwnerId(pathId.OwnerId);
             Record.MutablePathId()->SetLocalId(pathId.LocalPathId);
             Record.SetGeneration(generation);
-            Record.SetStatus(ConvertStatus(status));
+            Record.SetStatus(status);
         }
 
-        TEvTenantDataErasureResponse(ui64 ownerId, ui64 localPathId, ui64 generation, const EStatus& status)
+        TEvTenantDataErasureResponse(ui64 ownerId, ui64 localPathId, ui64 generation, const NKikimrScheme::TEvTenantDataErasureResponse::EStatus& status)
             : TEvTenantDataErasureResponse(TPathId(ownerId, localPathId), generation, status)
         {}
-
-        NKikimrScheme::TEvTenantDataErasureResponse::EStatus ConvertStatus(const EStatus& status) {
-            switch (status) {
-            case EStatus::UNSPECIFIED:
-                return NKikimrScheme::TEvTenantDataErasureResponse::UNSPECIFIED;
-            case EStatus::COMPLETED:
-                return NKikimrScheme::TEvTenantDataErasureResponse::COMPLETED;
-            case EStatus::IN_PROGRESS:
-                return NKikimrScheme::TEvTenantDataErasureResponse::IN_PROGRESS;
-            }
-        }
     };
 
     struct TEvDataErasureInfoRequest : TEventPB<TEvDataErasureInfoRequest, NKikimrScheme::TEvDataErasureInfoRequest, EvDataErasureInfoRequest> {};
 
     struct TEvDataErasureInfoResponse : TEventPB<TEvDataErasureInfoResponse, NKikimrScheme::TEvDataErasureInfoResponse, EvDataErasureInfoResponse> {
-        enum class EStatus {
-            UNSPECIFIED,
-            COMPLETED,
-            IN_PROGRESS_TENANT,
-            IN_PROGRESS_BSC,
-        };
 
         TEvDataErasureInfoResponse() = default;
-        TEvDataErasureInfoResponse(ui64 generation, const EStatus& status) {
+        TEvDataErasureInfoResponse(ui64 generation, const NKikimrScheme::TEvDataErasureInfoResponse::EStatus& status) {
             Record.SetGeneration(generation);
-            Record.SetStatus(ConvertStatus(status));
-        }
-
-        NKikimrScheme::TEvDataErasureInfoResponse::EStatus ConvertStatus(const EStatus& status) {
-            switch (status) {
-                case EStatus::UNSPECIFIED:
-                    return NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
-                case EStatus::COMPLETED:
-                    return NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED;
-                case EStatus::IN_PROGRESS_TENANT:
-                    return NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_TENANT;
-                case EStatus::IN_PROGRESS_BSC:
-                return NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_BSC;
-            }
+            Record.SetStatus(status);
         }
     };
 

@@ -296,8 +296,8 @@ public:
     {
         auto request = MakeOperationRequest<Ydb::Topic::UpdateOffsetsInTransactionRequest>(settings);
 
-        request.mutable_tx()->set_id(TStringType{GetTxId(tx)});
-        request.mutable_tx()->set_session(TStringType{GetSessionId(tx)});
+        request.mutable_tx()->set_id(tx.TxId);
+        request.mutable_tx()->set_session(tx.SessionId);
 
         for (auto& t : topics) {
             auto* topic = request.mutable_topics()->Add();

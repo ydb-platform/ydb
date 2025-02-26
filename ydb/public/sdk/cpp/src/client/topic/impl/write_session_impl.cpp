@@ -12,6 +12,12 @@
 #include <util/stream/buffer.h>
 #include <util/generic/guid.h>
 
+template <>
+void Out<NYdb::NTopic::TTransactionId>(IOutputStream& s, const NYdb::NTopic::TTransactionId& v)
+{
+    s << "{" << v.SessionId << ", " << v.TxId << "}";
+}
+
 namespace NYdb::inline V3::NTopic {
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
@@ -584,7 +590,7 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
         ++txInfo->AckCount;
 
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", txId=" << GetTxId(txId) << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", txId=" << txId << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
 
         if (txInfo->CommitCalled && (txInfo->WriteCount == txInfo->AckCount)) {
             txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
@@ -631,7 +637,7 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
                 ++txInfo->WriteCount;
 
                 LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                         LogPrefixImpl() << "OnWrite: seqNo=" << seqNo << ", txId=" << GetTxId(txId) << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                         LogPrefixImpl() << "OnWrite: seqNo=" << seqNo << ", txId=" << txId << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
             }
             WrittenInTx[seqNo] = txId;
         }

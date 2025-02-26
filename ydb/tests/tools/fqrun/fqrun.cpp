@@ -262,7 +262,7 @@ protected:
                 }
                 fileGateway->AddDummyTopic(topic);
             }
-            RunnerOptions.FqSettings.PqGateway = std::move(fileGateway);
+            RunnerOptions.FqSettings.PqGatewayFactory = CreatePqFileGatewayFactory(fileGateway);
         }
         if (!TopicsSettings.empty()) {
             ythrow yexception() << "Found topic settings for not existing topic: '" << TopicsSettings.begin()->first << "'";

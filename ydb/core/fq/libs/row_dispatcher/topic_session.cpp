@@ -409,12 +409,11 @@ void TTopicSession::SubscribeOnNextEvent() {
 }
 
 NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const {
-    NYdb::NTopic::TTopicClientSettings opts;
-    opts.Database(Database)
+    return PqGateway->GetTopicClientSettings()
+        .Database(Database)
         .DiscoveryEndpoint(Endpoint)
         .SslCredentials(NYdb::TSslCredentials(sourceParams.GetUseSsl()))
         .CredentialsProviderFactory(CredentialsProviderFactory);
-    return opts;
 }
 
 NYql::ITopicClient& TTopicSession::GetTopicClient(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {

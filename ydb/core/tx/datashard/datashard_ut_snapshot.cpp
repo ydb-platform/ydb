@@ -5918,6 +5918,78 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         runtime.SimulateSleep(TDuration::Seconds(1));
     }
 
+    Y_UNIT_TEST(ShardRestartAfterDropTableAndAbort) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100);
+
+        // The bug was discovered in 24-4 that doesn't have in-memory state migration
+        serverSettings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key Uint32, value Uint32, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table` (key, value) VALUES (1, 11);");
+
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 22);
+
+                SELECT key, value FROM `/Root/table`
+                WHERE key <= 5
+                ORDER BY key;
+            )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }");
+
+        // Copy table (this will prevent shard deletion)
+        {
+            auto senderCopy = runtime.AllocateEdgeActor();
+            ui64 txId = AsyncCreateCopyTable(server, senderCopy, "/Root", "table-copy", "/Root/table");
+            WaitTxNotification(server, senderCopy, txId);
+        }
+
+        // Drop the original table
+        {
+            auto senderDrop = runtime.AllocateEdgeActor();
+            ui64 txId = AsyncDropTable(server, senderDrop, "/Root", "table");
+            WaitTxNotification(server, senderDrop, txId);
+        }
+
+        TBlockEvents<TEvLongTxService::TEvLockStatus> blockedLockStatus(runtime);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1"),
+            "ERROR: UNAVAILABLE");
+
+        runtime.WaitFor("blocked lock status", [&]{ return blockedLockStatus.size() > 0; });
+        blockedLockStatus.Stop().clear();
+
+        // Reboot the original table shard and sleep a little
+        // The bug was causing shard to crash in RemoveSubscribedLock
+        RebootTablet(runtime, shards.at(0), sender);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
+
     Y_UNIT_TEST(BrokenLockChangesDontLeak) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

@@ -117,6 +117,7 @@ void MakeJoinHypergraphRec(
     }
 
     auto joinNode = std::static_pointer_cast<TJoinOptimizerNode>(joinTree);
+
     MakeJoinHypergraphRec(graph, joinNode->LeftArg, subtreeNodes);
     MakeJoinHypergraphRec(graph, joinNode->RightArg, subtreeNodes);
 

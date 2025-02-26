@@ -2,7 +2,10 @@
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 
+#include <ydb/library/actors/core/log.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -63,6 +66,12 @@ std::shared_ptr<arrow::Table> TAccessorsCollection::GetTable(const std::vector<u
     return arrow::Table::Make(std::make_shared<arrow::Schema>(std::move(fields)), std::move(arrays), *recordsCount);
 }
 
+std::vector<std::shared_ptr<IChunkedArray>> TAccessorsCollection::ExtractAccessors(const std::vector<ui32>& columnIds) {
+    auto result = GetAccessors(columnIds);
+    Remove(columnIds);
+    return result;
+}
+
 std::vector<std::shared_ptr<IChunkedArray>> TAccessorsCollection::GetAccessors(const std::vector<ui32>& columnIds) const {
     if (columnIds.empty()) {
         return {};
@@ -87,6 +96,8 @@ TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(const
         return TChunkedArguments::Empty();
     }
     TChunkedArguments result;
+    //    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("ids", JoinSeq(",", columnIds))("records_count", RecordsCountActual)(
+    //        "use_filter", UseFilter)("filter", Filter->DebugString());
     for (auto&& i : columnIds) {
         auto it = Accessors.find(i);
         if (it == Accessors.end()) {
@@ -127,7 +138,7 @@ TAccessorsCollection::TAccessorsCollection(const std::shared_ptr<arrow::RecordBa
     for (auto&& i : data->columns()) {
         const std::string arrName = data->schema()->field(idx)->name();
         TString name(arrName.data(), arrName.size());
-        AddVerified(resolver.GetColumnIdVerified(name), std::make_shared<TTrivialArray>(i));
+        AddVerified(resolver.GetColumnIdVerified(name), std::make_shared<TTrivialArray>(i), false);
         ++idx;
     }
 }
@@ -137,7 +148,7 @@ TAccessorsCollection::TAccessorsCollection(const std::shared_ptr<arrow::Table>& 
     for (auto&& i : data->columns()) {
         const std::string arrName = data->schema()->field(idx)->name();
         TString name(arrName.data(), arrName.size());
-        AddVerified(resolver.GetColumnIdVerified(name), std::make_shared<TTrivialChunkedArray>(i));
+        AddVerified(resolver.GetColumnIdVerified(name), std::make_shared<TTrivialChunkedArray>(i), false);
         ++idx;
     }
 }
@@ -203,12 +214,12 @@ std::optional<TAccessorsCollection> TAccessorsCollection::SelectOptional(const s
                 result.AddConstantVerified(i, itConst->second);
             }
         } else {
-            result.AddVerified(i, it->second);
+            result.AddVerified(i, it->second, false);
         }
     }
     if (withFilters) {
         result.UseFilter = UseFilter;
-        result.Filter = std::make_shared<TColumnFilter>(*Filter);
+        result.AddFilter(*Filter);
     }
     return result;
 }
@@ -235,20 +246,22 @@ void TAccessorsCollection::RemainOnly(const std::vector<ui32>& columns, const bo
     }
     AFL_VERIFY(columnIds.empty());
     for (auto&& i : toRemove) {
-        Remove(std::vector<ui32>({ i }));
+        Remove(i);
     }
     if (useAsSequence) {
         ColumnIdsSequence = columns;
     }
 }
 
-void TAccessorsCollection::AddBatch(const std::shared_ptr<TGeneralContainer>& container, const NSSA::IColumnResolver& resolver, const bool withFilter) {
+void TAccessorsCollection::AddBatch(
+    const std::shared_ptr<TGeneralContainer>& container, const NSSA::IColumnResolver& resolver, const bool withFilter) {
     for (ui32 i = 0; i < container->GetColumnsCount(); ++i) {
-        AddVerified(resolver.GetColumnIdVerified(container->GetSchema()->GetFieldVerified(i)->name()), container->GetColumnVerified(i), withFilter);
+        AddVerified(
+            resolver.GetColumnIdVerified(container->GetSchema()->GetFieldVerified(i)->name()), container->GetColumnVerified(i), withFilter);
     }
 }
 
- TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow::Datum& data)
+TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow::Datum& data)
     : ItWasScalar(data.is_scalar()) {
     if (data.is_array()) {
         Data = std::make_shared<TTrivialArray>(data.make_array());

@@ -40,35 +40,40 @@ public:
 }   // namespace
 
 TConclusion<TProgramChain> TProgramChain::Build(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver) {
-    THashMap<TColumnChainInfo, TColumnUsage> contextUsage;
+    THashMap<ui32, TColumnUsage> contextUsage;
     ui32 stepIdx = 0;
-    THashSet<TColumnChainInfo> sourceColumns;
+    THashSet<ui32> sourceColumns;
     std::optional<ui32> lastFilter;
     std::optional<ui32> firstAggregation;
+    std::vector<std::vector<TColumnChainInfo>> originalsToUse;
+    originalsToUse.resize(processors.size());
     for (auto&& i : processors) {
-        if (i->GetProcessorType() == EProcessorType::Aggregation) {
+        if (!firstAggregation && i->IsAggregation()) {
             firstAggregation = stepIdx;
         }
         if (!firstAggregation && i->GetProcessorType() == EProcessorType::Filter) {
             lastFilter = stepIdx;
         }
         for (auto&& c : i->GetOutput()) {
-            auto it = contextUsage.find(c);
+            auto it = contextUsage.find(c.GetColumnId());
             if (it != contextUsage.end()) {
                 AFL_VERIFY(false);
             } else {
-                contextUsage.emplace(c, TColumnUsage::Construct(stepIdx, i));
+                contextUsage.emplace(c.GetColumnId(), TColumnUsage::Construct(stepIdx, i));
             }
         }
         for (auto&& c : i->GetInput()) {
-            auto it = contextUsage.find(c);
+            auto it = contextUsage.find(c.GetColumnId());
+            const bool isOriginalColumn = resolver.HasColumn(c.GetColumnId());
+            if (isOriginalColumn) {
+                originalsToUse[stepIdx].emplace_back(c);
+            }
             if (it == contextUsage.end()) {
-                if (!resolver.GetColumnName(c, false)) {
-                    resolver.GetColumnName(c, true);
-                    return TConclusionStatus::Fail("incorrect input column: " + ::ToString(c));
+                if (!isOriginalColumn) {
+                    return TConclusionStatus::Fail("incorrect input column: " + c.DebugString());
                 }
-                it = contextUsage.emplace(c, TColumnUsage::Fetch(stepIdx, i)).first;
-                sourceColumns.emplace(c);
+                it = contextUsage.emplace(c.GetColumnId(), TColumnUsage::Fetch(stepIdx, i)).first;
+                sourceColumns.emplace(c.GetColumnId());
             } else {
                 it->second.SetLastUsage(stepIdx);
             }
@@ -94,7 +99,8 @@ TConclusion<TProgramChain> TProgramChain::Build(std::vector<std::shared_ptr<IRes
     }
     TProgramChain result;
     for (ui32 i = 0; i < processors.size(); ++i) {
-        result.Processors.emplace_back(std::move(columnsToFetch[i]), std::move(processors[i]), std::move(columnsToDrop[i]));
+        result.Processors.emplace_back(
+            std::move(columnsToFetch[i]), std::move(originalsToUse[i]), std::move(processors[i]), std::move(columnsToDrop[i]));
     }
     auto initStatus = result.Initialize();
     result.LastOriginalDataFilter = lastFilter;
@@ -147,7 +153,7 @@ TConclusionStatus TProgramChain::Apply(const std::shared_ptr<TAccessorsCollectio
         if (status.IsFail()) {
             return status;
         }
-        resources->Remove(i.GetColumnsToDrop());
+        resources->Remove(i.GetColumnsToDrop(), true);
         if (resources->IsEmptyFiltered()) {
             resources->Clear();
             break;

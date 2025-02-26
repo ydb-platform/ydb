@@ -50,6 +50,10 @@ public:
     virtual ~IColumnResolver() = default;
     virtual TString GetColumnName(ui32 id, bool required = true) const = 0;
     virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const = 0;
+    bool HasColumn(const ui32 id) const {
+        return !!GetColumnName(id, false);
+    }
+
     ui32 GetColumnIdVerified(const char* name) const {
         auto result = GetColumnIdOptional(name);
         AFL_VERIFY(!!result);
@@ -115,6 +119,10 @@ private:
     YDB_READONLY(ui32, ColumnId, 0);
 
 public:
+    TString DebugString() const {
+        return ::ToString(ColumnId);
+    }
+
     template <class TContainer>
     static std::vector<ui32> ExtractColumnIds(const TContainer& container) {
         std::vector<ui32> result;
@@ -145,10 +153,6 @@ public:
         : ColumnId(columnId) {
     }
 
-    operator size_t() const {
-        return ColumnId;
-    }
-
     bool operator==(const TColumnChainInfo& item) const {
         return ColumnId == item.ColumnId;
     }
@@ -161,6 +165,26 @@ enum class EProcessorType {
     Projection,
     Filter,
     Aggregation
+};
+
+class TFetchingInfo {
+private:
+    YDB_READONLY(bool, RemoveCurrent, false);
+    YDB_READONLY(bool, FullRestore, true);
+    YDB_READONLY_DEF(std::vector<TString>, SubColumns);
+
+public:
+    static TFetchingInfo BuildFullRestore(const bool replace) {
+        TFetchingInfo result;
+        result.RemoveCurrent = replace;
+        return result;
+    }
+    static TFetchingInfo BuildSubColumnsRestore(const std::vector<TString>& subColumns) {
+        TFetchingInfo result;
+        result.FullRestore = false;
+        result.SubColumns = subColumns;
+        return result;
+    }
 };
 
 class IResourceProcessor {
@@ -176,6 +200,10 @@ private:
     }
 
 public:
+    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType, const std::shared_ptr<TAccessorsCollection>& resources) const;
+
+    virtual bool IsAggregation() const = 0;
+
     virtual ~IResourceProcessor() = default;
 
     NJson::TJsonValue DebugJson() const;
@@ -202,15 +230,17 @@ public:
 class TResourceProcessorStep {
 private:
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, ColumnsToFetch);
+    YDB_READONLY_DEF(std::vector<TColumnChainInfo>, OriginalColumnsToUse);
     YDB_READONLY_DEF(std::shared_ptr<IResourceProcessor>, Processor);
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, ColumnsToDrop);
 
 public:
     NJson::TJsonValue DebugJson() const;
 
-    TResourceProcessorStep(
-        std::vector<TColumnChainInfo>&& toFetch, std::shared_ptr<IResourceProcessor>&& processor, std::vector<TColumnChainInfo>&& toDrop)
+    TResourceProcessorStep(std::vector<TColumnChainInfo>&& toFetch, std::vector<TColumnChainInfo>&& originalToUse,
+        std::shared_ptr<IResourceProcessor>&& processor, std::vector<TColumnChainInfo>&& toDrop)
         : ColumnsToFetch(std::move(toFetch))
+        , OriginalColumnsToUse(std::move(originalToUse))
         , Processor(std::move(processor))
         , ColumnsToDrop(std::move(toDrop)) {
         AFL_VERIFY(Processor);

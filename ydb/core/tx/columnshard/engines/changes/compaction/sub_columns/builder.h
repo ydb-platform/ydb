@@ -113,6 +113,7 @@ private:
                 case NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray:
                 case NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray:
                 case NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray:
+                case NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray:
                 case NArrow::NAccessor::IChunkedArray::EType::ChunkedArray:
                     AFL_VERIFY(false);
             }

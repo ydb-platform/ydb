@@ -132,9 +132,9 @@ public:
         return Accessors.contains(id) || Constants.contains(id);
     }
 
-    void AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter = false);
-    void AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter = false);
-    void AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter = false);
+    void AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter);
+    void AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter);
+    void AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter);
 
     void AddConstantVerified(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& scalar) {
         AFL_VERIFY(columnId);
@@ -216,10 +216,10 @@ public:
                 return result;
             }
 
-            arrow::Datum GetDatum(const std::vector<std::shared_ptr<arrow::Array>>& arrays, const std::vector<arrow::Datum>& scalars) const {
+            arrow::Datum GetDatum(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<arrow::Datum>& scalars) const {
                 if (ArrayIndex) {
-                    AFL_VERIFY(*ArrayIndex < arrays.size());
-                    return arrays[*ArrayIndex];
+                    AFL_VERIFY(*ArrayIndex < (ui32)batch->num_columns());
+                    return batch->column_data(*ArrayIndex);
                 } else {
                     AFL_VERIFY(ScalarIndex);
                     AFL_VERIFY(*ScalarIndex < scalars.size());
@@ -239,7 +239,8 @@ public:
             AFL_VERIFY(!Started);
             if (Arrays.size()) {
                 AFL_VERIFY(ArraysOriginal.back()->GetRecordsCount() == arr->GetRecordsCount())("last", ArraysOriginal.back()->GetRecordsCount())(
-                                                                         "new", arr->GetRecordsCount());
+                                                                         "new", arr->GetRecordsCount())("last_type",
+                                                                         ArraysOriginal.back()->GetType())("current_type", arr->GetType());
             }
             ArraysOriginal.emplace_back(arr);
             Arrays.emplace_back(arr->GetChunkedArray());
@@ -296,7 +297,7 @@ public:
                 }
                 std::vector<arrow::Datum> columns;
                 for (auto&& i : Addresses) {
-                    columns.emplace_back(i.GetDatum(chunk->columns(), Scalars));
+                    columns.emplace_back(i.GetDatum(chunk, Scalars));
                 }
                 return columns;
             }
@@ -307,26 +308,37 @@ public:
 
     TChunkedArguments GetArguments(const std::vector<ui32>& columnIds, const bool concatenate) const;
     std::vector<std::shared_ptr<IChunkedArray>> GetAccessors(const std::vector<ui32>& columnIds) const;
+    std::vector<std::shared_ptr<IChunkedArray>> ExtractAccessors(const std::vector<ui32>& columnIds);
 
     std::shared_ptr<arrow::Table> GetTable(const std::vector<ui32>& columnIds) const;
 
-    void Remove(const std::vector<ui32>& columnIds) {
+    void Remove(const std::vector<ui32>& columnIds, const bool optional = false) {
         for (auto&& i : columnIds) {
-            auto it = Accessors.find(i);
-            if (it != Accessors.end()) {
-                Accessors.erase(it);
-            } else {
-                auto itConst = Constants.find(i);
+            Remove(i, optional);
+        }
+    }
+
+    void Remove(const ui32 columnId, const bool optional = false) {
+        auto it = Accessors.find(columnId);
+        if (it != Accessors.end()) {
+            Accessors.erase(it);
+        } else {
+            auto itConst = Constants.find(columnId);
+            if (!optional) {
                 AFL_VERIFY(itConst != Constants.end());
-                Constants.erase(itConst);
+            } else {
+                if (itConst == Constants.end()) {
+                    return;
+                }
             }
+            Constants.erase(itConst);
         }
     }
 
     template <class TColumnIdOwner>
-    void Remove(const std::vector<TColumnIdOwner>& columns) {
+    void Remove(const std::vector<TColumnIdOwner>& columns, const bool optional = false) {
         for (auto&& i : columns) {
-            Remove({ i.GetColumnId() });
+            Remove(i.GetColumnId(), optional);
         }
     }
 

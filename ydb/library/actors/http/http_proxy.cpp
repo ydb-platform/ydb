@@ -9,7 +9,7 @@ public:
     using TBase = NActors::TActorBootstrapped<THttpProxy>;
 
     IActor* AddListeningPort(TEvHttpProxy::TEvAddListeningPort::TPtr& event) {
-        IActor* listeningSocket = CreateHttpAcceptorActor(SelfId(), Poller);
+        IActor* listeningSocket = CreateHttpAcceptorActor(SelfId());
         TActorId acceptorId = Register(listeningSocket);
         Send(event->Forward(acceptorId));
         Acceptors.emplace_back(acceptorId);
@@ -17,7 +17,7 @@ public:
     }
 
     IActor* AddOutgoingConnection(bool secure) {
-        IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), secure, Poller);
+        IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), secure);
         TActorId connectionId = Register(connectionSocket);
         ALOG_DEBUG(HttpLog, "Connection created " << connectionId);
         Connections.emplace(connectionId);
@@ -25,7 +25,6 @@ public:
     }
 
     void Bootstrap() {
-        Poller = Register(NActors::CreatePollerActor());
         Become(&THttpProxy::StateWork);
     }
 
@@ -54,7 +53,6 @@ protected:
     }
 
     void PassAway() override {
-        Send(Poller, new NActors::TEvents::TEvPoisonPill());
         for (const NActors::TActorId& connection : Connections) {
             Send(connection, new NActors::TEvents::TEvPoisonPill());
         }
@@ -273,7 +271,6 @@ protected:
         PassAway();
     }
 
-    NActors::TActorId Poller;
     TVector<TActorId> Acceptors;
 
     struct THostEntry {

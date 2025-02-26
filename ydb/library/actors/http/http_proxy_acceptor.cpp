@@ -10,7 +10,6 @@ public:
     using TBase::Schedule;
 
     const TActorId Owner;
-    const TActorId Poller;
     TIntrusivePtr<TSocketDescriptor> Socket;
     NActors::TPollerToken::TPtr PollerToken;
     THashSet<TActorId> Connections;
@@ -18,10 +17,9 @@ public:
     ui32 MaxRecycledRequestsCount = 0;
     std::shared_ptr<TPrivateEndpointInfo> Endpoint;
 
-    TAcceptorActor(const TActorId& owner, const TActorId& poller)
+    TAcceptorActor(const TActorId& owner)
         : NActors::TActor<TAcceptorActor>(&TAcceptorActor::StateInit)
         , Owner(owner)
-        , Poller(poller)
     {
     }
 
@@ -89,7 +87,7 @@ protected:
             if (err == 0) {
                 ALOG_INFO(HttpLog, "Listening on " << schema << bindAddress->ToString());
                 SetNonBlock(Socket->Socket);
-                Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
+                Send(NActors::MakePollerActorId(), new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 TBase::Become(&TAcceptorActor::StateListening);
                 Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress, Endpoint), 0, event->Cookie);
                 return;
@@ -138,7 +136,7 @@ protected:
                 RecycledRequests.pop_front();
             }
             NActors::TActorId connectionId = Register(connectionSocket);
-            Send(Poller, new NActors::TEvPollerRegister(socket, connectionId, connectionId));
+            Send(NActors::MakePollerActorId(), new NActors::TEvPollerRegister(socket, connectionId, connectionId));
             Connections.emplace(connectionId);
         }
     }
@@ -159,8 +157,8 @@ protected:
     }
 };
 
-NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner, const TActorId& poller) {
-    return new TAcceptorActor(owner, poller);
+NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner) {
+    return new TAcceptorActor(owner);
 }
 
 }

@@ -2192,7 +2192,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             )").GetValueSync();
 
             auto expected = R"([
-                [["user1"];[%true];[%false];[0u];[0u];[0u]];
+                [["user1"];[%true];[%false];#;#;[0u]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -2218,7 +2218,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             )").GetValueSync();
 
             auto expected = R"([
-                [["user2"];[%true];[%false];[0u];[0u];[0u]];
+                [["user2"];[%true];[%false];#;#;[0u]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -2231,8 +2231,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
             )").GetValueSync();
 
             auto expected = R"([
-                [["user3"];[%true];[%false];[0u];[0u];[0u]];
-                [["user4"];[%true];[%false];[0u];[0u];[0u]];
+                [["user3"];[%true];[%false];#;#;[0u]];
+                [["user4"];[%true];[%false];#;#;[0u]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));

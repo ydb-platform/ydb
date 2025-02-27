@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(AuthConfigValidation) {
         std::vector<TString> error;
         EValidationResult result = ValidateAuthConfig(authConfig, error);
         UNIT_ASSERT_EQUAL(result, EValidationResult::Ok);
-        UNIT_ASSERT_C(error.empty(), "Should not be errors");
+        UNIT_ASSERT_C(error.empty(), error.front());
     }
 
     Y_UNIT_TEST(CannotAcceptInvalidPasswordComplexity) {
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(AuthConfigValidation) {
             std::vector<TString> error;
             EValidationResult result = ValidateAuthConfig(authConfig, error);
             UNIT_ASSERT_EQUAL(result, EValidationResult::Ok);
-            UNIT_ASSERT_C(error.empty(), "Should not be errors");
+            UNIT_ASSERT_C(error.empty(), error.front());
         }
 
         {
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(AuthConfigValidation) {
             std::vector<TString> error;
             EValidationResult result = ValidateAuthConfig(authConfig, error);
             UNIT_ASSERT_EQUAL(result, EValidationResult::Ok);
-            UNIT_ASSERT_C(error.empty(), "Should not be errors");
+            UNIT_ASSERT_C(error.empty(), error.front());
         }
 
         {
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(AuthConfigValidation) {
             std::vector<TString> error;
             EValidationResult result = ValidateAuthConfig(authConfig, error);
             UNIT_ASSERT_EQUAL(result, EValidationResult::Ok);
-            UNIT_ASSERT_C(error.empty(), "Should not be errors");
+            UNIT_ASSERT_C(error.empty(), error.front());
         }
     }
 

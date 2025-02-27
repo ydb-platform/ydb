@@ -272,7 +272,7 @@ protected:
 
     void RequestSchemeCacheNavigate(const TString& path);
     void RequestSchemeCacheNavigate(const TPathId& pathId);
-    void RequestSchemeCacheNavigateWtihAclCheck(const TString& path, ui32 access = NACLib::DescribeSchema);
+    void RequestSchemeCacheNavigateWtihParams(const TString& path, ui32 access = NACLib::DescribeSchema, bool showPrivate = false);
 
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie = 0);
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie = 0);
@@ -322,6 +322,7 @@ protected:
     TString GetHTTPOKJSON(const google::protobuf::Message& response, TInstant lastModified = {});
     TString GetHTTPGATEWAYTIMEOUT(TString contentType = {}, TString response = {});
     TString GetHTTPBADREQUEST(TString contentType = {}, TString response = {});
+    TString GetHTTPNOTFOUND(TString contentType = {}, TString response = {});
     TString GetHTTPINTERNALERROR(TString contentType = {}, TString response = {});
     TString GetHTTPFORBIDDEN(TString contentType = {}, TString response = {});
     TString MakeForward(const std::vector<ui32>& nodes);

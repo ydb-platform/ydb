@@ -1027,7 +1027,7 @@ private:
     struct TPingTaskParams {
         TString Query;
         TParams Params;
-        const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)> Prepare;
+        const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)> Prepare;
         std::shared_ptr<std::vector<TString>> MeteringRecords;
     };
 

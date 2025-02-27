@@ -6,7 +6,7 @@
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/generic/ptr.h>

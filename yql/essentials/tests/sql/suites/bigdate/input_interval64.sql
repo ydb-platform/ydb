@@ -21,9 +21,16 @@ select cast("PT999999M" as interval64), cast(cast("PT999999M" as interval64) as 
 select cast("PT999999H" as interval64), cast(cast("PT999999H" as interval64) as string);
 
 select cast("P106751616D" as interval64), cast(cast("P106751616D" as interval64) as string);
+select cast("-P106751616D" as interval64), cast(cast("-P106751616D" as interval64) as string);
 select cast("P106751617D" as interval64), cast(cast("P106751617D" as interval64) as string);
+select cast("-P106751617D" as interval64), cast(cast("-P106751617D" as interval64) as string);
 select cast("P15250230W" as interval64), cast(cast("P15250230W" as interval64) as string);
 select cast("P15250231W" as interval64), cast(cast("P15250231W" as interval64) as string);
+
+select cast("PT9223339708799S" as interval64), cast(cast("PT9223339708799S" as interval64) as string);
+select cast("-PT9223339708799S" as interval64), cast(cast("-PT9223339708799S" as interval64) as string);
+select cast("PT9223339708800S" as interval64), cast(cast("PT9223339708800S" as interval64) as string);
+select cast("-PT9223339708800S" as interval64), cast(cast("-PT9223339708800S" as interval64) as string);
 
 select cast("PT0000000S" as interval64), cast(cast("PT0000000S" as interval64) as string);
 select cast("PT0000000M" as interval64), cast(cast("PT0000000M" as interval64) as string);

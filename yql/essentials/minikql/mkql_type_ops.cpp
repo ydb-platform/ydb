@@ -2223,8 +2223,8 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
     }
 }
 
-template <bool DecimalPart = false, i8 MaxDigits = 6>
-bool ParseNumber(std::string_view::const_iterator& pos, const std::string_view& buf, ui32& value) {
+template <bool DecimalPart, ui8 MaxDigits>
+bool ParseNumber(std::string_view::const_iterator& pos, const std::string_view& buf, ui64& value) {
     value = 0U;
 
     if (buf.cend() == pos || !std::isdigit(*pos)) {
@@ -2263,10 +2263,16 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
         return NUdf::TUnboxedValuePod();
     }
 
-    std::optional<ui32> days, hours, minutes, seconds, microseconds;
-    ui32 num;
+    std::optional<ui64> days, hours, minutes, seconds, microseconds;
+    ui64 num;
 
     if (*pos != 'T') {
+        // Estimated upper bound for number of digits in the
+        // numeric representation of days (weeks need less).
+        // * Interval:   MAX_DATE (49673)                    = 5 digits.
+        // * Interval64: MAX_DATE32 - MIN_DATE32 (106751616) = 9 digits.
+        // So, 9 digits is maximum for any interval component with
+        // granularity more than a day.
         if (!ParseNumber<false, 9>(pos, buf, num)) {
             return NUdf::TUnboxedValuePod();
         }
@@ -2289,7 +2295,14 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
 
         if (buf.cend() != pos) // TODO: Remove this line later.
         do {
-            if (!ParseNumber(pos, buf, num)) {
+            // Estimated upper bound for number of digits in the
+            // numeric representation of seconds (hours, minutes,
+            // microseconds need less).
+            // * Interval:   MAX_DATETIME (4291747200)                       = 10 digits.
+            // * Interval64: MAX_DATETIME64 - MIN_DATETIME64 (9223339708799) = 13 digits.
+            // So, 13 digits is maximum for any interval component with
+            // granularity less than a day.
+            if (!ParseNumber<false, 13>(pos, buf, num)) {
                 return NUdf::TUnboxedValuePod();
             }
 
@@ -2317,7 +2330,8 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
                         return NUdf::TUnboxedValuePod();
                     }
                     seconds = num;
-                    if (!ParseNumber<true>(pos, buf, num) || *pos++ != 'S') {
+                    // 6 digits is maximum for microseconds representation.
+                    if (!ParseNumber<true, 6>(pos, buf, num) || *pos++ != 'S') {
                         return NUdf::TUnboxedValuePod();
                     }
                     microseconds = num;

@@ -72,7 +72,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
         self.sqs_port = None
-        if configurator.sqs_service_enabled:
+        if not (configurator.use_distconf or configurator.simple_config) and configurator.sqs_service_enabled:
             self.sqs_port = port_allocator.sqs_port
 
         self.__role = role

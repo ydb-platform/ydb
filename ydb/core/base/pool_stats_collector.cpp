@@ -37,6 +37,8 @@ private:
         }
 
         void Update() {
+            TAlignedPagePool::DoCleanupGlobalFreeList(1 << 30); // keep 1Gb of cached pages
+
             *TotalBytes = TAlignedPagePool::GetGlobalPagePoolSize();
             *TotalMmapped = ::NKikimr::GetTotalMmapedBytes();
             *TotalFreeList = ::NKikimr::GetTotalFreeListBytes();

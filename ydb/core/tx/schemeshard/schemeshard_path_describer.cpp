@@ -780,6 +780,11 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
     Y_ABORT_UNLESS(it, "SolomonVolume is not found");
     TSolomonVolumeInfo::TPtr solomonVolumeInfo = *it;
 
+    TPathId domainId = pathEl->DomainPathId;
+    Y_ABORT_UNLESS(domainId != InvalidPathId);
+    auto domainInfo = Self->ResolveDomainInfo(domainId);
+    Y_ABORT_UNLESS(domainInfo, "Domain info is not found");
+
     auto entry = Result->Record.MutablePathDescription()->MutableSolomonDescription();
     entry->SetName(pathEl->Name);
     entry->SetPathId(pathId.LocalPathId);

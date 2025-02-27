@@ -18,15 +18,6 @@
 
 namespace NSQLTranslationV1 {
 
-TLexers MakeAllLexers() {
-    return TLexers {
-        .Antlr3 = MakeAntlr3LexerFactory(),
-        .Antlr3Ansi = MakeAntlr3AnsiLexerFactory(),
-        .Antlr4 = MakeAntlr4LexerFactory(),
-        .Antlr4Ansi = MakeAntlr4AnsiLexerFactory()
-    };
-}
-
 namespace {
 
 #if defined(_tsan_enabled_)
@@ -84,10 +75,6 @@ private:
 };
 
 } // namespace
-
-NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi, bool antlr4) {
-    return NSQLTranslation::ILexer::TPtr(new TV1Lexer(MakeAllLexers(), ansi, antlr4));
-}
 
 NSQLTranslation::ILexer::TPtr MakeLexer(const TLexers& lexers, bool ansi, bool antlr4) {
     return NSQLTranslation::ILexer::TPtr(new TV1Lexer(lexers, ansi, antlr4));

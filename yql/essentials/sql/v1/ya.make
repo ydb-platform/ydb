@@ -13,14 +13,13 @@ PEERDIR(
     yql/essentials/core/sql_types
     yql/essentials/parser/lexer_common
     yql/essentials/parser/proto_ast/collect_issues
-    yql/essentials/parser/proto_ast/gen/v1
-    yql/essentials/parser/proto_ast/gen/v1_ansi
     yql/essentials/parser/proto_ast/gen/v1_proto_split
-    yql/essentials/parser/proto_ast/gen/v1_antlr4
-    yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4
     yql/essentials/parser/pg_catalog
     yql/essentials/sql/v1/lexer
     yql/essentials/sql/v1/proto_parser
+    # for lexer tokens
+    yql/essentials/parser/proto_ast/gen/v1
+    yql/essentials/parser/proto_ast/gen/v1_antlr4
 )
 
 SRCS(

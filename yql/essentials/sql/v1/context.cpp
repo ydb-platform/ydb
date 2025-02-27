@@ -81,13 +81,6 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
 
 } // namespace
 
-TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
-    const NSQLTranslation::TSQLHints& hints,
-    NYql::TIssues& issues,
-    const TString& query)
-    : TContext(MakeAllLexers(), MakeAllParsers(), settings, hints, issues, query)
-{}
-
 TContext::TContext(const TLexers& lexers, const TParsers& parsers,
                    const NSQLTranslation::TTranslationSettings& settings,
                    const NSQLTranslation::TSQLHints& hints,

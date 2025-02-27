@@ -28,7 +28,7 @@
 #include "resource_profile.h"
 #include "event_filter.h"
 
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/library/pdisk_io/aio.h>
 
 #include <ydb/core/base/event_filter.h>

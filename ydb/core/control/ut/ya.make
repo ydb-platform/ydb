@@ -22,7 +22,6 @@ PEERDIR(
 )
 
 SRCS(
-    immediate_control_board_ut.cpp
     immediate_control_board_actor_ut.cpp
 )
 

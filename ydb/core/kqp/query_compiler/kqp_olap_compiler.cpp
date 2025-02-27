@@ -279,7 +279,6 @@ ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx);
 
 ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
 {
-    constexpr bool yqlTypes = NKikimr::NSsa::RuntimeVersion >= 4U;
     auto *const ssaValue = ctx.CreateAssignCmd();
     const auto& nodeValue = value.Cast<TCoDataCtor>().Literal().Value();
     if (value.Maybe<TCoUtf8>()) {
@@ -287,38 +286,23 @@ ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
     } else if (value.Maybe<TCoString>()) {
         ssaValue->MutableConstant()->SetBytes(TString(nodeValue));
     } else if (value.Maybe<TCoBool>()) {
-        if constexpr (yqlTypes)
-            ssaValue->MutableConstant()->SetUint8(FromString<bool>(nodeValue) ? 1U : 0U);
-        else
-            ssaValue->MutableConstant()->SetBool(FromString<bool>(nodeValue));
+        ssaValue->MutableConstant()->SetUint8(FromString<bool>(nodeValue) ? 1U : 0U);
     } else if (value.Maybe<TCoFloat>()) {
         ssaValue->MutableConstant()->SetFloat(FromString<float>(nodeValue));
     } else if (value.Maybe<TCoDouble>()) {
         ssaValue->MutableConstant()->SetDouble(FromString<double>(nodeValue));
     } else if (value.Maybe<TCoInt8>()) {
-        if constexpr (yqlTypes)
-            ssaValue->MutableConstant()->SetInt8(FromString<i8>(nodeValue));
-        else
-            ssaValue->MutableConstant()->SetInt32(FromString<i32>(nodeValue));
+        ssaValue->MutableConstant()->SetInt8(FromString<i8>(nodeValue));
     } else if (value.Maybe<TCoInt16>()) {
-        if constexpr (yqlTypes)
-            ssaValue->MutableConstant()->SetInt16(FromString<i16>(nodeValue));
-        else
-            ssaValue->MutableConstant()->SetInt32(FromString<i32>(nodeValue));
+        ssaValue->MutableConstant()->SetInt16(FromString<i16>(nodeValue));
     } else if (value.Maybe<TCoInt32>() || value.Maybe<TCoDate32>()) {
         ssaValue->MutableConstant()->SetInt32(FromString<i32>(nodeValue));
     } else if (value.Maybe<TCoInt64>() || value.Maybe<TCoInterval64>() || value.Maybe<TCoDatetime64>() || value.Maybe<TCoTimestamp64>()) {
         ssaValue->MutableConstant()->SetInt64(FromString<i64>(nodeValue));
     } else if (value.Maybe<TCoUint8>()) {
-        if constexpr (yqlTypes)
-            ssaValue->MutableConstant()->SetUint8(FromString<ui8>(nodeValue));
-        else
-            ssaValue->MutableConstant()->SetUint32(FromString<ui32>(nodeValue));
+        ssaValue->MutableConstant()->SetUint8(FromString<ui8>(nodeValue));
     } else if (value.Maybe<TCoUint16>()) {
-        if constexpr (yqlTypes)
-            ssaValue->MutableConstant()->SetUint16(FromString<ui16>(nodeValue));
-        else
-            ssaValue->MutableConstant()->SetUint32(FromString<ui32>(nodeValue));
+        ssaValue->MutableConstant()->SetUint16(FromString<ui16>(nodeValue));
     } else if (value.Maybe<TCoUint32>()) {
         ssaValue->MutableConstant()->SetUint32(FromString<ui32>(nodeValue));
     } else if (value.Maybe<TCoUint64>()) {
@@ -408,8 +392,6 @@ struct TTypedColumn {
 };
 
 const TTypedColumn ConvertJsonValueToColumn(const TKqpOlapJsonValue& jsonValueCallable, TKqpOlapCompileContext& ctx) {
-    Y_ABORT_UNLESS(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_VALUE pushdown is supported starting from the v3 of SSA runtime.");
-
     const auto columnId = GetOrCreateColumnId(jsonValueCallable.Column(), ctx);
     const auto pathId = GetOrCreateColumnId(jsonValueCallable.Path(), ctx);
 
@@ -433,8 +415,6 @@ const TTypedColumn ConvertJsonValueToColumn(const TKqpOlapJsonValue& jsonValueCa
 }
 
 const TTypedColumn CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallable, TKqpOlapCompileContext& ctx) {
-    Y_ABORT_UNLESS(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_EXISTS pushdown is supported starting from the v3 of SSA runtime.");
-
     const auto columnId = GetOrCreateColumnId(jsonExistsCallable.Column(), ctx);
     const auto pathId = GetOrCreateColumnId(jsonExistsCallable.Path(), ctx);
 
@@ -452,11 +432,7 @@ const TTypedColumn CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallabl
         type);
     jsonExistsFunc->SetKernelIdx(idx);
 
-    if constexpr (NSsa::RuntimeVersion >= 4U) {
-        return {ConvertSafeCastToColumn(command->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
-    } else {
-        return {command->GetColumn().GetId(), ctx.ConvertToBlockType(type)};
-    }
+    return {ConvertSafeCastToColumn(command->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
 }
 
 ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
@@ -497,42 +473,35 @@ ui64 CompileYqlKernelComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOl
     auto *const cmpFunc = command->MutableFunction();
 
     ui32 function = TProgram::TAssignment::FUNC_UNSPECIFIED;
-    bool isYqlKernelsSupported = (NKikimr::NSsa::RuntimeVersion >= 3);
     bool needCastToBool = false;
 
     if (comparison.Operator() == "string_contains") {
         function = TProgram::TAssignment::FUNC_STR_MATCH;
-        if (isYqlKernelsSupported) {
-            cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
-            auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), TKernelRequestBuilder::EBinaryOp::StringContains,
-                comparison.Left(),
-                comparison.Right(),
-                ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
-            cmpFunc->SetKernelIdx(idx);
-            needCastToBool = true;
-        }
+        cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
+        auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), TKernelRequestBuilder::EBinaryOp::StringContains,
+            comparison.Left(),
+            comparison.Right(),
+            ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
+        cmpFunc->SetKernelIdx(idx);
+        needCastToBool = true;
     } else if (comparison.Operator() == "starts_with") {
         function = TProgram::TAssignment::FUNC_STR_STARTS_WITH;
-        if (isYqlKernelsSupported) {
-            cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
-            auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), TKernelRequestBuilder::EBinaryOp::StartsWith,
-                comparison.Left(),
-                comparison.Right(),
-                ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
-            cmpFunc->SetKernelIdx(idx);
-            needCastToBool = true;
-        }
+        cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
+        auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), TKernelRequestBuilder::EBinaryOp::StartsWith,
+            comparison.Left(),
+            comparison.Right(),
+            ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
+        cmpFunc->SetKernelIdx(idx);
+        needCastToBool = true;
     } else if (comparison.Operator() == "ends_with") {
         function = TProgram::TAssignment::FUNC_STR_ENDS_WITH;
-        if (isYqlKernelsSupported) {
-            cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
-            auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), TKernelRequestBuilder::EBinaryOp::EndsWith,
-                comparison.Left(),
-                comparison.Right(),
-                ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
-            cmpFunc->SetKernelIdx(idx);
-            needCastToBool = true;
-        }
+        cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
+        auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), TKernelRequestBuilder::EBinaryOp::EndsWith,
+            comparison.Left(),
+            comparison.Right(),
+            ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
+        cmpFunc->SetKernelIdx(idx);
+        needCastToBool = true;
     }
 
     cmpFunc->SetId(function);
@@ -612,19 +581,11 @@ const TTypedColumn CompileExists(const TExprBase& arg, TKqpOlapCompileContext& c
     isNullFunc->AddArguments()->SetId(column.Id);
 
     if constexpr (Empty) {
-        if constexpr (NSsa::RuntimeVersion >= 4U) {
-            return {ConvertSafeCastToColumn(command->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
-        } else {
-            return {command->GetColumn().GetId(), type};
-        }
+        return {ConvertSafeCastToColumn(command->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
     }
 
     auto *const notCommand = InvertResult(command, ctx);
-    if constexpr (NSsa::RuntimeVersion >= 4U) {
-        return {ConvertSafeCastToColumn(notCommand->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
-    } else {
-        return {notCommand->GetColumn().GetId(), type};
-    }
+    return {ConvertSafeCastToColumn(notCommand->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
 }
 
 TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCompileContext& ctx) {
@@ -808,31 +769,21 @@ const TTypedColumn BuildLogicalNot(const TExprBase& arg, TKqpOlapCompileContext&
 
     notFunc->AddArguments()->SetId(value.Id);
 
-    if constexpr (NSsa::RuntimeVersion >= 4U) {
-        const auto block = ctx.ExprCtx().MakeType<TBlockExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
-        const auto idx = ctx.GetKernelRequestBuilder().AddUnaryOp(TKernelRequestBuilder::EUnaryOp::Not, block, block);
-        notFunc->SetKernelIdx(idx);
-        notFunc->SetFunctionType(TProgram::YQL_KERNEL);
-    } else
-        notFunc->SetId(TProgram::TAssignment::FUNC_BINARY_NOT);
+    const auto block = ctx.ExprCtx().MakeType<TBlockExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
+    const auto idx = ctx.GetKernelRequestBuilder().AddUnaryOp(TKernelRequestBuilder::EUnaryOp::Not, block, block);
+    notFunc->SetKernelIdx(idx);
+    notFunc->SetFunctionType(TProgram::YQL_KERNEL);
 
     return {notOp->GetColumn().GetId(), value.Type};
 }
 
 TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileContext& ctx) {
     if (const auto& maybeBinaryOp = node.Maybe<TKqpOlapFilterBinaryOp>()) {
-        if constexpr (NSsa::RuntimeVersion >= 4U) {
-            if (const auto& binaryOp = maybeBinaryOp.Cast(); ctx.CheckYqlCompatibleArgsTypes(binaryOp)) {
-                return CompileYqlKernelBinaryOperation(binaryOp, ctx);
-            } else {
-                return {
-                    ConvertSafeCastToColumn(CompileSimpleArrowComparison(binaryOp, ctx), "Uint8", ctx),
-                    ctx.ExprCtx().MakeType<TBlockExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool))
-                };
-            }
+        if (const auto& binaryOp = maybeBinaryOp.Cast(); ctx.CheckYqlCompatibleArgsTypes(binaryOp)) {
+            return CompileYqlKernelBinaryOperation(binaryOp, ctx);
         } else {
             return {
-                CompileSimpleArrowComparison(maybeBinaryOp.Cast(), ctx),
+                ConvertSafeCastToColumn(CompileSimpleArrowComparison(binaryOp, ctx), "Uint8", ctx),
                 ctx.ExprCtx().MakeType<TBlockExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool))
             };
         }
@@ -841,20 +792,11 @@ TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileCo
     } else if (const auto& maybeTernaryOp = node.Maybe<TKqpOlapFilterTernaryOp>()) {
         return CompileYqlKernelTernaryOperation(maybeTernaryOp.Cast(), ctx);
     } else if (const auto& maybeAnd = node.Maybe<TKqpOlapAnd>()) {
-        if constexpr (NSsa::RuntimeVersion >= 4U)
-            return BuildLogicalProgram(node.Pos(), maybeAnd.Ref().Children(), TKernelRequestBuilder::EBinaryOp::And, ctx);
-        else
-            return BuildLogicalProgram(node.Pos(), maybeAnd.Ref().Children(), TProgram::TAssignment::FUNC_BINARY_AND, ctx);
+        return BuildLogicalProgram(node.Pos(), maybeAnd.Ref().Children(), TKernelRequestBuilder::EBinaryOp::And, ctx);
     } else if (const auto& maybeOr = node.Maybe<TKqpOlapOr>()) {
-        if constexpr (NSsa::RuntimeVersion >= 4U)
-            return BuildLogicalProgram(node.Pos(), maybeOr.Ref().Children(), TKernelRequestBuilder::EBinaryOp::Or, ctx);
-        else
-            return BuildLogicalProgram(node.Pos(), maybeOr.Ref().Children(), TProgram::TAssignment::FUNC_BINARY_OR, ctx);
+        return BuildLogicalProgram(node.Pos(), maybeOr.Ref().Children(), TKernelRequestBuilder::EBinaryOp::Or, ctx);
     } else if (const auto& maybeXor = node.Maybe<TKqpOlapXor>()) {
-        if constexpr (NSsa::RuntimeVersion >= 4U)
-            return BuildLogicalProgram(node.Pos(), maybeXor.Ref().Children(), TKernelRequestBuilder::EBinaryOp::Xor, ctx);
-        else
-            return BuildLogicalProgram(node.Pos(), maybeXor.Ref().Children(), TProgram::TAssignment::FUNC_BINARY_XOR, ctx);
+        return BuildLogicalProgram(node.Pos(), maybeXor.Ref().Children(), TKernelRequestBuilder::EBinaryOp::Xor, ctx);
     } else if (const auto& maybeNot = node.Maybe<TKqpOlapNot>()) {
         return BuildLogicalNot(maybeNot.Cast().Value(), ctx);
     } else if (const auto& maybeJsonValue = node.Maybe<TKqpOlapJsonValue>()) {
@@ -870,12 +812,10 @@ TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileCo
 
 ui64 CompileComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompileContext& ctx)
 {
-    if constexpr (NKikimr::NSsa::RuntimeVersion >= 4U) {
-        if (ctx.CheckYqlCompatibleArgsTypes(comparison)) {
-            return CompileYqlKernelBinaryOperation(comparison, ctx).Id;
-        } else {
-            return ConvertSafeCastToColumn(CompileSimpleArrowComparison(comparison, ctx), "Uint8", ctx);
-        }
+    if (ctx.CheckYqlCompatibleArgsTypes(comparison)) {
+        return CompileYqlKernelBinaryOperation(comparison, ctx).Id;
+    } else {
+        return ConvertSafeCastToColumn(CompileSimpleArrowComparison(comparison, ctx), "Uint8", ctx);
     }
 
     std::string op = comparison.Operator().StringValue().c_str();
@@ -917,26 +857,18 @@ ui64 CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx) {
         return BuildLogicalNot(maybeNot.Cast().Value(), ctx).Id;
     }
 
-    ui32 function = TProgram::TAssignment::FUNC_UNSPECIFIED;
     TKernelRequestBuilder::EBinaryOp op;
 
     if (condition.Maybe<TKqpOlapAnd>()) {
-        function = TProgram::TAssignment::FUNC_BINARY_AND;
         op = TKernelRequestBuilder::EBinaryOp::And;
     } else if (condition.Maybe<TKqpOlapOr>()) {
-        function = TProgram::TAssignment::FUNC_BINARY_OR;
         op = TKernelRequestBuilder::EBinaryOp::Or;
     } else if (condition.Maybe<TKqpOlapXor>()) {
-        function = TProgram::TAssignment::FUNC_BINARY_XOR;
         op = TKernelRequestBuilder::EBinaryOp::Xor;
     } else {
         YQL_ENSURE(false, "Unsuppoted logical operation: " << condition.Ref().Content());
     }
-
-    if constexpr (NSsa::RuntimeVersion >= 4U)
-        return BuildLogicalProgram(condition.Pos(), condition.Ref().Children(), op, ctx).Id;
-    else
-        return BuildLogicalProgram(condition.Pos(), condition.Ref().Children(), function, ctx).Id;
+    return BuildLogicalProgram(condition.Pos(), condition.Ref().Children(), op, ctx).Id;
 }
 
 void CompileFilter(const TKqpOlapFilter& filterNode, TKqpOlapCompileContext& ctx) {

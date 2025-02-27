@@ -32,10 +32,8 @@ bool IsSupportedDataType(const TCoDataCtor& node) {
         return true;
     }
 
-    if constexpr (NKikimr::NSsa::RuntimeVersion >= 4U) {
-        if (node.Maybe<TCoTimestamp>()) {
-            return true;
-        }
+    if (node.Maybe<TCoTimestamp>()) {
+        return true;
     }
 
     if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
@@ -168,13 +166,11 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
         return true;
     }
 
-    if constexpr (NKikimr::NSsa::RuntimeVersion >= 4U) {
-        if (const auto op = node.Maybe<TCoUnaryArithmetic>()) {
-            return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg) && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn());
-        } else if (const auto op = node.Maybe<TCoBinaryArithmetic>()) {
-            return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg) && CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg)
-                && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn()) && !op.Cast().Maybe<TCoAggrAdd>();
-        }
+    if (const auto op = node.Maybe<TCoUnaryArithmetic>()) {
+        return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg) && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn());
+    } else if (const auto op = node.Maybe<TCoBinaryArithmetic>()) {
+        return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg) && CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg)
+            && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn()) && !op.Cast().Maybe<TCoAggrAdd>();
     }
 
     if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {

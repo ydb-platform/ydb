@@ -27,6 +27,9 @@ namespace NKikimr::NSsa {
 // v2 is the version supported by kikimr-23-1. Supports LIKE filter for Utf8 type, COUNT(col), COUNT(*), SUM(), MIN(), MAX(), AVG(), SOME() aggregations.
 // v3 is the version supported by kikimr-23-3. Supports LIKE filter for String type, JSON_VALUE and JSON_EXISTS functions in filters
 // v4 is the version supported by kikimr-24-1. Supports any comparsions and arithmetics on YQL kernels.
+// v5 supports generic ast pushdouwn via KqpOlapApply
 constexpr ui32 RuntimeVersion = SSA_RUNTIME_VERSION;
+
+static_assert(RuntimeVersion >= 4);
 
 }

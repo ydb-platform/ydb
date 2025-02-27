@@ -245,11 +245,6 @@ TExprBase KqpPushDownOlapGroupByKeysImpl(TExprBase node, TExprContext& ctx, bool
 }
 
 TExprBase KqpPushDownOlapGroupByKeys(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (NKikimr::NSsa::RuntimeVersion < 2U) {
-        // We introduced aggregate pushdown in v2 of SSA program
-        return node;
-    }
-
     if (!kqpCtx.Config->HasOptEnableOlapPushdown() || !kqpCtx.Config->HasOptEnableOlapProvideComputeSharding()) {
         return node;
     }
@@ -271,11 +266,6 @@ TExprBase KqpPushDownOlapGroupByKeys(TExprBase node, TExprContext& ctx, const TK
 
 TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    if (NKikimr::NSsa::RuntimeVersion < 2U) {
-        // We introduced aggregate pushdown in v2 of SSA program
-        return node;
-    }
-
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }
@@ -373,11 +363,6 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
 
 TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    if (NKikimr::NSsa::RuntimeVersion < 2U) {
-        // We introduced aggregate pushdown in v2 of SSA program
-        return node;
-    }
-
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }

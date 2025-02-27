@@ -81,11 +81,10 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-    
+
       - name: Update Changelog
         uses: ./.github/actions/update_changelog 
         env:
-          YDBOT_TOKEN: ${{ secrets.YDBOT_TOKEN }}
           GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         with:
           pr_data: "${{ needs.gather-prs.outputs.prs }}"

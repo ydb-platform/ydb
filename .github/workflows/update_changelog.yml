@@ -39,7 +39,6 @@ jobs:
           TYPE="${{ github.event.inputs.type }}"
           START="${{ github.event.inputs.start }}"
           BRANCH="${GITHUB_REF_NAME}"
-
           echo "::notice:: branch = ${GITHUB_REF_NAME}, start = $START"
 
           if [ "$TYPE" == "date" ]; then
@@ -86,7 +85,7 @@ jobs:
       - name: Update Changelog
         uses: ./.github/actions/update_changelog 
         env:
-          YDBOT_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         with:
           pr_data: "${{ needs.gather-prs.outputs.prs }}"
           changelog_path: "${{ github.event.inputs.changelog_path }}"

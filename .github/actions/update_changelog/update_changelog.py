@@ -15,7 +15,7 @@ VERSION_PREFIX = "## "
 CATEGORY_PREFIX = "### "
 ITEM_PREFIX = "* "
 
-YDBOT_TOKEN = os.getenv("YDBOT_TOKEN")
+GH_TOKEN = os.getenv("GH_TOKEN")
 
 @functools.cache
 def get_github_api_url():
@@ -152,7 +152,7 @@ def fetch_pr_details(pr_id):
     url = f"https://api.github.com/repos/{get_github_api_url()}/pulls/{pr_id}"
     headers = {
         "Accept": "application/vnd.github.v3+json",
-        "Authorization": f"token {YDBOT_TOKEN}"
+        "Authorization": f"token {GH_TOKEN}"
     }
     response = requests.get(url, headers=headers)
     response.raise_for_status()
@@ -162,7 +162,7 @@ def fetch_user_details(username):
     url = f"https://api.github.com/users/{username}"
     headers = {
         "Accept": "application/vnd.github.v3+json",
-        "Authorization": f"token {YDBOT_TOKEN}"
+        "Authorization": f"token {GH_TOKEN}"
     }
     response = requests.get(url, headers=headers)
     response.raise_for_status()

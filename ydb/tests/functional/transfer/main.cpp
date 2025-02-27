@@ -114,10 +114,11 @@ TMessage _withMessageGroupId(const TString& messageGroupId) {
 }
 
 struct TConfig {
-    const char* TableDDL;
-    const char* Lambda;
+    TString TableDDL;
+    const TString Lambda;
     const TVector<TMessage> Messages;
     TVector<std::pair<TString, std::shared_ptr<IChecker>>> Expectations;
+    const TVector<TString> AlterLambdas;
 };
 
 
@@ -142,7 +143,7 @@ struct MainTestCase {
         auto topicClient = TTopicClient(driver);
 
         {
-            auto tableDDL = Sprintf(Config.TableDDL, TableName.data());
+            auto tableDDL = Sprintf(Config.TableDDL.data(), TableName.data());
             auto res = session.ExecuteQuery(tableDDL, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
@@ -157,18 +158,39 @@ struct MainTestCase {
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
 
-        {
-            auto res = session.ExecuteQuery(Sprintf(R"(
-                %s;
+        TVector<TString> lambdas;
+        lambdas.insert(lambdas.end(), Config.AlterLambdas.begin(), Config.AlterLambdas.end());
+        lambdas.push_back(Config.Lambda);
 
-                CREATE TRANSFER `%s`
-                FROM `%s` TO `%s` USING $l
-                WITH (
-                    CONNECTION_STRING = 'grpc://%s'
-                    -- , TOKEN = 'user@builtin'
-                );
-            )", Config.Lambda, TransferName.data(), TopicName.data(), TableName.data(), connectionString.data()), TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        for (size_t i = 0; i < lambdas.size(); ++i) {
+            auto lambda = lambdas[i];
+            if (!i) {
+                auto res = session.ExecuteQuery(Sprintf(R"(
+                    %s;
+
+                    CREATE TRANSFER `%s`
+                    FROM `%s` TO `%s` USING $l
+                    WITH (
+                        CONNECTION_STRING = 'grpc://%s'
+                        -- , TOKEN = 'user@builtin'
+                    );
+                )", lambda.data(), TransferName.data(), TopicName.data(), TableName.data(), connectionString.data()), TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            } else {
+                Sleep(TDuration::Seconds(1));
+
+                auto res = session.ExecuteQuery(Sprintf(R"(
+                    %s;
+
+                    ALTER TRANSFER `%s`
+                    SET USING $l;
+                )", lambda.data(), TransferName.data()), TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+                if (i == lambdas.size() - 1) {
+                    Sleep(TDuration::Seconds(1));
+                }
+            }
         }
 
         {
@@ -664,6 +686,63 @@ Y_UNIT_TEST_SUITE(Transfer)
             }
         }).Run();
     }
+
+    Y_UNIT_TEST(AlterLambda)
+    {
+        MainTestCase({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+    
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data || " new lambda" AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+    
+            .Messages = {{"Message-1"}},
+    
+            .Expectations = {
+                _C("Message", TString("Message-1 new lambda")),
+            },
+
+            .AlterLambdas = {
+                R"(
+                    $l = ($x) -> {
+                        return [
+                            <|
+                                Key:CAST($x._offset AS Uint64),
+                                Message:CAST($x._data || " 1 lambda" AS Utf8)
+                            |>
+                        ];
+                    };
+                )",
+                R"(
+                    $l = ($x) -> {
+                        return [
+                            <|
+                                Key:CAST($x._offset AS Uint64),
+                                Message:CAST($x._data || " 2 lambda" AS Utf8)
+                            |>
+                        ];
+                    };
+                )",
+            }
+    
+        }).Run();
+    }
+
 
 }
 

@@ -37,27 +37,48 @@ public:
             return true;
         }
 
+        bool alter = false;
+
+        const auto& oldConfig = Replication->GetConfig();
+        const auto& newConfig = record.GetConfig();
+
+        if (oldConfig.HasTransferSpecific()) {
+            auto& oldLambda = oldConfig.GetTransferSpecific().GetTargets(0).GetTransformLambda();
+            auto& newLambda = newConfig.GetTransferSpecific().GetTargets(0).GetTransformLambda();
+
+            alter = oldLambda != newLambda;
+        }
+
+        auto desiredState = Replication->GetState();
+        if (record.HasSwitchState()) {
+            switch (record.GetSwitchState().GetStateCase()) {
+                case NKikimrReplication::TReplicationState::kDone:
+                    desiredState = TReplication::EState::Done;
+                    alter = true;
+                    break;
+                default:
+                    Y_ABORT("Invalid state");
+                }
+        }
+
+        if (alter) {
+            Replication->SetDesiredState(desiredState);
+        }
+
         Replication->SetConfig(std::move(*record.MutableConfig()));
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString())
+            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),
+            NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState)
         );
 
-        if (!record.HasSwitchState()) {
+        if (!alter) {
             Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
             return true;
         }
 
-        switch (record.GetSwitchState().GetStateCase()) {
-        case NKikimrReplication::TReplicationState::kDone:
-            break;
-        default:
-            Y_ABORT("Invalid state");
-        }
-
         Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
 
-        bool alter = false;
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
             if (!target) {

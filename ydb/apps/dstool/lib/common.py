@@ -219,7 +219,7 @@ class ConnectionParams:
         g.add_argument('--grpc-port', type=int, default=2135, metavar='PORT', help='GRPC port to use for procedure invocation')
         g.add_argument('--mon-port', type=int, default=8765, metavar='PORT', help='HTTP monitoring port for viewer JSON access')
         g.add_argument('--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file')
-        g.add_argument('--ca-file', metavar='PATH', dest='cafile', type=str, help='Path to a file containing the PEM encoding of the server root certificates for tls connections.')
+        g.add_argument('--ca-file', metavar='PATH', dest='cafile', type=str, help='File containing PEM encoded root certificates for SSL/TLS connections. If this parameter is empty, the default roots will be used.')
         g.add_argument('--http-timeout', type=int, default=5, help='Timeout for blocking socket I/O operations during HTTP(s) queries')
         g.add_argument('--insecure', action='store_true', help='Allow insecure HTTPS fetching')
         g.add_argument('--use-ip', action='store_true', help='Use IP addresses instead of hostnames when connecting to endpoints')

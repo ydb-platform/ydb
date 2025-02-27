@@ -4,6 +4,7 @@
 #include "datashard_locks_db.h"
 #include "datashard_user_db.h"
 #include "datashard_kqp.h"
+#include "datashard_integrity_trails.h"
 
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 
@@ -41,7 +42,8 @@ public:
     void AddLocksToResult(TWriteOperation* writeOp, const TActorContext& ctx) {
         NEvents::TDataEvents::TEvWriteResult& writeResult = *writeOp->GetWriteResult();
 
-        auto locks = DataShard.SysLocksTable().ApplyLocks();
+        auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
+        NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), writeOp->GetTxId(), locksBrokenByTx);
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add locks to result: " << locks.size());
         for (const auto& lock : locks) {
             if (lock.IsError()) {
@@ -344,7 +346,8 @@ public:
                 }
 
                 KqpEraseLocks(tabletId, kqpLocks, sysLocks);
-                sysLocks.ApplyLocks();
+                auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
+                NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
                 DataShard.SubscribeNewLocks(ctx);
                 if (locksDb.HasChanges()) {
                     op->SetWaitCompletionFlag(true);

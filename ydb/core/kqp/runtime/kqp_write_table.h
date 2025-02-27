@@ -116,7 +116,6 @@ using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;
 struct TShardedWriteControllerSettings {
     i64 MemoryLimitTotal;
     i64 MemoryLimitPerMessage;
-    i64 MaxBatchesPerMessage;
     bool Inconsistent;
 };
 

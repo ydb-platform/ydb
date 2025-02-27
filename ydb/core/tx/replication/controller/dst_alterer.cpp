@@ -157,11 +157,9 @@ public:
             switch (Kind) {
                 case TReplication::ETargetKind::Table:
                 case TReplication::ETargetKind::IndexTable:
-                    AllocateTxId();
-                    break;
+                    return AllocateTxId();
                 case TReplication::ETargetKind::Transfer:
-                    Success();
-                    break;
+                    return Success();
             }
         }
     }

@@ -135,7 +135,7 @@ private:
             if (!msgs.empty()) {
                 EventsQ_.Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, Session_), size);
             } else if (CancelOnFileFinish_) {
-                EventsQ_.Push(NYdb::NTopic::TSessionClosedEvent(NYdb::EStatus::CANCELLED, {NYdb::NIssue::TIssue("PQ file topic was finished")}), size);
+                EventsQ_.Push(NYdb::NTopic::TSessionClosedEvent(NYdb::EStatus::CANCELLED, {NYql::TIssue("PQ file topic was finished")}), size);
             }
 
             Sleep(FILE_POLL_PERIOD);

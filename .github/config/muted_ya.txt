@@ -162,6 +162,7 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[36]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[67]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[86]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
+ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_availability_data
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]

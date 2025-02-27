@@ -311,7 +311,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
     RegisterDQSolomonReadActorFactory(*factory, nullptr);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
     RegisterGenericProviderFactories(*factory, credentialsFactory, genericClient);
-    RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
+    RegisterDqPqWriteActorFactory(*factory, driver, nullptr, pqGateway);
 
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
     s3ActorsFactory->RegisterS3WriteActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy());

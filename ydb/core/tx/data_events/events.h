@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
 namespace NKikimr::NEvents {
 
 struct TDataEvents {
@@ -100,8 +102,8 @@ struct TDataEvents {
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(status);
-            auto issue = result->Record.AddIssues();
-            issue->set_message(errorMsg);
+            NYql::TIssue issue(errorMsg);
+            NYql::IssueToMessage(issue, result->Record.AddIssues());
             return result;
         }
 

@@ -524,15 +524,11 @@ void TDatabase::SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) 
 TDatabase::TChangeCounter TDatabase::Head(ui32 table) const noexcept
 {
     if (table == Max<ui32>()) {
-        return { DatabaseImpl->Serial(), TEpoch::Max() };
+        return { DatabaseImpl->StableSerial(), TEpoch::Max() };
     } else {
         auto &wrap = DatabaseImpl->Get(table, true);
 
-        // We return numbers as they have been at the start of transaction,
-        // but possibly after schema changes or memtable flushes.
-        auto serial = wrap.DataModified && !wrap.EpochSnapshot ? wrap.SerialBackup : wrap.Serial;
-        auto head = wrap.EpochSnapshot ? *wrap.EpochSnapshot : wrap->Head();
-        return { serial, head };
+        return { wrap.StableSerial(), wrap.StableHead() };
     }
 }
 

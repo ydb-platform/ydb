@@ -39,7 +39,6 @@ jobs:
           TYPE="${{ github.event.inputs.type }}"
           START="${{ github.event.inputs.start }}"
           BRANCH="${GITHUB_REF_NAME}"
-          echo `gh auth status`
           echo "::notice:: branch = ${GITHUB_REF_NAME}, start = $START"
 
           if [ "$TYPE" == "date" ]; then

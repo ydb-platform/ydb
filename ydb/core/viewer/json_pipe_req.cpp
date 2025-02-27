@@ -556,11 +556,12 @@ THolder<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNaviga
     return request;
 }
 
-void TViewerPipeClient::RequestSchemeCacheNavigateWtihAclCheck(const TString& path, ui32 access) {
+void TViewerPipeClient::RequestSchemeCacheNavigateWtihParams(const TString& path, ui32 access, bool showPrivate) {
     auto request = SchemeCacheNavigateRequestBuilder(
         [&](auto& entry) {
             entry.Path = SplitPath(path);
             entry.Access = access;
+            entry.ShowPrivatePath = showPrivate;
         }
     );
     if (!Event->Get()->UserToken.empty())
@@ -797,6 +798,10 @@ TString TViewerPipeClient::GetHTTPGATEWAYTIMEOUT(TString contentType, TString re
 
 TString TViewerPipeClient::GetHTTPBADREQUEST(TString contentType, TString response) {
     return Viewer->GetHTTPBADREQUEST(GetRequest(), std::move(contentType), std::move(response));
+}
+
+TString TViewerPipeClient::GetHTTPNOTFOUND(TString, TString) {
+    return Viewer->GetHTTPNOTFOUND(GetRequest());
 }
 
 TString TViewerPipeClient::GetHTTPINTERNALERROR(TString contentType, TString response) {

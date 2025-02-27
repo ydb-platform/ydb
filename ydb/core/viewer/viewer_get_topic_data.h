@@ -7,6 +7,28 @@
 
 namespace NKikimr::NViewer {
 
+struct TEvViewerTopicData {
+    enum EEv {
+        EvTopicDataUnpacked = EventSpaceBegin(TKikimrEvents::ES_VIEWER),
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_VIEWER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_VIEWER)");
+
+    struct TEvTopicDataUnpacked : TEventLocal<TEvTopicDataUnpacked, EEv::EvTopicDataUnpacked> {
+        explicit TEvTopicDataUnpacked() = delete;
+        explicit TEvTopicDataUnpacked(bool status, NJson::TJsonValue&& data)
+            : Status(status)
+            , Data(std::move(data))
+        {
+        }
+
+        bool Status = true;
+        NJson::TJsonValue Data;
+    };
+}; // TEvViewerTopicData
+
+
 class TGetTopicData : public TViewerPipeClient {
     using TBase = TViewerPipeClient;
     using TThis = TGetTopicData;
@@ -17,7 +39,7 @@ private:
     void HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void SendPQReadRequest();
     void HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev);
-    void HandleDecompressionDone(TAutoPtr<::NActors::IEventHandle>& ev);
+    void HandleDataUnpacked(TEvViewerTopicData::TEvTopicDataUnpacked::TPtr& ev);
 
     void ReplyAndPassAwayIfAlive(TString data, const TString& error = {});
     bool GetIntegerParam(const TString& name, i64& value);
@@ -46,6 +68,7 @@ private:
     NJson::TJsonValue Response;
 
     static constexpr ui32 READ_TIMEOUT_MS = 1000;
+    static constexpr ui32 MAX_MESSAGES_LIMIT = 1000;
 
 public:
     static YAML::Node GetSwagger() {

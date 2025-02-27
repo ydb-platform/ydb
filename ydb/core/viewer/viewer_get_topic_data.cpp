@@ -1,26 +1,12 @@
 #include "viewer_get_topic_data.h"
-#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
-namespace NKikimr::NPersQueue {
+namespace NKikimr::NViewer {
 
-struct TEvDecompressionDone : TEventLocal<TEvDecompressionDone, TEvPQ::EEv::EvDecompressionDone> {
-    explicit TEvDecompressionDone() = delete;
-    explicit TEvDecompressionDone(THolder<TEvPersQueue::TEvResponse>&& readResponse, bool status, NJson::TJsonValue&& data)
-        : ReadResponse(std::move(readResponse))
-        , Status(status)
-        , Data(std::move(data))
-    {
-    }
 
-    THolder<TEvPersQueue::TEvResponse> ReadResponse;
-    bool Status = true;
-    NJson::TJsonValue Data;
-};
-
-class TUnpackDataActor : public TActorBootstrapped<TUnpackDataActor> {
+class TUnpackDataToJsonActor : public TActorBootstrapped<TUnpackDataToJsonActor> {
 public:
-    TUnpackDataActor(THolder<TEvPersQueue::TEvResponse>&& readResponse, const TActorId& recipient,
+    TUnpackDataToJsonActor(THolder<TEvPersQueue::TEvResponse>&& readResponse, const TActorId& recipient,
                      ui64 maxSingleMessageSize = 1_MB, ui64 maxTotalSize = 10_MB)
         : ReadResponse(std::move(readResponse))
         , Recipient(recipient)
@@ -68,7 +54,7 @@ private:
             if (dataChunk.HasCodec() && dataChunk.GetCodec() != NPersQueueCommon::RAW) {
                 const NYdb::NTopic::ICodec* codec = GetCodec(static_cast<NPersQueueCommon::ECodec>(dataChunk.GetCodec()));
                 if (codec == nullptr) {
-                    Send(Recipient, new NKikimr::NPersQueue::TEvDecompressionDone(std::move(ReadResponse), false, NJson::TJsonValue()));
+                    Send(Recipient, new TEvViewerTopicData::TEvTopicDataUnpacked(false, NJson::TJsonValue()));
                     Die(ActorContext());
                     return;
                 }
@@ -93,7 +79,7 @@ private:
             jsonResponse.AppendValue(std::move(jsonRecord));
         }
 
-        Send(Recipient, new NKikimr::NPersQueue::TEvDecompressionDone(std::move(ReadResponse), true, std::move(jsonResponse)));
+        Send(Recipient, new TEvViewerTopicData::TEvTopicDataUnpacked(true, std::move(jsonResponse)));
         Die(ActorContext());
     }
 
@@ -128,23 +114,54 @@ private:
 };
 
 
-} // namespace NKikimr::NPersQueue
-
-namespace NKikimr::NViewer {
-
 void TGetTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     auto ev_ = std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(ev->Release().Release());
-    if (!TBase::IsSuccess(ev_)) {
-        auto error = TStringBuilder() << "While trying to find topic: '" << TopicPath << "' got error '" << TBase::GetError(ev_) << "'";
-        return ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", error));
-
-    }
     const auto& result = ev_->Request;
+
+    if (!TBase::IsSuccess(ev_)) {
+        TStringBuilder error;
+        if (result->ResultSet.size() != 0) {
+            switch (result->ResultSet[0].Status) {
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+                    break; // Unexpected but just in case
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
+                    error << "Got internal schema error  while trying to describe topic: '" << TopicPath << "'";
+                    return ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", error));
+
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
+                    error << "Topic not found: '" << TopicPath << "'";
+                    return ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", error));
+
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                    error << "Access denied to topuc: '" << TopicPath << "'";
+                    return ReplyAndPassAwayIfAlive(GetHTTPFORBIDDEN("text/plain", error));
+
+                default:
+                    return ReplyAndPassAwayIfAlive(GetHTTPINTERNALERROR("text/plain", "Got unknown error type trying to describe topic"));
+
+            }
+        }
+        error << "While trying to find topic: '" << TopicPath << "' got error '" << TBase::GetError(ev_) << "'";
+        return ReplyAndPassAwayIfAlive(GetHTTPINTERNALERROR("text/plain", error));
+    }
     const auto response = result->ResultSet.front();
     if (response.Self->Info.GetPathType() != NKikimrSchemeOp::EPathTypePersQueueGroup) {
         auto error = TStringBuilder() << "No such topic '" << TopicPath << "";
         return ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", error));
-
+    }
+    if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        NACLib::TUserToken token(Event->Get()->UserToken);
+        if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, token)) {
+            TStringBuilder error;
+            error << "Access to topic " << TopicPath << " is denied for subject " << token.GetUserSID();
+            return ReplyAndPassAwayIfAlive(GetHTTPFORBIDDEN("text/plain", error));
+        }
     }
     const auto& partitions = response.PQGroupInfo->Description.GetPartitions();
     for (auto& partition : partitions) {
@@ -154,6 +171,7 @@ void TGetTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResul
             return SendPQReadRequest();
         }
     }
+    ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", "No such partition in topic"));
 }
 
 void TGetTopicData::SendPQReadRequest() {
@@ -196,22 +214,21 @@ void TGetTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
     if (response.HasCmdReadResult()) {
         const auto& readResult = response.GetCmdReadResult();
         if (readResult.GetReadingFinished()) {
-            ReplyAndPassAwayIfAlive(GetHTTPNOTFOUND("text/plain", "Bad partition-id"));
+            ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", "Bad partition-id"));
             return;
         }
     } else {
         return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "No data received from topic"));
     }
-    Register(new NKikimr::NPersQueue::TUnpackDataActor(std::move(ReadResponse), SelfId()),
+    Register(new TUnpackDataToJsonActor(std::move(ReadResponse), SelfId()),
                 TMailboxType::HTSwap, AppData()->BatchPoolId);
 }
 
-void TGetTopicData::HandleDecompressionDone(TAutoPtr<::NActors::IEventHandle>& ev) {
-    auto& ev_ = *reinterpret_cast<NKikimr::NPersQueue::TEvDecompressionDone::TPtr*>(&ev);
-    if (!ev_->Get()->Status) {
+void TGetTopicData::HandleDataUnpacked(TEvViewerTopicData::TEvTopicDataUnpacked::TPtr& ev) {
+    if (!ev->Get()->Status) {
         return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Messages decompression failed"));
     }
-    Response = std::move(ev_->Get()->Data);
+    Response = std::move(ev->Get()->Data);
     RequestDone();
 }
 
@@ -219,10 +236,7 @@ void TGetTopicData::StateRequestedDescribe(TAutoPtr<::NActors::IEventHandle>& ev
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleDescribe);
         hFunc(TEvPersQueue::TEvResponse, HandlePQResponse);
-        case NKikimr::NPersQueue::TEvDecompressionDone::EventType: {
-            HandleDecompressionDone(ev);
-            break;
-        }
+        hFunc(TEvViewerTopicData::TEvTopicDataUnpacked, HandleDataUnpacked);
         cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
     }
 }
@@ -257,16 +271,21 @@ void TGetTopicData::Bootstrap() {
     }
     const auto& params(Event->Get()->Request.GetParams());
     Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
+    Timeout = std::min(Timeout, 30000u);
+
 
     GetIntegerParam("partition", PartitionId);
     GetIntegerParam("offset", Offset);
     Limit = FromStringWithDefault<ui32>(params.Get("limit"), 10);
+    if (Limit > MAX_MESSAGES_LIMIT) {
+        return ReplyAndPassAwayIfAlive(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Too many messages requested"));
+    }
 
     if (IsDead)
         return;
     if (params.Has("topic_path")) {
         TopicPath = params.Get("topic_path");
-        RequestSchemeCacheNavigateWtihAclCheck(params.Get("topic_path"));
+        RequestSchemeCacheNavigateWtihParams(params.Get("topic_path"), NACLib::DescribeSchema, true);
     } else {
         return ReplyAndPassAwayIfAlive(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'topic_path' is required"));
     }

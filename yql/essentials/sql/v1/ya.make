@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    library/cpp/charset
+    library/cpp/charset/lite
     library/cpp/enumbitset
     library/cpp/json
     library/cpp/yson/node

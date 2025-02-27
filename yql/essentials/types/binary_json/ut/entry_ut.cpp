@@ -104,8 +104,8 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            const auto serialized = SerializeToBinaryJson(testCase.first, NKikimr::NBinaryJson::EOutOfBoundsHandlingPolicy::REJECT);
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(serialized), "abc");
+            const auto serialized = SerializeToBinaryJson(testCase.first);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(serialized), "NUMBER_ERROR: Problem while parsing a number");
         }
 
         for (const auto& testCase : testCases) {

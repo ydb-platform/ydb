@@ -1198,23 +1198,6 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         TestTableWithNulls({testCase});
     }
 
-    Y_UNIT_TEST(Json_ValueAndLike) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT id FROM `/Root/tableWithNulls`
-                WHERE 
-                    (JSON_VALUE(jsonval, "$.labels.http_status_code") = '500')
-                    AND JSON_EXISTS(jsonval, "$.meta.exception.stacktrace")
-                    AND 
-                        (JSON_VALUE(jsonval, "$.meta.uri") ilike "%unified%")
-            )")
-            .AddExpectedPlanOptions("KqpOlapFilter");
-            // .SetExpectedReply(R"([[1;["val1"];#]])");
-
-        TestTableWithNulls({testCase});
-    }
-
-
 
     Y_UNIT_TEST(Json_GetValue_Minus) {
         TAggregationTestCase testCase;
@@ -1359,6 +1342,26 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .SetExpectedReply(R"([[1;["[\"val1\"]"];#]])");
 
         TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(MixedJsonAndOlapApply) {
+        TAggregationTestCase testCase;
+        //(R"({"col1": "val1", "col-abc": "val-abc", "obj": {"obj_col2_int": 16}})"
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.\"col-abc\"") FROM `/Root/tableWithNulls`
+                WHERE id = 1
+                    AND  JSON_VALUE(jsonval, "$.col1") = "val1"
+                    AND  JSON_VALUE(jsonval, "$.\"col-abc\"") ilike "%A%b%"
+                    AND JSON_EXISTS(jsonval, "$.obj.obj_col2_int")
+
+            )")
+            .AddExpectedPlanOptions("KqpOlapJsonValue")
+            .AddExpectedPlanOptions("KqpOlapJsonExists")
+            .AddExpectedPlanOptions("KqpOlapApply")
+            .SetExpectedReply(R"([[1;["val-abc"]]])")
+        ;
+
+        TestTableWithNulls({testCase});
     }
 
     Y_UNIT_TEST(BlockGenericWithDistinct) {

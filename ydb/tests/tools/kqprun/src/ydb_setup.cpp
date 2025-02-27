@@ -550,7 +550,7 @@ public:
 
         auto request = GetQueryRequest(query);
         auto startPromise = NThreading::NewPromise();
-        GetRuntime()->Send(*AsyncQueryRunnerActorId_, GetRuntime()->AllocateEdgeActor(), new TEvPrivate::TEvStartAsyncQuery(std::move(request), startPromise));
+        GetRuntime()->Send(*AsyncQueryRunnerActorId_, GetRuntime()->AllocateEdgeActor(), new NKikimrRun::TEvPrivate::TEvStartAsyncQuery(std::move(request), startPromise));
 
         return startPromise.GetFuture().GetValueSync();
     }
@@ -561,7 +561,7 @@ public:
         }
 
         auto finalizePromise = NThreading::NewPromise();
-        GetRuntime()->Send(*AsyncQueryRunnerActorId_, GetRuntime()->AllocateEdgeActor(), new TEvPrivate::TEvFinalizeAsyncQueryRunner(finalizePromise));
+        GetRuntime()->Send(*AsyncQueryRunnerActorId_, GetRuntime()->AllocateEdgeActor(), new NKikimrRun::TEvPrivate::TEvFinalizeAsyncQueryRunner(finalizePromise));
 
         return finalizePromise.GetFuture().GetValueSync();
     }

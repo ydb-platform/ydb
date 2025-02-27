@@ -75,7 +75,7 @@ IChunkedArray::TFullDataAddress IChunkedArray::GetChunk(const std::optional<TAdd
 
 IChunkedArray::TFullChunkedArrayAddress IChunkedArray::GetArray(
     const std::optional<TAddressChain>& chunkCurrent, const ui64 position, const std::shared_ptr<IChunkedArray>& selfPtr) const {
-    AFL_VERIFY(position < GetRecordsCount());
+    AFL_VERIFY(position < GetRecordsCount())("pos", position)("records_count", GetRecordsCount());
     if (IsDataOwner()) {
         AFL_VERIFY(selfPtr);
         TAddressChain chain;

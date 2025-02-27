@@ -78,8 +78,10 @@ public:
                 i.second.GetBlobDataVerified().size());
             std::vector<NArrow::NAccessor::TDeserializeChunkedArray::TChunk> chunks = { NArrow::NAccessor::TDeserializeChunkedArray::TChunk(
                 GetRecordsCount(), i.second.GetBlobDataVerified()) };
-            const std::shared_ptr<NArrow::NAccessor::IChunkedArray> arrOriginal = deserialize
-                    ? columnLoader->ApplyVerified(i.second.GetBlobDataVerified(), GetRecordsCount())
+//            const ui32 filledRecordsCount = PartialArray->GetHeader().GetColumnStats().GetColumnRecordsCount(i.second.GetColumnIdx());
+            const std::shared_ptr<NArrow::NAccessor::IChunkedArray> arrOriginal =
+                deserialize
+                    ? columnLoader->ApplyVerified(i.second.GetBlobDataVerified(), GetRecordsCount()/*, filledRecordsCount*/)
                     : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(GetRecordsCount(), columnLoader, std::move(chunks), true);
             if (applyFilter) {
                 PartialArray->AddColumn(i.first, applyFilter->Apply(arrOriginal));
@@ -124,14 +126,12 @@ public:
 //            "others", PartialArray->GetHeader().GetOtherStats().DebugJson().GetStringRobust());
     }
 
-    void InitPartialReader(
-        const ui32 columnId, const ui32 positionStart, const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>& resources) {
+    void InitPartialReader(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor) {
         AFL_VERIFY(!HeaderRange);
         AFL_VERIFY(!PartialArray);
-        auto columnAccessor = resources->GetAccessorVerified(columnId);
-        auto partialArray = columnAccessor->GetArraySlow(positionStart, columnAccessor);
-        AFL_VERIFY(partialArray.GetArray()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
-        PartialArray = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsPartialArray>(partialArray.GetArray());
+        AFL_VERIFY(accessor);
+        AFL_VERIFY(accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray)("type", accessor->GetType());
+        PartialArray = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsPartialArray>(accessor);
     }
 
     TColumnChunkRestoreInfo(const TBlobRange& fullChunkRange, const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo)
@@ -179,8 +179,10 @@ private:
             }
             Resources->AddVerified(GetColumnId(), compositeBuilder.Finish(), true);
         } else {
+            ui32 pos = 0;
             for (auto&& i : ColumnChunks) {
-                i.Finish(Resources->GetAppliedFilter(), Source);
+                i.Finish(std::make_shared<NArrow::TColumnFilter>(Resources->GetAppliedFilter()->Slice(pos, i.GetRecordsCount())), Source);
+                pos += i.GetRecordsCount();
             }
         }
     }
@@ -238,23 +240,36 @@ private:
         auto itFilter = cFilter.GetIterator(false, Source->GetRecordsCount());
         bool itFinished = false;
 
-        NeedToAddResource = !Resources->HasColumn(GetColumnId());
-        ui32 posCurrent = 0;
-        for (auto&& c : columnChunks) {
+        auto accessor = Resources->GetAccessorOptional(GetColumnId());
+        NeedToAddResource = !accessor;
+        std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> chunks;
+        if (!NeedToAddResource) {
+            if (accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
+                auto composite = std::static_pointer_cast<NArrow::NAccessor::TCompositeChunkedArray>(accessor);
+                chunks = composite->GetChunks();
+            } else {
+                chunks.emplace_back(accessor);
+            }
+        }
+        ui32 resChunkIdx = 0;
+        for (ui32 chunkIdx = 0; chunkIdx < columnChunks.size(); ++chunkIdx) {
+            auto& meta = columnChunks[chunkIdx]->GetMeta();
             AFL_VERIFY(!itFinished);
-            if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
-                const TBlobRange range = Source->RestoreBlobRange(c->BlobRange);
-                ColumnChunks.emplace_back(range, ChunkExternalInfo.GetSubset(c->GetMeta().GetRecordsCount()));
+            if (!itFilter.IsBatchForSkip(meta.GetRecordsCount())) {
+                const TBlobRange range = Source->RestoreBlobRange(columnChunks[chunkIdx]->BlobRange);
+                ColumnChunks.emplace_back(range, ChunkExternalInfo.GetSubset(meta.GetRecordsCount()));
                 if (!NeedToAddResource) {
-                    ColumnChunks.back().InitPartialReader(GetColumnId(), posCurrent, Resources);
+                    AFL_VERIFY(resChunkIdx < chunks.size())("chunks", chunks.size())("meta", columnChunks.size())("need", NeedToAddResource);
+                    ColumnChunks.back().InitPartialReader(chunks[resChunkIdx]);
+                    ++resChunkIdx;
                 }
                 ColumnChunks.back().InitReading(reading, SubColumns);
             } else {
-                ColumnChunks.emplace_back(TColumnChunkRestoreInfo::BuildEmpty(ChunkExternalInfo.GetSubset(c->GetMeta().GetRecordsCount())));
+                ColumnChunks.emplace_back(TColumnChunkRestoreInfo::BuildEmpty(ChunkExternalInfo.GetSubset(meta.GetRecordsCount())));
             }
-            itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
-            posCurrent += c->GetMeta().GetRecordsCount();
+            itFinished = !itFilter.Next(meta.GetRecordsCount());
         }
+        AFL_VERIFY(NeedToAddResource || (resChunkIdx == chunks.size()));
         AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Source->GetRecordsCount());
         for (auto&& i : blobsAction.GetReadingActions()) {
             nextRead.Add(i);

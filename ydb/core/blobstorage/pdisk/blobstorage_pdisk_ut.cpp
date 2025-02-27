@@ -907,7 +907,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 .DiskSize = 16_MB,
                 .SmallDisk = true,
             });
-            
+
             UNIT_ASSERT(false);
         } catch (const yexception &e) {
             UNIT_ASSERT_STRING_CONTAINS(e.what(), "Total chunks# 0, System chunks needed# 1, cant run with < 3 free chunks!");
@@ -1134,7 +1134,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             offset = offset / blockSize * blockSize;
             auto size = rng.Uniform(1, maxSize + 1); // + 1 for maxSize to be included in distribution
             NPDisk::TEvChunkWrite::TPartsPtr parts = GenParts(rng, size);
-            Ctest << "offset# " << offset << " size# " << size << Endl;
+            Cerr << "offset# " << offset << " size# " << size << Endl;
             testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
                     new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
                         reservedChunk, offset, parts, nullptr, false, 0),
@@ -1143,6 +1143,16 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
                         reservedChunk, offset, size, 0, 0),
                     NKikimrProto::OK);
+            Cerr << ConvertIPartsToString(parts.Get()).size() << " ?= " << res->Data.ToString().size() << Endl;
+            UNIT_ASSERT_EQUAL(ConvertIPartsToString(parts.Get()).size(), res->Data.ToString().size());
+
+            if (true) {
+                Cerr << "ConvertIPartsToString(parts.Get())# ";
+                Cerr << ConvertIPartsToString(parts.Get()).Quote() << Endl;
+                Cerr << "res->Data.ToString()# ";
+                auto x = res->Data.ToString();
+                Cerr << TString(x.data(), x.size()).Quote() << Endl;
+            }
             UNIT_ASSERT(ConvertIPartsToString(parts.Get()) == res->Data.ToString().Slice());
         }
     }
@@ -1385,13 +1395,13 @@ Y_UNIT_TEST_SUITE(ReadOnlyPDisk) {
         cfg->ReadOnly = true;
         testCtx.UpdateConfigRecreatePDisk(cfg);
 
-        vdisk.Init(); 
+        vdisk.Init();
         vdisk.ReadLog();
 
         std::vector<std::function<void(TActorTestContext&)>> eventSenders = {
             // Should fail on writing log. (ERequestType::RequestLogWrite)
             CheckReadOnlyRequest<NPDisk::TEvLog, NPDisk::TEvLogResult>(
-                vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0, 
+                vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0,
                 TRcBuf(PrepareData(1)), TLsnSeg(), nullptr
             ),
             // Should fail on writing chunk. (ERequestType::RequestChunkWrite)

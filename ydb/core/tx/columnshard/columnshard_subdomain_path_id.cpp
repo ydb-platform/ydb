@@ -76,20 +76,13 @@ void TSpaceWatcher::StartWatchingSubDomainPathId() {
 
     if (!WatchingSubDomainPathId) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("started_watching_subdomain", *SubDomainPathId);
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(TPathId(Self->CurrentSchemeShardId, *SubDomainPathId)));
+        Self->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(TPathId(Self->CurrentSchemeShardId, *SubDomainPathId)));
         WatchingSubDomainPathId = *SubDomainPathId;
     }
 }
 
 void TSpaceWatcher::Handle(NActors::TEvents::TEvPoison::TPtr& , const TActorContext& ctx) {
     Die(ctx);
-}
-
-void TSpaceWatcher::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext&) {
-    auto* msg = ev->Get();
-    if (msg->PathId.LocalPathId == SubDomainPathId) {
-        Send(Self->SelfId(), ev.Get()->Release());
-    }
 }
 
 void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {

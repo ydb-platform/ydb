@@ -167,6 +167,7 @@ ydb/tests/olap sole chunk chunk
 ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test_delete
 ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_all_supported_compression
 ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_availability_data
+ydb/tests/olap/column_family/compression sole chunk chunk
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]

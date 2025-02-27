@@ -75,7 +75,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
     }
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
     for (auto& part : data) {
-        if (part.RowCount()) {
+        if (part.ChunkCount()) {
             TUnboxedValueBatch rows(mkqlSrcRowType);
             dataSerializer.Deserialize(std::move(part), mkqlSrcRowType, rows);
             rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {

@@ -23,7 +23,7 @@ class TArrowToYdbConverter {
 private:
     std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema_; // Destination schema (allow shrink and reorder)
     IRowWriter& RowWriter_;
-    NBinaryJson::EInfinityHandlingPolicy InfinityHandling_;
+    NBinaryJson::EOutOfBoundsHandlingPolicy InfinityHandling_;
 
     template <typename TArray>
     TCell MakeCellFromValue(const std::shared_ptr<arrow::Array>& column, i64 row) {
@@ -66,7 +66,7 @@ public:
     static bool NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType);
 
     TArrowToYdbConverter(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, IRowWriter& rowWriter,
-        const NBinaryJson::EInfinityHandlingPolicy infinityHandling = NBinaryJson::EInfinityHandlingPolicy::REJECT)
+        const NBinaryJson::EOutOfBoundsHandlingPolicy infinityHandling = NBinaryJson::EOutOfBoundsHandlingPolicy::REJECT)
         : YdbSchema_(ydbSchema)
         , RowWriter_(rowWriter)
         , InfinityHandling_(infinityHandling) {

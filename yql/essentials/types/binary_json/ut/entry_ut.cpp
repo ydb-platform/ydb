@@ -17,6 +17,7 @@ public:
         UNIT_TEST(TestGetContainer);
         UNIT_TEST(TestGetString);
         UNIT_TEST(TestGetNumber);
+        UNIT_TEST(TestOutOfBounds);
     UNIT_TEST_SUITE_END();
 
     void TestGetType() {
@@ -95,7 +96,7 @@ public:
         }
     }
 
-    void TestInfinityHandling() {
+    void TestOutOfBounds() {
         const TVector<std::pair<TString, double>> testCases = {
             {"1e100000000", std::numeric_limits<double>::max()},
             {"-1e100000000", std::numeric_limits<double>::lowest()},
@@ -104,13 +105,13 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            const auto serialized = SerializeToBinaryJson(testCase.first, NKikimr::NBinaryJson::EInfinityHandlingPolicy::REJECT);
-            UNIT_ASSERT(std::holds_alternative<TString>(serialized));
+            const auto serialized = SerializeToBinaryJson(testCase.first, NKikimr::NBinaryJson::EOutOfBoundsHandlingPolicy::REJECT);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(serialized), "abc");
         }
 
         for (const auto& testCase : testCases) {
-            const auto serialized = SerializeToBinaryJson(testCase.first, NKikimr::NBinaryJson::EInfinityHandlingPolicy::CLIP);
-            UNIT_ASSERT_C(std::holds_alternative<TBinaryJson>(serialized), std::get<TString>(serialized));
+            const auto serialized = SerializeToBinaryJson(testCase.first, NKikimr::NBinaryJson::EOutOfBoundsHandlingPolicy::CLIP);
+            UNIT_ASSERT_C(std::get<TBinaryJson>(serialized), std::get<TString>(serialized));
             const auto reader = TBinaryJsonReader::Make(std::get<TBinaryJson>(serialized));
             const auto container = reader->GetRootCursor();
 

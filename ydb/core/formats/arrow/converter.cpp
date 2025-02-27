@@ -17,7 +17,7 @@
 
 namespace NKikimr::NArrow {
 
-static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryPool& memPool, TString& errorMessage, const NBinaryJson::EInfinityHandlingPolicy infinityHandling) {
+static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryPool& memPool, TString& errorMessage, const NBinaryJson::EOutOfBoundsHandlingPolicy infinityHandling) {
     if (!cell.AsBuf()) {
         cell = TCell();
         return true;

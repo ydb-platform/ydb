@@ -13,6 +13,7 @@
 #include <util/generic/set.h>
 #include <util/generic/stack.h>
 #include <util/generic/vector.h>
+#include <yql/essentials/minikql/dom/node.h>
 #include <yql/essentials/utils/parse_double.h>
 
 #include <cmath>
@@ -416,9 +417,9 @@ private:
  */
 class TBinaryJsonCallbacks : public TJsonCallbacks {
 public:
-    TBinaryJsonCallbacks(bool throwException, EInfinityHandlingPolicy infinityHandling)
+    TBinaryJsonCallbacks(bool throwException, EOutOfBoundsHandlingPolicy outOfBoundsHandling)
         : TJsonCallbacks(/* throwException */ throwException)
-        , InfinityHandling(infinityHandling) {
+        , OutOfBoundsHandling(outOfBoundsHandling) {
     }
 
     bool OnNull() override {
@@ -447,14 +448,14 @@ public:
 
     bool OnDouble(double value) override {
         if (Y_UNLIKELY(std::isinf(value))) {
-            switch (InfinityHandling) {
-                case EInfinityHandlingPolicy::REJECT:
+            switch (OutOfBoundsHandling) {
+                case EOutOfBoundsHandlingPolicy::REJECT:
                     if (ThrowException) {
                         ythrow yexception() << "JSON number is infinite";
                     } else {
                         return false;
                     }
-                case EInfinityHandlingPolicy::CLIP:
+                case EOutOfBoundsHandlingPolicy::CLIP:
                     const double clipped = value > 0 ? std::numeric_limits<double>::max() : std::numeric_limits<double>::lowest();
                     Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(clipped)), /* createTopLevel */ true);
                     return true;
@@ -501,7 +502,7 @@ public:
 
 private:
     TJsonIndex Json;
-    EInfinityHandlingPolicy InfinityHandling;
+    EOutOfBoundsHandlingPolicy OutOfBoundsHandling;
 };
 
 void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& callbacks) {
@@ -557,46 +558,6 @@ void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& call
         }
     }
 }
-
-class TErrorHandlingPolicy {
-private:
-    static std::optional<double> DetectExtremeDouble(const std::string_view token) {
-        const ui64 mantissaPos = [&token]() {
-            if (const ui64 pos = token.find('e'); pos != std::string_view::npos) {
-                return pos;
-            }
-            if (const ui64 pos = token.find('E'); pos != std::string_view::npos) {
-                return pos;
-            }
-            return std::string_view::npos;
-        }();
-        if (mantissaPos == std::string_view::npos) {
-            return std::nullopt;
-        }
-
-        const double expectedValue = token.starts_with('-') ? std::numeric_limits<double>::lowest() : std::numeric_limits<double>::max();
-        const ui64 precision = mantissaPos - 1 - (token.starts_with('-') ? 1 : 0);
-        std::ostringstream ss;
-        ss << std::setprecision(precision) << expectedValue;
-        if (ss.str() == token) {
-            return expectedValue;
-        }
-
-        return std::nullopt;
-    }
-
-public:
-    [[nodiscard]] static simdjson::error_code OnDoubleError(
-        const simdjson::error_code status, const std::string_view token, TBinaryJsonCallbacks& callbacks) {
-        if (status == simdjson::NUMBER_ERROR) {
-            if (const auto value = DetectExtremeDouble(token)) {
-                callbacks.OnDouble(*value);
-                return simdjson::SUCCESS;
-            }
-        }
-        return status;
-    }
-};
 
 template <typename TOnDemandValue>
     requires std::is_same_v<TOnDemandValue, simdjson::ondemand::value> || std::is_same_v<TOnDemandValue, simdjson::ondemand::document>
@@ -769,9 +730,9 @@ template <typename TOnDemandValue>
 }
 }
 
-std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json, const EInfinityHandlingPolicy infinityHandling) {
+std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json, const EOutOfBoundsHandlingPolicy outOfBoundsHandling) {
     std::variant<TBinaryJson, TString> res;
-    TBinaryJsonCallbacks callbacks(/* throwException */ false, infinityHandling);
+    TBinaryJsonCallbacks callbacks(/* throwException */ false, outOfBoundsHandling);
     const simdjson::padded_string paddedJson(json);
     simdjson::ondemand::parser parser;
     try {
@@ -793,12 +754,12 @@ std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf js
     return res;
 }
 
-std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json, const EInfinityHandlingPolicy infinityHandling) {
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json, const EOutOfBoundsHandlingPolicy infinityHandling) {
     return SerializeToBinaryJsonImpl(json, infinityHandling);
 }
 
 TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {
-    TBinaryJsonCallbacks callbacks(/* throwException */ false, EInfinityHandlingPolicy::REJECT);
+    TBinaryJsonCallbacks callbacks(/* throwException */ false, EOutOfBoundsHandlingPolicy::REJECT);
     DomToJsonIndex(value, callbacks);
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
     return std::move(serializer).Serialize();

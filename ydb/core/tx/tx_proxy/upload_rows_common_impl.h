@@ -353,15 +353,15 @@ private:
         return ok;
     }
 
-    NBinaryJson::EInfinityHandlingPolicy GetInfinityHandlingPolicy() const {
+    NBinaryJson::EOutOfBoundsHandlingPolicy GetInfinityHandlingPolicy() const {
         if (TableKind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
-            return NBinaryJson::EInfinityHandlingPolicy::REJECT;
+            return NBinaryJson::EOutOfBoundsHandlingPolicy::REJECT;
         }
         switch (AppDataVerified().ColumnShardConfig.GetOutOfRangeHandling()) {
             case NKikimrConfig::TColumnShardConfig_TJsonNumberOutOfRangeHandlingPolicy_REJECT:
-                return NBinaryJson::EInfinityHandlingPolicy::REJECT;
+                return NBinaryJson::EOutOfBoundsHandlingPolicy::REJECT;
             case NKikimrConfig::TColumnShardConfig_TJsonNumberOutOfRangeHandlingPolicy_CLIP:
-                return NBinaryJson::EInfinityHandlingPolicy::CLIP;
+                return NBinaryJson::EOutOfBoundsHandlingPolicy::CLIP;
         }
     }
 

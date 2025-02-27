@@ -9,6 +9,7 @@ import threading
 from importlib_resources import read_binary
 from google.protobuf import text_format
 import yaml
+import subprocess
 
 from six.moves.queue import Queue
 
@@ -71,7 +72,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
         self.sqs_port = None
-        if configurator.sqs_service_enabled:
+        if not (configurator.use_distconf or configurator.simple_config) and configurator.sqs_service_enabled:
             self.sqs_port = port_allocator.sqs_port
 
         self.__role = role
@@ -309,6 +310,21 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
+    def __call_ydb_cli(self, cmd):
+        endpoint = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
+        full_command = [self.__configurator.get_ydb_cli_path(), '--endpoint', endpoint, '-y'] + cmd
+        logger.debug("Executing command = {}".format(full_command))
+        try:
+            return yatest.common.execute(full_command)
+        except yatest.common.ExecutionError as e:
+            logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
+                cmd=" ".join(str(x) for x in full_command),
+                e=str(e),
+                out=e.execution_result.std_out,
+                err=e.execution_result.std_err
+            ))
+            raise
+
     def start(self):
         """
         Safely starts kikimr instance.
@@ -340,21 +356,26 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node_id in self.__configurator.all_node_ids():
             self.__run_node(node_id)
 
-        bs_needed = 'blob_storage_config' in self.__configurator.yaml_config
+        if self.__configurator.use_distconf:
+            self.__cluster_bootstrap()
+
+        bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_distconf
 
         if bs_needed:
             self.__wait_for_bs_controller_to_start()
-            self.__add_bs_box()
+            if not self.__configurator.use_distconf:
+                self.__add_bs_box()
 
         pools = {}
 
-        for p in self.__configurator.dynamic_storage_pools:
-            self.add_storage_pool(
-                name=p['name'],
-                kind=p['kind'],
-                pdisk_user_kind=p['pdisk_user_kind'],
-            )
-            pools[p['name']] = p['kind']
+        if not self.__configurator.use_distconf:
+            for p in self.__configurator.dynamic_storage_pools:
+                self.add_storage_pool(
+                    name=p['name'],
+                    kind=p['kind'],
+                    pdisk_user_kind=p['pdisk_user_kind'],
+                )
+                pools[p['name']] = p['kind']
 
         if len(pools) > 0:
             self.client.bind_storage_pools(self.domain_name, pools)
@@ -606,6 +627,29 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         assert bs_controller_started
 
+    def __cluster_bootstrap(self):
+        timeout = 240
+        sleep = 5
+        retries, success = timeout / sleep, False
+        while retries > 0 and not success:
+            try:
+                self.__call_ydb_cli(
+                    [
+                        "admin",
+                        "cluster",
+                        "bootstrap",
+                        "--uuid", "test-cluster"
+                    ]
+                )
+                success = True
+
+            except Exception as e:
+                logger.error("Failed to execute, %s", str(e))
+                retries -= 1
+                time.sleep(sleep)
+
+                if retries == 0:
+                    raise
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
     kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'

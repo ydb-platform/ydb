@@ -598,18 +598,15 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, 
 
 TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos)
 {
-    if constexpr (NSsa::RuntimeVersion >= 4U) {
-        if (const auto node = YqlCoalescePushdown(coalesce, argument, ctx)) {
-            return node;
-        }
+    if (const auto node = YqlCoalescePushdown(coalesce, argument, ctx)) {
+        return node;
+    }
 
     auto predicate = coalesce.Predicate();
     if (const auto maybeFlatmap = predicate.Maybe<TCoFlatMap>()) {
         return SafeCastPredicatePushdown(maybeFlatmap.Cast(), argument, ctx, pos);
     } else if (auto maybePredicate = predicate.Maybe<TCoCompare>()) {
         return SimplePredicatePushdown(maybePredicate.Cast(), argument, ctx, pos);
-    } else if (auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
-        return JsonExistsPushdown(maybeJsonExists.Cast(), ctx, pos);
     }
     return NullNode;
 }

@@ -225,6 +225,13 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleAlterDatabase(TKiAlterDatabase node, TExprContext& ctx) override {
+        // HERE CHECK METADATA
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(node);
@@ -549,7 +556,8 @@ private:
 
             case TKikimrKey::Type::TableList:
                 break;
-
+            case TKikimrKey::Type::Database:
+                return TStatus::Ok;
             case TKikimrKey::Type::Role:
                 return TStatus::Ok;
             case TKikimrKey::Type::Object:
@@ -724,6 +732,10 @@ public:
     }
 
     bool CanExecute(const TExprNode& node) override {
+        if (node.IsCallable(TKiAlterDatabase::CallableName())) {
+            return true;
+        }
+
         if (node.IsCallable(TKiExecDataQuery::CallableName())) {
             return true;
         }
@@ -1153,6 +1165,23 @@ public:
         YQL_ENSURE(key.Extract(*node->Child(2)), "Failed to extract ydb key.");
 
         switch (key.GetKeyType()) {
+            case TKikimrKey::Type::Database: {
+                NCommon::TDatabaseSettings settings = NCommon::ParseDatabaseSettings(TExprList(node->Child(4)), ctx);
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+
+                if (mode == "alterDatabase") {
+                    return Build<TKiAlterDatabase>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .DatabasePath().Build(key.GetDatabasePath())
+                        .Settings(settings.Other)
+                        .Done()
+                        .Ptr();
+                }
+
+                break;
+            }
             case TKikimrKey::Type::Table: {
                 NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
@@ -1953,6 +1982,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
     output = input;
 
     auto callable = TCallable(input);
+
+    if (auto node = callable.Maybe<TKiAlterDatabase>()) {
+        return HandleAlterDatabase(node.Cast(), ctx);
+    }
 
     if (auto node = callable.Maybe<TKiWriteTable>()) {
         return HandleWriteTable(node.Cast(), ctx);

@@ -17,13 +17,13 @@ namespace {
 
 Downsampling::GapFilling ParseGapFilling(const TString& fill)
 {
-    if (fill.equal("NULL")) {
+    if (fill == "NULL"sv) {
         return Downsampling::GAP_FILLING_NULL;
     }
-    if (fill.equal("NONE")) {
+    if (fill == "NONE"sv) {
         return Downsampling::GAP_FILLING_NONE;
     }
-    if (fill.equal("PREVIOUS")) {
+    if (fill == "PREVIOUS"sv) {
         return Downsampling::GAP_FILLING_PREVIOUS;
     }
     return Downsampling::GAP_FILLING_UNSPECIFIED;
@@ -31,22 +31,22 @@ Downsampling::GapFilling ParseGapFilling(const TString& fill)
 
 Downsampling::GridAggregation ParseGridAggregation(const TString& aggregation)
 {
-    if (aggregation.equal("MAX")) {
+    if (aggregation == "MAX"sv) {
         return Downsampling::GRID_AGGREGATION_MAX;
     }
-    if (aggregation.equal("MIN")) {
+    if (aggregation == "MIN"sv) {
         return Downsampling::GRID_AGGREGATION_MIN;
     }
-    if (aggregation.equal("SUM")) {
+    if (aggregation == "SUM"sv) {
         return Downsampling::GRID_AGGREGATION_SUM;
     }
-    if (aggregation.equal("AVG")) {
+    if (aggregation == "AVG"sv) {
         return Downsampling::GRID_AGGREGATION_AVG;
     }
-    if (aggregation.equal("LAST")) {
+    if (aggregation == "LAST"sv) {
         return Downsampling::GRID_AGGREGATION_LAST;
     }
-    if (aggregation.equal("COUNT")) {
+    if (aggregation == "COUNT"sv) {
         return Downsampling::GRID_AGGREGATION_COUNT;
     }
     return Downsampling::GRID_AGGREGATION_UNSPECIFIED;
@@ -54,16 +54,16 @@ Downsampling::GridAggregation ParseGridAggregation(const TString& aggregation)
 
 MetricType ParseMetricType(const TString& type)
 {
-    if (type.equal("DGAUGE")) {
+    if (type == "DGAUGE"sv) {
         return MetricType::DGAUGE;
     }
-    if (type.equal("IGAUGE")) {
+    if (type == "IGAUGE"sv) {
         return MetricType::IGAUGE;
     }
-    if (type.equal("COUNTER")) {
+    if (type == "COUNTER"sv) {
         return MetricType::COUNTER;
     }
-    if (type.equal("RATE")) {
+    if (type == "RATE"sv) {
         return MetricType::RATE;
     }
     return MetricType::METRIC_TYPE_UNSPECIFIED;
@@ -100,7 +100,7 @@ public:
             if (auto self = weakSelf.lock()) {
                 resultPromise.SetValue(self->ProcessHttpResponse(std::move(result)));
             } else {
-                resultPromise.SetValue(TListMetricsResult("Client is being shutted down"));
+                resultPromise.SetValue(TListMetricsResult("Client has been shut down"));
             }
         };
 
@@ -142,7 +142,7 @@ public:
             if (auto self = weakSelf.lock()) {
                 resultPromise.SetValue(self->ProcessGrpcResponse(std::move(status), std::move(result)));
             } else {
-                resultPromise.SetValue(TGetDataResult("Client is being shutted down"));
+                resultPromise.SetValue(TGetDataResult("Client has been shut down"));
             }
         };
 
